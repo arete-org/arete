@@ -1,5 +1,5 @@
 # Stage 1: Build the Vite-powered landing page
-FROM node:22.14.0 AS frontend-builder
+FROM node:22.21.0 AS frontend-builder
 WORKDIR /app
 
 # Provide the base tsconfig so the workspace's config extension resolves correctly.
@@ -18,7 +18,7 @@ RUN npm run build
 
 
 # Stage 2: Build the Discord bot
-FROM node:22.14.0-slim AS bot-builder
+FROM node:22.21.0-slim AS bot-builder
 WORKDIR /app
 
 # Copy package files
@@ -39,7 +39,7 @@ RUN cd packages/discord-bot && npm install --production
 
 
 # Stage 3: Final runtime image
-FROM node:22.14.0-slim
+FROM node:22.21.0-slim
 WORKDIR /app
 
 # Copy built frontend assets from the Vite build stage
