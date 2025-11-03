@@ -6,6 +6,10 @@ node_modules/
 .env.*
 !.env.example
 
+# GitHub App private keys
+keys/
+*.pem
+
 # Discord bot logs
 packages/discord-bot/logs/
 
@@ -28,8 +32,11 @@ packages/shared/src/**/*.js
 packages/shared/src/**/*.js.map
 packages/shared/src/**/*.d.ts
 
-# Traces
+# Traces (from all sources)
 packages/discord-bot/traces/
+packages/shared/traces/
+packages/web/traces/
+traces/
 
 # VSCode settings
 .vscode

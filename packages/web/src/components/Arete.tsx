@@ -22,19 +22,21 @@ const Arete = (): JSX.Element => (
         />
       </div>
       <div className="arete-text">
-        <h2 id="arete-title">I'm Arí,</h2>
         <p>
-          an AI assistant that shares how it thinks with an ethics-first approach. I help you explore tough questions, balance perspectives, and make choices with care.
+          You can host me yourself, invite me to Discord, and see how I work.
+          I'm open-source, easy to modify, and built for privacy.
         </p>
-        <p>
-          My name comes from the Greek word <em>arete</em>, meaning excellence and virtue. It's a reminder to stay grounded, ethical, and human in every conversation.
-        </p>
-        <p>
-          I'm built for privacy and easy self-hosting, tying Discord and AI together to create a natural conversation experience that anyone can participate in.
-        </p>
-        <a className="inline-cta" href="https://github.com/arete-org/arete" target="_blank" rel="noreferrer">
-          Learn more about ARETE's development
-        </a>
+        <div className="cta-group" aria-label="Primary actions">
+          <a className="cta-button primary" href="/invite/" aria-label="Invite ARETE to Discord server">
+            Invite to Discord <span aria-hidden="true">↗</span>
+          </a>
+          <a className="cta-button secondary" href="/blog" aria-label="View blog posts">
+            Blog <span aria-hidden="true">↗</span>
+          </a>
+          <a className="cta-button secondary" href="https://github.com/arete-org/arete" target="_blank" rel="noreferrer" aria-label="View ARETE project on GitHub (opens in new tab)">
+            GitHub <span aria-hidden="true">↗</span>
+          </a>
+        </div>
       </div>
     </div>
   </section>

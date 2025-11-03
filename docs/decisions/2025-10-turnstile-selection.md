@@ -20,7 +20,7 @@ Candidate solutions evaluated:
 
 ## 2. Decision
 **Cloudflare Turnstile** will be implemented as the default verification mechanism for all public web interactions requiring human validation.  
-Turnstile will operate primarily in *managed, non-interactive* mode, escalating to an interactive challenge only when confidence is low.
+Turnstile will operate in *Invisible mode* (`size: 'invisible'`, `execution: 'execute'`), which executes challenges silently without visible UI, providing seamless user experience with no layout impact and deterministic token timing through manual execution control.
 
 ---
 
@@ -49,11 +49,32 @@ Turnstile verifies *browser integrity* rather than *personal identity*, aligning
 - Introduces a limited dependency on Cloudflare infrastructure, mitigated by modular design and future pluggable verification options.  
 - Improves UX and accessibility for users.  
 - Reduces telemetry exposure and simplifies compliance documentation.  
-- Opens a future path toward an **ARETE-native attestation system** modeled on Turnstile’s privacy design.
+- Opens a future path toward an **ARETE-native attestation system** modeled on Turnstile's privacy design.
+
+## 6. Implementation Notes
+
+**Mode Selection: Invisible Widget Type**
+
+- **Chosen Mode**: Cloudflare's dedicated "Invisible" widget type with `size: 'invisible'` and `execution: 'execute'` for manual control.
+- **Why Invisible Widget**: Provides seamless UX with no visible UI, zero layout impact, and deterministic token timing through manual `execute()` calls. This gives precise control over when challenges run (on mount, after form submission, etc.).
+- **Implementation Details**:
+  - Widget type must be set to "Invisible" in Cloudflare dashboard
+  - Uses `ref` to access `TurnstileInstance` for manual `execute()` calls
+  - Executes on mount via `useEffect` hook with `onLoad` callback to ensure widget readiness
+  - Includes fallback execution in `onSubmit()` if token isn't pre-fetched (prevents deadlock)
+  - Re-executes after token consumption and on errors
+  - Error fallback shows visible widget (normal size, default appearance) for user retry
+- **Technical Constraints**: Invisible widgets never show UI—errors must be handled via custom styling and fallback to visible widget when needed. Execution timing must be carefully managed to ensure tokens are ready when needed.
+- **Token Characteristics**: 
+  - Production tokens: ~200+ characters
+  - Single-use only
+  - 5-minute expiry
+  - Generated on manual `execute()` call
+- **Error Handling**: When Invisible widget errors occur, the code falls back to showing a visible Managed mode widget (same site key, different configuration) to allow user retry. Custom error styling maintains consistent UX.
 
 ---
 
-## 6. Provenance
+## 7. Provenance
 - **Discussion thread:** _TBD_ (link to GitHub issue or Discord discussion)  
 - **Author(s):** Jordan
 - **Approved by:** ethics-core maintainers  

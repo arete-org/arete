@@ -112,7 +112,7 @@ const normalizeMetadata = (backendMetadata: any): ResponseMetadata => {
   return normalized;
 };
 
-const MeetArete = (): JSX.Element => {
+const AskMeAnything = (): JSX.Element => {
   const [question, setQuestion] = useState('');
   const [status, setStatus] = useState('');
   const [answer, setAnswer] = useState('');
@@ -164,22 +164,28 @@ const MeetArete = (): JSX.Element => {
     inputRef.current?.focus();
   };
 
-  // Skip CAPTCHA only in development mode, and only if explicitly enabled
-  // Cannot skip CAPTCHA in production - requires DEV=true AND VITE_SKIP_CAPTCHA not set to 'false'
-  const skipCaptcha = import.meta.env.DEV && import.meta.env.VITE_SKIP_CAPTCHA !== 'false';
+  // Check if Turnstile site key is valid (not empty or missing)
+  const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
+  const hasValidSiteKey = turnstileSiteKey && turnstileSiteKey.trim().length > 0;
+
+  // Skip CAPTCHA in development mode, unless explicitly disabled via VITE_SKIP_CAPTCHA
+  // Also skip CAPTCHA if site key is missing/invalid (production misconfiguration)
+  // If VITE_SKIP_CAPTCHA is explicitly set to 'false', require CAPTCHA even in dev mode (but still need valid key)
+  const isDevelopment = import.meta.env.VITE_SKIP_CAPTCHA === 'true' || 
+    (import.meta.env.DEV && import.meta.env.VITE_SKIP_CAPTCHA !== 'false') ||
+    !hasValidSiteKey; // Skip CAPTCHA if site key is missing (treat as misconfigured)
 
   // Turnstile callback functions
   // According to Cloudflare docs: tokens are max 2048 chars, expire after 300s, single-use only
       const onTurnstileVerify = (token: string) => {
+        console.log('[Turnstile] onTurnstileVerify called with token:', token ? `${token.substring(0, 30)}...` : 'null');
         // Check if using test keys (test keys generate shorter dummy tokens like "XXXX.DUMMY.TOKEN.XXXX")
         const isTestKey = import.meta.env.VITE_TURNSTILE_SITE_KEY?.startsWith('1x00000000000000000000') || 
                           import.meta.env.VITE_TURNSTILE_SITE_KEY?.startsWith('2x00000000000000000000') ||
                           import.meta.env.VITE_TURNSTILE_SITE_KEY?.startsWith('3x00000000000000000000');
         
-        // Log token generation (for debugging) - only log length and prefix, never full token
-        if (import.meta.env.DEV) {
-          console.log('Turnstile Managed mode (interaction-only) - onSuccess called - token length:', token?.length || 0, 'site key starts with:', import.meta.env.VITE_TURNSTILE_SITE_KEY?.substring(0, 10));
-        }
+        // Log token generation (for debugging)
+        console.log('[Turnstile] Token details - length:', token?.length || 0, 'site key:', import.meta.env.VITE_TURNSTILE_SITE_KEY?.substring(0, 20), 'isTestKey:', isTestKey);
         
         // Validate token - test keys generate shorter tokens, production tokens should be ~200+ chars
         if (!token) {
@@ -192,39 +198,28 @@ const MeetArete = (): JSX.Element => {
         
         // Only validate length for production keys (test keys use dummy tokens)
         if (!isTestKey && token.length < 50) {
-          const tokenPreview = token.length > 16 
-            ? `${token.substring(0, 8)}...${token.substring(token.length - 8)}`
-            : token;
-          if (import.meta.env.DEV) {
-            console.error('Turnstile token appears invalid - length:', token.length, 'preview:', tokenPreview);
-          }
+          console.error('Turnstile token appears invalid - length:', token.length);
+          console.error('Token preview:', token.substring(0, 50));
+          console.error('Full token:', token);
           setTurnstileError('CAPTCHA token is invalid. Please try again.');
           setIsTurnstileReady(false);
           setTurnstileToken(null);
           return;
         }
         
-        // Log token info for debugging (dev only - never log full tokens)
-        if (!isTestKey && import.meta.env.DEV) {
-          const tokenPreview = token.length > 16 
-            ? `${token.substring(0, 8)}...${token.substring(token.length - 8)}`
-            : token;
-          console.log('Turnstile token generated - length:', token.length, 'preview:', tokenPreview, 'hostname:', window.location.hostname);
+        // Log token info for debugging (especially in production)
+        if (!isTestKey) {
+          console.log('Turnstile token generated - length:', token.length, 'hostname:', window.location.hostname);
         }
     
     setTurnstileToken(token);
     setIsTurnstileReady(true);
     setTurnstileError(null);
-    // Clear any CAPTCHA-related error status on successful verification
-    // Other errors (network, API) should persist until next submission
+    // Only clear status if it's not an error message (errors should persist until next submission)
+    // Check if current status is an error by looking for common error keywords
     setStatus((prev) => {
-      if (!prev) return '';
-      // Clear CAPTCHA-specific errors on successful verify
-      if (prev.toLowerCase().includes('captcha') || prev.includes('verification failed')) {
-        return '';
-      }
-      // Keep other error messages (network, unavailable, etc.)
-      if (prev.includes('failed') || prev.includes('unavailable') || prev.includes('Unable to connect')) {
+      if (prev && (prev.includes('failed') || prev.includes('unavailable') || prev.includes('Unable to connect'))) {
+        // Keep error messages - don't clear them on CAPTCHA verify
         return prev;
       }
       // Clear non-error status messages
@@ -248,21 +243,45 @@ const MeetArete = (): JSX.Element => {
 
   // Execute Turnstile challenge on mount and when widget is reset
   // Guard execution to when widget is mounted and ready
+  // Fallback: if onLoad doesn't fire (can happen with test keys + invisible mode), try executing after delay
   useEffect(() => {
-    if (!skipCaptcha && isTurnstileMounted && turnstileRef.current && !turnstileError) {
-      // Execute challenge when widget is ready (after mount or reset)
-      const timer = setTimeout(() => {
-        if (turnstileRef.current) {
-          turnstileRef.current.execute();
-          // Optionally await token preparation (non-blocking)
-          turnstileRef.current.getResponsePromise?.().catch(() => {
-            // Silently handle promise rejection if widget isn't ready
-          });
-        }
-      }, 100);
-      return () => clearTimeout(timer);
+    if (!isDevelopment && hasValidSiteKey && turnstileRef.current && !turnstileError) {
+      // If widget is mounted, execute immediately
+      if (isTurnstileMounted) {
+        const timer = setTimeout(() => {
+          if (turnstileRef.current) {
+            console.log('[Turnstile] Executing invisible widget (mounted)...');
+            turnstileRef.current.execute();
+            turnstileRef.current.getResponsePromise?.()
+              .then((token) => {
+                console.log('[Turnstile] Token resolved from promise:', token ? `${token.substring(0, 20)}...` : 'null');
+              })
+              .catch((err) => {
+                console.error('[Turnstile] Promise rejection:', err);
+              });
+          }
+        }, 100);
+        return () => clearTimeout(timer);
+      } else {
+        // Fallback: if onLoad doesn't fire, try executing after 2 seconds anyway
+        // This handles cases where onLoad callback doesn't fire (test keys + invisible mode)
+        const fallbackTimer = setTimeout(() => {
+          if (turnstileRef.current && !isTurnstileMounted && !turnstileError) {
+            console.log('[Turnstile] Fallback: Executing widget even though onLoad hasn\'t fired');
+            try {
+              turnstileRef.current.execute();
+              // Mark as mounted after successful execution attempt
+              setIsTurnstileMounted(true);
+            } catch (err) {
+              console.error('[Turnstile] Fallback execution failed:', err);
+            }
+          }
+        }, 2000);
+        return () => clearTimeout(fallbackTimer);
+      }
     }
-  }, [turnstileKey, skipCaptcha, turnstileError, isTurnstileMounted]);
+    return undefined;
+  }, [turnstileKey, isDevelopment, hasValidSiteKey, turnstileError, isTurnstileMounted]);
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -329,25 +348,31 @@ const MeetArete = (): JSX.Element => {
     }
 
     // Fallback: trigger execution if token isn't pre-fetched to avoid deadlock
-    if (!skipCaptcha && !turnstileToken) {
+    let resolvedToken = turnstileToken;
+    if (!isDevelopment && !resolvedToken) {
       if (turnstileRef.current) {
         // Execute challenge and wait for token
         turnstileRef.current.execute();
         try {
-          // Wait for token with timeout
-          await Promise.race([
+          // Wait for token with timeout and capture the resolved token
+          const tokenFromPromise = await Promise.race([
             turnstileRef.current.getResponsePromise?.() || Promise.resolve(null),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+            new Promise<string | null>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
           ]).catch(() => {
-            // If timeout or no promise, continue anyway - validation will catch empty token
+            // If timeout or no promise, return null - validation will catch empty token
+            return null;
           });
+          if (tokenFromPromise) {
+            resolvedToken = tokenFromPromise;
+          }
         } catch {
           // Continue - validation will handle empty token
         }
       }
       // Re-check token after execution attempt
-      if (!turnstileToken) {
+      if (!resolvedToken) {
         setStatus('Please complete the CAPTCHA verification.');
+        setIsLoading(false); // Ensure loading state is reset if we return early
         return;
       }
     }
@@ -356,6 +381,11 @@ const MeetArete = (): JSX.Element => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+
+    // Set a timeout for the fetch request (60 seconds)
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 60000);
 
     // Clear previous status and answer when starting a new submission
     setStatus('');
@@ -369,9 +399,9 @@ const MeetArete = (): JSX.Element => {
         Accept: 'application/json'
       };
       
-          // Only add CAPTCHA token if we have one (not when CAPTCHA is skipped)
-          if (!skipCaptcha && turnstileToken) {
-        headers['x-turnstile-token'] = turnstileToken;
+      // Only add CAPTCHA token if we have one (not in development mode)
+      if (!isDevelopment && resolvedToken) {
+        headers['x-turnstile-token'] = resolvedToken;
       }
       
       const response = await fetch(`/api/reflect?question=${encodeURIComponent(trimmedQuestion)}`, {
@@ -379,6 +409,9 @@ const MeetArete = (): JSX.Element => {
         headers,
         signal: controller.signal,
       });
+
+      // Clear timeout once we have a response
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         // Handle CAPTCHA-specific errors
@@ -419,6 +452,7 @@ const MeetArete = (): JSX.Element => {
               setTurnstileToken(null);
               setIsTurnstileReady(false);
               setTurnstileError(null);
+              setIsTurnstileMounted(false); // Reset mount state
               setTurnstileKey(prev => prev + 1);
               return;
             }
@@ -476,6 +510,7 @@ const MeetArete = (): JSX.Element => {
         setTurnstileToken(null);
         setIsTurnstileReady(false);
         setTurnstileError(null);
+        setIsTurnstileMounted(false); // Reset mount state
         setIsLoading(false);
         return;
       }
@@ -485,6 +520,7 @@ const MeetArete = (): JSX.Element => {
       setMetadata(null);
       setIsTypingComplete(false);
     } finally {
+      clearTimeout(timeoutId); // Ensure timeout is cleared in all cases
       setIsLoading(false);
       inputRef.current?.focus();
       inputRef.current?.select();
@@ -492,156 +528,158 @@ const MeetArete = (): JSX.Element => {
   };
 
   return (
-    <section className="meet" aria-labelledby="meet-title">
-      <div className="meet-copy">
-        <div className="interaction">
-          <div className="interaction-heading-row">
-            <h2 className="interaction-heading">Ask me anything</h2>
-            <div className="interaction-prompt-buttons-row">
-              <div className="interaction-prompt-text-button-wrapper">
-                <button
-                  type="button"
-                  className="interaction-prompt-text-button"
-                  onClick={usePrompt}
-                  onMouseDown={(e) => e.currentTarget.blur()}
-                  aria-label={`Use prompt suggestion: ${currentPrompt}`}
-                >
-                  <span className="interaction-prompt-text">{currentPrompt}</span>
-                </button>
-              </div>
-              <button
-                type="button"
-                className="interaction-prompt-shuffle-button"
-                onClick={shufflePrompt}
-                onMouseDown={(e) => e.currentTarget.blur()}
-                aria-label="Shuffle prompt suggestions"
-              >
-                <span className="interaction-prompt-shuffle-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-                  </svg>
-                </span>
-              </button>
-            </div>
+    <div className="interaction">
+      <div className="interaction-heading-row">
+        <h2 className="interaction-heading">Ask me anything</h2>
+        <div className="interaction-prompt-buttons-row">
+          <div className="interaction-prompt-text-button-wrapper">
+            <button
+              type="button"
+              className="interaction-prompt-text-button"
+              onClick={usePrompt}
+              onMouseDown={(e) => e.currentTarget.blur()}
+              aria-label={`Use prompt suggestion: ${currentPrompt}`}
+            >
+              <span className="interaction-prompt-text">{currentPrompt}</span>
+            </button>
           </div>
-            <form className="interaction-form" onSubmit={onSubmit}>
-              <div className="interaction-input-group">
-                <label htmlFor="question-input" className="sr-only">
-                  Ask a question
-                </label>
-                <div className="interaction-input-wrapper">
-                  <textarea
-                    id="question-input"
-                    className="interaction-input"
-                    name="question"
-                    value={question}
-                    onChange={(event) => setQuestion(event.target.value)}
-                    placeholder="What should we talk about?"
-                    autoComplete="off"
-                    ref={inputRef}
-                    aria-label="Question input field"
-                    rows={1}
-                  />
-                  {question && (
-                    <button
-                      type="button"
-                      className="interaction-clear-button"
-                      onClick={() => setQuestion('')}
-                      aria-label="Clear text"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6"/>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                        <line x1="10" y1="11" x2="10" y2="17"/>
-                        <line x1="14" y1="11" x2="14" y2="17"/>
-                      </svg>
-                    </button>
-                  )}
-                </div>
-                <button 
-                  type="submit" 
-                  className="interaction-submit" 
-                  disabled={isLoading || (!skipCaptcha && !isTurnstileReady)}
-                  aria-label={isLoading ? "Submitting question" : (!skipCaptcha && !isTurnstileReady ? "Complete CAPTCHA to submit" : "Submit question")}
-                >
-                  {isLoading ? (
-                    <>
-                      <span className="spinner" aria-hidden="true" />
-                    </>
-                  ) : !skipCaptcha && !isTurnstileReady ? (
-                    <span className="hourglass" aria-label="Complete CAPTCHA verification">⏳</span>
-                  ) : (
-                    'Go'
-                  )}
-                </button>
-              </div>
-              {!skipCaptcha && turnstileError && (
-                <div 
-                  className="interaction-captcha interaction-captcha-visible"
-                  aria-label="Complete CAPTCHA verification to submit your question"
-                >
-                  <Turnstile
-                    key={turnstileKey}
-                    siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
-                    onSuccess={onTurnstileVerify}
-                    onError={onTurnstileError}
-                    onExpire={onTurnstileExpire}
-                    options={{
-                      theme: 'light',
-                      size: 'normal',
-                      language: 'auto'
-                    }}
-                  />
-                  <p className="interaction-error" role="alert">{turnstileError}</p>
-                </div>
-              )}
-            </form>
-            {/* Render Turnstile widget in Invisible mode - requires manual execute() calls for deterministic timing */}
-            {!skipCaptcha && !turnstileError && (
-              <div className="interaction-captcha">
-                <Turnstile
-                  ref={turnstileRef}
-                  key={turnstileKey}
-                  siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
-                  onSuccess={onTurnstileVerify}
-                  onError={onTurnstileError}
-                  onExpire={onTurnstileExpire}
-                  onLoad={() => setIsTurnstileMounted(true)}
-                  options={{
-                    theme: 'light',
-                    size: 'invisible', // True Invisible widget type
-                    execution: 'execute', // Manual execution control
-                    appearance: 'execute', // Execute challenge, only show UI when executing
-                    language: 'auto'
-                  }}
-                />
-              </div>
-            )}
-            {/* Only show status when there's actual content (error messages, etc.) - spinner is in button during loading */}
-            {/* Conditionally render only when we have actual content to avoid empty div taking space */}
-            {/* IMPORTANT: Do not render at all if there's no content to avoid layout spacing */}
-            {/* Only render after user has interacted to prevent initial flash */}
-            {hasInteractedRef.current && status && status.trim().length > 0 && (
-              <div 
-                className="interaction-status interaction-status-visible"
-                role="status"
-              >
-                <span>{status}</span>
-              </div>
-            )}
-            {/* Only show output when there's actual content, not just when loading */}
-            {displayedAnswer && (
-              <div className="interaction-output" aria-live="polite">
-                {displayedAnswer}
-              </div>
-            )}
-            {isTypingComplete && metadata && (
-              <ProvenanceFooter metadata={metadata} />
-            )}
+          <button
+            type="button"
+            className="interaction-prompt-shuffle-button"
+            onClick={shufflePrompt}
+            onMouseDown={(e) => e.currentTarget.blur()}
+            aria-label="Shuffle prompt suggestions"
+          >
+            <span className="interaction-prompt-shuffle-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+              </svg>
+            </span>
+          </button>
         </div>
       </div>
-    </section>
+        <form className="interaction-form" onSubmit={onSubmit}>
+          <div className="interaction-input-group">
+            <label htmlFor="question-input" className="sr-only">
+              Ask a question
+            </label>
+            <div className="interaction-input-wrapper">
+              <textarea
+                id="question-input"
+                className="interaction-input"
+                name="question"
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                placeholder="What should we talk about?"
+                autoComplete="off"
+                ref={inputRef}
+                aria-label="Question input field"
+                rows={1}
+              />
+              {question && (
+                <button
+                  type="button"
+                  className="interaction-clear-button"
+                  onClick={() => setQuestion('')}
+                  aria-label="Clear text"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    <line x1="10" y1="11" x2="10" y2="17"/>
+                    <line x1="14" y1="11" x2="14" y2="17"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+            <button 
+              type="submit" 
+              className="interaction-submit" 
+              disabled={isLoading || (!isDevelopment && !isTurnstileReady)}
+              aria-label={isLoading ? "Submitting question" : (!isDevelopment && !isTurnstileReady ? "Complete CAPTCHA to submit" : "Submit question")}
+            >
+              {isLoading ? (
+                <>
+                  <span className="spinner" aria-hidden="true" />
+                </>
+              ) : !isDevelopment && !isTurnstileReady ? (
+                <span className="hourglass" aria-label="Complete CAPTCHA verification">⏳</span>
+              ) : (
+                'Go'
+              )}
+            </button>
+          </div>
+        </form>
+        {/* Only show status when there's actual content (error messages, etc.) - spinner is in button during loading */}
+        {/* Conditionally render only when we have actual content to avoid empty div taking space */}
+        {/* IMPORTANT: Do not render at all if there's no content to avoid layout spacing */}
+        {/* Only render after user has interacted to prevent initial flash */}
+        {hasInteractedRef.current && status && status.trim().length > 0 && (
+          <div 
+            className="interaction-status interaction-status-visible"
+            role="status"
+          >
+            <span>{status}</span>
+          </div>
+        )}
+        {/* Only show output when there's actual content, not just when loading */}
+        {displayedAnswer && (
+          <div className="interaction-output" aria-live="polite">
+            {displayedAnswer}
+          </div>
+        )}
+        {/* Render Turnstile widget in Invisible mode - requires manual execute() calls for deterministic timing */}
+        {/* Only render if we have a valid site key and CAPTCHA is required */}
+        {hasValidSiteKey && !isDevelopment && !turnstileError && (
+          <div className="interaction-captcha">
+            <Turnstile
+              ref={turnstileRef}
+              key={turnstileKey}
+              siteKey={turnstileSiteKey}
+              onSuccess={onTurnstileVerify}
+              onError={onTurnstileError}
+              onExpire={onTurnstileExpire}
+              onLoad={() => {
+                console.log('[Turnstile] onLoad called - widget is mounted');
+                setIsTurnstileMounted(true);
+              }}
+              options={{
+                theme: 'light',
+                size: 'invisible', // True Invisible widget type
+                execution: 'execute', // Manual execution control
+                appearance: 'execute', // Execute challenge, only show UI when executing
+                language: 'auto'
+              }}
+            />
+          </div>
+        )}
+        {!isDevelopment && turnstileError && (
+          <div 
+            className="interaction-captcha interaction-captcha-visible"
+            aria-label="Complete CAPTCHA verification to submit your question"
+          >
+            <Turnstile
+              key={turnstileKey}
+              siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+              onSuccess={onTurnstileVerify}
+              onError={onTurnstileError}
+              onExpire={onTurnstileExpire}
+              options={{
+                theme: 'light',
+                size: 'normal',
+                language: 'auto'
+              }}
+            />
+            <p className="interaction-error" role="alert">{turnstileError}</p>
+          </div>
+        )}
+        {isTypingComplete && metadata && (
+          <ProvenanceFooter metadata={metadata} />
+        )}
+    </div>
   );
 };
 
-export default MeetArete;
+export { AskMeAnything };
+export default AskMeAnything;
+

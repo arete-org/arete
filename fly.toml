@@ -2,7 +2,7 @@ app = 'arete'
 primary_region = 'ord'
 
 [build]
-  args = { NODE_ENV = "production" }
+  args = { NODE_ENV = "production", TURNSTILE_SITE_KEY = "0x4AAAAAAB88uYTW8ZMNJsJl" }
 
 [env]
   NODE_ENV = "production"

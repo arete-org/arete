@@ -57,9 +57,10 @@ VITE_TURNSTILE_SITE_KEY=your_turnstile_site_key
 
 **Cloudflare Turnstile Setup:**
 1. Navigate to the [Cloudflare Turnstile dashboard](https://dash.cloudflare.com/?to=/:account/turnstile)
-2. Create a new site (or use an existing one)
+2. Create a new site with **Widget Mode set to "Invisible"** for seamless UX with no visible UI
 3. Copy the Site Key and Secret Key
 4. Add them to your `.env` file as `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`
+5. **Important**: Widget type must be "Invisible" in Cloudflare dashboard (not "Managed"). Ensure the site key includes your production domain (e.g., `ai.jordanmakes.dev`) in the allowlist. Site key and secret key must be from the same Turnstile widget configuration.
 
 **Development Testing:**
 For local development, you can use Cloudflare's test keys:

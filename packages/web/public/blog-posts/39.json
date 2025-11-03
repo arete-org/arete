@@ -1,0 +1,14 @@
+{
+  "number": 39,
+  "title": "Test Title",
+  "body": "# Title1\r\n\r\nasdf\r\n\r\n## Title2\r\n\r\nasdf\r\n\r\n### Title3\r\n\r\nHello world!\r\n\r\n![logo](https://github.com/user-attachments/assets/08795962-5873-4cdb-be14-2b68e51e79f9)",
+  "author": {
+    "login": "jbax1899",
+    "avatarUrl": "https://avatars.githubusercontent.com/u/48304619?v=4",
+    "profileUrl": "https://github.com/jbax1899"
+  },
+  "createdAt": "2025-10-27T21:56:38Z",
+  "updatedAt": "2025-10-27T21:56:39Z",
+  "discussionUrl": "https://github.com/arete-org/arete/discussions/39",
+  "commentCount": 0
+}

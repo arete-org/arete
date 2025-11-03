@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import ThemeToggle from '@components/ThemeToggle';
+import Header from '@components/Header';
 import Footer from '@components/Footer';
 
 const InvitePage: React.FC = () => {
@@ -13,32 +13,28 @@ const InvitePage: React.FC = () => {
   const [requiredToast, setRequiredToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
   const [optionalToast, setOptionalToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
 
+  // Breadcrumb items for invite page
+  const breadcrumbItems = [
+    { label: 'Self-Hosting Setup' }
+  ];
+
   const showToast = (setter: any, message: string) => {
     setter({ message, visible: true });
     setTimeout(() => setter({ message: '', visible: false }), 2000);
   };
 
   return (
-    <div className="app-shell">
+    <>
       {/* Header Section */}
-      <header className="site-header" aria-label="Site header">
-        <div className="site-title-group">
-          <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
-            <h1 className="site-mark">ARETE</h1>
-          </Link>
-          <p className="site-tagline">Self-Hosting Setup Guide</p>
-        </div>
-        <ThemeToggle />
-      </header>
+      <Header breadcrumbItems={breadcrumbItems} />
 
       {/* Main Content Section */}
       <main>
         <section className="hero" aria-labelledby="hero-title">
           <div className="hero-copy">
-            <h1 id="hero-title">Self-Host ARETE</h1>
+            <h1 id="hero-title">Setup</h1>
             <p>
-              ARETE cannot be directly invited to Discord servers. Instead, you need to set up your own instance 
-              with your Discord bot token and API keys. Follow this guide to get started.
+              For beginners and advanced users alike.
             </p>
           </div>
         </section>
@@ -935,7 +931,7 @@ WEB_BASE_URL=https://your-domain.com       # Base URL for web server (String)`}
       </main>
 
       <Footer />
-    </div>
+    </>
   );
 };
 

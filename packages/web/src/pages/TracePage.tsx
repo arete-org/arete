@@ -22,12 +22,29 @@ interface ServerMetadata {
   };
   finishReason?: string;
   staleAfter: string;
+  confidence?: number;
+  tradeoffCount?: number;
+  citations?: Array<{
+    title: string;
+    url: string;
+    snippet?: string;
+  }>;
 }
 
 // Reuse the shared provenance contracts, but model the transport layer differences so the
 // React page can consume the JSON payload without re-defining the entire schema.
+type SerializableResponseMetadata = ServerMetadata;
 
-type LoadingState = 'loading' | 'success' | 'error' | 'not-found';
+// Helper to extract payload from 410 (stale) responses
+const extractPayload = (data: unknown): ServerMetadata | null => {
+  if (data && typeof data === 'object' && 'metadata' in data) {
+    const obj = data as { metadata?: ServerMetadata };
+    return obj.metadata || null;
+  }
+  return null;
+};
+
+type LoadingState = 'loading' | 'success' | 'error' | 'not-found' | 'stale' | 'hash-mismatch';
 
 // Risk tier colors matching the server constants
 const RISK_TIER_COLORS: Record<string, string> = {
@@ -57,16 +74,34 @@ const TracePage = (): JSX.Element => {
       setTraceData(null);
 
       try {
+        console.log('=== Trace Page - Making Request ===');
+        console.log('Request URL:', `/trace/${responseId}.json`);
         const response = await fetch(`/trace/${responseId}.json`);
+        console.log('Response status:', response.status);
+        console.log('Response ok:', response.ok);
+        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
         if (response.status === 200) {
           const payload = (await response.json()) as SerializableResponseMetadata;
+
+          // Debug logging
+          console.log('=== Trace Page Debug ===');
+          console.log('Response ID:', responseId);
+          console.log('Payload received:', JSON.stringify(payload, null, 2));
+          console.log('Payload confidence:', payload?.confidence);
+          console.log('Payload confidence type:', typeof payload?.confidence);
+          console.log('Has confidence property:', 'confidence' in payload);
+          console.log('Payload keys:', Object.keys(payload));
+          console.log('========================');
 
           if (!isMounted) {
             return;
           }
 
+          console.log('About to set traceData with payload:', payload);
+          console.log('Payload confidence before setting:', payload?.confidence);
           setTraceData(payload);
+          console.log('traceData state set, confidence should be:', payload?.confidence);
           setLoadingState('success');
           return;
         }
@@ -114,6 +149,12 @@ const TracePage = (): JSX.Element => {
         setLoadingState('error');
 
       } catch (error) {
+        console.error('=== Trace Page - Error ===');
+        console.error('Error:', error);
+        console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+        console.error('Error message:', error instanceof Error ? error.message : String(error));
+        console.error('===========================');
+        
         if (!isMounted) {
           return;
         }
@@ -169,11 +210,114 @@ const TracePage = (): JSX.Element => {
     );
   }
 
+  if (loadingState === 'stale') {
+    return (
+      <section className="site-section">
+        <article className="card">
+          <h1>Trace Stale</h1>
+          <p>
+            This trace has expired and may no longer be accurate. The information below is displayed for reference only.
+          </p>
+          <Link to="/" className="button-link">
+            Back to home
+          </Link>
+        </article>
+        {traceData && (
+          <>
+            <header className="site-header" aria-live="polite">
+              <div className="site-mark">
+                <h1>Response Trace</h1>
+                <code>{traceData.id ?? responseId}</code>
+              </div>
+              <Link to="/" className="button-link">
+                Back to home
+              </Link>
+            </header>
+            <article className="card" aria-label="Trace summary">
+              <h2>Summary</h2>
+              <p>
+                <strong>Model:</strong> {traceData.model || 'Unspecified'}
+              </p>
+              <p>
+                <strong>Generated:</strong> {traceData.timestamp ? new Date(traceData.timestamp).toLocaleString() : 'N/A'}
+              </p>
+            </article>
+          </>
+        )}
+      </section>
+    );
+  }
+
+  if (loadingState === 'hash-mismatch') {
+    return (
+      <section className="site-section">
+        <article className="card">
+          <h1>Trace Integrity Check Failed</h1>
+          <p>
+            The trace data failed an integrity verification check and may have been tampered with.
+          </p>
+          <Link to="/" className="button-link">
+            Back to home
+          </Link>
+        </article>
+      </section>
+    );
+  }
+
+  if (!traceData) {
+    return (
+      <section className="site-section">
+        <article className="card">
+          <h1>Trace Unavailable</h1>
+          <p>No trace data available.</p>
+          <Link to="/" className="button-link">
+            Back to home
+          </Link>
+        </article>
+      </section>
+    );
+  }
+
+  // Debug: log traceData whenever it changes
+  useEffect(() => {
+    console.log('=== traceData State Changed ===');
+    console.log('traceData:', traceData);
+    console.log('traceData?.confidence:', traceData?.confidence);
+    console.log('traceData?.confidence type:', typeof traceData?.confidence);
+    if (traceData) {
+      console.log('All traceData keys:', Object.keys(traceData));
+      console.log('Raw traceData JSON:', JSON.stringify(traceData, null, 2));
+    }
+    console.log('================================');
+  }, [traceData]);
 
   const riskTier = traceData?.reasoningEffort ?? 'low';
   const riskColor = RISK_TIER_COLORS[riskTier] ?? '#6b7280';
-  const confidence = 'Confidence data unavailable';
-  const tradeoffCount = 0;
+  
+  // Format confidence as percentage if available
+  const formatConfidence = (confidence?: number): string => {
+    console.log('=== Formatting Confidence ===');
+    console.log('Input confidence value:', confidence);
+    console.log('Input type:', typeof confidence);
+    console.log('traceData object:', traceData);
+    console.log('traceData.confidence:', traceData?.confidence);
+    
+    if (typeof confidence === 'number' && !isNaN(confidence) && confidence >= 0 && confidence <= 1) {
+      const result = `${Math.round(confidence * 100)}%`;
+      console.log('Confidence formatted as:', result);
+      return result;
+    }
+    console.log('Confidence validation failed - returning unavailable');
+    console.log('Confidence value that failed:', confidence);
+    console.log('Is number?', typeof confidence === 'number');
+    console.log('Is NaN?', isNaN(confidence as number));
+    console.log('Range check:', confidence !== undefined ? `${confidence} >= 0 && ${confidence} <= 1 = ${(confidence as number) >= 0 && (confidence as number) <= 1}` : 'undefined');
+    return 'Confidence data unavailable';
+  };
+  const confidence = formatConfidence(traceData?.confidence);
+  console.log('=== Final Confidence Result ===');
+  console.log('Final confidence string:', confidence);
+  const tradeoffCount = traceData?.tradeoffCount ?? 0;
   const staleAfter = traceData?.staleAfter
     ? new Date(traceData.staleAfter).toLocaleString()
     : 'N/A';
@@ -222,7 +366,33 @@ const TracePage = (): JSX.Element => {
 
       <article className="card" aria-label="Citations">
         <h2>Citations</h2>
-        <p>No citations available for this response.</p>
+        {traceData?.citations && traceData.citations.length > 0 ? (
+          <ul>
+            {traceData.citations.map((citation, index) => {
+              const urlString = typeof citation.url === 'string' 
+                ? citation.url 
+                : String(citation.url || '');
+              return (
+                <li key={index}>
+                  <a
+                    href={urlString}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {citation.title || 'Untitled'}
+                  </a>
+                  {citation.snippet && (
+                    <p style={{ marginTop: '0.25rem', fontSize: '0.875rem', color: '#6b7280' }}>
+                      {citation.snippet}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p>No citations available for this response.</p>
+        )}
       </article>
 
       <article className="card" aria-label="Technical details">

@@ -6,16 +6,16 @@ interface InviteStep {
 
 const STEPS: InviteStep[] = [
   {
-    title: 'Prepare',
+    title: '1. Prepare',
     description: 'Create a Discord bot, add your API keys, and configure personality and rules.',
   },
   {
-    title: 'Deploy',
+    title: '2. Deploy',
     description: 'Run the Node server locally or deploy it to Fly.io using the provided configuration.',
   },
   {
-    title: 'Invite',
-    description: 'Add the bot to your Discord server and start the conversation.',
+    title: '3. Invite',
+    description: 'Add the bot to your Discord server and start the conversation!',
   },
 ];
 
@@ -31,8 +31,8 @@ const Invite = (): JSX.Element => (
         </article>
       ))}
     </div>
-    <a className="inline-cta" href="https://github.com/arete-org/arete/tree/main/docs" target="_blank" rel="noreferrer">
-      🛠 Read the docs
+    <a className="inline-cta" href="/invite/" aria-label="View detailed setup instructions">
+      <span aria-hidden="true">🛠</span> Detailed instructions
     </a>
   </section>
 );

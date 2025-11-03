@@ -68,6 +68,12 @@ RUN npm install --production --ignore-scripts
 # Copy the lightweight Node server used to host the static site
 COPY server.js ./server.js
 
+# Copy GitHub App private key (if it exists)
+# Create keys directory first
+RUN mkdir -p ./keys
+# Copy keys directory if it exists using wildcard pattern
+COPY keys* ./keys/
+
 # Note: TURNSTILE_SECRET_KEY must be provided at runtime via environment variables
 # This secret key is used for server-side verification and must never be committed
 # For Fly.io deployment, use: fly secrets set TURNSTILE_SECRET_KEY=...

@@ -6,12 +6,22 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   define: {
-    'import.meta.env.VITE_TURNSTILE_SITE_KEY': JSON.stringify(process.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000BB'),
+    // In production, require real Turnstile keys. Only use test keys as fallback in development.
+    // WARNING: If VITE_TURNSTILE_SITE_KEY is not set in production, CAPTCHA will not work!
+    'import.meta.env.VITE_TURNSTILE_SITE_KEY': JSON.stringify(
+      process.env.VITE_TURNSTILE_SITE_KEY || 
+      (process.env.NODE_ENV === 'production' ? '' : '1x00000000000000000000BB') // Test key fallback for development only
+    ),
+    'import.meta.env.VITE_SKIP_CAPTCHA': JSON.stringify(process.env.VITE_SKIP_CAPTCHA || 'false'),
   },
   server: {
     port: 5173,
     proxy: {
       '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/trace': {
         target: 'http://localhost:3000',
         changeOrigin: true,
       },
