@@ -22,7 +22,7 @@
   "dependencies": {
     "@arete/shared": "file:../shared",
     "ethics-core": "file:../ethics-core",
-    "@openai/agents": "^0.1.8",
+    "@openai/agents": "^0.3.0",
     "@pinecone-database/pinecone": "^6.1.2",
     "body-parser": "^2.2.0",
     "cloudinary": "^2.7.0",
