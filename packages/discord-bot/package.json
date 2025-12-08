@@ -22,12 +22,12 @@
   "dependencies": {
     "@arete/shared": "file:../shared",
     "ethics-core": "file:../ethics-core",
-    "@openai/agents": "^0.1.8",
+    "@openai/agents": "^0.3.4",
     "@pinecone-database/pinecone": "^6.1.2",
     "body-parser": "^2.2.0",
-    "cloudinary": "^2.7.0",
+    "cloudinary": "^2.8.0",
     "date-fns": "^4.1.0",
-    "discord.js": "^14.22.1",
+    "discord.js": "^14.25.1",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "flyio": "^0.6.14",
@@ -46,9 +46,9 @@
     "@types/node": "^24.6.2",
     "copyfiles": "^2.4.1",
     "cross-env": "^10.1.0",
-    "rimraf": "^6.0.1",
+    "rimraf": "^6.1.2",
     "ts-node-dev": "^2.0.0",
-    "tsx": "^4.20.6",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.2"
   }
 }
