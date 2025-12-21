@@ -12,7 +12,7 @@
   "dependencies": {
     "@marsidev/react-turnstile": "^1.4.0",
     "ethics-core": "file:../ethics-core",
-    "react": "^18.3.1",
+    "react": "^19.2.3",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.10.1",
