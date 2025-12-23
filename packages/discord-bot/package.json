@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@arete/shared": "file:../shared",
-    "@openai/agents": "^0.3.4",
+    "@openai/agents": "^0.3.7",
     "@pinecone-database/pinecone": "^6.1.2",
     "body-parser": "^2.2.0",
     "cloudinary": "^2.8.0",
