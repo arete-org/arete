@@ -87,7 +87,10 @@ export class RealtimeSessionConfig {
 
         logger.debug('Creating response');
 
-        const event: any = {
+        const event: {
+            type: 'response.create';
+            response: { output_modalities: string[]; instructions?: string };
+        } = {
             type: 'response.create',
             response: {
                 output_modalities: ['audio'],

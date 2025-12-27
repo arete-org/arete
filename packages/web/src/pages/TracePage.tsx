@@ -429,7 +429,7 @@ const TracePage = (): JSX.Element => {
             <dd>
               <span>See license strategy for reuse details.</span>{' '}
               <a
-                href="https://github.com/arete-org/arete/blob/main/LICENSE_STRATEGY.md"
+                href="https://github.com/arete-org/arete/blob/main/docs/LICENSE_STRATEGY.md"
                 target="_blank"
                 rel="noopener noreferrer"
               >

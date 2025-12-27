@@ -37,10 +37,10 @@ export abstract class Event {
    * Main execution method to be implemented by subclasses.
    * This method contains the logic to execute when the event is emitted.
    * @abstract
-   * @param {...any[]} args - Arguments passed by the Discord.js client
+   * @param {...unknown[]} args - Arguments passed by the Discord.js client
    * @returns {Promise<void> | void}
    */
-  public abstract execute(...args: any[]): Promise<void> | void;
+  public abstract execute(...args: unknown[]): Promise<void> | void;
 
   /**
    * Optional method to register an initiating user for events that need it
@@ -71,9 +71,9 @@ export abstract class Event {
   /**
    * Wraps the execute method with error handling.
    * @private
-   * @param {...any[]} args - Arguments passed by the Discord.js client
+   * @param {...unknown[]} args - Arguments passed by the Discord.js client
    */
-  private async _execute(...args: any[]): Promise<void> {
+  private async _execute(...args: unknown[]): Promise<void> {
     try {
       await this.execute(...args);
     } catch (error) {

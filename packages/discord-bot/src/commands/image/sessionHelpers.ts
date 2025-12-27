@@ -15,7 +15,6 @@ import {
     type TextModelPricingKey
 } from '../../utils/pricing.js';
 import {
-    ANNOTATION_MESSAGE_LIMIT,
     EMBED_FIELD_VALUE_LIMIT,
     EMBED_MAX_FIELDS,
     EMBED_TOTAL_FIELD_CHAR_LIMIT,
@@ -37,7 +36,6 @@ import type {
 } from './types.js';
 import type { ImageGenerationContext } from './followUpCache.js';
 import { sanitizeForEmbed, setEmbedFooterText, truncateForEmbed } from './embed.js';
-import { PROMPT_ADJUSTMENT_MIN_REMAINING_RATIO } from './constants.js';
 
 /**
  * Provides structured metadata about a generated image so that different

@@ -13,11 +13,6 @@ traces/
 docs/licenses/
 packages/ethics-core/licenses/
 
-# TypeScript build artifacts
-*.tsbuildinfo
-*.js.map
-*.d.ts
-
 # Lock files
 pnpm-lock.yaml
 package-lock.json

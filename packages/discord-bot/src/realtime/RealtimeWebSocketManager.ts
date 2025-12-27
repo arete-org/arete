@@ -201,18 +201,18 @@ export class RealtimeWebSocketManager {
         */
     }
 
-    public on(event: string, callback: (data: any) => void): void {
+    public on(event: string, callback: (data: unknown) => void): void {
         if (!this.eventListeners.has(event)) {
             this.eventListeners.set(event, new Set());
         }
         this.eventListeners.get(event)?.add(callback);
     }
 
-    public off(event: string, callback: (data: any) => void): void {
+    public off(event: string, callback: (data: unknown) => void): void {
         this.eventListeners.get(event)?.delete(callback);
     }
 
-    private emit(event: string, data?: any): void {
+    private emit(event: string, data?: unknown): void {
         this.eventListeners.get(event)?.forEach(callback => {
             try {
                 callback(data);

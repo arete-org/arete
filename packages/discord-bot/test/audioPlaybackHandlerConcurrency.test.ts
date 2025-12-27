@@ -83,7 +83,14 @@ class MockPipeline {
 
 test('player errors do not allow overlapping processAudioQueue executions', async () => {
     const handler = new AudioPlaybackHandler();
-    const handlerAny = handler as any;
+    const handlerTestHarness = handler as unknown as {
+        pipelines: Map<string, MockPipeline>;
+        audioQueues: Map<string, Buffer[]>;
+        isProcessingQueue: Map<string, boolean>;
+        cleanupPipeline: (guildId: string) => void;
+        retryProcessingQueue: (connection: VoiceConnection) => void;
+        processAudioQueue: (connection: VoiceConnection) => Promise<void>;
+    };
     const guildId = 'guild-id';
 
     const connection = {
@@ -95,7 +102,7 @@ test('player errors do not allow overlapping processAudioQueue executions', asyn
     const originalSetTimeout = global.setTimeout;
     const scheduledCallbacks: Array<() => void> = [];
 
-    global.setTimeout = ((fn: (...args: any[]) => void, _delay?: number, ...args: any[]) => {
+    global.setTimeout = ((fn: (...args: unknown[]) => void, _delay?: number, ...args: unknown[]) => {
         const callback = () => fn(...args);
         scheduledCallbacks.push(callback);
         return {
@@ -118,29 +125,29 @@ test('player errors do not allow overlapping processAudioQueue executions', asyn
         player.emit('error', new Error('player failure'));
     }, player, encoder);
 
-    handlerAny.pipelines.set(guildId, pipeline);
+    handlerTestHarness.pipelines.set(guildId, pipeline);
 
     const queue = [Buffer.alloc(2, 0x01), Buffer.alloc(2, 0x02)];
-    handlerAny.audioQueues.set(guildId, queue);
+    handlerTestHarness.audioQueues.set(guildId, queue);
 
     encoder.once('error', () => {
-        const q = handlerAny.audioQueues.get(guildId);
-        handlerAny.cleanupPipeline(guildId);
+        const q = handlerTestHarness.audioQueues.get(guildId);
+        handlerTestHarness.cleanupPipeline(guildId);
         if (q && q.length > 0) {
-            handlerAny.retryProcessingQueue(connection);
+            handlerTestHarness.retryProcessingQueue(connection);
         }
     });
 
     player.on('error', () => {
-        handlerAny.cleanupPipeline(guildId);
-        handlerAny.retryProcessingQueue(connection);
+        handlerTestHarness.cleanupPipeline(guildId);
+        handlerTestHarness.retryProcessingQueue(connection);
     });
 
-    const originalProcess = handlerAny.processAudioQueue.bind(handlerAny);
+    const originalProcess = handlerTestHarness.processAudioQueue.bind(handlerTestHarness);
     let currentRuns = 0;
     let maxConcurrentRuns = 0;
 
-    handlerAny.processAudioQueue = async function wrappedProcess(connectionArg: VoiceConnection): Promise<void> {
+    handlerTestHarness.processAudioQueue = async function wrappedProcess(connectionArg: VoiceConnection): Promise<void> {
         currentRuns++;
         maxConcurrentRuns = Math.max(maxConcurrentRuns, currentRuns);
         try {
@@ -151,13 +158,13 @@ test('player errors do not allow overlapping processAudioQueue executions', asyn
     };
 
     try {
-        const processingPromise = handlerAny.processAudioQueue(connection);
+        const processingPromise = handlerTestHarness.processAudioQueue(connection);
 
         assert.equal(currentRuns, 1, 'initial processing run should be active');
         assert.ok(scheduledCallbacks.length > 0, 'player error should schedule a retry');
 
         const scheduled = scheduledCallbacks.shift()!;
-        const flagDuringRetry = handlerAny.isProcessingQueue.get(guildId);
+        const flagDuringRetry = handlerTestHarness.isProcessingQueue.get(guildId);
         scheduled();
 
         assert.equal(flagDuringRetry, true, 'retry should see processing already in progress');
@@ -167,10 +174,10 @@ test('player errors do not allow overlapping processAudioQueue executions', asyn
         pipeline.releaseWrite();
 
         await processingPromise;
-        assert.equal(handlerAny.isProcessingQueue.get(guildId), false, 'processing flag should reset after completion');
+        assert.equal(handlerTestHarness.isProcessingQueue.get(guildId), false, 'processing flag should reset after completion');
     } finally {
         global.setTimeout = originalSetTimeout;
-        handlerAny.processAudioQueue = originalProcess;
+        handlerTestHarness.processAudioQueue = originalProcess;
         pipeline.releaseWrite();
     }
 });

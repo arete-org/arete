@@ -9,7 +9,7 @@ import { AttachmentBuilder, ChatInputCommandInteraction, EmbedBuilder, Repliable
 import { Command } from './BaseCommand.js';
 import { logger } from '../utils/logger.js';
 import { formatUsd } from '../utils/pricing.js';
-import { buildPromptFieldValue, setEmbedFooterText, truncateForEmbed } from './image/embed.js';
+import { setEmbedFooterText, truncateForEmbed } from './image/embed.js';
 import { imageConfig } from '../config/imageConfig.js';
 // Pulling defaults from the constants module keeps the slash command aligned
 // with any environment overrides exposed by imageConfig.
@@ -103,9 +103,6 @@ function buildInitialStatusFields(
     resolutionFieldValue: string,
     followUpResponseId?: string | null
 ): StatusField[] {
-    const activePrompt = context.refinedPrompt ?? context.prompt;
-    const originalPrompt = context.originalPrompt ?? context.prompt;
-
     const fields: StatusField[] = [
         {
             name: 'Image model',

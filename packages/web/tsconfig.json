@@ -8,8 +8,7 @@
     "paths": {
       "@components/*": ["components/*"],
       "@pages/*": ["pages/*"],
-      "@ethics-core": ["../../ethics-core/src/index.ts"],
-      "ethics-core": ["../../ethics-core/src/index.ts"],
+      "@arete/backend/ethics-core": ["../../backend/src/ethics-core/index.ts"],
       "@styles/*": ["styles/*"],
       "@theme": ["theme"],
       "@types/*": ["types/*"]
@@ -17,6 +16,6 @@
   },
   "include": ["src", "src/types"],
   "references": [
-    { "path": "../ethics-core" }
+    { "path": "../backend" }
   ]
 }

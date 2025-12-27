@@ -27,14 +27,14 @@ export class EventManager {
   private events: Event[] = [];
   
   /** Dependencies to be injected into event handlers */
-  private dependencies: Record<string, any>;
+  private dependencies: Record<string, unknown>;
 
   /**
    * Creates an instance of EventManager.
    * @param {Client} client - The Discord.js client instance
-   * @param {Record<string, any>} [dependencies={}] - Dependencies to inject into event handlers
+   * @param {Record<string, unknown>} [dependencies={}] - Dependencies to inject into event handlers
    */
-  constructor(private client: Client, dependencies: Record<string, any> = {}) {
+  constructor(private client: Client, dependencies: Record<string, unknown> = {}) {
     this.dependencies = dependencies;
   }
 

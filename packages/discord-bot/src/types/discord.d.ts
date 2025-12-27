@@ -23,6 +23,6 @@ declare module 'discord.js' {
     /**
      * Map of event handlers, mapped by handler name
      */
-    handlers: Collection<string, any>;
+    handlers: Collection<string, unknown>;
   }
 }

@@ -6,7 +6,7 @@
  * @arete-ethics: moderate - Provenance accuracy affects transparency and trust.
  */
 import crypto from 'crypto';
-import { ResponseMetadata, RiskTier, Provenance, Citation } from 'ethics-core';
+import type { ResponseMetadata, RiskTier, Provenance, Citation } from '@arete/backend/ethics-core';
 import { AssistantMetadataPayload } from '../openaiService.js';
 
 interface RuntimeContext {
@@ -61,3 +61,4 @@ export function buildResponseMetadata(
     citations
   };
 }
+

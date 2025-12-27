@@ -9,8 +9,8 @@ import { renderPrompt } from '../env.js';
 import { logger } from '../logger.js';
 import { OpenAIService, OpenAIMessage, OpenAIOptions, OpenAIResponse, SupportedModel, TTS_DEFAULT_OPTIONS } from '../openaiService.js';
 import { ActivityOptions } from 'discord.js';
-import type { RiskTier } from 'ethics-core';
-import { DEFAULT_IMAGE_OUTPUT_COMPRESSION, DEFAULT_IMAGE_OUTPUT_FORMAT, DEFAULT_IMAGE_QUALITY } from '../../commands/image/constants.js';
+import type { RiskTier } from '@arete/backend/ethics-core';
+import { DEFAULT_IMAGE_OUTPUT_COMPRESSION } from '../../commands/image/constants.js';
 import type { ImageQualityType } from '../../commands/image/types.js';
 
 const PLANNING_MODEL: SupportedModel = 'gpt-5-nano';
@@ -433,3 +433,4 @@ export class Planner {
     return Math.min(100, Math.max(1, Math.round(value)));
   }
 }
+

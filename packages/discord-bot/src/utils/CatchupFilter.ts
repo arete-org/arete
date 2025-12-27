@@ -224,6 +224,7 @@ export class CatchupFilter {
 
     // Collapse whitespace to evaluate pure emoji sequences.
     const squashed = trimmed.replace(/\s+/g, '');
+    // eslint-disable-next-line no-misleading-character-class -- Unicode emoji sequences require combining characters.
     const emojiRegex = /^(?:[\p{Extended_Pictographic}][\u{200D}\u{FE0F}]*)+$/u;
     if (emojiRegex.test(squashed)) {
       return true;

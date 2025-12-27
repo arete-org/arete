@@ -1,5 +1,6 @@
+import type { CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
-import type { ResponseMetadata, RiskTier } from 'ethics-core';
+import type { ResponseMetadata, RiskTier, Citation } from '@arete/backend/ethics-core';
 
 interface ProvenanceFooterProps {
   metadata?: ResponseMetadata | null;
@@ -19,6 +20,7 @@ const ProvenanceFooter = ({ metadata }: ProvenanceFooterProps): JSX.Element | nu
 
   // Extract risk tier color based on riskTier (matching ethics-core)
   const riskTierColor = RISK_TIER_COLORS[metadata.riskTier] || RISK_TIER_COLORS.Low;
+  const riskStyle = { '--risk-color': riskTierColor } as CSSProperties;
 
   // Format confidence as percentage if available
   const formatConfidence = (confidence: number): string => {
@@ -36,14 +38,15 @@ const ProvenanceFooter = ({ metadata }: ProvenanceFooterProps): JSX.Element | nu
   // Process citations with safe URL parsing
   const citations: JSX.Element[] = [];
   if (metadata.citations && metadata.citations.length > 0) {
-    metadata.citations.forEach((citation, index) => {
+    metadata.citations.forEach((citation: Citation, index: number) => {
       try {
         const url = citation.url instanceof URL ? citation.url : new URL(citation.url);
         const hostname = url.hostname.replace('www.', '');
+        const href = typeof citation.url === 'string' ? citation.url : citation.url.toString();
         citations.push(
           <a
             key={index}
-            href={citation.url.toString()}
+            href={href}
             target="_blank"
             rel="noopener noreferrer"
             className="provenance-citation-link"
@@ -64,7 +67,7 @@ const ProvenanceFooter = ({ metadata }: ProvenanceFooterProps): JSX.Element | nu
       className="provenance-footer"
       role="complementary"
       aria-label="Response provenance and metadata"
-      style={{ ['--risk-color' as any]: riskTierColor }}
+      style={riskStyle}
     >
       <div className="provenance-header">
         Reasoning - {metadata.provenance}
@@ -137,3 +140,4 @@ const ProvenanceFooter = ({ metadata }: ProvenanceFooterProps): JSX.Element | nu
 };
 
 export default ProvenanceFooter;
+

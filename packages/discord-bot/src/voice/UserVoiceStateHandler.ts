@@ -5,7 +5,7 @@
  * @arete-risk: high - State handling errors can misjoin channels or leak sessions.
  * @arete-ethics: high - Voice session triggers must respect consent and privacy.
  */
-import { VoiceState } from 'discord.js';
+import type { Client, VoiceBasedChannel, VoiceState } from 'discord.js';
 import { logger } from '../utils/logger.js';
 import { getVoiceConnection } from '@discordjs/voice';
 import { cleanupVoiceConnection } from './VoiceConnectionManager.js';
@@ -19,7 +19,12 @@ export class UserVoiceStateHandler {
         this.sessionManager = sessionManager;
     }
 
-    public async handleUserVoiceChange(oldState: VoiceState, newState: VoiceState, client: any, startConversationCallback: (guildId: string) => Promise<void>): Promise<void> {
+    public async handleUserVoiceChange(
+        oldState: VoiceState,
+        newState: VoiceState,
+        client: Client,
+        startConversationCallback: (guildId: string) => Promise<void>
+    ): Promise<void> {
         const guildId = newState.guild.id;
         const member = newState.member;
 
@@ -52,7 +57,12 @@ export class UserVoiceStateHandler {
         }
     }
 
-    private async handleUserJoinedBotChannel(newState: VoiceState, botVoiceChannel: any, client: any, startConversationCallback: (guildId: string) => Promise<void>): Promise<void> {
+    private async handleUserJoinedBotChannel(
+        newState: VoiceState,
+        botVoiceChannel: VoiceBasedChannel,
+        client: Client,
+        startConversationCallback: (guildId: string) => Promise<void>
+    ): Promise<void> {
         const user = newState.member?.user;
         const guildId = newState.guild.id;
 
@@ -90,7 +100,12 @@ export class UserVoiceStateHandler {
         }
     }
 
-    private async handleUserLeftBotChannel(oldState: VoiceState, botVoiceChannel: any, guildId: string, client: any): Promise<void> {
+    private async handleUserLeftBotChannel(
+        oldState: VoiceState,
+        botVoiceChannel: VoiceBasedChannel,
+        guildId: string,
+        client: Client
+    ): Promise<void> {
         const user = oldState.member?.user;
         logger.info(`User ${user?.tag || 'Unknown'} left voice channel ${botVoiceChannel.name}`);
 

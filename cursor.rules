@@ -118,10 +118,10 @@ export interface SimpleConfig {
 - **@arete-risk**: Technical fragility (stability, security, data integrity)
 - **@arete-ethics**: Human/governance impact (privacy, fairness, transparency, social harm)
 - **@arete-scope**: Logical role in the system (helps auto-group modules)
-- Run `pnpm validate-arete-tags` before committing; CI enforces this to guarantee standardized risk/ethics levels.
+- Run `npm run validate-arete-tags` before committing; CI enforces this to guarantee standardized risk/ethics levels.
 - Keep annotations under 10 lines for readability
 - Separate technical risk from ethical sensitivity for clarity
-- Enable future automated audit tools (e.g., `pnpm audit-risk`)
+- Enable future automated audit tools (e.g., `npm run audit-risk`)
 
 ## ARETE Scoped Logger Tagging
 - Every scoped logger must include structured ARETE annotations in its JSDoc header.
@@ -150,6 +150,11 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 - Preserve provenance comments, cost tracking, and licensing headers.
 - Never remove risk annotations or audit metadata without explicit reason.
 - Maintain backward compatibility unless explicitly breaking for a versioned release.
+
+## Interaction Guardrails
+- When the user asks a question (not an explicit request to edit), do not modify files.
+- Ask for confirmation before making any changes unless the user clearly requests edits.
+- If uncertain whether a prompt is a question or an edit request, ask a brief clarifying question.
 
 ## Pre-Review Analysis with Cursor
 - **Use Cursor for structural pre-review** before human code review to catch complexity, inconsistencies, and missing documentation.

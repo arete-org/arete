@@ -29,6 +29,11 @@ export interface VoiceSession {
     audioPipeline: Promise<void>;
 }
 
+type VoiceSessionWithHandlers = VoiceSession & {
+    audioChunkHandler?: (event: AudioChunkEvent) => void;
+    silenceHandler?: (event: { guildId: string; userId: string }) => void;
+};
+
 export class VoiceSessionManager {
     private activeSessions: Map<string, VoiceSession> = new Map();
 
@@ -81,8 +86,9 @@ export class VoiceSessionManager {
         session.audioCaptureHandler.on('audioChunk', chunkHandler);
         session.audioCaptureHandler.on('speakerSilence', silenceHandler);
 
-        (session as any).audioChunkHandler = chunkHandler;
-        (session as any).silenceHandler = silenceHandler;
+        const sessionWithHandlers = session as VoiceSessionWithHandlers;
+        sessionWithHandlers.audioChunkHandler = chunkHandler;
+        sessionWithHandlers.silenceHandler = silenceHandler;
 
         logger.debug(`Added voice session for guild ${guildId}, total sessions: ${this.activeSessions.size}`);
     }
@@ -129,16 +135,17 @@ export class VoiceSessionManager {
     }
 
     private cleanupSessionEventListeners(session: VoiceSession): void {
-        const chunkHandler = (session as any).audioChunkHandler;
+        const sessionWithHandlers = session as VoiceSessionWithHandlers;
+        const chunkHandler = sessionWithHandlers.audioChunkHandler;
         if (chunkHandler) {
             session.audioCaptureHandler.off('audioChunk', chunkHandler);
-            delete (session as any).audioChunkHandler;
+            delete sessionWithHandlers.audioChunkHandler;
         }
 
-        const silenceHandler = (session as any).silenceHandler;
+        const silenceHandler = sessionWithHandlers.silenceHandler;
         if (silenceHandler) {
             session.audioCaptureHandler.off('speakerSilence', silenceHandler);
-            delete (session as any).silenceHandler;
+            delete sessionWithHandlers.silenceHandler;
         }
     }
 

@@ -23,6 +23,16 @@ import { UserVoiceStateHandler } from '../voice/UserVoiceStateHandler.js';
 import { VoiceConnectionManager } from '../voice/VoiceConnectionManager.js';
 import { RealtimeContextBuilder, RealtimeContextParticipant } from '../utils/prompting/RealtimeContextBuilder.js';
 
+type ClientWithHandlers = Client & {
+    handlers?: {
+        set: (key: string, handler: unknown) => void;
+    };
+};
+
+type RealtimeSessionWithListeners = RealtimeSession & {
+    listenersAttached?: boolean;
+};
+
 export class VoiceStateHandler extends Event {
     private sessionManager: VoiceSessionManager;
     private audioCaptureHandler: AudioCaptureHandler;
@@ -47,9 +57,9 @@ export class VoiceStateHandler extends Event {
         this.realtimeContextBuilder = new RealtimeContextBuilder();
 
         try {
-            const anyClient = this.client as any;
-            if (anyClient && anyClient.handlers && typeof anyClient.handlers.set === 'function') {
-                anyClient.handlers.set('voiceState', this);
+            const clientWithHandlers = this.client as ClientWithHandlers;
+            if (clientWithHandlers.handlers && typeof clientWithHandlers.handlers.set === 'function') {
+                clientWithHandlers.handlers.set('voiceState', this);
             }
         } catch {
           // Ignore errors during cleanup
@@ -244,8 +254,9 @@ export class VoiceStateHandler extends Event {
         });
 
         // Attach listeners only once
-        if (!(realtimeSession as any).listenersAttached) {
-            (realtimeSession as any).listenersAttached = true;
+        const sessionWithListeners = realtimeSession as RealtimeSessionWithListeners;
+        if (!sessionWithListeners.listenersAttached) {
+            sessionWithListeners.listenersAttached = true;
 
             realtimeSession.on('audio', (audioData: Buffer) => {
                 if (!audioData || audioData.length === 0) return;
@@ -261,8 +272,10 @@ export class VoiceStateHandler extends Event {
 
             realtimeSession.on('text', (text: string) => logger.debug(`[BOT TEXT] ${text}`));
             realtimeSession.on('greeting', (text: string) => logger.info(`[BOT GREETING] ${text}`));
-            realtimeSession.on('response.completed', (event: any) => logger.debug(`[BOT RESPONSE COMPLETED] Response ID: ${event?.response_id || 'unknown'}`));
-            realtimeSession.on('response.output_audio.done', (event: any) => logger.debug('[BOT AUDIO DONE] Audio stream completed for ' + event));
+            realtimeSession.on('response.completed', (event: { response_id?: string }) =>
+                logger.debug(`[BOT RESPONSE COMPLETED] Response ID: ${event.response_id || 'unknown'}`));
+            realtimeSession.on('response.output_audio.done', (event: unknown) =>
+                logger.debug(`[BOT AUDIO DONE] Audio stream completed for ${String(event)}`));
             realtimeSession.on('error', (error: Error) => logger.error('[RealtimeSession] Error:', error));
 
             realtimeSession.on('connected', () => logger.info('[RealtimeSession] Connected to OpenAI Realtime API'));

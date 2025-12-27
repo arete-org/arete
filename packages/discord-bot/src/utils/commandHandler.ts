@@ -138,7 +138,7 @@ export class CommandHandler {
         const data = await rest.put(
           Routes.applicationGuildCommands(clientId, guildId),
           { body: commands }
-        ) as any[];
+        ) as unknown[];
         logger.info(`Successfully reloaded ${data.length} guild commands.`);
       } else {
         // Global commands
@@ -146,7 +146,7 @@ export class CommandHandler {
         const data = await rest.put(
           Routes.applicationCommands(clientId),
           { body: commands }
-        ) as any[];
+        ) as unknown[];
         logger.info(`Successfully reloaded ${data.length} global commands.`);
       }
     } catch (error) {

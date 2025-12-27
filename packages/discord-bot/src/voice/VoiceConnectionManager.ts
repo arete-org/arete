@@ -5,7 +5,7 @@
  * @arete-risk: high - Connection leaks can destabilize voice playback or capture.
  * @arete-ethics: high - Voice connection control affects consent and session boundaries.
  */
-import { VoiceConnection } from '@discordjs/voice';
+import { VoiceConnection, VoiceConnectionStatus } from '@discordjs/voice';
 import { Client } from 'discord.js';
 import { logger } from '../utils/logger.js';
 import { getVoiceConnection } from '@discordjs/voice';
@@ -70,8 +70,9 @@ export class VoiceConnectionManager {
 
             // Stop any ongoing audio playback
             try {
-                const connectionAny = connection as any;
-                const subscription = connectionAny.state?.subscription;
+                const subscription = connection.state.status === VoiceConnectionStatus.Ready
+                    ? connection.state.subscription
+                    : null;
                 if (subscription) {
                     logger.debug('[cleanupVoiceConnection] Unsubscribing from audio subscription');
                     subscription.unsubscribe();

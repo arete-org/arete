@@ -27,7 +27,7 @@ export interface RealtimeSessionOptions {
 
 export interface RealtimeEvent {
     type: string;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export interface AudioChunk {
@@ -48,7 +48,7 @@ export interface RealtimeResponseAudioDeltaEvent {
 export interface RealtimeResponseCompletedEvent {
     type: 'response.completed';
     response_id: string;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export interface RealtimeErrorEvent {
@@ -56,7 +56,7 @@ export interface RealtimeErrorEvent {
     error: {
         message: string;
         code: string;
-        [key: string]: any;
+        [key: string]: unknown;
     };
 }
 

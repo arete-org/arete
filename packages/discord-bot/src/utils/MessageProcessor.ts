@@ -41,11 +41,9 @@ import { readFollowUpContext, saveFollowUpContext, type ImageGenerationContext }
 import { recoverContextDetailsFromMessage, type RecoveredImageContext } from '../commands/image/contextResolver.js';
 import { buildResponseMetadata } from './response/metadata.js';
 import { buildFooterEmbed } from './response/provenanceFooter.js';
-import { ResponseMetadata } from 'ethics-core';
-import { defaultTraceStore } from '@arete/shared';
+import type { ResponseMetadata } from '@arete/backend/ethics-core';
 import type {
   ImageBackgroundType,
-  ImageQualityType,
   ImageRenderModel,
   ImageStylePreset,
   ImageTextModel,
@@ -97,6 +95,8 @@ const clampOutputCompression = (value: number | undefined | null): number => {
   }
   return Math.min(100, Math.max(1, Math.round(value as number)));
 };
+
+let warnedMissingTraceToken = false;
 
 export class MessageProcessor {
   private readonly openaiService: OpenAIService;
@@ -525,11 +525,57 @@ export class MessageProcessor {
           // Save trace asynchronously
           const persistTrace = async () => {
             try {
-              await defaultTraceStore.upsert(responseMetadata);
-              logger.debug(`Persisted response metadata for response ${responseMetadata.responseId} to trace store.`);
+              if (!config.traceApiToken && !warnedMissingTraceToken) {
+                warnedMissingTraceToken = true;
+                logger.warn('TRACE_API_TOKEN is not set; backend trace ingestion will reject requests.');
+              }
+
+              const headers: Record<string, string> = {
+                'Content-Type': 'application/json'
+              };
+              if (config.traceApiToken) {
+                headers['X-Arete-Trace-Token'] = config.traceApiToken;
+              }
+
+              const traceUrl = `${config.backendBaseUrl}/api/traces`;
+              const maxAttempts = 3;
+
+              for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+                try {
+                  const response = await fetch(traceUrl, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(responseMetadata)
+                  });
+                  if (!response.ok) {
+                    const errorText = await response.text();
+                    if (response.status >= 500 && attempt < maxAttempts) {
+                      logger.warn(
+                        `Trace API retry ${attempt}/${maxAttempts} failed with ${response.status}; backing off before retry.`
+                      );
+                      await new Promise(resolve => setTimeout(resolve, 250 * attempt));
+                      continue;
+                    }
+                    throw new Error(`Trace API ${response.status}: ${errorText}`);
+                  }
+                  logger.debug(
+                    `Persisted response metadata for response ${responseMetadata.responseId} via backend API.`
+                  );
+                  return;
+                } catch (error) {
+                  if (attempt < maxAttempts) {
+                    logger.warn(
+                      `Trace API attempt ${attempt}/${maxAttempts} failed; retrying. Error: ${(error as Error)?.message ?? error}`
+                    );
+                    await new Promise(resolve => setTimeout(resolve, 250 * attempt));
+                    continue;
+                  }
+                  throw error;
+                }
+              }
             } catch (error) {
               logger.error(
-                `Failed to persist response metadata for response ${responseMetadata.responseId}: ${(
+                `Failed to persist response metadata for response ${responseMetadata.responseId} (backend: ${config.backendBaseUrl}): ${(
                   error as Error
                 )?.message ?? error}`
               );
@@ -676,4 +722,5 @@ export async function cleanupTTSFile(ttsPath: string): Promise<void> {
     logger.debug(`Failed to delete TTS file ${ttsPath}: ${err?.message ?? err}`);
   }
 }
+
 

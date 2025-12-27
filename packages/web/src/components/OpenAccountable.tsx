@@ -34,7 +34,7 @@ const PRINCIPLES: Principle[] = [
     description:
       'MIT + Hippocratic — open for everyone, grounded in ethics.',
     link: {
-      href: 'https://github.com/arete-org/arete/blob/main/LICENSE_STRATEGY.md',
+      href: 'https://github.com/arete-org/arete/blob/main/docs/LICENSE_STRATEGY.md',
       label: 'Licensing',
       external: true,
     },

@@ -23,6 +23,21 @@ import { logger } from '../utils/logger.js';
 const DEFAULT_MAX_RESULTS = 3;
 const MAX_RESULTS = 5;
 
+type NewsItem = {
+  title: string;
+  summary: string;
+  url: string;
+  source: string;
+  timestamp: string;
+  thumbnail?: string | null;
+  image?: string | null;
+};
+
+type NewsResponse = {
+  news: NewsItem[];
+  summary?: string;
+};
+
 const newsFunction = {
   name: "generate_news_response",
   description: "Generates a structured news response with multiple news items and a summary",
@@ -209,7 +224,7 @@ const newsCommand: Command = {
         throw new Error('No function call returned from OpenAI');
       }
 
-      const newsResponse = JSON.parse(functionCall.arguments);
+      const newsResponse = JSON.parse(functionCall.arguments) as NewsResponse;
       if (!newsResponse.news || !Array.isArray(newsResponse.news)) {
         throw new Error('Invalid news response format');
       }
@@ -217,7 +232,7 @@ const newsCommand: Command = {
       // TODO: REMOVE
       logger.info(`News response: ${JSON.stringify(newsResponse)}`);
       logger.info(`Image analysis for ${newsResponse.news.length} articles:`);
-      newsResponse.news.forEach((item: any, index: number) => {
+      newsResponse.news.forEach((item, index) => {
         const hasThumbnail = !!item.thumbnail;
         const hasImage = !!item.image;
         logger.info(`Article ${index + 1}: "${item.title}"`);
@@ -226,7 +241,7 @@ const newsCommand: Command = {
       });
 
       // Create embeds for each news item
-      const embeds = newsResponse.news.slice(0, maxResults).map((item: any) => {
+      const embeds = newsResponse.news.slice(0, maxResults).map((item) => {
         const embed = new EmbedBuilder()
           .setTitle(item.title)
           .setDescription(item.summary)

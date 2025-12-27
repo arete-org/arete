@@ -15,6 +15,7 @@ import { fileURLToPath } from 'url';
 import path, { dirname } from 'path';
 import fs from 'fs';
 import OpenAI from 'openai';
+import type { ResponseCreateParamsNonStreaming } from 'openai/resources/responses/responses.js';
 import { logger } from './logger.js';
 import { renderPrompt } from './env.js';
 import { ActivityOptions } from 'discord.js';
@@ -26,6 +27,8 @@ import { IMAGE_DESCRIPTION_CONFIG, type ImageDescriptionModelType } from '../con
 // ====================
 // Type Declarations
 // ====================
+
+type ResponseCreateParams = ResponseCreateParamsNonStreaming;
 
 export type { GPT5ModelType } from './pricing.js';
 export type SupportedModel = GPT5ModelType;
@@ -71,7 +74,7 @@ export interface OpenAIOptions {
   functions?: Array<{
     name: string;
     description?: string;
-    parameters: Record<string, any>;
+    parameters: Record<string, unknown>;
   }>;
   function_call?: { name: string } | 'auto' | 'none' | 'required' | null;
   tool_choice?: {
@@ -174,6 +177,31 @@ interface ResponseOutputItemExtended {
   finish_reason?: string;
 }
 
+type OpenAIWebSearchTool = {
+  type: 'web_search';
+  filters?: { allowed_domains?: string[] };
+  search_context_size?: 'low' | 'medium' | 'high';
+  user_location?: {
+    type?: 'approximate' | 'exact';
+    country?: string;
+    city?: string;
+    region?: string;
+    timezone?: string;
+  };
+};
+
+type OpenAIFunctionTool = {
+  type: 'function';
+  name: string;
+  description?: string;
+  parameters?: Record<string, unknown>;
+  strict?: boolean;
+};
+
+type OpenAITool = OpenAIWebSearchTool | OpenAIFunctionTool;
+
+const isFunctionTool = (tool: OpenAITool): tool is OpenAIFunctionTool => tool.type === 'function';
+
 // ====================
 // Constants / Variables
 // ====================
@@ -268,32 +296,38 @@ export class OpenAIService {
     const { reasoningEffort = 'low', verbosity = 'low' } = options;
 
     try {
+      const buildInputMessage = (role: OpenAIMessage['role'], text: string) => ({
+        role,
+        type: 'message' as const,
+        // Use string content for assistant history to stay within ResponseInput types.
+        content: role === 'assistant'
+          ? text
+          : [{ type: 'input_text' as const, text }]
+      });
+
       // Map messages for the OpenAI Responses API
-      const messages = messagesInput.map(msg => ({
-        role: msg.role,
-        content: [{
-          type: msg.role === 'assistant' ? 'output_text' : 'input_text' as const,
-          text: msg.content
-        }]
-      }));
+      const messages = messagesInput.map(msg => buildInputMessage(msg.role, msg.content));
 
       // Validate messages before sending to OpenAI
       const validMessages = messages.filter(msg => {
-        if (!msg.content || typeof msg.content[0].text !== 'string' || msg.content[0].text.trim() === '') {
+        const contentText = typeof msg.content === 'string'
+          ? msg.content
+          : msg.content?.[0]?.text;
+        if (!contentText || typeof contentText !== 'string' || contentText.trim() === '') {
           logger.warn(`Filtering out invalid message: ${JSON.stringify(msg)}`);
           return false;
         }
         return true;
       });
 
-      const tools: any[] = []; // Initialize tools array
+      const tools: OpenAITool[] = []; // Initialize tools array
       const doingWebSearch = typeof options.tool_choice === 'object' && 
                               options.tool_choice !== null && 
                               options.tool_choice.type === 'web_search';
       
       // Add web search tool if enabled
       if (doingWebSearch) {
-        const webSearchTool: any = {
+        const webSearchTool: OpenAIWebSearchTool = {
           type: 'web_search',
         };
 
@@ -329,25 +363,29 @@ export class OpenAIService {
       }
 
       // Create request payload to pass to OpenAI
-      const requestPayload: any = {
+      const requestPayload: ResponseCreateParams = {
         model,
         input: [
           ...validMessages,
           ...(doingWebSearch ? [{
             role: 'system' as const,
-            content: `The planner instructed you to perform a web search for: ${options.webSearch?.query}`
+            type: 'message' as const,
+            content: [{
+              type: 'input_text' as const,
+              text: `The planner instructed you to perform a web search for: ${options.webSearch?.query}`
+            }]
           }] : []),
           //...(options.ttsOptions ? [{ role: 'system' as const, content: `This message will be read as TTS. If appropriate, add a little emphasis with italics (wrap with *), bold (wrap with **), and/or UPPERCASE (shouting).` }] : []) 
           // TODO: This system message is always appended, even when TTS is not enabled. Consider adding logic to only include it if TTS options are present.
         ],
         ...(reasoningEffort && { reasoning: { effort: reasoningEffort } }),
         ...(verbosity && { text: { verbosity } }),
-        ...(tools.length > 0 && { tools })
+        ...(tools.length > 0 && { tools: tools as ResponseCreateParams['tools'] })
       };
 
       const toolNames = tools
-        .filter(tool => tool?.type === 'function' && typeof tool?.name === 'string')
-        .map(tool => tool.name as string);
+        .filter(isFunctionTool)
+        .map(tool => tool.name);
       const toolTypes = Array.from(new Set(tools.map(tool => tool?.type).filter(Boolean)));
       const requestMetadata = {
         model,

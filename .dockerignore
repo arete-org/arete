@@ -1,5 +1,8 @@
-fly.toml
-Dockerfile
-.dockerignore
 node_modules
+**/node_modules
 .git
+logs
+traces
+data
+keys
+packages/web/dist

@@ -1,0 +1,23 @@
+:80 {
+  handle /api/traces {
+    respond "Forbidden" 403
+  }
+
+  handle /api/* {
+    reverse_proxy {$BACKEND_HOST}:3000
+  }
+
+  handle /trace/*.json {
+    reverse_proxy {$BACKEND_HOST}:3000
+  }
+
+  handle /config.json {
+    reverse_proxy {$BACKEND_HOST}:3000
+  }
+
+  handle {
+    root * /usr/share/caddy
+    try_files {path} /index.html
+    file_server
+  }
+}

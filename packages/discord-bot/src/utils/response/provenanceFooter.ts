@@ -8,7 +8,7 @@
 import { EmbedBuilder } from './EmbedBuilder.js';
 import { ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
 import { logger } from '../logger.js';
-import type { ResponseMetadata, RiskTier, Citation } from 'ethics-core';
+import type { ResponseMetadata, RiskTier, Citation } from '@arete/backend/ethics-core';
 
 // Footer payload type: Embed plus interactive components (buttons)
 type ProvenanceFooterPayload = { embeds: EmbedBuilder[], components: ActionRowBuilder<ButtonBuilder>[] };
@@ -129,4 +129,5 @@ export function buildFooterEmbed(responseMetadata: ResponseMetadata, webBaseUrl:
     // Return the ProvenanceFooterPayload - Embed plus interactive components (buttons)
     return { embeds: [embed], components: [actionRow] };
 };
+
 

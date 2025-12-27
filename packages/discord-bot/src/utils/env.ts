@@ -7,9 +7,10 @@
  */
 
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { PromptKey } from '@arete/shared';
+import type { PromptKey } from '@arete/backend/shared';
 import { logger } from './logger.js';
 
 // Get the current directory
@@ -20,8 +21,8 @@ const __dirname = path.dirname(__filename);
 const envPath = path.resolve(__dirname, '../../../../.env');
 logger.debug(`Loading environment variables from: ${envPath}`);
 
-// Load environment variables from .env file in the root directory
-try {
+// Load environment variables from .env file in the root directory (when present).
+if (fs.existsSync(envPath)) {
   const { error, parsed } = dotenv.config({ path: envPath });
 
   if (error) {
@@ -29,8 +30,8 @@ try {
   } else if (parsed) {
     logger.debug(`Loaded environment variables: ${Object.keys(parsed).join(', ')}`);
   }
-} catch {
-  logger.warn('No .env found (expected on Fly.io deployments)');
+} else {
+  logger.debug('No .env file found; relying on injected environment variables.');
 }
 
 // Import shared module after environment has been configured so it reads the correct values.
@@ -39,10 +40,10 @@ const {
   renderPrompt: sharedRenderPrompt,
   setActivePromptRegistry
 }: {
-  PromptRegistry: typeof import('@arete/shared').PromptRegistry;
-  renderPrompt: typeof import('@arete/shared').renderPrompt;
-  setActivePromptRegistry: typeof import('@arete/shared').setActivePromptRegistry;
-} = await import('@arete/shared');
+  PromptRegistry: typeof import('@arete/backend/shared').PromptRegistry;
+  renderPrompt: typeof import('@arete/backend/shared').renderPrompt;
+  setActivePromptRegistry: typeof import('@arete/backend/shared').setActivePromptRegistry;
+} = await import('@arete/backend/shared');
 
 /**
  * List of required environment variables that must be set for the application to run.
@@ -57,10 +58,22 @@ const REQUIRED_ENV_VARS: readonly string[] = [
   'INCIDENT_PSEUDONYMIZATION_SECRET' // Secret key for HMAC pseudonymization of Discord IDs
 ] as const;
 
+type RateLimitDefaults = {
+  USER_LIMIT: number;
+  USER_WINDOW_MS: number;
+  CHANNEL_LIMIT: number;
+  CHANNEL_WINDOW_MS: number;
+  GUILD_LIMIT: number;
+  GUILD_WINDOW_MS: number;
+  RATE_LIMIT_USER: 'true' | 'false';
+  RATE_LIMIT_CHANNEL: 'true' | 'false';
+  RATE_LIMIT_GUILD: 'true' | 'false';
+};
+
 /**
  * Default rate limit configurations
  */
-const DEFAULT_RATE_LIMITS: Record<string, any> = {
+const DEFAULT_RATE_LIMITS: RateLimitDefaults = {
   // Per-user: 5 messages per minute
   USER_LIMIT: 5,
   USER_WINDOW_MS: 60_000,
@@ -74,7 +87,7 @@ const DEFAULT_RATE_LIMITS: Record<string, any> = {
   RATE_LIMIT_USER: 'true',
   RATE_LIMIT_CHANNEL: 'true',
   RATE_LIMIT_GUILD: 'true'
-} as const;
+};
 
 /**
  * Limits on channel/thread visibility
@@ -229,9 +242,10 @@ const flyAppName = process.env.FLY_APP_NAME?.trim();
 // Default to the Fly-provisioned hostname when present so deployments work without extra config.
 const fallbackWebBaseUrl = flyAppName ? `https://${flyAppName}.fly.dev` : undefined;
 const rawWebBaseUrl = process.env.WEB_BASE_URL?.trim();
+const fallbackLocalBaseUrl = 'http://localhost:8080';
 const webBaseUrl = rawWebBaseUrl && rawWebBaseUrl.length > 0
   ? rawWebBaseUrl
-  : fallbackWebBaseUrl;
+  : fallbackWebBaseUrl || fallbackLocalBaseUrl;
 
 if (!webBaseUrl) {
   throw new Error(
@@ -239,6 +253,17 @@ if (!webBaseUrl) {
   );
 }
 logger.info(`Using web base URL: ${webBaseUrl}`);
+
+const rawBackendBaseUrl = process.env.BACKEND_BASE_URL?.trim();
+const fallbackBackendBaseUrl = flyAppName
+  ? 'http://arete-backend.internal:3000'
+  : 'http://localhost:3000';
+const backendBaseUrl = rawBackendBaseUrl && rawBackendBaseUrl.length > 0
+  ? rawBackendBaseUrl.replace(/\/+$/, '')
+  : fallbackBackendBaseUrl;
+
+logger.info(`Using backend base URL: ${backendBaseUrl}`);
+const traceApiToken = process.env.TRACE_API_TOKEN?.trim();
 
 // Instantiate the shared prompt registry and expose it to downstream modules.
 export const promptRegistry = new PromptRegistry({ overridePath: promptConfigPath });
@@ -358,6 +383,8 @@ export const config = {
   incidentPseudonymizationSecret: process.env.INCIDENT_PSEUDONYMIZATION_SECRET!,
   promptConfigPath,
   webBaseUrl,
+  backendBaseUrl,
+  traceApiToken,
   
   // Bot mention names for engagement detection
   botMentionNames: getStringArrayEnv('BOT_MENTION_NAMES', DEFAULT_BOT_MENTION_NAMES),

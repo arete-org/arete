@@ -6,7 +6,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import BlogPostCard from '../components/BlogPostCard';
 import Header from '../components/Header';
-import { fetchBlogIndex, getLatestBlogPosts, getBlogPostsPage } from '../utils/blog';
+import { getLatestBlogPosts, getBlogPostsPage } from '../utils/blog';
 import type { BlogPostMetadata } from '../types/blog';
 
 type LoadingState = 'loading' | 'success' | 'error' | 'loading-more';

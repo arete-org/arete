@@ -1,5 +1,5 @@
 /**
- * Utility functions for fetching blog posts and index from static JSON files.
+ * Utility functions for fetching blog posts and index from backend endpoints.
  * Uses discussion number as identifier/slug for routing.
  */
 
@@ -11,7 +11,7 @@ import type { BlogPost, BlogPostMetadata, BlogIndex } from '../types/blog';
  */
 export async function fetchBlogIndex(): Promise<BlogIndex | null> {
   try {
-    const response = await fetch('/blog-posts/index.json');
+    const response = await fetch('/api/blog-posts');
     
     if (!response.ok) {
       if (response.status === 404) {
@@ -35,7 +35,7 @@ export async function fetchBlogIndex(): Promise<BlogIndex | null> {
  */
 export async function fetchBlogPost(discussionNumber: number): Promise<BlogPost | null> {
   try {
-    const response = await fetch(`/blog-posts/${discussionNumber}.json`);
+    const response = await fetch(`/api/blog-posts/${discussionNumber}`);
     
     if (!response.ok) {
       if (response.status === 404) {

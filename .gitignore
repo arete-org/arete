@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+*.tsbuildinfo
 
 # Environment files
 .env
@@ -20,34 +21,18 @@ packages/discord-bot/dist/
 packages/discord-bot/output/
 packages/discord-bot/src/output/
 
-# Ethics core build artifacts
-packages/ethics-core/dist/
-packages/ethics-core/src/**/*.js
-packages/ethics-core/src/**/*.js.map
-packages/ethics-core/src/**/*.d.ts
-
-# Shared build artifacts
-packages/shared/dist/
-packages/shared/src/**/*.js
-packages/shared/src/**/*.js.map
-packages/shared/src/**/*.d.ts
-
-# Traces (from all sources)
-packages/discord-bot/traces/
-traces/
+# Backend build artifacts
+packages/backend/dist/
 
 # Keys
 keys/
 *.pem
 
 # VSCode settings
-.vscode
+.vscode/
 
 # Frontend build artifacts
 packages/web/dist/
-packages/web/src/**/*.js
-packages/web/src/**/*.js.map
-packages/web/src/**/*.d.ts
 packages/web/tsconfig*.tsbuildinfo
 packages/web/vite.config.js
 packages/web/vite.config.js.map

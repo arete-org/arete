@@ -3,6 +3,7 @@
  * GitHub discussion link, and comment count for blog posts.
  * Follows the same patterns as ProvenanceFooter for consistency.
  */
+import type { CSSProperties } from 'react';
 import type { BlogPost } from '../types/blog';
 
 interface BlogProvenanceProps {
@@ -61,13 +62,14 @@ const BlogProvenance = ({ post }: BlogProvenanceProps): JSX.Element => {
   const relativeCreated = formatRelativeTime(post.createdAt);
   const relativeUpdated = formatRelativeTime(post.updatedAt);
   const isUpdated = post.createdAt !== post.updatedAt;
+  const riskStyle = { '--risk-color': '#7FDCA4' } as CSSProperties;
 
   return (
     <aside 
       className="provenance-footer"
       role="complementary"
       aria-label="Blog post provenance and metadata"
-      style={{ ['--risk-color' as any]: '#7FDCA4' }} // Use sage green for blog posts
+      style={riskStyle} // Use sage green for blog posts
     >
       <div className="provenance-header">
         Blog Post - Discussion #{post.number}

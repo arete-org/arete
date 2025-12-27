@@ -5,7 +5,6 @@
  * @arete-risk: moderate - Interaction failures can block provenance navigation.
  * @arete-ethics: high - Provenance access affects user trust and accountability.
  */
-import { defaultTraceStore } from '@arete/shared';
 import type {
   ButtonInteraction,
   InteractionReplyOptions,
@@ -25,11 +24,11 @@ import {
   TextInputBuilder,
   TextInputStyle
 } from 'discord.js';
-import { ResponseMetadata, type Citation } from 'ethics-core';
+import type { ResponseMetadata, Citation } from '@arete/backend/ethics-core';
 import { logger } from '../logger.js';
 import { ResponseHandler } from './ResponseHandler.js';
 import { OpenAIService, type OpenAIMessage, type OpenAIOptions, type SupportedModel } from '../openaiService.js';
-import { renderPrompt } from '../env.js';
+import { config, renderPrompt } from '../env.js';
 import { Planner } from '../prompting/Planner.js';
 
 export type AlternativeLensKey =
@@ -565,7 +564,12 @@ export async function resolveProvenanceMetadata(message: Message): Promise<{ res
   }
 
   try {
-    const metadata = await defaultTraceStore.retrieve(responseId);
+    const response = await fetch(`${config.backendBaseUrl}/trace/${responseId}.json`);
+    if (!response.ok) {
+      logger.warn(`Failed to load provenance metadata for response ${responseId}: HTTP ${response.status}`);
+      return { responseId, metadata: null };
+    }
+    const metadata = (await response.json()) as ResponseMetadata;
     return { responseId, metadata };
   } catch (error) {
     logger.warn(`Failed to load provenance metadata for response ${responseId}:`, error);
@@ -993,4 +997,5 @@ export async function handleAlternativeLensSubmit(interaction: ButtonInteraction
     clearAlternativeLensInProgress(messageId);
   }
 }
+
 

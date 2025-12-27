@@ -1,0 +1,35 @@
+# Fly app: backend (API + persistence)
+app = 'arete-backend'
+primary_region = 'ord'
+
+[build]
+  dockerfile = 'Dockerfile.backend'
+
+[env]
+  NODE_ENV = 'production'
+  ARETE_ALLOWED_ORIGINS = 'https://arete-web.fly.dev'
+  ARETE_FRAME_ANCESTORS = 'https://arete-web.fly.dev'
+
+# Backend listens on 3000; keep this in sync with server.js.
+# No public service is defined; access is via Fly internal networking only.
+[[services]]
+  internal_port = 3000
+  protocol = 'tcp'
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 1
+  max_machines_running = 1
+
+  [services.concurrency]
+    hard_limit = 25
+    soft_limit = 20
+    type = 'connections'
+
+[[mounts]]
+  source      = 'provenance_data'
+  destination = '/data'
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "256mb"

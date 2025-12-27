@@ -21,6 +21,7 @@ import { logger } from './utils/logger.js';
 import { config } from './utils/env.js';
 import { OpenAIService } from './utils/openaiService.js';
 import { ResponseHandler } from './utils/response/ResponseHandler.js';
+import type { Command } from './commands/BaseCommand.js';
 import { evictFollowUpContext, readFollowUpContext, saveFollowUpContext } from './commands/image/followUpCache.js';
 import { runImageGenerationSession } from './commands/image.js';
 import {
@@ -56,6 +57,8 @@ import {
   updateVariationSession
 } from './commands/image/variationSessions.js';
 import { resolveAspectRatioSettings } from './commands/image/aspect.js';
+import type { ImageGenerationContext } from './commands/image/followUpCache.js';
+import type { ImageQualityType, ImageRenderModel } from './commands/image/types.js';
 import {
   buildTokenSummaryLine,
   consumeImageTokens,
@@ -85,6 +88,10 @@ import {
 } from './utils/response/provenanceInteractions.js';
 //import express from 'express'; // For webhook
 //import bodyParser from "body-parser"; // For webhook
+
+type ClientWithCommands = Client & {
+  commands?: Map<string, Command>;
+};
 
 // ====================
 // Environment Setup
@@ -160,8 +167,9 @@ client.handlers = new Collection();
     
     // Store commands in memory for execution
     commands.forEach((cmd, name) => {
-      (client as any).commands = (client as any).commands || new Map();
-      (client as any).commands.set(name, cmd);
+      const clientWithCommands = client as ClientWithCommands;
+      clientWithCommands.commands = clientWithCommands.commands || new Map();
+      clientWithCommands.commands.set(name, cmd);
       logger.debug(`Command stored in memory: ${name}`);
     });
 
@@ -227,7 +235,7 @@ function buildExplainLogContext(
 // Slash commands handler
 client.on(Events.InteractionCreate, async interaction => {
   if (interaction.isChatInputCommand()) {
-    const command = (interaction.client as any).commands?.get(interaction.commandName);
+    const command = (interaction.client as ClientWithCommands).commands?.get(interaction.commandName);
 
     if (!command) {
       logger.error(`No command matching ${interaction.commandName} was found.`);
@@ -271,7 +279,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (customId.startsWith(IMAGE_VARIATION_QUALITY_SELECT_PREFIX)) {
       const responseId = customId.slice(IMAGE_VARIATION_QUALITY_SELECT_PREFIX.length);
       const session = updateVariationSession(interaction.user.id, responseId, current => {
-        current.quality = selected as any;
+        current.quality = selected as ImageQualityType;
       });
 
       if (!session) {
@@ -291,7 +299,9 @@ client.on(Events.InteractionCreate, async interaction => {
     if (customId.startsWith(IMAGE_VARIATION_ASPECT_SELECT_PREFIX)) {
       const responseId = customId.slice(IMAGE_VARIATION_ASPECT_SELECT_PREFIX.length);
       const session = updateVariationSession(interaction.user.id, responseId, current => {
-        const { size, aspectRatio, aspectRatioLabel } = resolveAspectRatioSettings(selected as any);
+        const { size, aspectRatio, aspectRatioLabel } = resolveAspectRatioSettings(
+          selected as ImageGenerationContext['aspectRatio']
+        );
         current.size = size;
         current.aspectRatio = aspectRatio;
         current.aspectRatioLabel = aspectRatioLabel;
@@ -314,7 +324,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (customId.startsWith(IMAGE_VARIATION_IMAGE_MODEL_SELECT_PREFIX)) {
       const responseId = customId.slice(IMAGE_VARIATION_IMAGE_MODEL_SELECT_PREFIX.length);
       const session = updateVariationSession(interaction.user.id, responseId, current => {
-        current.imageModel = selected as any;
+        current.imageModel = selected as ImageRenderModel;
       });
 
       if (!session) {
@@ -791,7 +801,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (customId === 'report_issue') {
       logger.info(`Report Issue button clicked by user: ${interaction.user.id} on message: ${interaction.message.id} (${interaction.message.url})`);
       await interaction.reply({
-        content: "This feature isn't active yet. To report ethical or security issues, please follow the instructions in [SECURITY.md](https://github.com/arete-org/arete/blob/main/SECURITY.md).",
+        content: "This feature isn't active yet. To report ethical or security issues, please follow the instructions in [SECURITY.md](https://github.com/arete-org/arete/blob/main/docs/SECURITY.md).",
         flags: [1 << 6] // [1 << 6] = EPHEMERAL
       });
       return;
@@ -909,7 +919,7 @@ appServer.post("/github-webhook", async (req, res) => {
     const { ref, commits } = req.body;
     console.log(`Push detected on ${ref}`);
 
-    const changedFiles = commits.flatMap((c: any) => [...c.added, ...c.modified]);
+    const changedFiles = commits.flatMap((c: { added: string[]; modified: string[] }) => [...c.added, ...c.modified]);
     console.log(`Changed files: ${changedFiles.join(', ')}`);
 
     // Trigger reindexing asynchronously

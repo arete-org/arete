@@ -118,8 +118,11 @@ export class RealtimeEventHandler extends EventEmitter {
 
         // Log any errors we receive
         if (event.type === 'error') {
-            const errorEvent = event as RealtimeErrorEvent;
-            logger.error(`[realtime] Error from server:`, errorEvent.error);
+            if (isRealtimeErrorEvent(event)) {
+                logger.error(`[realtime] Error from server:`, event.error);
+                return;
+            }
+            logger.error('[realtime] Error event received without error payload');
         }
     }
 
@@ -178,3 +181,9 @@ export class RealtimeEventHandler extends EventEmitter {
         });
     }
 }
+
+const isRealtimeErrorEvent = (
+    event: RealtimeEvent
+): event is RealtimeEvent & { type: 'error'; error: RealtimeErrorEvent['error'] } => {
+    return typeof event === 'object' && event !== null && 'error' in event && event.type === 'error';
+};

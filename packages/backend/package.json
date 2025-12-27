@@ -1,0 +1,33 @@
+{
+  "name": "@arete/backend",
+  "private": true,
+  "main": "dist/server.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    },
+    "./shared": {
+      "types": "./dist/shared/index.d.ts",
+      "default": "./dist/shared/index.js"
+    },
+    "./ethics-core": {
+      "types": "./dist/ethics-core/index.d.ts",
+      "default": "./dist/ethics-core/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "date-fns": "^4.1.0",
+    "js-yaml": "^4.1.0",
+    "winston": "^3.19.0"
+  }
+}

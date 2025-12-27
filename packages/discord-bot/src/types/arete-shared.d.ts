@@ -1,12 +1,12 @@
 /**
- * @description: Ambient declarations for @arete/shared to support local builds.
- * @arete-scope interface
+ * @description: Ambient declarations for @arete/backend/shared to support local builds.
+ * @arete-scope: interface
  * @arete-module AreteSharedTypes
  * @arete-risk: low - Drift can break type checking or build tooling.
  * @arete-ethics: low - Types do not change runtime behavior.
  */
-declare module '@arete/shared' {
-  import type { ResponseMetadata } from 'ethics-core';
+declare module '@arete/backend/shared' {
+  import type { ResponseMetadata } from '@arete/backend/ethics-core';
   import type { Logger } from 'winston';
 
   export type PromptKey =
@@ -167,3 +167,4 @@ declare module '@arete/shared' {
   export function pseudonymizeActorId(actorId: string | null | undefined, secret: string): string | null;
   export function pseudonymizeIncidentPointers(pointers: IncidentPointers, secret: string): IncidentPointers;
 }
+

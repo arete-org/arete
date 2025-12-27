@@ -1,0 +1,54 @@
+name: arete
+
+services:
+  backend:
+    # Backend runs the Node server (server.js) and owns persistence.
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    command: ["node", "packages/backend/dist/server.js"]
+    env_file:
+      - ../.env
+    volumes:
+      # Named volume keeps SQLite/provenance data across restarts.
+      - arete-data:/data
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+  web:
+    # Web builds the Vite app and serves it with Caddy + /api/* proxying.
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    environment:
+      # Compose uses the service DNS name on the shared network.
+      - BACKEND_HOST=backend
+    ports:
+      # Map host port 8080 -> container port 80 to avoid privileged port binding.
+      - "8080:80"
+    networks:
+      - backend-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  discord-bot:
+    # Bot-only process with its own image.
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.bot
+    env_file:
+      - ../.env
+    environment:
+      - BACKEND_BASE_URL=http://backend:3000
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+networks:
+  backend-network:
+    driver: bridge
+
+volumes:
+  arete-data:

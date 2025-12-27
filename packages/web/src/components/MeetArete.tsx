@@ -1,15 +1,14 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import ProvenanceFooter from './ProvenanceFooter';
-import type { ResponseMetadata } from 'ethics-core';
+import type { ResponseMetadata } from '@arete/backend/ethics-core';
 import examplePrompts from '../data/examplePrompts.json';
+import { loadRuntimeConfig } from '../utils/runtimeConfig';
 
 // Module augmentation for Vite environment variables
 declare global {
   interface ImportMetaEnv {
     readonly DEV: boolean;
-    readonly VITE_TURNSTILE_SITE_KEY: string;
-    readonly VITE_SKIP_CAPTCHA: string;
   }
 
   interface ImportMeta {
@@ -30,8 +29,32 @@ const normalizeProvenance = (provenance: string): 'Retrieved' | 'Inferred' | 'Sp
   return 'Inferred'; // Default to 'Inferred' when unknown
 };
 
+type BackendCitation = {
+  title?: string;
+  url?: string | URL;
+  snippet?: string;
+};
+
+type BackendMetadata = {
+  responseId?: string;
+  id?: string;
+  provenance?: string;
+  confidence?: number;
+  riskTier?: string;
+  tradeoffCount?: number;
+  chainHash?: string;
+  licenseContext?: string;
+  model?: string;
+  reasoningEffort?: string;
+  staleAfter?: string;
+  runtimeContext?: { modelVersion?: string };
+  citations?: BackendCitation[];
+};
+
+type MappedCitation = { title: string; url: URL; snippet?: string };
+
 // Normalize backend metadata to ResponseMetadata format
-const normalizeMetadata = (backendMetadata: any): ResponseMetadata => {
+const normalizeMetadata = (backendMetadata: BackendMetadata): ResponseMetadata => {
   // Type guard: check if backendMetadata already matches ResponseMetadata structure
   // We also need to ensure confidence is properly normalized even in this path
   if (backendMetadata && 
@@ -42,20 +65,28 @@ const normalizeMetadata = (backendMetadata: any): ResponseMetadata => {
       (backendMetadata.provenance === 'Retrieved' || backendMetadata.provenance === 'Inferred' || backendMetadata.provenance === 'Speculative') &&
       Array.isArray(backendMetadata.citations)) {
     // Convert string URLs to URL objects if needed
-    const processedCitations = backendMetadata.citations.map((citation: any) => {
+    const processedCitations = backendMetadata.citations.map((citation) => {
+      if (citation.url instanceof URL) {
+        return {
+          title: citation.title || 'Untitled',
+          url: citation.url,
+          ...(citation.snippet ? { snippet: citation.snippet } : {})
+        } as MappedCitation;
+      }
       if (typeof citation.url === 'string') {
         try {
           return {
-            ...citation,
-            url: new URL(citation.url)
-          };
+            title: citation.title || 'Untitled',
+            url: new URL(citation.url),
+            ...(citation.snippet ? { snippet: citation.snippet } : {})
+          } as MappedCitation;
         } catch (error) {
           console.warn('Invalid citation URL:', citation.url, error);
           return null;
         }
       }
-      return citation;
-    }).filter(Boolean);
+      return null;
+    }).filter((citation): citation is MappedCitation => citation !== null);
     
     // Ensure confidence is valid even if type guard passed
     const validConfidence = typeof backendMetadata.confidence === 'number' && 
@@ -95,18 +126,21 @@ const normalizeMetadata = (backendMetadata: any): ResponseMetadata => {
 
   // Process citations if they exist
   if (backendMetadata.citations && Array.isArray(backendMetadata.citations)) {
-    normalized.citations = backendMetadata.citations.map((citation: any) => {
+    normalized.citations = backendMetadata.citations.map((citation) => {
       try {
+        if (!citation.url) {
+          return null;
+        }
         return {
           title: citation.title || 'Untitled',
-          url: new URL(citation.url),
-          snippet: citation.snippet
-        };
+          url: citation.url instanceof URL ? citation.url : new URL(citation.url),
+          ...(citation.snippet ? { snippet: citation.snippet } : {})
+        } as MappedCitation;
       } catch (error) {
         console.warn('Invalid citation URL:', citation.url, error);
         return null;
       }
-    }).filter(Boolean);
+    }).filter((citation): citation is MappedCitation => citation !== null);
   }
 
   return normalized;
@@ -125,8 +159,9 @@ const MeetArete = (): JSX.Element => {
   const [isTurnstileReady, setIsTurnstileReady] = useState(false);
   const [turnstileKey, setTurnstileKey] = useState(0);
   const [isTurnstileMounted, setIsTurnstileMounted] = useState(false);
+  const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
   const abortRef = useRef<AbortController | null>(null);
-  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const turnstileRef = useRef<TurnstileInstance | null>(null);
   const hasInteractedRef = useRef(false); // Track if user has interacted to prevent initial status flash
   
@@ -164,21 +199,40 @@ const MeetArete = (): JSX.Element => {
     inputRef.current?.focus();
   };
 
-  // Skip CAPTCHA only in development mode, and only if explicitly enabled
-  // Cannot skip CAPTCHA in production - requires DEV=true AND VITE_SKIP_CAPTCHA not set to 'false'
-  const skipCaptcha = import.meta.env.DEV && import.meta.env.VITE_SKIP_CAPTCHA !== 'false';
+  useEffect(() => {
+    let isMounted = true;
+
+    loadRuntimeConfig()
+      .then((config) => {
+        if (isMounted) {
+          setTurnstileSiteKey(config.turnstileSiteKey);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setTurnstileSiteKey('');
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const hasValidSiteKey = turnstileSiteKey && turnstileSiteKey.trim().length > 0;
+  const skipCaptcha = !hasValidSiteKey;
 
   // Turnstile callback functions
   // According to Cloudflare docs: tokens are max 2048 chars, expire after 300s, single-use only
       const onTurnstileVerify = (token: string) => {
         // Check if using test keys (test keys generate shorter dummy tokens like "XXXX.DUMMY.TOKEN.XXXX")
-        const isTestKey = import.meta.env.VITE_TURNSTILE_SITE_KEY?.startsWith('1x00000000000000000000') || 
-                          import.meta.env.VITE_TURNSTILE_SITE_KEY?.startsWith('2x00000000000000000000') ||
-                          import.meta.env.VITE_TURNSTILE_SITE_KEY?.startsWith('3x00000000000000000000');
+        const isTestKey = turnstileSiteKey.startsWith('1x00000000000000000000') || 
+                          turnstileSiteKey.startsWith('2x00000000000000000000') ||
+                          turnstileSiteKey.startsWith('3x00000000000000000000');
         
         // Log token generation (for debugging) - only log length and prefix, never full token
         if (import.meta.env.DEV) {
-          console.log('Turnstile Managed mode (interaction-only) - onSuccess called - token length:', token?.length || 0, 'site key starts with:', import.meta.env.VITE_TURNSTILE_SITE_KEY?.substring(0, 10));
+          console.log('Turnstile Managed mode (interaction-only) - onSuccess called - token length:', token?.length || 0, 'site key starts with:', turnstileSiteKey.substring(0, 10));
         }
         
         // Validate token - test keys generate shorter tokens, production tokens should be ~200+ chars
@@ -252,8 +306,8 @@ const MeetArete = (): JSX.Element => {
     if (!skipCaptcha && isTurnstileMounted && turnstileRef.current && !turnstileError) {
       // Execute challenge when widget is ready (after mount or reset)
       const timer = setTimeout(() => {
-        if (turnstileRef.current) {
-          turnstileRef.current.execute();
+          if (turnstileRef.current) {
+            turnstileRef.current.execute();
           // Optionally await token preparation (non-blocking)
           turnstileRef.current.getResponsePromise?.().catch(() => {
             // Silently handle promise rejection if widget isn't ready
@@ -262,6 +316,7 @@ const MeetArete = (): JSX.Element => {
       }, 100);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [turnstileKey, skipCaptcha, turnstileError, isTurnstileMounted]);
 
   // Auto-resize textarea based on content
@@ -346,8 +401,8 @@ const MeetArete = (): JSX.Element => {
         }
       }
       // Re-check token after execution attempt
-      if (!turnstileToken) {
-        setStatus('Please complete the CAPTCHA verification.');
+          if (!turnstileToken) {
+            setStatus('Please complete the CAPTCHA verification.');
         return;
       }
     }
@@ -582,7 +637,7 @@ const MeetArete = (): JSX.Element => {
                 >
                   <Turnstile
                     key={turnstileKey}
-                    siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+                    siteKey={turnstileSiteKey}
                     onSuccess={onTurnstileVerify}
                     onError={onTurnstileError}
                     onExpire={onTurnstileExpire}
@@ -602,7 +657,7 @@ const MeetArete = (): JSX.Element => {
                 <Turnstile
                   ref={turnstileRef}
                   key={turnstileKey}
-                  siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+                  siteKey={turnstileSiteKey}
                   onSuccess={onTurnstileVerify}
                   onError={onTurnstileError}
                   onExpire={onTurnstileExpire}
@@ -645,3 +700,4 @@ const MeetArete = (): JSX.Element => {
 };
 
 export default MeetArete;
+

@@ -1,24 +1,26 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import Header from '@components/Header';
 import Footer from '@components/Footer';
 
+type ToastState = { message: string; visible: boolean };
+type ToastSetter = React.Dispatch<React.SetStateAction<ToastState>>;
+
 const InvitePage: React.FC = () => {
-  const [cloneToast, setCloneToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
-  const [installToast, setInstallToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
-  const [devToast, setDevToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
-  const [buildToast, setBuildToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
-  const [launchToast, setLaunchToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
-  const [deployToast, setDeployToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
-  const [requiredToast, setRequiredToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
-  const [optionalToast, setOptionalToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
+  const [cloneToast, setCloneToast] = useState<ToastState>({ message: '', visible: false });
+  const [installToast, setInstallToast] = useState<ToastState>({ message: '', visible: false });
+  const [devToast, setDevToast] = useState<ToastState>({ message: '', visible: false });
+  const [buildToast, setBuildToast] = useState<ToastState>({ message: '', visible: false });
+  const [launchToast, setLaunchToast] = useState<ToastState>({ message: '', visible: false });
+  const [deployToast, setDeployToast] = useState<ToastState>({ message: '', visible: false });
+  const [requiredToast, setRequiredToast] = useState<ToastState>({ message: '', visible: false });
+  const [optionalToast, setOptionalToast] = useState<ToastState>({ message: '', visible: false });
 
   // Breadcrumb items for invite page
   const breadcrumbItems = [
     { label: 'Self-Hosting Setup' }
   ];
 
-  const showToast = (setter: any, message: string) => {
+  const showToast = (setter: ToastSetter, message: string) => {
     setter({ message, visible: true });
     setTimeout(() => setter({ message: '', visible: false }), 2000);
   };
@@ -377,7 +379,6 @@ ENGAGEMENT_PROBABILISTIC_HIGH=0.6
 ENGAGEMENT_ENABLE_LLM_REFINEMENT=false
 
 # Provenance storage configuration
-PROVENANCE_BACKEND=sqlite
 PROVENANCE_SQLITE_PATH=/data/provenance.db
 
 # Optional web server configuration
@@ -443,7 +444,6 @@ ENGAGEMENT_PROBABILISTIC_HIGH=0.6
 ENGAGEMENT_ENABLE_LLM_REFINEMENT=false
 
 # Provenance storage configuration
-PROVENANCE_BACKEND=sqlite
 PROVENANCE_SQLITE_PATH=/data/provenance.db
 
 # Optional web server configuration
@@ -564,7 +564,6 @@ ENGAGEMENT_PROBABILISTIC_HIGH=0.6         # Upper bound for LLM refinement (Floa
 ENGAGEMENT_ENABLE_LLM_REFINEMENT=false    # Use LLM for score refinement (Boolean)
 
 # Provenance storage configuration
-PROVENANCE_BACKEND=sqlite                  # Storage backend (sqlite)
 PROVENANCE_SQLITE_PATH=/data/provenance.db # SQLite database path
 
 # Optional web server configuration

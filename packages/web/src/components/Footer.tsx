@@ -10,7 +10,7 @@ const Footer = (): JSX.Element => (
         <span className="link-icon" aria-hidden="true">↗</span>Join the discussion
       </a>
       <span className="link-separator" aria-hidden="true">·</span>
-      <a href="https://github.com/arete-org/arete/blob/main/PHILOSOPHY.md" target="_blank" rel="noreferrer" aria-label="Read ARETE philosophy document (opens in new tab)">
+      <a href="https://github.com/arete-org/arete/blob/main/docs/PHILOSOPHY.md" target="_blank" rel="noreferrer" aria-label="Read ARETE philosophy document (opens in new tab)">
         <span className="link-icon" aria-hidden="true">↗</span>Philosophy
       </a>
     </div>

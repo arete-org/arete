@@ -3,27 +3,26 @@
 This file provides default context for automation tools (Codex, Cursor) so work is productive without manually selecting files.
 
 ## Project Overview
-- Monorepo for ARETE (ethics-first AI framework) with Discord bot, shared libs, ethics core, and web site.
+- Monorepo for ARETE (ethics-first AI framework) with Discord bot, backend core, and web site.
 - Core principles: interpretability, traceability, cost tracking, fail-open behavior.
 - Required annotations: `@arete-module`, `@arete-risk`, `@arete-ethics`, `@arete-scope`.
 - Structured logging is mandatory; use scoped loggers from `packages/discord-bot/src/utils/logger.ts`.
 
 ## Primary Entrypoints
 - Discord bot runtime: `packages/discord-bot/src/index.ts`
-- Shared utilities: `packages/shared/src`
-- Ethics core: `packages/ethics-core/src`
+- Backend core: `packages/backend/src`
 - Web app: `packages/web/src`
 - Server wrapper: `server.js`
 - Environment templates: `.env.example`
-- Project docs: `README.md`, `PHILOSOPHY.md`, `SECURITY.md`
+- Project docs: `README.md`, `docs/PHILOSOPHY.md`, `docs/SECURITY.md`
 
 ## Preferred Context (load first)
 - `cursor.rules` (authoritative development rules)
 - `packages/discord-bot/src/utils/env.ts`
 - `packages/discord-bot/src/utils/logger.ts`
 - `packages/discord-bot/src/state/ChannelContextManager.ts`
-- `packages/shared/src/incidentStore.ts`
-- `packages/shared/src/pseudonymization.ts`
+- `packages/backend/src/shared/incidentStore.ts`
+- `packages/backend/src/shared/pseudonymization.ts`
 
 ## When Editing
 - Preserve provenance comments and licensing headers.
@@ -56,7 +55,7 @@ Example:
 ## Context Hints
 - Bot: `packages/discord-bot/src/events`, `packages/discord-bot/src/commands`, `packages/discord-bot/src/voice`
 - Realtime audio: `packages/discord-bot/src/realtime`
-- Shared prompts: `packages/shared/prompts`
+- Shared prompts: `packages/backend/src/shared/prompts`
 - Web UI: `packages/web/src/components`, `packages/web/src/pages`
 
 ## Exclusions
