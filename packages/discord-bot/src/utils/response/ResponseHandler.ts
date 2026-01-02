@@ -195,10 +195,11 @@ export class ResponseHandler {
       discordEmbed = embed instanceof CustomEmbedBuilder 
         ? new DiscordEmbedBuilder(embed.toJSON())
         : embed;
+      const filteredOptions = this.applyOutboundFiltersToOptions(options);
 
       if (this.channel.isSendable()) {
         await this.channel.send({
-          ...options,
+          ...filteredOptions,
           embeds: [discordEmbed]
         });
       } else {
@@ -246,7 +247,10 @@ export class ResponseHandler {
     try {
       const message = await this.channel.messages.fetch(messageId);
       if (message.editable) {
-        await message.edit(content);
+        const filteredContent = typeof content === 'string'
+          ? this.applyOutboundFilters(content)
+          : this.applyOutboundFiltersToOptions(content);
+        await message.edit(filteredContent);
       }
     } catch (error) {
       logger.error('Failed to edit message:', error);
@@ -423,7 +427,7 @@ export class ResponseHandler {
   /**
    * Applies outbound filters to MessageCreateOptions without mutating the input.
    */
-  private applyOutboundFiltersToOptions(options: MessageCreateOptions): MessageCreateOptions {
+  private applyOutboundFiltersToOptions<T extends { content?: string | null }>(options: T): T {
     if (!options.content) {
       return options;
     }
