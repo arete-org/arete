@@ -415,11 +415,7 @@ export class ResponseHandler {
    * Applies outbound filters with context so downstream logs stay traceable.
    */
   private applyOutboundFilters(content: string): string {
-    const result = runOutboundFilters(content, {
-      channelId: this.channel.id,
-      messageId: this.message.id,
-      userId: this.user.id
-    });
+    const result = runOutboundFilters(content);
 
     return result.content;
   }

@@ -1,26 +1,29 @@
 /**
- * @description: Normalizes outbound URLs into Markdown links using a Markdown AST.
+ * @description: Normalizes outbound URLs into Markdown links without reflowing formatting.
  * @arete-scope: interface
  * @arete-module: NormalizeOutboundLinks
  * @arete-risk: moderate - Linkification errors can distort meaning or intent.
  * @arete-ethics: moderate - Formatting changes shape user interpretation and trust.
  */
 
-// Unified is the pipeline runner that parses Markdown into an AST and serializes it back.
+// Unified is the pipeline runner that parses Markdown into an AST.
 // AST: Abstract Syntax Tree; a tree representation of the Markdown document.
 import { unified } from 'unified';
 // remark-parse turns Markdown text into a typed AST so we can avoid regex hacks.
 import remarkParse from 'remark-parse';
-// remark-stringify converts the AST back into Markdown text after transforms.
-import remarkStringify from 'remark-stringify';
-// unist-util-visit walks the AST so we can rewrite only "text" nodes safely.
+// unist-util-visit walks the AST so we can gather protected ranges safely.
 import { visit } from 'unist-util-visit';
-// linkify-it detects URLs inside plain text nodes.
+// linkify-it detects URLs inside plain text segments.
 import LinkifyIt from 'linkify-it';
-import type { Root, Text, PhrasingContent } from 'mdast';
-import type { Parent } from 'unist';
+import type { Root } from 'mdast';
+import type { Node } from 'unist';
 
 import type { OutboundFilterResult } from './types.js';
+
+interface TextRange {
+    start: number;
+    end: number;
+}
 
 // Linkify is scoped to this module to keep behavior consistent and testable.
 const linkify = new LinkifyIt();
@@ -28,9 +31,19 @@ const linkify = new LinkifyIt();
 // Extract the match type without depending on LinkifyIt namespace types.
 type LinkifyMatch = NonNullable<ReturnType<typeof linkify.match>>[number];
 
-// Normalize outbound links by wrapping bare URLs with markdown links.
-// We use an AST pipeline to safely rewrite text nodes without affecting code
-// blocks or existing links.
+// Node types that should never be rewritten by the outbound normalizer.
+const PROTECTED_NODE_TYPES = new Set<string>([
+    'link',
+    'linkReference',
+    'definition',
+    'inlineCode',
+    'code',
+    'image',
+    'imageReference',
+]);
+
+// Normalize outbound links by wrapping bare URLs with markdown autolinks.
+// We parse to find protected spans, then only rewrite raw text outside them.
 export const normalizeOutboundLinks = (
     content: string
 ): OutboundFilterResult => {
@@ -38,107 +51,139 @@ export const normalizeOutboundLinks = (
         return { content, changes: [] };
     }
 
-    // Fast path: skip AST work when there are no http(s) URLs to normalize.
+    // Fast path: skip parsing when there are no http(s) URLs to normalize.
     if (!content.includes('http://') && !content.includes('https://')) {
         return { content, changes: [] };
     }
 
     // Parse Markdown so we can safely ignore code blocks and existing links.
-    // Parse with the core Markdown parser only. We intentionally skip remark-gfm
-    // so bare URLs stay as text nodes for explicit linkification and counting.
     const tree = unified().use(remarkParse).parse(content) as Root;
-    let linkifiedCount = 0;
+    const protectedRanges = collectProtectedRanges(tree, content.length);
 
-    // Walk all text nodes and only rewrite when the parent is safe to edit.
-    visit(
-        tree,
-        'text',
-        (node: Text, index: number | undefined, parent: Parent | undefined) => {
-            if (index === undefined || !parent || isProtectedParent(parent)) {
-                return;
-            }
-
-            // Is this particular text node a URL?
-            const matches = linkify.match(node.value);
-            if (!matches || matches.length === 0) {
-                return;
-            }
-
-            // If it is, expand it into a sequence of text + link nodes.
-            const { children, linkifiedCount: nodeCount } = linkifyTextNode(
-                node,
-                matches
-            );
-            linkifiedCount += nodeCount;
-
-            // Replace the original text node with the expanded sequence.
-            parent.children.splice(index, 1, ...children);
-            return index + children.length;
-        }
+    const { text: normalized, count } = linkifyWithProtectedRanges(
+        content,
+        protectedRanges
     );
-
-    // Convert the AST back into Markdown after transformations.
-    const output = unified().use(remarkStringify).stringify(tree).trimEnd();
 
     // Emit a compact summary for logging rather than per-link detail.
-    const changes =
-        linkifiedCount > 0 ? [`wrapped_urls:${linkifiedCount}`] : [];
-    return { content: output, changes };
+    const changes = count > 0 ? [`wrapped_urls:${count}`] : [];
+    return { content: normalized, changes };
 };
 
-// Skip transformations in nodes that already represent links or code.
-// This ensures we do not double-link or alter code blocks/inline code.
-const isProtectedParent = (parent?: Parent | null): boolean => {
-    if (!parent) {
-        return false;
+// Collect source ranges that should not be modified (links, code, images).
+const collectProtectedRanges = (tree: Root, maxLength: number): TextRange[] => {
+    const ranges: TextRange[] = [];
+
+    visit(tree, (node: Node) => {
+        if (!PROTECTED_NODE_TYPES.has(node.type)) {
+            return;
+        }
+
+        const start = node.position?.start?.offset;
+        const end = node.position?.end?.offset;
+        if (typeof start !== 'number' || typeof end !== 'number') {
+            return;
+        }
+
+        const clampedStart = Math.max(0, Math.min(start, maxLength));
+        const clampedEnd = Math.max(0, Math.min(end, maxLength));
+        if (clampedEnd <= clampedStart) {
+            return;
+        }
+
+        ranges.push({ start: clampedStart, end: clampedEnd });
+    });
+
+    return mergeRanges(ranges);
+};
+
+// Merge overlapping ranges so we can scan the content efficiently.
+const mergeRanges = (ranges: TextRange[]): TextRange[] => {
+    if (ranges.length === 0) {
+        return [];
     }
 
-    return (
-        parent.type === 'link' ||
-        parent.type === 'linkReference' ||
-        parent.type === 'definition' ||
-        parent.type === 'inlineCode' ||
-        parent.type === 'code'
-    );
+    const sorted = [...ranges].sort((first, second) => {
+        if (first.start !== second.start) {
+            return first.start - second.start;
+        }
+        return first.end - second.end;
+    });
+
+    const merged: TextRange[] = [{ ...sorted[0] }];
+
+    for (const range of sorted.slice(1)) {
+        const last = merged[merged.length - 1];
+        if (range.start <= last.end) {
+            last.end = Math.max(last.end, range.end);
+        } else {
+            merged.push({ ...range });
+        }
+    }
+
+    return merged;
 };
 
-// Convert a text node into a sequence of text + link nodes based on linkify matches.
-// This keeps the AST structure explicit instead of rewriting raw strings.
-const linkifyTextNode = (
-    node: Text,
-    matches: LinkifyMatch[]
-): { children: PhrasingContent[]; linkifiedCount: number } => {
-    const children: PhrasingContent[] = [];
-    let cursor = 0;
-    let linkifiedCount = 0;
+// Apply linkification to content slices that are not protected.
+const linkifyWithProtectedRanges = (
+    content: string,
+    ranges: TextRange[]
+): { text: string; count: number } => {
+    if (ranges.length === 0) {
+        return linkifySegment(content);
+    }
 
-    // Build a new list of phrasing nodes, preserving non-link text slices.
+    let cursor = 0;
+    let output = '';
+    let total = 0;
+
+    for (const range of ranges) {
+        if (range.start > cursor) {
+            const segment = content.slice(cursor, range.start);
+            const { text, count } = linkifySegment(segment);
+            output += text;
+            total += count;
+        }
+
+        output += content.slice(range.start, range.end);
+        cursor = range.end;
+    }
+
+    if (cursor < content.length) {
+        const { text, count } = linkifySegment(content.slice(cursor));
+        output += text;
+        total += count;
+    }
+
+    return { text: output, count: total };
+};
+
+// Convert a single plain-text segment by wrapping detected URLs in autolinks.
+const linkifySegment = (segment: string): { text: string; count: number } => {
+    const matches = linkify.match(segment);
+    if (!matches || matches.length === 0) {
+        return { text: segment, count: 0 };
+    }
+
+    let result = '';
+    let cursor = 0;
+    let count = 0;
+
     for (const match of matches) {
         const start = match.index ?? 0;
         const end = match.lastIndex ?? start;
 
         if (start > cursor) {
-            children.push({
-                type: 'text',
-                value: node.value.slice(cursor, start),
-            });
+            result += segment.slice(cursor, start);
         }
 
-        // Use linkify's display text when provided; fall back to the URL.
-        const displayText = match.text ?? match.url;
-        children.push({
-            type: 'link',
-            url: match.url,
-            title: null,
-            children: [{ type: 'text', value: displayText }],
-        });
-        linkifiedCount += 1;
+        const raw = match.raw ?? match.text ?? segment.slice(start, end);
+        const url = raw || match.url;
+        result += `<${url}>`;
+        count += 1;
         cursor = end;
     }
 
-    if (cursor < node.value.length) {
-        children.push({ type: 'text', value: node.value.slice(cursor) });
-    }
-
-    return { children, linkifiedCount };
+    result += segment.slice(cursor);
+    return { text: result, count };
 };

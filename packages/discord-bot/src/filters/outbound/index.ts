@@ -10,13 +10,6 @@ import { logger } from '../../utils/logger.js';
 import { normalizeOutboundLinks } from './normalizeLinks.js';
 import type { OutboundFilter, OutboundFilterResult } from './types.js';
 
-// Context used for logging only; keep identifiers but avoid raw content.
-export interface OutboundFilterContext {
-    channelId?: string;
-    messageId?: string;
-    userId?: string;
-}
-
 /**
  * @arete-logger: outboundFilters
  *
@@ -34,10 +27,7 @@ const outboundFilters: Array<{ name: string; apply: OutboundFilter }> = [
     { name: 'normalize_links', apply: normalizeOutboundLinks },
 ];
 
-export const runOutboundFilters = (
-    content: string,
-    context: OutboundFilterContext = {}
-): OutboundFilterResult => {
+export const runOutboundFilters = (content: string): OutboundFilterResult => {
     let filteredContent = content; // Track intermediate state for each filter.
     const changeLog: string[] = []; // Final list of changes for logging.
 
@@ -60,13 +50,10 @@ export const runOutboundFilters = (
         }
     }
 
-    // Log metadata only; avoid raw message bodies to reduce leakage risk.
+    // Log only the change summary; avoid raw message bodies or identifiers.
     outboundFilterLogger.debug('Outbound filters evaluated', {
-        appliedFilters: outboundFilters.map((filter) => filter.name),
-        // TODO: Pseudonymize raw content once available.
+        // TODO: Pseudonymize change summaries if they later include identifiers.
         changes: changeLog,
-        originalLength: content.length,
-        filteredLength: filteredContent.length,
     });
 
     return { content: filteredContent, changes: changeLog };

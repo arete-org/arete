@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 
 import { normalizeOutboundLinks } from '../src/filters/outbound/normalizeLinks.js';
 
-// Note: remark-stringify emits autolinks (<https://...>) when link text equals URL.
+// Note: the normalizer wraps URLs as autolinks (<https://...>) for minimal formatting change.
 test('normalizeOutboundLinks wraps bare URLs with markdown link text', () => {
     const input = 'Docs at https://example.com.';
     const result = normalizeOutboundLinks(input);
@@ -87,10 +87,9 @@ test('normalizeOutboundLinks preserves list, quote, and emphasis formatting', ()
     assert.equal(
         result.content,
         [
-            '* item with <https://example.com>',
-            '',
+            '- item with <https://example.com>',
             '> quote with <https://example.org>',
-            '> *emphasis with <https://example.net>*',
+            '*emphasis with <https://example.net>*',
         ].join('\n')
     );
     assert.deepEqual(result.changes, ['wrapped_urls:3']);
@@ -146,7 +145,6 @@ test('normalizeOutboundLinks skips code blocks but normalizes surrounding text',
             '```js',
             'const url = "https://example.com";',
             '```',
-            '',
             'More info <https://example.com>',
         ].join('\n')
     );
