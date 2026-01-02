@@ -9,6 +9,7 @@
 import { Message, MessageCreateOptions, MessageReplyOptions, EmbedBuilder as DiscordEmbedBuilder, TextBasedChannel, User, MessageEditOptions, ActivityOptions } from 'discord.js';
 import { logger } from '../logger.js';
 import { EmbedBuilder as CustomEmbedBuilder } from './EmbedBuilder.js';
+import { runOutboundFilters } from '../../filters/outbound/index.js';
 
 /**
  * Handles various types of message responses for Discord interactions.
@@ -56,8 +57,11 @@ export class ResponseHandler {
     }
   
     try {
+      // Apply outbound filters before chunking so formatting stays consistent.
+      const filteredContent = this.applyOutboundFilters(content);
+
       // Split the message into chunks if it exceeds Discord's limits for a single message
-      let chunks = this.splitMessage(content);
+      let chunks = this.splitMessage(filteredContent);
       const messages: Message[] = [];
       const hasEmbeds = embeds.length > 0;
       const hasComponents = (components?.length ?? 0) > 0 || (embedComponents?.length ?? 0) > 0;
@@ -149,9 +153,12 @@ export class ResponseHandler {
       throw new Error('Channel is not sendable');
     }
 
+    // Normalize optional content without altering the embed payload.
+    const filteredContent = content ? this.applyOutboundFilters(content) : content;
+
     const messageOptions: MessageCreateOptions = {
       embeds: [embed],
-      content,
+      content: filteredContent,
       components
     };
 
@@ -212,7 +219,11 @@ export class ResponseHandler {
   public async sendDM(content: string | MessageCreateOptions): Promise<void> {
     try {
       const dmChannel = await this.user.createDM();
-      await dmChannel.send(content);
+      // Apply outbound filters to DM content to keep formatting consistent.
+      const dmPayload = typeof content === 'string'
+        ? this.applyOutboundFilters(content)
+        : this.applyOutboundFiltersToOptions(content);
+      await dmChannel.send(dmPayload);
     } catch (error) {
       logger.error('Failed to send DM:', error);
       // Fall back to public channel if DM fails
@@ -398,6 +409,33 @@ export class ResponseHandler {
     } catch (error) {
       logger.warn('Failed to set presence:', error); // Not a high-severity error
     }
+  }
+
+  /**
+   * Applies outbound filters with context so downstream logs stay traceable.
+   */
+  private applyOutboundFilters(content: string): string {
+    const result = runOutboundFilters(content, {
+      channelId: this.channel.id,
+      messageId: this.message.id,
+      userId: this.user.id
+    });
+
+    return result.content;
+  }
+
+  /**
+   * Applies outbound filters to MessageCreateOptions without mutating the input.
+   */
+  private applyOutboundFiltersToOptions(options: MessageCreateOptions): MessageCreateOptions {
+    if (!options.content) {
+      return options;
+    }
+
+    return {
+      ...options,
+      content: this.applyOutboundFilters(options.content)
+    };
   }
 
   /**
