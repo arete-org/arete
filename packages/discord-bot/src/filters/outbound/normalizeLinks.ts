@@ -28,9 +28,6 @@ interface TextRange {
 // Linkify is scoped to this module to keep behavior consistent and testable.
 const linkify = new LinkifyIt();
 
-// Extract the match type without depending on LinkifyIt namespace types.
-type LinkifyMatch = NonNullable<ReturnType<typeof linkify.match>>[number];
-
 // Node types that should never be rewritten by the outbound normalizer.
 const PROTECTED_NODE_TYPES = new Set<string>([
     'link',
