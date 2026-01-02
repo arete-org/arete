@@ -58,7 +58,7 @@ class SimpleOpenAIService {
     const requestBody = JSON.stringify({
       model: model,
       messages: messages,
-      max_tokens: 4000
+      max_completion_tokens: 4000
     });
 
     const performRequest = async (attempt: number): Promise<Response> => {
