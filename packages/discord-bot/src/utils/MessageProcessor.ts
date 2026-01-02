@@ -652,19 +652,37 @@ export class MessageProcessor {
               const footerEmbeds = footerEmbed ? [footerEmbed] : [];
               const footerComponents = footerPayload?.components ?? [];
 
-              // Send the response with footer
+              // Send the response text with embeds suppressed to avoid link previews.
               await responseHandler.sendMessage(
                 finalResponseText,
                 [],
                 directReply,
-                footerEmbeds.length === 0,
-                [],
-                footerEmbeds,
-                footerComponents
+                true
               );
 
               // Save trace asynchronously
               await persistTrace();
+
+              // Send the provenance footer as a follow-up message so embeds remain visible.
+              if (footerEmbeds.length > 0 || footerComponents.length > 0) {
+                try {
+                  await responseHandler.sendMessage(
+                    '',
+                    [],
+                    false,
+                    false,
+                    [],
+                    footerEmbeds,
+                    footerComponents
+                  );
+                } catch (error) {
+                  logger.error(
+                    `Failed to send provenance footer follow-up for response ${responseMetadata.responseId}: ${(
+                      error as Error
+                    )?.message ?? error}`
+                  );
+                }
+              }
             }
             logger.debug(`Response sent (${finalResponseText}) for message: ${message.content.slice(0, 100)}...`);
           }
