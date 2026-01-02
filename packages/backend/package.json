@@ -25,15 +25,15 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "better-sqlite3": "^11.10.0",
-    "date-fns": "^4.1.0",
-    "js-yaml": "^4.1.1",
-    "winston": "^3.19.0"
+    "better-sqlite3": "catalog:",
+    "date-fns": "catalog:",
+    "js-yaml": "catalog:",
+    "winston": "catalog:"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/js-yaml": "^4.0.9",
-    "@types/node": "^24.10.4",
-    "typescript": "^5.9.3"
+    "@types/better-sqlite3": "catalog:",
+    "@types/js-yaml": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
   }
 }
