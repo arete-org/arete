@@ -49,6 +49,7 @@ export const normalizeOutboundLinks = (
     }
 
     // Fast path: skip parsing when there are no http(s) URLs to normalize.
+    // TODO:
     if (!content.includes('http://') && !content.includes('https://')) {
         return { content, changes: [] };
     }
