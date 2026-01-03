@@ -5,6 +5,180 @@ settings:
   excludeLinksFromLockfile: false
   injectWorkspacePackages: true
 
+catalogs:
+  default:
+    '@discordjs/voice':
+      specifier: ^0.19.0
+      version: 0.19.0
+    '@eslint/js':
+      specifier: ^9.39.2
+      version: 9.39.2
+    '@marsidev/react-turnstile':
+      specifier: ^1.4.1
+      version: 1.4.1
+    '@openai/agents':
+      specifier: ^0.3.7
+      version: 0.3.7
+    '@sapphire/shapeshift':
+      specifier: ^4.0.0
+      version: 4.0.0
+    '@swc/core':
+      specifier: ^1.15.8
+      version: 1.15.8
+    '@swc/helpers':
+      specifier: ^0.5.18
+      version: 0.5.18
+    '@types/better-sqlite3':
+      specifier: ^7.6.13
+      version: 7.6.13
+    '@types/body-parser':
+      specifier: ^1.19.6
+      version: 1.19.6
+    '@types/express':
+      specifier: ^5.0.6
+      version: 5.0.6
+    '@types/js-yaml':
+      specifier: ^4.0.9
+      version: 4.0.9
+    '@types/mime-types':
+      specifier: ^3.0.1
+      version: 3.0.1
+    '@types/node':
+      specifier: ^24.10.4
+      version: 24.10.4
+    '@types/ws':
+      specifier: ^8.18.1
+      version: 8.18.1
+    '@typescript-eslint/eslint-plugin':
+      specifier: ^8.51.0
+      version: 8.51.0
+    '@typescript-eslint/parser':
+      specifier: ^8.51.0
+      version: 8.51.0
+    '@vitejs/plugin-react':
+      specifier: ^5.1.2
+      version: 5.1.2
+    autoprefixer:
+      specifier: ^10.4.23
+      version: 10.4.23
+    better-sqlite3:
+      specifier: ^11.10.0
+      version: 11.10.0
+    body-parser:
+      specifier: ^2.2.1
+      version: 2.2.1
+    cloudinary:
+      specifier: ^2.8.0
+      version: 2.8.0
+    concurrently:
+      specifier: ^8.2.2
+      version: 8.2.2
+    copyfiles:
+      specifier: ^2.4.1
+      version: 2.4.1
+    cross-env:
+      specifier: ^10.1.0
+      version: 10.1.0
+    date-fns:
+      specifier: ^4.1.0
+      version: 4.1.0
+    discord.js:
+      specifier: ^14.25.1
+      version: 14.25.1
+    dotenv:
+      specifier: ^16.6.1
+      version: 16.6.1
+    esbuild:
+      specifier: ^0.27.2
+      version: 0.27.2
+    eslint:
+      specifier: ^9.39.2
+      version: 9.39.2
+    eslint-config-prettier:
+      specifier: ^10.1.8
+      version: 10.1.8
+    eslint-plugin-react-hooks:
+      specifier: ^5.2.0
+      version: 5.2.0
+    express:
+      specifier: ^5.2.1
+      version: 5.2.1
+    flyio:
+      specifier: ^0.6.14
+      version: 0.6.14
+    js-yaml:
+      specifier: ^4.1.1
+      version: 4.1.1
+    jsonwebtoken:
+      specifier: ^9.0.3
+      version: 9.0.3
+    mime-types:
+      specifier: ^3.0.2
+      version: 3.0.2
+    node-fetch:
+      specifier: ^3.3.2
+      version: 3.3.2
+    only:
+      specifier: ^0.0.2
+      version: 0.0.2
+    openai:
+      specifier: ^6.15.0
+      version: 6.15.0
+    opusscript:
+      specifier: ^0.0.8
+      version: 0.0.8
+    postcss:
+      specifier: ^8.5.6
+      version: 8.5.6
+    prettier:
+      specifier: 3.7.4
+      version: 3.7.4
+    prism-media:
+      specifier: ^1.3.5
+      version: 1.3.5
+    react:
+      specifier: ^18.3.1
+      version: 18.3.1
+    react-dom:
+      specifier: ^18.3.1
+      version: 18.3.1
+    react-markdown:
+      specifier: ^10.1.0
+      version: 10.1.0
+    react-router-dom:
+      specifier: ^7.11.0
+      version: 7.11.0
+    reindex:
+      specifier: ^0.1.0
+      version: 0.1.0
+    remark-gfm:
+      specifier: ^4.0.1
+      version: 4.0.1
+    rimraf:
+      specifier: ^6.1.2
+      version: 6.1.2
+    ts-node:
+      specifier: ^10.9.2
+      version: 10.9.2
+    ts-node-dev:
+      specifier: ^2.0.0
+      version: 2.0.0
+    tsx:
+      specifier: ^4.21.0
+      version: 4.21.0
+    typescript:
+      specifier: ^5.9.3
+      version: 5.9.3
+    vite:
+      specifier: ^7.3.0
+      version: 7.3.0
+    winston:
+      specifier: ^3.19.0
+      version: 3.19.0
+    ws:
+      specifier: ^8.18.3
+      version: 8.18.3
+
 overrides:
   '@types/react': 18.3.27
   '@types/react-dom': 18.3.7
@@ -15,32 +189,32 @@ importers:
   .:
     dependencies:
       dotenv:
-        specifier: ^16.6.1
+        specifier: 'catalog:'
         version: 16.6.1
       jsonwebtoken:
-        specifier: ^9.0.3
+        specifier: 'catalog:'
         version: 9.0.3
     devDependencies:
       '@eslint/js':
-        specifier: ^9.39.2
+        specifier: 'catalog:'
         version: 9.39.2
       '@swc/core':
-        specifier: ^1.15.8
+        specifier: 'catalog:'
         version: 1.15.8(@swc/helpers@0.5.18)
       '@swc/helpers':
-        specifier: ^0.5.18
+        specifier: 'catalog:'
         version: 0.5.18
       '@types/better-sqlite3':
-        specifier: ^7.6.13
+        specifier: 'catalog:'
         version: 7.6.13
       '@types/js-yaml':
-        specifier: ^4.0.9
+        specifier: 'catalog:'
         version: 4.0.9
       '@types/mime-types':
-        specifier: ^3.0.1
+        specifier: 'catalog:'
         version: 3.0.1
       '@types/node':
-        specifier: ^24.10.4
+        specifier: 'catalog:'
         version: 24.10.4
       '@types/react':
         specifier: 18.3.27
@@ -49,71 +223,71 @@ importers:
         specifier: 18.3.7
         version: 18.3.7(@types/react@18.3.27)
       '@types/ws':
-        specifier: ^8.18.1
+        specifier: 'catalog:'
         version: 8.18.1
       '@typescript-eslint/eslint-plugin':
-        specifier: ^8.51.0
+        specifier: 'catalog:'
         version: 8.51.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
       '@typescript-eslint/parser':
-        specifier: ^8.51.0
+        specifier: 'catalog:'
         version: 8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
       concurrently:
-        specifier: ^8.2.2
+        specifier: 'catalog:'
         version: 8.2.2
       cross-env:
-        specifier: ^10.1.0
+        specifier: 'catalog:'
         version: 10.1.0
       csstype:
         specifier: 3.2.3
         version: 3.2.3
       eslint:
-        specifier: ^9.39.2
+        specifier: 'catalog:'
         version: 9.39.2(jiti@2.6.1)
       eslint-config-prettier:
-        specifier: ^10.1.8
+        specifier: 'catalog:'
         version: 10.1.8(eslint@9.39.2(jiti@2.6.1))
       eslint-plugin-react-hooks:
-        specifier: ^5.2.0
+        specifier: 'catalog:'
         version: 5.2.0(eslint@9.39.2(jiti@2.6.1))
       prettier:
-        specifier: 3.7.4
+        specifier: 'catalog:'
         version: 3.7.4
       ts-node:
-        specifier: ^10.9.2
+        specifier: 'catalog:'
         version: 10.9.2(@swc/core@1.15.8(@swc/helpers@0.5.18))(@types/node@24.10.4)(typescript@5.9.3)
       tsx:
-        specifier: ^4.21.0
+        specifier: 'catalog:'
         version: 4.21.0
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
 
   packages/backend:
     dependencies:
       better-sqlite3:
-        specifier: ^11.10.0
+        specifier: 'catalog:'
         version: 11.10.0
       date-fns:
-        specifier: ^4.1.0
+        specifier: 'catalog:'
         version: 4.1.0
       js-yaml:
-        specifier: ^4.1.1
+        specifier: 'catalog:'
         version: 4.1.1
       winston:
-        specifier: ^3.19.0
+        specifier: 'catalog:'
         version: 3.19.0
     devDependencies:
       '@types/better-sqlite3':
-        specifier: ^7.6.13
+        specifier: 'catalog:'
         version: 7.6.13
       '@types/js-yaml':
-        specifier: ^4.0.9
+        specifier: 'catalog:'
         version: 4.0.9
       '@types/node':
-        specifier: ^24.10.4
+        specifier: 'catalog:'
         version: 24.10.4
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
 
   packages/discord-bot:
@@ -122,92 +296,92 @@ importers:
         specifier: workspace:*
         version: link:../backend
       '@discordjs/voice':
-        specifier: ^0.19.0
+        specifier: 'catalog:'
         version: 0.19.0(opusscript@0.0.8)
       '@openai/agents':
-        specifier: ^0.3.7
+        specifier: 'catalog:'
         version: 0.3.7(@cfworker/json-schema@4.1.1)(hono@4.11.3)(ws@8.18.3)(zod@4.0.17)
       '@sapphire/shapeshift':
-        specifier: ^4.0.0
+        specifier: 'catalog:'
         version: 4.0.0
       body-parser:
-        specifier: ^2.2.1
+        specifier: 'catalog:'
         version: 2.2.1
       cloudinary:
-        specifier: ^2.8.0
+        specifier: 'catalog:'
         version: 2.8.0
       date-fns:
-        specifier: ^4.1.0
+        specifier: 'catalog:'
         version: 4.1.0
       discord.js:
-        specifier: ^14.25.1
+        specifier: 'catalog:'
         version: 14.25.1
       dotenv:
-        specifier: ^17.2.3
-        version: 17.2.3
+        specifier: 'catalog:'
+        version: 16.6.1
       express:
-        specifier: ^5.2.1
+        specifier: 'catalog:'
         version: 5.2.1
       flyio:
-        specifier: ^0.6.14
+        specifier: 'catalog:'
         version: 0.6.14
       js-yaml:
-        specifier: ^4.1.1
+        specifier: 'catalog:'
         version: 4.1.1
       mime-types:
-        specifier: ^3.0.2
+        specifier: 'catalog:'
         version: 3.0.2
       node-fetch:
-        specifier: ^3.3.2
+        specifier: 'catalog:'
         version: 3.3.2
       only:
-        specifier: ^0.0.2
+        specifier: 'catalog:'
         version: 0.0.2
       openai:
-        specifier: ^6.15.0
+        specifier: 'catalog:'
         version: 6.15.0(ws@8.18.3)(zod@4.0.17)
       opusscript:
-        specifier: ^0.0.8
+        specifier: 'catalog:'
         version: 0.0.8
       prism-media:
-        specifier: ^1.3.5
+        specifier: 'catalog:'
         version: 1.3.5(opusscript@0.0.8)
       reindex:
-        specifier: ^0.1.0
+        specifier: 'catalog:'
         version: 0.1.0
       winston:
-        specifier: ^3.19.0
+        specifier: 'catalog:'
         version: 3.19.0
       ws:
-        specifier: ^8.18.3
+        specifier: 'catalog:'
         version: 8.18.3
     devDependencies:
       '@types/body-parser':
-        specifier: ^1.19.6
+        specifier: 'catalog:'
         version: 1.19.6
       '@types/express':
-        specifier: ^5.0.6
+        specifier: 'catalog:'
         version: 5.0.6
       '@types/node':
-        specifier: ^24.10.4
+        specifier: 'catalog:'
         version: 24.10.4
       copyfiles:
-        specifier: ^2.4.1
+        specifier: 'catalog:'
         version: 2.4.1
       cross-env:
-        specifier: ^10.1.0
+        specifier: 'catalog:'
         version: 10.1.0
       rimraf:
-        specifier: ^6.1.2
+        specifier: 'catalog:'
         version: 6.1.2
       ts-node-dev:
-        specifier: ^2.0.0
+        specifier: 'catalog:'
         version: 2.0.0(@swc/core@1.15.8(@swc/helpers@0.5.18))(@types/node@24.10.4)(typescript@5.9.3)
       tsx:
-        specifier: ^4.21.0
+        specifier: 'catalog:'
         version: 4.21.0
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
 
   packages/web:
@@ -216,26 +390,26 @@ importers:
         specifier: workspace:*
         version: link:../backend
       '@marsidev/react-turnstile':
-        specifier: ^1.4.1
+        specifier: 'catalog:'
         version: 1.4.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
-        specifier: ^18.3.1
+        specifier: 'catalog:'
         version: 18.3.1
       react-dom:
-        specifier: ^18.3.1
+        specifier: 'catalog:'
         version: 18.3.1(react@18.3.1)
       react-markdown:
-        specifier: ^10.1.0
+        specifier: 'catalog:'
         version: 10.1.0(@types/react@18.3.27)(react@18.3.1)
       react-router-dom:
-        specifier: ^7.11.0
+        specifier: 'catalog:'
         version: 7.11.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       remark-gfm:
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1
     devDependencies:
       '@types/node':
-        specifier: ^24.10.4
+        specifier: 'catalog:'
         version: 24.10.4
       '@types/react':
         specifier: 18.3.27
@@ -244,22 +418,22 @@ importers:
         specifier: 18.3.7
         version: 18.3.7(@types/react@18.3.27)
       '@vitejs/plugin-react':
-        specifier: ^5.1.2
+        specifier: 'catalog:'
         version: 5.1.2(vite@7.3.0(@types/node@24.10.4)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.1))
       autoprefixer:
-        specifier: ^10.4.23
+        specifier: 'catalog:'
         version: 10.4.23(postcss@8.5.6)
       esbuild:
-        specifier: ^0.27.2
+        specifier: 'catalog:'
         version: 0.27.2
       postcss:
-        specifier: ^8.5.6
+        specifier: 'catalog:'
         version: 8.5.6
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
       vite:
-        specifier: ^7.3.0
+        specifier: 'catalog:'
         version: 7.3.0(@types/node@24.10.4)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.1)
 
 packages:
@@ -1425,10 +1599,6 @@ packages:
 
   dotenv@16.6.1:
     resolution: {integrity: sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==}
-    engines: {node: '>=12'}
-
-  dotenv@17.2.3:
-    resolution: {integrity: sha512-JVUnt+DUIzu87TABbhPmNfVdBDt18BLOWjMUFJMSi/Qqg7NTYtabbvSNJGOJ7afbRuv9D/lngizHtP7QyLQ+9w==}
     engines: {node: '>=12'}
 
   dunder-proto@1.0.1:
@@ -4250,8 +4420,6 @@ snapshots:
       - utf-8-validate
 
   dotenv@16.6.1: {}
-
-  dotenv@17.2.3: {}
 
   dunder-proto@1.0.1:
     dependencies:

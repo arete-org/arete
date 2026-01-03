@@ -11,22 +11,22 @@
     },
     "dependencies": {
         "@arete/backend": "workspace:*",
-        "@marsidev/react-turnstile": "^1.4.1",
-        "react": "^18.3.1",
-        "react-dom": "^18.3.1",
-        "react-markdown": "^10.1.0",
-        "react-router-dom": "^7.11.0",
-        "remark-gfm": "^4.0.1"
+        "@marsidev/react-turnstile": "catalog:",
+        "react": "catalog:",
+        "react-dom": "catalog:",
+        "react-markdown": "catalog:",
+        "react-router-dom": "catalog:",
+        "remark-gfm": "catalog:"
     },
     "devDependencies": {
-        "@types/node": "^24.10.4",
-        "@types/react": "18.3.27",
-        "@types/react-dom": "18.3.7",
-        "@vitejs/plugin-react": "^5.1.2",
-        "autoprefixer": "^10.4.23",
-        "esbuild": "^0.27.2",
-        "postcss": "^8.5.6",
-        "typescript": "^5.9.3",
-        "vite": "^7.3.0"
+        "@types/node": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "@vitejs/plugin-react": "catalog:",
+        "autoprefixer": "catalog:",
+        "esbuild": "catalog:",
+        "postcss": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:"
     }
 }

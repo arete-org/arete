@@ -21,10 +21,10 @@ COPY pnpm-lock.yaml* ./
 COPY packages/backend/src/ packages/backend/src/
 
 # Build with backend-local dev tooling, then install backend-only prod deps.
-RUN pnpm --dir packages/backend --ignore-workspace install --prod=false --lockfile-dir /app \
-  && pnpm --dir packages/backend --ignore-workspace exec tsc -p tsconfig.json \
+RUN pnpm --dir packages/backend install --prod=false --lockfile-dir /app \
+  && pnpm --dir packages/backend exec tsc -p tsconfig.json \
   # Install backend deps without workspace closure; the image only includes packages/backend.
-  && CI=true pnpm --dir packages/backend install --prod --ignore-workspace --lockfile-dir /app
+  && CI=true pnpm --dir packages/backend install --prod --lockfile-dir /app
 
 EXPOSE 3000
 WORKDIR /app/packages/backend
