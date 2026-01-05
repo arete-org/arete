@@ -19,28 +19,28 @@
         "lint-check": "pnpm exec eslint packages/"
     },
     "devDependencies": {
-        "@eslint/js": "^9.39.2",
-        "@swc/core": "^1.15.8",
-        "@swc/helpers": "^0.5.18",
-        "@types/better-sqlite3": "^7.6.13",
-        "@types/js-yaml": "^4.0.9",
-        "@types/mime-types": "^3.0.1",
-        "@types/node": "^24.10.4",
-        "@types/react": "18.3.27",
-        "@types/react-dom": "18.3.7",
-        "@types/ws": "^8.18.1",
-        "@typescript-eslint/eslint-plugin": "^8.51.0",
-        "@typescript-eslint/parser": "^8.51.0",
-        "concurrently": "^8.2.2",
-        "cross-env": "^10.1.0",
-        "csstype": "3.2.3",
-        "eslint": "^9.39.2",
-        "eslint-config-prettier": "^10.1.8",
-        "eslint-plugin-react-hooks": "^5.2.0",
-        "prettier": "3.7.4",
-        "ts-node": "^10.9.2",
-        "tsx": "^4.21.0",
-        "typescript": "^5.9.3"
+        "@eslint/js": "catalog:",
+        "@swc/core": "catalog:",
+        "@swc/helpers": "catalog:",
+        "@types/better-sqlite3": "catalog:",
+        "@types/js-yaml": "catalog:",
+        "@types/mime-types": "catalog:",
+        "@types/node": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "@types/ws": "catalog:",
+        "@typescript-eslint/eslint-plugin": "catalog:",
+        "@typescript-eslint/parser": "catalog:",
+        "concurrently": "catalog:",
+        "cross-env": "catalog:",
+        "csstype": "catalog:",
+        "eslint": "catalog:",
+        "eslint-config-prettier": "catalog:",
+        "eslint-plugin-react-hooks": "catalog:",
+        "prettier": "catalog:",
+        "ts-node": "catalog:",
+        "tsx": "catalog:",
+        "typescript": "catalog:"
     },
     "pnpm": {
         "overrides": {
@@ -53,7 +53,7 @@
         ]
     },
     "dependencies": {
-        "dotenv": "^16.6.1",
-        "jsonwebtoken": "^9.0.3"
+        "dotenv": "catalog:",
+        "jsonwebtoken": "catalog:"
     }
 }
