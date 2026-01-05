@@ -1,25 +1,33 @@
 /**
- * @description: Normalizes outbound URLs into Markdown links without reflowing formatting.
+ * @description: Normalizes outbound URLs into Markdown autolinks (<url>) without reflowing formatting.
  * @arete-scope: interface
  * @arete-module: NormalizeOutboundLinks
  * @arete-risk: moderate - Linkification errors can distort meaning or intent.
  * @arete-ethics: moderate - Formatting changes shape user interpretation and trust.
  */
 
-// Unified is the pipeline runner that parses Markdown into an AST.
-// AST: Abstract Syntax Tree; a tree representation of the Markdown document.
+// used only to run a Markdown parse so we can target edits by source offsets (no re-serialization/reflow).
 import { unified } from 'unified';
-// remark-parse turns Markdown text into a typed AST so we can avoid regex hacks.
+
+// turns Markdown into an mdast AST with positional info, letting us identify “do not touch” spans (links/code/etc.).
 import remarkParse from 'remark-parse';
-// unist-util-visit walks the AST so we can gather protected ranges safely.
+
+// walks the AST so we can collect protected ranges and avoid editing inside Markdown constructs.
 import { visit } from 'unist-util-visit';
-// linkify-it detects URLs inside plain text segments.
+
+// provides robust URL detection in plain text (punctuation/parentheses/etc.) without maintaining a regex.
 import LinkifyIt from 'linkify-it';
+
+// the AST type produced by remark-parse.
 import type { Root } from 'mdast';
+
+// the base type for nodes visited in the AST walker.
 import type { Node } from 'unist';
 
+// this filter’s return contract: { content, changes } for pipeline logging/telemetry.
 import type { OutboundFilterResult } from './types.js';
 
+// represents a portion of the scanned text.
 interface TextRange {
     start: number;
     end: number;
@@ -29,18 +37,38 @@ interface TextRange {
 const linkify = new LinkifyIt();
 
 // Node types that should never be rewritten by the outbound normalizer.
+// https://www.npmjs.com/package/mdast
 const PROTECTED_NODE_TYPES = new Set<string>([
     'link',
     'linkReference',
     'definition',
     'inlineCode',
     'code',
+    'html',
     'image',
     'imageReference',
 ]);
 
-// Normalize outbound links by wrapping bare URLs with markdown autolinks.
-// We parse to find protected spans, then only rewrite raw text outside them.
+/**
+ * Wraps bare URLs in "<...>" so Markdown renders them as links.
+ * Note: Discord suppresses embeds for links formatted this way.
+ *
+ * What changes:
+ * - For each URL we detect in normal text, we wrap it with "<" and ">" only.
+ * - The only new characters we add are those angle brackets.
+ *
+ * What counts as a plain-text URL:
+ * - It appears in normal text, and NOT inside existing Markdown links/images,
+ *   code blocks, inline code, raw HTML, or reference definitions.
+ * - We only run this filter when the message contains "http://" or "https://"
+ * - Reflow is avoided so line breaks and original formatting stay intact.
+ *
+ * How:
+ * - We parse first to find protected ranges (links, images, code, definitions, HTML),
+ *   then scan only the remaining text outside those ranges.
+ * - URL detection is handled by linkify-it so we don't maintain our own edge-case
+ *   rules (punctuation, parentheses, trailing periods, etc.).
+ */
 export const normalizeOutboundLinks = (
     content: string
 ): OutboundFilterResult => {
@@ -49,12 +77,11 @@ export const normalizeOutboundLinks = (
     }
 
     // Fast path: skip parsing when there are no http(s) URLs to normalize.
-    // TODO:
     if (!content.includes('http://') && !content.includes('https://')) {
         return { content, changes: [] };
     }
 
-    // Parse Markdown so we can safely ignore code blocks and existing links.
+    // Parse content to find protected regions we must not modify.
     const tree = unified().use(remarkParse).parse(content) as Root;
     const protectedRanges = collectProtectedRanges(tree, content.length);
 
@@ -68,7 +95,7 @@ export const normalizeOutboundLinks = (
     return { content: normalized, changes };
 };
 
-// Collect source ranges that should not be modified (links, code, images).
+// Collect source ranges that should NOT be modified (see PROTECTED_NODE_TYPES)
 const collectProtectedRanges = (tree: Root, maxLength: number): TextRange[] => {
     const ranges: TextRange[] = [];
 

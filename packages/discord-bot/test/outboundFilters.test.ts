@@ -65,13 +65,16 @@ test('normalizeOutboundLinks leaves existing markdown links untouched', () => {
     assert.equal(result.changes.length, 0);
 });
 
-// Autolinks are already safe; we should not rewrite or count them.
-test('normalizeOutboundLinks leaves autolinks untouched', () => {
-    const input = 'Autolink: <https://example.com>';
+// Autolinks are already safe; only bare URLs should be wrapped and counted.
+test('normalizeOutboundLinks leaves existing autolinks untouched while wrapping bare URLs', () => {
+    const input = 'Already <https://example.com> and https://example.org';
     const result = normalizeOutboundLinks(input);
 
-    assert.equal(result.content, input);
-    assert.equal(result.changes.length, 0);
+    assert.equal(
+        result.content,
+        'Already <https://example.com> and <https://example.org>'
+    );
+    assert.deepEqual(result.changes, ['wrapped_urls:1']);
 });
 
 // Formatting constructs should survive normalization (lists, quotes, emphasis).
@@ -96,15 +99,30 @@ test('normalizeOutboundLinks preserves list, quote, and emphasis formatting', ()
 });
 
 // URLs followed by punctuation should keep punctuation outside the link.
-test('normalizeOutboundLinks handles punctuation around URLs', () => {
-    const input = 'See https://example.com, https://example.org. End.';
-    const result = normalizeOutboundLinks(input);
+test('normalizeOutboundLinks handles trailing punctuation and parentheses', () => {
+    const cases = [
+        {
+            input: 'Trailing punctuation: https://example.com.',
+            expected: 'Trailing punctuation: <https://example.com>.',
+            count: 1,
+        },
+        {
+            input: 'Parentheses: (https://example.com)',
+            expected: 'Parentheses: (<https://example.com>)',
+            count: 1,
+        },
+        {
+            input: 'Commas/colons: https://example.com, next: https://example.org:',
+            expected: 'Commas/colons: <https://example.com>, next: <https://example.org>:',
+            count: 2,
+        },
+    ];
 
-    assert.equal(
-        result.content,
-        'See <https://example.com>, <https://example.org>. End.'
-    );
-    assert.deepEqual(result.changes, ['wrapped_urls:2']);
+    for (const testCase of cases) {
+        const result = normalizeOutboundLinks(testCase.input);
+        assert.equal(result.content, testCase.expected);
+        assert.deepEqual(result.changes, [`wrapped_urls:${testCase.count}`]);
+    }
 });
 
 // Query strings and parentheses are common in real links; ensure they stay intact.
@@ -121,20 +139,23 @@ test('normalizeOutboundLinks wraps URLs with query strings and parentheses', () 
 
 // Inline code should never be modified by outbound normalization.
 test('normalizeOutboundLinks skips inline code spans', () => {
-    const input = 'Use `https://example.com` when testing.';
+    const input = 'Use `https://example.com` and https://example.org';
     const result = normalizeOutboundLinks(input);
 
-    assert.equal(result.content, input);
-    assert.equal(result.changes.length, 0);
+    assert.equal(
+        result.content,
+        'Use `https://example.com` and <https://example.org>'
+    );
+    assert.deepEqual(result.changes, ['wrapped_urls:1']);
 });
 
 // Fenced code blocks should be preserved verbatim, with normalization outside.
 test('normalizeOutboundLinks skips code blocks but normalizes surrounding text', () => {
     const input = [
-        '```js',
-        'const url = "https://example.com";',
+        '```txt',
+        'https://example.com should stay as-is here',
         '```',
-        'More info https://example.com',
+        'More info https://example.org',
     ].join('\n');
 
     const result = normalizeOutboundLinks(input);
@@ -142,11 +163,55 @@ test('normalizeOutboundLinks skips code blocks but normalizes surrounding text',
     assert.equal(
         result.content,
         [
-            '```js',
-            'const url = "https://example.com";',
+            '```txt',
+            'https://example.com should stay as-is here',
             '```',
-            'More info <https://example.com>',
+            'More info <https://example.org>',
         ].join('\n')
+    );
+    assert.deepEqual(result.changes, ['wrapped_urls:1']);
+});
+
+// Reference-style links and definitions should remain untouched.
+test('normalizeOutboundLinks skips reference-style links and definitions', () => {
+    const input = [
+        'See [Docs][ref] and https://example.org.',
+        '',
+        '[ref]: https://example.com',
+    ].join('\n');
+    const result = normalizeOutboundLinks(input);
+
+    assert.equal(
+        result.content,
+        [
+            'See [Docs][ref] and <https://example.org>.',
+            '',
+            '[ref]: https://example.com',
+        ].join('\n')
+    );
+    assert.deepEqual(result.changes, ['wrapped_urls:1']);
+});
+
+// Image URLs should remain untouched; only plain-text URLs are wrapped.
+test('normalizeOutboundLinks skips image URLs', () => {
+    const input = '![](https://example.com/img.png) and https://example.org';
+    const result = normalizeOutboundLinks(input);
+
+    assert.equal(
+        result.content,
+        '![](https://example.com/img.png) and <https://example.org>'
+    );
+    assert.deepEqual(result.changes, ['wrapped_urls:1']);
+});
+
+// Raw HTML should remain untouched; only plain-text URLs are wrapped.
+test('normalizeOutboundLinks skips raw HTML blocks', () => {
+    const input = '<a href="https://example.com">x</a> https://example.org';
+    const result = normalizeOutboundLinks(input);
+
+    assert.equal(
+        result.content,
+        '<a href="https://example.com">x</a> <https://example.org>'
     );
     assert.deepEqual(result.changes, ['wrapped_urls:1']);
 });
