@@ -91,6 +91,8 @@ import {
     markExplainInProgress,
     clearExplainInProgress,
     recoverFullMessageText,
+    safeInteractionReply,
+    resolveResponseAnchorMessage,
     resolveProvenanceMetadata,
 } from './utils/response/provenanceInteractions.js';
 //import express from 'express'; // For webhook
@@ -508,11 +510,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (customId === 'explain') {
             const explainKey = buildExplainSessionKey(interaction.message.id);
             if (isExplainInProgress(explainKey)) {
-                await interaction.reply({
-                    content:
-                        '⚠️ An explanation is already in progress for this response. Please wait for it to finish.',
-                    flags: [1 << 6],
-                });
+                await safeInteractionReply(
+                    interaction,
+                    {
+                        content:
+                            '⚠️ An explanation is already in progress for this response. Please wait for it to finish.',
+                        flags: [1 << 6],
+                    },
+                    buildExplainLogContext(interaction),
+                    'explain_in_progress'
+                );
                 return;
             }
 
@@ -554,11 +561,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 interaction.user.username
             );
             const progressContent = `⏳ Explanation requested by **${requester}** — compiling reasoning…`;
+            let progressMessage: Message | null = null;
             try {
-                await interaction.reply({
-                    content: progressContent,
-                    allowedMentions: { parse: [] },
-                });
+                // Acknowledge the interaction early so Discord doesn't time us out.
+                progressMessage = await safeInteractionReply(
+                    interaction,
+                    {
+                        content: progressContent,
+                        allowedMentions: { parse: [] },
+                    },
+                    explainLogContext,
+                    'explain_progress'
+                );
             } catch (error) {
                 clearExplainInProgress(explainKey);
                 if (explainTimeout) {
@@ -573,21 +587,46 @@ client.on(Events.InteractionCreate, async (interaction) => {
                         error,
                     }
                 );
-                if (!interaction.replied) {
-                    await interaction
-                        .followUp({
-                            content:
-                                'I could not start the explanation flow. Please try again.',
-                            flags: [1 << 6],
-                        })
-                        .catch(() => undefined);
-                }
+                await safeInteractionReply(
+                    interaction,
+                    {
+                        content:
+                            'I could not start the explanation flow. Please try again.',
+                        flags: [1 << 6],
+                    },
+                    explainLogContext,
+                    'explain_ack_failed'
+                ).catch(() => undefined);
                 return;
             }
 
+            const updateExplainStatus = async (
+                content: string,
+                label: string
+            ): Promise<void> => {
+                // Prefer editing the progress message to keep the channel tidy.
+                if (progressMessage) {
+                    await progressMessage.edit({ content });
+                    return;
+                }
+
+                await safeInteractionReply(
+                    interaction,
+                    { content },
+                    explainLogContext,
+                    label
+                );
+            };
+
             try {
-                const messageText = await recoverFullMessageText(
+                // Anchor to the response message so we can recover full content if the footer was sent separately.
+                const anchorMessage = await resolveResponseAnchorMessage(
                     interaction.message
+                );
+                // Rebuild the full response text across any split chunks for accurate explanations.
+                const messageText = await recoverFullMessageText(
+                    interaction.message,
+                    anchorMessage
                 );
                 if (!messageText) {
                     provenanceLogger.error(
@@ -598,10 +637,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
                             reason: 'missing_message_text',
                         }
                     );
-                    await interaction.editReply({
-                        content:
-                            'I could not locate the response to explain. Please try again from the original message.',
-                    });
+                    await updateExplainStatus(
+                        'I could not locate the response to explain. Please try again from the original message.',
+                        'explain_missing_text'
+                    );
                     return;
                 }
 
@@ -643,15 +682,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
                             reason: 'unsendable_channel',
                         }
                     );
-                    await interaction.editReply({
-                        content:
-                            'I could not post the explanation in this channel.',
-                    });
+                    await updateExplainStatus(
+                        'I could not post the explanation in this channel.',
+                        'explain_unsendable_channel'
+                    );
                     return;
                 }
 
-                let targetMessage: Message | null = null;
-                if (channel.isTextBased()) {
+                let targetMessage: Message | null = anchorMessage ?? null;
+                if (!targetMessage && channel.isTextBased()) {
                     try {
                         targetMessage = await channel.messages.fetch(
                             interaction.message.id
@@ -690,9 +729,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
                     );
                 }
 
-                await interaction.editReply({
-                    content: '✅ Explanation posted.',
-                });
+                await updateExplainStatus(
+                    '✅ Explanation posted.',
+                    'explain_complete'
+                );
                 provenanceLogger.info('Explain flow completed', {
                     ...explainLogContext,
                     phase: 'success',
@@ -704,10 +744,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
                     reason: 'generation_failed',
                     error,
                 });
-                await interaction.editReply({
-                    content:
-                        '⚠️ I could not generate that explanation. Please try again later.',
-                });
+                await updateExplainStatus(
+                    '⚠️ I could not generate that explanation. Please try again later.',
+                    'explain_generation_failed'
+                );
             } finally {
                 clearExplainInProgress(explainKey);
                 if (explainTimeout) {
