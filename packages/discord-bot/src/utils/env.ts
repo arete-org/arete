@@ -190,7 +190,7 @@ const DEFAULT_ENGAGEMENT_WEIGHTS = {
  * @property {boolean} ENABLE_LLM_REFINEMENT - Whether to use LLM to refine scores in grey zone
  */
 const DEFAULT_ENGAGEMENT_PREFERENCES = {
-    IGNORE_MODE: 'silent' as const,
+    IGNORE_MODE: 'react' as const,
     REACTION_EMOJI: '👍',
     MIN_ENGAGE_THRESHOLD: 0.5,
     PROBABILISTIC_BAND_LOW: 0.4,
@@ -353,6 +353,7 @@ function getStringArrayEnv(
 }
 
 type BotInteractionAction = 'ignore' | 'react';
+type EngagementIgnoreMode = 'silent' | 'react';
 
 /**
  * Reads the preferred action to take once the bot-to-bot conversation limit is reached
@@ -371,6 +372,28 @@ function getBotInteractionActionEnv(
 
     logger.warn(
         `Ignoring invalid bot interaction action for ${key}: "${value}". Expected "ignore" or "react"; using default (${defaultValue}).`
+    );
+
+    return defaultValue;
+}
+
+/**
+ * Reads the preferred engagement ignore mode when the realtime filter skips
+ */
+function getEngagementIgnoreModeEnv(
+    key: string,
+    defaultValue: EngagementIgnoreMode
+): EngagementIgnoreMode {
+    const value = process.env[key];
+    if (!value) return defaultValue;
+
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'silent' || normalized === 'react') {
+        return normalized;
+    }
+
+    logger.warn(
+        `Ignoring invalid engagement ignore mode for ${key}: "${value}". Expected "silent" or "react"; using default (${defaultValue}).`
     );
 
     return defaultValue;
@@ -581,11 +604,10 @@ export const config = {
 
     // Engagement behavior preferences
     engagementPreferences: {
-        ignoreMode:
-            (process.env.ENGAGEMENT_IGNORE_MODE?.trim().toLowerCase() ===
-            'react'
-                ? 'react'
-                : 'silent') as 'silent' | 'react',
+        ignoreMode: getEngagementIgnoreModeEnv(
+            'ENGAGEMENT_IGNORE_MODE',
+            DEFAULT_ENGAGEMENT_PREFERENCES.IGNORE_MODE
+        ),
         reactionEmoji:
             process.env.ENGAGEMENT_REACTION_EMOJI?.trim() ||
             DEFAULT_ENGAGEMENT_PREFERENCES.REACTION_EMOJI,
