@@ -109,7 +109,7 @@ const DEFAULT_BOT_INTERACTION_LIMITS = {
     COOLDOWN_MS: 5 * 60_000,
     CONVERSATION_TTL_MS: 10 * 60_000,
     ACTION: 'react' as const,
-    REACTION: '👍',
+    REACTION: '👀',
 };
 
 /**
