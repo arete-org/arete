@@ -1,0 +1,787 @@
+# Spec version for this file; change only when upgrading tooling.
+openapi: 3.1.0
+
+# ====================
+# Public API metadata
+# Bump info.version when the contract changes
+# ====================
+info:
+    title: ARETE Backend API
+    version: 0.0.0
+    description: |
+        Backend wire contract and integration boundary for other packages.
+        Non-2xx responses use ErrorResponse unless an operation states otherwise.
+        info.version is manually maintained (see docs/api/README.md).
+
+# ====================
+# Base URLs
+# ====================
+servers:
+    - url: http://localhost:3000
+      description: Local backend
+
+# ====================
+# Tags
+# ====================
+tags:
+    - name: Chat
+      description: Reflective chat responses.
+    - name: Image
+      description: Image generation and analysis endpoints.
+    - name: Voice
+      description: Voice and audio endpoints.
+    - name: Traces
+      description: Trace storage and retrieval.
+    - name: Blog
+      description: Public blog content.
+    - name: Webhooks
+      description: Inbound webhook ingestion.
+    - name: System
+      description: Runtime config and service metadata.
+
+# ====================
+# Endpoints
+# ====================
+paths:
+    /api/reflect:
+        get:
+            summary: Generate a reflective response
+            description: |
+            Provide a question as a query param. Turnstile token is required when CAPTCHA is enabled. X-Session-Id / X-Turnstile-Token headers may be accepted as an alternative (TODO: confirm).
+            tags:
+                - Chat
+            parameters:
+                - $ref: '#/components/parameters/Question'
+                - $ref: '#/components/parameters/SessionId'
+                - $ref: '#/components/parameters/TurnstileToken'
+            responses:
+                '200':
+                    description: Reflect response with metadata.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ReflectResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '429':
+                    $ref: '#/components/responses/TooManyRequests'
+                '502':
+                    $ref: '#/components/responses/BadGateway'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+        post:
+            summary: Generate a reflective response
+            description: |
+            Provide a question in the JSON body or as a query param. If a body is sent, question is required. Turnstile token is required when CAPTCHA is enabled. X-Session-Id / X-Turnstile-Token headers may be accepted as an alternative (TODO: confirm).
+            tags:
+                - Chat
+            parameters:
+                - $ref: '#/components/parameters/QuestionOptional'
+                - $ref: '#/components/parameters/SessionId'
+                - $ref: '#/components/parameters/TurnstileToken'
+            requestBody:
+                required: false
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReflectRequest'
+            responses:
+                '200':
+                    description: Reflect response with metadata.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ReflectResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '429':
+                    $ref: '#/components/responses/TooManyRequests'
+                '502':
+                    $ref: '#/components/responses/BadGateway'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+
+    /api/traces:
+        post:
+            summary: Upsert trace metadata
+            description: Stores ResponseMetadata from trusted clients. Use responseId; legacy id is accepted as an alias.
+            tags:
+                - Traces
+            security:
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TraceUpsertRequest'
+            responses:
+                '200':
+                    description: Trace stored.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TraceUpsertResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '429':
+                    $ref: '#/components/responses/TooManyRequests'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+
+    /trace/{responseId}.json:
+        get:
+            summary: Fetch a stored trace
+            description: Returns stored ResponseMetadata by response ID.
+            tags:
+                - Traces
+            parameters:
+                - $ref: '#/components/parameters/TraceResponseId'
+            responses:
+                '200':
+                    description: Trace metadata.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ResponseMetadata'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '410':
+                    $ref: '#/components/responses/Gone'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+
+    /api/blog-posts:
+        get:
+            summary: List blog posts
+            description: Returns the blog index.
+            tags:
+                - Blog
+            responses:
+                '200':
+                    description: Blog index entries.
+                    content:
+                        application/json:
+                            schema:
+                                type: array
+                                items:
+                                    $ref: '#/components/schemas/BlogPostIndexEntry'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+
+    /api/blog-posts/{postId}:
+        get:
+            summary: Fetch a blog post
+            description: Returns a single blog post by numeric id.
+            tags:
+                - Blog
+            parameters:
+                - $ref: '#/components/parameters/BlogPostId'
+            responses:
+                '200':
+                    description: Blog post.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BlogPost'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+
+    /api/webhook/github:
+        post:
+            summary: Ingest GitHub discussion webhook
+            description: Accepts GitHub discussion events used to sync blog posts.
+            tags:
+                - Webhooks
+            security:
+                - GitHubWebhookSignature: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GitHubDiscussionWebhook'
+            responses:
+                '200':
+                    description: Webhook processed or ignored.
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                    - $ref: '#/components/schemas/WebhookSuccessResponse'
+                                    - $ref: '#/components/schemas/WebhookIgnoredResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+
+    /config.json:
+        get:
+            summary: Fetch runtime config
+            description: Returns public runtime configuration for web clients.
+            tags:
+                - System
+            responses:
+                '200':
+                    description: Runtime config.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RuntimeConfig'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+
+# ====================
+# Components
+# ====================
+components:
+    # TODO: Add auth when we introduce bearer/apiKey/webhook signature.
+    securitySchemes:
+        TraceToken:
+            type: apiKey
+            in: header
+            name: x-arete-trace-token
+            description: Shared secret for trusted trace ingestion.
+        GitHubWebhookSignature:
+            type: apiKey
+            in: header
+            name: X-Hub-Signature-256
+            description: GitHub webhook signature (sha256=...).
+
+    schemas:
+        ErrorResponse:
+            type: object
+            properties:
+                error:
+                    type: string
+                details:
+                    type: string
+                retryAfter:
+                    type: integer
+                    description: Seconds until retry is allowed.
+            required:
+                - error
+            additionalProperties: false
+
+        ReflectRequest:
+            type: object
+            properties:
+                question:
+                    type: string
+                turnstileToken:
+                    type: string
+            required:
+                - question
+            additionalProperties: false
+
+        ReflectResponse:
+            type: object
+            properties:
+                message:
+                    type: string
+                metadata:
+                    $ref: '#/components/schemas/ResponseMetadata'
+            required:
+                - message
+                - metadata
+            additionalProperties: false
+
+        ResponseMetadata:
+            type: object
+            properties:
+                responseId:
+                    type: string
+                provenance:
+                    type: string
+                    enum:
+                        - Retrieved
+                        - Inferred
+                        - Speculative
+                confidence:
+                    type: number
+                    minimum: 0
+                    maximum: 1
+                riskTier:
+                    type: string
+                    enum:
+                        - Low
+                        - Medium
+                        - High
+                tradeoffCount:
+                    type: integer
+                    minimum: 0
+                chainHash:
+                    type: string
+                licenseContext:
+                    type: string
+                modelVersion:
+                    type: string
+                staleAfter:
+                    type: string
+                    format: date-time
+                citations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Citation'
+                imageDescriptions:
+                    type: array
+                    items:
+                        type: string
+            required:
+                - responseId
+                - provenance
+                - confidence
+                - riskTier
+                - tradeoffCount
+                - chainHash
+                - licenseContext
+                - modelVersion
+                - staleAfter
+                - citations
+            additionalProperties: false
+
+        ResponseMetadataWithId:
+            type: object
+            properties:
+                id:
+                    type: string
+                provenance:
+                    type: string
+                    enum:
+                        - Retrieved
+                        - Inferred
+                        - Speculative
+                confidence:
+                    type: number
+                    minimum: 0
+                    maximum: 1
+                riskTier:
+                    type: string
+                    enum:
+                        - Low
+                        - Medium
+                        - High
+                tradeoffCount:
+                    type: integer
+                    minimum: 0
+                chainHash:
+                    type: string
+                licenseContext:
+                    type: string
+                modelVersion:
+                    type: string
+                staleAfter:
+                    type: string
+                    format: date-time
+                citations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Citation'
+                imageDescriptions:
+                    type: array
+                    items:
+                        type: string
+            required:
+                - id
+                - provenance
+                - confidence
+                - riskTier
+                - tradeoffCount
+                - chainHash
+                - licenseContext
+                - modelVersion
+                - staleAfter
+                - citations
+            additionalProperties: false
+
+        TraceUpsertRequest:
+            description: Accepts responseId or legacy id.
+            oneOf:
+                - $ref: '#/components/schemas/ResponseMetadata'
+                - $ref: '#/components/schemas/ResponseMetadataWithId'
+
+        Citation:
+            type: object
+            properties:
+                title:
+                    type: string
+                url:
+                    type: string
+                    format: uri
+                snippet:
+                    type: string
+            required:
+                - title
+                - url
+            additionalProperties: false
+
+        TraceUpsertResponse:
+            type: object
+            properties:
+                ok:
+                    type: boolean
+                responseId:
+                    type: string
+            required:
+                - ok
+                - responseId
+            additionalProperties: false
+
+        TraceStaleResponse:
+            type: object
+            properties:
+                message:
+                    type: string
+                metadata:
+                    $ref: '#/components/schemas/ResponseMetadata'
+            required:
+                - message
+                - metadata
+            additionalProperties: false
+
+        BlogPostAuthor:
+            type: object
+            properties:
+                login:
+                    type: string
+                avatarUrl:
+                    type: string
+                    format: uri
+                profileUrl:
+                    type: string
+                    format: uri
+            required:
+                - login
+                - avatarUrl
+                - profileUrl
+            additionalProperties: false
+
+        BlogPostIndexEntry:
+            type: object
+            properties:
+                number:
+                    type: integer
+                title:
+                    type: string
+                author:
+                    $ref: '#/components/schemas/BlogPostAuthor'
+                createdAt:
+                    type: string
+                    format: date-time
+                updatedAt:
+                    type: string
+                    format: date-time
+            required:
+                - number
+                - title
+                - author
+                - createdAt
+                - updatedAt
+            additionalProperties: false
+
+        BlogPost:
+            type: object
+            properties:
+                number:
+                    type: integer
+                title:
+                    type: string
+                author:
+                    $ref: '#/components/schemas/BlogPostAuthor'
+                createdAt:
+                    type: string
+                    format: date-time
+                updatedAt:
+                    type: string
+                    format: date-time
+                body:
+                    type: string
+                discussionUrl:
+                    type: string
+                    format: uri
+                commentCount:
+                    type: integer
+            required:
+                - number
+                - title
+                - author
+                - createdAt
+                - updatedAt
+                - body
+                - discussionUrl
+                - commentCount
+            additionalProperties: false
+
+        RuntimeConfig:
+            type: object
+            properties:
+                turnstileSiteKey:
+                    type: string
+                    description: Empty string when Turnstile is disabled.
+            required:
+                - turnstileSiteKey
+            additionalProperties: false
+
+        WebhookSuccessResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+                    const: true
+                postNumber:
+                    type: integer
+            required:
+                - success
+                - postNumber
+            additionalProperties: false
+
+        WebhookIgnoredResponse:
+            type: object
+            properties:
+                message:
+                    type: string
+            required:
+                - message
+            additionalProperties: false
+
+        GitHubDiscussionWebhook:
+            type: object
+            description: |
+            TODO: confirm full GitHub discussion webhook payload; this is the required subset.
+            properties:
+                action:
+                    type: string
+                repository:
+                    type: object
+                    properties:
+                        full_name:
+                            type: string
+                    required:
+                        - full_name
+                    additionalProperties: true
+                discussion:
+                    type: object
+                    properties:
+                        number:
+                            type: integer
+                        title:
+                            type: string
+                        body:
+                            type: string
+                        user:
+                            type: object
+                            properties:
+                                login:
+                                    type: string
+                                avatar_url:
+                                    type: string
+                                    format: uri
+                                html_url:
+                                    type: string
+                                    format: uri
+                            required:
+                                - login
+                                - avatar_url
+                                - html_url
+                            additionalProperties: true
+                        created_at:
+                            type: string
+                            format: date-time
+                        updated_at:
+                            type: string
+                            format: date-time
+                        html_url:
+                            type: string
+                            format: uri
+                        comments:
+                            type: integer
+                        category:
+                            type: object
+                            properties:
+                                name:
+                                    type: string
+                            required:
+                                - name
+                            additionalProperties: true
+                    required:
+                        - number
+                        - title
+                        - body
+                        - user
+                        - created_at
+                        - updated_at
+                        - html_url
+                    additionalProperties: true
+            required:
+                - action
+                - repository
+                - discussion
+            additionalProperties: true
+
+    parameters:
+        Question:
+            name: question
+            in: query
+            required: true
+            description: Question text (max 3072 chars).
+            schema:
+                type: string
+
+        QuestionOptional:
+            name: question
+            in: query
+            required: false
+            description: Question text (max 3072 chars).
+            schema:
+                type: string
+
+        SessionId:
+            name: sessionId
+            in: query
+            required: false
+            description: Optional session id used for rate limiting.
+            schema:
+                type: string
+
+        TurnstileToken:
+            name: turnstileToken
+            in: query
+            required: false
+            description: Turnstile CAPTCHA token when enabled.
+            schema:
+                type: string
+
+        SessionIdHeader:
+            name: X-Session-Id
+            in: header
+            required: false
+            description: Optional session id header used for rate limiting.
+            schema:
+                type: string
+
+        TurnstileTokenHeader:
+            name: X-Turnstile-Token
+            in: header
+            required: false
+            description: Turnstile CAPTCHA token header when enabled.
+            schema:
+                type: string
+
+        TraceResponseId:
+            name: responseId
+            in: path
+            required: true
+            description: Response id used to fetch a trace.
+            schema:
+                type: string
+
+        BlogPostId:
+            name: postId
+            in: path
+            required: true
+            description: Numeric blog post id.
+            schema:
+                type: string
+                pattern: '^\d+$'
+
+    requestBodies: {}
+
+    # ====================
+    # Shared responses
+    # ====================
+    responses:
+        BadRequest:
+            description: Bad request.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Unauthorized:
+            description: Missing or invalid credentials.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Forbidden:
+            description: Request was refused.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        NotFound:
+            description: Resource not found.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        TooManyRequests:
+            description: Rate limit exceeded.
+            headers:
+                Retry-After:
+                    description: Seconds until retry allowed.
+                    schema:
+                        type: integer
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        InternalServerError:
+            description: Unexpected server error.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        PayloadTooLarge:
+            description: Request payload too large.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        ServiceUnavailable:
+            description: Service unavailable or not configured.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        BadGateway:
+            description: Upstream service error.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Gone:
+            description: Trace has expired.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/TraceStaleResponse'

@@ -190,7 +190,7 @@ const DEFAULT_ENGAGEMENT_WEIGHTS = {
  * @property {boolean} ENABLE_LLM_REFINEMENT - Whether to use LLM to refine scores in grey zone
  */
 const DEFAULT_ENGAGEMENT_PREFERENCES = {
-    IGNORE_MODE: 'react' as const,
+    IGNORE_MODE: 'silent' as const,
     REACTION_EMOJI: '👍',
     MIN_ENGAGE_THRESHOLD: 0.5,
     PROBABILISTIC_BAND_LOW: 0.4,
