@@ -1,9 +1,18 @@
 # Spec version for this file; change only when upgrading tooling.
 openapi: 3.1.0
 
+# Quick Map
+# - GET/POST /api/reflect: Reflection (public; Turnstile + rate limits when configured)
+# - OPTIONS /api/reflect: CORS preflight
+# - POST /api/traces: Trace upsert (TraceToken required)
+# - GET /trace/{responseId}.json: Trace fetch (public)
+# - GET /api/blog-posts: Blog index (public)
+# - GET /api/blog-posts/{postId}: Blog post (public)
+# - POST /api/webhook/github: GitHub discussion webhook (signature when configured)
+# - GET /config.json: Runtime config (public)
+
 # ====================
 # Public API metadata
-# Versioning note: bump when request/response shapes, status codes, or auth semantics change.
 # ====================
 info:
     title: ARETE Backend API
@@ -14,12 +23,15 @@ info:
         url: docs/LICENSE_STRATEGY.md
     description: |
         Backend wire contract and integration boundary for other packages.
+        Reflection is the trimmed-down, web-facing slice of the AI chat system for embeddable UIs.
         Non-2xx responses use ErrorResponse unless an operation states otherwise.
         info.version is manually maintained (see docs/api/README.md).
 
+# Explicitly mark endpoints as unauthenticated by default.
+security: []
+
 # ====================
 # Base URLs
-# Servers are environment-specific; add concrete URLs in deployment docs.
 # ====================
 servers:
     - url: https://{backendHost}
@@ -28,42 +40,37 @@ servers:
           backendHost:
               default: api.your-domain.tld
 
-# Explicitly mark endpoints as unauthenticated by default.
-# Auth convention: keep global security empty; add per-operation `security` when auth is required.
-# If a global auth scheme is added later, keep public endpoints explicit with `security: []`.
-security: []
-
 # ====================
 # Tags
 # ====================
 tags:
     - name: Chat
-      description: Reflective chat responses.
-    - name: Image
-      description: Image generation and analysis endpoints.
-    - name: Voice
-      description: Voice and audio endpoints.
+      description: Chat responses.
+    - name: Image # [Reserved]
+      description: Image generation.
+    - name: Voice # [Reserved]
+      description: Voice and audio.
     - name: Traces
       description: Trace storage and retrieval.
     - name: Blog
       description: Public blog content.
     - name: Webhooks
-      description: Inbound webhook ingestion.
+      description: Webhook ingestion.
     - name: System
       description: Runtime config and service metadata.
 
 # ====================
 # Endpoints
 # ====================
-# New endpoint checklist: unique operationId (verbNoun), tags, request/response schemas, non-2xx ErrorResponse, and any auth overrides.
-# Wiring checklist: add handler in packages/backend/src/handlers, route in packages/backend/src/server.ts, and update tests as needed.
 paths:
+    # Reflection (public, Turnstile when enabled, rate-limited).
     /api/reflect:
         get:
             operationId: getReflect
             summary: Generate a reflective response
             description: |
-                Provide a question as a query param. Turnstile token is required when CAPTCHA is enabled. X-Session-Id / X-Turnstile-Token headers are accepted as an alternative.
+                Generate a reflective response from a question in the query string.
+                Turnstile required when enabled; rate limited per IP/session; X-Session-Id / X-Turnstile-Token headers accepted.
             tags:
                 - Chat
             parameters:
@@ -74,32 +81,29 @@ paths:
                 - $ref: '#/components/parameters/TurnstileTokenHeader'
             responses:
                 '200':
-                    description: Reflect response with metadata.
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ReflectResponse'
-                '400':
-                    $ref: '#/components/responses/BadRequest'
+                    $ref: '#/components/responses/ReflectOk'
                 '403':
                     $ref: '#/components/responses/Forbidden'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
                 '405':
                     $ref: '#/components/responses/MethodNotAllowed'
                 '413':
                     $ref: '#/components/responses/PayloadTooLarge'
                 '429':
                     $ref: '#/components/responses/TooManyRequests'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
                 '502':
                     $ref: '#/components/responses/BadGateway'
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
-                '500':
-                    $ref: '#/components/responses/InternalServerError'
         post:
             operationId: postReflect
             summary: Generate a reflective response
             description: |
-                Provide a question in the JSON body or as a query param. A question is required overall. Turnstile token is required when CAPTCHA is enabled. X-Session-Id / X-Turnstile-Token headers are accepted as an alternative.
+                Generate a reflective response from a question in the JSON body or query string.
+                Turnstile required when enabled; rate limited per IP/session; X-Session-Id / X-Turnstile-Token headers accepted.
             tags:
                 - Chat
             parameters:
@@ -116,42 +120,43 @@ paths:
                             $ref: '#/components/schemas/ReflectRequest'
             responses:
                 '200':
-                    description: Reflect response with metadata.
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ReflectResponse'
-                '400':
-                    $ref: '#/components/responses/BadRequest'
+                    $ref: '#/components/responses/ReflectOk'
                 '403':
                     $ref: '#/components/responses/Forbidden'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
                 '405':
                     $ref: '#/components/responses/MethodNotAllowed'
                 '413':
                     $ref: '#/components/responses/PayloadTooLarge'
                 '429':
                     $ref: '#/components/responses/TooManyRequests'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
                 '502':
                     $ref: '#/components/responses/BadGateway'
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
-                '500':
-                    $ref: '#/components/responses/InternalServerError'
         options:
             operationId: optionsReflect
             summary: CORS preflight
-            description: Handles CORS preflight for the reflect endpoint.
+            description: |
+                Handle CORS preflight for the reflect endpoint.
+                Public endpoint; no auth or rate limits.
             tags:
                 - Chat
             responses:
                 '204':
-                    description: Preflight accepted.
+                    $ref: '#/components/responses/PreflightAccepted'
 
+    # Trace upsert (TraceToken required, rate-limited).
     /api/traces:
         post:
             operationId: postTraces
             summary: Upsert trace metadata
-            description: Stores ResponseMetadata from trusted clients. Use responseId; legacy id is accepted as an alias.
+            description: |
+                Store ResponseMetadata for a responseId (legacy id accepted).
+                TraceToken required; rate limited per client IP.
             tags:
                 - Traces
             security:
@@ -164,73 +169,63 @@ paths:
                             $ref: '#/components/schemas/TraceUpsertRequest'
             responses:
                 '200':
-                    description: Trace stored.
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/TraceUpsertResponse'
-                '400':
-                    $ref: '#/components/responses/BadRequest'
+                    $ref: '#/components/responses/TraceUpsertOk'
                 '401':
                     $ref: '#/components/responses/Unauthorized'
                 '403':
                     $ref: '#/components/responses/Forbidden'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
                 '405':
                     $ref: '#/components/responses/MethodNotAllowed'
                 '413':
                     $ref: '#/components/responses/PayloadTooLarge'
                 '429':
                     $ref: '#/components/responses/TooManyRequests'
-                '503':
-                    $ref: '#/components/responses/ServiceUnavailable'
                 '500':
                     $ref: '#/components/responses/InternalServerError'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
 
+    # Trace fetch (public).
     /trace/{responseId}.json:
         get:
             operationId: getTrace
             summary: Fetch a stored trace
-            description: Returns stored ResponseMetadata by response ID.
+            description: |
+                Return stored ResponseMetadata by response ID.
+                Public endpoint; no auth or rate limits.
             tags:
                 - Traces
             parameters:
                 - $ref: '#/components/parameters/TraceResponseId'
             responses:
                 '200':
-                    description: Trace metadata.
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ResponseMetadata'
+                    $ref: '#/components/responses/TraceFetchOk'
                 '400':
                     $ref: '#/components/responses/BadRequest'
                 '404':
                     $ref: '#/components/responses/NotFound'
                 '410':
                     $ref: '#/components/responses/Gone'
-                '503':
-                    $ref: '#/components/responses/ServiceUnavailable'
                 '500':
                     $ref: '#/components/responses/InternalServerError'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
 
+    # Blog index (public).
     /api/blog-posts:
-        # Pagination/filtering: if added later, document query params + response envelope here.
-        # Keep pagination params/envelope consistent with any other list endpoints once introduced.
         get:
             operationId: listBlogPosts
             summary: List blog posts
-            description: Returns the blog index. Trailing slash is accepted.
+            description: |
+                Return the public blog index (trailing slash accepted).
+                Public endpoint; no auth or rate limits.
             tags:
                 - Blog
             responses:
                 '200':
-                    description: Blog index entries.
-                    content:
-                        application/json:
-                            schema:
-                                type: array
-                                items:
-                                    $ref: '#/components/schemas/BlogPostIndexEntry'
+                    $ref: '#/components/responses/BlogIndexOk'
                 '405':
                     $ref: '#/components/responses/MethodNotAllowed'
                 '500':
@@ -240,18 +235,16 @@ paths:
         get:
             operationId: getBlogPost
             summary: Fetch a blog post
-            description: Returns a single blog post by numeric id.
+            description: |
+                Return a single blog post by numeric id.
+                Public endpoint; no auth or rate limits.
             tags:
                 - Blog
             parameters:
                 - $ref: '#/components/parameters/BlogPostId'
             responses:
                 '200':
-                    description: Blog post.
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/BlogPost'
+                    $ref: '#/components/responses/BlogPostOk'
                 '400':
                     $ref: '#/components/responses/BadRequest'
                 '404':
@@ -261,11 +254,14 @@ paths:
                 '500':
                     $ref: '#/components/responses/InternalServerError'
 
+    # GitHub webhook (signature when configured).
     /api/webhook/github:
         post:
             operationId: postGitHubWebhook
             summary: Ingest GitHub discussion webhook
-            description: Accepts GitHub discussion events used to sync blog posts.
+            description: |
+                Accept GitHub discussion events to sync blog posts.
+                Signature required when configured; otherwise ignored.
             tags:
                 - Webhooks
             security:
@@ -279,38 +275,31 @@ paths:
                             $ref: '#/components/schemas/GitHubDiscussionWebhook'
             responses:
                 '200':
-                    description: Webhook processed or ignored.
-                    content:
-                        application/json:
-                            schema:
-                                oneOf:
-                                    - $ref: '#/components/schemas/WebhookSuccessResponse'
-                                    - $ref: '#/components/schemas/WebhookIgnoredResponse'
-                '400':
-                    $ref: '#/components/responses/BadRequest'
+                    $ref: '#/components/responses/WebhookOk'
                 '401':
                     $ref: '#/components/responses/Unauthorized'
-                '413':
-                    $ref: '#/components/responses/PayloadTooLarge'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
                 '405':
                     $ref: '#/components/responses/MethodNotAllowed'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
                 '500':
                     $ref: '#/components/responses/InternalServerError'
 
+    # Runtime config (public).
     /config.json:
         get:
             operationId: getRuntimeConfig
             summary: Fetch runtime config
-            description: Returns public runtime configuration for web clients.
+            description: |
+                Return public runtime configuration for web clients.
+                Public endpoint; no auth or rate limits.
             tags:
                 - System
             responses:
                 '200':
-                    description: Runtime config.
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/RuntimeConfig'
+                    $ref: '#/components/responses/RuntimeConfigOk'
                 '405':
                     $ref: '#/components/responses/MethodNotAllowed'
                 '500':
@@ -320,22 +309,25 @@ paths:
 # Components
 # ====================
 components:
-    # TODO: Add auth when we introduce bearer/apiKey/webhook signature.
+    # Auth schemes and signature checks for trusted callers.
     securitySchemes:
+        # Shared secret for trace ingestion.
         TraceToken:
             type: apiKey
             in: header
             name: x-arete-trace-token
             description: Shared secret for trusted trace ingestion.
+        # GitHub webhook signature verification.
         GitHubWebhookSignature:
             type: apiKey
             in: header
             name: X-Hub-Signature-256
             description: GitHub webhook signature (sha256=...).
 
+    # Data models for request/response payloads.
     schemas:
-        # JSON Schema 3.1 note: avoid `nullable`; use `type: [string, 'null']` or oneOf with { type: 'null' }.
-        # When multiple shapes can coexist, prefer anyOf or add not/required guards to avoid oneOf conflicts.
+        # Errors.
+        # Standard error envelope.
         ErrorResponse:
             type: object
             properties:
@@ -350,6 +342,8 @@ components:
                 - error
             additionalProperties: false
 
+        # Reflection.
+        # Reflect payloads.
         ReflectRequest:
             type: object
             properties:
@@ -372,14 +366,11 @@ components:
                 - metadata
             additionalProperties: false
 
-        ResponseMetadata:
+        # Traces + provenance.
+        # Trace metadata payloads.
+        ResponseMetadataBase:
             type: object
             properties:
-                responseId:
-                    type: string
-                id:
-                    type: string
-                    description: Legacy response id when supplied by clients.
                 provenance:
                     type: string
                     description: Expected values are Retrieved, Inferred, or Speculative.
@@ -410,7 +401,6 @@ components:
                     items:
                         type: string
             required:
-                - responseId
                 - provenance
                 - confidence
                 - riskTier
@@ -422,52 +412,29 @@ components:
                 - citations
             additionalProperties: true
 
+        ResponseMetadata:
+            allOf:
+                - $ref: '#/components/schemas/ResponseMetadataBase'
+                - type: object
+                  properties:
+                      responseId:
+                          type: string
+                      id:
+                          type: string
+                          description: Legacy response id when supplied by clients.
+                  required:
+                      - responseId
+
         ResponseMetadataWithId:
-            type: object
-            properties:
-                id:
-                    type: string
-                provenance:
-                    type: string
-                    description: Expected values are Retrieved, Inferred, or Speculative.
-                confidence:
-                    type: number
-                    description: Expected range is 0.0 to 1.0.
-                riskTier:
-                    type: string
-                    description: Expected values are Low, Medium, or High.
-                tradeoffCount:
-                    type: number
-                    description: Expected minimum is 0.
-                chainHash:
-                    type: string
-                licenseContext:
-                    type: string
-                modelVersion:
-                    type: string
-                staleAfter:
-                    type: string
-                    format: date-time
-                citations:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/Citation'
-                imageDescriptions:
-                    type: array
-                    items:
-                        type: string
-            required:
-                - id
-                - provenance
-                - confidence
-                - riskTier
-                - tradeoffCount
-                - chainHash
-                - licenseContext
-                - modelVersion
-                - staleAfter
-                - citations
-            additionalProperties: true
+            allOf:
+                - $ref: '#/components/schemas/ResponseMetadataBase'
+                - type: object
+                  properties:
+                      id:
+                          type: string
+                          description: Legacy response id when supplied by clients.
+                  required:
+                      - id
 
         TraceUpsertRequest:
             description: Accepts responseId or legacy id.
@@ -475,6 +442,7 @@ components:
                 - $ref: '#/components/schemas/ResponseMetadata'
                 - $ref: '#/components/schemas/ResponseMetadataWithId'
 
+        # Citations for provenance and attribution.
         Citation:
             type: object
             properties:
@@ -490,6 +458,7 @@ components:
                 - url
             additionalProperties: false
 
+        # Trace ingest and expiry responses.
         TraceUpsertResponse:
             type: object
             properties:
@@ -514,6 +483,8 @@ components:
                 - metadata
             additionalProperties: false
 
+        # Blog content.
+        # Blog content payloads.
         BlogPostAuthor:
             type: object
             properties:
@@ -587,6 +558,8 @@ components:
                 - commentCount
             additionalProperties: false
 
+        # Runtime config.
+        # Public runtime config payload.
         RuntimeConfig:
             type: object
             properties:
@@ -597,6 +570,8 @@ components:
                 - turnstileSiteKey
             additionalProperties: false
 
+        # Webhooks.
+        # Webhook response envelopes.
         WebhookSuccessResponse:
             type: object
             properties:
@@ -619,6 +594,7 @@ components:
                 - message
             additionalProperties: false
 
+        # GitHub discussion webhook payload (subset).
         GitHubDiscussionWebhook:
             type: object
             description: |
@@ -692,7 +668,7 @@ components:
             additionalProperties: true
 
     parameters:
-        # Header convention: prefer X-Session-Id / X-Turnstile-Token over query params for /api/reflect.
+        # Shared request parameters.
         # X-Session-Id is sanitized to alphanumeric/dash/underscore and max 128 chars (see reflect handler).
         Question:
             name: question
@@ -761,13 +737,63 @@ components:
                 type: string
                 pattern: '^\d+$'
 
+    # No shared request bodies yet.
     requestBodies: {}
 
     # ====================
     # Shared responses
     # ====================
-    # Error envelope: use ErrorResponse (error required; details/retryAfter optional). Add request-id here if introduced.
     responses:
+        # Success responses.
+        PreflightAccepted:
+            description: Preflight accepted.
+        ReflectOk:
+            description: Reflect response with metadata.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ReflectResponse'
+        TraceUpsertOk:
+            description: Trace stored.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/TraceUpsertResponse'
+        TraceFetchOk:
+            description: Trace metadata.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ResponseMetadata'
+        BlogIndexOk:
+            description: Blog index entries.
+            content:
+                application/json:
+                    schema:
+                        type: array
+                        items:
+                            $ref: '#/components/schemas/BlogPostIndexEntry'
+        BlogPostOk:
+            description: Blog post.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/BlogPost'
+        WebhookOk:
+            description: Webhook processed or ignored.
+            content:
+                application/json:
+                    schema:
+                        oneOf:
+                            - $ref: '#/components/schemas/WebhookSuccessResponse'
+                            - $ref: '#/components/schemas/WebhookIgnoredResponse'
+        RuntimeConfigOk:
+            description: Runtime config.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/RuntimeConfig'
+        # Error envelope: use ErrorResponse (error required; details/retryAfter optional). Add request-id here if introduced.
         BadRequest:
             description: Bad request.
             content:
