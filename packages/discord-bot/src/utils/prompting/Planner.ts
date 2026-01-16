@@ -453,6 +453,27 @@ export class Planner {
             };
         }
 
+        // Ensure web search always carries a user location type (required by OpenAI API)
+        if (
+            typeof mergedPlan.openaiOptions?.tool_choice === 'object' &&
+            mergedPlan.openaiOptions.tool_choice?.type === 'web_search'
+        ) {
+            const webSearch = mergedPlan.openaiOptions.webSearch ?? {};
+            mergedPlan.openaiOptions = {
+                ...mergedPlan.openaiOptions,
+                webSearch: {
+                    ...webSearch,
+                    userLocation: {
+                        type: webSearch.userLocation?.type ?? 'approximate',
+                        country: webSearch.userLocation?.country,
+                        city: webSearch.userLocation?.city,
+                        region: webSearch.userLocation?.region,
+                        timezone: webSearch.userLocation?.timezone,
+                    },
+                },
+            };
+        }
+
         // Clear ttsOptions when modality isn't tts
         if (mergedPlan.modality !== 'tts' && mergedPlan.openaiOptions) {
             mergedPlan.openaiOptions = {
