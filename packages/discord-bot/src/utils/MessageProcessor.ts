@@ -594,13 +594,37 @@ export class MessageProcessor {
                         RESPONSE_CONTEXT_SIZE
                     );
 
+                // Add Planner payload as context
+                // TODO: Sanitize planner payload before including it in the prompt.
+                const plannerPayload = JSON.stringify(plan);
+                responseContext.push({
+                    role: 'system',
+                    content: [
+                        '// ==========',
+                        '// BEGIN Planner Output',
+                        '// Explaination: The "Planner" is another LLM call that was run to determine how you should respond. Some actions, listed below, may have already run. You should use such information as if performed or retrieved live (web search retrieval for example), as this current LLM call is the final stage in the pipeline (the user is not aware of the distinction).',
+                        '// ==========',
+                        plannerPayload,
+                        '// ==========',
+                        '// END Planner Output',
+                        '// ==========',
+                    ].join('\n'),
+                });
+
                 // Add image descriptions to context, if any
                 if (flatImageDescriptions) {
                     responseContext.push({
                         role: 'system',
-                        content: `User also uploaded images with these automatically generated descriptions: 
-            ${flatImageDescriptions}
-            Use these descriptions for reasoning.`,
+                        content: [
+                            '// ==========',
+                            '// BEGIN Image Descriptions',
+                            '// The user uploaded images; use these auto-generated descriptions for grounding.',
+                            '// ==========',
+                            flatImageDescriptions,
+                            '// ==========',
+                            '// END Image Descriptions',
+                            '// ==========',
+                        ].join('\n'),
                     });
                 }
 
