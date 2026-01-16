@@ -179,7 +179,7 @@ const planFunction = {
                                 type: 'string',
                                 enum: ['none', 'web_search'],
                                 description:
-                                    "Only choose 'web_search' when you can produce a meaningful, non-empty query; otherwise use 'none' ('none' performs no tool calls). 'web_search' performs a web search for a given query and should be used to find information that the assistant needs to respond to the message (real-time information especially). Always pair this with reasoningEffort >= low.",
+                                    "Choose 'web_search' only when the response depends on time-sensitive, versioned, comparative, or externally verifiable facts (e.g. news, pricing, releases, benchmarks). Otherwise use 'none' (no tool calls). If you choose 'web_search', you must provide a concise, specific query that captures the user's ask. Always pair this with reasoningEffort >= low.",
                             },
                         },
                         required: ['type'],
