@@ -1,17 +1,17 @@
 {
-  "aliases": {
-    "@core/*": ["packages/discord-bot/src/*"],
-    "@shared/*": ["packages/shared/src/*"],
-    "@ethics/*": ["packages/ethics-core/src/*"],
-    "@web/*": ["packages/web/src/*"]
-  },
-  "imports": {
-    "utils": "packages/discord-bot/src/utils",
-    "commands": "packages/discord-bot/src/commands",
-    "events": "packages/discord-bot/src/events",
-    "voice": "packages/discord-bot/src/voice",
-    "realtime": "packages/discord-bot/src/realtime",
-    "shared": "packages/shared/src",
-    "ethics": "packages/ethics-core/src"
-  }
+    "aliases": {
+        "@core/*": ["packages/discord-bot/src/*"],
+        "@shared/*": ["packages/shared/src/*"],
+        "@ethics/*": ["packages/ethics-core/src/*"],
+        "@web/*": ["packages/web/src/*"]
+    },
+    "imports": {
+        "utils": "packages/discord-bot/src/utils",
+        "commands": "packages/discord-bot/src/commands",
+        "events": "packages/discord-bot/src/events",
+        "voice": "packages/discord-bot/src/voice",
+        "realtime": "packages/discord-bot/src/realtime",
+        "shared": "packages/shared/src",
+        "ethics": "packages/ethics-core/src"
+    }
 }

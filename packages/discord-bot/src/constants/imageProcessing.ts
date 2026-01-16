@@ -10,7 +10,7 @@ import type OpenAI from 'openai';
 import type { GPT5ModelType, OmniModelType } from '../utils/pricing.js';
 
 type ImageDetailLevel = NonNullable<
-  OpenAI.Chat.Completions.ChatCompletionContentPartImage.ImageURL['detail']
+    OpenAI.Chat.Completions.ChatCompletionContentPartImage.ImageURL['detail']
 >;
 
 /**
@@ -48,13 +48,13 @@ Additional context (may indicate what to focus on): {{context}}
 export type ImageDescriptionModelType = GPT5ModelType | OmniModelType;
 
 export interface ImageDescriptionConfig {
-  model: ImageDescriptionModelType;
-  detail: ImageDetailLevel;
-  maxTokens: number;
-  defaultContentType: string;
-  keyElementsMin: number;
-  keyElementsMax: number;
-  extractedTextLineLimit: number;
+    model: ImageDescriptionModelType;
+    detail: ImageDetailLevel;
+    maxTokens: number;
+    defaultContentType: string;
+    keyElementsMin: number;
+    keyElementsMax: number;
+    extractedTextLineLimit: number;
 }
 
 /**
@@ -62,11 +62,11 @@ export interface ImageDescriptionConfig {
  * to reduce cost and keep outputs terse for Discord metadata consumers.
  */
 export const IMAGE_DESCRIPTION_CONFIG: ImageDescriptionConfig = {
-  model: 'gpt-4o-mini', // Tool-capable multimodal model
-  detail: 'auto', // High-detail vision helps with OCR and UI elements (auto/low/high).
-  maxTokens: 16384, // Cap output size to keep costs bounded (16384=max).
-  defaultContentType: 'image/jpeg', // Discord attachments usually resolve to a concrete MIME type.
-  keyElementsMin: 3, // Ensures we capture enough elements for downstream context.
-  keyElementsMax: 7, // Avoids overly long bullet lists that bloat metadata.
-  extractedTextLineLimit: 20 // Keeps OCR dumps short enough for embeds and logs.
+    model: 'gpt-4o-mini', // Tool-capable multimodal model
+    detail: 'auto', // High-detail vision helps with OCR and UI elements (auto/low/high).
+    maxTokens: 16384, // Cap output size to keep costs bounded (16384=max).
+    defaultContentType: 'image/jpeg', // Discord attachments usually resolve to a concrete MIME type.
+    keyElementsMin: 3, // Ensures we capture enough elements for downstream context.
+    keyElementsMax: 7, // Avoids overly long bullet lists that bloat metadata.
+    extractedTextLineLimit: 20, // Keeps OCR dumps short enough for embeds and logs.
 };

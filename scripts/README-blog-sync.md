@@ -5,25 +5,27 @@ This utility allows you to manually synchronize blog posts from GitHub Discussio
 ## Setup
 
 1. **Create a GitHub App** (if not already done):
-   - Go to GitHub Settings → Developer settings → GitHub Apps
-   - Create a new GitHub App with `Discussions: Read` permission
-   - Install the app on your repository
-   - Download the private key (.pem file)
+    - Go to GitHub Settings → Developer settings → GitHub Apps
+    - Create a new GitHub App with `Discussions: Read` permission
+    - Install the app on your repository
+    - Download the private key (.pem file)
 
 2. **Set Environment Variables**:
-   ```bash
-   export GITHUB_APP_ID=your_app_id_here
-   export GITHUB_APP_PRIVATE_KEY_PATH=./keys/github-app-key.pem
-   ```
+    ```bash
+    export GITHUB_APP_ID=your_app_id_here
+    export GITHUB_APP_PRIVATE_KEY_PATH=./keys/github-app-key.pem
+    ```
 
 ## Usage
 
 ### Option 1: Using pnpm script (Recommended)
+
 ```bash
 pnpm blog-sync
 ```
 
 ### Option 2: Direct execution
+
 ```bash
 node scripts/blog-sync.js
 ```
@@ -40,6 +42,7 @@ node scripts/blog-sync.js
 ## Output
 
 The script will:
+
 - Create individual JSON files for each blog post: `{number}.json`
 - Update the main index file: `index.json`
 - Show progress and completion status

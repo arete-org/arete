@@ -13,7 +13,7 @@ import type {
     ImageStylePreset,
     ImageTextModel,
     ImageOutputFormat,
-    ImageOutputCompression
+    ImageOutputCompression,
 } from './types.js';
 
 /**
@@ -88,7 +88,9 @@ export function saveFollowUpContext(
  * Retrieves a cached follow-up context if it has not expired yet. Expired
  * entries are removed and `null` is returned.
  */
-export function readFollowUpContext(responseId: string): ImageGenerationContext | null {
+export function readFollowUpContext(
+    responseId: string
+): ImageGenerationContext | null {
     const entry = followUpCache.get(responseId);
     if (!entry) {
         return null;

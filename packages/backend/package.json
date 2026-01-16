@@ -1,39 +1,39 @@
 {
-  "name": "@arete/backend",
-  "private": true,
-  "main": "dist/server.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+    "name": "@arete/backend",
+    "private": true,
+    "main": "dist/server.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./server": {
+            "types": "./dist/server.d.ts",
+            "default": "./dist/server.js"
+        },
+        "./shared": {
+            "types": "./dist/shared/index.d.ts",
+            "default": "./dist/shared/index.js"
+        },
+        "./ethics-core": {
+            "types": "./dist/ethics-core/index.d.ts",
+            "default": "./dist/ethics-core/index.js"
+        }
     },
-    "./server": {
-      "types": "./dist/server.d.ts",
-      "default": "./dist/server.js"
+    "scripts": {
+        "build": "tsc -p tsconfig.json"
     },
-    "./shared": {
-      "types": "./dist/shared/index.d.ts",
-      "default": "./dist/shared/index.js"
+    "dependencies": {
+        "better-sqlite3": "catalog:",
+        "date-fns": "catalog:",
+        "js-yaml": "catalog:",
+        "winston": "catalog:"
     },
-    "./ethics-core": {
-      "types": "./dist/ethics-core/index.d.ts",
-      "default": "./dist/ethics-core/index.js"
+    "devDependencies": {
+        "@types/better-sqlite3": "catalog:",
+        "@types/js-yaml": "catalog:",
+        "@types/node": "catalog:",
+        "typescript": "catalog:"
     }
-  },
-  "scripts": {
-    "build": "tsc -p tsconfig.json"
-  },
-  "dependencies": {
-    "better-sqlite3": "catalog:",
-    "date-fns": "catalog:",
-    "js-yaml": "catalog:",
-    "winston": "catalog:"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "catalog:",
-    "@types/js-yaml": "catalog:",
-    "@types/node": "catalog:",
-    "typescript": "catalog:"
-  }
 }

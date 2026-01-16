@@ -23,7 +23,9 @@ const createRampBuffer = (sampleCount: number): Buffer => {
     return buffer;
 };
 
-const collectUpsampledBytes = async (chunkSampleCounts: number[]): Promise<number> => {
+const collectUpsampledBytes = async (
+    chunkSampleCounts: number[]
+): Promise<number> => {
     const stream = createPlaybackResampler();
     const emitted: Buffer[] = [];
 
@@ -52,7 +54,7 @@ test('playback resampler flushes the full tail frame', async () => {
     assert.equal(
         upsampled,
         expectedUpsampledBytes(inputSamples),
-        'flush should emit every interpolated 48kHz frame',
+        'flush should emit every interpolated 48kHz frame'
     );
 });
 
@@ -64,6 +66,6 @@ test('playback resampler combines partial frames across chunks', async () => {
     assert.equal(
         upsampled,
         expectedUpsampledBytes(totalInput),
-        'chunk boundaries must not drop interpolated samples',
+        'chunk boundaries must not drop interpolated samples'
     );
 });

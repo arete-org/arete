@@ -239,11 +239,14 @@ export async function safeInteractionReply(
         }
 
         // Fall back to follow-up when another handler already acknowledged the token.
-        provenanceLogger.warn('Interaction already acknowledged; using follow-up', {
-            ...logContext,
-            phase: 'fallback',
-            reason: logLabel,
-        });
+        provenanceLogger.warn(
+            'Interaction already acknowledged; using follow-up',
+            {
+                ...logContext,
+                phase: 'fallback',
+                reason: logLabel,
+            }
+        );
         try {
             const response = await interaction.followUp(payload);
             return await resolveMessage(response, 'fallback_follow_up');

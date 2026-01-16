@@ -8,11 +8,19 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const entryPath = path.join(__dirname, 'packages', 'backend', 'dist', 'server.js');
+const entryPath = path.join(
+    __dirname,
+    'packages',
+    'backend',
+    'dist',
+    'server.js'
+);
 
 if (!fs.existsSync(entryPath)) {
-  console.error('Backend build output not found. Run: pnpm build --filter @arete/backend');
-  process.exit(1);
+    console.error(
+        'Backend build output not found. Run: pnpm build --filter @arete/backend'
+    );
+    process.exit(1);
 }
 
 require(entryPath);

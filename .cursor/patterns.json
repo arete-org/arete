@@ -1,46 +1,46 @@
 {
-  "patterns": {
-    "logging": {
-      "description": "Always use structured logging with logger.ts",
-      "pattern": "logger.(debug|info|warn|error)",
-      "example": "logger.info('User interaction processed', { userId, action })"
+    "patterns": {
+        "logging": {
+            "description": "Always use structured logging with logger.ts",
+            "pattern": "logger.(debug|info|warn|error)",
+            "example": "logger.info('User interaction processed', { userId, action })"
+        },
+        "errorHandling": {
+            "description": "Wrap risky operations in try/catch with informative messages",
+            "pattern": "try\\s*\\{[\\s\\S]*?\\}\\s*catch\\s*\\([^)]*\\)\\s*\\{[\\s\\S]*?logger\\.error",
+            "example": "try { await riskyOperation(); } catch (error) { logger.error('Operation failed:', error); }"
+        },
+        "costTracking": {
+            "description": "Record LLM usage for cost tracking",
+            "pattern": "ChannelContextManager\\.recordLLMUsage",
+            "example": "ChannelContextManager.recordLLMUsage(tokens, cost)"
+        },
+        "riskTags": {
+            "description": "Include risk/ethics tags in module headers",
+            "pattern": "@arete-risk:\\s*(critical|high|medium|low)",
+            "example": "@arete-risk: high"
+        },
+        "asyncAwait": {
+            "description": "Prefer async/await over promises",
+            "pattern": "async\\s+\\w+\\s*\\([^)]*\\)\\s*:\\s*Promise<",
+            "example": "async processMessage(): Promise<void>"
+        }
     },
-    "errorHandling": {
-      "description": "Wrap risky operations in try/catch with informative messages",
-      "pattern": "try\\s*\\{[\\s\\S]*?\\}\\s*catch\\s*\\([^)]*\\)\\s*\\{[\\s\\S]*?logger\\.error",
-      "example": "try { await riskyOperation(); } catch (error) { logger.error('Operation failed:', error); }"
-    },
-    "costTracking": {
-      "description": "Record LLM usage for cost tracking",
-      "pattern": "ChannelContextManager\\.recordLLMUsage",
-      "example": "ChannelContextManager.recordLLMUsage(tokens, cost)"
-    },
-    "riskTags": {
-      "description": "Include risk/ethics tags in module headers",
-      "pattern": "@arete-risk:\\s*(critical|high|medium|low)",
-      "example": "@arete-risk: high"
-    },
-    "asyncAwait": {
-      "description": "Prefer async/await over promises",
-      "pattern": "async\\s+\\w+\\s*\\([^)]*\\)\\s*:\\s*Promise<",
-      "example": "async processMessage(): Promise<void>"
+    "antiPatterns": {
+        "avoidAny": {
+            "description": "Avoid 'any' types - use proper TypeScript types",
+            "pattern": ":\\s*any\\b",
+            "suggestion": "Use specific types or generics instead"
+        },
+        "avoidConsole": {
+            "description": "Use logger instead of console",
+            "pattern": "console\\.(log|error|warn|info)",
+            "suggestion": "Use logger.debug(), logger.error(), etc."
+        },
+        "avoidSync": {
+            "description": "Avoid synchronous file operations",
+            "pattern": "fs\\.(readFile|writeFile|exists|stat)Sync",
+            "suggestion": "Use async versions with await"
+        }
     }
-  },
-  "antiPatterns": {
-    "avoidAny": {
-      "description": "Avoid 'any' types - use proper TypeScript types",
-      "pattern": ":\\s*any\\b",
-      "suggestion": "Use specific types or generics instead"
-    },
-    "avoidConsole": {
-      "description": "Use logger instead of console",
-      "pattern": "console\\.(log|error|warn|info)",
-      "suggestion": "Use logger.debug(), logger.error(), etc."
-    },
-    "avoidSync": {
-      "description": "Avoid synchronous file operations",
-      "pattern": "fs\\.(readFile|writeFile|exists|stat)Sync",
-      "suggestion": "Use async versions with await"
-    }
-  }
 }

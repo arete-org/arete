@@ -16,15 +16,33 @@ import type { ImageSizeType } from './types.js';
  */
 export function resolveAspectRatioSettings(
     aspect: ImageGenerationContext['aspectRatio'] | 'auto' | null | undefined
-): Pick<ImageGenerationContext, 'aspectRatio' | 'aspectRatioLabel'> & { size: ImageSizeType } {
+): Pick<ImageGenerationContext, 'aspectRatio' | 'aspectRatioLabel'> & {
+    size: ImageSizeType;
+} {
     switch (aspect) {
         case 'square':
-            return { aspectRatio: 'square', aspectRatioLabel: 'Square', size: '1024x1024' };
+            return {
+                aspectRatio: 'square',
+                aspectRatioLabel: 'Square',
+                size: '1024x1024',
+            };
         case 'portrait':
-            return { aspectRatio: 'portrait', aspectRatioLabel: 'Portrait', size: '1024x1536' };
+            return {
+                aspectRatio: 'portrait',
+                aspectRatioLabel: 'Portrait',
+                size: '1024x1536',
+            };
         case 'landscape':
-            return { aspectRatio: 'landscape', aspectRatioLabel: 'Landscape', size: '1536x1024' };
+            return {
+                aspectRatio: 'landscape',
+                aspectRatioLabel: 'Landscape',
+                size: '1536x1024',
+            };
         default:
-            return { aspectRatio: 'auto', aspectRatioLabel: 'Auto', size: 'auto' };
+            return {
+                aspectRatio: 'auto',
+                aspectRatioLabel: 'Auto',
+                size: 'auto',
+            };
     }
 }

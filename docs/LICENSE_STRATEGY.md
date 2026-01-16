@@ -1,8 +1,9 @@
-# LICENSE_STRATEGY.md  
-*A living document for ARETE’s ethical licensing approach*
+# LICENSE_STRATEGY.md
 
-Version: 0.1 
-Last updated: 2025-10-18  
+_A living document for ARETE’s ethical licensing approach_
+
+Version: 0.1
+Last updated: 2025-10-18
 
 ---
 
@@ -34,8 +35,8 @@ This licensing shift is not a symbolic gesture—it is a deliberate extension of
 
 The following **HL3 clauses** are currently active within ARETE’s ethical scope:
 
-- **Human Rights Clause** — Forbids use in systems that infringe upon internationally recognized human rights, including bodily autonomy and freedom of expression.  
-- **No State Violence / Torture / Genocide Clause** — Disallows deployment for violence, detention, or state coercion.  
+- **Human Rights Clause** — Forbids use in systems that infringe upon internationally recognized human rights, including bodily autonomy and freedom of expression.
+- **No State Violence / Torture / Genocide Clause** — Disallows deployment for violence, detention, or state coercion.
 - **Slavery / Forced Labor Clause** — Prohibits use in systems tied to forced labor, trafficking, or exploitative labor conditions.
 
 These represent ARETE’s **ethical baseline**—a non-negotiable set of moral commitments embedded in its license and provenance model.
@@ -77,10 +78,11 @@ As ARETE’s domain, architecture, and adoption mature, I intend to evaluate add
   Prevents deployment in systems built to manipulate elections, microtarget political persuasion, or covertly influence civic behavior.
 
 Each new module will be added only after:
-1. Ethical deliberation (internally and publicly)  
-2. Impact evaluation and risk modeling  
-3. Contributor and stakeholder feedback  
-4. Provenance model updates (annotating modules in the licensing metadata)  
+
+1. Ethical deliberation (internally and publicly)
+2. Impact evaluation and risk modeling
+3. Contributor and stakeholder feedback
+4. Provenance model updates (annotating modules in the licensing metadata)
 5. Documentation and transparency in `ETHICS_DECISIONS.md`
 
 ---
@@ -101,6 +103,7 @@ This connects licensing to provenance: any AI reasoning process can reference it
 ---
 
 ## Future Work
+
 - Add `license_context` to TerminusDB schema
 - Extend `/explain` command to include license lineage
 - Draft `USE_POLICY.md` with clear “red lines” and examples
@@ -117,6 +120,7 @@ Licensing is not a one-time choice but a living social contract.
 Contributors and users are invited to participate in shaping this evolving framework.
 
 Feedback and proposals are welcome via:
+
 - GitHub Discussions
 - Pull Requests to this file
 

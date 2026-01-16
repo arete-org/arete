@@ -16,7 +16,7 @@ export class RealtimeSessionConfig {
         this.options = {
             model: 'gpt-realtime',
             voice: 'echo',
-            ...options
+            ...options,
         };
     }
 
@@ -54,28 +54,30 @@ export class RealtimeSessionConfig {
                     input: {
                         format: {
                             type: 'audio/pcm',
-                            rate: 24000,    // OpenAI outputs 24kHz PCM
+                            rate: 24000, // OpenAI outputs 24kHz PCM
                             //channels: 1,    // Mono
                             //sample_size: 16 // 16-bit PCM
                         },
-                        turn_detection: null
+                        turn_detection: null,
                     },
                     output: {
                         format: {
                             type: 'audio/pcm',
-                            rate: 24000,    // Match OpenAI's 24kHz output
+                            rate: 24000, // Match OpenAI's 24kHz output
                             //channels: 1,    // Mono
                             //sample_size: 16 // 16-bit PCM
                         },
                         voice: this.options.voice,
-                    }
-                }
-            }
+                    },
+                },
+            },
         };
 
         try {
             ws.send(JSON.stringify(sessionUpdate));
-            logger.debug('Sent session configuration with 24kHz PCM16 audio settings');
+            logger.debug(
+                'Sent session configuration with 24kHz PCM16 audio settings'
+            );
         } catch (error) {
             logger.error('Failed to send session configuration:', error);
             throw error;
@@ -94,8 +96,8 @@ export class RealtimeSessionConfig {
             type: 'response.create',
             response: {
                 output_modalities: ['audio'],
-                instructions: this.options.instructions
-            }
+                instructions: this.options.instructions,
+            },
         };
 
         if (this.options.instructions) {
@@ -116,11 +118,11 @@ export class RealtimeSessionConfig {
                 audio: {
                     input: {
                         turn_detection: {
-                            type: 'semantic_vad'
-                        }
-                    }
-                }
-            }
+                            type: 'semantic_vad',
+                        },
+                    },
+                },
+            },
         };
 
         ws.send(JSON.stringify(vadUpdate));

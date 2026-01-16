@@ -45,11 +45,17 @@ export class AudioCaptureHandler extends EventEmitter {
         this.setMaxListeners(50);
     }
 
-    public setupAudioCapture(connection: VoiceConnection, _unusedRealtimeSession: unknown, guildId: string): void {
+    public setupAudioCapture(
+        connection: VoiceConnection,
+        _unusedRealtimeSession: unknown,
+        guildId: string
+    ): void {
         const receiver = connection.receiver;
 
         if (this.captureInitialized.has(guildId)) {
-            logger.debug(`Audio capture already initialized for guild ${guildId}`);
+            logger.debug(
+                `Audio capture already initialized for guild ${guildId}`
+            );
             return;
         }
 
@@ -57,7 +63,9 @@ export class AudioCaptureHandler extends EventEmitter {
             receiver.speaking.removeAllListeners('start');
             receiver.speaking.removeAllListeners('end');
         } catch (error) {
-            logger.warn(`Failed to clear existing speaking listeners for guild ${guildId}: ${error}`);
+            logger.warn(
+                `Failed to clear existing speaking listeners for guild ${guildId}: ${error}`
+            );
         }
 
         receiver.speaking.on('start', (userId: string) => {
@@ -86,7 +94,11 @@ export class AudioCaptureHandler extends EventEmitter {
         return `${guildId}:${userId}`;
     }
 
-    private startReceiverStream(guildId: string, userId: string, receiver: VoiceReceiver): void {
+    private startReceiverStream(
+        guildId: string,
+        userId: string,
+        receiver: VoiceReceiver
+    ): void {
         const captureKey = this.getCaptureKey(guildId, userId);
         if (this.activeReceivers.has(captureKey)) {
             logger.debug(`[${captureKey}] Receiver already active`);
@@ -113,7 +125,11 @@ export class AudioCaptureHandler extends EventEmitter {
         const onData = (chunk: Buffer) => {
             if (chunk.length === 0) return;
 
-            const event: AudioChunkEvent = { guildId, userId, audioBuffer: chunk };
+            const event: AudioChunkEvent = {
+                guildId,
+                userId,
+                audioBuffer: chunk,
+            };
             this.emit('audioChunk', event);
         };
 
@@ -185,4 +201,3 @@ export class AudioCaptureHandler extends EventEmitter {
 }
 
 export type { AudioChunkEvent };
-

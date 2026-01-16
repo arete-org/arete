@@ -6,8 +6,14 @@
  * @arete-ethics: low - Token tracking does not process user content directly.
  */
 import { logger } from './logger.js';
-import { getImageModelTokenMultiplier, imageConfig } from '../config/imageConfig.js';
-import type { ImageQualityType, ImageRenderModel } from '../commands/image/types.js';
+import {
+    getImageModelTokenMultiplier,
+    imageConfig,
+} from '../config/imageConfig.js';
+import type {
+    ImageQualityType,
+    ImageRenderModel,
+} from '../commands/image/types.js';
 
 /**
  * Represents the configurable settings for a token bucket. The manager keeps
@@ -63,13 +69,15 @@ export class UsageTokenManager {
      */
     public consume(key: string, cost: number): TokenSpendResult {
         if (cost <= 0 || !Number.isFinite(cost)) {
-            logger.warn(`Ignoring invalid token cost (${cost}) for key ${this.namespacedKey(key)}.`);
+            logger.warn(
+                `Ignoring invalid token cost (${cost}) for key ${this.namespacedKey(key)}.`
+            );
             const bucket = this.ensureBucket(key);
             return {
                 ...this.buildSnapshot(bucket),
                 allowed: true,
                 cost: 0,
-                remainingTokens: bucket.tokens
+                remainingTokens: bucket.tokens,
             };
         }
 
@@ -82,7 +90,7 @@ export class UsageTokenManager {
                 allowed: false,
                 cost,
                 remainingTokens: bucket.tokens,
-                neededTokens
+                neededTokens,
             };
         }
 
@@ -91,7 +99,7 @@ export class UsageTokenManager {
             ...this.buildSnapshot(bucket),
             allowed: true,
             cost,
-            remainingTokens: bucket.tokens
+            remainingTokens: bucket.tokens,
         };
     }
 
@@ -105,12 +113,17 @@ export class UsageTokenManager {
         }
 
         const bucket = this.ensureBucket(key);
-        bucket.tokens = Math.min(bucket.tokens + amount, this.options.tokensPerInterval);
+        bucket.tokens = Math.min(
+            bucket.tokens + amount,
+            this.options.tokensPerInterval
+        );
         return this.buildSnapshot(bucket);
     }
 
     private namespacedKey(key: string): string {
-        return this.options.namespace ? `${this.options.namespace}:${key}` : key;
+        return this.options.namespace
+            ? `${this.options.namespace}:${key}`
+            : key;
     }
 
     private ensureBucket(key: string): TokenBucketState {
@@ -121,7 +134,7 @@ export class UsageTokenManager {
         if (!bucket) {
             bucket = {
                 tokens: this.options.tokensPerInterval,
-                nextRefreshAt: now + this.options.intervalMs
+                nextRefreshAt: now + this.options.intervalMs,
             };
             this.buckets.set(namespacedKey, bucket);
             return bucket;
@@ -129,9 +142,14 @@ export class UsageTokenManager {
 
         if (now >= bucket.nextRefreshAt) {
             // Advance the refresh window so long offline periods do not stall.
-            const intervalsElapsed = Math.floor((now - bucket.nextRefreshAt) / this.options.intervalMs) + 1;
+            const intervalsElapsed =
+                Math.floor(
+                    (now - bucket.nextRefreshAt) / this.options.intervalMs
+                ) + 1;
             bucket.tokens = this.options.tokensPerInterval;
-            bucket.nextRefreshAt = bucket.nextRefreshAt + intervalsElapsed * this.options.intervalMs;
+            bucket.nextRefreshAt =
+                bucket.nextRefreshAt +
+                intervalsElapsed * this.options.intervalMs;
         }
 
         return bucket;
@@ -142,7 +160,10 @@ export class UsageTokenManager {
         return {
             tokens: bucket.tokens,
             nextRefreshAt: bucket.nextRefreshAt,
-            refreshInSeconds: Math.max(0, Math.ceil((bucket.nextRefreshAt - now) / 1000))
+            refreshInSeconds: Math.max(
+                0,
+                Math.ceil((bucket.nextRefreshAt - now) / 1000)
+            ),
         };
     }
 }
@@ -151,7 +172,7 @@ const QUALITY_TOKEN_COST: Record<ImageQualityType, number> = {
     auto: 1,
     low: 1,
     medium: 3,
-    high: 5
+    high: 5,
 };
 
 const imageTokenManager = new UsageTokenManager({
@@ -160,10 +181,13 @@ const imageTokenManager = new UsageTokenManager({
     // limits.
     tokensPerInterval: imageConfig.tokens.tokensPerRefresh,
     intervalMs: imageConfig.tokens.refreshIntervalMs,
-    namespace: 'image'
+    namespace: 'image',
 });
 
-export function getImageTokenCost(quality: ImageQualityType, imageModel: ImageRenderModel): number {
+export function getImageTokenCost(
+    quality: ImageQualityType,
+    imageModel: ImageRenderModel
+): number {
     // Base costs reflect the relative compute footprint for each quality tier,
     // while model multipliers come from the shared configuration to keep
     // accounting aligned with operator overrides.
@@ -186,9 +210,10 @@ export function refundImageTokens(
     qualityOrAmount: ImageQualityType | number,
     imageModel: ImageRenderModel = imageConfig.defaults.imageModel
 ): TokenSnapshot {
-    const amount = typeof qualityOrAmount === 'number'
-        ? qualityOrAmount
-        : getImageTokenCost(qualityOrAmount, imageModel);
+    const amount =
+        typeof qualityOrAmount === 'number'
+            ? qualityOrAmount
+            : getImageTokenCost(qualityOrAmount, imageModel);
     return imageTokenManager.refund(userId, amount);
 }
 
@@ -203,13 +228,15 @@ export function describeTokenAvailability(
 ): string {
     const qualityName = quality.charAt(0).toUpperCase() + quality.slice(1);
     const countdown = formatCountdown(result.refreshInSeconds);
-    const neededText = result.neededTokens && result.neededTokens > 0
-        ? `You need ${result.neededTokens} more token${result.neededTokens === 1 ? '' : 's'} to proceed.`
-        : '';
+    const neededText =
+        result.neededTokens && result.neededTokens > 0
+            ? `You need ${result.neededTokens} more token${result.neededTokens === 1 ? '' : 's'} to proceed.`
+            : '';
 
-    const waitInstruction = result.remainingTokens === 0
-        ? `Please wait ${countdown} for your balance to refresh.`
-        : `Please wait ${countdown} or pick a lower quality.`;
+    const waitInstruction =
+        result.remainingTokens === 0
+            ? `Please wait ${countdown} for your balance to refresh.`
+            : `Please wait ${countdown} or pick a lower quality.`;
 
     return `⚠️ ${qualityName} quality with ${imageModel} requires ${result.cost} token${result.cost === 1 ? '' : 's'}, but you have ${result.remainingTokens}. ${waitInstruction} ${neededText}`.trim();
 }
@@ -234,7 +261,10 @@ export function buildModelTokenDescription(
 export function buildTokenSummaryLine(userId: string): string {
     const snapshot = inspectImageTokens(userId);
     const countdown = formatCountdown(snapshot.refreshInSeconds);
-    const parts = [`Tokens remaining: ${snapshot.tokens}`, `Refreshes in: ${countdown}`];
+    const parts = [
+        `Tokens remaining: ${snapshot.tokens}`,
+        `Refreshes in: ${countdown}`,
+    ];
     return parts.join(' • ');
 }
 

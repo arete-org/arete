@@ -11,27 +11,31 @@ import { logger } from '../shared/logger';
 /**
  * Builds a short log entry for monitoring within Fly.io logs.
  */
-function logRequest(req: IncomingMessage, res: ServerResponse, extra = ''): void {
-  // --- Timestamp ---
-  const timestamp = new Date().toISOString();
+function logRequest(
+    req: IncomingMessage,
+    res: ServerResponse,
+    extra = ''
+): void {
+    // --- Timestamp ---
+    const timestamp = new Date().toISOString();
 
-  // --- URL sanitization ---
-  // Avoid logging full reflect query strings (can include user content).
-  let logUrl = req.url;
-  if (req.url && req.url.includes('/api/reflect')) {
-    try {
-      const parsedUrl = new URL(req.url, 'http://localhost');
-      logUrl = parsedUrl.pathname;
-    } catch {
-      logUrl = req.url;
+    // --- URL sanitization ---
+    // Avoid logging full reflect query strings (can include user content).
+    let logUrl = req.url;
+    if (req.url && req.url.includes('/api/reflect')) {
+        try {
+            const parsedUrl = new URL(req.url, 'http://localhost');
+            logUrl = parsedUrl.pathname;
+        } catch {
+            logUrl = req.url;
+        }
     }
-  }
 
-  // --- Emit ---
-  // Keep format consistent for ingestion into log tooling.
-  logger.info(`[${timestamp}] ${req.method} ${logUrl} -> ${res.statusCode} ${extra}`.trim());
+    // --- Emit ---
+    // Keep format consistent for ingestion into log tooling.
+    logger.info(
+        `[${timestamp}] ${req.method} ${logUrl} -> ${res.statusCode} ${extra}`.trim()
+    );
 }
 
 export { logRequest };
-
-

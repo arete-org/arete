@@ -16,23 +16,27 @@ const formatToMime: Record<string, string> = {
     png: 'image/png',
     jpg: 'image/jpeg',
     jpeg: 'image/jpeg',
-    webp: 'image/webp'
+    webp: 'image/webp',
 };
 
 const cloudinaryConfig = {
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
+    api_secret: process.env.CLOUDINARY_API_SECRET,
 };
 
 export const isCloudinaryConfigured = Boolean(
-    cloudinaryConfig.cloud_name && cloudinaryConfig.api_key && cloudinaryConfig.api_secret
+    cloudinaryConfig.cloud_name &&
+    cloudinaryConfig.api_key &&
+    cloudinaryConfig.api_secret
 );
 
 if (isCloudinaryConfigured) {
     cloudinary.config(cloudinaryConfig);
 } else {
-    logger.warn('Cloudinary credentials are missing. Image uploads are disabled.');
+    logger.warn(
+        'Cloudinary credentials are missing. Image uploads are disabled.'
+    );
 }
 
 export class CloudinaryConfigurationError extends Error {
@@ -67,7 +71,10 @@ function addChunkedContext(
     });
 }
 
-export async function uploadToCloudinary(imageBuffer: Buffer, metadata: UploadMetadata): Promise<string> {
+export async function uploadToCloudinary(
+    imageBuffer: Buffer,
+    metadata: UploadMetadata
+): Promise<string> {
     if (!isCloudinaryConfigured) {
         throw new CloudinaryConfigurationError();
     }
@@ -91,14 +98,17 @@ export async function uploadToCloudinary(imageBuffer: Buffer, metadata: UploadMe
             text_input_tokens: metadata.usage.inputTokens.toString(),
             text_output_tokens: metadata.usage.outputTokens.toString(),
             text_total_tokens: metadata.usage.totalTokens.toString(),
-            combined_input_tokens: metadata.usage.combinedInputTokens.toString(),
-            combined_output_tokens: metadata.usage.combinedOutputTokens.toString(),
-            combined_total_tokens: metadata.usage.combinedTotalTokens.toString(),
+            combined_input_tokens:
+                metadata.usage.combinedInputTokens.toString(),
+            combined_output_tokens:
+                metadata.usage.combinedOutputTokens.toString(),
+            combined_total_tokens:
+                metadata.usage.combinedTotalTokens.toString(),
             image_count: metadata.usage.imageCount.toString(),
             cost_text_usd: formatUsd(metadata.cost.text),
             cost_image_usd: formatUsd(metadata.cost.image),
             cost_total_usd: formatUsd(metadata.cost.total),
-            cost_per_image_usd: formatUsd(metadata.cost.perImage)
+            cost_per_image_usd: formatUsd(metadata.cost.perImage),
         };
 
         if (metadata.title) {
@@ -106,32 +116,48 @@ export async function uploadToCloudinary(imageBuffer: Buffer, metadata: UploadMe
         }
 
         if (metadata.description) {
-            context.image_description = clampForCloudinary(metadata.description);
+            context.image_description = clampForCloudinary(
+                metadata.description
+            );
         }
 
-        addChunkedContext(context, 'annotation_note', metadata.noteMessage ?? undefined);
+        addChunkedContext(
+            context,
+            'annotation_note',
+            metadata.noteMessage ?? undefined
+        );
         addChunkedContext(context, 'original_prompt', metadata.originalPrompt);
-        addChunkedContext(context, 'adjusted_prompt', metadata.revisedPrompt ?? undefined, {
-            fallback: 'Model reused the original prompt.'
-        });
+        addChunkedContext(
+            context,
+            'adjusted_prompt',
+            metadata.revisedPrompt ?? undefined,
+            {
+                fallback: 'Model reused the original prompt.',
+            }
+        );
 
         const mimeType = formatToMime[metadata.outputFormat] ?? 'image/png';
 
-        const uploadResult = await cloudinary.uploader.upload(`data:${mimeType};base64,${imageBuffer.toString('base64')}`, {
-            resource_type: 'image',
-            public_id: `ai-image-${Date.now()}`,
-            context,
-            tags: [
-                'ai-generated',
-                'discord-bot',
-                metadata.textModel,
-                metadata.imageModel,
-                metadata.quality,
-                metadata.style
-            ]
-        });
+        const uploadResult = await cloudinary.uploader.upload(
+            `data:${mimeType};base64,${imageBuffer.toString('base64')}`,
+            {
+                resource_type: 'image',
+                public_id: `ai-image-${Date.now()}`,
+                context,
+                tags: [
+                    'ai-generated',
+                    'discord-bot',
+                    metadata.textModel,
+                    metadata.imageModel,
+                    metadata.quality,
+                    metadata.style,
+                ],
+            }
+        );
 
-        logger.debug(`Image uploaded to Cloudinary: ${uploadResult.secure_url}`);
+        logger.debug(
+            `Image uploaded to Cloudinary: ${uploadResult.secure_url}`
+        );
         return uploadResult.secure_url;
     } catch (error) {
         logger.error(`Cloudinary upload error: ${error}`);

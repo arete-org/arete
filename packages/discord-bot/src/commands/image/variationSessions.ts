@@ -16,7 +16,7 @@ import {
     TextInputBuilder,
     TextInputStyle,
     type InteractionUpdateOptions,
-    type MessageActionRowComponentBuilder
+    type MessageActionRowComponentBuilder,
 } from 'discord.js';
 import { buildPromptFieldValue, truncateForEmbed } from './embed.js';
 import {
@@ -29,10 +29,18 @@ import {
     IMAGE_VARIATION_RESET_PROMPT_CUSTOM_ID_PREFIX,
     IMAGE_VARIATION_PROMPT_ADJUST_SELECT_PREFIX,
     IMAGE_VARIATION_IMAGE_MODEL_SELECT_PREFIX,
-    EMBED_FIELD_VALUE_LIMIT
+    EMBED_FIELD_VALUE_LIMIT,
 } from './constants.js';
-import { clampPromptForContext, formatRetryCountdown, formatStylePreset, toTitleCase } from './sessionHelpers.js';
-import { buildModelTokenDescription, buildQualityTokenDescription } from '../../utils/imageTokens.js';
+import {
+    clampPromptForContext,
+    formatRetryCountdown,
+    formatStylePreset,
+    toTitleCase,
+} from './sessionHelpers.js';
+import {
+    buildModelTokenDescription,
+    buildQualityTokenDescription,
+} from '../../utils/imageTokens.js';
 import type { ImageGenerationContext } from './followUpCache.js';
 import type {
     ImageBackgroundType,
@@ -42,7 +50,7 @@ import type {
     ImageStylePreset,
     ImageTextModel,
     ImageOutputFormat,
-    ImageOutputCompression
+    ImageOutputCompression,
 } from './types.js';
 
 /**
@@ -89,55 +97,68 @@ const QUALITY_LABELS: Record<ImageQualityType, string> = {
     auto: 'Auto',
     low: 'Low',
     medium: 'Medium',
-    high: 'High'
+    high: 'High',
 };
 
-const ASPECT_OPTIONS: Array<{ value: ImageGenerationContext['aspectRatio']; label: string }> = [
+const ASPECT_OPTIONS: Array<{
+    value: ImageGenerationContext['aspectRatio'];
+    label: string;
+}> = [
     { value: 'auto', label: 'Auto' },
     { value: 'square', label: 'Square' },
     { value: 'portrait', label: 'Portrait' },
-    { value: 'landscape', label: 'Landscape' }
+    { value: 'landscape', label: 'Landscape' },
 ];
 
 const IMAGE_MODEL_LABELS: Record<ImageRenderModel, string> = {
     'gpt-image-1-mini': 'GPT Image 1 Mini',
     'gpt-image-1.5': 'GPT Image 1.5',
-    'gpt-image-1': 'GPT Image 1'
+    'gpt-image-1': 'GPT Image 1',
 };
 
 // Menu builders are kept as helpers so we can regenerate token-aware labels each
 // time the configurator re-renders. This keeps the select copy in sync with the
 // active image model or quality without duplicating cost logic at the call site.
-function buildQualityOptions(imageModel: ImageRenderModel): Array<{ value: ImageQualityType; label: string; description: string }> {
-    return (['low', 'medium', 'high'] as ImageQualityType[]).map(quality => ({
+function buildQualityOptions(
+    imageModel: ImageRenderModel
+): Array<{ value: ImageQualityType; label: string; description: string }> {
+    return (['low', 'medium', 'high'] as ImageQualityType[]).map((quality) => ({
         value: quality,
         label: QUALITY_LABELS[quality],
-        description: buildQualityTokenDescription(quality, imageModel)
+        description: buildQualityTokenDescription(quality, imageModel),
     }));
 }
 
-function buildImageModelOptions(quality: ImageQualityType): Array<{ value: ImageRenderModel; label: string; description: string }> {
-    return (Object.keys(IMAGE_MODEL_LABELS) as ImageRenderModel[]).map(model => ({
-        value: model,
-        label: IMAGE_MODEL_LABELS[model],
-        description: buildModelTokenDescription(model, quality)
-    }));
+function buildImageModelOptions(
+    quality: ImageQualityType
+): Array<{ value: ImageRenderModel; label: string; description: string }> {
+    return (Object.keys(IMAGE_MODEL_LABELS) as ImageRenderModel[]).map(
+        (model) => ({
+            value: model,
+            label: IMAGE_MODEL_LABELS[model],
+            description: buildModelTokenDescription(model, quality),
+        })
+    );
 }
 
 // Select menus are limited to four rows, so the "style" selector now doubles as a
 // toggle for whether the AI may refine the prompt. Providing a description keeps
 // the intent crystal-clear when users revisit the configurator.
-const PROMPT_ADJUSTMENT_OPTIONS: Array<{ value: 'allow' | 'deny'; label: string; description: string }> = [
+const PROMPT_ADJUSTMENT_OPTIONS: Array<{
+    value: 'allow' | 'deny';
+    label: string;
+    description: string;
+}> = [
     {
         value: 'allow',
         label: 'Automatically improve the prompt',
-        description: 'Refine wording for better results'
+        description: 'Refine wording for better results',
     },
     {
         value: 'deny',
         label: 'Use exactly what I wrote',
-        description: 'Skip all prompt adjustments'
-    }
+        description: 'Skip all prompt adjustments',
+    },
 ];
 
 function makeSessionKey(userId: string, responseId: string): string {
@@ -167,9 +188,15 @@ export function initialiseVariationSession(
     const key = makeSessionKey(userId, responseId);
     disposeVariationSession(key);
 
-    const normalizedOriginal = clampPromptForContext(context.originalPrompt ?? context.prompt);
-    const normalizedRefined = context.refinedPrompt ? clampPromptForContext(context.refinedPrompt) : null;
-    const initialPrompt = clampPromptForContext(context.refinedPrompt ?? context.prompt);
+    const normalizedOriginal = clampPromptForContext(
+        context.originalPrompt ?? context.prompt
+    );
+    const normalizedRefined = context.refinedPrompt
+        ? clampPromptForContext(context.refinedPrompt)
+        : null;
+    const initialPrompt = clampPromptForContext(
+        context.refinedPrompt ?? context.prompt
+    );
 
     const session: VariationSessionState = {
         key,
@@ -194,14 +221,17 @@ export function initialiseVariationSession(
         }, VARIATION_SESSION_TTL_MS),
         cooldownUntil: null,
         messageUpdater: undefined,
-        statusMessage: null
+        statusMessage: null,
     };
 
     sessions.set(key, session);
     return session;
 }
 
-export function getVariationSession(userId: string, responseId: string): VariationSessionState | null {
+export function getVariationSession(
+    userId: string,
+    responseId: string
+): VariationSessionState | null {
     return sessions.get(makeSessionKey(userId, responseId)) ?? null;
 }
 
@@ -265,7 +295,9 @@ export function applyVariationCooldown(
                 session.cooldownUntil = null;
                 try {
                     if (session.messageUpdater) {
-                        await session.messageUpdater(buildVariationConfiguratorView(session));
+                        await session.messageUpdater(
+                            buildVariationConfiguratorView(session)
+                        );
                     }
                 } catch {
                     // Ignore refresh errors; the user may have closed the configurator.
@@ -278,7 +310,10 @@ export function applyVariationCooldown(
     return session;
 }
 
-export function resetVariationCooldown(userId: string, responseId: string): VariationSessionState | null {
+export function resetVariationCooldown(
+    userId: string,
+    responseId: string
+): VariationSessionState | null {
     const session = getVariationSession(userId, responseId);
     if (!session) {
         return null;
@@ -295,30 +330,37 @@ function buildSelectRow(
     {
         selectedValue,
         placeholder,
-        currentLabel
+        currentLabel,
     }: { selectedValue: string; placeholder: string; currentLabel?: string }
 ): ActionRowBuilder<MessageActionRowComponentBuilder> {
-    const selectedOption = options.find(option => option.value === selectedValue);
-    const placeholderLabel = currentLabel ?? selectedOption?.label ?? 'previous setting';
+    const selectedOption = options.find(
+        (option) => option.value === selectedValue
+    );
+    const placeholderLabel =
+        currentLabel ?? selectedOption?.label ?? 'previous setting';
 
     const menu = new StringSelectMenuBuilder()
         .setCustomId(customId)
         .setMinValues(0)
         .setMaxValues(1)
         .setPlaceholder(`${placeholder} (current: ${placeholderLabel})`)
-        .addOptions(options.map(option => {
-            const optionBuilder = new StringSelectMenuOptionBuilder()
-                .setLabel(option.label)
-                .setValue(option.value);
+        .addOptions(
+            options.map((option) => {
+                const optionBuilder = new StringSelectMenuOptionBuilder()
+                    .setLabel(option.label)
+                    .setValue(option.value);
 
-            if (option.description) {
-                optionBuilder.setDescription(option.description);
-            }
+                if (option.description) {
+                    optionBuilder.setDescription(option.description);
+                }
 
-            return optionBuilder;
-        }));
+                return optionBuilder;
+            })
+        );
 
-    return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
+    return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+        menu
+    );
 }
 
 export function buildVariationConfiguratorView(
@@ -329,76 +371,78 @@ export function buildVariationConfiguratorView(
         session.statusMessage = options.statusMessage;
     }
 
-    const statusText = options.statusMessage ?? session.statusMessage ?? 'Tweak the settings below and press **Generate variation** when you are ready.';
+    const statusText =
+        options.statusMessage ??
+        session.statusMessage ??
+        'Tweak the settings below and press **Generate variation** when you are ready.';
     const embed = new EmbedBuilder()
         .setTitle('🎨 Configure image variation')
-        .setDescription(
-            truncateForEmbed(
-                statusText,
-                2048
-            )
-        );
+        .setDescription(truncateForEmbed(statusText, 2048));
 
     embed.addFields({
         name: 'Current prompt',
-        value: buildPromptFieldValue(session.prompt, { label: 'variation prompt' })
+        value: buildPromptFieldValue(session.prompt, {
+            label: 'variation prompt',
+        }),
     });
 
     embed.addFields({
         name: 'Original prompt',
-        value: buildPromptFieldValue(session.originalPrompt, { label: 'original prompt' })
+        value: buildPromptFieldValue(session.originalPrompt, {
+            label: 'original prompt',
+        }),
     });
 
     embed.addFields(
         {
             name: 'Image model',
             value: session.imageModel,
-            inline: true
+            inline: true,
         },
         {
             name: 'Text model',
             value: session.textModel,
-            inline: true
+            inline: true,
         },
         {
             name: 'Quality',
             value: `${toTitleCase(session.quality)} (${session.imageModel})`,
-            inline: true
+            inline: true,
         },
         {
             name: 'Aspect ratio',
             value: session.aspectRatioLabel,
-            inline: true
+            inline: true,
         },
         {
             name: 'Resolution',
             value: session.size === 'auto' ? 'Auto' : session.size,
-            inline: true
+            inline: true,
         },
         {
             name: 'Background',
             value: toTitleCase(session.background),
-            inline: true
+            inline: true,
         },
         {
             name: 'Prompt adjustment',
             value: session.allowPromptAdjustment ? 'Enabled' : 'Disabled',
-            inline: true
+            inline: true,
         },
         {
             name: 'Output format',
             value: session.outputFormat.toUpperCase(),
-            inline: true
+            inline: true,
         },
         {
             name: 'Compression',
             value: `${session.outputCompression}%`,
-            inline: true
+            inline: true,
         },
         {
             name: 'Style',
             value: formatStylePreset(session.style),
-            inline: true
+            inline: true,
         }
     );
 
@@ -412,7 +456,9 @@ export function buildVariationConfiguratorView(
             {
                 selectedValue: session.allowPromptAdjustment ? 'allow' : 'deny',
                 placeholder: 'Select if AI improves prompt',
-                currentLabel: session.allowPromptAdjustment ? 'Enabled' : 'Disabled'
+                currentLabel: session.allowPromptAdjustment
+                    ? 'Enabled'
+                    : 'Disabled',
             }
         ),
         buildSelectRow(
@@ -421,7 +467,9 @@ export function buildVariationConfiguratorView(
             {
                 selectedValue: session.imageModel,
                 placeholder: 'Select image model',
-                currentLabel: IMAGE_MODEL_LABELS[session.imageModel] ?? session.imageModel
+                currentLabel:
+                    IMAGE_MODEL_LABELS[session.imageModel] ??
+                    session.imageModel,
             }
         ),
         buildSelectRow(
@@ -430,7 +478,9 @@ export function buildVariationConfiguratorView(
             {
                 selectedValue: session.quality,
                 placeholder: 'Select quality',
-                currentLabel: QUALITY_LABELS[session.quality] ?? toTitleCase(session.quality)
+                currentLabel:
+                    QUALITY_LABELS[session.quality] ??
+                    toTitleCase(session.quality),
             }
         ),
         buildSelectRow(
@@ -439,55 +489,76 @@ export function buildVariationConfiguratorView(
             {
                 selectedValue: session.aspectRatio,
                 placeholder: 'Select aspect ratio',
-                currentLabel: session.aspectRatioLabel
+                currentLabel: session.aspectRatioLabel,
             }
-        )
+        ),
     ];
 
     const now = Date.now();
-    const onCooldown = Boolean(session.cooldownUntil && session.cooldownUntil > now);
-    const countdown = onCooldown && session.cooldownUntil
-        ? formatRetryCountdown(Math.max(0, Math.ceil((session.cooldownUntil - now) / 1000)))
-        : null;
+    const onCooldown = Boolean(
+        session.cooldownUntil && session.cooldownUntil > now
+    );
+    const countdown =
+        onCooldown && session.cooldownUntil
+            ? formatRetryCountdown(
+                  Math.max(0, Math.ceil((session.cooldownUntil - now) / 1000))
+              )
+            : null;
 
     const actionButton = new ButtonBuilder()
-        .setCustomId(`${IMAGE_VARIATION_GENERATE_CUSTOM_ID_PREFIX}${session.responseId}`)
+        .setCustomId(
+            `${IMAGE_VARIATION_GENERATE_CUSTOM_ID_PREFIX}${session.responseId}`
+        )
         .setStyle(onCooldown ? ButtonStyle.Secondary : ButtonStyle.Primary)
         .setDisabled(Boolean(onCooldown))
-        .setLabel(onCooldown && countdown ? `Retry image generation (${countdown})` : 'Generate variation');
+        .setLabel(
+            onCooldown && countdown
+                ? `Retry image generation (${countdown})`
+                : 'Generate variation'
+        );
 
     const editPromptButton = new ButtonBuilder()
-        .setCustomId(`${IMAGE_VARIATION_PROMPT_MODAL_ID_PREFIX}${session.responseId}`)
+        .setCustomId(
+            `${IMAGE_VARIATION_PROMPT_MODAL_ID_PREFIX}${session.responseId}`
+        )
         .setLabel('Edit prompt')
         .setStyle(ButtonStyle.Secondary);
 
     const resetPromptButton = new ButtonBuilder()
-        .setCustomId(`${IMAGE_VARIATION_RESET_PROMPT_CUSTOM_ID_PREFIX}${session.responseId}`)
+        .setCustomId(
+            `${IMAGE_VARIATION_RESET_PROMPT_CUSTOM_ID_PREFIX}${session.responseId}`
+        )
         .setLabel('Reset to original prompt')
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(session.prompt === session.originalPrompt);
 
     const cancelButton = new ButtonBuilder()
-        .setCustomId(`${IMAGE_VARIATION_CANCEL_CUSTOM_ID_PREFIX}${session.responseId}`)
+        .setCustomId(
+            `${IMAGE_VARIATION_CANCEL_CUSTOM_ID_PREFIX}${session.responseId}`
+        )
         .setLabel('Cancel')
         .setStyle(ButtonStyle.Danger);
 
-    const promptButtons = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-        editPromptButton,
-        resetPromptButton,
-        actionButton,
-        cancelButton
-    );
+    const promptButtons =
+        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+            editPromptButton,
+            resetPromptButton,
+            actionButton,
+            cancelButton
+        );
 
     rows.push(promptButtons);
 
     return {
         embeds: [embed],
-        components: rows
+        components: rows,
     };
 }
 
-export function buildPromptModal(responseId: string, currentPrompt: string): ModalBuilder {
+export function buildPromptModal(
+    responseId: string,
+    currentPrompt: string
+): ModalBuilder {
     const modal = new ModalBuilder()
         .setCustomId(`${IMAGE_VARIATION_PROMPT_MODAL_ID_PREFIX}${responseId}`)
         .setTitle('Update variation prompt');
@@ -500,5 +571,7 @@ export function buildPromptModal(responseId: string, currentPrompt: string): Mod
         .setMaxLength(EMBED_FIELD_VALUE_LIMIT)
         .setValue(clampPromptForContext(currentPrompt));
 
-    return modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(promptInput));
+    return modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(promptInput)
+    );
 }

@@ -6,18 +6,18 @@
  * @arete-ethics: low - This module is structural and does not alter user-facing behavior.
  */
 import {
-  ChatInputCommandInteraction,
-  SlashCommandBuilder,
-  SlashCommandOptionsOnlyBuilder,
-  SlashCommandSubcommandsOnlyBuilder,
+    ChatInputCommandInteraction,
+    SlashCommandBuilder,
+    SlashCommandOptionsOnlyBuilder,
+    SlashCommandSubcommandsOnlyBuilder,
 } from 'discord.js';
 
 export type SlashCommand =
-  | SlashCommandBuilder
-  | SlashCommandOptionsOnlyBuilder
-  | SlashCommandSubcommandsOnlyBuilder;
+    | SlashCommandBuilder
+    | SlashCommandOptionsOnlyBuilder
+    | SlashCommandSubcommandsOnlyBuilder;
 
 export interface Command {
-  data: SlashCommand;
-  execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
+    data: SlashCommand;
+    execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
 }

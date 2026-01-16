@@ -8,19 +8,26 @@
 import { EmbedBuilder } from './EmbedBuilder.js';
 import { ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
 import { logger } from '../logger.js';
-import type { ResponseMetadata, RiskTier, Citation } from '@arete/backend/ethics-core';
+import type {
+    ResponseMetadata,
+    RiskTier,
+    Citation,
+} from '@arete/backend/ethics-core';
 
 // Footer payload type: Embed plus interactive components (buttons)
-type ProvenanceFooterPayload = { embeds: EmbedBuilder[], components: ActionRowBuilder<ButtonBuilder>[] };
+type ProvenanceFooterPayload = {
+    embeds: EmbedBuilder[];
+    components: ActionRowBuilder<ButtonBuilder>[];
+};
 
 // Module-scoped logger
 const console = logger.child({ module: 'provenanceFooter' });
 
 // UI colors for RiskTier levels
 const RISK_TIER_COLORS: Record<RiskTier, string> = {
-    Low: '#7FDCA4',     // Sage green
-    Medium: '#F8E37C',  // Warm gold
-    High: '#E27C7C',    // Soft coral
+    Low: '#7FDCA4', // Sage green
+    Medium: '#F8E37C', // Warm gold
+    High: '#E27C7C', // Soft coral
     // Used to be green/yellow/red but changed to be friendlier without losing the meaning
 };
 
@@ -30,14 +37,20 @@ const RISK_TIER_COLORS: Record<RiskTier, string> = {
  * @param responseMetadata - Metadata describing the generated response and its provenance.
  * @param webBaseUrl - Base URL for linking to the full trace; defaults to https://arete.org when falsy.
  */
-export function buildFooterEmbed(responseMetadata: ResponseMetadata, webBaseUrl: string): ProvenanceFooterPayload {
+export function buildFooterEmbed(
+    responseMetadata: ResponseMetadata,
+    webBaseUrl: string
+): ProvenanceFooterPayload {
     const embed = new EmbedBuilder();
     const normalizedBaseUrl = webBaseUrl.trim().replace(/\/+$/, ''); // Remove trailing slashes
 
     // RiskTier is reflected in the embed color band
-    const riskColor: string = RISK_TIER_COLORS[responseMetadata.riskTier] || '#000000';
+    const riskColor: string =
+        RISK_TIER_COLORS[responseMetadata.riskTier] || '#000000';
     if (riskColor == '#000000') {
-        console.warn(`Unknown RiskTier: ${responseMetadata.riskTier}, defaulting to black color.`);
+        console.warn(
+            `Unknown RiskTier: ${responseMetadata.riskTier}, defaulting to black color.`
+        );
     }
     embed.setColor(riskColor);
 
@@ -54,32 +67,43 @@ export function buildFooterEmbed(responseMetadata: ResponseMetadata, webBaseUrl:
     // Confidence, displayed as a percentage (e.g. "85%")
     // Use a lowercase provenance label for the compact "(inferred)" suffix.
     const provenanceLabel = responseMetadata.provenance.toLowerCase();
-    if (responseMetadata.confidence < 0.0 || responseMetadata.confidence > 1.0) {
-        console.warn(`Confidence score out of bounds: ${responseMetadata.confidence} - Reporting as 0%`);
+    if (
+        responseMetadata.confidence < 0.0 ||
+        responseMetadata.confidence > 1.0
+    ) {
+        console.warn(
+            `Confidence score out of bounds: ${responseMetadata.confidence} - Reporting as 0%`
+        );
         descriptionParts.push(`0% confidence (${provenanceLabel})`);
     } else {
-        descriptionParts.push(`${(responseMetadata.confidence * 100).toFixed(0)}% confidence (${provenanceLabel})`);
+        descriptionParts.push(
+            `${(responseMetadata.confidence * 100).toFixed(0)}% confidence (${provenanceLabel})`
+        );
     }
 
     // Trade-offs, if any
     // We won't always have trade-offs surfaced as it depends on the context
     if (responseMetadata.tradeoffCount > 0) {
-        descriptionParts.push(`${responseMetadata.tradeoffCount} trade-offs considered`);
+        descriptionParts.push(
+            `${responseMetadata.tradeoffCount} trade-offs considered`
+        );
     }
 
     // Citations, if any
     // Only list the hostnames with link embedded - the Sources button can be used for more detailed information
     // Discord also shows you the full URL on mouseover
     if (responseMetadata.citations.length > 0) {
-        const citationLines = responseMetadata.citations.map((c: Citation) => {
-            // Extract just the hostname from the URL
-            const domain = c.url.hostname.replace('www.', '');
-            // Return hostname embedded with url
-            return `[${domain}](${c.url})`;
-        }).join(' · '); // Join multiple citations with smaller dot separators
+        const citationLines = responseMetadata.citations
+            .map((c: Citation) => {
+                // Extract just the hostname from the URL
+                const domain = c.url.hostname.replace('www.', '');
+                // Return hostname embedded with url
+                return `[${domain}](${c.url})`;
+            })
+            .join(' · '); // Join multiple citations with smaller dot separators
         descriptionParts.push(`Sources:\n${citationLines}`); // Push citations to new line for readability
     }
-    
+
     // At last, set the description
     embed.setDescription(descriptionParts.join(' • '));
 
@@ -87,13 +111,13 @@ export function buildFooterEmbed(responseMetadata: ResponseMetadata, webBaseUrl:
     // I would add links to sessionID and license, but Discord footers don't support links
     // Thankfully we already have the Full Trace button, which provides a source for more detailed information
     embed.setFooter({
-        text: `${responseMetadata.modelVersion} • ${responseMetadata.chainHash} • ${responseMetadata.responseId} • ${responseMetadata.licenseContext}`
+        text: `${responseMetadata.modelVersion} • ${responseMetadata.chainHash} • ${responseMetadata.responseId} • ${responseMetadata.licenseContext}`,
     });
 
     //
     // Interactable Buttons
     //
-    const actionRow = new ActionRowBuilder<ButtonBuilder>()
+    const actionRow = new ActionRowBuilder<ButtonBuilder>();
 
     // Explain button
     const explainButton = new ButtonBuilder()
@@ -129,6 +153,4 @@ export function buildFooterEmbed(responseMetadata: ResponseMetadata, webBaseUrl:
 
     // Return the ProvenanceFooterPayload - Embed plus interactive components (buttons)
     return { embeds: [embed], components: [actionRow] };
-};
-
-
+}

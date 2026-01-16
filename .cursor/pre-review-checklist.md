@@ -3,14 +3,16 @@
 Use this checklist before opening a PR to ensure your code meets ARETE's standards and is ready for Cursor's automated analysis.
 
 ## Automated Validation (Run First)
+
 - [ ] **ARETE Module Tags**: `npm run validate-arete-tags` passes
-- [ ] **TypeScript**: `npm run type-check` passes  
+- [ ] **TypeScript**: `npm run type-check` passes
 - [ ] **Linting**: `npm run lint-check` passes
 - [ ] **Quick Check**: `npm run pre-review` passes
 
 ## ARETE-Specific Requirements
 
 ### Module Documentation
+
 - [ ] **ARETE Module Header**: Contains all required tags (`@arete-module`, `@arete-risk`, `@arete-ethics`, `@arete-scope`)
 - [ ] **Risk Level**: Accurately reflects technical fragility (critical/high/moderate/low)
 - [ ] **Ethics Level**: Accurately reflects human/governance impact (critical/high/moderate/low)
@@ -19,6 +21,7 @@ Use this checklist before opening a PR to ensure your code meets ARETE's standar
 - [ ] **Impact**: Clear explanation of risks and ethical implications
 
 ### Code Quality
+
 - [ ] **Structured Logging**: Uses `logger.ts` for all log statements
 - [ ] **Cost Tracking**: All LLM interactions use `ChannelContextManager.recordLLMUsage()`
 - [ ] **Fail-Open Design**: Uncertain operations don't block execution
@@ -26,6 +29,7 @@ Use this checklist before opening a PR to ensure your code meets ARETE's standar
 - [ ] **TypeScript**: Explicit types everywhere, no `any` usage
 
 ### Comments & Documentation
+
 - [ ] **Meaningful Comments**: Explain "why" and "what", not just "how"
 - [ ] **Business Logic**: Complex algorithms and decisions are documented
 - [ ] **Edge Cases**: Workarounds and potential gotchas are explained
@@ -33,6 +37,7 @@ Use this checklist before opening a PR to ensure your code meets ARETE's standar
 - [ ] **Technical Terms**: Parenthetical explanations provided (e.g., `technicalTerm (plainEnglish)`)
 
 ### ARETE Framework Compliance
+
 - [ ] **Utility Reuse**: Existing utilities used before adding new modules
 - [ ] **RAM-Only Buffers**: No persistence to disk or database
 - [ ] **Serializable Interfaces**: Public interfaces can be serialized for web UI
@@ -40,6 +45,7 @@ Use this checklist before opening a PR to ensure your code meets ARETE's standar
 - [ ] **Backward Compatibility**: Maintained unless explicitly breaking for versioned release
 
 ### Testing & Validation
+
 - [ ] **Tests Added**: New functionality includes appropriate tests
 - [ ] **Test Patterns**: Follows existing test utilities and patterns
 - [ ] **Deterministic Tests**: External services mocked where possible
@@ -50,18 +56,21 @@ Use this checklist before opening a PR to ensure your code meets ARETE's standar
 Before using Cursor's automated review, ask yourself:
 
 ### Complexity Check
+
 - [ ] **Single Responsibility**: Does each function do one thing well?
 - [ ] **Conditional Depth**: Are nested conditions reasonable (< 3 levels)?
 - [ ] **Data Flow**: Is the flow of data clear and traceable?
 - [ ] **Function Size**: Are functions focused and not overly long?
 
 ### Future Compatibility
+
 - [ ] **API Boundaries**: Would this survive a modular ethics-core refactor?
 - [ ] **Scalability**: How would this scale with additional model providers?
 - [ ] **Generalization**: Can this be generalized for multi-lens reasoning?
 - [ ] **Integration**: Does this maintain clean separation of concerns?
 
 ### Ethical Considerations
+
 - [ ] **Transparency**: Are all AI interactions traceable and explainable?
 - [ ] **Privacy**: Is user data handled appropriately?
 - [ ] **Fairness**: Are there any potential biases or unfair outcomes?
@@ -79,6 +88,7 @@ After completing the checklist, use these Cursor features:
 ## Success Criteria
 
 Your code is ready for human review when:
+
 - ✅ All automated checks pass
 - ✅ ARETE-specific requirements are met
 - ✅ Cursor analysis shows no major issues

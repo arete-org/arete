@@ -7,7 +7,13 @@
  */
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
-import { RealtimeEvent, RealtimeResponseTextDeltaEvent, RealtimeResponseAudioDeltaEvent, RealtimeResponseCompletedEvent, RealtimeErrorEvent } from '../utils/realtimeService.js';
+import {
+    RealtimeEvent,
+    RealtimeResponseTextDeltaEvent,
+    RealtimeResponseAudioDeltaEvent,
+    RealtimeResponseCompletedEvent,
+    RealtimeErrorEvent,
+} from '../utils/realtimeService.js';
 import { RealtimeWebSocketManager } from './RealtimeWebSocketManager.js';
 
 export class RealtimeEventHandler extends EventEmitter {
@@ -24,62 +30,82 @@ export class RealtimeEventHandler extends EventEmitter {
 
     private setupInternalEventHandlers(): void {
         // Handle AI responses
-        this.on('response.text.delta', (event: RealtimeResponseTextDeltaEvent) => {
-            this.emit('text', event.delta);
-        });
+        this.on(
+            'response.text.delta',
+            (event: RealtimeResponseTextDeltaEvent) => {
+                this.emit('text', event.delta);
+            }
+        );
 
         // Handle model output audio - stream chunks immediately
-        this.on('response.output_audio.delta', (event: RealtimeResponseAudioDeltaEvent) => {
-            try {
-                if (!event.delta) {
-                    logger.warn('[RealtimeEventHandler] Received empty audio delta');
-                    return;
+        this.on(
+            'response.output_audio.delta',
+            (event: RealtimeResponseAudioDeltaEvent) => {
+                try {
+                    if (!event.delta) {
+                        logger.warn(
+                            '[RealtimeEventHandler] Received empty audio delta'
+                        );
+                        return;
+                    }
+
+                    const audioData = Buffer.from(event.delta, 'base64');
+                    logger.debug(
+                        `[RealtimeEventHandler] Processing audio chunk: ${audioData.length} bytes`
+                    );
+
+                    // Emit the audio data immediately for real-time playback
+                    this.emit('audio', audioData);
+
+                    // Also emit the raw event for other handlers
+                    this.emit('event', {
+                        type: 'response.output_audio.delta',
+                        delta: event.delta,
+                        audioData: audioData,
+                    });
+
+                    // Buffer the audio data for potential later use
+                    if (!this.isCollectingAudio) {
+                        this.isCollectingAudio = true;
+                        this.audioBuffer = [];
+                    }
+                    this.audioBuffer.push(audioData);
+                } catch (error) {
+                    logger.error(
+                        '[RealtimeEventHandler] Error processing audio delta:',
+                        error
+                    );
                 }
-                
-                const audioData = Buffer.from(event.delta, 'base64');
-                logger.debug(`[RealtimeEventHandler] Processing audio chunk: ${audioData.length} bytes`);
-                
-                // Emit the audio data immediately for real-time playback
-                this.emit('audio', audioData);
-                
-                // Also emit the raw event for other handlers
-                this.emit('event', { 
-                    type: 'response.output_audio.delta', 
-                    delta: event.delta,
-                    audioData: audioData
-                });
-                
-                // Buffer the audio data for potential later use
-                if (!this.isCollectingAudio) {
-                    this.isCollectingAudio = true;
-                    this.audioBuffer = [];
-                }
-                this.audioBuffer.push(audioData);
-                
-            } catch (error) {
-                logger.error('[RealtimeEventHandler] Error processing audio delta:', error);
             }
-        });
+        );
 
         // Handle audio completion - finalize and clear buffer without re-emitting duplicate events
         this.on('response.output_audio.done', () => {
             logger.debug('[RealtimeEventHandler] Audio stream completed');
-            
+
             // We already emit streaming deltas as 'audio'. Do NOT emit the full concatenated audio again.
             // Just clear the collection state to prepare for the next stream.
             if (this.isCollectingAudio) {
                 const bufferedChunks = this.audioBuffer.slice();
-                const totalBytes = bufferedChunks.reduce((n, b) => n + b.length, 0);
-                logger.debug(`[RealtimeEventHandler] Final buffered length: ${totalBytes} bytes`);
+                const totalBytes = bufferedChunks.reduce(
+                    (n, b) => n + b.length,
+                    0
+                );
+                logger.debug(
+                    `[RealtimeEventHandler] Final buffered length: ${totalBytes} bytes`
+                );
             }
             this.isCollectingAudio = false;
             this.audioBuffer = [];
         });
 
         // Handle response completion
-        this.on('response.completed', (event: RealtimeResponseCompletedEvent) => {
-            this.emit('responseComplete', event);
-        });
+        this.on(
+            'response.completed',
+            (event: RealtimeResponseCompletedEvent) => {
+                this.emit('responseComplete', event);
+            }
+        );
 
         // Handle errors
         this.on('error', (event: RealtimeErrorEvent) => {
@@ -96,12 +122,15 @@ export class RealtimeEventHandler extends EventEmitter {
         logger.debug(`[realtime] Handling event: ${event.type}`);
 
         // Special handling for audio buffer events
-        if (event.type === 'input_audio_buffer.committed' ||
+        if (
+            event.type === 'input_audio_buffer.committed' ||
             event.type === 'conversation.item.input_audio_buffer.collected' ||
-            event.type === 'audio_collected') {
+            event.type === 'audio_collected'
+        ) {
+            logger.debug(
+                `[realtime] Audio buffer event received: ${event.type}, emitting audio_collected`
+            );
 
-            logger.debug(`[realtime] Audio buffer event received: ${event.type}, emitting audio_collected`);
-            
             // Emit the audio_collected event with the original event data
             this.emit('audio_collected', event);
 
@@ -122,11 +151,15 @@ export class RealtimeEventHandler extends EventEmitter {
                 logger.error(`[realtime] Error from server:`, event.error);
                 return;
             }
-            logger.error('[realtime] Error event received without error payload');
+            logger.error(
+                '[realtime] Error event received without error payload'
+            );
         }
     }
 
-    public setupWebSocketEventHandlers(wsManager: RealtimeWebSocketManager): void {
+    public setupWebSocketEventHandlers(
+        wsManager: RealtimeWebSocketManager
+    ): void {
         // Only set up event handlers once per WebSocket manager
         if (this.wsManager === wsManager && this.isEventHandlersSetup) {
             return;
@@ -151,7 +184,9 @@ export class RealtimeEventHandler extends EventEmitter {
 
         // Set up cleanup when WebSocket disconnects
         wsManager.onClose((_code, _reason) => {
-            logger.warn(`WebSocket closed unexpectedly, cleaning up event handlers`);
+            logger.warn(
+                `WebSocket closed unexpectedly, cleaning up event handlers`
+            );
             this.cleanupWebSocketEventHandlers();
         });
     }
@@ -184,6 +219,14 @@ export class RealtimeEventHandler extends EventEmitter {
 
 const isRealtimeErrorEvent = (
     event: RealtimeEvent
-): event is RealtimeEvent & { type: 'error'; error: RealtimeErrorEvent['error'] } => {
-    return typeof event === 'object' && event !== null && 'error' in event && event.type === 'error';
+): event is RealtimeEvent & {
+    type: 'error';
+    error: RealtimeErrorEvent['error'];
+} => {
+    return (
+        typeof event === 'object' &&
+        event !== null &&
+        'error' in event &&
+        event.type === 'error'
+    );
 };

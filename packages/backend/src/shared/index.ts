@@ -7,25 +7,30 @@
  */
 
 export type {
-  PromptCachePolicy,
-  PromptDefinition,
-  PromptKey,
-  PromptMetadata,
-  PromptVariables,
-  RenderedPrompt
+    PromptCachePolicy,
+    PromptDefinition,
+    PromptKey,
+    PromptMetadata,
+    PromptVariables,
+    RenderedPrompt,
 } from './prompts/promptRegistry';
 
 export {
-  PromptRegistry,
-  getActivePromptRegistry,
-  renderPrompt,
-  setActivePromptRegistry
+    PromptRegistry,
+    getActivePromptRegistry,
+    renderPrompt,
+    setActivePromptRegistry,
 } from './prompts/promptRegistry';
 
 /**
  * Logging utilities.
  */
-export { logger, formatUsd, logLLMCostSummary, sanitizeLogData } from './logger';
+export {
+    logger,
+    formatUsd,
+    logLLMCostSummary,
+    sanitizeLogData,
+} from './logger';
 export type { LLMCostTotals, LLMCostSummaryProvider } from './logger';
 
 /**
@@ -44,4 +49,9 @@ export { SqliteIncidentStore } from './sqliteIncidentStore';
 /**
  * Pseudonymization helpers for Discord-facing identifiers.
  */
-export { hmacId, pseudonymizeActorId, pseudonymizeIncidentPointers, shortHash } from './pseudonymization';
+export {
+    hmacId,
+    pseudonymizeActorId,
+    pseudonymizeIncidentPointers,
+    shortHash,
+} from './pseudonymization';

@@ -5,10 +5,11 @@ This file contains reusable prompts for Cursor's inline chat (`Ctrl+K`) and code
 ## Module Analysis Prompts
 
 ### ARETE Tagging Compliance
+
 ```
 Check this function/module for ARETE module tagging compliance. Does it have:
 - @arete-module tag with descriptive name
-- @arete-risk level (critical/high/moderate/low) 
+- @arete-risk level (critical/high/moderate/low)
 - @arete-ethics level (critical/high/moderate/low)
 - @arete-scope (core/utility/interface/test)
 - @description explaining what it does
@@ -16,6 +17,7 @@ Check this function/module for ARETE module tagging compliance. Does it have:
 ```
 
 ### Risk Assessment
+
 ```
 Analyze the risk level for this module. Consider:
 - Technical fragility (stability, security, data integrity)
@@ -25,6 +27,7 @@ Analyze the risk level for this module. Consider:
 ```
 
 ### Ethics Assessment
+
 ```
 Analyze the ethical implications of this module. Consider:
 - Privacy and data handling implications
@@ -36,6 +39,7 @@ Analyze the ethical implications of this module. Consider:
 ## Code Quality Prompts
 
 ### Complexity Analysis
+
 ```
 Analyze this function for complexity issues:
 - Does it do too many things? Should it be broken down?
@@ -45,6 +49,7 @@ Analyze this function for complexity issues:
 ```
 
 ### Comment Quality
+
 ```
 Review the comments in this code. Do they:
 - Explain the "why" and "what" rather than just "how"?
@@ -55,6 +60,7 @@ Review the comments in this code. Do they:
 ```
 
 ### ARETE Framework Compliance
+
 ```
 Check this code for ARETE framework compliance:
 - Does it use the structured logger (utils/logger.ts)?
@@ -67,6 +73,7 @@ Check this code for ARETE framework compliance:
 ## Architecture & Design Prompts
 
 ### Future Compatibility
+
 ```
 Analyze this code for future compatibility:
 - Would this API boundary survive a modular ethics-core refactor?
@@ -77,6 +84,7 @@ Analyze this code for future compatibility:
 ```
 
 ### Integration Analysis
+
 ```
 Review this code for integration concerns:
 - Does it maintain backward compatibility?
@@ -87,6 +95,7 @@ Review this code for integration concerns:
 ```
 
 ### Performance & Scalability
+
 ```
 Analyze this code for performance and scalability:
 - Are there any obvious performance bottlenecks?
@@ -99,6 +108,7 @@ Analyze this code for performance and scalability:
 ## Testing & Validation Prompts
 
 ### Test Coverage
+
 ```
 Review the test coverage for this module:
 - Are all new functions tested?
@@ -109,6 +119,7 @@ Review the test coverage for this module:
 ```
 
 ### Validation Scripts
+
 ```
 Check if this code needs updates to validation scripts:
 - Should validate-arete-tags.js catch any issues here?
@@ -120,6 +131,7 @@ Check if this code needs updates to validation scripts:
 ## Ethics & Safety Prompts
 
 ### Ethical Safety Review
+
 ```
 Perform an ethical safety review of this code:
 - Are there any potential privacy violations?
@@ -130,6 +142,7 @@ Perform an ethical safety review of this code:
 ```
 
 ### Transparency & Auditability
+
 ```
 Check this code for transparency and auditability:
 - Are all decisions logged with structured data?
@@ -142,6 +155,7 @@ Check this code for transparency and auditability:
 ## Specific ARETE Components
 
 ### Discord Bot Analysis
+
 ```
 Analyze this Discord bot code for:
 - Proper rate limiting and abuse prevention
@@ -152,6 +166,7 @@ Analyze this Discord bot code for:
 ```
 
 ### Web UI Analysis
+
 ```
 Review this web UI code for:
 - User experience and accessibility
@@ -162,6 +177,7 @@ Review this web UI code for:
 ```
 
 ### Ethics Core Analysis
+
 ```
 Analyze this ethics core code for:
 - Reasoning transparency and explainability
@@ -174,6 +190,7 @@ Analyze this ethics core code for:
 ## Quick Reference Commands
 
 ### For Inline Chat (`Ctrl+K`)
+
 - "Check ARETE tagging compliance"
 - "Analyze complexity and suggest simplifications"
 - "Review comments for quality and completeness"
@@ -181,6 +198,7 @@ Analyze this ethics core code for:
 - "Verify cost tracking implementation"
 
 ### For Codebase Chat (`Ctrl+L`)
+
 - "How does this integrate with ARETE's ethics framework?"
 - "What are the potential risks of this change?"
 - "How would this scale with additional model providers?"

@@ -1,32 +1,32 @@
 version: 2
 updates:
-  # ─── Core Node.js / TypeScript Packages ─────────────────────────────────────
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
-    groups:
-      core-dependencies:
-        patterns: ["*"]
-    ignore:
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
+    # ─── Core Node.js / TypeScript Packages ─────────────────────────────────────
+    - package-ecosystem: 'npm'
+      directory: '/'
+      schedule:
+          interval: 'weekly'
+      open-pull-requests-limit: 10
+      groups:
+          core-dependencies:
+              patterns: ['*']
+      ignore:
+          - dependency-name: 'typescript'
+            update-types: ['version-update:semver-major']
 
-  # ─── Fly.io Deployment Stack ──────────────────────────────────────────────────
-  - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "weekly"  # Faster cadence = patch vulnerabilities earlier
-    ignore:
-      - dependency-name: "node"
-        update-types: ["version-update:semver-major"]
-    labels:
-      - "fly.io"
-      - "dependencies"
+    # ─── Fly.io Deployment Stack ──────────────────────────────────────────────────
+    - package-ecosystem: 'docker'
+      directory: '/'
+      schedule:
+          interval: 'weekly' # Faster cadence = patch vulnerabilities earlier
+      ignore:
+          - dependency-name: 'node'
+            update-types: ['version-update:semver-major']
+      labels:
+          - 'fly.io'
+          - 'dependencies'
 
-  # ─── GitHub Actions ─────────────────────────────────────────────────────────
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
+    # ─── GitHub Actions ─────────────────────────────────────────────────────────
+    - package-ecosystem: 'github-actions'
+      directory: '/'
+      schedule:
+          interval: 'weekly'
