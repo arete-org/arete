@@ -13,7 +13,6 @@ import {
     OpenAIOptions,
     OpenAIResponse,
     SupportedModel,
-    TTS_DEFAULT_OPTIONS,
 } from '../openaiService.js';
 import { ActivityOptions } from 'discord.js';
 import type { RiskTier } from '@arete/backend/ethics-core';
