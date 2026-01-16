@@ -64,7 +64,6 @@ const defaultPlan: Plan = {
             searchContextSize: 'low',
             userLocation: { type: 'approximate' },
         },
-        ttsOptions: TTS_DEFAULT_OPTIONS,
     },
     riskTier: DEFAULT_RISK_TIER,
 };
@@ -452,6 +451,14 @@ export class Planner {
                 ...mergedPlan.openaiOptions,
                 tool_choice: 'none',
                 webSearch: undefined,
+            };
+        }
+
+        // Clear ttsOptions when modality isn't tts
+        if (mergedPlan.modality !== 'tts' && mergedPlan.openaiOptions) {
+            mergedPlan.openaiOptions = {
+                ...mergedPlan.openaiOptions,
+                ttsOptions: undefined,
             };
         }
 
