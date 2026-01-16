@@ -99,11 +99,19 @@ export interface OpenAIOptions {
     function_call?: { name: string } | 'auto' | 'none' | 'required' | null;
     tool_choice?:
         | {
-              type: 'function' | 'web_search';
+              type: 'function';
               function: { name: string };
+          }
+        | {
+              type: 'web_search';
+              function?: { name: string };
+          }
+        | {
+              type: 'none';
           }
         | 'none'
         | 'auto'
+        | 'web_search'
         | null;
     channelContext?: {
         channelId: string;

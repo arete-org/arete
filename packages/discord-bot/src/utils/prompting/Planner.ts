@@ -442,6 +442,18 @@ export class Planner {
         // Ensure callers always see a supported risk tier value
         mergedPlan.riskTier = this.normalizeRiskTier(plan.riskTier);
 
+        // Normalize planner tool_choice to the expected object shape for web search.
+        const toolChoice = mergedPlan.openaiOptions?.tool_choice;
+        if (toolChoice === 'web_search') {
+            mergedPlan.openaiOptions = {
+                ...mergedPlan.openaiOptions,
+                tool_choice: {
+                    type: 'web_search',
+                    function: { name: 'web_search' },
+                },
+            };
+        }
+
         // Image actions must never trigger TTS or web search; enforce text modality
         // and clear tool/web search hints to avoid accidental spend.
         if (mergedPlan.action === 'image') {
