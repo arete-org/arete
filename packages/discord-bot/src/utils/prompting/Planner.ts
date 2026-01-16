@@ -179,7 +179,7 @@ const planFunction = {
                                 type: 'string',
                                 enum: ['none', 'web_search'],
                                 description:
-                                    "Choose 'web_search' when the response depends on time-sensitive, versioned, comparative, or externally verifiable facts (e.g. news, pricing, releases, benchmarks). Otherwise use 'none' (no tool calls). If you cannot justify high confidence without lookup, you must perform a web_search rather than speculate. Always pair this with reasoningEffort >= low.",
+                                    'hoose web_search when the answer depends on facts that may have changed since 2025 (versions/compatibility/support matrices, releases, pricing/availability, benchmarks, current office-holders, policies/laws/procedures, schedules, incidents/news), OR when you are not highly confident the fact is stable. Choose none for stable concepts, pure reasoning, coding/writing, or when the user has provided all needed facts. If stability is uncertain, prefer a small web_search rather than guessing. Always pair web_search with reasoningEffort >= low.',
                             },
                         },
                         required: ['type'],
@@ -190,14 +190,14 @@ const planFunction = {
                             query: {
                                 type: 'string',
                                 description:
-                                    'If tool_choice.type is web_search, you must provide a concise, non-empty query summarizing what information is needed; do not return an empty string.',
+                                    'If tool_choice.type is web_search, you must provide a concise, non-empty query; do not return an empty string.',
                             },
                             //allowedDomains: { type: "array", items: { type: "string" }, description: "An array of allowed domains to search within." },
                             searchContextSize: {
                                 type: 'string',
                                 enum: ['low', 'medium', 'high'],
                                 description:
-                                    "Controls the breadth of external context retrieved. Guidance: Use 'low' when a single, stable fact is sufficient. Use 'medium' for comparisons, synthesis, or when confidence beyond a single source is required. Use 'high' only for complex, multi-factor, or high-stakes queries where missing context could materially affect correctness. Default to 'medium' when uncertainty exists. You may use conversation history as additional guidance, reflecting user requests or percieved value of higher search context sizes.",
+                                    'Default to low for a quick verification or one fact. Use medium for comparisons or when multiple sources are needed. Use high only for complex or high-stakes questions where missing context could change the answer.',
                             },
                             /*userLocation: {
                 type: "object",
