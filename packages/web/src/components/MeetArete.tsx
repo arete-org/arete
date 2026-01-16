@@ -429,6 +429,7 @@ const MeetArete = (): JSX.Element => {
         headers['x-turnstile-token'] = turnstileToken;
       }
       
+      // Reflection is the trimmed-down web chat surface (embeddable, Turnstile-protected).
       const response = await fetch(`/api/reflect?question=${encodeURIComponent(trimmedQuestion)}`, {
         method: 'GET',
         headers,
