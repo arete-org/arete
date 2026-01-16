@@ -179,7 +179,7 @@ const planFunction = {
                                 type: 'string',
                                 enum: ['none', 'web_search'],
                                 description:
-                                    "Choose 'web_search' only when the response depends on time-sensitive, versioned, comparative, or externally verifiable facts (e.g. news, pricing, releases, benchmarks). Otherwise use 'none' (no tool calls). If you choose 'web_search', you must provide a concise, specific query that captures the user's ask. Always pair this with reasoningEffort >= low.",
+                                    "Choose 'web_search' when the response depends on time-sensitive, versioned, comparative, or externally verifiable facts (e.g. news, pricing, releases, benchmarks). Otherwise use 'none' (no tool calls). If you cannot justify high confidence without lookup, you must perform a web_search rather than speculate. Always pair this with reasoningEffort >= low.",
                             },
                         },
                         required: ['type'],
@@ -190,14 +190,14 @@ const planFunction = {
                             query: {
                                 type: 'string',
                                 description:
-                                    'If tool_choice.type is web_search, you must provide a concise, non-empty query summarizing the user’s ask; do not return an empty string. web_search is required whenever the answer depends on versioned, time-sensitive, comparative, or externally verifiable facts (e.g., model versions, releases, benchmarks, pricing). If you cannot justify high confidence without lookup, you must perform a web_search rather than speculate.',
+                                    'If tool_choice.type is web_search, you must provide a concise, non-empty query summarizing what information is needed; do not return an empty string.',
                             },
                             //allowedDomains: { type: "array", items: { type: "string" }, description: "An array of allowed domains to search within." },
                             searchContextSize: {
                                 type: 'string',
                                 enum: ['low', 'medium', 'high'],
                                 description:
-                                    "Controls the breadth of external context retrieved. Use 'low' only when a single, stable fact is sufficient. Use 'medium' for comparisons, synthesis, or when confidence beyond a single source is required (e.g., model versions, release differences, benchmarks, pricing, timelines). Use 'high' only for complex, multi-factor, or high-stakes queries where missing context could materially affect correctness. Default to 'medium' when uncertainty exists.",
+                                    "Controls the breadth of external context retrieved. Guidance: Use 'low' when a single, stable fact is sufficient. Use 'medium' for comparisons, synthesis, or when confidence beyond a single source is required. Use 'high' only for complex, multi-factor, or high-stakes queries where missing context could materially affect correctness. Default to 'medium' when uncertainty exists. You may use conversation history as additional guidance, reflecting user requests or percieved value of higher search context sizes.",
                             },
                             /*userLocation: {
                 type: "object",
