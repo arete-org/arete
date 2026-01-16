@@ -95,6 +95,7 @@ export interface OpenAIOptions {
         name: string;
         description?: string;
         parameters: Record<string, unknown>;
+        strict?: boolean;
     }>;
     function_call?: { name: string } | 'auto' | 'none' | 'required' | null;
     tool_choice?:
@@ -413,7 +414,7 @@ export class OpenAIService {
                         name: fn.name,
                         description: fn.description || '',
                         parameters: fn.parameters || {},
-                        strict: false,
+                        strict: fn.strict ?? false,
                     }))
                 );
             }

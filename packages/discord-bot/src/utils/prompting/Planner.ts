@@ -70,6 +70,7 @@ const defaultPlan: Plan = {
 const planFunction = {
     name: 'generate-plan',
     description: 'Generates a structured plan for responding to a message.',
+    strict: true,
     parameters: {
         type: 'object',
         properties: {
@@ -328,7 +329,6 @@ const planFunction = {
             'action',
             'modality',
             'openaiOptions',
-            'presence',
             'riskTier',
         ],
     },
