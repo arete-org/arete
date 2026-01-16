@@ -8,6 +8,8 @@ on:
 jobs:
     deploy:
         name: Deploy app
+        permissions:
+            contents: read
         runs-on: ubuntu-latest
         concurrency: deploy-${{ matrix.app.name }} # ensure only one deploy per app at a time
         strategy:
