@@ -31,11 +31,12 @@ graph TD
 ### 1. Automated Validation Pipeline
 
 **Scripts** (`package.json`):
+
 ```json
 {
-  "scripts": {
-    "pre-review": "pnpm validate-arete-tags && pnpm type-check && pnpm lint-check"
-  }
+    "scripts": {
+        "pre-review": "pnpm validate-arete-tags && pnpm type-check && pnpm lint-check"
+    }
 }
 ```
 
@@ -44,17 +45,18 @@ graph TD
 ### 2. Cursor Task Integration
 
 **Configuration** (`.cursor/tasks.json`):
+
 ```json
 {
-  "commands": {
-    "pre-review": "pnpm pre-review"
-  },
-  "tasks": {
-    "pre-review": {
-      "command": "pnpm pre-review",
-      "description": "Run automated validation pipeline (ARETE tags, types, linting)"
+    "commands": {
+        "pre-review": "pnpm pre-review"
+    },
+    "tasks": {
+        "pre-review": {
+            "command": "pnpm pre-review",
+            "description": "Run automated validation pipeline (ARETE tags, types, linting)"
+        }
     }
-  }
 }
 ```
 
@@ -65,6 +67,7 @@ graph TD
 **File**: `.cursor/pre-review-checklist.md`
 
 **Sections**:
+
 - Automated validation steps
 - ARETE-specific requirements
 - Code quality standards
@@ -79,6 +82,7 @@ graph TD
 **File**: `.cursor/arete-prompts.md`
 
 **Categories**:
+
 - Module analysis prompts
 - Code quality prompts
 - Architecture & design prompts
@@ -91,32 +95,38 @@ graph TD
 ## Detailed Workflow Steps
 
 ### Step 1: Complete Implementation
+
 - Finish your feature or bug fix
 - Ensure basic functionality works
 - Add any necessary tests
 
 ### Step 2: Run Automated Validation
+
 ```bash
 pnpm pre-review
 ```
 
 **What it checks**:
+
 - ARETE module tagging compliance
 - TypeScript type safety
 - ESLint code quality
 - Basic structural integrity
 
 ### Step 3: Use Cursor's Bugbot (Review PR)
+
 - Enable Cursor's automated PR review
 - Let it analyze code quality, bugs, and security issues
 - Review suggested fixes and improvements
 
 ### Step 4: Use Inline Chat with ARETE Prompts
+
 - Use `Ctrl+K` (or `Cmd+K` on Mac) for inline chat
 - Apply prompts from `.cursor/arete-prompts.md`
 - Focus on complexity, comments, and framework compliance
 
 **Example prompts**:
+
 ```
 Check this function for ARETE module tagging compliance
 Analyze this function for complexity issues
@@ -124,30 +134,34 @@ Review the comments in this code for quality and completeness
 ```
 
 ### Step 5: Accept Cursor Suggestions
+
 - Review all suggested simplifications
 - Accept comments and documentation improvements
 - Address any flagged issues
 
 ### Step 6: Open Human PR Review
+
 - Human reviewers focus on:
-  - Logic correctness
-  - Ethical implications
-  - Integration concerns
-  - Architectural decisions
+    - Logic correctness
+    - Ethical implications
+    - Integration concerns
+    - Architectural decisions
 
 ## ARETE-Specific Requirements
 
 ### Module Documentation
+
 Every module must include:
+
 ```typescript
 /**
  * @arete-module: <ModuleName>
  * @arete-risk: <high|high|moderate|low>
  * @arete-ethics: <high|high|moderate|low>
  * @arete-scope: <core|utility|interface|test>
- * 
+ *
  * @description: <1-3 lines summarizing what this module does.>
- * 
+ *
  * @impact
  * Risk: <What could break or be compromised if mishandled.>
  * Ethics: <What human or governance impacts errors could cause.>
@@ -155,6 +169,7 @@ Every module must include:
 ```
 
 ### Code Quality Standards
+
 - **Structured Logging**: Use `logger.ts` for all log statements
 - **Cost Tracking**: All LLM interactions use `ChannelContextManager.recordLLMUsage()`
 - **Fail-Open Design**: Uncertain operations don't block execution
@@ -162,6 +177,7 @@ Every module must include:
 - **TypeScript**: Explicit types everywhere, no `any` usage
 
 ### Comment Standards
+
 - Explain "why" and "what", not just "how"
 - Document business logic and important decisions
 - Explain edge cases and potential gotchas
@@ -171,12 +187,14 @@ Every module must include:
 ## Success Metrics
 
 ### Quantitative Metrics
+
 - **Reduction in human review time**: Focus on logic vs. mechanics
 - **Fewer ARETE tagging violations**: Automated validation catches issues
 - **Improved comment quality**: Measured by contributor feedback
 - **Faster onboarding**: New contributors follow structured checklist
 
 ### Qualitative Metrics
+
 - **Human reviewer satisfaction**: Focus on high-value decisions
 - **Code maintainability**: Better documentation and structure
 - **Ethical compliance**: Consistent adherence to ARETE framework
@@ -185,38 +203,46 @@ Every module must include:
 ## Troubleshooting
 
 ### Issue: Missing ARETE Tags
+
 **Solution**: Run `pnpm validate-arete-tags` first
 **Prevention**: Use pre-review checklist
 
 ### Issue: Inadequate Comments
+
 **Solution**: Use comment quality prompts from `.cursor/arete-prompts.md`
 **Prevention**: Follow commenting standards in `cursor.rules`
 
 ### Issue: Inconsistent Logging
+
 **Solution**: Use structured logger prompts
 **Prevention**: Automated validation catches violations
 
 ### Issue: Missing Cost Tracking
+
 **Solution**: Use cost tracking prompts
 **Prevention**: Framework compliance checks
 
 ### Issue: Overly Complex Functions
+
 **Solution**: Use complexity analysis prompts
 **Prevention**: Break down functions during development
 
 ## Integration with Existing Tools
 
 ### CI/CD Pipeline
+
 - `pnpm validate-arete-tags` runs in CI
 - Prevents merging code with missing tags
 - Enforces ARETE standards automatically
 
 ### Development Environment
+
 - Cursor tasks provide quick access to validation
 - Inline chat integrates with existing workflow
 - Prompts ensure consistent analysis
 
 ### Human Review Process
+
 - Human reviewers focus on ethics and integration
 - Cursor handles mechanical consistency
 - Clear separation of concerns
@@ -224,6 +250,7 @@ Every module must include:
 ## Best Practices
 
 ### For Contributors
+
 1. **Always run validation first**: `pnpm pre-review`
 2. **Use structured prompts**: Follow `.cursor/arete-prompts.md`
 3. **Follow the checklist**: Use `.cursor/pre-review-checklist.md`
@@ -231,12 +258,14 @@ Every module must include:
 5. **Document decisions**: Explain "why" not just "how"
 
 ### For Maintainers
+
 1. **Trust the automation**: Let Cursor handle mechanics
 2. **Focus on ethics**: Human judgment for ethical implications
 3. **Review integration**: Ensure changes work with existing systems
 4. **Maintain standards**: Update prompts and checklist as needed
 
 ### For New Contributors
+
 1. **Start with the checklist**: Follow `.cursor/pre-review-checklist.md`
 2. **Use the prompts**: Reference `.cursor/arete-prompts.md`
 3. **Ask questions**: Use inline chat to understand ARETE patterns
@@ -245,12 +274,14 @@ Every module must include:
 ## Future Enhancements
 
 ### Planned Improvements
+
 - **Automated prompt suggestions**: Cursor suggests relevant prompts
 - **Integration with GitHub**: Automated PR comments from Cursor
 - **Metrics dashboard**: Track workflow effectiveness
 - **Custom validation rules**: Project-specific checks
 
 ### Potential Extensions
+
 - **Multi-language support**: Extend to other programming languages
 - **Team collaboration**: Shared prompt libraries
 - **Learning system**: Cursor learns from human review patterns
@@ -267,9 +298,9 @@ This approach scales well with team growth, maintains high standards, and ensure
 ---
 
 **Template Note**: This document can be adapted for other projects by:
+
 1. Replacing ARETE-specific requirements with project-specific standards
 2. Updating validation scripts to match project needs
 3. Customizing prompts for project architecture
 4. Adapting the checklist for project-specific requirements
 5. Modifying success metrics for project goals
-

@@ -15,19 +15,24 @@ This directory contains Cursor-specific configuration files for the ARETE projec
 ## Key Features
 
 ### Risk/Ethics Tags
+
 All modules are tagged with `@arete-risk` and `@arete-ethics` levels:
+
 - **Critical**: Core system functionality, voice processing, AI interactions
 - **High**: Important utilities, command handlers, session management
 - **Medium**: News processing, trace storage, prompt management
 - **Low**: Simple utilities, configuration files
 
 ### Domain Dictionary
+
 The `cursor.dictionary` file contains ARETE-specific terms to prevent auto-correction:
+
 - Class names (VoiceSessionManager, AudioCaptureHandler, etc.)
 - Domain concepts (ARETE, Daneel, Traycer, etc.)
 - Technical terms (RealtimeAudioHandler, ChannelContextManager, etc.)
 
 ### Code Patterns
+
 - Structured logging with `logger.ts` and scoped loggers
 - Cost tracking with `ChannelContextManager.recordLLMUsage()`
 - Error handling with try/catch and informative messages
@@ -36,6 +41,7 @@ The `cursor.dictionary` file contains ARETE-specific terms to prevent auto-corre
 - Async/await over promises
 
 ### Available Tasks
+
 - `/cost-summary` - Check LLM cost summary
 - `/risk-audit` - Audit risk tags for accuracy
 - `/ethics-audit` - Audit ethics tags for accuracy
@@ -45,6 +51,7 @@ The `cursor.dictionary` file contains ARETE-specific terms to prevent auto-corre
 ## Usage
 
 Cursor will automatically use these configurations when working in the ARETE project. The AI will:
+
 - Understand ARETE's ethical framework and principles
 - Maintain risk/ethics tags when making changes
 - Follow established code patterns and conventions

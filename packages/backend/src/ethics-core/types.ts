@@ -12,7 +12,7 @@
  * - high: Sensitive topics near circuit-breaker thresholds
  * Includes standard colors for UI representation.
  */
-export type RiskTier = "Low" | "Medium" | "High";
+export type RiskTier = 'Low' | 'Medium' | 'High';
 
 /**
  * Provenance indicates the epistemic origin of a response.
@@ -20,7 +20,7 @@ export type RiskTier = "Low" | "Medium" | "High";
  * - inferred: Logical deduction from context
  * - speculative: Educated guess (lower confidence)
  */
-export type Provenance = "Retrieved" | "Inferred" | "Speculative";
+export type Provenance = 'Retrieved' | 'Inferred' | 'Speculative';
 
 /**
  * Calculated confidence score (0.0–1.0) reflects the system's certainty
@@ -35,21 +35,21 @@ export type Citation = {
     title: string;
     url: URL;
     snippet?: string; // Optional excerpt from source
-}
+};
 
 /**
  * The complete provenance package for a response.
  */
 export type ResponseMetadata = {
-    responseId: string;           // Unique short ID
-    provenance: Provenance;       // Epistemic origin
-    confidence: ConfidenceScore;  // 0.0-1.0 confidence
-    riskTier: RiskTier;           // Sensitivity classification
-    tradeoffCount: number;        // Number of competing values surfaced
-    chainHash: string;            // Cryptographic hash of reasoning chain
-    licenseContext: string;       // e.g., "MIT + HL3"
-    modelVersion: string;         // e.g., "gpt-5-mini"
-    staleAfter: string;           // ISO 8601 timestamp
-    citations: Citation[];        // Sources consulted
+    responseId: string; // Unique short ID
+    provenance: Provenance; // Epistemic origin
+    confidence: ConfidenceScore; // 0.0-1.0 confidence
+    riskTier: RiskTier; // Sensitivity classification
+    tradeoffCount: number; // Number of competing values surfaced
+    chainHash: string; // Cryptographic hash of reasoning chain
+    licenseContext: string; // e.g., "MIT + HL3"
+    modelVersion: string; // e.g., "gpt-5-mini"
+    staleAfter: string; // ISO 8601 timestamp
+    citations: Citation[]; // Sources consulted
     imageDescriptions?: string[]; // Optional image description payloads captured during response generation
-}
+};

@@ -33,7 +33,7 @@ class MockPipeline {
     constructor(
         private readonly onFirstWrite: () => void,
         private readonly player: MockAudioPlayer,
-        private readonly encoder: MockOpusEncoder,
+        private readonly encoder: MockOpusEncoder
     ) {}
 
     public getPlayer(): MockAudioPlayer {
@@ -96,13 +96,17 @@ test('player errors do not allow overlapping processAudioQueue executions', asyn
     const connection = {
         joinConfig: { guildId },
         state: { status: 'ready' },
-        subscribe: () => ({})
+        subscribe: () => ({}),
     } as unknown as VoiceConnection;
 
     const originalSetTimeout = global.setTimeout;
     const scheduledCallbacks: Array<() => void> = [];
 
-    global.setTimeout = ((fn: (...args: unknown[]) => void, _delay?: number, ...args: unknown[]) => {
+    global.setTimeout = ((
+        fn: (...args: unknown[]) => void,
+        _delay?: number,
+        ...args: unknown[]
+    ) => {
         const callback = () => fn(...args);
         scheduledCallbacks.push(callback);
         return {
@@ -121,9 +125,13 @@ test('player errors do not allow overlapping processAudioQueue executions', asyn
     const player = new MockAudioPlayer();
     const encoder = new MockOpusEncoder();
 
-    const pipeline = new MockPipeline(() => {
-        player.emit('error', new Error('player failure'));
-    }, player, encoder);
+    const pipeline = new MockPipeline(
+        () => {
+            player.emit('error', new Error('player failure'));
+        },
+        player,
+        encoder
+    );
 
     handlerTestHarness.pipelines.set(guildId, pipeline);
 
@@ -143,11 +151,14 @@ test('player errors do not allow overlapping processAudioQueue executions', asyn
         handlerTestHarness.retryProcessingQueue(connection);
     });
 
-    const originalProcess = handlerTestHarness.processAudioQueue.bind(handlerTestHarness);
+    const originalProcess =
+        handlerTestHarness.processAudioQueue.bind(handlerTestHarness);
     let currentRuns = 0;
     let maxConcurrentRuns = 0;
 
-    handlerTestHarness.processAudioQueue = async function wrappedProcess(connectionArg: VoiceConnection): Promise<void> {
+    handlerTestHarness.processAudioQueue = async function wrappedProcess(
+        connectionArg: VoiceConnection
+    ): Promise<void> {
         currentRuns++;
         maxConcurrentRuns = Math.max(maxConcurrentRuns, currentRuns);
         try {
@@ -158,23 +169,36 @@ test('player errors do not allow overlapping processAudioQueue executions', asyn
     };
 
     try {
-        const processingPromise = handlerTestHarness.processAudioQueue(connection);
+        const processingPromise =
+            handlerTestHarness.processAudioQueue(connection);
 
         assert.equal(currentRuns, 1, 'initial processing run should be active');
-        assert.ok(scheduledCallbacks.length > 0, 'player error should schedule a retry');
+        assert.ok(
+            scheduledCallbacks.length > 0,
+            'player error should schedule a retry'
+        );
 
         const scheduled = scheduledCallbacks.shift()!;
-        const flagDuringRetry = handlerTestHarness.isProcessingQueue.get(guildId);
+        const flagDuringRetry =
+            handlerTestHarness.isProcessingQueue.get(guildId);
         scheduled();
 
-        assert.equal(flagDuringRetry, true, 'retry should see processing already in progress');
+        assert.equal(
+            flagDuringRetry,
+            true,
+            'retry should see processing already in progress'
+        );
         assert.equal(maxConcurrentRuns, 1, 'processing runs must not overlap');
 
         queue.length = 0;
         pipeline.releaseWrite();
 
         await processingPromise;
-        assert.equal(handlerTestHarness.isProcessingQueue.get(guildId), false, 'processing flag should reset after completion');
+        assert.equal(
+            handlerTestHarness.isProcessingQueue.get(guildId),
+            false,
+            'processing flag should reset after completion'
+        );
     } finally {
         global.setTimeout = originalSetTimeout;
         handlerTestHarness.processAudioQueue = originalProcess;

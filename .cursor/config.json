@@ -1,64 +1,54 @@
 {
-"prompt": "You are developing within the ARETE monorepo — an open-source ethics-first AI framework. Core principles: interpretability, traceability, and user-tunable AI behavior. When generating or modifying code: Reuse existing utilities (e.g. logger.ts, env.ts, pricing.ts, openaiService.ts) before adding new ones. Every LLM interaction must record tokens and cost via ChannelContextManager.recordLLMUsage(). All buffers are RAM-only (no persistence). Follow fail-open design — if uncertain, do not block execution. Log every decision at debug level with structured data. Keep interfaces stable and serializable for future web UI integration (e.g. the Cognitive Budget panel). Use interfaces for public/extendable structures; use types for unions, aliases, or generics. Prefer incremental, well-scoped diffs and preserve provenance comments, cost tracking, and licensing headers. IMPORTANT: Keep all @arete-risk and @arete-ethics tags current with actual code functionality. Update risk/ethics reasoning when code changes affect the module's purpose or behavior.",
-  "context": {
-    "core": [
-      "packages/discord-bot/src/events",
-      "packages/discord-bot/src/utils",
-      "packages/discord-bot/src/commands",
-      "packages/discord-bot/src/voice",
-      "packages/discord-bot/src/realtime",
-      "packages/discord-bot/src/types"
-    ],
-    "ethics": [
-      "packages/ethics-core/src",
-      "PHILOSOPHY.md",
-      "SECURITY.md"
-    ],
-    "shared": [
-      "packages/shared/src",
-      "packages/shared/prompts"
-    ],
-    "web": [
-      "packages/web/src/components",
-      "packages/web/src/pages",
-      "packages/web/src/styles"
-    ],
-    "config": [
-      "packages/discord-bot/src/utils/env.ts",
-      "packages/discord-bot/src/config",
-      "packages/discord-bot/src/constants",
-      "package.json",
-      "tsconfig.json"
-    ],
-    "tests": [
-      "packages/discord-bot/test",
-      "packages/shared/test"
-    ],
-    "deployment": [
-      "Dockerfile",
-      "fly.toml",
-      "server.js",
-      "BuildRepoInitial.js"
-    ],
-    "documentation": [
-      "README.md",
-      "LICENSE_STRATEGY.md",
-      "HIPPOCRATIC_LICENSE.md",
-      "MIT_LICENSE.md"
-    ]
-  },
-  "environments": {
-    "development": [
-      "packages/discord-bot/logs",
-      "packages/discord-bot/traces",
-      "packages/discord-bot/test"
-    ],
-    "production": [
-      "Dockerfile",
-      "fly.toml",
-      "server.js",
-      "BuildRepoInitial.js"
-    ]
-  },
-  "priority": ["core", "shared", "ethics"]
-}  
+    "prompt": "You are developing within the ARETE monorepo — an open-source ethics-first AI framework. Core principles: interpretability, traceability, and user-tunable AI behavior. When generating or modifying code: Reuse existing utilities (e.g. logger.ts, env.ts, pricing.ts, openaiService.ts) before adding new ones. Every LLM interaction must record tokens and cost via ChannelContextManager.recordLLMUsage(). All buffers are RAM-only (no persistence). Follow fail-open design — if uncertain, do not block execution. Log every decision at debug level with structured data. Keep interfaces stable and serializable for future web UI integration (e.g. the Cognitive Budget panel). Use interfaces for public/extendable structures; use types for unions, aliases, or generics. Prefer incremental, well-scoped diffs and preserve provenance comments, cost tracking, and licensing headers. IMPORTANT: Keep all @arete-risk and @arete-ethics tags current with actual code functionality. Update risk/ethics reasoning when code changes affect the module's purpose or behavior.",
+    "context": {
+        "core": [
+            "packages/discord-bot/src/events",
+            "packages/discord-bot/src/utils",
+            "packages/discord-bot/src/commands",
+            "packages/discord-bot/src/voice",
+            "packages/discord-bot/src/realtime",
+            "packages/discord-bot/src/types"
+        ],
+        "ethics": ["packages/ethics-core/src", "PHILOSOPHY.md", "SECURITY.md"],
+        "shared": ["packages/shared/src", "packages/shared/prompts"],
+        "web": [
+            "packages/web/src/components",
+            "packages/web/src/pages",
+            "packages/web/src/styles"
+        ],
+        "config": [
+            "packages/discord-bot/src/utils/env.ts",
+            "packages/discord-bot/src/config",
+            "packages/discord-bot/src/constants",
+            "package.json",
+            "tsconfig.json"
+        ],
+        "tests": ["packages/discord-bot/test", "packages/shared/test"],
+        "deployment": [
+            "Dockerfile",
+            "fly.toml",
+            "server.js",
+            "BuildRepoInitial.js"
+        ],
+        "documentation": [
+            "README.md",
+            "LICENSE_STRATEGY.md",
+            "HIPPOCRATIC_LICENSE.md",
+            "MIT_LICENSE.md"
+        ]
+    },
+    "environments": {
+        "development": [
+            "packages/discord-bot/logs",
+            "packages/discord-bot/traces",
+            "packages/discord-bot/test"
+        ],
+        "production": [
+            "Dockerfile",
+            "fly.toml",
+            "server.js",
+            "BuildRepoInitial.js"
+        ]
+    },
+    "priority": ["core", "shared", "ethics"]
+}

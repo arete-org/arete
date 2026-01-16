@@ -12,38 +12,38 @@ import EmbedPage from '@pages/EmbedPage';
 
 // The App component stitches together the landing page sections in their intended scroll order.
 const App = (): JSX.Element => (
-  <div className="app-shell">
-    <a href="#main-content" className="skip-link">
-      Skip to main content
-    </a>
-    <Routes>
-      <Route
-        path="/"
-        element={(
-          <main id="main-content">
-            <Hero />
-            <div className="section-container">
-              <Services />
-            </div>
-            <div className="section-container">
-              <OpenAccountable />
-            </div>
-            <div className="section-container">
-              <Invite />
-            </div>
-            <Footer />
-          </main>
-        )}
-      />
-      <Route path="/invite" element={<InvitePage />} />
-      <Route path="/invite/" element={<InvitePage />} />
-      <Route path="/embed" element={<EmbedPage />} />
-      <Route path="/blog" element={<BlogListPage />} />
-      <Route path="/blog/" element={<BlogListPage />} />
-      <Route path="/blog/:number" element={<BlogPostPage />} />
-      <Route path="/trace/:responseId" element={<TracePage />} />
-    </Routes>
-  </div>
+    <div className="app-shell">
+        <a href="#main-content" className="skip-link">
+            Skip to main content
+        </a>
+        <Routes>
+            <Route
+                path="/"
+                element={
+                    <main id="main-content">
+                        <Hero />
+                        <div className="section-container">
+                            <Services />
+                        </div>
+                        <div className="section-container">
+                            <OpenAccountable />
+                        </div>
+                        <div className="section-container">
+                            <Invite />
+                        </div>
+                        <Footer />
+                    </main>
+                }
+            />
+            <Route path="/invite" element={<InvitePage />} />
+            <Route path="/invite/" element={<InvitePage />} />
+            <Route path="/embed" element={<EmbedPage />} />
+            <Route path="/blog" element={<BlogListPage />} />
+            <Route path="/blog/" element={<BlogListPage />} />
+            <Route path="/blog/:number" element={<BlogPostPage />} />
+            <Route path="/trace/:responseId" element={<TracePage />} />
+        </Routes>
+    </div>
 );
 
 export default App;

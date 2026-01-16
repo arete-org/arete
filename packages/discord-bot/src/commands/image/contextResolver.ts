@@ -9,7 +9,13 @@ import type { Message } from 'discord.js';
 import { logger } from '../../utils/logger.js';
 // Defaults stay in sync with environment overrides via the shared constants
 // module, so every recovery path mirrors the slash-command behaviour.
-import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_OUTPUT_COMPRESSION, DEFAULT_IMAGE_OUTPUT_FORMAT, DEFAULT_IMAGE_QUALITY, DEFAULT_TEXT_MODEL } from './constants.js';
+import {
+    DEFAULT_IMAGE_MODEL,
+    DEFAULT_IMAGE_OUTPUT_COMPRESSION,
+    DEFAULT_IMAGE_OUTPUT_FORMAT,
+    DEFAULT_IMAGE_QUALITY,
+    DEFAULT_TEXT_MODEL,
+} from './constants.js';
 import { clampPromptForContext } from './sessionHelpers.js';
 import type { ImageGenerationContext } from './followUpCache.js';
 import type {
@@ -19,18 +25,25 @@ import type {
     ImageRenderModel,
     ImageSizeType,
     ImageStylePreset,
-    ImageTextModel
+    ImageTextModel,
 } from './types.js';
 
-const ASPECT_RATIO_LABELS: Record<ImageGenerationContext['aspectRatio'], string> = {
+const ASPECT_RATIO_LABELS: Record<
+    ImageGenerationContext['aspectRatio'],
+    string
+> = {
     auto: 'Auto',
     square: 'Square',
     portrait: 'Portrait',
-    landscape: 'Landscape'
+    landscape: 'Landscape',
 };
 
 const QUALITY_VALUES: ImageQualityType[] = ['low', 'medium', 'high'];
-const BACKGROUND_VALUES: ImageBackgroundType[] = ['auto', 'transparent', 'opaque'];
+const BACKGROUND_VALUES: ImageBackgroundType[] = [
+    'auto',
+    'transparent',
+    'opaque',
+];
 const STYLE_VALUES: ImageStylePreset[] = [
     'natural',
     'vivid',
@@ -57,13 +70,23 @@ const STYLE_VALUES: ImageStylePreset[] = [
     'pop_art',
     'dreamcore',
     'isometric',
-    'unspecified'
+    'unspecified',
 ];
 
 const STYLE_SET = new Set<ImageStylePreset>(STYLE_VALUES);
 
-const SIZE_VALUES: ImageSizeType[] = ['auto', '1024x1024', '1024x1536', '1536x1024'];
-const ASPECT_VALUES: ImageGenerationContext['aspectRatio'][] = ['auto', 'square', 'portrait', 'landscape'];
+const SIZE_VALUES: ImageSizeType[] = [
+    'auto',
+    '1024x1024',
+    '1024x1536',
+    '1536x1024',
+];
+const ASPECT_VALUES: ImageGenerationContext['aspectRatio'][] = [
+    'auto',
+    'square',
+    'portrait',
+    'landscape',
+];
 
 // We only need a small look-back/look-ahead window when a user replies to a
 // follow-up message instead of the original embed. Keeping the search tight
@@ -77,9 +100,13 @@ function parseQuality(value: string | null | undefined): ImageQualityType {
         : DEFAULT_IMAGE_QUALITY;
 }
 
-function parseBackground(value: string | null | undefined): ImageBackgroundType {
+function parseBackground(
+    value: string | null | undefined
+): ImageBackgroundType {
     const normalised = value?.trim().toLowerCase() ?? '';
-    return BACKGROUND_VALUES.includes(normalised as ImageBackgroundType) ? (normalised as ImageBackgroundType) : 'auto';
+    return BACKGROUND_VALUES.includes(normalised as ImageBackgroundType)
+        ? (normalised as ImageBackgroundType)
+        : 'auto';
 }
 
 function parseStyle(value: string | null | undefined): ImageStylePreset {
@@ -96,16 +123,22 @@ function parseStyle(value: string | null | undefined): ImageStylePreset {
     return STYLE_SET.has(formatted) ? formatted : 'unspecified';
 }
 
-function parseAspectRatio(value: string | null | undefined): ImageGenerationContext['aspectRatio'] {
+function parseAspectRatio(
+    value: string | null | undefined
+): ImageGenerationContext['aspectRatio'] {
     const normalised = value?.trim().toLowerCase() ?? '';
-    return ASPECT_VALUES.includes(normalised as ImageGenerationContext['aspectRatio'])
+    return ASPECT_VALUES.includes(
+        normalised as ImageGenerationContext['aspectRatio']
+    )
         ? (normalised as ImageGenerationContext['aspectRatio'])
         : 'auto';
 }
 
 function parseSize(value: string | null | undefined): ImageSizeType {
     const normalised = value?.trim().toLowerCase() ?? '';
-    return SIZE_VALUES.includes(normalised as ImageSizeType) ? (normalised as ImageSizeType) : 'auto';
+    return SIZE_VALUES.includes(normalised as ImageSizeType)
+        ? (normalised as ImageSizeType)
+        : 'auto';
 }
 
 function parseTextModel(value: string | null | undefined): ImageTextModel {
@@ -118,9 +151,15 @@ function parseImageModel(value: string | null | undefined): ImageRenderModel {
     return normalised ?? DEFAULT_IMAGE_MODEL;
 }
 
-function parseOutputFormat(value: string | null | undefined): ImageOutputFormat {
+function parseOutputFormat(
+    value: string | null | undefined
+): ImageOutputFormat {
     const normalised = value?.trim().toLowerCase();
-    if (normalised === 'png' || normalised === 'webp' || normalised === 'jpeg') {
+    if (
+        normalised === 'png' ||
+        normalised === 'webp' ||
+        normalised === 'jpeg'
+    ) {
         return normalised;
     }
     return DEFAULT_IMAGE_OUTPUT_FORMAT;
@@ -141,7 +180,11 @@ function parsePromptAdjustment(value: string | null | undefined): boolean {
         return true;
     }
 
-    if (normalised === 'disabled' || normalised === 'false' || normalised === 'no') {
+    if (
+        normalised === 'disabled' ||
+        normalised === 'false' ||
+        normalised === 'no'
+    ) {
         return false;
     }
 
@@ -172,7 +215,10 @@ interface RecoveredContextDetails {
 
 // Prompt labels are now dynamic (e.g., "Refined Prompt (gpt-4.1-mini)") so we
 // need to locate entries by prefix rather than assuming a fixed field name.
-function findPromptBaseField(fieldMap: Map<string, string>, label: string): string | null {
+function findPromptBaseField(
+    fieldMap: Map<string, string>,
+    label: string
+): string | null {
     if (fieldMap.has(label)) {
         return label;
     }
@@ -206,7 +252,9 @@ function collectPromptSections(
     const sections: string[] = [baseField];
     let sectionIndex = 1;
     while (true) {
-        const continuation = fieldMap.get(`${label} (cont. ${sectionIndex})`) ?? fieldMap.get(`${baseFieldName} (cont. ${sectionIndex})`);
+        const continuation =
+            fieldMap.get(`${label} (cont. ${sectionIndex})`) ??
+            fieldMap.get(`${baseFieldName} (cont. ${sectionIndex})`);
         if (!continuation) {
             break;
         }
@@ -218,14 +266,22 @@ function collectPromptSections(
     let truncatedFlag = false;
 
     if (combined.endsWith('\n*(truncated)*')) {
-        combined = combined.slice(0, combined.length - '\n*(truncated)*'.length);
+        combined = combined.slice(
+            0,
+            combined.length - '\n*(truncated)*'.length
+        );
         truncatedFlag = true;
     }
 
-    const legacyTruncation = fieldMap.get(`${label} Truncated`)?.toLowerCase() === 'true';
+    const legacyTruncation =
+        fieldMap.get(`${label} Truncated`)?.toLowerCase() === 'true';
     truncatedFlag = truncatedFlag || legacyTruncation;
 
-    return { prompt: combined, truncated: truncatedFlag, fieldName: baseFieldName };
+    return {
+        prompt: combined,
+        truncated: truncatedFlag,
+        fieldName: baseFieldName,
+    };
 }
 
 function collectPromptSectionsWithFallback(
@@ -258,16 +314,23 @@ function parseIdentifier(raw: string | undefined): string | null {
 // Extracts the model hint that we embed within prompt labels. This keeps
 // historical embeds backwards compatible while giving reboot recovery a single
 // place to pull the active model when caching is unavailable.
-function extractModelFromPromptLabel(label: string | null | undefined): string | null {
+function extractModelFromPromptLabel(
+    label: string | null | undefined
+): string | null {
     if (!label) {
         return null;
     }
 
-    const match = /^\s*(?:Original|Refined|Current) Prompt\s*\(([^)]+)\)\s*$/i.exec(label);
+    const match =
+        /^\s*(?:Original|Refined|Current) Prompt\s*\(([^)]+)\)\s*$/i.exec(
+            label
+        );
     return match ? match[1].trim() : null;
 }
 
-function extractModelFromQualityField(value: string | null | undefined): string | null {
+function extractModelFromQualityField(
+    value: string | null | undefined
+): string | null {
     if (!value) {
         return null;
     }
@@ -276,7 +339,9 @@ function extractModelFromQualityField(value: string | null | undefined): string 
     return match ? match[1].trim() : null;
 }
 
-function buildContextFromEmbed(message: Message): RecoveredContextDetails | null {
+function buildContextFromEmbed(
+    message: Message
+): RecoveredContextDetails | null {
     const embed = message.embeds?.[0];
     if (!embed) {
         return null;
@@ -287,10 +352,24 @@ function buildContextFromEmbed(message: Message): RecoveredContextDetails | null
         fieldMap.set(field.name, field.value ?? '');
     }
 
-    const currentPromptResult = collectPromptSectionsWithFallback(fieldMap, ['Current prompt', 'Refined Prompt', 'Prompt']);
-    const originalPromptResult = collectPromptSectionsWithFallback(fieldMap, ['Original prompt', 'Original Prompt', 'Prompt']);
-    const legacyRefinedResult = collectPromptSections(fieldMap, 'Refined Prompt');
-    const prompt = currentPromptResult.prompt ?? legacyRefinedResult.prompt ?? originalPromptResult.prompt;
+    const currentPromptResult = collectPromptSectionsWithFallback(fieldMap, [
+        'Current prompt',
+        'Refined Prompt',
+        'Prompt',
+    ]);
+    const originalPromptResult = collectPromptSectionsWithFallback(fieldMap, [
+        'Original prompt',
+        'Original Prompt',
+        'Prompt',
+    ]);
+    const legacyRefinedResult = collectPromptSections(
+        fieldMap,
+        'Refined Prompt'
+    );
+    const prompt =
+        currentPromptResult.prompt ??
+        legacyRefinedResult.prompt ??
+        originalPromptResult.prompt;
 
     if (!prompt) {
         logger.warn('Unable to recover any prompt from embed fields.');
@@ -298,10 +377,14 @@ function buildContextFromEmbed(message: Message): RecoveredContextDetails | null
     }
 
     if (!originalPromptResult.prompt) {
-        logger.warn('Original prompt missing from embed; using recovered prompt as fallback.');
+        logger.warn(
+            'Original prompt missing from embed; using recovered prompt as fallback.'
+        );
     }
 
-    const aspectRatio = parseAspectRatio(fieldMap.get('Aspect ratio') ?? fieldMap.get('Aspect Ratio'));
+    const aspectRatio = parseAspectRatio(
+        fieldMap.get('Aspect ratio') ?? fieldMap.get('Aspect Ratio')
+    );
     const size = parseSize(fieldMap.get('Resolution') ?? fieldMap.get('Size'));
 
     let refinedPrompt: string | null = null;
@@ -313,9 +396,9 @@ function buildContextFromEmbed(message: Message): RecoveredContextDetails | null
         refinedPromptField = legacyRefinedResult.fieldName;
         refinedPromptTruncated = legacyRefinedResult.truncated;
     } else if (
-        currentPromptResult.prompt
-        && originalPromptResult.prompt
-        && currentPromptResult.prompt !== originalPromptResult.prompt
+        currentPromptResult.prompt &&
+        originalPromptResult.prompt &&
+        currentPromptResult.prompt !== originalPromptResult.prompt
     ) {
         refinedPrompt = currentPromptResult.prompt;
         refinedPromptField = currentPromptResult.fieldName;
@@ -329,21 +412,29 @@ function buildContextFromEmbed(message: Message): RecoveredContextDetails | null
     }
 
     const normalizedPrompt = clampPromptForContext(prompt);
-    const normalizedOriginal = clampPromptForContext(originalPromptResult.prompt ?? prompt);
-    const normalizedRefinedCandidate = refinedPrompt ? clampPromptForContext(refinedPrompt) : null;
-    const normalizedRefined = normalizedRefinedCandidate && normalizedRefinedCandidate !== normalizedPrompt
-        ? normalizedRefinedCandidate
+    const normalizedOriginal = clampPromptForContext(
+        originalPromptResult.prompt ?? prompt
+    );
+    const normalizedRefinedCandidate = refinedPrompt
+        ? clampPromptForContext(refinedPrompt)
         : null;
+    const normalizedRefined =
+        normalizedRefinedCandidate &&
+        normalizedRefinedCandidate !== normalizedPrompt
+            ? normalizedRefinedCandidate
+            : null;
 
-    const textModelHint = extractModelFromPromptLabel(currentPromptResult.fieldName)
-        ?? extractModelFromPromptLabel(refinedPromptField)
-        ?? extractModelFromPromptLabel(originalPromptResult.fieldName)
-        ?? fieldMap.get('Text model')
-        ?? fieldMap.get('Text Model')
-        ?? fieldMap.get('Model');
-    const imageModelHint = fieldMap.get('Image model')
-        ?? fieldMap.get('Image Model')
-        ?? extractModelFromQualityField(fieldMap.get('Quality'));
+    const textModelHint =
+        extractModelFromPromptLabel(currentPromptResult.fieldName) ??
+        extractModelFromPromptLabel(refinedPromptField) ??
+        extractModelFromPromptLabel(originalPromptResult.fieldName) ??
+        fieldMap.get('Text model') ??
+        fieldMap.get('Text Model') ??
+        fieldMap.get('Model');
+    const imageModelHint =
+        fieldMap.get('Image model') ??
+        fieldMap.get('Image Model') ??
+        extractModelFromQualityField(fieldMap.get('Quality'));
 
     return {
         context: {
@@ -358,12 +449,19 @@ function buildContextFromEmbed(message: Message): RecoveredContextDetails | null
             quality: parseQuality(fieldMap.get('Quality')),
             background: parseBackground(fieldMap.get('Background')),
             style: parseStyle(fieldMap.get('Style')),
-            allowPromptAdjustment: parsePromptAdjustment(fieldMap.get('Prompt adjustment') ?? fieldMap.get('Prompt Adjustment')),
-            outputFormat: parseOutputFormat(fieldMap.get('Output format') ?? fieldMap.get('Output Format')),
-            outputCompression: parseOutputCompression(fieldMap.get('Compression'))
+            allowPromptAdjustment: parsePromptAdjustment(
+                fieldMap.get('Prompt adjustment') ??
+                    fieldMap.get('Prompt Adjustment')
+            ),
+            outputFormat: parseOutputFormat(
+                fieldMap.get('Output format') ?? fieldMap.get('Output Format')
+            ),
+            outputCompression: parseOutputCompression(
+                fieldMap.get('Compression')
+            ),
         },
         responseId: parseIdentifier(fieldMap.get('Output ID')),
-        inputId: parseIdentifier(fieldMap.get('Input ID'))
+        inputId: parseIdentifier(fieldMap.get('Input ID')),
     };
 }
 
@@ -374,12 +472,16 @@ function buildContextFromEmbed(message: Message): RecoveredContextDetails | null
  */
 export interface RecoveredImageContext extends RecoveredContextDetails {}
 
-export async function recoverContextFromMessage(message: Message): Promise<ImageGenerationContext | null> {
+export async function recoverContextFromMessage(
+    message: Message
+): Promise<ImageGenerationContext | null> {
     const recovered = await recoverContextDetailsFromMessage(message);
     return recovered ? recovered.context : null;
 }
 
-export async function recoverContextDetailsFromMessage(message: Message): Promise<RecoveredImageContext | null> {
+export async function recoverContextDetailsFromMessage(
+    message: Message
+): Promise<RecoveredImageContext | null> {
     // Track every message we inspect so we can both avoid infinite loops when
     // walking reply chains and prefer those messages during nearby lookups if
     // we still cannot find the embed payload.
@@ -400,12 +502,14 @@ export async function recoverContextDetailsFromMessage(message: Message): Promis
         // instead of the original embed. If this message references another
         // message, walk that chain before we fall back to broader history
         // lookups.
-        const parentChannel: Message['channel'] | null = current.channel ?? null;
+        const parentChannel: Message['channel'] | null =
+            current.channel ?? null;
         if (!parentChannel) {
             break;
         }
 
-        const referencedId: string | null = current.reference?.messageId ?? null;
+        const referencedId: string | null =
+            current.reference?.messageId ?? null;
         if (!referencedId) {
             break;
         }
@@ -413,14 +517,19 @@ export async function recoverContextDetailsFromMessage(message: Message): Promis
         try {
             current = await parentChannel.messages.fetch(referencedId);
         } catch (error) {
-            logger.debug('Failed to fetch referenced message while rebuilding image context:', error);
+            logger.debug(
+                'Failed to fetch referenced message while rebuilding image context:',
+                error
+            );
             break;
         }
     }
 
-    const anchorMessage = visitedMessages[visitedMessages.length - 1] ?? message;
+    const anchorMessage =
+        visitedMessages[visitedMessages.length - 1] ?? message;
     const channel = anchorMessage.channel ?? message.channel;
-    const clientUserId = anchorMessage.client.user?.id ?? message.client.user?.id;
+    const clientUserId =
+        anchorMessage.client.user?.id ?? message.client.user?.id;
 
     if (!channel || !clientUserId) {
         return null;
@@ -433,8 +542,14 @@ export async function recoverContextDetailsFromMessage(message: Message): Promis
         // reply chain) so we can recover the intended context without scanning
         // the entire channel history.
         const surrounding = await Promise.all([
-            channel.messages.fetch({ before: anchorMessage.id, limit: NEARBY_SEARCH_LIMIT }),
-            channel.messages.fetch({ after: anchorMessage.id, limit: Math.min(NEARBY_SEARCH_LIMIT, 5) })
+            channel.messages.fetch({
+                before: anchorMessage.id,
+                limit: NEARBY_SEARCH_LIMIT,
+            }),
+            channel.messages.fetch({
+                after: anchorMessage.id,
+                limit: Math.min(NEARBY_SEARCH_LIMIT, 5),
+            }),
         ]);
 
         const candidateMap = new Map<string, Message>();
@@ -451,7 +566,9 @@ export async function recoverContextDetailsFromMessage(message: Message): Promis
             candidateMap.set(candidate.id, candidate);
         }
 
-        const candidates = Array.from(candidateMap.values()).filter(candidate => candidate.author?.id === clientUserId);
+        const candidates = Array.from(candidateMap.values()).filter(
+            (candidate) => candidate.author?.id === clientUserId
+        );
 
         candidates.sort((a, b) => {
             const anchorTimestamp = anchorMessage.createdTimestamp;
@@ -477,7 +594,9 @@ export async function recoverContextDetailsFromMessage(message: Message): Promis
         for (const candidate of candidates) {
             const recovered = buildContextFromEmbed(candidate);
             if (recovered) {
-                logger.debug(`Recovered image context from nearby bot message ${candidate.id}.`);
+                logger.debug(
+                    `Recovered image context from nearby bot message ${candidate.id}.`
+                );
                 return recovered;
             }
         }

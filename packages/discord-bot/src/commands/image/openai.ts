@@ -12,7 +12,7 @@ import type {
     ResponseCreateParamsNonStreaming,
     ResponseCreateParamsStreaming,
     Tool,
-    ToolChoiceTypes
+    ToolChoiceTypes,
 } from 'openai/resources/responses/responses.js';
 import { logger } from '../../utils/logger.js';
 import {
@@ -20,7 +20,7 @@ import {
     ANNOTATION_MESSAGE_LIMIT,
     ANNOTATION_TITLE_LIMIT,
     PARTIAL_IMAGE_LIMIT,
-    DEFAULT_IMAGE_OUTPUT_COMPRESSION
+    DEFAULT_IMAGE_OUTPUT_COMPRESSION,
 } from './constants.js';
 import { sanitizeForEmbed, truncateForEmbed } from './embed.js';
 import { renderPrompt } from '../../utils/env.js';
@@ -36,7 +36,7 @@ import type {
     PartialImagePayload,
     AnnotationFields,
     ImageOutputFormat,
-    ImageOutputCompression
+    ImageOutputCompression,
 } from './types.js';
 import { mapResponseError } from './errors.js';
 
@@ -71,7 +71,9 @@ interface GenerationOutcome {
     annotations: AnnotationFields;
 }
 
-export async function generateImageWithMetadata(options: GenerateImageOptions): Promise<GenerationOutcome> {
+export async function generateImageWithMetadata(
+    options: GenerateImageOptions
+): Promise<GenerationOutcome> {
     const {
         openai,
         prompt,
@@ -89,7 +91,7 @@ export async function generateImageWithMetadata(options: GenerateImageOptions): 
         nickname,
         guildName,
         onPartialImage,
-        stream
+        stream,
     } = options;
 
     const { content: imageSystemPrompt } = renderPrompt('discord.image.system');
@@ -100,28 +102,33 @@ export async function generateImageWithMetadata(options: GenerateImageOptions): 
         {
             role: 'system',
             type: 'message',
-            content: [{ type: 'input_text', text: imageSystemPrompt }]
+            content: [{ type: 'input_text', text: imageSystemPrompt }],
         },
         {
             role: 'developer',
             type: 'message',
-            content: [{ type: 'input_text', text: buildDeveloperPrompt({
-                allowPromptAdjustment,
-                size,
-                quality,
-                background,
-                style,
-                username,
-                nickname,
-                guildName,
-                remainingPromptRatio
-            }) }]
+            content: [
+                {
+                    type: 'input_text',
+                    text: buildDeveloperPrompt({
+                        allowPromptAdjustment,
+                        size,
+                        quality,
+                        background,
+                        style,
+                        username,
+                        nickname,
+                        guildName,
+                        remainingPromptRatio,
+                    }),
+                },
+            ],
         },
         {
             role: 'user',
             type: 'message',
-            content: [{ type: 'input_text', text: prompt }]
-        }
+            content: [{ type: 'input_text', text: prompt }],
+        },
     ];
 
     const imageTool = createImageGenerationTool({
@@ -131,7 +138,7 @@ export async function generateImageWithMetadata(options: GenerateImageOptions): 
         background,
         outputFormat,
         outputCompression,
-        allowPartialImages: Boolean(onPartialImage)
+        allowPartialImages: Boolean(onPartialImage),
     });
 
     const toolChoice: ToolChoiceTypes = { type: 'image_generation' };
@@ -141,7 +148,7 @@ export async function generateImageWithMetadata(options: GenerateImageOptions): 
         input,
         tools: [imageTool],
         tool_choice: toolChoice,
-        previous_response_id: followUpResponseId ?? null
+        previous_response_id: followUpResponseId ?? null,
     };
 
     logger.debug(`Request payload: ${JSON.stringify(requestPayload, null, 2)}`);
@@ -152,18 +159,34 @@ export async function generateImageWithMetadata(options: GenerateImageOptions): 
 
     if (shouldStream) {
         const partialImages: string[] = [];
-        const streamingPayload: ResponseStreamParams = { ...requestPayload, stream: true };
+        const streamingPayload: ResponseStreamParams = {
+            ...requestPayload,
+            stream: true,
+        };
         const stream = await openai.responses.stream(streamingPayload);
 
-        stream.on('response.image_generation_call.partial_image', event => {
+        stream.on('response.image_generation_call.partial_image', (event) => {
             try {
-                partialImages[event.partial_image_index] = event.partial_image_b64;
+                partialImages[event.partial_image_index] =
+                    event.partial_image_b64;
                 if (onPartialImage) {
-                    void Promise.resolve(onPartialImage({ index: event.partial_image_index, base64: event.partial_image_b64 }))
-                        .catch(error => logger.warn('Failed to process partial image update:', error));
+                    void Promise.resolve(
+                        onPartialImage({
+                            index: event.partial_image_index,
+                            base64: event.partial_image_b64,
+                        })
+                    ).catch((error) =>
+                        logger.warn(
+                            'Failed to process partial image update:',
+                            error
+                        )
+                    );
                 }
             } catch (error) {
-                logger.warn('Unexpected error while handling partial image:', error);
+                logger.warn(
+                    'Unexpected error while handling partial image:',
+                    error
+                );
             }
         });
 
@@ -171,8 +194,11 @@ export async function generateImageWithMetadata(options: GenerateImageOptions): 
             logger.error('Image generation stream error:', error);
         });
 
-        stream.on('response.failed', event => {
-            logger.error('Image generation stream failed:', event.response.error ?? event.response);
+        stream.on('response.failed', (event) => {
+            logger.error(
+                'Image generation stream failed:',
+                event.response.error ?? event.response
+            );
         });
 
         response = await stream.finalResponse();
@@ -187,22 +213,31 @@ export async function generateImageWithMetadata(options: GenerateImageOptions): 
     }
 
     const imageGenerationCalls = response.output.filter(
-        (output): output is ImageGenerationCallWithPrompt => output.type === 'image_generation_call'
+        (output): output is ImageGenerationCallWithPrompt =>
+            output.type === 'image_generation_call'
     );
 
     if (imageGenerationCalls.length === 0) {
-        throw new Error('No image generation call found in response. The model may not have decided to generate an image.');
+        throw new Error(
+            'No image generation call found in response. The model may not have decided to generate an image.'
+        );
     }
 
-    const imageCallWithResult = imageGenerationCalls.find(call => Boolean(call.result));
+    const imageCallWithResult = imageGenerationCalls.find((call) =>
+        Boolean(call.result)
+    );
     const imageCall = imageCallWithResult ?? imageGenerationCalls[0];
     const imageData = normalizeImageResult(imageCall?.result);
 
     if (!imageCall || !imageData) {
-        throw new Error('No image data found in the image generation call result.');
+        throw new Error(
+            'No image data found in the image generation call result.'
+        );
     }
 
-    logger.debug(`Image generation successful - ID: ${imageCall.id}, Status: ${imageCall.status}`);
+    logger.debug(
+        `Image generation successful - ID: ${imageCall.id}, Status: ${imageCall.status}`
+    );
 
     const annotationText = extractFirstTextMessage(response);
     const annotations = parseAnnotationFields(annotationText);
@@ -212,7 +247,7 @@ export async function generateImageWithMetadata(options: GenerateImageOptions): 
         imageCall,
         finalImageBase64: imageData,
         partialImages: partials,
-        annotations
+        annotations,
     };
 }
 
@@ -236,7 +271,7 @@ function createImageGenerationTool(options: {
         background: options.background,
         output_format: options.outputFormat,
         // SDK only narrows to "gpt-image-1" literal, but API accepts other models (e.g., gpt-image-1-mini).
-        model: options.model as Tool.ImageGeneration['model']
+        model: options.model as Tool.ImageGeneration['model'],
     };
 
     // OpenAI currently expects PNG requests to use 100 compression; values < 100
@@ -244,7 +279,9 @@ function createImageGenerationTool(options: {
     if (options.outputFormat === 'png') {
         tool.output_compression = 100;
     } else {
-        tool.output_compression = clampOutputCompression(options.outputCompression);
+        tool.output_compression = clampOutputCompression(
+            options.outputCompression
+        );
     }
 
     if (options.allowPartialImages) {
@@ -316,27 +353,56 @@ function stripJsonFences(value: string): string {
 
 function parseAnnotationFields(rawText: string | null): AnnotationFields {
     if (!rawText) {
-        return { title: null, description: null, note: null, adjustedPrompt: null };
+        return {
+            title: null,
+            description: null,
+            note: null,
+            adjustedPrompt: null,
+        };
     }
 
     const sanitizedRaw = stripJsonFences(rawText);
 
     try {
-        const parsed = JSON.parse(sanitizedRaw) as Partial<AnnotationFields> & { adjusted_prompt?: string; reflection?: string };
-        const title = parsed.title ? truncateForEmbed(sanitizeForEmbed(parsed.title), ANNOTATION_TITLE_LIMIT) : null;
+        const parsed = JSON.parse(sanitizedRaw) as Partial<AnnotationFields> & {
+            adjusted_prompt?: string;
+            reflection?: string;
+        };
+        const title = parsed.title
+            ? truncateForEmbed(
+                  sanitizeForEmbed(parsed.title),
+                  ANNOTATION_TITLE_LIMIT
+              )
+            : null;
         const description = parsed.description
-            ? truncateForEmbed(sanitizeForEmbed(parsed.description), ANNOTATION_DESCRIPTION_LIMIT)
+            ? truncateForEmbed(
+                  sanitizeForEmbed(parsed.description),
+                  ANNOTATION_DESCRIPTION_LIMIT
+              )
             : null;
-        const noteSource = parsed.note ?? (parsed as { reflection?: string }).reflection ?? null;
+        const noteSource =
+            parsed.note ??
+            (parsed as { reflection?: string }).reflection ??
+            null;
         const note = noteSource
-            ? truncateForEmbed(sanitizeForEmbed(noteSource), ANNOTATION_MESSAGE_LIMIT)
+            ? truncateForEmbed(
+                  sanitizeForEmbed(noteSource),
+                  ANNOTATION_MESSAGE_LIMIT
+              )
             : null;
-        const adjustedPrompt = parsed.adjusted_prompt ?? parsed.adjustedPrompt ?? null;
+        const adjustedPrompt =
+            parsed.adjusted_prompt ?? parsed.adjustedPrompt ?? null;
 
         return { title, description, note, adjustedPrompt };
     } catch (error) {
-        logger.warn('Failed to parse annotation response JSON. Using raw text.', error);
-        const note = truncateForEmbed(sanitizeForEmbed(sanitizedRaw), ANNOTATION_MESSAGE_LIMIT);
+        logger.warn(
+            'Failed to parse annotation response JSON. Using raw text.',
+            error
+        );
+        const note = truncateForEmbed(
+            sanitizeForEmbed(sanitizedRaw),
+            ANNOTATION_MESSAGE_LIMIT
+        );
         return { title: null, description: null, note, adjustedPrompt: null };
     }
 }

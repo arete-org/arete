@@ -18,8 +18,21 @@ import { RealtimeEventHandler } from '../realtime/RealtimeEventHandler.js';
 import { RealtimeSessionConfig } from '../realtime/RealtimeSessionConfig.js';
 
 export interface RealtimeSessionOptions {
-    model?: 'gpt-realtime' | 'gpt-4o-realtime-preview' | 'gpt-4o-mini-realtime-preview';
-    voice?: 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer';
+    model?:
+        | 'gpt-realtime'
+        | 'gpt-4o-realtime-preview'
+        | 'gpt-4o-mini-realtime-preview';
+    voice?:
+        | 'alloy'
+        | 'ash'
+        | 'ballad'
+        | 'coral'
+        | 'echo'
+        | 'fable'
+        | 'nova'
+        | 'onyx'
+        | 'sage'
+        | 'shimmer';
     instructions?: string;
     temperature?: number;
     maxResponseOutputTokens?: number;
@@ -61,8 +74,8 @@ export interface RealtimeErrorEvent {
 }
 
 /**
-* Manages a connection to OpenAI's Realtime API
-*/
+ * Manages a connection to OpenAI's Realtime API
+ */
 export class RealtimeSession extends EventEmitter {
     private wsManager: RealtimeWebSocketManager;
     private audioHandler: RealtimeAudioHandler;
@@ -100,7 +113,7 @@ export class RealtimeSession extends EventEmitter {
     public async connect(): Promise<void> {
         const wsUrl = `wss://api.openai.com/v1/realtime?model=${this.sessionConfig.getModel()}`;
         const headers = {
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         };
 
         await this.wsManager.connect(wsUrl, headers);
@@ -121,10 +134,20 @@ export class RealtimeSession extends EventEmitter {
         this.wsManager.disconnect();
     }
 
-    public async sendAudio(audioBuffer: Buffer, speakerLabel: string, speakerId?: string): Promise<void> {
+    public async sendAudio(
+        audioBuffer: Buffer,
+        speakerLabel: string,
+        speakerId?: string
+    ): Promise<void> {
         const ws = this.wsManager.getWebSocket();
         if (ws && this.audioHandler) {
-            await this.audioHandler.sendAudio(ws, this.eventHandler, audioBuffer, speakerLabel, speakerId);
+            await this.audioHandler.sendAudio(
+                ws,
+                this.eventHandler,
+                audioBuffer,
+                speakerLabel,
+                speakerId
+            );
         }
     }
 
@@ -180,20 +203,30 @@ export class RealtimeSession extends EventEmitter {
         const ws = this.wsManager.getWebSocket();
         if (!ws) return;
 
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise((resolve) => setTimeout(resolve, 300));
 
-        ws.send(JSON.stringify({
-            type: 'conversation.item.create',
-            item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Hello!' }] }
-        }));
+        ws.send(
+            JSON.stringify({
+                type: 'conversation.item.create',
+                item: {
+                    type: 'message',
+                    role: 'user',
+                    content: [{ type: 'input_text', text: 'Hello!' }],
+                },
+            })
+        );
 
-        ws.send(JSON.stringify({
-            type: 'response.create',
-            response: {
-                output_modalities: ['audio'],
-                instructions: (`${this.sessionConfig.getInstructions() ?? ''}` + " Say: Hello!").trim()
-            }
-        }));
+        ws.send(
+            JSON.stringify({
+                type: 'response.create',
+                response: {
+                    output_modalities: ['audio'],
+                    instructions: (
+                        `${this.sessionConfig.getInstructions() ?? ''}` +
+                        ' Say: Hello!'
+                    ).trim(),
+                },
+            })
+        );
     }
 }
-

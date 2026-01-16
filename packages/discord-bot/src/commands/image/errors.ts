@@ -11,7 +11,9 @@ import type { Response } from 'openai/resources/responses/responses.js';
 import { logger } from '../../utils/logger.js';
 import { CloudinaryConfigurationError } from './cloudinary.js';
 
-export function mapResponseError(error: NonNullable<Response['error']>): string {
+export function mapResponseError(
+    error: NonNullable<Response['error']>
+): string {
     switch (error.code) {
         case 'image_content_policy_violation':
             return 'OpenAI safety filters blocked this prompt. Please modify your prompt and try again.';
@@ -48,25 +50,36 @@ export function resolveImageCommandError(error: unknown): string {
     if (error instanceof AggregateError) {
         const aggregate = error as AggregateError & { errors?: unknown[] };
         const nestedMessages = (aggregate.errors ?? [])
-            .map(inner => resolveImageCommandError(inner))
-            .filter(message => Boolean(message) && message !== aggregate.message);
+            .map((inner) => resolveImageCommandError(inner))
+            .filter(
+                (message) => Boolean(message) && message !== aggregate.message
+            );
 
         if (nestedMessages.length > 0) {
             const uniqueMessages = [...new Set(nestedMessages)];
             return uniqueMessages.join(' | ');
         }
 
-        return aggregate.message || 'Multiple errors occurred while generating the image.';
+        return (
+            aggregate.message ||
+            'Multiple errors occurred while generating the image.'
+        );
     }
 
     if (error instanceof CombinedPropertyError) {
-        logger.warn('Discord embed validation failed while preparing an image response: %s', error);
+        logger.warn(
+            'Discord embed validation failed while preparing an image response: %s',
+            error
+        );
         return 'Discord rejected the response format. Please try again with a shorter or simpler prompt.';
     }
 
     if (error instanceof APIError) {
         const code = extractApiErrorCode(error);
-        if (code === 'content_policy_violation' || code === 'image_content_policy_violation') {
+        if (
+            code === 'content_policy_violation' ||
+            code === 'image_content_policy_violation'
+        ) {
             return 'OpenAI safety filters blocked this prompt. Please modify your prompt and try again.';
         }
         if (code === 'rate_limit_exceeded' || error.status === 429) {
@@ -75,7 +88,10 @@ export function resolveImageCommandError(error: unknown): string {
         if (error.status === 401 || error.status === 403) {
             return 'OpenAI rejected our request. Please contact the administrator.';
         }
-        if (error.status === 400 && /invalid[_\s-]*prompt/i.test(error.message ?? '')) {
+        if (
+            error.status === 400 &&
+            /invalid[_\s-]*prompt/i.test(error.message ?? '')
+        ) {
             return 'OpenAI reported that the prompt was invalid. Please try again with a simpler request.';
         }
         if (error.status >= 500) {

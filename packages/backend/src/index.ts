@@ -11,4 +11,3 @@ export * from './shared';
 
 // Re-export ethics-core types and evaluators for downstream consumers.
 export * from './ethics-core';
-

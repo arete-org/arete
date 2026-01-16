@@ -11,7 +11,7 @@ import type {
     ImageOutputFormat,
     ImageQualityType,
     ImageRenderModel,
-    ImageTextModel
+    ImageTextModel,
 } from '../commands/image/types.js';
 
 /**
@@ -35,7 +35,7 @@ const FALLBACK_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const FALLBACK_MODEL_MULTIPLIERS: Record<ImageRenderModel, number> = {
     'gpt-image-1-mini': 1,
     'gpt-image-1.5': 2, // Latest model, 1.5, is cheaper than 1
-    'gpt-image-1': 3
+    'gpt-image-1': 3,
 };
 
 /**
@@ -63,7 +63,9 @@ function readNumberEnv(key: string, fallback: number): number {
  * Parses the optional JSON map stored in IMAGE_MODEL_MULTIPLIERS. This allows a
  * single variable to override multiple models when desired.
  */
-function parseMultiplierMapFromJson(): Partial<Record<ImageRenderModel, number>> {
+function parseMultiplierMapFromJson(): Partial<
+    Record<ImageRenderModel, number>
+> {
     const raw = process.env.IMAGE_MODEL_MULTIPLIERS;
     if (!raw) {
         return {};
@@ -74,7 +76,8 @@ function parseMultiplierMapFromJson(): Partial<Record<ImageRenderModel, number>>
         const overrides: Partial<Record<ImageRenderModel, number>> = {};
 
         for (const [model, value] of Object.entries(parsed)) {
-            const numericValue = typeof value === 'string' ? Number(value) : (value as number);
+            const numericValue =
+                typeof value === 'string' ? Number(value) : (value as number);
             if (!Number.isFinite(numericValue) || numericValue <= 0) {
                 logger.warn(
                     `Skipping invalid multiplier for model ${model} in IMAGE_MODEL_MULTIPLIERS: ${String(value)}`
@@ -98,7 +101,9 @@ function parseMultiplierMapFromJson(): Partial<Record<ImageRenderModel, number>>
  * underscores in the environment suffix so standard shell syntax works.
  */
 function parseMultiplierOverrides(): Record<ImageRenderModel, number> {
-    const overrides: Record<ImageRenderModel, number> = { ...FALLBACK_MODEL_MULTIPLIERS };
+    const overrides: Record<ImageRenderModel, number> = {
+        ...FALLBACK_MODEL_MULTIPLIERS,
+    };
     const jsonOverrides = parseMultiplierMapFromJson();
 
     for (const [model, multiplier] of Object.entries(jsonOverrides)) {
@@ -135,15 +140,23 @@ function parseOutputFormat(raw: string | undefined): ImageOutputFormat | null {
     }
 
     const normalized = raw.toLowerCase();
-    if (normalized === 'png' || normalized === 'webp' || normalized === 'jpeg') {
+    if (
+        normalized === 'png' ||
+        normalized === 'webp' ||
+        normalized === 'jpeg'
+    ) {
         return normalized;
     }
 
-    logger.warn(`Ignoring invalid IMAGE_DEFAULT_OUTPUT_FORMAT "${raw}". Expected png, webp, or jpeg.`);
+    logger.warn(
+        `Ignoring invalid IMAGE_DEFAULT_OUTPUT_FORMAT "${raw}". Expected png, webp, or jpeg.`
+    );
     return null;
 }
 
-function parseOutputCompression(raw: string | undefined): ImageOutputCompression | null {
+function parseOutputCompression(
+    raw: string | undefined
+): ImageOutputCompression | null {
     if (!raw) {
         return null;
     }
@@ -153,7 +166,9 @@ function parseOutputCompression(raw: string | undefined): ImageOutputCompression
         return value;
     }
 
-    logger.warn(`Ignoring invalid IMAGE_DEFAULT_OUTPUT_COMPRESSION "${raw}". Expected a number between 1 and 100.`);
+    logger.warn(
+        `Ignoring invalid IMAGE_DEFAULT_OUTPUT_COMPRESSION "${raw}". Expected a number between 1 and 100.`
+    );
     return null;
 }
 
@@ -180,17 +195,37 @@ export interface ImageConfiguration {
  */
 export const imageConfig: ImageConfiguration = {
     defaults: {
-        textModel: (process.env.IMAGE_DEFAULT_TEXT_MODEL as ImageTextModel | undefined) ?? FALLBACK_TEXT_MODEL,
-        imageModel: (process.env.IMAGE_DEFAULT_IMAGE_MODEL as ImageRenderModel | undefined) ?? FALLBACK_IMAGE_MODEL,
-        quality: (process.env.IMAGE_DEFAULT_QUALITY as ImageQualityType | undefined) ?? FALLBACK_IMAGE_QUALITY,
-        outputFormat: parseOutputFormat(process.env.IMAGE_DEFAULT_OUTPUT_FORMAT) ?? FALLBACK_OUTPUT_FORMAT,
-        outputCompression: parseOutputCompression(process.env.IMAGE_DEFAULT_OUTPUT_COMPRESSION) ?? FALLBACK_OUTPUT_COMPRESSION
+        textModel:
+            (process.env.IMAGE_DEFAULT_TEXT_MODEL as
+                | ImageTextModel
+                | undefined) ?? FALLBACK_TEXT_MODEL,
+        imageModel:
+            (process.env.IMAGE_DEFAULT_IMAGE_MODEL as
+                | ImageRenderModel
+                | undefined) ?? FALLBACK_IMAGE_MODEL,
+        quality:
+            (process.env.IMAGE_DEFAULT_QUALITY as
+                | ImageQualityType
+                | undefined) ?? FALLBACK_IMAGE_QUALITY,
+        outputFormat:
+            parseOutputFormat(process.env.IMAGE_DEFAULT_OUTPUT_FORMAT) ??
+            FALLBACK_OUTPUT_FORMAT,
+        outputCompression:
+            parseOutputCompression(
+                process.env.IMAGE_DEFAULT_OUTPUT_COMPRESSION
+            ) ?? FALLBACK_OUTPUT_COMPRESSION,
     },
     tokens: {
-        tokensPerRefresh: readNumberEnv('IMAGE_TOKENS_PER_REFRESH', FALLBACK_TOKENS_PER_REFRESH),
-        refreshIntervalMs: readNumberEnv('IMAGE_TOKEN_REFRESH_INTERVAL_MS', FALLBACK_REFRESH_INTERVAL_MS),
-        modelTokenMultipliers: parseMultiplierOverrides()
-    }
+        tokensPerRefresh: readNumberEnv(
+            'IMAGE_TOKENS_PER_REFRESH',
+            FALLBACK_TOKENS_PER_REFRESH
+        ),
+        refreshIntervalMs: readNumberEnv(
+            'IMAGE_TOKEN_REFRESH_INTERVAL_MS',
+            FALLBACK_REFRESH_INTERVAL_MS
+        ),
+        modelTokenMultipliers: parseMultiplierOverrides(),
+    },
 };
 
 /**

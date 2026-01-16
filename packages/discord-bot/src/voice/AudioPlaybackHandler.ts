@@ -11,7 +11,14 @@
  * Ethics: Controls how and when AI-generated speech is delivered to users in voice channels, affecting the quality and timing of AI participation.
  */
 
-import { AudioPlayer, VoiceConnection, AudioPlayerStatus, AudioPlayerError, createAudioResource, StreamType } from '@discordjs/voice';
+import {
+    AudioPlayer,
+    VoiceConnection,
+    AudioPlayerStatus,
+    AudioPlayerError,
+    createAudioResource,
+    StreamType,
+} from '@discordjs/voice';
 import { logger } from '../utils/logger.js';
 import { GuildAudioPipeline } from './GuildAudioPipeline.js';
 import { upsampleToDiscord } from './audioTransforms.js';
@@ -25,9 +32,14 @@ export class AudioPlaybackHandler {
     private isProcessingQueue: Map<string, boolean> = new Map();
     private pipelineCleanupTimers: Map<string, NodeJS.Timeout> = new Map();
 
-    public async playAudioToChannel(connection: VoiceConnection, audioData: Buffer): Promise<void> {
+    public async playAudioToChannel(
+        connection: VoiceConnection,
+        audioData: Buffer
+    ): Promise<void> {
         const guildId = connection.joinConfig.guildId;
-        logger.debug(`[AudioPlayback] Adding audio chunk to queue for guild ${guildId}`);
+        logger.debug(
+            `[AudioPlayback] Adding audio chunk to queue for guild ${guildId}`
+        );
 
         this.clearPipelineCleanupTimer(guildId);
 
@@ -37,7 +49,9 @@ export class AudioPlaybackHandler {
 
         const queue = this.audioQueues.get(guildId)!;
         queue.push(audioData);
-        logger.debug(`[AudioPlayback] Added audio chunk to queue for guild ${guildId}, queue length: ${queue.length}`);
+        logger.debug(
+            `[AudioPlayback] Added audio chunk to queue for guild ${guildId}, queue length: ${queue.length}`
+        );
 
         this.ensurePipeline(connection);
 
@@ -55,14 +69,19 @@ export class AudioPlaybackHandler {
             return this.pipelines.get(guildId)!;
         }
 
-        logger.debug(`[AudioPlayback] Creating new audio pipeline for guild ${guildId}`);
+        logger.debug(
+            `[AudioPlayback] Creating new audio pipeline for guild ${guildId}`
+        );
         const pipeline = new GuildAudioPipeline();
         this.pipelines.set(guildId, pipeline);
 
         const player = pipeline.getPlayer();
 
         pipeline.getOpusEncoder().once('error', (error: Error) => {
-            logger.error(`[AudioPlayback] Opus encoder error for guild ${guildId}:`, error);
+            logger.error(
+                `[AudioPlayback] Opus encoder error for guild ${guildId}:`,
+                error
+            );
             const queue = this.audioQueues.get(guildId);
             this.cleanupPipeline(guildId);
             if (queue && queue.length > 0) {
@@ -71,10 +90,15 @@ export class AudioPlaybackHandler {
         });
 
         player.on(AudioPlayerStatus.Idle, () => {
-            logger.debug(`[AudioPlayback] Player idle for guild ${guildId}, checking for more audio`);
+            logger.debug(
+                `[AudioPlayback] Player idle for guild ${guildId}, checking for more audio`
+            );
             this.processAudioQueue(connection)
                 .catch((error: Error) => {
-                    logger.error(`[AudioPlayback] Error processing next item in queue:`, error);
+                    logger.error(
+                        `[AudioPlayback] Error processing next item in queue:`,
+                        error
+                    );
                 })
                 .finally(() => {
                     const queue = this.audioQueues.get(guildId);
@@ -85,7 +109,10 @@ export class AudioPlaybackHandler {
         });
 
         player.on('error', (error: AudioPlayerError) => {
-            logger.error(`[AudioPlayback] Player error for guild ${guildId}:`, error);
+            logger.error(
+                `[AudioPlayback] Player error for guild ${guildId}:`,
+                error
+            );
             this.cleanupPipeline(guildId);
             this.retryProcessingQueue(connection);
         });
@@ -95,7 +122,10 @@ export class AudioPlaybackHandler {
                 connection.subscribe(player);
             }
         } catch (error) {
-            logger.error(`[AudioPlayback] Error subscribing connection for guild ${guildId}:`, error);
+            logger.error(
+                `[AudioPlayback] Error subscribing connection for guild ${guildId}:`,
+                error
+            );
             this.cleanupPipeline(guildId);
             throw error;
         }
@@ -103,7 +133,9 @@ export class AudioPlaybackHandler {
         return pipeline;
     }
 
-    private async processAudioQueue(connection: VoiceConnection): Promise<void> {
+    private async processAudioQueue(
+        connection: VoiceConnection
+    ): Promise<void> {
         const guildId = connection.joinConfig.guildId;
         const queue = this.audioQueues.get(guildId);
 
@@ -122,12 +154,18 @@ export class AudioPlaybackHandler {
         let encounteredError = false;
 
         try {
-            const pipeline = this.pipelines.get(guildId) ?? this.ensurePipeline(connection);
+            const pipeline =
+                this.pipelines.get(guildId) ?? this.ensurePipeline(connection);
             const player = pipeline.getPlayer();
 
             if (!pipeline.hasResource()) {
-                const opusStream = pipeline.getPCMStream().pipe(pipeline.getOpusEncoder());
-                const resource = createAudioResource(opusStream, { inputType: StreamType.Opus, inlineVolume: true });
+                const opusStream = pipeline
+                    .getPCMStream()
+                    .pipe(pipeline.getOpusEncoder());
+                const resource = createAudioResource(opusStream, {
+                    inputType: StreamType.Opus,
+                    inlineVolume: true,
+                });
                 player.play(resource);
                 pipeline.markResourceCreated();
             }
@@ -146,7 +184,10 @@ export class AudioPlaybackHandler {
 
                     await pipeline.writePCM(pcmChunk);
                 } catch (error) {
-                    logger.error('[AudioPlayback] Error writing audio data to pipeline:', error);
+                    logger.error(
+                        '[AudioPlayback] Error writing audio data to pipeline:',
+                        error
+                    );
                     if (audioData) {
                         queue.unshift(audioData);
                     }
@@ -199,7 +240,10 @@ export class AudioPlaybackHandler {
     }
 
     private schedulePipelineCleanup(guildId: string): void {
-        if (!this.pipelines.has(guildId) || this.pipelineCleanupTimers.has(guildId)) {
+        if (
+            !this.pipelines.has(guildId) ||
+            this.pipelineCleanupTimers.has(guildId)
+        ) {
             return;
         }
 
@@ -248,7 +292,10 @@ export class AudioPlaybackHandler {
         const pipeline = this.pipelines.get(guildId);
         if (pipeline) {
             void pipeline.destroy().catch((error: Error) => {
-                logger.error(`[AudioPlayback] Error cleaning up pipeline for guild ${guildId}:`, error);
+                logger.error(
+                    `[AudioPlayback] Error cleaning up pipeline for guild ${guildId}:`,
+                    error
+                );
             });
             this.pipelines.delete(guildId);
         }
@@ -271,4 +318,3 @@ export class AudioPlaybackHandler {
         this.pipelineCleanupTimers.clear();
     }
 }
-

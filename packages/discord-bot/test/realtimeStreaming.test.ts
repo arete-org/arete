@@ -43,10 +43,18 @@ class MockEventHandler extends RealtimeEventHandler {
 }
 
 class FakeRealtimeSession {
-    public readonly chunks: { speaker: string; buffer: Buffer; userId?: string }[] = [];
+    public readonly chunks: {
+        speaker: string;
+        buffer: Buffer;
+        userId?: string;
+    }[] = [];
     public flushes = 0;
 
-    async sendAudio(buffer: Buffer, speaker: string, userId?: string): Promise<void> {
+    async sendAudio(
+        buffer: Buffer,
+        speaker: string,
+        userId?: string
+    ): Promise<void> {
         this.chunks.push({ speaker, buffer: Buffer.from(buffer), userId });
     }
 
@@ -63,7 +71,7 @@ const noopConnection = {} as VoiceConnection;
 
 const waitForPipeline = async (session: { audioPipeline: Promise<void> }) => {
     await session.audioPipeline;
-    await new Promise(resolve => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
 };
 
 test('RealtimeAudioHandler annotates speaker label before commit', async () => {
@@ -89,7 +97,9 @@ test('RealtimeAudioHandler annotates speaker label before commit', async () => {
 test('VoiceSessionManager forwards multi-speaker audio with display names', async () => {
     const manager = new VoiceSessionManager();
     const audioCapture = new AudioCaptureHandler();
-    const realtimeSession = new FakeRealtimeSession() as unknown as RealtimeSession & FakeRealtimeSession;
+    const realtimeSession =
+        new FakeRealtimeSession() as unknown as RealtimeSession &
+            FakeRealtimeSession;
     const participants = new Map([
         ['user-1', 'Alice'],
         ['user-2', 'Bob'],
@@ -100,23 +110,42 @@ test('VoiceSessionManager forwards multi-speaker audio with display names', asyn
         realtimeSession,
         audioCapture,
         noopPlaybackHandler,
-        participants,
+        participants
     );
 
     manager.addSession('guild-1', session);
 
-    audioCapture.emit('audioChunk', { guildId: 'guild-1', userId: 'user-1', audioBuffer: Buffer.from([1, 2]) });
-    audioCapture.emit('audioChunk', { guildId: 'guild-1', userId: 'user-2', audioBuffer: Buffer.from([3, 4]) });
-    audioCapture.emit('speakerSilence', { guildId: 'guild-1', userId: 'user-1' });
+    audioCapture.emit('audioChunk', {
+        guildId: 'guild-1',
+        userId: 'user-1',
+        audioBuffer: Buffer.from([1, 2]),
+    });
+    audioCapture.emit('audioChunk', {
+        guildId: 'guild-1',
+        userId: 'user-2',
+        audioBuffer: Buffer.from([3, 4]),
+    });
+    audioCapture.emit('speakerSilence', {
+        guildId: 'guild-1',
+        userId: 'user-1',
+    });
 
     await waitForPipeline(session);
 
     assert.deepEqual(
-        realtimeSession.chunks.map(({ speaker }: { speaker: string }) => speaker),
-        ['Alice', 'Bob'],
+        realtimeSession.chunks.map(
+            ({ speaker }: { speaker: string }) => speaker
+        ),
+        ['Alice', 'Bob']
     );
-    assert.deepEqual(Array.from(realtimeSession.chunks[0].buffer.values()), [1, 2]);
-    assert.deepEqual(Array.from(realtimeSession.chunks[1].buffer.values()), [3, 4]);
+    assert.deepEqual(
+        Array.from(realtimeSession.chunks[0].buffer.values()),
+        [1, 2]
+    );
+    assert.deepEqual(
+        Array.from(realtimeSession.chunks[1].buffer.values()),
+        [3, 4]
+    );
     assert.equal(realtimeSession.flushes, 1);
 
     manager.removeSession('guild-1');

@@ -11,7 +11,6 @@ import { logger } from '../utils/logger.js';
 import { getVoiceConnection } from '@discordjs/voice';
 
 export class VoiceConnectionManager {
-
     constructor() {
         // Initialize
     }
@@ -35,22 +34,37 @@ export class VoiceConnectionManager {
                 try {
                     const member = await guild.members.fetchMe();
                     if (member?.voice.channel) {
-                        logger.warn(`Found bot in voice channel ${member.voice.channel.name} (${guild.name}) - cleaning up`);
+                        logger.warn(
+                            `Found bot in voice channel ${member.voice.channel.name} (${guild.name}) - cleaning up`
+                        );
                         const connection = getVoiceConnection(guildId);
                         if (connection) {
-                            logger.debug(`Cleaning up connection in guild ${guild.name} (${guildId})`);
-                            await this.cleanupVoiceConnection(connection, client);
-                            logger.debug(`Successfully cleaned up connection in guild ${guild.name}`);
+                            logger.debug(
+                                `Cleaning up connection in guild ${guild.name} (${guildId})`
+                            );
+                            await this.cleanupVoiceConnection(
+                                connection,
+                                client
+                            );
+                            logger.debug(
+                                `Successfully cleaned up connection in guild ${guild.name}`
+                            );
                             cleanedCount++;
                         }
                     }
                 } catch (error) {
-                    logger.error(`Error cleaning up voice connection in guild ${guild.name} (${guildId}):`, error);
+                    logger.error(
+                        `Error cleaning up voice connection in guild ${guild.name} (${guildId}):`,
+                        error
+                    );
                 }
             }
             logger.info(`Cleaned ${cleanedCount} voice connections`);
         } catch (error) {
-            logger.error('Unexpected error in cleanupExistingConnections:', error);
+            logger.error(
+                'Unexpected error in cleanupExistingConnections:',
+                error
+            );
             throw error;
         }
     }
@@ -58,7 +72,10 @@ export class VoiceConnectionManager {
     /**
      * Cleans up a specific voice connection
      */
-    public async cleanupVoiceConnection(connection: VoiceConnection | null, client: Client): Promise<void> {
+    public async cleanupVoiceConnection(
+        connection: VoiceConnection | null,
+        client: Client
+    ): Promise<void> {
         if (!connection) {
             logger.warn('No voice connection found to clean up');
             return;
@@ -66,17 +83,24 @@ export class VoiceConnectionManager {
 
         try {
             const guildId = connection.joinConfig.guildId;
-            logger.debug(`[cleanupVoiceConnection] Starting cleanup for guild ${guildId}`);
+            logger.debug(
+                `[cleanupVoiceConnection] Starting cleanup for guild ${guildId}`
+            );
 
             // Stop any ongoing audio playback
             try {
-                const subscription = connection.state.status === VoiceConnectionStatus.Ready
-                    ? connection.state.subscription
-                    : null;
+                const subscription =
+                    connection.state.status === VoiceConnectionStatus.Ready
+                        ? connection.state.subscription
+                        : null;
                 if (subscription) {
-                    logger.debug('[cleanupVoiceConnection] Unsubscribing from audio subscription');
+                    logger.debug(
+                        '[cleanupVoiceConnection] Unsubscribing from audio subscription'
+                    );
                     subscription.unsubscribe();
-                    logger.debug('[cleanupVoiceConnection] Attempting to stop audio player');
+                    logger.debug(
+                        '[cleanupVoiceConnection] Attempting to stop audio player'
+                    );
                     subscription.player?.stop(true);
                 }
             } catch (error) {
@@ -84,7 +108,9 @@ export class VoiceConnectionManager {
             }
 
             // Destroy the connection
-            logger.debug('[cleanupVoiceConnection] Destroying voice connection');
+            logger.debug(
+                '[cleanupVoiceConnection] Destroying voice connection'
+            );
             connection.destroy();
 
             // Leave the voice channel if possible
@@ -94,16 +120,25 @@ export class VoiceConnectionManager {
                     if (guild) {
                         const member = guild.members.me;
                         if (member?.voice.channel) {
-                            logger.debug(`[cleanupVoiceConnection] Disconnecting from voice channel ${member.voice.channel.name}`);
-                            await member.voice.disconnect('Cleaning up old connection');
+                            logger.debug(
+                                `[cleanupVoiceConnection] Disconnecting from voice channel ${member.voice.channel.name}`
+                            );
+                            await member.voice.disconnect(
+                                'Cleaning up old connection'
+                            );
                         }
                     }
                 } catch (error) {
-                    logger.error('Error disconnecting from voice channel:', error);
+                    logger.error(
+                        'Error disconnecting from voice channel:',
+                        error
+                    );
                 }
             }
 
-            logger.debug(`[cleanupVoiceConnection] Successfully cleaned up connection for guild ${guildId}`);
+            logger.debug(
+                `[cleanupVoiceConnection] Successfully cleaned up connection for guild ${guildId}`
+            );
         } catch (error) {
             logger.error('Error in cleanupVoiceConnection:', error);
             throw error;
@@ -114,7 +149,10 @@ export class VoiceConnectionManager {
 /**
  * Cleans up a specific voice connection (standalone function for backward compatibility)
  */
-export async function cleanupVoiceConnection(connection: VoiceConnection | null, client: Client): Promise<void> {
+export async function cleanupVoiceConnection(
+    connection: VoiceConnection | null,
+    client: Client
+): Promise<void> {
     const manager = new VoiceConnectionManager();
     return manager.cleanupVoiceConnection(connection, client);
 }

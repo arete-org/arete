@@ -1,31 +1,31 @@
 {
-  "commands": {
-    "cost-summary": "pnpm exec tsx packages/discord-bot/src/utils/logger.ts --cost-summary",
-    "test-discord": "pnpm test packages/discord-bot/test",
-    "test-shared": "pnpm test packages/shared/test",
-    "build-all": "pnpm build",
-    "type-check": "pnpm tsc --noEmit",
-    "lint-check": "pnpm eslint packages/",
-    "format-check": "pnpm prettier --check packages/",
-    "format-fix": "pnpm prettier --write packages/",
-    "pre-review": "pnpm pre-review"
-  },
-  "tasks": {
-    "cost-summary": {
-      "command": "pnpm exec tsx -e \"import { logLLMCostSummary } from './packages/discord-bot/src/utils/logger.ts'; logLLMCostSummary();\"",
-      "description": "Check LLM cost summary for current session"
+    "commands": {
+        "cost-summary": "pnpm exec tsx packages/discord-bot/src/utils/logger.ts --cost-summary",
+        "test-discord": "pnpm test packages/discord-bot/test",
+        "test-shared": "pnpm test packages/shared/test",
+        "build-all": "pnpm build",
+        "type-check": "pnpm tsc --noEmit",
+        "lint-check": "pnpm eslint packages/",
+        "format-check": "pnpm prettier --check packages/",
+        "format-fix": "pnpm prettier --write packages/",
+        "pre-review": "pnpm pre-review"
     },
-    "pre-review": {
-      "command": "pnpm pre-review",
-      "description": "Run automated validation pipeline (ARETE tags, types, linting)"
-    },
-    "format-code": {
-      "command": "pnpm prettier --write packages/",
-      "description": "Format all code with Prettier"
-    },
-    "type-check": {
-      "command": "pnpm tsc --noEmit",
-      "description": "Run TypeScript type checking"
+    "tasks": {
+        "cost-summary": {
+            "command": "pnpm exec tsx -e \"import { logLLMCostSummary } from './packages/discord-bot/src/utils/logger.ts'; logLLMCostSummary();\"",
+            "description": "Check LLM cost summary for current session"
+        },
+        "pre-review": {
+            "command": "pnpm pre-review",
+            "description": "Run automated validation pipeline (ARETE tags, types, linting)"
+        },
+        "format-code": {
+            "command": "pnpm prettier --write packages/",
+            "description": "Format all code with Prettier"
+        },
+        "type-check": {
+            "command": "pnpm tsc --noEmit",
+            "description": "Run TypeScript type checking"
+        }
     }
-  }
 }

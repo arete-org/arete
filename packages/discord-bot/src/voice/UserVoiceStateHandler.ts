@@ -31,29 +31,54 @@ export class UserVoiceStateHandler {
         // Skip if this is a bot (to avoid self-triggering)
         if (member?.user.bot) return;
 
-        logger.debug(`[handleUserVoiceChange] Voice state change in guild ${guildId} (${newState.guild.name}):`);
+        logger.debug(
+            `[handleUserVoiceChange] Voice state change in guild ${guildId} (${newState.guild.name}):`
+        );
         logger.debug(`- Member: ${member?.user.tag} (${member?.id})`);
-        logger.debug(`- Old channel: ${oldState.channelId} (${oldState.channel?.name})`);
-        logger.debug(`- New channel: ${newState.channelId} (${newState.channel?.name})`);
+        logger.debug(
+            `- Old channel: ${oldState.channelId} (${oldState.channel?.name})`
+        );
+        logger.debug(
+            `- New channel: ${newState.channelId} (${newState.channel?.name})`
+        );
 
         // Get the bot's voice channel
         const botVoiceChannel = newState.guild.members.me?.voice.channel;
         if (!botVoiceChannel) {
-            logger.debug(`[handleUserVoiceChange] Bot is not in a voice channel in guild ${guildId}`);
+            logger.debug(
+                `[handleUserVoiceChange] Bot is not in a voice channel in guild ${guildId}`
+            );
             return;
         }
 
-        logger.debug(`[handleUserVoiceChange] Bot is in voice channel: ${botVoiceChannel.id} (${botVoiceChannel.name})`);
+        logger.debug(
+            `[handleUserVoiceChange] Bot is in voice channel: ${botVoiceChannel.id} (${botVoiceChannel.name})`
+        );
 
         // User joined the bot's voice channel
-        if ((!oldState.channelId || oldState.channelId !== botVoiceChannel.id) &&
-            newState.channelId === botVoiceChannel.id) {
-            await this.handleUserJoinedBotChannel(newState, botVoiceChannel, client, startConversationCallback);
+        if (
+            (!oldState.channelId ||
+                oldState.channelId !== botVoiceChannel.id) &&
+            newState.channelId === botVoiceChannel.id
+        ) {
+            await this.handleUserJoinedBotChannel(
+                newState,
+                botVoiceChannel,
+                client,
+                startConversationCallback
+            );
         }
         // User left the bot's voice channel
-        else if (oldState.channelId === botVoiceChannel.id &&
-            (!newState.channelId || newState.channelId !== botVoiceChannel.id)) {
-            await this.handleUserLeftBotChannel(oldState, botVoiceChannel, guildId, client);
+        else if (
+            oldState.channelId === botVoiceChannel.id &&
+            (!newState.channelId || newState.channelId !== botVoiceChannel.id)
+        ) {
+            await this.handleUserLeftBotChannel(
+                oldState,
+                botVoiceChannel,
+                guildId,
+                client
+            );
         }
     }
 
@@ -67,19 +92,29 @@ export class UserVoiceStateHandler {
         const guildId = newState.guild.id;
 
         if (!user) {
-            logger.warn(`[handleUserVoiceChange] User object is null or undefined`);
+            logger.warn(
+                `[handleUserVoiceChange] User object is null or undefined`
+            );
             return;
         }
 
-        logger.info(`[handleUserVoiceChange] User ${user.tag} (${user.id}) joined voice channel ${botVoiceChannel.name}`);
+        logger.info(
+            `[handleUserVoiceChange] User ${user.tag} (${user.id}) joined voice channel ${botVoiceChannel.name}`
+        );
 
         const displayName = newState.member?.displayName || user.username;
-        this.sessionManager.updateParticipantLabel(guildId, user.id, displayName);
+        this.sessionManager.updateParticipantLabel(
+            guildId,
+            user.id,
+            displayName
+        );
 
         // Double-check the bot is still in the voice channel
         const currentBotChannel = newState.guild.members.me?.voice.channel;
         if (!currentBotChannel || currentBotChannel.id !== botVoiceChannel.id) {
-            logger.warn(`[handleUserVoiceChange] Bot is no longer in the expected voice channel`);
+            logger.warn(
+                `[handleUserVoiceChange] Bot is no longer in the expected voice channel`
+            );
             return;
         }
 
@@ -88,7 +123,9 @@ export class UserVoiceStateHandler {
         if (user && initiatingUserId === user.id) {
             try {
                 await startConversationCallback(guildId);
-                logger.info(`Successfully started conversation with ${user.tag} in ${botVoiceChannel.name}`);
+                logger.info(
+                    `Successfully started conversation with ${user.tag} in ${botVoiceChannel.name}`
+                );
             } catch (error) {
                 logger.error('Error starting conversation:', error);
                 // If conversation fails, clean up the connection
@@ -107,7 +144,9 @@ export class UserVoiceStateHandler {
         client: Client
     ): Promise<void> {
         const user = oldState.member?.user;
-        logger.info(`User ${user?.tag || 'Unknown'} left voice channel ${botVoiceChannel.name}`);
+        logger.info(
+            `User ${user?.tag || 'Unknown'} left voice channel ${botVoiceChannel.name}`
+        );
 
         if (user) {
             this.sessionManager.removeParticipant(guildId, user.id);
@@ -125,9 +164,13 @@ export class UserVoiceStateHandler {
     }
 
     public registerInitiatingUser(guildId: string, userId: string): void {
-        logger.debug(`[registerInitiatingUser] Starting registration for guild ${guildId}, user ${userId}`);
+        logger.debug(
+            `[registerInitiatingUser] Starting registration for guild ${guildId}, user ${userId}`
+        );
         this.initiatingUsers.set(guildId, userId);
-        logger.debug(`[registerInitiatingUser] Stored initiating user ${userId} for guild ${guildId}`);
+        logger.debug(
+            `[registerInitiatingUser] Stored initiating user ${userId} for guild ${guildId}`
+        );
     }
 
     public getInitiatingUser(guildId: string): string | undefined {

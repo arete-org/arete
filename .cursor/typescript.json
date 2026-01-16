@@ -1,19 +1,19 @@
 {
-  "compilerOptions": {
-    "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true
-  },
-  "preferences": {
-    "preferInterfaces": true,
-    "preferTypeAliases": false,
-    "preferConstAssertions": true,
-    "interfaceForPublic": true,
-    "typeForUnions": true
-  }
+    "compilerOptions": {
+        "strict": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "strictFunctionTypes": true,
+        "noImplicitReturns": true,
+        "noFallthroughCasesInSwitch": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true
+    },
+    "preferences": {
+        "preferInterfaces": true,
+        "preferTypeAliases": false,
+        "preferConstAssertions": true,
+        "interfaceForPublic": true,
+        "typeForUnions": true
+    }
 }

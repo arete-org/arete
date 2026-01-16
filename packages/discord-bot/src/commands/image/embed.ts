@@ -11,7 +11,7 @@ import {
     EMBED_DESCRIPTION_LIMIT,
     EMBED_FIELD_VALUE_LIMIT,
     EMBED_FOOTER_TEXT_LIMIT,
-    PROMPT_DISPLAY_LIMIT
+    PROMPT_DISPLAY_LIMIT,
 } from './constants.js';
 
 export function sanitizeForEmbed(value: string): string {
@@ -30,8 +30,13 @@ export function truncateForEmbed(
     }
 
     const ellipsis = '…';
-    const truncationNote = options.includeTruncationNote ? '\n*(truncated)*' : '';
-    const availableLength = Math.max(0, limit - ellipsis.length - truncationNote.length);
+    const truncationNote = options.includeTruncationNote
+        ? '\n*(truncated)*'
+        : '';
+    const availableLength = Math.max(
+        0,
+        limit - ellipsis.length - truncationNote.length
+    );
     const truncated = sanitized.slice(0, availableLength);
     return `${truncated}${ellipsis}${truncationNote}`;
 }
@@ -41,7 +46,9 @@ export function setEmbedFooterText(embed: EmbedBuilder, text: string) {
 }
 
 export function setEmbedDescription(embed: EmbedBuilder, description: string) {
-    embed.setDescription(truncateForEmbed(description, EMBED_DESCRIPTION_LIMIT));
+    embed.setDescription(
+        truncateForEmbed(description, EMBED_DESCRIPTION_LIMIT)
+    );
 }
 
 export function setOrAddEmbedField(
@@ -51,18 +58,24 @@ export function setOrAddEmbedField(
     {
         inline = false,
         includeTruncationNote = false,
-        maxLength = EMBED_FIELD_VALUE_LIMIT
+        maxLength = EMBED_FIELD_VALUE_LIMIT,
     }: {
         inline?: boolean;
         includeTruncationNote?: boolean;
         maxLength?: number;
     } = {}
 ) {
-    const formattedValue = truncateForEmbed(value, maxLength, { includeTruncationNote });
-    const field: APIEmbedField = inline ? { name, value: formattedValue, inline } : { name, value: formattedValue };
+    const formattedValue = truncateForEmbed(value, maxLength, {
+        includeTruncationNote,
+    });
+    const field: APIEmbedField = inline
+        ? { name, value: formattedValue, inline }
+        : { name, value: formattedValue };
 
     const fields = embed.data.fields ?? [];
-    const index = fields.findIndex(existingField => existingField.name === name);
+    const index = fields.findIndex(
+        (existingField) => existingField.name === name
+    );
 
     if (index >= 0) {
         embed.spliceFields(index, 1, field);
@@ -77,7 +90,10 @@ export interface PromptFieldOptions {
     whenMissing?: string;
 }
 
-export function buildPromptFieldValue(value: string | null | undefined, options: PromptFieldOptions): string {
+export function buildPromptFieldValue(
+    value: string | null | undefined,
+    options: PromptFieldOptions
+): string {
     const fallback = options.whenMissing ?? 'None';
 
     if (!value || !value.trim()) {
@@ -87,7 +103,9 @@ export function buildPromptFieldValue(value: string | null | undefined, options:
     const sanitized = sanitizeForEmbed(value);
     const exceedsThreshold = sanitized.length > PROMPT_DISPLAY_LIMIT;
     let preview = exceedsThreshold
-        ? truncateForEmbed(sanitized, PROMPT_DISPLAY_LIMIT, { includeTruncationNote: true })
+        ? truncateForEmbed(sanitized, PROMPT_DISPLAY_LIMIT, {
+              includeTruncationNote: true,
+          })
         : sanitized;
 
     if (exceedsThreshold && options.fullContentUrl) {

@@ -1,37 +1,47 @@
 {
-  "compilerOptions": {
-    // Base compiler options for all packages
-    "target": "esnext",
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "jsx": "react-jsx",
-    "declaration": true,
-    "sourceMap": true,
-    "composite": true,
-    "incremental": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noUnusedParameters": true,
-    "noUnusedLocals": true,
-    "noImplicitReturns": true,
-    
-    // Path aliases
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./packages/*/src"],
-      "@arete/backend": ["./packages/backend/src/index.ts"],
-      "@arete/backend/*": ["./packages/backend/src/*"],
-      "@components/*": ["./packages/web/src/components/*"],
-      "@pages/*": ["./packages/web/src/pages/*"],
-      "@styles/*": ["./packages/web/src/styles/*"],
-      "@theme": ["./packages/web/src/theme"],
-      "@types/*": ["./packages/web/src/types/*"]
-    }
-  },
-  "include": ["packages/**/*.ts", "packages/**/*.tsx", "mcp/**/*.ts", "mcp/**/types/*.d.ts"],
-  "exclude": ["node_modules", "**/node_modules/*", "**/dist/*", "packages/web/vite.config.ts"]
+    "compilerOptions": {
+        // Base compiler options for all packages
+        "target": "esnext",
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "jsx": "react-jsx",
+        "declaration": true,
+        "sourceMap": true,
+        "composite": true,
+        "incremental": true,
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "noUnusedParameters": true,
+        "noUnusedLocals": true,
+        "noImplicitReturns": true,
+
+        // Path aliases
+        "baseUrl": ".",
+        "paths": {
+            "@/*": ["./packages/*/src"],
+            "@arete/backend": ["./packages/backend/src/index.ts"],
+            "@arete/backend/*": ["./packages/backend/src/*"],
+            "@components/*": ["./packages/web/src/components/*"],
+            "@pages/*": ["./packages/web/src/pages/*"],
+            "@styles/*": ["./packages/web/src/styles/*"],
+            "@theme": ["./packages/web/src/theme"],
+            "@types/*": ["./packages/web/src/types/*"]
+        }
+    },
+    "include": [
+        "packages/**/*.ts",
+        "packages/**/*.tsx",
+        "mcp/**/*.ts",
+        "mcp/**/types/*.d.ts"
+    ],
+    "exclude": [
+        "node_modules",
+        "**/node_modules/*",
+        "**/dist/*",
+        "packages/web/vite.config.ts"
+    ]
 }

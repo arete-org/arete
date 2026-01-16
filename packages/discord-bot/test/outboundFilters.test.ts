@@ -16,10 +16,7 @@ test('normalizeOutboundLinks wraps bare URLs with markdown link text', () => {
     const input = 'Docs at https://example.com.';
     const result = normalizeOutboundLinks(input);
 
-    assert.equal(
-        result.content,
-        'Docs at <https://example.com>.'
-    );
+    assert.equal(result.content, 'Docs at <https://example.com>.');
     assert.deepEqual(result.changes, ['wrapped_urls:1']);
 });
 
@@ -113,7 +110,8 @@ test('normalizeOutboundLinks handles trailing punctuation and parentheses', () =
         },
         {
             input: 'Commas/colons: https://example.com, next: https://example.org:',
-            expected: 'Commas/colons: <https://example.com>, next: <https://example.org>:',
+            expected:
+                'Commas/colons: <https://example.com>, next: <https://example.org>:',
             count: 2,
         },
     ];
@@ -130,10 +128,7 @@ test('normalizeOutboundLinks wraps URLs with query strings and parentheses', () 
     const input = 'Lookup https://example.com?foo=bar(baz).';
     const result = normalizeOutboundLinks(input);
 
-    assert.equal(
-        result.content,
-        'Lookup <https://example.com?foo=bar(baz)>.' 
-    );
+    assert.equal(result.content, 'Lookup <https://example.com?foo=bar(baz)>.');
     assert.deepEqual(result.changes, ['wrapped_urls:1']);
 });
 

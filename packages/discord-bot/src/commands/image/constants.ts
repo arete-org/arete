@@ -26,18 +26,24 @@ export const DEFAULT_TEXT_MODEL = imageConfig.defaults.textModel;
 export const DEFAULT_IMAGE_MODEL = imageConfig.defaults.imageModel;
 export const DEFAULT_IMAGE_QUALITY = imageConfig.defaults.quality;
 export const DEFAULT_IMAGE_OUTPUT_FORMAT = imageConfig.defaults.outputFormat;
-export const DEFAULT_IMAGE_OUTPUT_COMPRESSION = imageConfig.defaults.outputCompression;
+export const DEFAULT_IMAGE_OUTPUT_COMPRESSION =
+    imageConfig.defaults.outputCompression;
 export const IMAGE_VARIATION_CUSTOM_ID_PREFIX = 'image:variation:';
 export const IMAGE_RETRY_CUSTOM_ID_PREFIX = 'image:retry:';
-export const IMAGE_VARIATION_GENERATE_CUSTOM_ID_PREFIX = 'image:variation:generate:';
+export const IMAGE_VARIATION_GENERATE_CUSTOM_ID_PREFIX =
+    'image:variation:generate:';
 export const IMAGE_VARIATION_QUALITY_SELECT_PREFIX = 'image:variation:quality:';
-export const IMAGE_VARIATION_IMAGE_MODEL_SELECT_PREFIX = 'image:variation:image-model:';
-export const IMAGE_VARIATION_PROMPT_ADJUST_SELECT_PREFIX = 'image:variation:prompt-adjust:';
+export const IMAGE_VARIATION_IMAGE_MODEL_SELECT_PREFIX =
+    'image:variation:image-model:';
+export const IMAGE_VARIATION_PROMPT_ADJUST_SELECT_PREFIX =
+    'image:variation:prompt-adjust:';
 export const IMAGE_VARIATION_ASPECT_SELECT_PREFIX = 'image:variation:aspect:';
 export const IMAGE_VARIATION_PROMPT_MODAL_ID_PREFIX = 'image:variation:prompt:';
 export const IMAGE_VARIATION_PROMPT_INPUT_ID = 'variationPrompt';
-export const IMAGE_VARIATION_RESET_PROMPT_CUSTOM_ID_PREFIX = 'image:variation:reset-prompt:';
-export const IMAGE_VARIATION_CANCEL_CUSTOM_ID_PREFIX = 'image:variation:cancel:';
+export const IMAGE_VARIATION_RESET_PROMPT_CUSTOM_ID_PREFIX =
+    'image:variation:reset-prompt:';
+export const IMAGE_VARIATION_CANCEL_CUSTOM_ID_PREFIX =
+    'image:variation:cancel:';
 // When the prompt is already near the embed field budget, skip prompt
 // enlargement to avoid duplicate/truncated fields.
 export const PROMPT_ADJUSTMENT_MIN_REMAINING_RATIO = 0.2;

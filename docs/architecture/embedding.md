@@ -10,12 +10,12 @@ Add the following iframe code to embed ARETE in your website:
 
 ```html
 <iframe
-  src="https://arete.fly.dev/embed"
-  width="100%"
-  height="800"
-  frameborder="0"
-  allow="clipboard-read; clipboard-write"
-  title="ARETE - Ethics-first AI assistant"
+    src="https://arete.fly.dev/embed"
+    width="100%"
+    height="800"
+    frameborder="0"
+    allow="clipboard-read; clipboard-write"
+    title="ARETE - Ethics-first AI assistant"
 ></iframe>
 ```
 
@@ -24,28 +24,34 @@ Add the following iframe code to embed ARETE in your website:
 For a responsive embed that adapts to different screen sizes, use CSS:
 
 ```html
-<div style="position: relative; width: 100%; max-width: 1200px; margin: 0 auto;">
-  <div style="position: relative; padding-bottom: 100%; height: 0; overflow: hidden;">
-    <iframe
-      src="https://arete.fly.dev/embed"
-      style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"
-      allow="clipboard-read; clipboard-write"
-      title="ARETE - Ethics-first AI assistant"
-    ></iframe>
-  </div>
+<div
+    style="position: relative; width: 100%; max-width: 1200px; margin: 0 auto;"
+>
+    <div
+        style="position: relative; padding-bottom: 100%; height: 0; overflow: hidden;"
+    >
+        <iframe
+            src="https://arete.fly.dev/embed"
+            style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"
+            allow="clipboard-read; clipboard-write"
+            title="ARETE - Ethics-first AI assistant"
+        ></iframe>
+    </div>
 </div>
 ```
 
 Or with a fixed aspect ratio (recommended for better UX):
 
 ```html
-<div style="position: relative; width: 100%; max-width: 1200px; margin: 0 auto; aspect-ratio: 16 / 10;">
-  <iframe
-    src="https://arete.fly.dev/embed"
-    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"
-    allow="clipboard-read; clipboard-write"
-    title="ARETE - Ethics-first AI assistant"
-  ></iframe>
+<div
+    style="position: relative; width: 100%; max-width: 1200px; margin: 0 auto; aspect-ratio: 16 / 10;"
+>
+    <iframe
+        src="https://arete.fly.dev/embed"
+        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"
+        allow="clipboard-read; clipboard-write"
+        title="ARETE - Ethics-first AI assistant"
+    ></iframe>
 </div>
 ```
 
@@ -55,45 +61,45 @@ ARETE's embed automatically communicates its height to the parent window, allowi
 
 ```html
 <iframe
-  id="arete-embed"
-  src="https://arete.fly.dev/embed"
-  width="100%"
-  frameborder="0"
-  allow="clipboard-read; clipboard-write"
-  title="ARETE - Ethics-first AI assistant"
-  style="border: none; width: 100%; min-height: 800px;"
+    id="arete-embed"
+    src="https://arete.fly.dev/embed"
+    width="100%"
+    frameborder="0"
+    allow="clipboard-read; clipboard-write"
+    title="ARETE - Ethics-first AI assistant"
+    style="border: none; width: 100%; min-height: 800px;"
 ></iframe>
 
 <script>
-  (function() {
-    const iframe = document.getElementById('arete-embed');
-    if (!iframe) {
-      console.warn('ARETE embed: iframe element not found');
-      return;
-    }
-
-    // Disable scrolling on iframe
-    iframe.scrolling = 'no';
-    iframe.style.overflow = 'hidden';
-
-    // Listen for height messages from embed
-    window.addEventListener('message', (event) => {
-      // Optional: Validate origin for security (recommended in production)
-      // if (event.origin !== 'https://arete.fly.dev') return;
-      
-      if (event.data && event.data.type === 'arete-embed-height') {
-        const newHeight = event.data.height;
-        if (newHeight && newHeight > 0) {
-          iframe.style.height = newHeight + 'px';
-          // Debug logging (remove in production)
-          // console.log('ARETE embed resized to:', newHeight + 'px');
+    (function () {
+        const iframe = document.getElementById('arete-embed');
+        if (!iframe) {
+            console.warn('ARETE embed: iframe element not found');
+            return;
         }
-      }
-    });
 
-    // Fallback: Set initial height
-    iframe.style.minHeight = '800px';
-  })();
+        // Disable scrolling on iframe
+        iframe.scrolling = 'no';
+        iframe.style.overflow = 'hidden';
+
+        // Listen for height messages from embed
+        window.addEventListener('message', (event) => {
+            // Optional: Validate origin for security (recommended in production)
+            // if (event.origin !== 'https://arete.fly.dev') return;
+
+            if (event.data && event.data.type === 'arete-embed-height') {
+                const newHeight = event.data.height;
+                if (newHeight && newHeight > 0) {
+                    iframe.style.height = newHeight + 'px';
+                    // Debug logging (remove in production)
+                    // console.log('ARETE embed resized to:', newHeight + 'px');
+                }
+            }
+        });
+
+        // Fallback: Set initial height
+        iframe.style.minHeight = '800px';
+    })();
 </script>
 ```
 
@@ -112,67 +118,73 @@ If you're not using dynamic height, the embed route content typically requires a
 ```html
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ARETE Embedded</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 20px;
-      font-family: system-ui, -apple-system, sans-serif;
-    }
-    .embed-container {
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    .embed-container iframe {
-      width: 100%;
-      border: none;
-      min-height: 800px; /* Initial height, will be adjusted automatically */
-    }
-  </style>
-</head>
-<body>
-  <div class="embed-container">
-    <iframe
-      id="arete-embed"
-      src="https://arete.fly.dev/embed"
-      allow="clipboard-read; clipboard-write"
-      title="ARETE - Ethics-first AI assistant"
-    ></iframe>
-  </div>
-  
-  <script>
-    (function() {
-      const iframe = document.getElementById('arete-embed');
-      if (!iframe) {
-        console.warn('ARETE embed: iframe element not found');
-        return;
-      }
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>ARETE Embedded</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 20px;
+                font-family:
+                    system-ui,
+                    -apple-system,
+                    sans-serif;
+            }
+            .embed-container {
+                max-width: 1200px;
+                margin: 0 auto;
+            }
+            .embed-container iframe {
+                width: 100%;
+                border: none;
+                min-height: 800px; /* Initial height, will be adjusted automatically */
+            }
+        </style>
+    </head>
+    <body>
+        <div class="embed-container">
+            <iframe
+                id="arete-embed"
+                src="https://arete.fly.dev/embed"
+                allow="clipboard-read; clipboard-write"
+                title="ARETE - Ethics-first AI assistant"
+            ></iframe>
+        </div>
 
-      // Disable scrolling on iframe
-      iframe.scrolling = 'no';
-      iframe.style.overflow = 'hidden';
+        <script>
+            (function () {
+                const iframe = document.getElementById('arete-embed');
+                if (!iframe) {
+                    console.warn('ARETE embed: iframe element not found');
+                    return;
+                }
 
-      // Listen for height messages from embed
-      window.addEventListener('message', (event) => {
-        // Optional: Validate origin for security (recommended in production)
-        // if (event.origin !== 'https://arete.fly.dev') return;
-        
-        if (event.data && event.data.type === 'arete-embed-height') {
-          const newHeight = event.data.height;
-          if (newHeight && newHeight > 0) {
-            iframe.style.height = newHeight + 'px';
-          }
-        }
-      });
+                // Disable scrolling on iframe
+                iframe.scrolling = 'no';
+                iframe.style.overflow = 'hidden';
 
-      // Fallback: Set initial height
-      iframe.style.minHeight = '800px';
-    })();
-  </script>
-</body>
+                // Listen for height messages from embed
+                window.addEventListener('message', (event) => {
+                    // Optional: Validate origin for security (recommended in production)
+                    // if (event.origin !== 'https://arete.fly.dev') return;
+
+                    if (
+                        event.data &&
+                        event.data.type === 'arete-embed-height'
+                    ) {
+                        const newHeight = event.data.height;
+                        if (newHeight && newHeight > 0) {
+                            iframe.style.height = newHeight + 'px';
+                        }
+                    }
+                });
+
+                // Fallback: Set initial height
+                iframe.style.minHeight = '800px';
+            })();
+        </script>
+    </body>
 </html>
 ```
 
@@ -201,12 +213,13 @@ If you see scrollbars in the iframe:
 1. **Check that the listener script is loaded**: Open your browser's developer console and look for any errors.
 
 2. **Verify message reception**: Add temporary logging to see if messages are received:
-   ```javascript
-   window.addEventListener('message', (event) => {
-     console.log('Message received:', event.data);
-     // ... rest of your code
-   });
-   ```
+
+    ```javascript
+    window.addEventListener('message', (event) => {
+        console.log('Message received:', event.data);
+        // ... rest of your code
+    });
+    ```
 
 3. **Ensure iframe ID matches**: The iframe must have `id="arete-embed"` (or update the script to match your ID).
 
@@ -270,4 +283,3 @@ This will add your domains to the default allowed list. The environment variable
 2. **CSP configuration**: Update the `frame-ancestors` directive in `server.js` (around line 1276) and `packages/web/vite.config.ts` (around line 14) to allow your domain
 
 Note: Multiple domains can be configured by listing them in the CSP `frame-ancestors` directive (space-separated).
-

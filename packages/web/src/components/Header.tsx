@@ -7,63 +7,101 @@ import Breadcrumb from './Breadcrumb';
 import ThemeToggle from './ThemeToggle';
 
 interface BreadcrumbItem {
-  label: string;
-  path?: string;
+    label: string;
+    path?: string;
 }
 
 interface HeaderProps {
-  breadcrumbItems: BreadcrumbItem[];
+    breadcrumbItems: BreadcrumbItem[];
 }
 
 const Header = ({ breadcrumbItems }: HeaderProps): JSX.Element => {
-  const location = useLocation();
-  const pathname = location.pathname;
-  
-  // Hide Setup button on setup/invite page
-  const showSetupButton = !pathname.startsWith('/invite');
-  
-  // Hide Blog button on blog pages
-  const showBlogButton = !pathname.startsWith('/blog');
-  
-  return (
-    <header className="site-header-sticky" aria-label="Site header">
-      <div className="site-header-sticky__inner">
-        <div className="site-title-group">
-          <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
-            <p className="site-mark">ARETE</p>
-          </Link>
-          <Breadcrumb items={breadcrumbItems} />
-        </div>
-        <div className="site-header-actions">
-          {showSetupButton && (
-            <a 
-              className="header-button secondary" 
-              href="/invite/"
-              {...(pathname === '/embed' ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-              aria-label={pathname === '/embed' ? 'Setup (opens in new tab)' : 'Setup'}
-            >
-              Setup{pathname === '/embed' && <> <span aria-hidden="true">↗</span></>}
-            </a>
-          )}
-          {showBlogButton && (
-            <a 
-              className="header-button secondary" 
-              href="/blog"
-              {...(pathname === '/embed' ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-              aria-label={pathname === '/embed' ? 'Blog (opens in new tab)' : 'Blog'}
-            >
-              Blog{pathname === '/embed' && <> <span aria-hidden="true">↗</span></>}
-            </a>
-          )}
-          <a className="header-button secondary" href="https://github.com/arete-org/arete" target="_blank" rel="noreferrer" aria-label="View ARETE project on GitHub (opens in new tab)">
-            GitHub <span aria-hidden="true">↗</span>
-          </a>
-          <ThemeToggle />
-        </div>
-      </div>
-    </header>
-  );
+    const location = useLocation();
+    const pathname = location.pathname;
+
+    // Hide Setup button on setup/invite page
+    const showSetupButton = !pathname.startsWith('/invite');
+
+    // Hide Blog button on blog pages
+    const showBlogButton = !pathname.startsWith('/blog');
+
+    return (
+        <header className="site-header-sticky" aria-label="Site header">
+            <div className="site-header-sticky__inner">
+                <div className="site-title-group">
+                    <Link
+                        to="/"
+                        style={{ textDecoration: 'none', color: 'inherit' }}
+                    >
+                        <p className="site-mark">ARETE</p>
+                    </Link>
+                    <Breadcrumb items={breadcrumbItems} />
+                </div>
+                <div className="site-header-actions">
+                    {showSetupButton && (
+                        <a
+                            className="header-button secondary"
+                            href="/invite/"
+                            {...(pathname === '/embed'
+                                ? {
+                                      target: '_blank',
+                                      rel: 'noopener noreferrer',
+                                  }
+                                : {})}
+                            aria-label={
+                                pathname === '/embed'
+                                    ? 'Setup (opens in new tab)'
+                                    : 'Setup'
+                            }
+                        >
+                            Setup
+                            {pathname === '/embed' && (
+                                <>
+                                    {' '}
+                                    <span aria-hidden="true">↗</span>
+                                </>
+                            )}
+                        </a>
+                    )}
+                    {showBlogButton && (
+                        <a
+                            className="header-button secondary"
+                            href="/blog"
+                            {...(pathname === '/embed'
+                                ? {
+                                      target: '_blank',
+                                      rel: 'noopener noreferrer',
+                                  }
+                                : {})}
+                            aria-label={
+                                pathname === '/embed'
+                                    ? 'Blog (opens in new tab)'
+                                    : 'Blog'
+                            }
+                        >
+                            Blog
+                            {pathname === '/embed' && (
+                                <>
+                                    {' '}
+                                    <span aria-hidden="true">↗</span>
+                                </>
+                            )}
+                        </a>
+                    )}
+                    <a
+                        className="header-button secondary"
+                        href="https://github.com/arete-org/arete"
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="View ARETE project on GitHub (opens in new tab)"
+                    >
+                        GitHub <span aria-hidden="true">↗</span>
+                    </a>
+                    <ThemeToggle />
+                </div>
+            </div>
+        </header>
+    );
 };
 
 export default Header;
-

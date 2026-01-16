@@ -21,7 +21,11 @@ const clampSample = (value: number): number => {
  * The implementation avoids the need for an external FFmpeg binary which proved
  * unreliable in some deployment environments and resulted in empty capture buffers.
  */
-export const resamplePCM = (buffer: Buffer, fromRate: number, toRate: number): Buffer => {
+export const resamplePCM = (
+    buffer: Buffer,
+    fromRate: number,
+    toRate: number
+): Buffer => {
     if (buffer.length === 0 || fromRate === toRate) {
         return Buffer.from(buffer);
     }
@@ -32,8 +36,13 @@ export const resamplePCM = (buffer: Buffer, fromRate: number, toRate: number): B
     }
 
     const resampleRatio = toRate / fromRate;
-    const outputSampleCount = Math.max(1, Math.floor(inputSampleCount * resampleRatio));
-    const outputBuffer = Buffer.allocUnsafe(outputSampleCount * BYTES_PER_SAMPLE);
+    const outputSampleCount = Math.max(
+        1,
+        Math.floor(inputSampleCount * resampleRatio)
+    );
+    const outputBuffer = Buffer.allocUnsafe(
+        outputSampleCount * BYTES_PER_SAMPLE
+    );
 
     for (let i = 0; i < outputSampleCount; i++) {
         const sourceIndex = i / resampleRatio;
@@ -44,8 +53,12 @@ export const resamplePCM = (buffer: Buffer, fromRate: number, toRate: number): B
         const lowerSample = buffer.readInt16LE(lowerIndex * BYTES_PER_SAMPLE);
         const upperSample = buffer.readInt16LE(upperIndex * BYTES_PER_SAMPLE);
 
-        const sampleValue = lowerSample + (upperSample - lowerSample) * interpolation;
-        outputBuffer.writeInt16LE(clampSample(Math.round(sampleValue)), i * BYTES_PER_SAMPLE);
+        const sampleValue =
+            lowerSample + (upperSample - lowerSample) * interpolation;
+        outputBuffer.writeInt16LE(
+            clampSample(Math.round(sampleValue)),
+            i * BYTES_PER_SAMPLE
+        );
     }
 
     return outputBuffer;
@@ -67,7 +80,9 @@ class PCMResamplerStream extends Transform {
     }
 
     private processChunks(): void {
-        const inputSampleCount = Math.floor(this.pendingInput.length / BYTES_PER_SAMPLE);
+        const inputSampleCount = Math.floor(
+            this.pendingInput.length / BYTES_PER_SAMPLE
+        );
         if (inputSampleCount < 2) {
             return;
         }
@@ -79,10 +94,15 @@ class PCMResamplerStream extends Transform {
             const upperIndex = lowerIndex + 1;
             const interpolation = this.position - lowerIndex;
 
-            const lowerSample = this.pendingInput.readInt16LE(lowerIndex * BYTES_PER_SAMPLE);
-            const upperSample = this.pendingInput.readInt16LE(upperIndex * BYTES_PER_SAMPLE);
+            const lowerSample = this.pendingInput.readInt16LE(
+                lowerIndex * BYTES_PER_SAMPLE
+            );
+            const upperSample = this.pendingInput.readInt16LE(
+                upperIndex * BYTES_PER_SAMPLE
+            );
 
-            const sampleValue = lowerSample + (upperSample - lowerSample) * interpolation;
+            const sampleValue =
+                lowerSample + (upperSample - lowerSample) * interpolation;
             outputSamples.push(clampSample(Math.round(sampleValue)));
 
             this.position += this.step;
@@ -90,20 +110,31 @@ class PCMResamplerStream extends Transform {
 
         const consumedSamples = Math.max(0, Math.floor(this.position));
         if (consumedSamples > 0) {
-            this.pendingInput = this.pendingInput.subarray(consumedSamples * BYTES_PER_SAMPLE);
+            this.pendingInput = this.pendingInput.subarray(
+                consumedSamples * BYTES_PER_SAMPLE
+            );
             this.position -= consumedSamples;
         }
 
         if (outputSamples.length > 0) {
-            const outputBuffer = Buffer.allocUnsafe(outputSamples.length * BYTES_PER_SAMPLE);
+            const outputBuffer = Buffer.allocUnsafe(
+                outputSamples.length * BYTES_PER_SAMPLE
+            );
             for (let i = 0; i < outputSamples.length; i++) {
-                outputBuffer.writeInt16LE(outputSamples[i], i * BYTES_PER_SAMPLE);
+                outputBuffer.writeInt16LE(
+                    outputSamples[i],
+                    i * BYTES_PER_SAMPLE
+                );
             }
             this.push(outputBuffer);
         }
     }
 
-    public override _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
+    public override _transform(
+        chunk: Buffer,
+        _encoding: BufferEncoding,
+        callback: TransformCallback
+    ): void {
         if (chunk.length > 0) {
             this.pendingInput = Buffer.concat([this.pendingInput, chunk]);
         }
@@ -114,7 +145,9 @@ class PCMResamplerStream extends Transform {
 
     public override _flush(callback: TransformCallback): void {
         if (this.pendingInput.length >= BYTES_PER_SAMPLE) {
-            const lastSample = this.pendingInput.subarray(this.pendingInput.length - BYTES_PER_SAMPLE);
+            const lastSample = this.pendingInput.subarray(
+                this.pendingInput.length - BYTES_PER_SAMPLE
+            );
 
             // Duplicate the final sample so the interpolation loop can emit any
             // remaining fractional outputs implied by the current read position.
@@ -141,8 +174,15 @@ export const createPlaybackResampler = (): Transform =>
     });
 
 export const downsampleToRealtime = (buffer: Buffer): Buffer =>
-    resamplePCM(buffer, AUDIO_CONSTANTS.DISCORD_SAMPLE_RATE, AUDIO_CONSTANTS.REALTIME_SAMPLE_RATE);
+    resamplePCM(
+        buffer,
+        AUDIO_CONSTANTS.DISCORD_SAMPLE_RATE,
+        AUDIO_CONSTANTS.REALTIME_SAMPLE_RATE
+    );
 
 export const upsampleToDiscord = (buffer: Buffer): Buffer =>
-    resamplePCM(buffer, AUDIO_CONSTANTS.REALTIME_SAMPLE_RATE, AUDIO_CONSTANTS.DISCORD_SAMPLE_RATE);
-
+    resamplePCM(
+        buffer,
+        AUDIO_CONSTANTS.REALTIME_SAMPLE_RATE,
+        AUDIO_CONSTANTS.DISCORD_SAMPLE_RATE
+    );

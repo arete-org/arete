@@ -1,10 +1,11 @@
 # ARETE AI Direction Files Index
 
-*Coordinated guidance for AI assistants and developers.*
+_Coordinated guidance for AI assistants and developers._
 
 ## 📋 Single Source of Truth
 
 ### `cursor.rules` - **Complete Development Rules**
+
 - ARETE principles, Module tagging, scoped logger patterns, TypeScript standards
 - All other files reference this as the authoritative source
 
@@ -12,7 +13,7 @@
 
 - **`cursor.rules`** - Complete development rules (single source of truth)
 - **`.codexrules`** - Points to cursor.rules for Codex
-- **`.github/copilot-instructions.md`** - GitHub Copilot instructions  
+- **`.github/copilot-instructions.md`** - GitHub Copilot instructions
 - **`docs/contributing_cursor.md`** - Detailed Cursor guide
 - **`cursor.dictionary`** - Project terminology
 - **`.cursor/README.md`** - Cursor IDE configuration

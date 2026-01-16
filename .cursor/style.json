@@ -1,23 +1,23 @@
 {
-  "formatting": {
-    "indentSize": 2,
-    "insertSpaces": true,
-    "trimTrailingWhitespace": true,
-    "insertFinalNewline": true,
-    "trimFinalNewlines": true
-  },
-  "naming": {
-    "variables": "camelCase",
-    "functions": "camelCase",
-    "classes": "PascalCase",
-    "interfaces": "PascalCase",
-    "types": "PascalCase",
-    "enums": "PascalCase",
-    "constants": "UPPER_SNAKE_CASE"
-  },
-  "imports": {
-    "preferRelativeImports": true,
-    "groupImports": true,
-    "sortImports": true
-  }
+    "formatting": {
+        "indentSize": 2,
+        "insertSpaces": true,
+        "trimTrailingWhitespace": true,
+        "insertFinalNewline": true,
+        "trimFinalNewlines": true
+    },
+    "naming": {
+        "variables": "camelCase",
+        "functions": "camelCase",
+        "classes": "PascalCase",
+        "interfaces": "PascalCase",
+        "types": "PascalCase",
+        "enums": "PascalCase",
+        "constants": "UPPER_SNAKE_CASE"
+    },
+    "imports": {
+        "preferRelativeImports": true,
+        "groupImports": true,
+        "sortImports": true
+    }
 }

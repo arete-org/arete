@@ -11,9 +11,12 @@
  * Ethics: Logs may contain user data or sensitive information, affecting privacy and auditability.
  */
 export {
-  logger,
-  formatUsd,
-  logLLMCostSummary,
-  sanitizeLogData
+    logger,
+    formatUsd,
+    logLLMCostSummary,
+    sanitizeLogData,
 } from '@arete/backend/shared';
-export type { LLMCostTotals, LLMCostSummaryProvider } from '@arete/backend/shared';
+export type {
+    LLMCostTotals,
+    LLMCostSummaryProvider,
+} from '@arete/backend/shared';

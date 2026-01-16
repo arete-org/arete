@@ -40,9 +40,11 @@ function buildEmbedSummary(message: Message): string | null {
         if (embed.author?.name) lines.push(`Author: ${embed.author.name}`);
         if (embed.url) lines.push(`URL: ${embed.url}`);
         if (embed.image?.url) lines.push(`Image: ${embed.image.url}`);
-        if (embed.thumbnail?.url) lines.push(`Thumbnail: ${embed.thumbnail.url}`);
+        if (embed.thumbnail?.url)
+            lines.push(`Thumbnail: ${embed.thumbnail.url}`);
         if (embed.footer?.text) lines.push(`Footer: ${embed.footer.text}`);
-        if (embed.provider?.name) lines.push(`Provider: ${embed.provider.name}`);
+        if (embed.provider?.name)
+            lines.push(`Provider: ${embed.provider.name}`);
         if (embed.fields?.length) {
             for (const field of embed.fields) {
                 lines.push(`${field.name}: ${field.value ?? ''}`);
@@ -67,34 +69,49 @@ export class ContextBuilder {
      * @param {Message} message - The message to build the context for
      * @returns {Promise<{ context: OpenAIMessage[] }>} The message context
      */
-    public async buildMessageContext(message: Message, maxMessages: number = this.DEFAULT_CONTEXT_MESSAGES): Promise<{ context: OpenAIMessage[] }> {
-        logger.debug(`Building message context for message ID: ${message.id} (${message.content?.substring(0, 50)}${message.content?.length > 50 ? '...' : ''})`);
+    public async buildMessageContext(
+        message: Message,
+        maxMessages: number = this.DEFAULT_CONTEXT_MESSAGES
+    ): Promise<{ context: OpenAIMessage[] }> {
+        logger.debug(
+            `Building message context for message ID: ${message.id} (${message.content?.substring(0, 50)}${message.content?.length > 50 ? '...' : ''})`
+        );
 
         // Get the message being replied to if this is a reply
         const repliedMessage = message.reference?.messageId
-            ? await message.channel.messages.fetch(message.reference.messageId).catch((error) => {
-                logger.debug(`Failed to fetch replied message ${message.reference?.messageId}: ${error.message}`);
-                return null;
-            })
+            ? await message.channel.messages
+                  .fetch(message.reference.messageId)
+                  .catch((error) => {
+                      logger.debug(
+                          `Failed to fetch replied message ${message.reference?.messageId}: ${error.message}`
+                      );
+                      return null;
+                  })
             : null;
 
-        logger.debug(`Is reply: ${!!repliedMessage}${repliedMessage ? ` (to message ID: ${repliedMessage.id})` : ''}`);
+        logger.debug(
+            `Is reply: ${!!repliedMessage}${repliedMessage ? ` (to message ID: ${repliedMessage.id})` : ''}`
+        );
 
         // Fetch messages before the current message
         const recentMessages = await message.channel.messages.fetch({
             limit: repliedMessage ? Math.floor(maxMessages / 2) : maxMessages, // Use half the messages if this is a reply, as we'll fetch more messages before the replied-to message
-            before: message.id
+            before: message.id,
         });
-        logger.debug(`Fetched ${recentMessages.size} recent messages before current message`);
+        logger.debug(
+            `Fetched ${recentMessages.size} recent messages before current message`
+        );
 
         // If this is a reply, fetch messages before the replied message as well
         let contextMessages = new Map(recentMessages);
         if (repliedMessage) {
             const messagesBeforeReply = await message.channel.messages.fetch({
                 limit: maxMessages,
-                before: repliedMessage.id
+                before: repliedMessage.id,
             });
-            logger.debug(`Fetched ${messagesBeforeReply.size} messages before replied message`);
+            logger.debug(
+                `Fetched ${messagesBeforeReply.size} messages before replied message`
+            );
 
             // Merge both message collections, removing duplicates
             const beforeMergeSize = contextMessages.size;
@@ -103,12 +120,16 @@ export class ContextBuilder {
                     contextMessages.set(id, msg);
                 }
             });
-            logger.debug(`Added ${contextMessages.size - beforeMergeSize} new messages from before replied message`);
+            logger.debug(
+                `Added ${contextMessages.size - beforeMergeSize} new messages from before replied message`
+            );
 
             // Add the replied message if it's not already included
             if (!contextMessages.has(repliedMessage.id)) {
                 contextMessages.set(repliedMessage.id, repliedMessage);
-                logger.debug(`Added replied message to context: ${repliedMessage.id}`);
+                logger.debug(
+                    `Added replied message to context: ${repliedMessage.id}`
+                );
             }
         }
 
@@ -117,10 +138,11 @@ export class ContextBuilder {
         let repliedMessageIndex = null;
         const history: OpenAIMessage[] = Array.from(contextMessages.values())
             .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
-            .map(m => {
+            .map((m) => {
                 const isBot = m.author.id === message.client.user?.id;
                 const displayName = m.member?.displayName || m.author.username;
-                const timestamp = new Date(m.createdTimestamp).toISOString()
+                const timestamp = new Date(m.createdTimestamp)
+                    .toISOString()
                     .replace(/T/, ' ')
                     .replace(/\..+/, '')
                     .slice(0, -3); // Trim to minutes
@@ -150,14 +172,16 @@ export class ContextBuilder {
                     }
                     if (!assistantContent) {
                         assistantContent = `${assistantPreamble} Assistant response contained only embeds.`;
-                    } else if (!assistantContent.startsWith(assistantPreamble)) {
+                    } else if (
+                        !assistantContent.startsWith(assistantPreamble)
+                    ) {
                         assistantContent = `${assistantPreamble} ${assistantContent}`;
                     }
                 }
 
                 return {
-                    role: isBot ? 'assistant' : 'user' as const,
-                    content: isBot ? assistantContent : formattedMessage
+                    role: isBot ? 'assistant' : ('user' as const),
+                    content: isBot ? assistantContent : formattedMessage,
                 };
             });
 
@@ -168,18 +192,20 @@ export class ContextBuilder {
         // Add the current message
         reducedHistory.push({
             role: 'user',
-            content: `${message.member?.displayName || message.author.username} said: "${message.content}" ${repliedMessageIndex ? ` (Replying to message ${repliedMessageIndex - 1})` : ''}`
+            content: `${message.member?.displayName || message.author.username} said: "${message.content}" ${repliedMessageIndex ? ` (Replying to message ${repliedMessageIndex - 1})` : ''}`,
         });
 
         // Build the final context
         const systemPrompt = renderPrompt('discord.chat.system').content;
         const context: OpenAIMessage[] = [
             { role: 'system', content: systemPrompt },
-            ...reducedHistory
+            ...reducedHistory,
         ];
         logContextIfVerbose(context);
 
-        logger.debug(`Final context built with ${context.length} messages (${reducedHistory.length} history + 1 system)`);
+        logger.debug(
+            `Final context built with ${context.length} messages (${reducedHistory.length} history + 1 system)`
+        );
         return { context };
     }
 }

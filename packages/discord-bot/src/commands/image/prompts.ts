@@ -11,9 +11,8 @@ import type {
     ImageBackgroundType,
     ImageQualityType,
     ImageSizeType,
-    ImageStylePreset
+    ImageStylePreset,
 } from './types.js';
-
 
 interface DeveloperPromptOptions {
     allowPromptAdjustment: boolean;
@@ -46,10 +45,16 @@ export function buildDeveloperPrompt(options: DeveloperPromptOptions): string {
     const requesterName = safeNickname || safeUsername || null;
 
     const userContext = [
-        safeUsername ? `The user invoking the command is "${safeUsername}".` : '',
+        safeUsername
+            ? `The user invoking the command is "${safeUsername}".`
+            : '',
         safeNickname ? `Their server nickname is "${safeNickname}".` : '',
-        safeGuildName ? `This generation takes place in the server "${safeGuildName}".` : ''
-    ].filter(Boolean).join(' ');
+        safeGuildName
+            ? `This generation takes place in the server "${safeGuildName}".`
+            : '',
+    ]
+        .filter(Boolean)
+        .join(' ');
 
     const annotationInstruction = requesterName
         ? `Provide a brief annotation that addresses "${requesterName}" by name and explores the creative intent in two or three sentences.`
@@ -62,7 +67,7 @@ export function buildDeveloperPrompt(options: DeveloperPromptOptions): string {
         background: options.background,
         style: options.style,
         adjustmentClause,
-        reflectionInstruction: annotationInstruction
+        reflectionInstruction: annotationInstruction,
     });
 
     return content;

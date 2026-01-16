@@ -43,7 +43,7 @@ export class VoiceSessionManager {
         audioCaptureHandler: AudioCaptureHandler,
         audioPlaybackHandler: AudioPlaybackHandler,
         participants: Map<string, string>,
-        initiatingUserId?: string,
+        initiatingUserId?: string
     ): VoiceSession {
         return {
             connection,
@@ -59,11 +59,15 @@ export class VoiceSessionManager {
     }
 
     public addSession(guildId: string, session: VoiceSession): void {
-        logger.debug(`Adding session for guild ${guildId}, current sessions: ${this.activeSessions.size}`);
+        logger.debug(
+            `Adding session for guild ${guildId}, current sessions: ${this.activeSessions.size}`
+        );
 
         const existingSession = this.activeSessions.get(guildId);
         if (existingSession) {
-            logger.warn(`Session already exists for guild ${guildId}, cleaning up existing session`);
+            logger.warn(
+                `Session already exists for guild ${guildId}, cleaning up existing session`
+            );
             this.cleanupSessionEventListeners(existingSession);
         }
 
@@ -72,7 +76,11 @@ export class VoiceSessionManager {
         const chunkHandler = (event: AudioChunkEvent) => {
             if (event.guildId !== guildId) return;
             this.enqueueAudioTask(guildId, async () => {
-                await this.forwardAudioChunk(guildId, event.userId, event.audioBuffer);
+                await this.forwardAudioChunk(
+                    guildId,
+                    event.userId,
+                    event.audioBuffer
+                );
             });
         };
 
@@ -90,7 +98,9 @@ export class VoiceSessionManager {
         sessionWithHandlers.audioChunkHandler = chunkHandler;
         sessionWithHandlers.silenceHandler = silenceHandler;
 
-        logger.debug(`Added voice session for guild ${guildId}, total sessions: ${this.activeSessions.size}`);
+        logger.debug(
+            `Added voice session for guild ${guildId}, total sessions: ${this.activeSessions.size}`
+        );
     }
 
     private enqueueAudioTask(guildId: string, task: () => Promise<void>): void {
@@ -99,7 +109,10 @@ export class VoiceSessionManager {
 
         session.audioPipeline = session.audioPipeline
             .catch((error) => {
-                logger.error(`Audio pipeline error for guild ${guildId}:`, error);
+                logger.error(
+                    `Audio pipeline error for guild ${guildId}:`,
+                    error
+                );
             })
             .then(task)
             .catch((error) => {
@@ -107,10 +120,16 @@ export class VoiceSessionManager {
             });
     }
 
-    private async forwardAudioChunk(guildId: string, userId: string, audioBuffer: Buffer): Promise<void> {
+    private async forwardAudioChunk(
+        guildId: string,
+        userId: string,
+        audioBuffer: Buffer
+    ): Promise<void> {
         const session = this.activeSessions.get(guildId);
         if (!session) {
-            logger.warn(`No session found for guild ${guildId} when forwarding audio chunk`);
+            logger.warn(
+                `No session found for guild ${guildId} when forwarding audio chunk`
+            );
             return;
         }
 
@@ -119,7 +138,9 @@ export class VoiceSessionManager {
         }
 
         const label = session.participantLabels.get(userId) || userId;
-        logger.debug(`Forwarding ${audioBuffer.length} bytes for ${label} (${userId}) in guild ${guildId}`);
+        logger.debug(
+            `Forwarding ${audioBuffer.length} bytes for ${label} (${userId}) in guild ${guildId}`
+        );
 
         await session.realtimeSession.sendAudio(audioBuffer, label, userId);
         session.lastAudioTime = Date.now();
@@ -149,7 +170,11 @@ export class VoiceSessionManager {
         }
     }
 
-    public updateParticipantLabel(guildId: string, userId: string, displayName: string): void {
+    public updateParticipantLabel(
+        guildId: string,
+        userId: string,
+        displayName: string
+    ): void {
         const session = this.activeSessions.get(guildId);
         if (!session) return;
         session.participantLabels.set(userId, displayName);
@@ -176,7 +201,9 @@ export class VoiceSessionManager {
             }
         }
         this.activeSessions.delete(guildId);
-        logger.debug(`Removed voice session for guild ${guildId}, remaining sessions: ${this.activeSessions.size}`);
+        logger.debug(
+            `Removed voice session for guild ${guildId}, remaining sessions: ${this.activeSessions.size}`
+        );
     }
 
     public getAllSessions(): Map<string, VoiceSession> {
@@ -187,4 +214,3 @@ export class VoiceSessionManager {
         return this.activeSessions.has(guildId);
     }
 }
-
