@@ -73,6 +73,7 @@ const planFunction = {
     strict: true,
     parameters: {
         type: 'object',
+        additionalProperties: false,
         properties: {
             action: {
                 type: 'string',
@@ -101,6 +102,7 @@ const planFunction = {
             },
             imageRequest: {
                 type: 'object',
+                additionalProperties: false,
                 description:
                     "Details for image generation when action is 'image'.",
                 properties: {
@@ -160,6 +162,7 @@ const planFunction = {
             },
             openaiOptions: {
                 type: 'object',
+                additionalProperties: false,
                 properties: {
                     reasoningEffort: {
                         type: 'string',
@@ -175,6 +178,7 @@ const planFunction = {
                     },
                     tool_choice: {
                         type: 'object',
+                        additionalProperties: false,
                         properties: {
                             type: {
                                 type: 'string',
@@ -187,6 +191,7 @@ const planFunction = {
                     },
                     webSearch: {
                         type: 'object',
+                        additionalProperties: false,
                         properties: {
                             query: {
                                 type: 'string',
@@ -216,6 +221,7 @@ const planFunction = {
                     },
                     ttsOptions: {
                         type: 'object',
+                        additionalProperties: false,
                         description:
                             "Controls how the TTS response should be generated. Use only if 'modality' is 'tts'.",
                         properties: {
@@ -271,6 +277,7 @@ const planFunction = {
             },
             presence: {
                 type: 'object',
+                additionalProperties: false,
                 description: 'The new presence to set for the Discord bot',
                 properties: {
                     status: {
@@ -284,6 +291,7 @@ const planFunction = {
                             'List of activities for the bot to display.',
                         items: {
                             type: 'object',
+                            additionalProperties: false,
                             properties: {
                                 type: {
                                     type: 'integer',
