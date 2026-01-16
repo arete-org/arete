@@ -454,6 +454,7 @@ const AskMeAnything = (): JSX.Element => {
         headers['x-turnstile-token'] = resolvedToken;
       }
       
+      // Reflection is the trimmed-down web chat surface (embeddable, Turnstile-protected).
       const response = await fetch(`/api/reflect?question=${encodeURIComponent(trimmedQuestion)}`, {
         method: 'GET',
         headers,

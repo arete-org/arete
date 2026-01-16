@@ -150,6 +150,7 @@ const handleWebhookRequest = createWebhookHandler({
   verifyGitHubSignature,
   logRequest
 });
+// Reflection is the slim, web-facing chat interface (Turnstile + rate-limited).
 const handleReflectRequest = createReflectHandler({
   openaiService,
   ipRateLimiter,
