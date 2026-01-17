@@ -508,6 +508,7 @@ const MeetArete = (): JSX.Element => {
         try {
             const headers: Record<string, string> = {
                 Accept: 'application/json',
+                'Content-Type': 'application/json',
             };
 
             // Only add CAPTCHA token if we have one (not when CAPTCHA is skipped)
@@ -515,15 +516,13 @@ const MeetArete = (): JSX.Element => {
                 headers['x-turnstile-token'] = turnstileToken;
             }
 
-            // Reflection is the trimmed-down web chat surface (embeddable, Turnstile-protected).
-            const response = await fetch(
-                `/api/reflect?question=${encodeURIComponent(trimmedQuestion)}`,
-                {
-                    method: 'GET',
-                    headers,
-                    signal: controller.signal,
-                }
-            );
+            // Send "reflection"
+            const response = await fetch('/api/reflect', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ question: trimmedQuestion }),
+                signal: controller.signal,
+            });
 
             if (!response.ok) {
                 // Handle CAPTCHA-specific errors

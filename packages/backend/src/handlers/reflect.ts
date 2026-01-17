@@ -70,7 +70,7 @@ const setCorsHeaders = (res: ServerResponse, req: IncomingMessage): void => {
     const safeOrigin = sanitizedAllowedOrigins[allowedIndex];
     res.setHeader('Access-Control-Allow-Origin', safeOrigin);
     res.setHeader('Vary', 'Origin');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader(
         'Access-Control-Allow-Headers',
         'Content-Type, X-Turnstile-Token, X-Session-Id'
@@ -128,7 +128,7 @@ const createReflectHandler =
             }
 
             // --- Method validation ---
-            if (req.method !== 'GET' && req.method !== 'POST') {
+            if (req.method !== 'POST') {
                 res.statusCode = 405;
                 res.setHeader(
                     'Content-Type',
@@ -140,8 +140,8 @@ const createReflectHandler =
                 return;
             }
 
-            // --- Input parsing (query/body) ---
-            let question = parsedUrl.searchParams.get('question');
+            // --- Input parsing (JSON body only) ---
+            let question: string | null = null;
             let turnstileTokenFromBody: string | null = null;
 
             if (req.method === 'POST') {
@@ -321,7 +321,7 @@ const createReflectHandler =
                 tokenSource = 'body';
             }
 
-            // Query param is the least-preferred fallback for GET usage.
+            // Query param is the least-preferred fallback for legacy clients.
             if (!turnstileToken) {
                 const queryToken = parsedUrl.searchParams.get('turnstileToken');
                 if (queryToken) {

@@ -17,5 +17,5 @@ Reflection is the trimmed-down, web-facing slice of the full AI chat system, des
 embeddable UI flows. It returns a concise response plus provenance metadata, and is protected by
 Turnstile + configured rate limits.
 
-This endpoint is served at `/api/reflect` and is separate from the Discord bot pipeline, which
-uses its own context building and OpenAI orchestration.
+This endpoint is served at `POST /api/reflect` with a JSON body and is separate from the Discord
+bot pipeline, which uses its own context building and OpenAI orchestration.
