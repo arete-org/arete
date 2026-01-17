@@ -90,8 +90,7 @@ const createReflectHandler =
     }: ReflectHandlerDeps) =>
     async (
         req: IncomingMessage,
-        res: ServerResponse,
-        parsedUrl: URL
+        res: ServerResponse
     ): Promise<void> => {
         try {
             // --- CORS and preflight handling ---
