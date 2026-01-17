@@ -2,7 +2,7 @@
 openapi: 3.1.0
 
 # Quick Map
-# - GET/POST /api/reflect: Reflection (public; Turnstile + rate limits when configured)
+# - POST /api/reflect: Reflection (public; Turnstile + rate limits when configured)
 # - OPTIONS /api/reflect: CORS preflight
 # - POST /api/traces: Trace upsert (TraceToken required)
 # - GET /trace/{responseId}.json: Trace fetch (public)
@@ -65,55 +65,21 @@ tags:
 paths:
     # Reflection (public, Turnstile when enabled, rate-limited).
     /api/reflect:
-        get:
-            operationId: getReflect
-            summary: Generate a reflective response
-            description: |
-                Generate a reflective response from a question in the query string.
-                Turnstile required when enabled; rate limited per IP/session; X-Session-Id / X-Turnstile-Token headers accepted.
-            tags:
-                - Chat
-            parameters:
-                - $ref: '#/components/parameters/Question'
-                - $ref: '#/components/parameters/SessionId'
-                - $ref: '#/components/parameters/TurnstileToken'
-                - $ref: '#/components/parameters/SessionIdHeader'
-                - $ref: '#/components/parameters/TurnstileTokenHeader'
-            responses:
-                '200':
-                    $ref: '#/components/responses/ReflectOk'
-                '403':
-                    $ref: '#/components/responses/Forbidden'
-                '400':
-                    $ref: '#/components/responses/BadRequest'
-                '405':
-                    $ref: '#/components/responses/MethodNotAllowed'
-                '413':
-                    $ref: '#/components/responses/PayloadTooLarge'
-                '429':
-                    $ref: '#/components/responses/TooManyRequests'
-                '500':
-                    $ref: '#/components/responses/InternalServerError'
-                '502':
-                    $ref: '#/components/responses/BadGateway'
-                '503':
-                    $ref: '#/components/responses/ServiceUnavailable'
         post:
             operationId: postReflect
             summary: Generate a reflective response
             description: |
-                Generate a reflective response from a question in the JSON body or query string.
+                Generate a reflective response from a question in the JSON body.
                 Turnstile required when enabled; rate limited per IP/session; X-Session-Id / X-Turnstile-Token headers accepted.
             tags:
                 - Chat
             parameters:
-                - $ref: '#/components/parameters/QuestionOptional'
                 - $ref: '#/components/parameters/SessionId'
                 - $ref: '#/components/parameters/TurnstileToken'
                 - $ref: '#/components/parameters/SessionIdHeader'
                 - $ref: '#/components/parameters/TurnstileTokenHeader'
             requestBody:
-                required: false
+                required: true
                 content:
                     application/json:
                         schema:
@@ -352,6 +318,8 @@ components:
                     maxLength: 3072
                 turnstileToken:
                     type: string
+            required:
+                - question
             additionalProperties: true
 
         ReflectResponse:
@@ -670,24 +638,6 @@ components:
     parameters:
         # Shared request parameters.
         # X-Session-Id is sanitized to alphanumeric/dash/underscore and max 128 chars (see reflect handler).
-        Question:
-            name: question
-            in: query
-            required: true
-            description: Question text (max 3072 chars).
-            schema:
-                type: string
-                maxLength: 3072
-
-        QuestionOptional:
-            name: question
-            in: query
-            required: false
-            description: Question text (max 3072 chars).
-            schema:
-                type: string
-                maxLength: 3072
-
         SessionId:
             name: sessionId
             in: query

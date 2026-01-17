@@ -196,7 +196,7 @@ The embed route is configured to allow:
 
 - **Embedding from**: `https://jordanmakes.fly.dev`
 - **API requests**: The `/api/reflect` endpoint accepts cross-origin requests from `https://jordanmakes.fly.dev`
-- **CORS headers**: Configured for GET, POST, and OPTIONS requests
+- **CORS headers**: Configured for POST and OPTIONS requests
 
 ### Content Security Policy
 
