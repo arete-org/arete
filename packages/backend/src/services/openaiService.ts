@@ -52,7 +52,7 @@ class SimpleOpenAIService {
 
     constructor(apiKey: string) {
         this.apiKey = apiKey;
-        this.requestTimeoutMs = 15000;
+        this.requestTimeoutMs = 30000;
         this.retryAttempts = 1;
     }
 

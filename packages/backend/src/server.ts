@@ -240,7 +240,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (parsedUrl.pathname === '/api/reflect') {
-            await handleReflectRequest(req, res, parsedUrl);
+            await handleReflectRequest(req, res);
             return;
         }
 

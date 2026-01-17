@@ -70,12 +70,10 @@ paths:
             summary: Generate a reflective response
             description: |
                 Generate a reflective response from a question in the JSON body.
-                Turnstile required when enabled; rate limited per IP/session; X-Session-Id / X-Turnstile-Token headers accepted.
+                Turnstile required when enabled; rate limited per IP/session; send X-Session-Id / X-Turnstile-Token headers.
             tags:
                 - Chat
             parameters:
-                - $ref: '#/components/parameters/SessionId'
-                - $ref: '#/components/parameters/TurnstileToken'
                 - $ref: '#/components/parameters/SessionIdHeader'
                 - $ref: '#/components/parameters/TurnstileTokenHeader'
             requestBody:
@@ -316,8 +314,6 @@ components:
                 question:
                     type: string
                     maxLength: 3072
-                turnstileToken:
-                    type: string
             required:
                 - question
             additionalProperties: true
@@ -638,27 +634,11 @@ components:
     parameters:
         # Shared request parameters.
         # X-Session-Id is sanitized to alphanumeric/dash/underscore and max 128 chars (see reflect handler).
-        SessionId:
-            name: sessionId
-            in: query
-            required: false
-            description: Optional session id used for rate limiting.
-            schema:
-                type: string
-
-        TurnstileToken:
-            name: turnstileToken
-            in: query
-            required: false
-            description: Turnstile CAPTCHA token when enabled.
-            schema:
-                type: string
-
         SessionIdHeader:
             name: X-Session-Id
             in: header
             required: false
-            description: Optional session id header used for rate limiting.
+            description: Optional client-generated session id used for per-session rate limiting; when omitted, the server falls back to IP.
             schema:
                 type: string
 
