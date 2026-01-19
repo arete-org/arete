@@ -265,6 +265,9 @@ const server = http.createServer(async (req, res) => {
         // This path also doubles as a browser route for the trace page.
         // We only return JSON when the caller explicitly asks for JSON.
         if (parsedUrl.pathname.startsWith('/api/traces/')) {
+            // This endpoint can return HTML or JSON depending on the Accept header.
+            // Tell caches to keep those two versions separate (so a JSON request never gets a cached HTML page and vice versa).
+            res.setHeader('Vary', 'Accept');
             if (wantsJsonResponse(req)) {
                 logger.debug(`Trace route matched: ${parsedUrl.pathname}`);
                 await handleTraceRequest(req, res, parsedUrl);
