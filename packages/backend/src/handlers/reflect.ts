@@ -90,8 +90,7 @@ const createReflectHandler =
     }: ReflectHandlerDeps) =>
     async (
         req: IncomingMessage,
-        res: ServerResponse,
-        parsedUrl: URL
+        res: ServerResponse
     ): Promise<void> => {
         try {
             // --- CORS and preflight handling ---
@@ -141,8 +140,8 @@ const createReflectHandler =
             }
 
             // --- Input parsing (JSON body only) ---
+            // Tokens are headers-only; the body is reserved for the question payload.
             let question: string | null = null;
-            let turnstileTokenFromBody: string | null = null;
 
             if (req.method === 'POST') {
                 try {
@@ -218,15 +217,9 @@ const createReflectHandler =
                     if (body) {
                         const parsedBody = JSON.parse(body) as {
                             question?: string;
-                            turnstileToken?: string;
                         };
                         if (parsedBody.question) {
                             question = parsedBody.question;
-                        }
-                        if (parsedBody.turnstileToken) {
-                            turnstileTokenFromBody = String(
-                                parsedBody.turnstileToken
-                            );
                         }
                     }
                 } catch (error) {
@@ -304,7 +297,7 @@ const createReflectHandler =
             let turnstileToken: string | null = null;
             let tokenSource = 'none';
 
-            // Prefer header tokens to avoid leaking CAPTCHA tokens in URLs.
+            // Turnstile tokens are headers-only to avoid URL leakage or conflicts.
             if (req.headers['x-turnstile-token']) {
                 const headerToken = req.headers['x-turnstile-token'];
                 if (Array.isArray(headerToken)) {
@@ -313,21 +306,6 @@ const createReflectHandler =
                     turnstileToken = String(headerToken);
                 }
                 tokenSource = 'header';
-            }
-
-            // Fall back to body tokens (POST clients).
-            if (!turnstileToken && turnstileTokenFromBody) {
-                turnstileToken = turnstileTokenFromBody;
-                tokenSource = 'body';
-            }
-
-            // Query param is the least-preferred fallback for legacy clients.
-            if (!turnstileToken) {
-                const queryToken = parsedUrl.searchParams.get('turnstileToken');
-                if (queryToken) {
-                    turnstileToken = String(queryToken);
-                    tokenSource = 'query';
-                }
             }
 
             if (!skipCaptcha) {
@@ -373,19 +351,17 @@ const createReflectHandler =
                 clientIp = clientIp.substring(7);
             }
 
-            let sessionId = parsedUrl.searchParams.get('sessionId');
-
-            if (!sessionId) {
-                const rawSessionId = req.headers['x-session-id'];
-                if (rawSessionId) {
-                    let sessionIdStr = Array.isArray(rawSessionId)
-                        ? rawSessionId[0]
-                        : String(rawSessionId);
-                    sessionIdStr = sessionIdStr.trim().substring(0, 128);
-                    sessionIdStr = sessionIdStr.replace(/[^a-zA-Z0-9\-_]/g, '');
-                    if (sessionIdStr.length > 0) {
-                        sessionId = sessionIdStr;
-                    }
+            // Session identifiers are client-supplied headers to scope rate limits; fall back to IP when absent.
+            let sessionId: string | null = null;
+            const rawSessionId = req.headers['x-session-id'];
+            if (rawSessionId) {
+                let sessionIdStr = Array.isArray(rawSessionId)
+                    ? rawSessionId[0]
+                    : String(rawSessionId);
+                sessionIdStr = sessionIdStr.trim().substring(0, 128);
+                sessionIdStr = sessionIdStr.replace(/[^a-zA-Z0-9\-_]/g, '');
+                if (sessionIdStr.length > 0) {
+                    sessionId = sessionIdStr;
                 }
             }
 
