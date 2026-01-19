@@ -239,18 +239,15 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
-        if (parsedUrl.pathname === '/api/reflect') {
-            await handleReflectRequest(req, res);
+        // --- Trace retrieval route ---
+        if (parsedUrl.pathname.startsWith('/api/traces/')) {
+            logger.debug(`Trace route matched: ${parsedUrl.pathname}`);
+            await handleTraceRequest(req, res, parsedUrl);
             return;
         }
 
-        // --- Trace retrieval route ---
-        if (
-            parsedUrl.pathname.startsWith('/trace/') &&
-            parsedUrl.pathname.endsWith('.json')
-        ) {
-            logger.debug(`Trace route matched: ${parsedUrl.pathname}`);
-            await handleTraceRequest(req, res, parsedUrl);
+        if (parsedUrl.pathname === '/api/reflect') {
+            await handleReflectRequest(req, res);
             return;
         }
 

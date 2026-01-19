@@ -53,6 +53,10 @@ const getClientIp = (req: IncomingMessage, trustProxy: boolean): string => {
 };
 
 // --- Handler factory ---
+// This factory builds the two request handlers used by the server router:
+// - handleTraceRequest: reads a trace from storage and returns JSON
+// - handleTraceUpsertRequest: accepts a trace payload, validates it, then stores it
+// The handlers are nested so they can share the injected dependencies without globals.
 const createTraceHandlers = ({
     traceStore,
     logRequest,
@@ -67,8 +71,9 @@ const createTraceHandlers = ({
         parsedUrl: URL
     ): Promise<void> => {
         try {
-            // Expect /trace/{id}.json to support trace lookups.
-            const pathMatch = parsedUrl.pathname.match(/^\/trace\/(.+)\.json$/);
+            // Expect /api/traces/{responseId} to support trace lookups.
+            const pathMatch =
+                parsedUrl.pathname.match(/^\/api\/traces\/([^/]+)\/?$/);
             if (!pathMatch) {
                 res.statusCode = 400;
                 res.setHeader(
