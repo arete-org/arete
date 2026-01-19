@@ -8,7 +8,6 @@ import { Link, useParams } from 'react-router-dom';
 // Define the actual server response metadata structure
 interface ServerMetadata {
     responseId?: string;
-    id: string;
     timestamp: string;
     model: string;
     modelVersion?: string;
@@ -302,7 +301,9 @@ const TracePage = (): JSX.Element => {
                         <header className="site-header" aria-live="polite">
                             <div className="site-mark">
                                 <h1>Response Trace</h1>
-                                <code>{traceData.id ?? responseId}</code>
+                                <code>
+                                    {traceData.responseId ?? responseId}
+                                </code>
                             </div>
                             <Link to="/" className="button-link">
                                 Back to home
@@ -411,7 +412,7 @@ const TracePage = (): JSX.Element => {
     const staleAfter = traceData?.staleAfter
         ? new Date(traceData.staleAfter).toLocaleString()
         : 'N/A';
-    const displayId = traceData?.id || traceData?.responseId || responseId;
+    const displayId = traceData?.responseId || responseId;
 
     return (
         <section className="site-section">

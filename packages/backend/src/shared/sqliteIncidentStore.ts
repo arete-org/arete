@@ -42,7 +42,6 @@ export type IncidentStatus =
 
 export interface IncidentPointers {
     responseId?: string;
-    traceId?: string;
     guildId?: string;
     channelId?: string;
     messageId?: string;

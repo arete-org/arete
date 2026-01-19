@@ -39,7 +39,6 @@ type BackendCitation = {
 
 type BackendMetadata = {
     responseId?: string;
-    id?: string;
     provenance?: string;
     confidence?: number;
     riskTier?: string;
@@ -126,9 +125,9 @@ const normalizeMetadata = (
     }
 
     // Map backend fields to ResponseMetadata structure
+    // If it is missing, we use "unknown" so the UI still renders.
     const normalized: ResponseMetadata = {
-        responseId:
-            backendMetadata.responseId || backendMetadata.id || 'unknown',
+        responseId: backendMetadata.responseId || 'unknown',
         provenance: backendMetadata.provenance
             ? normalizeProvenance(backendMetadata.provenance)
             : 'Inferred',

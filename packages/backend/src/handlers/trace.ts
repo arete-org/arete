@@ -401,10 +401,10 @@ const createTraceHandlers = ({
                 return;
             }
 
-            // Normalize responseId to a canonical field.
-            const responseId = (payload.responseId || payload.id) as
-                | string
-                | undefined;
+            const responseId =
+                typeof payload.responseId === 'string'
+                    ? payload.responseId
+                    : undefined;
             if (!responseId) {
                 sendJson(res, 400, { error: 'Missing responseId' });
                 logRequest(req, res, 'trace upsert missing-responseId');

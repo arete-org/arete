@@ -39,7 +39,6 @@ test('SqliteIncidentStore pseudonymizes pointers and audit actors', async () => 
         guildId: '123456789012345678',
         channelId: '234567890123456789',
         messageId: '345678901234567890',
-        traceId: 'trace-123',
     };
 
     try {
@@ -62,8 +61,6 @@ test('SqliteIncidentStore pseudonymizes pointers and audit actors', async () => 
             incident.pointers.messageId,
             hmacId(SECRET, rawPointers.messageId, 'message')
         );
-        assert.equal(incident.pointers.traceId, rawPointers.traceId);
-
         const db = new Database(dbPath);
         try {
             const stored = db
