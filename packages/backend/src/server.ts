@@ -185,6 +185,19 @@ const handleWebhookRequest = createWebhookHandler({
     verifyGitHubSignature,
     logRequest,
 });
+// When /api/traces/:responseId is opened in a browser, serve the web UI.
+// When code fetches it with Accept: application/json, serve the raw trace JSON.
+const wantsJsonResponse = (req: http.IncomingMessage): boolean => {
+    const headerValue = req.headers.accept;
+    const acceptHeader = Array.isArray(headerValue)
+        ? headerValue.join(',')
+        : headerValue || '';
+    const normalized = acceptHeader.toLowerCase();
+    return (
+        normalized.includes('application/json') ||
+        normalized.includes('+json')
+    );
+};
 // Reflection is the slim, web-facing chat interface (Turnstile + rate-limited).
 const handleReflectRequest = createReflectHandler({
     openaiService,
@@ -239,11 +252,16 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
-        // --- Trace retrieval route ---
+        // --- Trace retrieval route (JSON only) ---
+        // This path also doubles as a browser route for the trace page.
+        // We only return JSON when the caller explicitly asks for JSON.
         if (parsedUrl.pathname.startsWith('/api/traces/')) {
-            logger.debug(`Trace route matched: ${parsedUrl.pathname}`);
-            await handleTraceRequest(req, res, parsedUrl);
-            return;
+            if (wantsJsonResponse(req)) {
+                logger.debug(`Trace route matched: ${parsedUrl.pathname}`);
+                await handleTraceRequest(req, res, parsedUrl);
+                return;
+            }
+            // Fall through to the static asset resolver for the SPA.
         }
 
         if (parsedUrl.pathname === '/api/reflect') {
