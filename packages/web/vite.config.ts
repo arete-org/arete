@@ -93,10 +93,6 @@ export default defineConfig({
                 target: 'http://localhost:3000',
                 changeOrigin: true,
             },
-            '/trace': {
-                target: 'http://localhost:3000',
-                changeOrigin: true,
-            },
         },
     },
     preview: {
