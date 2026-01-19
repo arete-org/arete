@@ -185,18 +185,27 @@ const handleWebhookRequest = createWebhookHandler({
     verifyGitHubSignature,
     logRequest,
 });
-// When /api/traces/:responseId is opened in a browser, serve the web UI.
-// When code fetches it with Accept: application/json, serve the raw trace JSON.
+// Decide whether /api/traces/:responseId should return JSON or the SPA HTML shell.
+// We default to JSON unless the Accept header clearly asks for HTML.
+// This keeps API clients working even when they send a generic "*/*" Accept header.
 const wantsJsonResponse = (req: http.IncomingMessage): boolean => {
     const headerValue = req.headers.accept;
     const acceptHeader = Array.isArray(headerValue)
         ? headerValue.join(',')
         : headerValue || '';
     const normalized = acceptHeader.toLowerCase();
-    return (
+    const wantsHtml =
+        normalized.includes('text/html') ||
+        normalized.includes('application/xhtml+xml');
+    const wantsJson =
         normalized.includes('application/json') ||
-        normalized.includes('+json')
-    );
+        normalized.includes('+json');
+
+    if (wantsHtml && !wantsJson) {
+        return false;
+    }
+
+    return true;
 };
 // Reflection is the slim, web-facing chat interface (Turnstile + rate-limited).
 const handleReflectRequest = createReflectHandler({
