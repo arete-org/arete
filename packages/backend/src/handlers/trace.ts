@@ -1,5 +1,5 @@
 /**
- * @description: Handles trace retrieval and persistence endpoints.
+ * @description: Handles trace storage and retrieval endpoints.
  * @arete-scope: interface
  * @arete-module: TraceHandlers
  * @arete-risk: high - Trace loss undermines transparency guarantees.
@@ -14,19 +14,84 @@ import {
     type TraceStore,
 } from '../shared/traceStore';
 
+// Shared log function signature used by handlers.
 type LogRequest = (
     req: IncomingMessage,
     res: ServerResponse,
     extra?: string
 ) => void;
 
+// Dependencies injected by the server so handlers stay simple and testable.
 type TraceHandlerDeps = {
-    traceStore: TraceStore | null;
-    logRequest: LogRequest;
-    traceWriteLimiter: SimpleRateLimiter | null;
-    traceToken: string | null;
-    maxTraceBodyBytes: number;
-    trustProxy: boolean;
+    traceStore: TraceStore | null; // Trace storage backend; null means storage failed to initialize.
+    logRequest: LogRequest; // Shared request logger for consistency.
+    traceWriteLimiter: SimpleRateLimiter | null; // Optional per-client limiter for trace writes.
+    traceToken: string | null; // Shared secret required to accept incoming trace writes.
+    maxTraceBodyBytes: number; // Upper bound for trace JSON payload size.
+    trustProxy: boolean; /* When true, read X-Forwarded-For to find the real client IP behind a proxy.
+    We use the client IP for rate limiting and request logs.
+    This matters because proxies hide the original IP unless we trust this header.
+    When false, we fall back to the direct socket IP, which is safer when the proxy header cannot be trusted.
+    The server sets this via WEB_TRUST_PROXY (true behind a reverse proxy, false for direct traffic). */
+};
+
+// Read results are modeled as simple statuses to avoid nested try/catch.
+type TraceReadResult =
+    | { status: 'found'; metadata: ResponseMetadata }
+    | { status: 'not-found' }
+    | { status: 'error'; errorMessage: string };
+
+// Shared header name so auth checks stay consistent and easy to update.
+const TRACE_TOKEN_HEADER = 'x-arete-trace-token';
+
+// Helper to send JSON consistently (status + headers + serialized payload).
+const sendJson = (
+    res: ServerResponse,
+    statusCode: number,
+    payload: unknown,
+    extraHeaders?: Record<string, string>
+): void => {
+    res.statusCode = statusCode;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    if (extraHeaders) {
+        for (const [header, value] of Object.entries(extraHeaders)) {
+            res.setHeader(header, value);
+        }
+    }
+    res.end(JSON.stringify(payload));
+};
+
+// Extract staleAfter if present and return a Date (or null if missing/invalid).
+// Fail-open: if staleAfter is malformed, treat it as missing so we do not block reads.
+const getStaleAfterDate = (metadata: ResponseMetadata): Date | null => {
+    const staleAfter =
+        typeof (metadata as { staleAfter?: unknown }).staleAfter === 'string'
+            ? (metadata as { staleAfter?: string }).staleAfter
+            : undefined;
+    if (!staleAfter) {
+        return null;
+    }
+    const staleAfterDate = new Date(staleAfter);
+    return Number.isNaN(staleAfterDate.getTime()) ? null : staleAfterDate;
+};
+
+// Wrap storage access so callers can branch on a small status object.
+const readTraceMetadata = async (
+    store: TraceStore,
+    responseId: string
+): Promise<TraceReadResult> => {
+    try {
+        const metadata = await store.retrieve(responseId);
+        if (!metadata) {
+            return { status: 'not-found' };
+        }
+        return { status: 'found', metadata };
+    } catch (error) {
+        return {
+            status: 'error',
+            errorMessage: error instanceof Error ? error.message : String(error),
+        };
+    }
 };
 
 // --- Client IP parsing ---
@@ -65,24 +130,64 @@ const createTraceHandlers = ({
     maxTraceBodyBytes,
     trustProxy,
 }: TraceHandlerDeps) => {
+    // Guard: stop early when trace storage is unavailable.
+    const requireTraceStore = (
+        store: TraceStore | null,
+        req: IncomingMessage,
+        res: ServerResponse,
+        logLabel: string
+    ): store is TraceStore => {
+        if (!store) {
+            sendJson(res, 503, { error: 'Trace store unavailable' });
+            logRequest(req, res, logLabel);
+            return false;
+        }
+        return true;
+    };
+
+    // Guard: stop early when ingestion is not configured.
+    const requireTraceToken = (
+        token: string | null,
+        req: IncomingMessage,
+        res: ServerResponse,
+        logLabel: string
+    ): token is string => {
+        if (!token) {
+            sendJson(res, 503, { error: 'Trace ingestion not configured' });
+            logRequest(req, res, logLabel);
+            return false;
+        }
+        return true;
+    };
+
+    // Guard: stop early when the rate limiter is unavailable.
+    const requireTraceWriteLimiter = (
+        limiter: SimpleRateLimiter | null,
+        req: IncomingMessage,
+        res: ServerResponse,
+        logLabel: string
+    ): limiter is SimpleRateLimiter => {
+        if (!limiter) {
+            sendJson(res, 503, { error: 'Trace rate limiter unavailable' });
+            logRequest(req, res, logLabel);
+            return false;
+        }
+        return true;
+    };
+
+    // Read handler: parse responseId, load metadata, check staleness, respond.
     const handleTraceRequest = async (
         req: IncomingMessage,
         res: ServerResponse,
         parsedUrl: URL
     ): Promise<void> => {
         try {
-            // Expect /api/traces/{responseId} to support trace lookups.
+            // Read flow: parse responseId -> check store -> load metadata -> enforce staleness -> respond.
+            // Expect /api/traces/{responseId}
             const pathMatch =
                 parsedUrl.pathname.match(/^\/api\/traces\/([^/]+)\/?$/);
             if (!pathMatch) {
-                res.statusCode = 400;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.end(
-                    JSON.stringify({ error: 'Invalid trace request format' })
-                );
+                sendJson(res, 400, { error: 'Invalid trace request format' });
                 logRequest(req, res, 'trace invalid-format');
                 return;
             }
@@ -94,83 +199,59 @@ const createTraceHandlers = ({
             );
 
             // Fail open with a 503 if storage is not available.
-            if (!traceStore) {
-                res.statusCode = 503;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.end(JSON.stringify({ error: 'Trace store unavailable' }));
-                logRequest(req, res, 'trace store-unavailable');
+            if (
+                !requireTraceStore(
+                    traceStore,
+                    req,
+                    res,
+                    'trace store-unavailable'
+                )
+            ) {
                 return;
             }
 
-            try {
-                const metadata = await traceStore.retrieve(responseId);
-
+            const readResult = await readTraceMetadata(
+                traceStore,
+                responseId
+            );
+            if (readResult.status === 'not-found') {
                 // Missing trace is not fatal but should return 404.
-                if (!metadata) {
-                    res.statusCode = 404;
-                    res.setHeader(
-                        'Content-Type',
-                        'application/json; charset=utf-8'
-                    );
-                    res.end(JSON.stringify({ error: 'Trace not found' }));
-                    logRequest(req, res, 'trace not-found');
-                    return;
-                }
-
-                // Respect staleAfter to avoid serving expired traces.
-                const staleAfter =
-                    typeof (metadata as { staleAfter?: unknown }).staleAfter ===
-                    'string'
-                        ? (metadata as { staleAfter?: string }).staleAfter
-                        : undefined;
-                if (staleAfter) {
-                    const staleAfterDate = new Date(staleAfter);
-                    if (staleAfterDate < new Date()) {
-                        res.statusCode = 410;
-                        res.setHeader(
-                            'Content-Type',
-                            'application/json; charset=utf-8'
-                        );
-                        res.end(
-                            JSON.stringify({
-                                message: 'Trace is stale',
-                                metadata,
-                            })
-                        );
-                        logRequest(req, res, 'trace stale');
-                        return;
-                    }
-                }
-
-                res.statusCode = 200;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.end(JSON.stringify(metadata));
-                logRequest(req, res, 'trace success');
-            } catch (error) {
-                const errorMessage =
-                    error instanceof Error ? error.message : String(error);
-                logger.error(
-                    `Failed to retrieve trace for response "${responseId}": ${errorMessage}`
-                );
-                res.statusCode = 500;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.end(JSON.stringify({ error: 'Failed to read trace' }));
-                logRequest(req, res, `trace error ${errorMessage}`);
+                sendJson(res, 404, { error: 'Trace not found' });
+                logRequest(req, res, 'trace not-found');
+                return;
             }
+
+            if (readResult.status === 'error') {
+                logger.error(
+                    `Failed to retrieve trace for response "${responseId}": ${readResult.errorMessage}`
+                );
+                sendJson(res, 500, { error: 'Failed to read trace' });
+                logRequest(req, res, `trace error ${readResult.errorMessage}`);
+                return;
+            }
+
+            const metadata = readResult.metadata;
+
+            // Respect staleAfter to avoid serving expired traces.
+            const staleAfterDate = getStaleAfterDate(metadata);
+            if (staleAfterDate && staleAfterDate < new Date()) {
+                sendJson(res, 410, {
+                    message: 'Trace is stale',
+                    metadata,
+                });
+                logRequest(req, res, 'trace stale');
+                return;
+            }
+
+            sendJson(res, 200, metadata);
+            logRequest(req, res, 'trace success');
         } catch (error) {
-            res.statusCode = 500;
-            res.setHeader('Content-Type', 'application/json; charset=utf-8');
-            res.setHeader('Cache-Control', 'no-store');
-            res.end(JSON.stringify({ error: 'Internal server error' }));
+            sendJson(
+                res,
+                500,
+                { error: 'Internal server error' },
+                { 'Cache-Control': 'no-store' }
+            );
             logRequest(
                 req,
                 res,
@@ -179,106 +260,83 @@ const createTraceHandlers = ({
         }
     };
 
+    // Write handler: validate, rate limit, then store the trace payload.
     const handleTraceUpsertRequest = async (
         req: IncomingMessage,
         res: ServerResponse
     ): Promise<void> => {
         try {
+            // Write flow: require POST + token + limiter -> parse JSON -> validate -> store.
             // Only allow trace writes via POST.
             if (req.method !== 'POST') {
-                res.statusCode = 405;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.end(JSON.stringify({ error: 'Method not allowed' }));
+                sendJson(res, 405, { error: 'Method not allowed' });
                 logRequest(req, res, 'trace upsert method-not-allowed');
                 return;
             }
 
-            if (!traceStore) {
-                res.statusCode = 503;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.end(JSON.stringify({ error: 'Trace store unavailable' }));
-                logRequest(req, res, 'trace upsert store-unavailable');
+            if (
+                !requireTraceStore(
+                    traceStore,
+                    req,
+                    res,
+                    'trace upsert store-unavailable'
+                )
+            ) {
                 return;
             }
 
             // Require a shared secret for trace ingestion to prevent public poisoning.
-            if (!traceToken) {
-                res.statusCode = 503;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.end(
-                    JSON.stringify({ error: 'Trace ingestion not configured' })
-                );
-                logRequest(req, res, 'trace upsert token-not-configured');
+            if (
+                !requireTraceToken(
+                    traceToken,
+                    req,
+                    res,
+                    'trace upsert token-not-configured'
+                )
+            ) {
                 return;
             }
 
             // Validate the shared secret supplied by trusted clients (e.g., bot).
-            const providedToken = req.headers['x-arete-trace-token'];
+            const providedToken = req.headers[TRACE_TOKEN_HEADER];
             const providedValue = Array.isArray(providedToken)
                 ? providedToken[0]
                 : providedToken;
             if (!providedValue) {
-                res.statusCode = 401;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.end(JSON.stringify({ error: 'Missing trace token' }));
+                sendJson(res, 401, { error: 'Missing trace token' });
                 logRequest(req, res, 'trace upsert missing-token');
                 return;
             }
 
             if (String(providedValue) !== traceToken) {
-                res.statusCode = 403;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.end(JSON.stringify({ error: 'Invalid trace token' }));
+                sendJson(res, 403, { error: 'Invalid trace token' });
                 logRequest(req, res, 'trace upsert invalid-token');
                 return;
             }
 
             // Rate-limit writes per client to protect storage from abuse.
             const clientIp = getClientIp(req, trustProxy);
-            if (!traceWriteLimiter) {
-                res.statusCode = 503;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.end(
-                    JSON.stringify({ error: 'Trace rate limiter unavailable' })
-                );
-                logRequest(req, res, 'trace upsert limiter-unavailable');
+            if (
+                !requireTraceWriteLimiter(
+                    traceWriteLimiter,
+                    req,
+                    res,
+                    'trace upsert limiter-unavailable'
+                )
+            ) {
                 return;
             }
 
             const rateLimitResult = traceWriteLimiter.check(clientIp);
             if (!rateLimitResult.allowed) {
-                res.statusCode = 429;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.setHeader(
-                    'Retry-After',
-                    rateLimitResult.retryAfter.toString()
-                );
-                res.end(
-                    JSON.stringify({
+                sendJson(
+                    res,
+                    429,
+                    {
                         error: 'Too many trace writes',
                         retryAfter: rateLimitResult.retryAfter,
-                    })
+                    },
+                    { 'Retry-After': rateLimitResult.retryAfter.toString() }
                 );
                 logRequest(req, res, 'trace upsert rate-limited');
                 return;
@@ -292,14 +350,7 @@ const createTraceHandlers = ({
                     Number.isFinite(contentLength) &&
                     contentLength > maxTraceBodyBytes
                 ) {
-                    res.statusCode = 413;
-                    res.setHeader(
-                        'Content-Type',
-                        'application/json; charset=utf-8'
-                    );
-                    res.end(
-                        JSON.stringify({ error: 'Trace payload too large' })
-                    );
+                    sendJson(res, 413, { error: 'Trace payload too large' });
                     logRequest(
                         req,
                         res,
@@ -316,14 +367,7 @@ const createTraceHandlers = ({
                 body += chunk.toString();
                 if (body.length > maxTraceBodyBytes) {
                     bodyTooLarge = true;
-                    res.statusCode = 413;
-                    res.setHeader(
-                        'Content-Type',
-                        'application/json; charset=utf-8'
-                    );
-                    res.end(
-                        JSON.stringify({ error: 'Trace payload too large' })
-                    );
+                    sendJson(res, 413, { error: 'Trace payload too large' });
                     logRequest(req, res, 'trace upsert payload-too-large');
                     req.destroy();
                 }
@@ -339,12 +383,7 @@ const createTraceHandlers = ({
             }
 
             if (!body) {
-                res.statusCode = 400;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.end(JSON.stringify({ error: 'Missing request body' }));
+                sendJson(res, 400, { error: 'Missing request body' });
                 logRequest(req, res, 'trace upsert missing-body');
                 return;
             }
@@ -357,12 +396,7 @@ const createTraceHandlers = ({
                 logger.warn(
                     `Trace upsert received invalid JSON body: ${error instanceof Error ? error.message : String(error)}`
                 );
-                res.statusCode = 400;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+                sendJson(res, 400, { error: 'Invalid JSON body' });
                 logRequest(req, res, 'trace upsert invalid-json');
                 return;
             }
@@ -372,12 +406,7 @@ const createTraceHandlers = ({
                 | string
                 | undefined;
             if (!responseId) {
-                res.statusCode = 400;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.end(JSON.stringify({ error: 'Missing responseId' }));
+                sendJson(res, 400, { error: 'Missing responseId' });
                 logRequest(req, res, 'trace upsert missing-responseId');
                 return;
             }
@@ -397,17 +426,13 @@ const createTraceHandlers = ({
 
             await traceStore.upsert(normalizedMetadata);
 
-            res.statusCode = 200;
-            res.setHeader('Content-Type', 'application/json; charset=utf-8');
-            res.end(JSON.stringify({ ok: true, responseId }));
+            sendJson(res, 200, { ok: true, responseId });
             logRequest(req, res, `trace upsert success ${responseId}`);
         } catch (error) {
             const errorMessage =
                 error instanceof Error ? error.message : 'unknown error';
             logger.error(`Trace upsert failed: ${errorMessage}`);
-            res.statusCode = 500;
-            res.setHeader('Content-Type', 'application/json; charset=utf-8');
-            res.end(JSON.stringify({ error: 'Failed to store trace' }));
+            sendJson(res, 500, { error: 'Failed to store trace' });
             logRequest(req, res, `trace upsert error ${errorMessage}`);
         }
     };
