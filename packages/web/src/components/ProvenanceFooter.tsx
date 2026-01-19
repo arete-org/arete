@@ -167,7 +167,7 @@ const ProvenanceFooter = ({
                     )}
                 {metadata.responseId && metadata.responseId.trim() !== '' && (
                     <Link
-                        to={`/trace/${metadata.responseId}`}
+                        to={`/api/traces/${metadata.responseId}`}
                         className="provenance-link"
                         aria-label="View full trace for this response"
                     >
