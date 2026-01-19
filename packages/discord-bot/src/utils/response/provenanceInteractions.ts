@@ -764,7 +764,12 @@ export async function resolveProvenanceMetadata(
 
     try {
         const response = await fetch(
-            `${config.backendBaseUrl}/trace/${responseId}.json`
+            `${config.backendBaseUrl}/api/traces/${responseId}`,
+            {
+                headers: {
+                    Accept: 'application/json',
+                },
+            }
         );
         if (!response.ok) {
             logger.warn(

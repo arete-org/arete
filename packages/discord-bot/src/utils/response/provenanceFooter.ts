@@ -140,7 +140,9 @@ export function buildFooterEmbed(
         .setLabel('Full Trace')
         .setStyle(ButtonStyle.Link) // Link style for external URL
         .setEmoji('\u{1F4DC}') // Scroll
-        .setURL(`${normalizedBaseUrl}/trace/${responseMetadata.responseId}`);
+        .setURL(
+            `${normalizedBaseUrl}/api/traces/${responseMetadata.responseId}`
+        );
     actionRow.addComponents(fullTraceButton);
 
     // Report Issue button

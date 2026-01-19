@@ -101,7 +101,6 @@ declare module '@arete/backend/shared' {
 
     export interface IncidentPointers {
         responseId?: string;
-        traceId?: string;
         guildId?: string;
         channelId?: string;
         messageId?: string;

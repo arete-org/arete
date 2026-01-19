@@ -76,7 +76,7 @@ This milestone establishes:
 
 - Auto-capture context:
     - message jump link + message ID pointers
-    - provenance pointers when available (responseId / traceId / model hash / chain hash)
+- provenance pointers when available (responseId / model hash / chain hash)
 
 - Store report as `status = new` and append an `incident.created` audit event.
 
@@ -181,6 +181,6 @@ This milestone establishes:
     - `incident.status_changed`
     - `breaker.tripped`
 
-- Include correlation fields: incidentId (short), responseId/traceId when available, ruleId, action.
+- Include correlation fields: incidentId (short), responseId when available, ruleId, action.
 
 **Deliverable:** Incidents and breaker trips are grep-able, correlatable, and privacy-preserving.

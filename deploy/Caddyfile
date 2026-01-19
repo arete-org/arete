@@ -3,11 +3,19 @@
     respond "Forbidden" 403
   }
 
-  handle /api/* {
-    reverse_proxy {$BACKEND_HOST}:3000
+  # Trace UI route: serve the SPA when a browser asks for HTML.
+  # JSON requests still go to the backend API via the /api/* proxy below.
+  @trace_ui {
+    path /api/traces/*
+    header_regexp Accept (?i)text/html|application/xhtml\+xml
+  }
+  handle @trace_ui {
+    root * /usr/share/caddy
+    try_files {path} /index.html
+    file_server
   }
 
-  handle /trace/*.json {
+  handle /api/* {
     reverse_proxy {$BACKEND_HOST}:3000
   }
 

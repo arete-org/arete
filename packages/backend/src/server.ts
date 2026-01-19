@@ -185,6 +185,28 @@ const handleWebhookRequest = createWebhookHandler({
     verifyGitHubSignature,
     logRequest,
 });
+// Decide whether /api/traces/:responseId should return JSON or the SPA HTML shell.
+// We default to JSON unless the Accept header clearly asks for HTML.
+// This keeps API clients working even when they send a generic "*/*" Accept header.
+const wantsJsonResponse = (req: http.IncomingMessage): boolean => {
+    const headerValue = req.headers.accept;
+    const acceptHeader = Array.isArray(headerValue)
+        ? headerValue.join(',')
+        : headerValue || '';
+    const normalized = acceptHeader.toLowerCase();
+    const wantsHtml =
+        normalized.includes('text/html') ||
+        normalized.includes('application/xhtml+xml');
+    const wantsJson =
+        normalized.includes('application/json') ||
+        normalized.includes('+json');
+
+    if (wantsHtml && !wantsJson) {
+        return false;
+    }
+
+    return true;
+};
 // Reflection is the slim, web-facing chat interface (Turnstile + rate-limited).
 const handleReflectRequest = createReflectHandler({
     openaiService,
@@ -239,18 +261,23 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
-        if (parsedUrl.pathname === '/api/reflect') {
-            await handleReflectRequest(req, res);
-            return;
+        // --- Trace retrieval route (JSON only) ---
+        // This path also doubles as a browser route for the trace page.
+        // We only return JSON when the caller explicitly asks for JSON.
+        if (parsedUrl.pathname.startsWith('/api/traces/')) {
+            // This endpoint can return HTML or JSON depending on the Accept header.
+            // Tell caches to keep those two versions separate (so a JSON request never gets a cached HTML page and vice versa).
+            res.setHeader('Vary', 'Accept');
+            if (wantsJsonResponse(req)) {
+                logger.debug(`Trace route matched: ${parsedUrl.pathname}`);
+                await handleTraceRequest(req, res, parsedUrl);
+                return;
+            }
+            // Fall through to the static asset resolver for the SPA.
         }
 
-        // --- Trace retrieval route ---
-        if (
-            parsedUrl.pathname.startsWith('/trace/') &&
-            parsedUrl.pathname.endsWith('.json')
-        ) {
-            logger.debug(`Trace route matched: ${parsedUrl.pathname}`);
-            await handleTraceRequest(req, res, parsedUrl);
+        if (parsedUrl.pathname === '/api/reflect') {
+            await handleReflectRequest(req, res);
             return;
         }
 
