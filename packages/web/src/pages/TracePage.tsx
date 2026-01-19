@@ -87,8 +87,12 @@ const TracePage = (): JSX.Element => {
 
             try {
                 console.log('=== Trace Page - Making Request ===');
-                console.log('Request URL:', `/trace/${responseId}.json`);
-                const response = await fetch(`/trace/${responseId}.json`);
+                console.log('Request URL:', `/api/traces/${responseId}`);
+                const response = await fetch(`/api/traces/${responseId}`, {
+                    headers: {
+                        Accept: 'application/json',
+                    },
+                });
                 console.log('Response status:', response.status);
                 console.log('Response ok:', response.ok);
                 console.log(
