@@ -125,6 +125,32 @@ export default [
         },
     },
     {
+        files: [
+            'packages/web/**/*.{ts,tsx,js,jsx}',
+            'packages/discord-bot/**/*.{ts,tsx,js,jsx}',
+        ],
+        rules: {
+            // Guardrail: web/bot should not import backend code directly. Call the backend
+            // over HTTP (/api/*) and keep that fetch logic in a small local module inside
+            // each package (for example, packages/web/src/api/* or packages/discord-bot/src/api/*).
+            'no-restricted-syntax': [
+                'warn',
+                {
+                    selector:
+                        "ImportDeclaration[source.value=/^@arete\\/backend(\\/|$)/]",
+                    message:
+                        'Avoid @arete/backend imports in web/bot. Call the backend via /api/* and keep the fetch logic in a local client module for this package (e.g., packages/web/src/api/* or packages/discord-bot/src/api/*).',
+                },
+                {
+                    selector:
+                        "CallExpression[callee.type='Import'][arguments.0.value=/^@arete\\/backend(\\/|$)/]",
+                    message:
+                        'Avoid @arete/backend dynamic imports in web/bot. Call the backend via /api/* and keep the fetch logic in a local client module for this package (e.g., packages/web/src/api/* or packages/discord-bot/src/api/*).',
+                },
+            ],
+        },
+    },
+    {
         files: ['packages/web/**/*.{ts,tsx}'],
         plugins: {
             'react-hooks': reactHooks,
