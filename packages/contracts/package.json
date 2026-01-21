@@ -1,0 +1,20 @@
+{
+    "name": "@arete/contracts",
+    "version": "0.0.1",
+    "private": true,
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./ethics-core": {
+            "types": "./dist/ethics-core/index.d.ts",
+            "default": "./dist/ethics-core/index.js"
+        }
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.json"
+    }
+}

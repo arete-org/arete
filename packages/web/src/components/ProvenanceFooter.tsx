@@ -4,7 +4,7 @@ import type {
     ResponseMetadata,
     RiskTier,
     Citation,
-} from '@arete/backend/ethics-core';
+} from '@arete/contracts/ethics-core';
 
 interface ProvenanceFooterProps {
     metadata?: ResponseMetadata | null;
@@ -49,20 +49,14 @@ const ProvenanceFooter = ({
             ? `${metadata.tradeoffCount} trade-off(s) considered`
             : '';
 
-    // Process citations with safe URL parsing
+    // Process citations
     const citations: JSX.Element[] = [];
     if (metadata.citations && metadata.citations.length > 0) {
         metadata.citations.forEach((citation: Citation, index: number) => {
             try {
-                const url =
-                    citation.url instanceof URL
-                        ? citation.url
-                        : new URL(citation.url);
+                const url = new URL(citation.url);
                 const hostname = url.hostname.replace('www.', '');
-                const href =
-                    typeof citation.url === 'string'
-                        ? citation.url
-                        : citation.url.toString();
+                const href = citation.url;
                 citations.push(
                     <a
                         key={index}

@@ -80,14 +80,13 @@ export class SqliteTraceStore {
                 );
             }
 
-            let url: URL;
-            if (citation.url instanceof URL) {
-                url = citation.url;
-            } else if (typeof citation.url === 'string') {
-                url = new URL(citation.url);
+            let url: string;
+            if (typeof citation.url === 'string') {
+                // Validate and normalize the URL string before storing.
+                url = new URL(citation.url).toString();
             } else {
                 throw new Error(
-                    `Cannot serialize citation URL for response "${metadata.responseId}". Expected string or URL instance.`
+                    `Cannot serialize citation URL for response "${metadata.responseId}". Expected a string URL.`
                 );
             }
 
@@ -178,9 +177,7 @@ export class SqliteTraceStore {
             }
 
             const citationRecord = citation as Record<string, unknown>;
-            if (typeof citationRecord.url === 'string') {
-                citationRecord.url = new URL(citationRecord.url);
-            } else if (!(citationRecord.url instanceof URL)) {
+            if (typeof citationRecord.url !== 'string') {
                 throw new Error(
                     `Trace record "${responseId}" is invalid: citation URL missing or malformed.`
                 );
