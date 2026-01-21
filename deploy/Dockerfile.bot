@@ -1,31 +1,38 @@
+# === Build stage ===
 FROM node:22-slim
 
+# Build context root
 WORKDIR /app
+# Production runtime flags
 ENV NODE_ENV=production
 
-# Enable corepack for pnpm
+# --- Tooling ---
 RUN corepack enable && corepack prepare pnpm@10.26.2 --activate
 
-# Native addon support for @discordjs/opus and friends.
+# --- System deps ---
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 
+# --- Workspace metadata ---
 COPY tsconfig.json ./tsconfig.json
 COPY package.json pnpm-workspace.yaml ./
 COPY packages/discord-bot/package.json packages/discord-bot/package.json
 COPY packages/backend/package.json packages/backend/tsconfig.json packages/backend/
 
-# Install dependencies (include dev deps for build tooling; lockfile required)
+# --- Dependencies ---
 COPY pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile --prod=false
 
+# --- Sources ---
 COPY packages/backend/src/ packages/backend/src/
 COPY packages/discord-bot/ packages/discord-bot/
 
+# --- Build ---
 RUN pnpm --filter @arete/backend run build \
   && pnpm exec tsc -p packages/discord-bot/tsconfig.json \
   && CI=true pnpm --filter @arete/discord-bot... install --prod
 
+# --- Runtime ---
 WORKDIR /app/packages/discord-bot
 CMD ["node", "dist/index.js"]
