@@ -10,7 +10,7 @@
         "type-check": "tsc --noEmit"
     },
     "dependencies": {
-        "@arete/backend": "workspace:*",
+        "@arete/contracts": "workspace:*",
         "@marsidev/react-turnstile": "catalog:",
         "react": "catalog:",
         "react-dom": "catalog:",

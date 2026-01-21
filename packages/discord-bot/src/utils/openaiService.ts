@@ -149,12 +149,12 @@ export interface OpenAIResponse {
  * Defines the structure of a citation from the OpenAI API.
  * @interface AssistantMetadataCitation
  * @property {string} title - The human-readable source name
- * @property {URL} url - The normalized URL instance for downstream rendering
+ * @property {string} url - The URL string (JSON-safe; parse with new URL() when needed)
  * @property {string} snippet - The optional short excerpt from the cited content
  */
 export interface AssistantMetadataCitation {
     title: string;
-    url: URL;
+    url: string;
     snippet?: string;
 }
 
@@ -549,7 +549,7 @@ export class OpenAIService {
             // Prefer metadata-provided citations; fall back to annotations when the JSON block is missing or incomplete
             const normalizedCitations = assistantMetadata?.citations?.length
                 ? assistantMetadata.citations.map((citation) => ({
-                      url: citation.url.toString(),
+                      url: citation.url,
                       title: citation.title,
                       text: citation.snippet ?? '',
                   }))
@@ -667,7 +667,8 @@ export class OpenAIService {
 
     /**
      * Validates the JSON metadata payload.
-     * Coerces citation URLs into `URL` objects and discards malformed entries.
+     * Keeps citation URLs as plain strings because JSON only stores text.
+     * Invalid citations are dropped to keep downstream code safe.
      * @param {unknown} candidate - The candidate metadata payload to normalize
      * @returns {AssistantMetadataPayload | null} - The normalized metadata payload
      */
@@ -696,7 +697,10 @@ export class OpenAIService {
                 }
 
                 try {
-                    const normalizedUrl = new URL(citationRecord.url);
+                    // Validate and normalize the URL string before we store it.
+                    const normalizedUrl = new URL(
+                        citationRecord.url
+                    ).toString();
                     citations.push({
                         title:
                             typeof citationRecord.title === 'string' &&

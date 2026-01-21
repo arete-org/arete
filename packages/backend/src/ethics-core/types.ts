@@ -5,6 +5,7 @@
  * @arete-risk: low - Type drift can break downstream assumptions or validations.
  * @arete-ethics: low - Types document semantics without processing data.
  */
+
 /**
  * RiskTier classifies the sensitivity of a response.
  * - low: General knowledge, casual topics
@@ -33,7 +34,7 @@ export type ConfidenceScore = number; // 0.0 to 1.0
  */
 export type Citation = {
     title: string;
-    url: URL;
+    url: string;
     snippet?: string; // Optional excerpt from source
 };
 
