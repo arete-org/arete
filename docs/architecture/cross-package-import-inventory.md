@@ -103,9 +103,7 @@ No matches found.
   - `packages/web/src/pages/InvitePage.tsx` includes `@arete/web` in a code snippet string (not an import).
 
 ## 6) Issue #146 snapshot (discord-bot ambient types removal)
-This section focuses on the `discord-bot -> backend` references that are tied to
-`arete-shared.d.ts` and shared backend modules. These are the concrete targets
-for Issue #146.
+This section focuses on the `discord-bot -> backend` references that are tied to `arete-shared.d.ts` and shared backend modules.
 
 ### `@arete/backend/shared` usage (discord-bot)
 - `packages/discord-bot/src/utils/env.ts` (discord-bot); type-only; `@arete/backend/shared`; symbols: `PromptKey`
@@ -124,3 +122,47 @@ for Issue #146.
 - `packages/discord-bot/src/utils/response/metadata.ts` (discord-bot); type-only; `@arete/backend/ethics-core`; symbols: `ResponseMetadata`, `RiskTier`, `Provenance`, `Citation`
 - `packages/discord-bot/src/utils/response/provenanceFooter.ts` (discord-bot); type-only; `@arete/backend/ethics-core`; symbols: `ResponseMetadata`, `RiskTier`, `Citation`
 - `packages/discord-bot/src/utils/response/provenanceInteractions.ts` (discord-bot); type-only; `@arete/backend/ethics-core`; symbols: `ResponseMetadata`, `Citation`
+
+## 7) Issue #146 planning notes (discord-bot decoupling)
+
+### #146 Status / What remains
+- Full coupling list is in Section 6; two buckets remain: type-only imports from `@arete/backend/ethics-core` and runtime imports from `@arete/backend/shared`.
+- Goal: move bot types to `@arete/contracts/ethics-core` and remove runtime imports of backend internals.
+- Highest-risk runtime couplings: prompt registry import (`packages/discord-bot/src/utils/env.ts`) and logger re-export (`packages/discord-bot/src/utils/logger.ts`).
+
+### Decision record (current direction)
+- Types: use `@arete/contracts/ethics-core` (contracts package exists under `packages/contracts`).
+- Prompts: access via backend API with auth required by default (prompt registry remains backend-owned (existing YAML-based registry)).
+- Logging: keep local for now; later centralize via Docker/Compose aggregation (no API logging work in #146).
+- Backend down: disable AI responses and return a clear fallback message/menu (planned behavior; not implemented yet).
+
+### Prompt access plan (impacted call sites + minimal response)
+All prompt call sites use the same pattern: `renderPrompt("<key>", {...})`.
+Files + functions that call it today:
+- `packages/discord-bot/src/commands/news.ts`: `newsCommand.execute`
+- `packages/discord-bot/src/commands/image/openai.ts`: `generateImageWithMetadata`
+- `packages/discord-bot/src/commands/image/prompts.ts`: `buildDeveloperPrompt`
+- `packages/discord-bot/src/utils/openaiService.ts`: `OpenAIService.reduceContext`
+- `packages/discord-bot/src/utils/prompting/RealtimeContextBuilder.ts`: `RealtimeContextBuilder.buildContext`
+- `packages/discord-bot/src/utils/prompting/ContextBuilder.ts`: `ContextBuilder.buildContext`
+- `packages/discord-bot/src/utils/prompting/Planner.ts`: `Planner.generatePlan`
+- `packages/discord-bot/src/utils/response/provenanceInteractions.ts`: `generateAlternativeLensMessage`, `generateExplanationMessage`, `requestProvenanceOpenAIOptions`
+
+Minimal API response shape the bot needs today:
+- Required now: `{ "content": "string" }`
+
+Auth scheme for prompt requests (mirrors trace token pattern in backend trace handler):
+- Env: `PROMPT_API_TOKEN` (to be added)
+- Header: `x-arete-prompt-token`
+- Enforcement: new backend prompt handler should gate access before reading prompt registry
+
+Fallback behavior expectation:
+- If the backend is down or prompt fetch fails, AI responses are disabled and the bot returns a clear fallback message/menu.
+- The cleanest place to gate this is the message pipeline in `packages/discord-bot/src/utils/MessageProcessor.ts`, before any planner/OpenAI calls.
+
+### Next steps (incremental)
+- Add an authenticated backend prompt endpoint (serve prompt content only). The backend does not have a prompt handler today.
+- Update the bot to fetch prompts via the API and disable AI responses when prompts are unavailable.
+- Migrate bot types from `@arete/backend/ethics-core` to `@arete/contracts/ethics-core`.
+- Remove `packages/discord-bot/src/types/arete-shared.d.ts` and drop the `@arete/backend` dependency once no usages remain.
+- Move `packages/discord-bot/test/loggingPrivacy.test.ts` into backend tests to remove test-only coupling.
