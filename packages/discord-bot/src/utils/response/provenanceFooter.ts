@@ -110,7 +110,7 @@ export function buildFooterEmbed(
                     return null;
                 }
             })
-            .filter((line): line is string => line !== null)
+            .filter((line: string | null): line is string => line !== null)
             .join(' · '); // Join multiple citations with smaller dot separators
         if (citationLines.length > 0) {
             descriptionParts.push(`Sources:
