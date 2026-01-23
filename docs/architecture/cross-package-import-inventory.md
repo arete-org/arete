@@ -101,3 +101,26 @@ No matches found.
   - `packages/backend/src/index.ts` has `@arete/backend/shared` in a comment (not an import).
   - `packages/discord-bot/src/types/arete-shared.d.ts` includes `@arete/backend/shared` in a doc comment and a `declare module` statement (not an import string inside `from`, `require`, or `import()`).
   - `packages/web/src/pages/InvitePage.tsx` includes `@arete/web` in a code snippet string (not an import).
+
+## 6) Issue #146 snapshot (discord-bot ambient types removal)
+This section focuses on the `discord-bot -> backend` references that are tied to
+`arete-shared.d.ts` and shared backend modules. These are the concrete targets
+for Issue #146.
+
+### `@arete/backend/shared` usage (discord-bot)
+- `packages/discord-bot/src/utils/env.ts` (discord-bot); type-only; `@arete/backend/shared`; symbols: `PromptKey`
+- `packages/discord-bot/src/utils/env.ts` (discord-bot); type-only; `@arete/backend/shared`; usage: `typeof import().PromptRegistry`
+- `packages/discord-bot/src/utils/env.ts` (discord-bot); type-only; `@arete/backend/shared`; usage: `typeof import().renderPrompt`
+- `packages/discord-bot/src/utils/env.ts` (discord-bot); type-only; `@arete/backend/shared`; usage: `typeof import().setActivePromptRegistry`
+- `packages/discord-bot/src/utils/env.ts` (discord-bot); dynamic; `@arete/backend/shared`; usage: `await import()`
+- `packages/discord-bot/src/utils/logger.ts` (discord-bot); runtime; `@arete/backend/shared`; symbols: `logger`, `formatUsd`, `logLLMCostSummary`, `sanitizeLogData`
+- `packages/discord-bot/src/utils/logger.ts` (discord-bot); type-only; `@arete/backend/shared`; symbols: `LLMCostTotals`, `LLMCostSummaryProvider`
+- `packages/discord-bot/test/loggingPrivacy.test.ts` (discord-bot test); runtime; `@arete/backend/shared`; symbols: `SqliteIncidentStore`
+
+### `@arete/backend/ethics-core` usage (discord-bot)
+- `packages/discord-bot/src/types/arete-shared.d.ts` (discord-bot); type-only; `@arete/backend/ethics-core`; symbols: `ResponseMetadata`
+- `packages/discord-bot/src/utils/MessageProcessor.ts` (discord-bot); type-only; `@arete/backend/ethics-core`; symbols: `ResponseMetadata`
+- `packages/discord-bot/src/utils/prompting/Planner.ts` (discord-bot); type-only; `@arete/backend/ethics-core`; symbols: `RiskTier`
+- `packages/discord-bot/src/utils/response/metadata.ts` (discord-bot); type-only; `@arete/backend/ethics-core`; symbols: `ResponseMetadata`, `RiskTier`, `Provenance`, `Citation`
+- `packages/discord-bot/src/utils/response/provenanceFooter.ts` (discord-bot); type-only; `@arete/backend/ethics-core`; symbols: `ResponseMetadata`, `RiskTier`, `Citation`
+- `packages/discord-bot/src/utils/response/provenanceInteractions.ts` (discord-bot); type-only; `@arete/backend/ethics-core`; symbols: `ResponseMetadata`, `Citation`
