@@ -105,22 +105,19 @@ export function assertValidResponseMetadata(
             );
         }
 
-        if (typeof citationRecord.url === 'string') {
-            try {
-                // Accept JSON payloads that encode URLs as strings, but store validated URL objects.
-                citationRecord.url = new URL(citationRecord.url);
-            } catch (error) {
-                const errorMessage =
-                    error instanceof Error ? error.message : String(error);
-                throw new Error(
-                    `Trace record "${source}" for response "${responseId}" is invalid (citation URL malformed: ${errorMessage}).`
-                );
-            }
-        }
-
-        if (!(citationRecord.url instanceof URL)) {
+        if (typeof citationRecord.url !== 'string') {
             throw new Error(
                 `Trace record "${source}" for response "${responseId}" is invalid (citation URL missing).`
+            );
+        }
+
+        try {
+            new URL(citationRecord.url);
+        } catch (error) {
+            const errorMessage =
+                error instanceof Error ? error.message : String(error);
+            throw new Error(
+                `Trace record "${source}" for response "${responseId}" is invalid (citation URL malformed: ${errorMessage}).`
             );
         }
     }

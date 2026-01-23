@@ -1,31 +1,37 @@
+# === Build stage ===
 FROM node:22-slim
 
+# Build context root
 WORKDIR /app
+# Production runtime flags
 ENV NODE_ENV=production
 
-# Enable corepack for pnpm
+# --- Tooling ---
 RUN corepack enable && corepack prepare pnpm@10.26.2 --activate
 
-# Native addon support for better-sqlite3.
+# --- System deps ---
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 
+# --- Workspace metadata ---
 COPY tsconfig.json ./tsconfig.json
 COPY package.json pnpm-workspace.yaml ./
 COPY packages/backend/package.json packages/backend/tsconfig.json packages/backend/
 
-# Install dependencies (lockfile required)
+# --- Dependencies ---
 COPY pnpm-lock.yaml* ./
 
+# --- Sources ---
 COPY packages/backend/src/ packages/backend/src/
 
-# Build with backend-local dev tooling, then install backend-only prod deps.
+# --- Build ---
 RUN pnpm --dir packages/backend install --prod=false --lockfile-dir /app \
   && pnpm --dir packages/backend exec tsc -p tsconfig.json \
   # Install backend deps without workspace closure; the image only includes packages/backend.
   && CI=true pnpm --dir packages/backend install --prod --lockfile-dir /app
 
+# --- Runtime ---
 EXPOSE 3000
 WORKDIR /app/packages/backend
 CMD ["node", "dist/server.js"]

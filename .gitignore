@@ -21,6 +21,9 @@ packages/discord-bot/dist/
 packages/discord-bot/output/
 packages/discord-bot/src/output/
 
+# Contracts build artifacts
+packages/contracts/dist
+
 # Backend build artifacts
 packages/backend/dist/
 

@@ -92,16 +92,30 @@ export function buildFooterEmbed(
     // Citations, if any
     // Only list the hostnames with link embedded - the Sources button can be used for more detailed information
     // Discord also shows you the full URL on mouseover
+    // URLs arrive as strings from the API, so we parse them locally for hostname display.
     if (responseMetadata.citations.length > 0) {
         const citationLines = responseMetadata.citations
             .map((c: Citation) => {
-                // Extract just the hostname from the URL
-                const domain = c.url.hostname.replace('www.', '');
-                // Return hostname embedded with url
-                return `[${domain}](${c.url})`;
+                try {
+                    // Extract just the hostname from the URL
+                    const domain = new URL(c.url).hostname.replace('www.', '');
+                    // Return hostname embedded with url
+                    return `[${domain}](${c.url})`;
+                } catch (error) {
+                    console.warn(
+                        'Skipping malformed citation URL in footer:',
+                        c.url,
+                        error
+                    );
+                    return null;
+                }
             })
+            .filter((line): line is string => line !== null)
             .join(' · '); // Join multiple citations with smaller dot separators
-        descriptionParts.push(`Sources:\n${citationLines}`); // Push citations to new line for readability
+        if (citationLines.length > 0) {
+            descriptionParts.push(`Sources:
+${citationLines}`); // Push citations to new line for readability
+        }
     }
 
     // At last, set the description

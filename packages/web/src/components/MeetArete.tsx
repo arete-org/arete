@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import ProvenanceFooter from './ProvenanceFooter';
-import type { ResponseMetadata } from '@arete/backend/ethics-core';
+import type { ResponseMetadata } from '@arete/contracts/ethics-core';
 import examplePrompts from '../data/examplePrompts.json';
 import { loadRuntimeConfig } from '../utils/runtimeConfig';
 
@@ -19,179 +19,6 @@ declare global {
 // Provide a stable fallback response in case the backend is unavailable so the space stays welcoming.
 const FALLBACK_REFLECTION =
     'I was unable to generate a response - please try again later.';
-
-// Map provenance strings to union values
-const normalizeProvenance = (
-    provenance: string
-): 'Retrieved' | 'Inferred' | 'Speculative' => {
-    const normalized = provenance.toLowerCase();
-    if (normalized === 'retrieved') return 'Retrieved';
-    if (normalized === 'inferred') return 'Inferred';
-    if (normalized === 'speculative') return 'Speculative';
-    return 'Inferred'; // Default to 'Inferred' when unknown
-};
-
-type BackendCitation = {
-    title?: string;
-    url?: string | URL;
-    snippet?: string;
-};
-
-type BackendMetadata = {
-    responseId?: string;
-    provenance?: string;
-    confidence?: number;
-    riskTier?: string;
-    tradeoffCount?: number;
-    chainHash?: string;
-    licenseContext?: string;
-    model?: string;
-    reasoningEffort?: string;
-    staleAfter?: string;
-    runtimeContext?: { modelVersion?: string };
-    citations?: BackendCitation[];
-};
-
-type MappedCitation = { title: string; url: URL; snippet?: string };
-
-// Normalize backend metadata to ResponseMetadata format
-const normalizeMetadata = (
-    backendMetadata: BackendMetadata
-): ResponseMetadata => {
-    // Type guard: check if backendMetadata already matches ResponseMetadata structure
-    // We also need to ensure confidence is properly normalized even in this path
-    if (
-        backendMetadata &&
-        typeof backendMetadata.responseId === 'string' &&
-        typeof backendMetadata.riskTier === 'string' &&
-        (backendMetadata.riskTier === 'Low' ||
-            backendMetadata.riskTier === 'Medium' ||
-            backendMetadata.riskTier === 'High') &&
-        typeof backendMetadata.provenance === 'string' &&
-        (backendMetadata.provenance === 'Retrieved' ||
-            backendMetadata.provenance === 'Inferred' ||
-            backendMetadata.provenance === 'Speculative') &&
-        Array.isArray(backendMetadata.citations)
-    ) {
-        // Convert string URLs to URL objects if needed
-        const processedCitations = backendMetadata.citations
-            .map((citation) => {
-                if (citation.url instanceof URL) {
-                    return {
-                        title: citation.title || 'Untitled',
-                        url: citation.url,
-                        ...(citation.snippet
-                            ? { snippet: citation.snippet }
-                            : {}),
-                    } as MappedCitation;
-                }
-                if (typeof citation.url === 'string') {
-                    try {
-                        return {
-                            title: citation.title || 'Untitled',
-                            url: new URL(citation.url),
-                            ...(citation.snippet
-                                ? { snippet: citation.snippet }
-                                : {}),
-                        } as MappedCitation;
-                    } catch (error) {
-                        console.warn(
-                            'Invalid citation URL:',
-                            citation.url,
-                            error
-                        );
-                        return null;
-                    }
-                }
-                return null;
-            })
-            .filter(
-                (citation): citation is MappedCitation => citation !== null
-            );
-
-        // Ensure confidence is valid even if type guard passed
-        const validConfidence =
-            typeof backendMetadata.confidence === 'number' &&
-            backendMetadata.confidence >= 0 &&
-            backendMetadata.confidence <= 1
-                ? backendMetadata.confidence
-                : 0.0;
-
-        return {
-            ...backendMetadata,
-            confidence: validConfidence,
-            citations: processedCitations,
-        } as ResponseMetadata;
-    }
-
-    // Map backend fields to ResponseMetadata structure
-    // If it is missing, we use "unknown" so the UI still renders.
-    const normalized: ResponseMetadata = {
-        responseId: backendMetadata.responseId || 'unknown',
-        provenance: backendMetadata.provenance
-            ? normalizeProvenance(backendMetadata.provenance)
-            : 'Inferred',
-        confidence:
-            typeof backendMetadata.confidence === 'number' &&
-            backendMetadata.confidence >= 0 &&
-            backendMetadata.confidence <= 1
-                ? backendMetadata.confidence
-                : 0.0, // Default to 0.0 (0%) if not available or invalid
-        riskTier:
-            backendMetadata.riskTier === 'Low' ||
-            backendMetadata.riskTier === 'Medium' ||
-            backendMetadata.riskTier === 'High'
-                ? backendMetadata.riskTier
-                : backendMetadata.reasoningEffort === 'low'
-                  ? 'Low'
-                  : backendMetadata.reasoningEffort === 'medium'
-                    ? 'Medium'
-                    : backendMetadata.reasoningEffort === 'high'
-                      ? 'High'
-                      : 'Low',
-        tradeoffCount: backendMetadata.tradeoffCount || 0,
-        chainHash: backendMetadata.chainHash || 'unknown',
-        licenseContext: backendMetadata.licenseContext || 'MIT + HL3',
-        modelVersion:
-            backendMetadata.runtimeContext?.modelVersion ||
-            backendMetadata.model ||
-            'unknown',
-        staleAfter:
-            backendMetadata.staleAfter ||
-            new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        citations: [],
-    };
-
-    // Process citations if they exist
-    if (backendMetadata.citations && Array.isArray(backendMetadata.citations)) {
-        normalized.citations = backendMetadata.citations
-            .map((citation) => {
-                try {
-                    if (!citation.url) {
-                        return null;
-                    }
-                    return {
-                        title: citation.title || 'Untitled',
-                        url:
-                            citation.url instanceof URL
-                                ? citation.url
-                                : new URL(citation.url),
-                        ...(citation.snippet
-                            ? { snippet: citation.snippet }
-                            : {}),
-                    } as MappedCitation;
-                } catch (error) {
-                    console.warn('Invalid citation URL:', citation.url, error);
-                    return null;
-                }
-            })
-            .filter(
-                (citation): citation is MappedCitation => citation !== null
-            );
-    }
-
-    return normalized;
-};
 
 const MeetArete = (): JSX.Element => {
     const [question, setQuestion] = useState('');
@@ -596,7 +423,9 @@ const MeetArete = (): JSX.Element => {
             const payload = await response.json();
 
             const reflection = payload.message as string | undefined;
-            const backendMetadata = payload.metadata;
+            // Trust the API contract: metadata is already normalized by the backend.
+            const backendMetadata =
+                payload.metadata as ResponseMetadata | null | undefined;
 
             setStatus('A brief reflection:');
             setAnswer(
@@ -605,10 +434,7 @@ const MeetArete = (): JSX.Element => {
             );
 
             // Normalize backend metadata to ResponseMetadata format
-            const normalizedMetadata = backendMetadata
-                ? normalizeMetadata(backendMetadata)
-                : null;
-            setMetadata(normalizedMetadata);
+            setMetadata(backendMetadata ?? null);
 
             // Reset Turnstile for next question by forcing re-render
             // The useEffect hook will automatically re-execute after turnstileKey increments

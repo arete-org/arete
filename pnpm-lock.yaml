@@ -300,9 +300,6 @@ importers:
       '@arete/backend':
         specifier: workspace:*
         version: link:../backend
-      '@arete/contracts':
-        specifier: workspace:*
-        version: link:../contracts
       '@discordjs/voice':
         specifier: 'catalog:'
         version: 0.19.0(opusscript@0.0.8)
@@ -415,9 +412,9 @@ importers:
 
   packages/web:
     dependencies:
-      '@arete/backend':
+      '@arete/contracts':
         specifier: workspace:*
-        version: link:../backend
+        version: link:../contracts
       '@marsidev/react-turnstile':
         specifier: 'catalog:'
         version: 1.4.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

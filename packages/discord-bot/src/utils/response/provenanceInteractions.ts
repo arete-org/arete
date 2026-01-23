@@ -712,8 +712,7 @@ function formatMetadataSummary(metadata: ResponseMetadata | null): string {
 
     if (metadata.citations.length > 0) {
         const citationSummaries = metadata.citations.map(
-            (citation: Citation) =>
-                `${citation.title} (${citation.url.toString()})`
+            (citation: Citation) => `${citation.title} (${citation.url})`
         );
         baseLines.push(`Citations: ${citationSummaries.join('; ')}`);
     } else {
