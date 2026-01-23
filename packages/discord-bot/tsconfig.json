@@ -11,7 +11,12 @@
         "rootDir": "./src",
         "baseUrl": ".",
         "paths": {
-            "@/*": ["./src/*"]
+            "@/*": ["./src/*"],
+            "@arete/contracts": ["../contracts/dist/index.d.ts"],
+            "@arete/contracts/ethics-core": [
+                "../contracts/dist/ethics-core/index.d.ts"
+            ],
+            "@arete/contracts/*": ["../contracts/dist/*"]
         },
         "typeRoots": ["./node_modules/@types", "./src/types"],
         "sourceMap": true,

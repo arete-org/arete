@@ -24,6 +24,9 @@ packages/discord-bot/src/output/
 # Backend build artifacts
 packages/backend/dist/
 
+# Contracts build artifacts
+packages/contracts/dist/
+
 # Keys
 keys/
 *.pem
