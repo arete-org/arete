@@ -34,7 +34,7 @@
         "concurrently": "catalog:",
         "cross-env": "catalog:",
         "csstype": "catalog:",
-        "dependency-cruiser": "^17.3.6",
+        "dependency-cruiser": "^17.3.7",
         "eslint": "catalog:",
         "eslint-config-prettier": "catalog:",
         "eslint-plugin-react-hooks": "catalog:",
