@@ -27,6 +27,9 @@ packages/contracts/dist
 # Backend build artifacts
 packages/backend/dist/
 
+# Contracts build artifacts
+packages/contracts/dist/
+
 # Keys
 keys/
 *.pem
