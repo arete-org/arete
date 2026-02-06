@@ -19,27 +19,27 @@ ARETE is an AI assistant that tries to **show its work**.
 
 Most assistants give you polished answers but hide the trail. ARETE is built around **structured provenance**: its responses carry trace metadata you can easily inspect.
 
-For each response, ARETE aims to surface:
+With every response ARETE surfaces:
 
 - what it concluded, and how confident it is
-- what sources it relied on (when browsing)
+- what sources it relied on
 - what trade-offs it considered
 - what constraints and safety checks were applied
 - a trace artifact suitable for review or audit
 
-ARETE is a working prototype and runs today as a web interface and Discord bot.
+ARETE doesn't try to earn your trust — it’s built for human oversight, with inspectable provenance instead of “just believe me.”
 
 ---
 
 ## What you can try today
 
-- **Web demo** with a quick “ask” flow with provenance data
-- **Discord bot** with the same provenance-first output style
+ARETE is a working prototype delivering these core features:
+
 - **Response traces** (artifacts + metadata) stored for later inspection
 - **Risk tiering** and citations
+- **Web demo** with a quick “ask” flow with provenance data
+- **Discord bot** provides provenance as first-class while preserving useability
 - **Self-hosting** via Docker (recommended for easiest setup), or to the cloud via Fly
-
-OpenAI is currently the only LLM provider. A provider pipeline (cloud + local) is planned.
 
 ---
 
@@ -55,6 +55,7 @@ ARETE is three small services that work together:
 
 - **Backend API**  
   Central brains: handles traces, configuration, rate limits, etc.
+  OpenAI is currently the only LLM provider. A provider pipeline (cloud + local) is planned.
 
 ---
 
