@@ -25,18 +25,18 @@ const FEATURES: ServiceFeature[] = [
     {
         id: 'call',
         title: '/call',
-        description: 'Join a voice channel and speak to me in real-time.',
+        description: 'Join a voice channel and speak with me in real-time.',
     },
     {
         id: 'image-understanding',
         title: 'Image understanding',
-        description: 'I can analyze photos for meaning and context.',
+        description: 'I can analyze images for meaning and context to support richer responses.',
     },
     {
         id: 'image',
         title: '/image',
         description:
-            'Turn prompts into reflective or illustrative artwork, complete with thoughtful captions.',
+            'Turn prompts into reflective or illustrative imagery, supporting discussion or workflows with visual context.',
         variant: 'wide',
     },
 ];
