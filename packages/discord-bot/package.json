@@ -21,6 +21,7 @@
     },
     "dependencies": {
         "@arete/backend": "workspace:*",
+        "@arete/contracts": "workspace:*",
         "@discordjs/voice": "catalog:",
         "@openai/agents": "catalog:",
         "@sapphire/shapeshift": "catalog:",

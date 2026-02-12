@@ -24,7 +24,7 @@ import {
     TextInputBuilder,
     TextInputStyle,
 } from 'discord.js';
-import type { ResponseMetadata, Citation } from '@arete/backend/ethics-core';
+import type { ResponseMetadata, Citation } from '@arete/contracts/ethics-core';
 import { logger } from '../logger.js';
 import { ResponseHandler } from './ResponseHandler.js';
 import {
