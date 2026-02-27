@@ -353,9 +353,10 @@ export const createWebApiClient = ({
     const getTrace = async (
         responseId: string,
         signal?: AbortSignal
-    ): Promise<ApiJsonResult<TraceResponse | TraceStaleResponse>> =>
-        requestJson<TraceResponse | TraceStaleResponse>(
-            `/api/traces/${responseId}`,
+    ): Promise<ApiJsonResult<TraceResponse | TraceStaleResponse>> => {
+        const encodedResponseId = encodeURIComponent(responseId);
+        return requestJson<TraceResponse | TraceStaleResponse>(
+            `/api/traces/${encodedResponseId}`,
             {
                 method: 'GET',
                 signal,
@@ -365,6 +366,7 @@ export const createWebApiClient = ({
                 acceptedStatusCodes: [410],
             }
         );
+    };
 
     return {
         requestJson,
