@@ -18,7 +18,15 @@ export type ApiRequestCacheMode =
     | 'force-cache'
     | 'only-if-cached';
 
-export type ApiRequestOptions = {
+export type ApiResponseValidationResult<T> =
+    | { success: true; data: T }
+    | { success: false; error: string };
+
+export type ApiResponseValidator<T> = (
+    data: unknown
+) => ApiResponseValidationResult<T>;
+
+export type ApiRequestOptions<T = unknown> = {
     method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
     headers?: Record<string, string>;
     body?: unknown;
@@ -26,6 +34,7 @@ export type ApiRequestOptions = {
     timeoutMs?: number;
     cache?: ApiRequestCacheMode;
     acceptedStatusCodes?: readonly number[];
+    validateResponse?: ApiResponseValidator<T>;
 };
 
 export type ApiJsonResult<T> = {
@@ -35,7 +44,7 @@ export type ApiJsonResult<T> = {
 
 export type ApiRequester = <T>(
     endpoint: string,
-    options?: ApiRequestOptions
+    options?: ApiRequestOptions<T>
 ) => Promise<ApiJsonResult<T>>;
 
 export type CreateApiTransportOptions = {
@@ -154,6 +163,49 @@ const createApiClientError = (
     return error;
 };
 
+const validateApiResponsePayload = <T>(
+    payload: unknown,
+    endpoint: string,
+    status: number,
+    validateResponse: ApiResponseValidator<T>,
+    errorName: string
+): T => {
+    try {
+        const validationResult = validateResponse(payload);
+        if (validationResult.success) {
+            return validationResult.data;
+        }
+
+        throw createApiClientError(
+            {
+                status,
+                code: 'invalid_payload',
+                message: validationResult.error,
+                endpoint,
+                raw: payload,
+            },
+            errorName
+        );
+    } catch (error) {
+        if (isApiClientError(error, errorName)) {
+            throw error;
+        }
+
+        const errorMessage =
+            error instanceof Error ? error.message : 'Response validation failed';
+        throw createApiClientError(
+            {
+                status,
+                code: 'invalid_payload',
+                message: errorMessage,
+                endpoint,
+                raw: payload,
+            },
+            errorName
+        );
+    }
+};
+
 export const isApiClientError = (
     value: unknown,
     errorName = DEFAULT_ERROR_NAME
@@ -180,7 +232,8 @@ export const createApiTransport = ({
             timeoutMs = defaultTimeoutMs,
             cache,
             acceptedStatusCodes = [],
-        }: ApiRequestOptions = {}
+            validateResponse,
+        }: ApiRequestOptions<T> = {}
     ): Promise<ApiJsonResult<T>> => {
         const url = buildUrl(normalizedBaseUrl, endpoint);
         const controller = new AbortController();
@@ -251,9 +304,19 @@ export const createApiTransport = ({
                 );
             }
 
+            const data = validateResponse
+                ? validateApiResponsePayload(
+                      payload,
+                      endpoint,
+                      response.status,
+                      validateResponse,
+                      clientErrorName
+                  )
+                : (payload as T);
+
             return {
                 status: response.status,
-                data: payload as T,
+                data,
             };
         } catch (error) {
             if (isApiClientError(error, clientErrorName)) {
