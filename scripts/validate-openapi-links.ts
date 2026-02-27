@@ -1,4 +1,11 @@
 /**
+ * @description: Validates bidirectional links between OpenAPI operations and code annotations to prevent spec/code drift.
+ * @arete-scope: tooling
+ * @arete-module: OpenApiLinksValidator
+ * @arete-risk: medium - Broken link validation can allow stale API contracts to pass CI checks.
+ * @arete-ethics: medium - Accurate API traceability supports transparent and reliable system behavior.
+ */
+/**
  * Purpose:
  * - Validate that OpenAPI operationIds are linked to code references.
  * - Check both directions:
