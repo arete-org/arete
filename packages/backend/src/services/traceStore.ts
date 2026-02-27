@@ -6,8 +6,11 @@
  * @arete-ethics: high - Missing provenance data reduces transparency guarantees.
  */
 import type { ResponseMetadata } from '../ethics-core';
-import { createTraceStoreFromEnv, type TraceStore } from '../shared/traceStore';
-import { logger } from '../shared/logger';
+import {
+    createTraceStoreFromEnv,
+    type TraceStore,
+} from '../storage/traces/traceStore';
+import { logger } from '../utils/logger';
 
 // --- Trace store initialization ---
 const createTraceStore = (): TraceStore => createTraceStoreFromEnv();

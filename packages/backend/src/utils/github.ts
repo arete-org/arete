@@ -6,7 +6,7 @@
  * @arete-ethics: moderate - Spoofed data could mislead users or poison content.
  */
 import crypto from 'node:crypto';
-import { logger } from '../shared/logger';
+import { logger } from './logger';
 
 /**
  * Verifies GitHub webhook signature using HMAC-SHA256.

@@ -12,7 +12,7 @@
  */
 
 import { Provenance, RiskTier } from './types';
-import { logger } from '../shared/logger';
+import { logger } from '../utils/logger';
 
 /**
  * Computes the provenance type for a given context.

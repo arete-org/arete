@@ -16,7 +16,7 @@ import type {
 } from '../services/openaiService';
 import type { ResponseMetadata } from '../ethics-core';
 import { runtimeConfig } from '../config';
-import { logger } from '../shared/logger';
+import { logger } from '../utils/logger';
 
 type LogRequest = (
     req: IncomingMessage,

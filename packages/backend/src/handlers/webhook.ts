@@ -7,7 +7,7 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { GitHubDiscussion } from '../storage/blogStore';
-import { logger } from '../shared/logger';
+import { logger } from '../utils/logger';
 
 type LogRequest = (
     req: IncomingMessage,

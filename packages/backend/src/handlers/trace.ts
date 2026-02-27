@@ -9,8 +9,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { PostTracesRequestSchema } from '../contracts/webSchemas';
 import type { ResponseMetadata } from '../ethics-core';
 import type { SimpleRateLimiter } from '../services/rateLimiter';
-import { logger } from '../shared/logger';
-import { type TraceStore } from '../shared/traceStore';
+import { logger } from '../utils/logger';
+import { type TraceStore } from '../storage/traces/traceStore';
 
 // Shared log function signature used by handlers.
 type LogRequest = (

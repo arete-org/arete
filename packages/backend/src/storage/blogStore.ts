@@ -7,7 +7,7 @@
  */
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { logger } from '../shared/logger';
+import { logger } from '../utils/logger';
 
 type BlogPostAuthor = {
     login: string;

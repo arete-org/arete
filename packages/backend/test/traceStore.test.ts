@@ -11,7 +11,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { SqliteTraceStore } from '../src/shared/sqliteTraceStore';
+import { SqliteTraceStore } from '../src/storage/traces/sqliteTraceStore';
 import type { ResponseMetadata } from '../src/ethics-core';
 
 test('TraceStore round trips metadata with citation URLs', async () => {

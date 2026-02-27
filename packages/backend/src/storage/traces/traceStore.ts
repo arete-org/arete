@@ -11,7 +11,7 @@
  * Ethics: Controls trace storage and audit trail management. Ensures all AI responses are traceable and auditable, supporting transparency and accountability.
  */
 
-import { logger } from './logger';
+import { logger } from '../../utils/logger';
 import { SqliteTraceStore } from './sqliteTraceStore';
 import {
     assertValidResponseMetadata,

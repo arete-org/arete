@@ -128,36 +128,38 @@ export default [
         files: [
             'packages/web/**/*.{ts,tsx,js,jsx}',
             'packages/discord-bot/**/*.{ts,tsx,js,jsx}',
+            'packages/contracts/**/*.{ts,tsx,js,jsx}',
         ],
         rules: {
-            // Guardrail: web/bot should not import backend code directly. Call the backend
-            // over HTTP (/api/*) and keep that fetch logic in a small local module inside
-            // each package (for example, packages/web/src/api/* or packages/discord-bot/src/api/*).
+            // Guardrail: packages outside backend should not import backend code directly.
+            // Web/bot should call the backend over HTTP (/api/*) and keep the fetch logic
+            // in a small local module. Contracts should stay dependency-light and only
+            // define shared wire shapes/schemas.
             'no-restricted-syntax': [
-                'warn',
+                'error',
                 {
                     selector:
                         'ImportDeclaration[source.value=/^@arete\\/backend(\\/|$)/]',
                     message:
-                        'Avoid @arete/backend imports in web/bot. Call the backend via /api/* and keep the fetch logic in a local client module for this package (e.g., packages/web/src/api/* or packages/discord-bot/src/api/*).',
+                        'Avoid @arete/backend imports outside backend. Web/bot should call the backend via /api/* with package-local API clients, and contracts should stay dependency-light.',
                 },
                 {
                     selector:
                         'ImportExpression[source.value=/^@arete\\/backend(\\/|$)/]',
                     message:
-                        'Avoid @arete/backend dynamic imports in web/bot. Call the backend via /api/* and keep the fetch logic in a local client module for this package (e.g., packages/web/src/api/* or packages/discord-bot/src/api/*).',
+                        'Avoid @arete/backend dynamic imports outside backend. Web/bot should call the backend via /api/* with package-local API clients, and contracts should stay dependency-light.',
                 },
                 {
                     selector:
                         'ExportNamedDeclaration[source.value=/^@arete\\/backend(\\/|$)/]',
                     message:
-                        'Avoid re-exporting @arete/backend modules in web/bot. Call the backend via /api/* and keep the fetch logic in a local client module for this package (e.g., packages/web/src/api/* or packages/discord-bot/src/api/*).',
+                        'Avoid re-exporting @arete/backend modules outside backend. Web/bot should call the backend via /api/* with package-local API clients, and contracts should stay dependency-light.',
                 },
                 {
                     selector:
                         'ExportAllDeclaration[source.value=/^@arete\\/backend(\\/|$)/]',
                     message:
-                        'Avoid re-exporting @arete/backend modules in web/bot. Call the backend via /api/* and keep the fetch logic in a local client module for this package (e.g., packages/web/src/api/* or packages/discord-bot/src/api/*).',
+                        'Avoid re-exporting @arete/backend modules outside backend. Web/bot should call the backend via /api/* with package-local API clients, and contracts should stay dependency-light.',
                 },
             ],
         },

@@ -24,8 +24,8 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 - `packages/discord-bot/src/utils/env.ts`
 - `packages/discord-bot/src/utils/logger.ts`
 - `packages/discord-bot/src/state/ChannelContextManager.ts`
-- `packages/backend/src/shared/incidentStore.ts`
-- `packages/backend/src/shared/pseudonymization.ts`
+- `packages/backend/src/storage/incidents/incidentStore.ts`
+- `packages/backend/src/utils/pseudonymization.ts`
 
 ## When Editing
 
@@ -80,7 +80,7 @@ Example:
 
 - Bot: `packages/discord-bot/src/events`, `packages/discord-bot/src/commands`, `packages/discord-bot/src/voice`
 - Realtime audio: `packages/discord-bot/src/realtime`
-- Shared prompts: `packages/backend/src/shared/prompts`
+- Shared prompts: `packages/backend/src/services/prompts`
 - Web UI: `packages/web/src/components`, `packages/web/src/pages`
 
 ## Exclusions

@@ -131,7 +131,7 @@ export class PromptRegistry {
 
     constructor(options: PromptRegistryOptions = {}) {
         const defaults = this.loadPromptFile(
-            resolveRelativePath('../../../src/shared/prompts/defaults.yaml'),
+            resolveRelativePath('./defaults.yaml'),
             false
         );
         const merged: PromptMap = { ...defaults };

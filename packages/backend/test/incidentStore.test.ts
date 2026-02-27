@@ -20,8 +20,8 @@ import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 
-import { SqliteIncidentStore } from '../src/shared/sqliteIncidentStore';
-import { hmacId } from '../src/shared/pseudonymization';
+import { SqliteIncidentStore } from '../src/storage/incidents/sqliteIncidentStore';
+import { hmacId } from '../src/utils/pseudonymization';
 
 const SECRET = 'integration-secret';
 

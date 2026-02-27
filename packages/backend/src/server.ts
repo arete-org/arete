@@ -21,7 +21,7 @@ import { createBlogStore } from './storage/blogStore';
 import { createAssetResolver } from './http/assets';
 import { verifyGitHubSignature } from './utils/github';
 import { logRequest } from './utils/requestLogger';
-import { logger } from './shared/logger';
+import { logger } from './utils/logger';
 import { createReflectHandler } from './handlers/reflect';
 import { createTraceHandlers } from './handlers/trace';
 import { createBlogHandlers } from './handlers/blog';

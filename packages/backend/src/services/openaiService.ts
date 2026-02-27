@@ -8,7 +8,7 @@
 import crypto from 'node:crypto';
 import { extractTextAndMetadata } from '../utils/metadata';
 import { runtimeConfig } from '../config';
-import { logger } from '../shared/logger';
+import { logger } from '../utils/logger';
 import type {
     ResponseMetadata,
     Provenance,

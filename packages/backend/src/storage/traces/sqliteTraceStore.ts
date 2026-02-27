@@ -8,8 +8,8 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
-import type { ResponseMetadata } from '../ethics-core';
-import { logger } from './logger';
+import type { ResponseMetadata } from '../../ethics-core';
+import { logger } from '../../utils/logger';
 import {
     assertValidResponseMetadata,
     traceStoreJsonReplacer,
