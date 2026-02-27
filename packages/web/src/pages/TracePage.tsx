@@ -5,10 +5,13 @@
  */
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { TraceResponse, TraceStaleResponse } from '@arete/contracts/web';
+import type {
+    GetTraceResponse,
+    GetTraceStaleResponse,
+} from '@arete/contracts/web';
 import { api, isApiClientError } from '../utils/api';
 // Define the actual server response metadata structure
-type ServerMetadata = TraceResponse & {
+type ServerMetadata = GetTraceResponse & {
     timestamp?: string;
     model?: string;
     reasoningEffort?: string;
@@ -31,7 +34,7 @@ type SerializableResponseMetadata = ServerMetadata;
 // Helper to extract payload from 410 (stale) responses
 const extractPayload = (data: unknown): ServerMetadata | null => {
     if (data && typeof data === 'object' && 'metadata' in data) {
-        const stalePayload = data as TraceStaleResponse;
+        const stalePayload = data as GetTraceStaleResponse;
         return (stalePayload.metadata as ServerMetadata) || null;
     }
     return null;

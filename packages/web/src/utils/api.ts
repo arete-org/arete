@@ -8,14 +8,14 @@
 
 import type {
     ApiErrorResponse,
-    BlogIndexResponse,
-    BlogPostResponse,
+    GetBlogPostResponse,
+    GetRuntimeConfigResponse,
+    GetTraceResponse,
+    GetTraceStaleResponse,
+    ListBlogPostsResponse,
     NormalizedApiError,
-    ReflectRequest,
-    ReflectResponse,
-    RuntimeConfigResponse,
-    TraceResponse,
-    TraceStaleResponse,
+    PostReflectRequest,
+    PostReflectResponse,
 } from '@arete/contracts/web';
 
 type ApiClientError = Error & NormalizedApiError;
@@ -290,29 +290,32 @@ export const createWebApiClient = ({
     };
 
     const reflectQuestion = async (
-        request: ReflectRequest,
+        request: PostReflectRequest,
         options?: { turnstileToken?: string; signal?: AbortSignal }
-    ): Promise<ReflectResponse> => {
+    ): Promise<PostReflectResponse> => {
         const headers: Record<string, string> = {};
 
         if (options?.turnstileToken) {
             headers['x-turnstile-token'] = options.turnstileToken;
         }
 
-        const response = await requestJson<ReflectResponse>('/api/reflect', {
+        const response = await requestJson<PostReflectResponse>(
+            '/api/reflect',
+            {
             method: 'POST',
             headers,
             body: request,
             signal: options?.signal,
-        });
+            }
+        );
 
         return response.data;
     };
 
     const getRuntimeConfig = async (
         signal?: AbortSignal
-    ): Promise<RuntimeConfigResponse> => {
-        const response = await requestJson<RuntimeConfigResponse>(
+    ): Promise<GetRuntimeConfigResponse> => {
+        const response = await requestJson<GetRuntimeConfigResponse>(
             '/config.json',
             {
                 method: 'GET',
@@ -325,8 +328,8 @@ export const createWebApiClient = ({
 
     const getBlogIndex = async (
         signal?: AbortSignal
-    ): Promise<BlogIndexResponse> => {
-        const response = await requestJson<BlogIndexResponse>(
+    ): Promise<ListBlogPostsResponse> => {
+        const response = await requestJson<ListBlogPostsResponse>(
             '/api/blog-posts',
             {
                 method: 'GET',
@@ -339,8 +342,8 @@ export const createWebApiClient = ({
     const getBlogPost = async (
         discussionNumber: number,
         signal?: AbortSignal
-    ): Promise<BlogPostResponse> => {
-        const response = await requestJson<BlogPostResponse>(
+    ): Promise<GetBlogPostResponse> => {
+        const response = await requestJson<GetBlogPostResponse>(
             `/api/blog-posts/${discussionNumber}`,
             {
                 method: 'GET',
@@ -353,9 +356,9 @@ export const createWebApiClient = ({
     const getTrace = async (
         responseId: string,
         signal?: AbortSignal
-    ): Promise<ApiJsonResult<TraceResponse | TraceStaleResponse>> => {
+    ): Promise<ApiJsonResult<GetTraceResponse | GetTraceStaleResponse>> => {
         const encodedResponseId = encodeURIComponent(responseId);
-        return requestJson<TraceResponse | TraceStaleResponse>(
+        return requestJson<GetTraceResponse | GetTraceStaleResponse>(
             `/api/traces/${encodedResponseId}`,
             {
                 method: 'GET',

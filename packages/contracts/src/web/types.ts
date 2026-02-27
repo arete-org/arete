@@ -4,17 +4,11 @@
  * @arete-module: WebContracts
  * @arete-risk: low - Contract drift can break client/server compatibility.
  * @arete-ethics: moderate - Contract clarity supports transparent behavior.
- *
- * @openapi.source: docs/api/openapi.yaml
  */
 
 import type { ResponseMetadata } from '../ethics-core';
 
-/**
- * OpenAPI component contract.
- * @openapi.component: ErrorResponse
- * @openapi.source: docs/api/openapi.yaml
- */
+// Standard API error envelope used by multiple endpoints.
 export type ApiErrorResponse = {
     error: string;
     details?: string;
@@ -37,65 +31,46 @@ export type NormalizedApiError = {
 };
 
 /**
- * OpenAPI operation contract.
- * @openapi.operationId: postReflect
- * @openapi.path: POST /api/reflect
- * @openapi.component: ReflectRequest
- * @openapi.source: docs/api/openapi.yaml
+ * @api.operationId: postReflect
+ * @api.path: POST /api/reflect
  */
-export type ReflectRequest = {
+export type PostReflectRequest = {
     question: string;
 };
 
 /**
- * OpenAPI operation contract.
- * @openapi.operationId: postReflect
- * @openapi.path: POST /api/reflect
- * @openapi.component: ReflectResponse
- * @openapi.source: docs/api/openapi.yaml
+ * @api.operationId: postReflect
+ * @api.path: POST /api/reflect
  */
-export type ReflectResponse = {
+export type PostReflectResponse = {
     message: string;
     metadata: ResponseMetadata;
 };
 
 /**
- * OpenAPI operation contract.
- * @openapi.operationId: getTrace
- * @openapi.path: GET /api/traces/{responseId}
- * @openapi.component: ResponseMetadata
- * @openapi.source: docs/api/openapi.yaml
+ * @api.operationId: getTrace
+ * @api.path: GET /api/traces/{responseId}
  */
-export type TraceResponse = ResponseMetadata;
+export type GetTraceResponse = ResponseMetadata;
 
 /**
- * OpenAPI operation contract.
- * @openapi.operationId: getTrace
- * @openapi.path: GET /api/traces/{responseId}
- * @openapi.component: TraceStaleResponse
- * @openapi.source: docs/api/openapi.yaml
+ * @api.operationId: getTrace
+ * @api.path: GET /api/traces/{responseId}
  */
-export type TraceStaleResponse = {
+export type GetTraceStaleResponse = {
     message: 'Trace is stale';
     metadata: ResponseMetadata;
 };
 
 /**
- * OpenAPI operation contract.
- * @openapi.operationId: getRuntimeConfig
- * @openapi.path: GET /config.json
- * @openapi.component: RuntimeConfig
- * @openapi.source: docs/api/openapi.yaml
+ * @api.operationId: getRuntimeConfig
+ * @api.path: GET /config.json
  */
-export type RuntimeConfigResponse = {
+export type GetRuntimeConfigResponse = {
     turnstileSiteKey: string;
 };
 
-/**
- * OpenAPI component contract.
- * @openapi.component: BlogPostAuthor
- * @openapi.source: docs/api/openapi.yaml
- */
+// Blog author payload used by blog list/detail endpoints.
 export type BlogAuthor = {
     login: string;
     avatarUrl: string;
@@ -103,11 +78,8 @@ export type BlogAuthor = {
 };
 
 /**
- * OpenAPI operation contract.
- * @openapi.operationId: listBlogPosts
- * @openapi.path: GET /api/blog-posts
- * @openapi.component: BlogPostIndexEntry
- * @openapi.source: docs/api/openapi.yaml
+ * @api.operationId: listBlogPosts
+ * @api.path: GET /api/blog-posts
  */
 export type BlogPostMetadata = {
     number: number;
@@ -118,11 +90,8 @@ export type BlogPostMetadata = {
 };
 
 /**
- * OpenAPI operation contract.
- * @openapi.operationId: getBlogPost
- * @openapi.path: GET /api/blog-posts/{postId}
- * @openapi.component: BlogPost
- * @openapi.source: docs/api/openapi.yaml
+ * @api.operationId: getBlogPost
+ * @api.path: GET /api/blog-posts/{postId}
  */
 export type BlogPost = BlogPostMetadata & {
     body: string;
@@ -131,19 +100,13 @@ export type BlogPost = BlogPostMetadata & {
 };
 
 /**
- * OpenAPI operation contract.
- * @openapi.operationId: listBlogPosts
- * @openapi.path: GET /api/blog-posts
- * @openapi.component: BlogPostIndexEntry[]
- * @openapi.source: docs/api/openapi.yaml
+ * @api.operationId: listBlogPosts
+ * @api.path: GET /api/blog-posts
  */
-export type BlogIndexResponse = BlogPostMetadata[];
+export type ListBlogPostsResponse = BlogPostMetadata[];
 
 /**
- * OpenAPI operation contract.
- * @openapi.operationId: getBlogPost
- * @openapi.path: GET /api/blog-posts/{postId}
- * @openapi.component: BlogPost
- * @openapi.source: docs/api/openapi.yaml
+ * @api.operationId: getBlogPost
+ * @api.path: GET /api/blog-posts/{postId}
  */
-export type BlogPostResponse = BlogPost;
+export type GetBlogPostResponse = BlogPost;

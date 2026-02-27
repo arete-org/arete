@@ -4,64 +4,52 @@
  * @arete-module: WebContractsIndex
  * @arete-risk: low - Incorrect exports can cause type mismatches.
  * @arete-ethics: low - Export surface only; no runtime behavior.
- *
- * @openapi.source: docs/api/openapi.yaml
  */
 
+// Shared error envelopes.
+export type { ApiErrorResponse, NormalizedApiError } from './types';
+
 /**
- * Shared error envelopes.
- * @openapi.component: ErrorResponse
- * @openapi.source: docs/api/openapi.yaml
+ * @api.operationId: postReflect
+ * @api.path: POST /api/reflect
  */
 export type {
-    ApiErrorResponse,
-    NormalizedApiError,
+    PostReflectRequest,
+    PostReflectResponse,
 } from './types';
 
 /**
- * Reflection endpoint contracts.
- * @openapi.operationId: postReflect
- * @openapi.path: POST /api/reflect
- * @openapi.source: docs/api/openapi.yaml
+ * @api.operationId: getTrace
+ * @api.path: GET /api/traces/{responseId}
  */
 export type {
-    ReflectRequest,
-    ReflectResponse,
+    GetTraceResponse,
+    GetTraceStaleResponse,
 } from './types';
 
 /**
- * Trace retrieval endpoint contracts.
- * @openapi.operationId: getTrace
- * @openapi.path: GET /api/traces/{responseId}
- * @openapi.source: docs/api/openapi.yaml
+ * @api.operationId: getRuntimeConfig
+ * @api.path: GET /config.json
  */
 export type {
-    TraceResponse,
-    TraceStaleResponse,
+    GetRuntimeConfigResponse,
 } from './types';
 
 /**
- * Runtime config endpoint contract.
- * @openapi.operationId: getRuntimeConfig
- * @openapi.path: GET /config.json
- * @openapi.source: docs/api/openapi.yaml
- */
-export type {
-    RuntimeConfigResponse,
-} from './types';
-
-/**
- * Blog endpoint contracts.
- * @openapi.operationId: listBlogPosts
- * @openapi.path: GET /api/blog-posts
- * @openapi.operationId: getBlogPost
- * @openapi.path: GET /api/blog-posts/{postId}
- * @openapi.source: docs/api/openapi.yaml
+ * @api.operationId: listBlogPosts
+ * @api.path: GET /api/blog-posts
  */
 export type {
     BlogAuthor,
     BlogPostMetadata,
+    ListBlogPostsResponse,
+} from './types';
+
+/**
+ * @api.operationId: getBlogPost
+ * @api.path: GET /api/blog-posts/{postId}
+ */
+export type {
     BlogPost,
-    BlogIndexResponse,
-    BlogPostResponse,
+    GetBlogPostResponse,
 } from './types';

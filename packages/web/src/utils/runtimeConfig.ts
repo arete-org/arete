@@ -5,10 +5,10 @@
  * @arete-risk: low - Config fetch failures only disable optional client features.
  * @arete-ethics: low - Exposes only non-sensitive configuration to the client.
  */
-import type { RuntimeConfigResponse } from '@arete/contracts/web';
+import type { GetRuntimeConfigResponse } from '@arete/contracts/web';
 import { api } from './api';
 
-export type RuntimeConfig = RuntimeConfigResponse;
+export type RuntimeConfig = GetRuntimeConfigResponse;
 
 const DEFAULT_CONFIG: RuntimeConfig = {
     turnstileSiteKey: '',
