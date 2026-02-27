@@ -39,14 +39,11 @@ ENV NODE_ENV=production
 
 RUN corepack enable && corepack prepare pnpm@10.26.2 --activate
 
-# Create non-root user
-RUN groupadd --gid 1000 appuser \
-  && useradd --uid 1000 --gid appuser --shell /bin/bash appuser
+# Use the non-root `node` user that already exists in the base image.
+COPY --from=builder --chown=node:node /app/packages /app/packages
+COPY --from=builder --chown=node:node /app/node_modules /app/node_modules
 
-COPY --from=builder --chown=appuser:appuser /app/packages /app/packages
-COPY --from=builder --chown=appuser:appuser /app/node_modules /app/node_modules
-
-USER appuser
+USER node
 
 # --- Runtime ---
 WORKDIR /app/packages/discord-bot
