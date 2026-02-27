@@ -29,24 +29,38 @@ const DISCORD_ID_REGEX = /\b\d{17,19}\b/g;
  * Processes nested arrays and objects while preserving overall structure; non-string primitives are returned unchanged.
  *
  * @param value - The value to sanitize (string, array, object, or primitive)
+ * @param visited - Tracks visited objects/arrays to avoid infinite recursion on circular references
  * @returns The same value shape with 17–19 digit Discord IDs in strings replaced by `[REDACTED_ID]`
  */
-export function sanitizeLogData<T>(value: T): T {
+export function sanitizeLogData<T>(
+    value: T,
+    visited: WeakSet<object> = new WeakSet<object>()
+): T {
     if (typeof value === 'string') {
         // Swap raw snowflakes for a clear placeholder.
         return value.replace(DISCORD_ID_REGEX, '[REDACTED_ID]') as T;
     }
 
     if (Array.isArray(value)) {
+        if (visited.has(value)) {
+            return '[Circular]' as T;
+        }
+        visited.add(value);
+
         // Walk arrays and sanitize each entry.
-        return value.map((entry) => sanitizeLogData(entry)) as T;
+        return value.map((entry) => sanitizeLogData(entry, visited)) as T;
     }
 
     if (value && typeof value === 'object') {
+        if (visited.has(value as object)) {
+            return '[Circular]' as T;
+        }
+        visited.add(value as object);
+
         // Walk objects so nested IDs get scrubbed too.
         const sanitized: Record<string, unknown> = {};
         for (const [key, val] of Object.entries(value)) {
-            sanitized[key] = sanitizeLogData(val);
+            sanitized[key] = sanitizeLogData(val, visited);
         }
         return sanitized as T;
     }
