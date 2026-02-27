@@ -1,19 +1,14 @@
 /**
- * @arete-module: Logger
- * @arete-risk: low
- * @arete-ethics: moderate
- * @arete-scope: utility
- *
  * @description: Winston-based logging utility with console and file transports. Provides structured logging for all bot operations.
- *
- * @impact
- * Risk: Logging failures can make debugging difficult but won't break core functionality.
- * Ethics: Logs may contain user data or sensitive information, affecting privacy and auditability.
+ * @arete-scope: utility
+ * @arete-module: Logger
+ * @arete-risk: low - Logging failures hinder debugging and observability but should not halt bot execution.
+ * @arete-ethics: moderate - Logs may include sensitive user-derived content, so redaction and retention discipline are required.
  */
 
 import fs from 'fs';
 import { createLogger, format, transports } from 'winston';
-import { format as dateFnsFormat } from 'date-fns';
+import DailyRotateFile from 'winston-daily-rotate-file';
 
 const { combine, timestamp, printf, colorize } = format;
 const splatSymbol = Symbol.for('splat');
@@ -127,8 +122,10 @@ export const logger = createLogger({
         new transports.Console(),
         ...(canWriteLogDirectory
             ? [
-                  new transports.File({
-                      filename: `${logDirectory}/${dateFnsFormat(new Date(), 'yyyy-MM-dd')}.log`,
+                  new DailyRotateFile({
+                      dirname: logDirectory,
+                      filename: '%DATE%.log',
+                      datePattern: 'YYYY-MM-DD',
                       format: format.combine(
                           format.uncolorize(),
                           format.timestamp(),

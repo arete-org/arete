@@ -146,6 +146,21 @@ export const buildAlternativeLensSessionKey = (
 export const buildExplainSessionKey = (messageId: string) =>
     `explain:${messageId}`;
 
+const isResponseMetadataPayload = (
+    value: unknown
+): value is ResponseMetadata => {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    const candidate = value as Partial<ResponseMetadata>;
+    return (
+        typeof candidate.responseId === 'string' &&
+        typeof candidate.provenance === 'string' &&
+        typeof candidate.riskTier === 'string'
+    );
+};
+
 // -----------------------------
 // Session lifecycle helpers
 // -----------------------------
@@ -686,7 +701,7 @@ export async function requestProvenanceOpenAIOptions(
         );
         return plan.openaiOptions;
     } catch (error) {
-        logger.warn(
+        provenanceLogger.warn(
             'Failed to retrieve planner options for provenance interaction:',
             error
         );
@@ -780,7 +795,18 @@ export async function resolveProvenanceMetadata(
             );
             return { responseId, metadata: null };
         }
-        const metadata = response.data as ResponseMetadata;
+        if (!isResponseMetadataPayload(response.data)) {
+            provenanceLogger.warn(
+                'Failed to load provenance metadata: invalid payload shape',
+                {
+                    responseId,
+                    status: response.status,
+                    payload: response.data,
+                }
+            );
+            return { responseId, metadata: null };
+        }
+        const metadata = response.data;
         return { responseId, metadata };
     } catch (error) {
         provenanceLogger.warn('Failed to load provenance metadata', {
@@ -811,7 +837,7 @@ export async function resolveResponseAnchorMessage(
                 return referenced;
             }
         } catch (error) {
-            logger.warn(
+            provenanceLogger.warn(
                 `Failed to fetch referenced message ${referencedId} while resolving provenance anchor:`,
                 error
             );
@@ -819,7 +845,7 @@ export async function resolveResponseAnchorMessage(
     }
 
     if (!message.channel.isTextBased()) {
-        logger.warn(
+        provenanceLogger.warn(
             'Failed to resolve provenance anchor message: Channel is not text-based'
         );
         return null;
@@ -827,7 +853,7 @@ export async function resolveResponseAnchorMessage(
 
     const botId = message.client.user?.id;
     if (!botId) {
-        logger.warn(
+        provenanceLogger.warn(
             'Failed to resolve provenance anchor message: Bot ID not found'
         );
         return null;
@@ -863,7 +889,7 @@ export async function resolveResponseAnchorMessage(
             }
         }
     } catch (error) {
-        logger.warn(
+        provenanceLogger.warn(
             `Failed to fetch recent messages while resolving provenance anchor:`,
             error
         );
@@ -946,7 +972,7 @@ export async function recoverFullMessageText(
             }
         }
     } catch (error) {
-        logger.warn(
+        provenanceLogger.warn(
             `Failed to recover previous response chunks for provenance actions:`,
             error
         );
@@ -1470,7 +1496,7 @@ export async function handleAlternativeLensSubmit(
                     session.context.messageId
                 );
             } catch (fetchError) {
-                logger.warn(
+                provenanceLogger.warn(
                     `Failed to fetch original message ${session.context.messageId} for alternative lens reply:`,
                     fetchError
                 );
