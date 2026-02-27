@@ -14,13 +14,12 @@
         "prestart": "pnpm build",
         "start": "node --es-module-specifier-resolution=node dist/index.js",
         "dev": "pnpm exec cross-env NODE_ENV=development pnpm exec tsx watch src/index.ts",
-        "build": "pnpm --filter @arete/backend build && pnpm clean && tsc && pnpm copy-files",
+        "build": "pnpm clean && tsc && pnpm copy-files",
         "clean": "rimraf dist",
         "copy-files": "xcopy /s /e /i /y src\\*.* dist\\src\\ 2>nul && xcopy /s /e /i /y src\\commands\\*.* dist\\commands\\ 2>nul && xcopy /s /e /i /y src\\events\\*.* dist\\events\\ 2>nul && xcopy /s /e /i /y src\\utils\\*.* dist\\utils\\ 2>nul || echo No files to copy",
         "watch": "tsc -w"
     },
     "dependencies": {
-        "@arete/backend": "workspace:*",
         "@arete/contracts": "workspace:*",
         "@discordjs/voice": "catalog:",
         "@openai/agents": "catalog:",
@@ -45,6 +44,7 @@
         "unified": "^11.0.5",
         "unist-util-visit": "^5.0.0",
         "winston": "catalog:",
+        "winston-daily-rotate-file": "catalog:",
         "ws": "catalog:"
     },
     "devDependencies": {

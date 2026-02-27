@@ -10,8 +10,13 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { PromptKey } from '@arete/backend/shared';
 import { logger } from './logger.js';
+import {
+    PromptRegistry,
+    renderPrompt as sharedRenderPrompt,
+    setActivePromptRegistry,
+    type PromptKey,
+} from './prompts/promptRegistry.js';
 
 // Get the current directory
 const __filename = fileURLToPath(import.meta.url);
@@ -37,17 +42,6 @@ if (fs.existsSync(envPath)) {
         'No .env file found; relying on injected environment variables.'
     );
 }
-
-// Import shared module after environment has been configured so it reads the correct values.
-const {
-    PromptRegistry,
-    renderPrompt: sharedRenderPrompt,
-    setActivePromptRegistry,
-}: {
-    PromptRegistry: typeof import('@arete/backend/shared').PromptRegistry;
-    renderPrompt: typeof import('@arete/backend/shared').renderPrompt;
-    setActivePromptRegistry: typeof import('@arete/backend/shared').setActivePromptRegistry;
-} = await import('@arete/backend/shared');
 
 /**
  * List of required environment variables that must be set for the application to run.

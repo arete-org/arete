@@ -24,6 +24,8 @@ export type {
     NormalizedApiError,
     PostReflectRequest,
     PostReflectResponse,
+    PostTracesRequest,
+    PostTracesResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
     GetRuntimeConfigResponse,

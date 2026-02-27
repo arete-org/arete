@@ -48,6 +48,21 @@ export type PostReflectResponse = {
 };
 
 /**
+ * @api.operationId: postTraces
+ * @api.path: POST /api/traces
+ */
+export type PostTracesRequest = ResponseMetadata;
+
+/**
+ * @api.operationId: postTraces
+ * @api.path: POST /api/traces
+ */
+export type PostTracesResponse = {
+    ok: true;
+    responseId: string;
+};
+
+/**
  * @api.operationId: getTrace
  * @api.path: GET /api/traces/{responseId}
  */

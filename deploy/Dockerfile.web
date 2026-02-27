@@ -1,5 +1,5 @@
 # === Build stage ===
-FROM node:22-slim as build
+FROM node:22-slim AS build
 
 # Build context root
 WORKDIR /app
@@ -24,7 +24,8 @@ COPY packages/backend/src/ packages/backend/src/
 COPY packages/contracts/src/ packages/contracts/src/
 
 # --- Build ---
-RUN pnpm --filter @arete/web run build
+RUN pnpm --filter @arete/contracts run build \
+  && pnpm --filter @arete/web run build
 
 # === Runtime stage ===
 FROM caddy:2.10.2-alpine

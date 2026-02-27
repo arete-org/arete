@@ -127,6 +127,9 @@ paths:
             operationId: postTraces
             x-codeRefs:
                 - packages/backend/src/handlers/trace.ts#handleTraceUpsertRequest
+                - packages/discord-bot/src/api/traces.ts#postTraces
+                - packages/contracts/src/web/types.ts#PostTracesRequest
+                - packages/contracts/src/web/types.ts#PostTracesResponse
             summary: Upsert trace metadata
             description: |
                 Store ResponseMetadata for a responseId.
@@ -167,6 +170,7 @@ paths:
             operationId: getTrace
             x-codeRefs:
                 - packages/backend/src/handlers/trace.ts#handleTraceRequest
+                - packages/discord-bot/src/api/traces.ts#getTrace
                 - packages/web/src/utils/api.ts#getTrace
                 - packages/contracts/src/web/types.ts#GetTraceResponse
                 - packages/contracts/src/web/types.ts#GetTraceStaleResponse
