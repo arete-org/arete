@@ -13,6 +13,9 @@
                 "../../contracts/src/ethics-core/index.ts"
             ],
             "@arete/contracts/web": ["../../contracts/src/web/index.ts"],
+            "@arete/contracts/web/schemas": [
+                "../../contracts/src/web/schemas.ts"
+            ],
             "@arete/contracts/*": ["../../contracts/src/*"],
             "@styles/*": ["styles/*"],
             "@theme": ["theme"],

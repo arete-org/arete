@@ -7,6 +7,7 @@
  */
 
 import { z } from 'zod';
+import type { ApiResponseValidationResult } from './client-core';
 
 const ProvenanceSchema = z.enum(['Retrieved', 'Inferred', 'Speculative']);
 const RiskTierSchema = z.enum(['Low', 'Medium', 'High']);
@@ -93,10 +94,18 @@ export const GetTraceResponseSchema = ResponseMetadataSchema;
  */
 export const GetTraceStaleResponseSchema = z
     .object({
-        message: z.string(),
+        message: z.literal('Trace is stale'),
         metadata: ResponseMetadataSchema,
     })
     .passthrough();
+
+/**
+ * Trace reads can return either live metadata or a stale envelope depending on status.
+ */
+export const GetTraceApiResponseSchema = z.union([
+    GetTraceResponseSchema,
+    GetTraceStaleResponseSchema,
+]);
 
 /**
  * Shared API error envelope for normalized server-side error responses.
@@ -108,3 +117,33 @@ export const ApiErrorResponseSchema = z
         retryAfter: z.number().int().nonnegative().optional(),
     })
     .strict();
+
+const formatSchemaIssues = (error: z.ZodError): string => {
+    const firstIssue = error.issues[0];
+    if (!firstIssue) {
+        return 'Response payload did not match the expected schema.';
+    }
+
+    const issuePath =
+        firstIssue.path.length > 0 ? firstIssue.path.join('.') : 'body';
+    return `${issuePath}: ${firstIssue.message}`;
+};
+
+export const createSchemaResponseValidator =
+    <TSchema extends z.ZodTypeAny>(schema: TSchema) =>
+    (
+        data: unknown
+    ): ApiResponseValidationResult<z.output<TSchema>> => {
+        const parsed = schema.safeParse(data);
+        if (parsed.success) {
+            return {
+                success: true,
+                data: parsed.data,
+            };
+        }
+
+        return {
+            success: false,
+            error: formatSchemaIssues(parsed.error),
+        };
+    };

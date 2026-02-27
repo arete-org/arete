@@ -11,11 +11,13 @@ import { strict as assert } from 'node:assert';
 
 import {
     ApiErrorResponseSchema,
+    GetTraceApiResponseSchema,
     GetTraceStaleResponseSchema,
     PostReflectRequestSchema,
     PostReflectResponseSchema,
     PostTracesRequestSchema,
     ResponseMetadataSchema,
+    createSchemaResponseValidator,
 } from '../src/web/schemas';
 
 const baseMetadata = {
@@ -97,6 +99,33 @@ test('PostReflectResponseSchema and GetTraceStaleResponseSchema accept extensibl
         extraTopLevel: true,
     });
     assert.equal(staleParsed.success, true);
+});
+
+test('GetTraceApiResponseSchema accepts both live and stale trace payloads', () => {
+    assert.equal(GetTraceApiResponseSchema.safeParse(baseMetadata).success, true);
+
+    assert.equal(
+        GetTraceApiResponseSchema.safeParse({
+            message: 'Trace is stale',
+            metadata: baseMetadata,
+        }).success,
+        true
+    );
+});
+
+test('createSchemaResponseValidator returns normalized validation results', () => {
+    const validateTraceResponse = createSchemaResponseValidator(
+        GetTraceApiResponseSchema
+    );
+
+    const success = validateTraceResponse(baseMetadata);
+    assert.equal(success.success, true);
+
+    const failure = validateTraceResponse({ invalid: true });
+    assert.equal(failure.success, false);
+    if (!failure.success) {
+        assert.match(failure.error, /body|responseId|metadata|provenance/i);
+    }
 });
 
 test('ApiErrorResponseSchema enforces strict known error envelope fields', () => {

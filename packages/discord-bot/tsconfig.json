@@ -16,6 +16,9 @@
             "@arete/contracts/ethics-core": [
                 "../contracts/dist/ethics-core/index.d.ts"
             ],
+            "@arete/contracts/web/schemas": [
+                "../contracts/dist/web/schemas.d.ts"
+            ],
             "@arete/contracts/*": ["../contracts/dist/*"]
         },
         "typeRoots": ["./node_modules/@types", "./src/types"],
