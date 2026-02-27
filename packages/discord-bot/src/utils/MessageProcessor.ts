@@ -48,7 +48,7 @@ import {
 } from '../commands/image/contextResolver.js';
 import { buildResponseMetadata } from './response/metadata.js';
 import { buildFooterEmbed } from './response/provenanceFooter.js';
-import type { ResponseMetadata } from '@arete/backend/ethics-core';
+import type { ResponseMetadata } from '@arete/contracts/ethics-core';
 import type {
     ImageBackgroundType,
     ImageRenderModel,

@@ -19,6 +19,7 @@ COPY tsconfig.json ./tsconfig.json
 COPY package.json pnpm-workspace.yaml ./
 COPY packages/discord-bot/package.json packages/discord-bot/package.json
 COPY packages/backend/package.json packages/backend/tsconfig.json packages/backend/
+COPY packages/contracts/package.json packages/contracts/tsconfig.json packages/contracts/
 
 # --- Dependencies ---
 COPY pnpm-lock.yaml* ./
@@ -26,10 +27,12 @@ RUN pnpm install --frozen-lockfile --prod=false
 
 # --- Sources ---
 COPY packages/backend/src/ packages/backend/src/
+COPY packages/contracts/src/ packages/contracts/src/
 COPY packages/discord-bot/ packages/discord-bot/
 
 # --- Build ---
-RUN pnpm --filter @arete/backend run build \
+RUN pnpm --filter @arete/contracts run build \
+  && pnpm --filter @arete/backend run build \
   && pnpm exec tsc -p packages/discord-bot/tsconfig.json \
   && CI=true pnpm --filter @arete/discord-bot... install --prod
 
