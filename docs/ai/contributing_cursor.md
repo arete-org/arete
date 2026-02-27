@@ -26,6 +26,7 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 
 - **Human review**: Mandatory before merging AI-generated code
 - **Incremental changes**: Prefer small, well-scoped diffs over large refactors
+- **Refactors**: Follow Refactoring.Guru discipline (`Smell -> Technique -> Steps`; keep tests green)
 - **Testing**: All new functionality must include appropriate tests
 - **Documentation**: Update relevant docs when adding new features
 - **Validation**: Run `pnpm pre-review` before review; this includes OpenAPI

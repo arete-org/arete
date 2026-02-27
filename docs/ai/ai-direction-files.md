@@ -14,14 +14,14 @@ _Coordinated guidance for AI assistants and developers._
 - **`cursor.rules`** - Complete development rules (single source of truth)
 - **`.codexrules`** - Points to cursor.rules for Codex
 - **`.github/copilot-instructions.md`** - GitHub Copilot instructions
-- **`docs/contributing_cursor.md`** - Detailed Cursor guide
+- **`docs/ai/contributing_cursor.md`** - Detailed Cursor guide
 - **`cursor.dictionary`** - Project terminology
 - **`.cursor/README.md`** - Cursor IDE configuration
 
 ## 🎯 Usage
 
 **AI Assistants**: Use `.codexrules` or `copilot-instructions.md` (both point to `cursor.rules`)
-**Developers**: Start with `docs/contributing_cursor.md` → Reference `cursor.rules`
+**Developers**: Start with `docs/ai/contributing_cursor.md` → Reference `cursor.rules`
 
 ## 🔧 Maintenance
 
