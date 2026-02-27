@@ -28,6 +28,8 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 - **Incremental changes**: Prefer small, well-scoped diffs over large refactors
 - **Testing**: All new functionality must include appropriate tests
 - **Documentation**: Update relevant docs when adding new features
+- **Validation**: Run `pnpm pre-review` before review; this includes OpenAPI
+  code-link validation via `pnpm validate-openapi-links`
 
 ## Cost Awareness
 
@@ -40,6 +42,13 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 - **Risk assessment**: Modules are tagged with structured annotations separating technical risk (`@arete-risk`) from ethical sensitivity (`@arete-ethics`). See the tagging format in `cursor.rules` for details.
 - **Governance**: Decision-making modules require extra scrutiny
 - **Accountability**: All changes must maintain audit trails
+
+### API Linking
+
+For API boundary changes, keep OpenAPI and code links aligned:
+
+- `@api.operationId` and `@api.path` in route/client/contract code
+- `x-codeRefs` for each operation in `docs/api/openapi.yaml`
 
 ### ARETE Module Tagging
 

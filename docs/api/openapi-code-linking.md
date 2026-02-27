@@ -60,5 +60,8 @@ Shared sub-models (reused across multiple operations) can stay domain-shaped:
 
 ## Scope
 
-This convention is intentionally minimal for now.
-Future updates may add validation and generated mapping artifacts.
+This convention is intentionally lightweight.
+Validation is enforced by `pnpm validate-openapi-links`.
+Future hardening: evaluate Spectral-based OpenAPI lint rules so baseline spec
+validation is tool-driven and this custom script stays focused on repo-specific
+linking checks.

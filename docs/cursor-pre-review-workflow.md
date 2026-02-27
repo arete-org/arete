@@ -35,7 +35,7 @@ graph TD
 ```json
 {
     "scripts": {
-        "pre-review": "pnpm validate-arete-tags && pnpm type-check && pnpm lint-check"
+        "pre-review": "pnpm validate-arete-tags && pnpm validate-openapi-links && pnpm type-check && pnpm lint-check"
     }
 }
 ```
@@ -109,6 +109,7 @@ pnpm pre-review
 **What it checks**:
 
 - ARETE module tagging compliance
+- OpenAPI <-> code link integrity
 - TypeScript type safety
 - ESLint code quality
 - Basic structural integrity
