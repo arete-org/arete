@@ -1,11 +1,10 @@
 /**
- * @arete-module: LoggingPrivacyTests
- * @arete-risk: low
- * @arete-ethics: high
- * @arete-scope: test
- *
  * @description: Validates that logging utilities redact or avoid leaking sensitive Discord
  * data, and that verbose logging is gated behind explicit flags.
+ * @arete-scope: test
+ * @arete-module: LoggingPrivacyTests
+ * @arete-risk: low - Logging regressions can leak sensitive data.
+ * @arete-ethics: high - Protects user privacy by preventing raw identifiers in logs.
  *
  * @impact
  * Risk: Logging regressions can leak sensitive data.

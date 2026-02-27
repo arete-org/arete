@@ -1,10 +1,9 @@
 /**
- * @arete-module: Logger
- * @arete-risk: low
- * @arete-ethics: moderate
- * @arete-scope: utility
- *
  * @description: Winston-based logging utility with console and file transports. Provides structured logging for all bot operations.
+ * @arete-scope: utility
+ * @arete-module: Logger
+ * @arete-risk: low - Logging failures can make debugging difficult but won't break core functionality.
+ * @arete-ethics: moderate - Logs may contain user data affecting privacy and auditability.
  *
  * @impact
  * Risk: Logging failures can make debugging difficult but won't break core functionality.

@@ -1,10 +1,9 @@
 /**
- * @arete-module: PromptRegistry
- * @arete-risk: moderate
- * @arete-ethics: high
- * @arete-scope: utility
- *
  * @description: Manages prompt templates and rendering for AI interactions. Handles prompt loading, caching, and variable substitution.
+ * @arete-scope: utility
+ * @arete-module: PromptRegistry
+ * @arete-risk: moderate - Template errors can break AI interactions or cause unexpected behavior.
+ * @arete-ethics: high - Prompt framing directly shapes AI behavior and output safety.
  *
  * @impact
  * Risk: Template errors can break AI interactions or cause unexpected behavior. Manages prompt lifecycle and variable interpolation.
@@ -20,17 +19,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * Literal union of every prompt key currently supported. Keeping this list
- * centrally defined ensures compile-time safety for all consumers.
+ * All supported prompt keys. Derive the union type from this array.
  */
-export type PromptKey =
-    | 'discord.chat.system'
-    | 'discord.image.system'
-    | 'discord.image.developer'
-    | 'discord.realtime.system'
-    | 'discord.planner.system'
-    | 'discord.summarizer.system'
-    | 'discord.news.system';
+const PROMPT_KEYS = [
+    'discord.chat.system',
+    'discord.image.system',
+    'discord.image.developer',
+    'discord.realtime.system',
+    'discord.planner.system',
+    'discord.summarizer.system',
+    'discord.news.system',
+] as const;
+
+export type PromptKey = (typeof PROMPT_KEYS)[number];
+
+/**
+ * Cache of known prompt keys for quick lookup and runtime validation.
+ */
+const KNOWN_PROMPT_KEYS = new Set<PromptKey>(PROMPT_KEYS);
 
 /**
  * Tracks metadata used by downstream systems (for example cache hints). The
@@ -81,19 +87,6 @@ export interface PromptRegistryOptions {
  * Internal helper type to keep strong typing over the flattened prompt map.
  */
 type PromptMap = Partial<Record<PromptKey, PromptDefinition>>;
-
-/**
- * Cache of known prompt keys for quick lookup and runtime validation.
- */
-const KNOWN_PROMPT_KEYS = new Set<PromptKey>([
-    'discord.chat.system',
-    'discord.image.system',
-    'discord.image.developer',
-    'discord.realtime.system',
-    'discord.planner.system',
-    'discord.summarizer.system',
-    'discord.news.system',
-]);
 
 /**
  * Tiny helper that converts `file:` URLs into absolute filesystem paths. Using

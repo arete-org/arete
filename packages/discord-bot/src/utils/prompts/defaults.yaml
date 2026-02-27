@@ -195,7 +195,7 @@ discord:
                 Compression prompt used when reducing lengthy Discord history into summaries.
             template: |-
                 You are a helpful assistant that summarizes text to reduce token usage.
-                You will recieve a list of messages, and you must summarize each.
+                You will receive a list of messages, and you must summarize each.
                 You will return a single string with each summary prefixed like [reduced-0], [reduced-1], etc.
                 Pass through the original timestamp and username/nickname of the user who said the message.
                 Do not include any additional text or formatting in your response.

@@ -1,10 +1,9 @@
 /**
- * @arete-module: MessageProcessor
- * @arete-risk: high
- * @arete-ethics: high
- * @arete-scope: core
- *
  * @description: Core message processing and AI response generation. Handles message analysis, AI model selection, and response generation.
+ * @arete-scope: core
+ * @arete-module: MessageProcessor
+ * @arete-risk: high - Processing failures can break all user interactions or generate inappropriate content.
+ * @arete-ethics: high - Controls AI response generation, content filtering, and provenance tracking.
  *
  * @impact
  * Risk: Processing failures can break all user interactions or generate inappropriate content. Orchestrates the entire message-to-response pipeline including context building, planning, and response delivery.
