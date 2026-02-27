@@ -4,10 +4,11 @@ Use this checklist before opening a PR to ensure your code meets ARETE's standar
 
 ## Automated Validation (Run First)
 
-- [ ] **ARETE Module Tags**: `npm run validate-arete-tags` passes
-- [ ] **TypeScript**: `npm run type-check` passes
-- [ ] **Linting**: `npm run lint-check` passes
-- [ ] **Quick Check**: `npm run pre-review` passes
+- [ ] **ARETE Module Tags**: `pnpm validate-arete-tags` passes
+- [ ] **OpenAPI Linking**: `pnpm validate-openapi-links` passes (for API boundary changes)
+- [ ] **TypeScript**: `pnpm type-check` passes
+- [ ] **Linting**: `pnpm lint-check` passes
+- [ ] **Quick Check**: `pnpm pre-review` passes
 
 ## ARETE-Specific Requirements
 
@@ -97,7 +98,7 @@ Your code is ready for human review when:
 
 ## Common Issues to Avoid
 
-- **Missing ARETE tags** - Run `npm run validate-arete-tags` first
+- **Missing ARETE tags** - Run `pnpm validate-arete-tags` first
 - **Inadequate comments** - Focus on business logic and decisions
 - **Inconsistent logging** - Use structured logger throughout
 - **Missing cost tracking** - All LLM calls must be tracked

@@ -34,6 +34,9 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 - Record LLM costs via `ChannelContextManager.recordLLMUsage()`.
 - Keep interfaces serializable for future UI integration.
 - Use fail-open design: if uncertain, do not block execution.
+- For API boundary code, keep OpenAPI links current:
+  - code annotations: `@api.operationId` + `@api.path`
+  - spec references: `x-codeRefs` in `docs/api/openapi.yaml`
 
 ## ARETE Header Format
 
@@ -57,6 +60,7 @@ Example:
 
 - Pre-review: `pnpm pre-review`
 - ARETE tags: `pnpm validate-arete-tags`
+- OpenAPI linking: `pnpm validate-openapi-links`
 
 ## Context Hints
 

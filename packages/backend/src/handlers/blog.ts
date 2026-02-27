@@ -26,6 +26,10 @@ const createBlogHandlers = ({
     blogStore: BlogStore;
     logRequest: LogRequest;
 }) => {
+    /**
+     * @api.operationId: listBlogPosts
+     * @api.path: GET /api/blog-posts
+     */
     const handleBlogIndexRequest = async (
         req: IncomingMessage,
         res: ServerResponse
@@ -62,6 +66,10 @@ const createBlogHandlers = ({
         }
     };
 
+    /**
+     * @api.operationId: getBlogPost
+     * @api.path: GET /api/blog-posts/{postId}
+     */
     const handleBlogPostRequest = async (
         req: IncomingMessage,
         res: ServerResponse,
