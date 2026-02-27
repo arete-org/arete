@@ -9,6 +9,7 @@
 // This file is intentionally small. It only re-exports types so every package
 // can import from one place without pulling in runtime code.
 
+// Ethics Core contracts (provenance/risk metadata)
 export type {
     Provenance,
     RiskTier,
@@ -16,3 +17,19 @@ export type {
     Citation,
     ResponseMetadata,
 } from './ethics-core';
+
+// Web API contracts (request/response envelopes)
+export type {
+    ApiErrorResponse,
+    NormalizedApiError,
+    ReflectRequest,
+    ReflectResponse,
+    TraceResponse,
+    TraceStaleResponse,
+    RuntimeConfigResponse,
+    BlogAuthor,
+    BlogPostMetadata,
+    BlogPost,
+    BlogIndexResponse,
+    BlogPostResponse,
+} from './web';

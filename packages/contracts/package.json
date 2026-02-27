@@ -13,6 +13,10 @@
         "./ethics-core": {
             "types": "./dist/ethics-core/index.d.ts",
             "default": "./dist/ethics-core/index.js"
+        },
+        "./web": {
+            "types": "./dist/web/index.d.ts",
+            "default": "./dist/web/index.js"
         }
     },
     "scripts": {

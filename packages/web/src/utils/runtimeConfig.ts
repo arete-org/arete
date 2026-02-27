@@ -5,9 +5,10 @@
  * @arete-risk: low - Config fetch failures only disable optional client features.
  * @arete-ethics: low - Exposes only non-sensitive configuration to the client.
  */
-export interface RuntimeConfig {
-    turnstileSiteKey: string;
-}
+import type { RuntimeConfigResponse } from '@arete/contracts/web';
+import { api } from './api';
+
+export type RuntimeConfig = RuntimeConfigResponse;
 
 const DEFAULT_CONFIG: RuntimeConfig = {
     turnstileSiteKey: '',
@@ -36,15 +37,9 @@ export const loadRuntimeConfig = async (): Promise<RuntimeConfig> => {
     }
 
     if (!inFlightConfig) {
-        inFlightConfig = fetch('/config.json', { cache: 'no-store' })
-            .then(async (response) => {
-                if (!response.ok) {
-                    throw new Error(
-                        `Runtime config fetch failed: ${response.status}`
-                    );
-                }
-                return normalizeConfig(await response.json());
-            })
+        inFlightConfig = api
+            .getRuntimeConfig()
+            .then((payload) => normalizeConfig(payload))
             .catch(() => DEFAULT_CONFIG)
             .then((config) => {
                 cachedConfig = config;
