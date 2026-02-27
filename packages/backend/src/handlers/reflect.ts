@@ -88,6 +88,12 @@ const createReflectHandler =
         buildResponseMetadata,
         maxReflectBodyBytes,
     }: ReflectHandlerDeps) =>
+    /**
+     * @api.operationId: postReflect
+     * @api.path: POST /api/reflect
+     * @api.operationId: optionsReflect
+     * @api.path: OPTIONS /api/reflect
+     */
     async (
         req: IncomingMessage,
         res: ServerResponse

@@ -175,6 +175,10 @@ const createTraceHandlers = ({
         return true;
     };
 
+    /**
+     * @api.operationId: getTrace
+     * @api.path: GET /api/traces/{responseId}
+     */
     // Read handler: parse responseId, load metadata, check staleness, respond.
     const handleTraceRequest = async (
         req: IncomingMessage,
@@ -261,6 +265,10 @@ const createTraceHandlers = ({
     };
 
     // Write handler: validate, rate limit, then store the trace payload.
+    /**
+     * @api.operationId: postTraces
+     * @api.path: POST /api/traces
+     */
     const handleTraceUpsertRequest = async (
         req: IncomingMessage,
         res: ServerResponse

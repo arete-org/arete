@@ -289,6 +289,10 @@ export const createWebApiClient = ({
         }
     };
 
+    /**
+     * @api.operationId: postReflect
+     * @api.path: POST /api/reflect
+     */
     const reflectQuestion = async (
         request: PostReflectRequest,
         options?: { turnstileToken?: string; signal?: AbortSignal }
@@ -312,6 +316,10 @@ export const createWebApiClient = ({
         return response.data;
     };
 
+    /**
+     * @api.operationId: getRuntimeConfig
+     * @api.path: GET /config.json
+     */
     const getRuntimeConfig = async (
         signal?: AbortSignal
     ): Promise<GetRuntimeConfigResponse> => {
@@ -326,6 +334,10 @@ export const createWebApiClient = ({
         return response.data;
     };
 
+    /**
+     * @api.operationId: listBlogPosts
+     * @api.path: GET /api/blog-posts
+     */
     const getBlogIndex = async (
         signal?: AbortSignal
     ): Promise<ListBlogPostsResponse> => {
@@ -339,6 +351,10 @@ export const createWebApiClient = ({
         return response.data;
     };
 
+    /**
+     * @api.operationId: getBlogPost
+     * @api.path: GET /api/blog-posts/{postId}
+     */
     const getBlogPost = async (
         discussionNumber: number,
         signal?: AbortSignal
@@ -353,6 +369,10 @@ export const createWebApiClient = ({
         return response.data;
     };
 
+    /**
+     * @api.operationId: getTrace
+     * @api.path: GET /api/traces/{responseId}
+     */
     const getTrace = async (
         responseId: string,
         signal?: AbortSignal
