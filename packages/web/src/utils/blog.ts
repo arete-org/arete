@@ -4,6 +4,7 @@
  */
 
 import type { BlogPost, BlogPostMetadata, BlogIndex } from '../types/blog';
+import { api, isApiClientError } from './api';
 
 /**
  * Fetches the blog index containing metadata for all posts
@@ -11,20 +12,12 @@ import type { BlogPost, BlogPostMetadata, BlogIndex } from '../types/blog';
  */
 export async function fetchBlogIndex(): Promise<BlogIndex | null> {
     try {
-        const response = await fetch('/api/blog-posts');
-
-        if (!response.ok) {
-            if (response.status === 404) {
-                return null;
-            }
-            throw new Error(
-                `Failed to fetch blog index: ${response.status} ${response.statusText}`
-            );
-        }
-
-        const posts: BlogPostMetadata[] = await response.json();
+        const posts: BlogPostMetadata[] = await api.getBlogIndex();
         return { posts };
     } catch (error) {
+        if (isApiClientError(error) && error.status === 404) {
+            return null;
+        }
         console.error('Error fetching blog index:', error);
         return null;
     }
@@ -39,20 +32,12 @@ export async function fetchBlogPost(
     discussionNumber: number
 ): Promise<BlogPost | null> {
     try {
-        const response = await fetch(`/api/blog-posts/${discussionNumber}`);
-
-        if (!response.ok) {
-            if (response.status === 404) {
-                return null;
-            }
-            throw new Error(
-                `Failed to fetch blog post ${discussionNumber}: ${response.status} ${response.statusText}`
-            );
-        }
-
-        const post: BlogPost = await response.json();
+        const post: BlogPost = await api.getBlogPost(discussionNumber);
         return post;
     } catch (error) {
+        if (isApiClientError(error) && error.status === 404) {
+            return null;
+        }
         console.error(`Error fetching blog post ${discussionNumber}:`, error);
         return null;
     }
