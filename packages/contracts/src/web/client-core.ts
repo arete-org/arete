@@ -57,7 +57,14 @@ const normalizeBaseUrl = (baseUrl?: string): string => {
     if (!trimmed) {
         return '';
     }
-    return trimmed.replace(/\/+$/, '');
+
+    // Avoid regex backtracking scanners by trimming trailing "/" with a linear scan.
+    let end = trimmed.length;
+    while (end > 0 && trimmed.charCodeAt(end - 1) === 47) {
+        end -= 1;
+    }
+
+    return trimmed.slice(0, end);
 };
 
 const buildUrl = (baseUrl: string, endpoint: string): string => {
