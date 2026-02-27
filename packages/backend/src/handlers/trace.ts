@@ -6,13 +6,11 @@
  * @arete-ethics: high - Provenance access impacts user trust and auditability.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { PostTracesRequestSchema } from '../contracts/webSchemas';
 import type { ResponseMetadata } from '../ethics-core';
 import type { SimpleRateLimiter } from '../services/rateLimiter';
 import { logger } from '../shared/logger';
-import {
-    assertValidResponseMetadata,
-    type TraceStore,
-} from '../shared/traceStore';
+import { type TraceStore } from '../shared/traceStore';
 
 // Shared log function signature used by handlers.
 type LogRequest = (
@@ -370,15 +368,19 @@ const createTraceHandlers = ({
 
             let body = '';
             let bodyTooLarge = false;
+            let bodyBytes = 0;
             req.on('data', (chunk) => {
                 // Track payload size as it streams in.
-                body += chunk.toString();
-                if (body.length > maxTraceBodyBytes) {
+                bodyBytes += chunk.length;
+                if (bodyBytes > maxTraceBodyBytes) {
                     bodyTooLarge = true;
                     sendJson(res, 413, { error: 'Trace payload too large' });
                     logRequest(req, res, 'trace upsert payload-too-large');
                     req.destroy();
+                    return;
                 }
+
+                body += chunk.toString();
             });
 
             await new Promise<void>((resolve, reject) => {
@@ -396,10 +398,10 @@ const createTraceHandlers = ({
                 return;
             }
 
-            let payload: Record<string, unknown>;
+            let payload: unknown;
             try {
                 // --- JSON parsing ---
-                payload = JSON.parse(body) as Record<string, unknown>;
+                payload = JSON.parse(body) as unknown;
             } catch (error) {
                 logger.warn(
                     `Trace upsert received invalid JSON body: ${error instanceof Error ? error.message : String(error)}`
@@ -409,28 +411,40 @@ const createTraceHandlers = ({
                 return;
             }
 
-            const responseId =
-                typeof payload.responseId === 'string'
-                    ? payload.responseId
-                    : undefined;
-            if (!responseId) {
-                sendJson(res, 400, { error: 'Missing responseId' });
-                logRequest(req, res, 'trace upsert missing-responseId');
+            const parsedPayload = PostTracesRequestSchema.safeParse(payload);
+            if (!parsedPayload.success) {
+                const missingResponseId = parsedPayload.error.issues.some(
+                    (issue) =>
+                        issue.path.length === 1 &&
+                        issue.path[0] === 'responseId' &&
+                        issue.code === 'invalid_type'
+                );
+                const firstIssue = parsedPayload.error.issues[0];
+                const issuePath =
+                    firstIssue && firstIssue.path.length > 0
+                        ? firstIssue.path.join('.')
+                        : 'body';
+                const issueMessage =
+                    firstIssue?.message ?? 'Invalid trace payload.';
+
+                sendJson(res, 400, {
+                    error: missingResponseId
+                        ? 'Missing responseId'
+                        : 'Invalid trace payload',
+                    details: `${issuePath}: ${issueMessage}`,
+                });
+                logRequest(
+                    req,
+                    res,
+                    missingResponseId
+                        ? 'trace upsert missing-responseId'
+                        : 'trace upsert invalid-payload'
+                );
                 return;
             }
 
-            // Ensure responseId is set before validation.
-            const normalizedMetadata = {
-                ...payload,
-                responseId,
-            } as ResponseMetadata;
-
-            // Validate the payload structure for trace storage.
-            assertValidResponseMetadata(
-                normalizedMetadata,
-                'trace upsert',
-                responseId
-            );
+            const normalizedMetadata = parsedPayload.data as ResponseMetadata;
+            const responseId = normalizedMetadata.responseId;
 
             await traceStore.upsert(normalizedMetadata);
 

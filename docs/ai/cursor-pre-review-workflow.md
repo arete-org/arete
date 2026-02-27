@@ -156,12 +156,11 @@ Every module must include:
 
 ```typescript
 /**
- * @arete-module: <ModuleName>
- * @arete-risk: <high|high|moderate|low>
- * @arete-ethics: <high|high|moderate|low>
- * @arete-scope: <core|utility|interface|test>
- *
  * @description: <1-3 lines summarizing what this module does.>
+ * @arete-scope: <core|utility|interface|test>
+ * @arete-module: <ModuleName>
+ * @arete-risk: <high|moderate|low>
+ * @arete-ethics: <high|moderate|low>
  *
  * @impact
  * Risk: <What could break or be compromised if mishandled.>

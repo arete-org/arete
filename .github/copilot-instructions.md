@@ -14,7 +14,7 @@ This project follows strict ARETE framework principles for ethical AI developmen
 - `cursor.rules` - Complete development rules (authoritative source)
 - `.codexrules` - Points to cursor.rules for AI assistants
 - `cursor.dictionary` - Project-specific terminology
-- `docs/contributing_cursor.md` - Detailed Cursor configuration guide
+- `docs/ai/contributing_cursor.md` - Detailed Cursor configuration guide
 
 ## Critical Requirements:
 

@@ -12,6 +12,11 @@ import type {
     PostTracesRequest,
     PostTracesResponse,
 } from '@arete/contracts/web';
+import {
+    GetTraceApiResponseSchema,
+    PostTracesResponseSchema,
+    createSchemaResponseValidator,
+} from '@arete/contracts/web/schemas';
 import type { ApiJsonResult, ApiRequester } from './client.js';
 
 export type CreateTraceApiOptions = {
@@ -52,6 +57,9 @@ export const createTraceApi = (
             headers,
             body: request,
             signal: options?.signal,
+            validateResponse: createSchemaResponseValidator(
+                PostTracesResponseSchema
+            ),
         });
 
         return response.data;
@@ -72,6 +80,9 @@ export const createTraceApi = (
                 method: 'GET',
                 signal: options?.signal,
                 acceptedStatusCodes: [410],
+                validateResponse: createSchemaResponseValidator(
+                    GetTraceApiResponseSchema
+                ),
             }
         );
     };

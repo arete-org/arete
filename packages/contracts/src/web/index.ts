@@ -1,5 +1,5 @@
 /**
- * @description: Public exports for web API contract types.
+ * @description: Public exports for web API contract types and runtime schemas.
  * @arete-scope: interface
  * @arete-module: WebContractsIndex
  * @arete-risk: low - Incorrect exports can cause type mismatches.
@@ -48,3 +48,18 @@ export type {
  * @api.path: GET /api/blog-posts/{postId}
  */
 export type { BlogPost, GetBlogPostResponse } from './types';
+
+// Runtime validation schemas for reflect/traces contracts.
+export {
+    ApiErrorResponseSchema,
+    CitationSchema,
+    GetTraceApiResponseSchema,
+    GetTraceResponseSchema,
+    GetTraceStaleResponseSchema,
+    PostReflectRequestSchema,
+    PostReflectResponseSchema,
+    PostTracesRequestSchema,
+    PostTracesResponseSchema,
+    ResponseMetadataSchema,
+    createSchemaResponseValidator,
+} from './schemas';

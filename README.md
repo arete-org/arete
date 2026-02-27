@@ -36,7 +36,7 @@ ARETE is a working prototype delivering these core features:
 - **Response traces** (artifacts + metadata) stored for later inspection
 - **Risk tiering** and citations
 - **Web demo** with a quick “ask” flow with provenance data
-- **Discord bot** provides provenance as first-class while preserving useability
+- **Discord bot** provides provenance as first-class while preserving usability
 - **Self-hosting** via Docker (recommended for easiest setup), or to the cloud via Fly
 
 ---

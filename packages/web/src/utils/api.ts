@@ -17,6 +17,11 @@ import type {
     PostReflectResponse,
 } from '@arete/contracts/web';
 import {
+    GetTraceApiResponseSchema,
+    PostReflectResponseSchema,
+    createSchemaResponseValidator,
+} from '@arete/contracts/web/schemas';
+import {
     createApiTransport,
     isApiClientError as isSharedApiClientError,
     type ApiClientError,
@@ -60,10 +65,12 @@ export const createWebApiClient = ({
         const response = await requestJson<PostReflectResponse>(
             '/api/reflect',
             {
-            method: 'POST',
-            headers,
-            body: request,
-            signal: options?.signal,
+                method: 'POST',
+                headers,
+                body: request,
+                signal: options?.signal,
+                validateResponse:
+                    createSchemaResponseValidator(PostReflectResponseSchema),
             }
         );
 
@@ -141,6 +148,9 @@ export const createWebApiClient = ({
                     Accept: 'application/json',
                 },
                 acceptedStatusCodes: [410],
+                validateResponse: createSchemaResponseValidator(
+                    GetTraceApiResponseSchema
+                ),
             }
         );
     };

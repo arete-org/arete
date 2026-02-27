@@ -21,9 +21,16 @@
         "./web/client-core": {
             "types": "./dist/web/client-core.d.ts",
             "default": "./dist/web/client-core.js"
+        },
+        "./web/schemas": {
+            "types": "./dist/web/schemas.d.ts",
+            "default": "./dist/web/schemas.js"
         }
     },
     "scripts": {
         "build": "tsc -p tsconfig.json"
+    },
+    "dependencies": {
+        "zod": "catalog:"
     }
 }

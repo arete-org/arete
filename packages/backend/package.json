@@ -28,6 +28,7 @@
         "better-sqlite3": "catalog:",
         "date-fns": "catalog:",
         "js-yaml": "catalog:",
+        "zod": "catalog:",
         "winston": "catalog:"
     },
     "devDependencies": {

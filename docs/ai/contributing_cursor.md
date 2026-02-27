@@ -26,6 +26,7 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 
 - **Human review**: Mandatory before merging AI-generated code
 - **Incremental changes**: Prefer small, well-scoped diffs over large refactors
+- **Refactors**: Follow Refactoring.Guru discipline (`Smell -> Technique -> Steps`; keep tests green)
 - **Testing**: All new functionality must include appropriate tests
 - **Documentation**: Update relevant docs when adding new features
 - **Validation**: Run `pnpm pre-review` before review; this includes OpenAPI
@@ -62,8 +63,8 @@ For API boundary changes, keep OpenAPI and code links aligned:
 
 ### ARETE Module Tagging
 
-- `@arete-risk`: Technical fragility (high, high, moderate, low)
-- `@arete-ethics`: Human impact sensitivity (high, high, moderate, low)
+- `@arete-risk`: Technical fragility (low, moderate, high)
+- `@arete-ethics`: Human impact sensitivity (low, moderate, high)
 - `@arete-scope`: Logical role (core, utility, interface, test)
 - `@description`: 1-3 line summary of module purpose
 - `@impact`: Separate Risk and Ethics impact statements
@@ -72,12 +73,11 @@ For API boundary changes, keep OpenAPI and code links aligned:
 
 ```typescript
 /**
- * @arete-module: <ModuleName>
- * @arete-risk: <high|high|moderate|low>
- * @arete-ethics: <high|high|moderate|low>
- * @arete-scope: <core|utility|interface|test>
- *
  * @description: <1-3 lines summarizing what this module does.>
+ * @arete-scope: <core|utility|interface|test>
+ * @arete-module: <ModuleName>
+ * @arete-risk: <low|moderate|high>
+ * @arete-ethics: <low|moderate|high>
  *
  * @impact
  * Risk: <What could break or be compromised if mishandled.>

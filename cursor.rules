@@ -151,6 +151,13 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 - Never remove risk annotations or audit metadata without explicit reason.
 - Maintain backward compatibility unless explicitly breaking for a versioned release.
 
+## Refactoring.Guru discipline
+- Use `docs/ai/refactoring_guru_playbook.md` as the canonical refactoring reference.
+- For any refactor suggestion or plan, use `Smell -> Technique -> Steps`.
+- Do not mix feature work or behavior changes into a refactor change.
+- Refactor in small steps and keep tests green; run the relevant tests after each meaningful step.
+- Treat patterns as optional. Default to no pattern unless it is justified against a simpler refactor or language feature.
+
 ## Interaction Guardrails
 - When the user asks a question (not an explicit request to edit), do not modify files.
 - Ask for confirmation before making any changes unless the user clearly requests edits.
