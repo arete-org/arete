@@ -8,6 +8,10 @@
 
 import { z } from 'zod';
 
+// Temporary copy of packages/contracts/src/web/schemas.ts.
+// For now, keep both files in sync.
+// Later, the backend should use the shared runtime schemas directly.
+
 const ProvenanceSchema = z.enum(['Retrieved', 'Inferred', 'Speculative']);
 const RiskTierSchema = z.enum(['Low', 'Medium', 'High']);
 
