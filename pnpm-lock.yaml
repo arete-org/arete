@@ -297,9 +297,6 @@ importers:
 
   packages/discord-bot:
     dependencies:
-      '@arete/backend':
-        specifier: workspace:*
-        version: link:../backend
       '@arete/contracts':
         specifier: workspace:*
         version: link:../contracts
