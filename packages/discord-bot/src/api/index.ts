@@ -1,0 +1,42 @@
+/**
+ * @description: Composes the Discord bot package-local backend API client.
+ * @arete-scope: utility
+ * @arete-module: DiscordApiClient
+ * @arete-risk: moderate - Misconfigured client settings can break bot/backend communication.
+ * @arete-ethics: moderate - Consistent API behavior supports predictable fail-open handling.
+ */
+
+import { createApiTransport, type CreateApiTransportOptions } from './client.js';
+import { createTraceApi, type CreateTraceApiOptions } from './traces.js';
+
+export type CreateDiscordApiClientOptions = CreateApiTransportOptions &
+    CreateTraceApiOptions;
+
+export const createDiscordApiClient = ({
+    baseUrl,
+    defaultHeaders,
+    defaultTimeoutMs,
+    fetchImpl,
+    traceApiToken,
+}: CreateDiscordApiClientOptions) => {
+    const { requestJson } = createApiTransport({
+        baseUrl,
+        defaultHeaders,
+        defaultTimeoutMs,
+        fetchImpl,
+    });
+
+    return {
+        requestJson,
+        ...createTraceApi(requestJson, { traceApiToken }),
+    };
+};
+
+export type {
+    ApiErrorResponse,
+    ApiJsonResult,
+    ApiRequestOptions,
+    DiscordApiClientError,
+} from './client.js';
+export { isDiscordApiClientError } from './client.js';
+export type { PostTracesRequest, PostTracesResponse } from './traces.js';

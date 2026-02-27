@@ -49,6 +49,7 @@ import {
 import { buildResponseMetadata } from './response/metadata.js';
 import { buildFooterEmbed } from './response/provenanceFooter.js';
 import type { ResponseMetadata } from '@arete/contracts/ethics-core';
+import { botApi, isDiscordApiClientError } from '../api/botApi.js';
 import type {
     ImageBackgroundType,
     ImageRenderModel,
@@ -746,15 +747,6 @@ export class MessageProcessor {
                                 );
                             }
 
-                            const headers: Record<string, string> = {
-                                'Content-Type': 'application/json',
-                            };
-                            if (config.traceApiToken) {
-                                headers['X-Arete-Trace-Token'] =
-                                    config.traceApiToken;
-                            }
-
-                            const traceUrl = `${config.backendBaseUrl}/api/traces`;
                             const maxAttempts = 3;
 
                             for (
@@ -763,37 +755,26 @@ export class MessageProcessor {
                                 attempt += 1
                             ) {
                                 try {
-                                    const response = await fetch(traceUrl, {
-                                        method: 'POST',
-                                        headers,
-                                        body: JSON.stringify(responseMetadata),
-                                    });
-                                    if (!response.ok) {
-                                        const errorText = await response.text();
-                                        if (
-                                            response.status >= 500 &&
-                                            attempt < maxAttempts
-                                        ) {
-                                            logger.warn(
-                                                `Trace API retry ${attempt}/${maxAttempts} failed with ${response.status}; backing off before retry.`
-                                            );
-                                            await new Promise((resolve) =>
-                                                setTimeout(
-                                                    resolve,
-                                                    250 * attempt
-                                                )
-                                            );
-                                            continue;
-                                        }
-                                        throw new Error(
-                                            `Trace API ${response.status}: ${errorText}`
-                                        );
-                                    }
+                                    await botApi.postTraces(responseMetadata);
                                     logger.debug(
                                         `Persisted response metadata for response ${responseMetadata.responseId} via backend API.`
                                     );
                                     return;
                                 } catch (error) {
+                                    if (
+                                        isDiscordApiClientError(error) &&
+                                        error.status !== null &&
+                                        error.status >= 500 &&
+                                        attempt < maxAttempts
+                                    ) {
+                                        logger.warn(
+                                            `Trace API retry ${attempt}/${maxAttempts} failed with ${error.status}; backing off before retry.`
+                                        );
+                                        await new Promise((resolve) =>
+                                            setTimeout(resolve, 250 * attempt)
+                                        );
+                                        continue;
+                                    }
                                     if (attempt < maxAttempts) {
                                         logger.warn(
                                             `Trace API attempt ${attempt}/${maxAttempts} failed; retrying. Error: ${(error as Error)?.message ?? error}`

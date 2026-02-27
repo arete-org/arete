@@ -17,6 +17,10 @@
         "./web": {
             "types": "./dist/web/index.d.ts",
             "default": "./dist/web/index.js"
+        },
+        "./web/client-core": {
+            "types": "./dist/web/client-core.d.ts",
+            "default": "./dist/web/client-core.js"
         }
     },
     "scripts": {

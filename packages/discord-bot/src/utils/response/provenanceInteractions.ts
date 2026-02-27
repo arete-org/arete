@@ -33,8 +33,9 @@ import {
     type OpenAIOptions,
     type SupportedModel,
 } from '../openaiService.js';
-import { config, renderPrompt } from '../env.js';
+import { renderPrompt } from '../env.js';
 import { Planner } from '../prompting/Planner.js';
+import { botApi } from '../../api/botApi.js';
 
 export type AlternativeLensKey =
     | 'DANEEL'
@@ -762,21 +763,14 @@ export async function resolveProvenanceMetadata(
     }
 
     try {
-        const response = await fetch(
-            `${config.backendBaseUrl}/api/traces/${responseId}`,
-            {
-                headers: {
-                    Accept: 'application/json',
-                },
-            }
-        );
-        if (!response.ok) {
+        const response = await botApi.getTrace(responseId);
+        if (response.status === 410) {
             logger.warn(
-                `Failed to load provenance metadata for response ${responseId}: HTTP ${response.status}`
+                `Failed to load provenance metadata for response ${responseId}: HTTP 410`
             );
             return { responseId, metadata: null };
         }
-        const metadata = (await response.json()) as ResponseMetadata;
+        const metadata = response.data as ResponseMetadata;
         return { responseId, metadata };
     } catch (error) {
         logger.warn(
