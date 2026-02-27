@@ -24,9 +24,12 @@ const splatSymbol = Symbol.for('splat');
 const DISCORD_ID_REGEX = /\b\d{17,19}\b/g;
 
 /**
- * Recursively sanitize log data to strip raw Discord identifiers. This is a
- * defense-in-depth layer; primary protection should still pseudonymize IDs
- * before logging or storing.
+ * Recursively redacts Discord-style numeric IDs found in strings within the provided value.
+ *
+ * Processes nested arrays and objects while preserving overall structure; non-string primitives are returned unchanged.
+ *
+ * @param value - The value to sanitize (string, array, object, or primitive)
+ * @returns The same value shape with 17–19 digit Discord IDs in strings replaced by `[REDACTED_ID]`
  */
 export function sanitizeLogData<T>(value: T): T {
     if (typeof value === 'string') {
