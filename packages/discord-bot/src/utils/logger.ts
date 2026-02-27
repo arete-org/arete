@@ -80,7 +80,22 @@ const logFormat = printf(({ level, message, timestamp }) => {
 
 // --- Logger output configuration ---
 const logDirectory = process.env.LOG_DIR || 'logs';
-fs.mkdirSync(logDirectory, { recursive: true });
+let canWriteLogDirectory = true;
+try {
+    fs.mkdirSync(logDirectory, { recursive: true });
+} catch (error) {
+    canWriteLogDirectory = false;
+    const err = error as NodeJS.ErrnoException;
+    if (err?.code === 'EACCES' || err?.code === 'EPERM') {
+        console.warn(
+            `Logger cannot create log directory "${logDirectory}" due to permissions (${err.code}). Continuing with console logging only.`
+        );
+    } else {
+        console.warn(
+            `Logger failed to create log directory "${logDirectory}". Continuing with console logging only. Error: ${err?.message ?? String(error)}`
+        );
+    }
+}
 
 /**
  * Winston logger instance with console and file transports
@@ -96,14 +111,18 @@ export const logger = createLogger({
     ),
     transports: [
         new transports.Console(),
-        new transports.File({
-            filename: `${logDirectory}/${dateFnsFormat(new Date(), 'yyyy-MM-dd')}.log`,
-            format: format.combine(
-                format.uncolorize(),
-                format.timestamp(),
-                format.json()
-            ),
-        }),
+        ...(canWriteLogDirectory
+            ? [
+                  new transports.File({
+                      filename: `${logDirectory}/${dateFnsFormat(new Date(), 'yyyy-MM-dd')}.log`,
+                      format: format.combine(
+                          format.uncolorize(),
+                          format.timestamp(),
+                          format.json()
+                      ),
+                  }),
+              ]
+            : []),
     ],
     exitOnError: false,
 });

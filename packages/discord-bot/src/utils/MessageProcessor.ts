@@ -763,6 +763,18 @@ export class MessageProcessor {
                                     if (
                                         isDiscordApiClientError(error) &&
                                         error.status !== null &&
+                                        error.status >= 400 &&
+                                        error.status < 500 &&
+                                        error.status !== 429
+                                    ) {
+                                        logger.warn(
+                                            `Trace API request failed with non-retriable status ${error.status}; not retrying. Message: ${error.message}`
+                                        );
+                                        throw error;
+                                    }
+                                    if (
+                                        isDiscordApiClientError(error) &&
+                                        error.status !== null &&
                                         error.status >= 500 &&
                                         attempt < maxAttempts
                                     ) {

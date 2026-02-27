@@ -8,12 +8,21 @@
 
 import {
     createApiTransport,
+    type ApiRequester,
     type CreateApiTransportOptions,
 } from './client.js';
-import { createTraceApi, type CreateTraceApiOptions } from './traces.js';
+import {
+    createTraceApi,
+    type CreateTraceApiOptions,
+    type TraceApi,
+} from './traces.js';
 
 export type CreateDiscordApiClientOptions = CreateApiTransportOptions &
     CreateTraceApiOptions;
+
+export type DiscordApiClient = {
+    requestJson: ApiRequester;
+} & TraceApi;
 
 export const createDiscordApiClient = ({
     baseUrl,
@@ -21,7 +30,7 @@ export const createDiscordApiClient = ({
     defaultTimeoutMs,
     fetchImpl,
     traceApiToken,
-}: CreateDiscordApiClientOptions) => {
+}: CreateDiscordApiClientOptions): DiscordApiClient => {
     const { requestJson } = createApiTransport({
         baseUrl,
         defaultHeaders,

@@ -771,18 +771,22 @@ export async function resolveProvenanceMetadata(
     try {
         const response = await botApi.getTrace(responseId);
         if (response.status === 410) {
-            logger.warn(
-                `Failed to load provenance metadata for response ${responseId}: HTTP 410`
+            provenanceLogger.warn(
+                'Failed to load provenance metadata: trace stale',
+                {
+                    responseId,
+                    status: 410,
+                }
             );
             return { responseId, metadata: null };
         }
         const metadata = response.data as ResponseMetadata;
         return { responseId, metadata };
     } catch (error) {
-        logger.warn(
-            `Failed to load provenance metadata for response ${responseId}:`,
-            error
-        );
+        provenanceLogger.warn('Failed to load provenance metadata', {
+            responseId,
+            error,
+        });
         return { responseId, metadata: null };
     }
 }

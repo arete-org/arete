@@ -18,10 +18,21 @@ export type CreateTraceApiOptions = {
     traceApiToken?: string;
 };
 
+export type TraceApi = {
+    postTraces: (
+        request: PostTracesRequest,
+        options?: { signal?: AbortSignal }
+    ) => Promise<PostTracesResponse>;
+    getTrace: (
+        responseId: string,
+        options?: { signal?: AbortSignal }
+    ) => Promise<ApiJsonResult<GetTraceResponse | GetTraceStaleResponse>>;
+};
+
 export const createTraceApi = (
     requestJson: ApiRequester,
     { traceApiToken }: CreateTraceApiOptions = {}
-) => {
+): TraceApi => {
     /**
      * @api.operationId: postTraces
      * @api.path: POST /api/traces
