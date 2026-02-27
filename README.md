@@ -10,8 +10,7 @@
 Transparent, private, easy to run yourself — under your rules.
 
 - **Try the demo:** [https://arete-web.fly.dev](https://arete-web.fly.dev)
-- **Setup (self-host):** [https://arete-web.fly.dev/invite](https://arete-web.fly.dev/invite)
-- **API spec:** [openapi.yaml](docs/api/openapi.yaml)
+- **Setup:** [https://arete-web.fly.dev/invite](https://arete-web.fly.dev/invite)
 
 ---
 
