@@ -6,19 +6,13 @@
  * @arete-ethics: moderate - Missing provenance data can weaken transparency and auditability.
  */
 
-import type { ResponseMetadata } from '@arete/contracts/ethics-core';
 import type {
     GetTraceResponse,
     GetTraceStaleResponse,
+    PostTracesRequest,
+    PostTracesResponse,
 } from '@arete/contracts/web';
 import type { ApiJsonResult, ApiRequester } from './client.js';
-
-export type PostTracesRequest = ResponseMetadata;
-
-export type PostTracesResponse = {
-    ok: true;
-    responseId: string;
-};
 
 export type CreateTraceApiOptions = {
     traceApiToken?: string;

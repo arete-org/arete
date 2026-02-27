@@ -137,7 +137,7 @@ export default [
                 'warn',
                 {
                     selector:
-                        "ImportDeclaration[source.value=/^@arete\\/backend(\\/|$)/]",
+                        'ImportDeclaration[source.value=/^@arete\\/backend(\\/|$)/]',
                     message:
                         'Avoid @arete/backend imports in web/bot. Call the backend via /api/* and keep the fetch logic in a local client module for this package (e.g., packages/web/src/api/* or packages/discord-bot/src/api/*).',
                 },
@@ -146,6 +146,18 @@ export default [
                         "CallExpression[callee.type='Import'][arguments.0.value=/^@arete\\/backend(\\/|$)/]",
                     message:
                         'Avoid @arete/backend dynamic imports in web/bot. Call the backend via /api/* and keep the fetch logic in a local client module for this package (e.g., packages/web/src/api/* or packages/discord-bot/src/api/*).',
+                },
+                {
+                    selector:
+                        'ExportNamedDeclaration[source.value=/^@arete\\/backend(\\/|$)/]',
+                    message:
+                        'Avoid re-exporting @arete/backend modules in web/bot. Call the backend via /api/* and keep the fetch logic in a local client module for this package (e.g., packages/web/src/api/* or packages/discord-bot/src/api/*).',
+                },
+                {
+                    selector:
+                        'ExportAllDeclaration[source.value=/^@arete\\/backend(\\/|$)/]',
+                    message:
+                        'Avoid re-exporting @arete/backend modules in web/bot. Call the backend via /api/* and keep the fetch logic in a local client module for this package (e.g., packages/web/src/api/* or packages/discord-bot/src/api/*).',
                 },
             ],
         },

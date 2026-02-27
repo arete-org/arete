@@ -6,7 +6,10 @@
  * @arete-ethics: moderate - Consistent API behavior supports predictable fail-open handling.
  */
 
-import { createApiTransport, type CreateApiTransportOptions } from './client.js';
+import {
+    createApiTransport,
+    type CreateApiTransportOptions,
+} from './client.js';
 import { createTraceApi, type CreateTraceApiOptions } from './traces.js';
 
 export type CreateDiscordApiClientOptions = CreateApiTransportOptions &
@@ -39,4 +42,7 @@ export type {
     DiscordApiClientError,
 } from './client.js';
 export { isDiscordApiClientError } from './client.js';
-export type { PostTracesRequest, PostTracesResponse } from './traces.js';
+export type {
+    PostTracesRequest,
+    PostTracesResponse,
+} from '@arete/contracts/web';
