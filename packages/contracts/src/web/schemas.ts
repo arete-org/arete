@@ -17,7 +17,7 @@ const RiskTierSchema = z.enum(['Low', 'Medium', 'High']);
 export const CitationSchema = z
     .object({
         title: z.string(),
-        url: z.string(),
+        url: z.string().url(),
         snippet: z.string().optional(),
     })
     .strict();

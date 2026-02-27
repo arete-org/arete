@@ -285,6 +285,9 @@ importers:
       winston:
         specifier: 'catalog:'
         version: 3.19.0
+      zod:
+        specifier: 'catalog:'
+        version: 4.0.17
     devDependencies:
       '@types/better-sqlite3':
         specifier: 'catalog:'

@@ -7,6 +7,7 @@
  * @arete-ethics: high - Incorrect metadata harms transparency and user trust.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { PostReflectRequestSchema } from '../contracts/webSchemas';
 import { SimpleRateLimiter } from '../services/rateLimiter';
 import type {
     SimpleOpenAIService,
@@ -35,6 +36,10 @@ type ReflectHandlerDeps = {
     logRequest: LogRequest;
     buildResponseMetadata: BuildResponseMetadata;
     maxReflectBodyBytes: number;
+};
+
+type LimiterRef = {
+    current: SimpleRateLimiter | null;
 };
 
 const setCorsHeaders = (res: ServerResponse, req: IncomingMessage): void => {
@@ -87,14 +92,18 @@ const createReflectHandler =
         logRequest,
         buildResponseMetadata,
         maxReflectBodyBytes,
-    }: ReflectHandlerDeps) =>
+    }: ReflectHandlerDeps) => {
+    // Cache fallback limiters so fail-open fallback behavior still preserves state across requests.
+    const fallbackIpLimiter: LimiterRef = { current: null };
+    const fallbackSessionLimiter: LimiterRef = { current: null };
+
     /**
      * @api.operationId: postReflect
      * @api.path: POST /api/reflect
      * @api.operationId: optionsReflect
      * @api.path: OPTIONS /api/reflect
      */
-    async (
+    return async (
         req: IncomingMessage,
         res: ServerResponse
     ): Promise<void> => {
@@ -147,7 +156,8 @@ const createReflectHandler =
 
             // --- Input parsing (JSON body only) ---
             // Tokens are headers-only; the body is reserved for the question payload.
-            let question: string | null = null;
+            let question = '';
+            let parsedBody: unknown = {};
 
             if (req.method === 'POST') {
                 try {
@@ -219,14 +229,9 @@ const createReflectHandler =
                         return;
                     }
 
-                    // Only parse JSON when a body is present.
+                    // Parse JSON when a body is present; empty bodies are validated below.
                     if (body) {
-                        const parsedBody = JSON.parse(body) as {
-                            question?: string;
-                        };
-                        if (parsedBody.question) {
-                            question = parsedBody.question;
-                        }
+                        parsedBody = JSON.parse(body) as unknown;
                     }
                 } catch (error) {
                     logger.warn(
@@ -245,7 +250,49 @@ const createReflectHandler =
             }
 
             // --- Request validation ---
-            if (!question || question.trim().length === 0) {
+            const parsedRequest = PostReflectRequestSchema.safeParse(parsedBody);
+            if (!parsedRequest.success) {
+                const isQuestionTooLong = parsedRequest.error.issues.some(
+                    (issue) =>
+                        issue.code === 'too_big' &&
+                        issue.path.length === 1 &&
+                        issue.path[0] === 'question'
+                );
+
+                const firstIssue = parsedRequest.error.issues[0];
+                const issuePath =
+                    firstIssue && firstIssue.path.length > 0
+                        ? firstIssue.path.join('.')
+                        : 'body';
+                const issueMessage =
+                    firstIssue?.message ?? 'Invalid request payload.';
+
+                res.statusCode = isQuestionTooLong ? 413 : 400;
+                res.setHeader(
+                    'Content-Type',
+                    'application/json; charset=utf-8'
+                );
+                res.setHeader('Cache-Control', 'no-store');
+                res.end(
+                    JSON.stringify({
+                        error: isQuestionTooLong
+                            ? 'Question parameter too long'
+                            : 'Question parameter is required',
+                        details: `${issuePath}: ${issueMessage}`,
+                    })
+                );
+                logRequest(
+                    req,
+                    res,
+                    isQuestionTooLong
+                        ? 'reflect question-too-long'
+                        : 'reflect missing-question'
+                );
+                return;
+            }
+
+            question = parsedRequest.data.question.trim();
+            if (question.length === 0) {
                 res.statusCode = 400;
                 res.setHeader(
                     'Content-Type',
@@ -256,22 +303,6 @@ const createReflectHandler =
                     JSON.stringify({ error: 'Question parameter is required' })
                 );
                 logRequest(req, res, 'reflect missing-question');
-                return;
-            }
-
-            // Limit request size to protect the model endpoint.
-            const MAX_QUESTION_LENGTH = 3072;
-            if (question.length > MAX_QUESTION_LENGTH) {
-                res.statusCode = 413;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.setHeader('Cache-Control', 'no-store');
-                res.end(
-                    JSON.stringify({ error: 'Question parameter too long' })
-                );
-                logRequest(req, res, 'reflect question-too-long');
                 return;
             }
 
@@ -642,10 +673,15 @@ const createReflectHandler =
                 limitKey: string,
                 windowKey: string,
                 defaultLimit: number,
-                defaultWindowMs: number
+                defaultWindowMs: number,
+                fallbackRef: LimiterRef
             ): SimpleRateLimiter => {
                 if (limiter) {
                     return limiter;
+                }
+
+                if (fallbackRef.current) {
+                    return fallbackRef.current;
                 }
 
                 logger.warn(
@@ -659,7 +695,7 @@ const createReflectHandler =
                 const windowMs = windowRaw
                     ? Number.parseInt(windowRaw, 10)
                     : defaultWindowMs;
-                return new SimpleRateLimiter({
+                fallbackRef.current = new SimpleRateLimiter({
                     limit:
                         Number.isFinite(limit) && limit > 0
                             ? limit
@@ -669,6 +705,7 @@ const createReflectHandler =
                             ? windowMs
                             : defaultWindowMs,
                 });
+                return fallbackRef.current;
             };
 
             const activeIpRateLimiter = getLimiter(
@@ -677,7 +714,8 @@ const createReflectHandler =
                 'WEB_API_RATE_LIMIT_IP',
                 'WEB_API_RATE_LIMIT_IP_WINDOW_MS',
                 3,
-                60000
+                60000,
+                fallbackIpLimiter
             );
             const activeSessionRateLimiter = getLimiter(
                 sessionRateLimiter,
@@ -685,7 +723,8 @@ const createReflectHandler =
                 'WEB_API_RATE_LIMIT_SESSION',
                 'WEB_API_RATE_LIMIT_SESSION_WINDOW_MS',
                 5,
-                60000
+                60000,
+                fallbackSessionLimiter
             );
 
             const ipRateLimitResult = activeIpRateLimiter.check(clientIp);
@@ -886,5 +925,6 @@ Guidelines:
             );
         }
     };
+};
 
 export { createReflectHandler };
