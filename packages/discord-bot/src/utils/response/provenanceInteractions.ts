@@ -754,6 +754,12 @@ export function deriveResponseIdFromMessage(
     return null;
 }
 
+/**
+ * Retrieve provenance metadata for a Discord message by extracting its response identifier and querying the trace service.
+ *
+ * @param message - The Discord message to inspect for an embedded provenance response identifier (e.g., in embed footers)
+ * @returns An object with `responseId` when a response identifier was found and `metadata` containing the provenance metadata, or `null` when no metadata is available (no response id found, the trace was removed (HTTP 410), or the lookup failed)
+ */
 export async function resolveProvenanceMetadata(
     message: Message
 ): Promise<{ responseId?: string; metadata: ResponseMetadata | null }> {
