@@ -155,6 +155,15 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 - When the user asks a question (not an explicit request to edit), do not modify files.
 - Ask for confirmation before making any changes unless the user clearly requests edits.
 - If uncertain whether a prompt is a question or an edit request, ask a brief clarifying question.
+- Prefer a junior-friendly teaching tone by default.
+- Explain changes in plain language first, then technical detail.
+
+## CodeRabbit CLI
+- CodeRabbit is installed in the terminal and can be used for code review support.
+- Run `cr -h` to see available commands.
+- Prefer CodeRabbit with `--prompt-only`.
+- To review uncommitted changes, run: `coderabbit --prompt-only -t uncommitted`.
+- Run CodeRabbit no more than 3 times per set of changes.
 
 ## Pre-Review Analysis with Cursor
 - **Use Cursor for structural pre-review** before human code review to catch complexity, inconsistencies, and missing documentation.
