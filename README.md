@@ -1,7 +1,5 @@
 # ARETE
 
-> Assistant for Realtime Ethical Thought and Evaluation
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Hippocratic License HL3-CORE](https://img.shields.io/static/v1?label=Hippocratic%20License&message=HL3-CORE&labelColor=5e2751&color=bc8c3d)](https://firstdonoharm.dev/version/3/0/core.html)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/arete-org/arete)
@@ -9,25 +7,25 @@
 **Mindful and honest AI.**  
 Transparent, private, easy to run yourself — under your rules.
 
-**Try the demo:** [https://arete-web.fly.dev](https://arete-web.fly.dev
+**Try the demo:** [https://arete-web.fly.dev](https://arete-web.fly.dev)
 
 ---
 
 ## What is ARETE?
 
-ARETE is an AI assistant that tries to **show its work**.
+> Assistant for Realtime Ethical Thought and Evaluation  
 
-Most assistants give you polished answers but hide the trail. ARETE is built around **structured provenance**: its responses carry trace metadata you can easily inspect.
+ARETE is an AI assistant that tries to show its work — Its responses carry trace metadata you can easily inspect, unlike other assistants which give you polished answers but hide the trail.  
 
-With every response ARETE surfaces:
+Every response includes:
 
-- what it concluded, and how confident it is
+- how confident it is
 - what sources it relied on
 - what trade-offs it considered
 - what constraints and safety checks were applied
 - a trace artifact suitable for review or audit
 
-ARETE doesn't try to earn your trust — it’s built for human oversight, with inspectable provenance instead of “just believe me.”
+ARETE is built for human oversight, rather than “just believe me.”
 
 ---
 
