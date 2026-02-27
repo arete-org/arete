@@ -17,7 +17,7 @@ openapi: 3.1.0
 info:
     title: ARETE Backend API
     # Versioning: bump when request/response shapes, status codes, or auth requirements change; docs-only edits can skip.
-    version: 0.0.0
+    version: 1.0.0
     license:
         name: MIT + Hippocratic License v3 (HL3-CORE)
         url: docs/LICENSE_STRATEGY.md
