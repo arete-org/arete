@@ -2,7 +2,9 @@
 
 > Assistant for Realtime Ethical Thought and Evaluation
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Hippocratic License HL3-CORE](https://img.shields.io/static/v1?label=Hippocratic%20License&message=HL3-CORE&labelColor=5e2751&color=bc8c3d)](https://firstdonoharm.dev/version/3/0/core.html)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Hippocratic License HL3-CORE](https://img.shields.io/static/v1?label=Hippocratic%20License&message=HL3-CORE&labelColor=5e2751&color=bc8c3d)](https://firstdonoharm.dev/version/3/0/core.html)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/arete-org/arete)
 
 **Mindful and honest AI.**  
 Transparent, private, easy to run yourself — under your rules.
