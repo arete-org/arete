@@ -7,7 +7,7 @@
 **Mindful and honest AI.**  
 Transparent, private, easy to run yourself — under your rules.
 
-**Try the demo:** [https://arete-web.fly.dev](https://arete-web.fly.dev)
+**Try the demo:** [https://ai.jordanmakes.dev](https://ai.jordanmakes.dev)
 
 ---
 
