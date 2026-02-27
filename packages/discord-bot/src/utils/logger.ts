@@ -65,6 +65,8 @@ export function sanitizeLogData<T>(
 
 // --- Winston formatters ---
 const sanitizeFormat = format((info) => {
+    const reservedKeys = new Set(['level', 'message', 'timestamp']);
+
     // Clean the main message field (string or structured).
     info.message = sanitizeLogData(info.message);
 
@@ -72,6 +74,14 @@ const sanitizeFormat = format((info) => {
     const splat = info[splatSymbol] as unknown[] | undefined;
     if (Array.isArray(splat)) {
         info[splatSymbol] = splat.map((item) => sanitizeLogData(item));
+    }
+
+    // Sanitize merged enumerable metadata fields (for example userId, guildId).
+    for (const key of Object.keys(info)) {
+        if (reservedKeys.has(key)) {
+            continue;
+        }
+        info[key] = sanitizeLogData(info[key]);
     }
 
     return info;
