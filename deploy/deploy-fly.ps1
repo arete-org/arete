@@ -149,8 +149,11 @@ function Ensure-FlySecrets {
 }
 
 $configRoot = $PSScriptRoot
+$repoRoot = Resolve-Path (Join-Path $configRoot '..')
 $envPath = Join-Path $configRoot '..\.env'
 
+Push-Location $repoRoot
+try {
 Write-Host "Ensuring Fly apps exist..."
 Ensure-FlyApp -ConfigPath (Join-Path $configRoot 'fly.backend.toml')
 Ensure-FlyApp -ConfigPath (Join-Path $configRoot 'fly.web.toml')
@@ -190,4 +193,7 @@ $startScript = Join-Path $configRoot 'fly-start.ps1'
 if (Test-Path $startScript) {
   Write-Host "Starting all apps..."
   & $startScript
+}
+} finally {
+  Pop-Location
 }

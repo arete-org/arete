@@ -145,6 +145,11 @@ ensure_optional_secrets() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Fly/Depot uses current working directory as Docker build context.
+# Force repo root so Dockerfiles can COPY workspace files reliably.
+cd "$REPO_ROOT"
 
 echo "Ensuring Fly apps exist..."
 ensure_app "$SCRIPT_DIR/fly.backend.toml"
