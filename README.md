@@ -9,8 +9,7 @@
 **Mindful and honest AI.**  
 Transparent, private, easy to run yourself — under your rules.
 
-- **Try the demo:** [https://arete-web.fly.dev](https://arete-web.fly.dev)
-- **Setup:** [https://arete-web.fly.dev/invite](https://arete-web.fly.dev/invite)
+**Try the demo:** [https://arete-web.fly.dev](https://arete-web.fly.dev
 
 ---
 
