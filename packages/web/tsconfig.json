@@ -8,9 +8,12 @@
         "paths": {
             "@components/*": ["components/*"],
             "@pages/*": ["pages/*"],
+            "@arete/contracts": ["../../contracts/src/index.ts"],
             "@arete/contracts/ethics-core": [
                 "../../contracts/src/ethics-core/index.ts"
             ],
+            "@arete/contracts/web": ["../../contracts/src/web/index.ts"],
+            "@arete/contracts/*": ["../../contracts/src/*"],
             "@styles/*": ["styles/*"],
             "@theme": ["theme"],
             "@types/*": ["types/*"]

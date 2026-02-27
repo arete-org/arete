@@ -4,6 +4,7 @@ import ProvenanceFooter from './ProvenanceFooter';
 import type { ResponseMetadata } from '@arete/contracts/ethics-core';
 import examplePrompts from '../data/examplePrompts.json';
 import { loadRuntimeConfig } from '../utils/runtimeConfig';
+import { api, isApiClientError } from '../utils/api';
 
 // Module augmentation for Vite environment variables
 declare global {
@@ -375,99 +376,19 @@ const AskMeAnything = (): JSX.Element => {
         setIsTypingComplete(false);
 
         try {
-            const headers: Record<string, string> = {
-                Accept: 'application/json',
-                'Content-Type': 'application/json',
-            };
-
-            // Only add CAPTCHA token if we have one (not in development mode)
-            if (!isCaptchaDisabled && resolvedToken) {
-                headers['x-turnstile-token'] = resolvedToken;
-            }
-
-            // Reflection is POST-only; send the question in the JSON body.
-            const response = await fetch('/api/reflect', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ question: trimmedQuestion }),
-                signal: controller.signal,
-            });
+            const payload = await api.reflectQuestion(
+                { question: trimmedQuestion },
+                {
+                    turnstileToken:
+                        !isCaptchaDisabled && resolvedToken
+                            ? resolvedToken
+                            : undefined,
+                    signal: controller.signal,
+                }
+            );
 
             // Clear timeout once we have a response
             clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                // Handle CAPTCHA-specific errors
-                if (response.status === 403) {
-                    try {
-                        const errorData = await response.json();
-                        const errorMessage = errorData.details
-                            ? `CAPTCHA verification failed: ${errorData.details}. Please refresh and try again.`
-                            : 'CAPTCHA verification failed. Please refresh and try again.';
-
-                        setIsLoading(false);
-                        setStatus(errorMessage);
-                        setTurnstileToken(null);
-                        setIsTurnstileReady(false);
-                        setTurnstileError(null); // Clear any widget errors, we're showing API error in status instead
-                        setIsTurnstileMounted(false); // Reset mount state
-                        setTurnstileKey((prev) => prev + 1);
-                        return;
-                    } catch {
-                        setIsLoading(false);
-                        setStatus(
-                            'CAPTCHA verification failed. Please refresh and try again.'
-                        );
-                        setTurnstileToken(null);
-                        setIsTurnstileReady(false);
-                        setTurnstileError(null);
-                        setIsTurnstileMounted(false); // Reset mount state
-                        setTurnstileKey((prev) => prev + 1);
-                        return;
-                    }
-                }
-
-                // Handle 502 Turnstile service errors
-                if (response.status === 502) {
-                    try {
-                        const errorData = await response.json();
-                        if (
-                            errorData.error &&
-                            errorData.error.includes(
-                                'CAPTCHA verification service unavailable'
-                            )
-                        ) {
-                            setIsLoading(false);
-                            setStatus(
-                                'CAPTCHA service is unavailable. Please try again shortly.'
-                            );
-                            setTurnstileToken(null);
-                            setIsTurnstileReady(false);
-                            setTurnstileError(null);
-                            setIsTurnstileMounted(false); // Reset mount state
-                            setTurnstileKey((prev) => prev + 1);
-                            return;
-                        }
-                    } catch {
-                        setIsLoading(false);
-                        setStatus(
-                            'CAPTCHA service is unavailable. Please try again shortly.'
-                        );
-                        setTurnstileToken(null);
-                        setIsTurnstileReady(false);
-                        setTurnstileError(null);
-                        setIsTurnstileMounted(false); // Reset mount state
-                        setTurnstileKey((prev) => prev + 1);
-                        return;
-                    }
-                }
-
-                throw new Error(
-                    `Unexpected response status: ${response.status}`
-                );
-            }
-
-            const payload = await response.json();
 
             const reflection = payload.message as string | undefined;
             // Trust the API contract: metadata is already normalized by the backend.
@@ -494,30 +415,69 @@ const AskMeAnything = (): JSX.Element => {
                 return;
             }
 
-            // Check for network errors
-            if (error instanceof TypeError && error.message.includes('fetch')) {
-                setStatus(
-                    'Unable to connect to the server. Please check your connection and try again.'
-                );
-                setIsLoading(false);
-                return;
-            }
+            if (isApiClientError(error)) {
+                // Handle CAPTCHA-specific errors
+                if (error.status === 403) {
+                    const errorMessage = error.details
+                        ? `CAPTCHA verification failed: ${error.details}. Please refresh and try again.`
+                        : 'CAPTCHA verification failed. Please refresh and try again.';
 
-            // Check for CAPTCHA-related errors
-            if (
-                error instanceof Error &&
-                (error.message.includes('CAPTCHA') ||
-                    error.message.includes('403'))
-            ) {
-                setStatus(
-                    'CAPTCHA verification failed. Please refresh and try again.'
-                );
-                setTurnstileToken(null);
-                setIsTurnstileReady(false);
-                setTurnstileError(null);
-                setIsTurnstileMounted(false); // Reset mount state
-                setIsLoading(false);
-                return;
+                    setIsLoading(false);
+                    setStatus(errorMessage);
+                    setTurnstileToken(null);
+                    setIsTurnstileReady(false);
+                    setTurnstileError(null); // Clear any widget errors, we're showing API error in status instead
+                    setIsTurnstileMounted(false); // Reset mount state
+                    setTurnstileKey((prev) => prev + 1);
+                    return;
+                }
+
+                // Handle 502 Turnstile service errors
+                if (
+                    error.status === 502 &&
+                    (error.message.includes(
+                        'CAPTCHA verification service unavailable'
+                    ) ||
+                        error.details?.includes(
+                            'CAPTCHA verification service unavailable'
+                        ))
+                ) {
+                    setIsLoading(false);
+                    setStatus(
+                        'CAPTCHA service is unavailable. Please try again shortly.'
+                    );
+                    setTurnstileToken(null);
+                    setIsTurnstileReady(false);
+                    setTurnstileError(null);
+                    setIsTurnstileMounted(false); // Reset mount state
+                    setTurnstileKey((prev) => prev + 1);
+                    return;
+                }
+
+                // Check for network errors
+                if (error.code === 'network_error') {
+                    setStatus(
+                        'Unable to connect to the server. Please check your connection and try again.'
+                    );
+                    setIsLoading(false);
+                    return;
+                }
+
+                // Check for CAPTCHA-related errors
+                if (
+                    error.message.includes('CAPTCHA') ||
+                    error.message.includes('403')
+                ) {
+                    setStatus(
+                        'CAPTCHA verification failed. Please refresh and try again.'
+                    );
+                    setTurnstileToken(null);
+                    setIsTurnstileReady(false);
+                    setTurnstileError(null);
+                    setIsTurnstileMounted(false); // Reset mount state
+                    setIsLoading(false);
+                    return;
+                }
             }
 
             setStatus('My thoughts:');

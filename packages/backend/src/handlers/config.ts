@@ -16,6 +16,10 @@ type LogRequest = (
 // --- Handler factory ---
 const createRuntimeConfigHandler =
     ({ logRequest }: { logRequest: LogRequest }) =>
+    /**
+     * @api.operationId: getRuntimeConfig
+     * @api.path: GET /config.json
+     */
     async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
         try {
             // --- Method validation ---

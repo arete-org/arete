@@ -24,7 +24,7 @@ import {
     TextInputBuilder,
     TextInputStyle,
 } from 'discord.js';
-import type { ResponseMetadata, Citation } from '@arete/backend/ethics-core';
+import type { ResponseMetadata, Citation } from '@arete/contracts/ethics-core';
 import { logger } from '../logger.js';
 import { ResponseHandler } from './ResponseHandler.js';
 import {
@@ -33,8 +33,9 @@ import {
     type OpenAIOptions,
     type SupportedModel,
 } from '../openaiService.js';
-import { config, renderPrompt } from '../env.js';
+import { renderPrompt } from '../env.js';
 import { Planner } from '../prompting/Planner.js';
+import { botApi } from '../../api/botApi.js';
 
 export type AlternativeLensKey =
     | 'DANEEL'
@@ -144,6 +145,21 @@ export const buildAlternativeLensSessionKey = (
 ) => `${userId}:${messageId}`;
 export const buildExplainSessionKey = (messageId: string) =>
     `explain:${messageId}`;
+
+const isResponseMetadataPayload = (
+    value: unknown
+): value is ResponseMetadata => {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    const candidate = value as Partial<ResponseMetadata>;
+    return (
+        typeof candidate.responseId === 'string' &&
+        typeof candidate.provenance === 'string' &&
+        typeof candidate.riskTier === 'string'
+    );
+};
 
 // -----------------------------
 // Session lifecycle helpers
@@ -685,7 +701,7 @@ export async function requestProvenanceOpenAIOptions(
         );
         return plan.openaiOptions;
     } catch (error) {
-        logger.warn(
+        provenanceLogger.warn(
             'Failed to retrieve planner options for provenance interaction:',
             error
         );
@@ -753,6 +769,12 @@ export function deriveResponseIdFromMessage(
     return null;
 }
 
+/**
+ * Retrieve provenance metadata for a Discord message by extracting its response identifier and querying the trace service.
+ *
+ * @param message - The Discord message to inspect for an embedded provenance response identifier (e.g., in embed footers)
+ * @returns An object with `responseId` when a response identifier was found and `metadata` containing the provenance metadata, or `null` when no metadata is available (no response id found, the trace was removed (HTTP 410), or the lookup failed)
+ */
 export async function resolveProvenanceMetadata(
     message: Message
 ): Promise<{ responseId?: string; metadata: ResponseMetadata | null }> {
@@ -762,27 +784,35 @@ export async function resolveProvenanceMetadata(
     }
 
     try {
-        const response = await fetch(
-            `${config.backendBaseUrl}/api/traces/${responseId}`,
-            {
-                headers: {
-                    Accept: 'application/json',
-                },
-            }
-        );
-        if (!response.ok) {
-            logger.warn(
-                `Failed to load provenance metadata for response ${responseId}: HTTP ${response.status}`
+        const response = await botApi.getTrace(responseId);
+        if (response.status === 410) {
+            provenanceLogger.warn(
+                'Failed to load provenance metadata: trace stale',
+                {
+                    responseId,
+                    status: 410,
+                }
             );
             return { responseId, metadata: null };
         }
-        const metadata = (await response.json()) as ResponseMetadata;
+        if (!isResponseMetadataPayload(response.data)) {
+            provenanceLogger.warn(
+                'Failed to load provenance metadata: invalid payload shape',
+                {
+                    responseId,
+                    status: response.status,
+                    payload: response.data,
+                }
+            );
+            return { responseId, metadata: null };
+        }
+        const metadata = response.data;
         return { responseId, metadata };
     } catch (error) {
-        logger.warn(
-            `Failed to load provenance metadata for response ${responseId}:`,
-            error
-        );
+        provenanceLogger.warn('Failed to load provenance metadata', {
+            responseId,
+            error,
+        });
         return { responseId, metadata: null };
     }
 }
@@ -807,7 +837,7 @@ export async function resolveResponseAnchorMessage(
                 return referenced;
             }
         } catch (error) {
-            logger.warn(
+            provenanceLogger.warn(
                 `Failed to fetch referenced message ${referencedId} while resolving provenance anchor:`,
                 error
             );
@@ -815,7 +845,7 @@ export async function resolveResponseAnchorMessage(
     }
 
     if (!message.channel.isTextBased()) {
-        logger.warn(
+        provenanceLogger.warn(
             'Failed to resolve provenance anchor message: Channel is not text-based'
         );
         return null;
@@ -823,7 +853,7 @@ export async function resolveResponseAnchorMessage(
 
     const botId = message.client.user?.id;
     if (!botId) {
-        logger.warn(
+        provenanceLogger.warn(
             'Failed to resolve provenance anchor message: Bot ID not found'
         );
         return null;
@@ -859,7 +889,7 @@ export async function resolveResponseAnchorMessage(
             }
         }
     } catch (error) {
-        logger.warn(
+        provenanceLogger.warn(
             `Failed to fetch recent messages while resolving provenance anchor:`,
             error
         );
@@ -942,7 +972,7 @@ export async function recoverFullMessageText(
             }
         }
     } catch (error) {
-        logger.warn(
+        provenanceLogger.warn(
             `Failed to recover previous response chunks for provenance actions:`,
             error
         );
@@ -1466,7 +1496,7 @@ export async function handleAlternativeLensSubmit(
                     session.context.messageId
                 );
             } catch (fetchError) {
-                logger.warn(
+                provenanceLogger.warn(
                     `Failed to fetch original message ${session.context.messageId} for alternative lens reply:`,
                     fetchError
                 );

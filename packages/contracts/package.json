@@ -2,6 +2,7 @@
     "name": "@arete/contracts",
     "version": "0.0.1",
     "private": true,
+    "type": "module",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "exports": {
@@ -12,6 +13,14 @@
         "./ethics-core": {
             "types": "./dist/ethics-core/index.d.ts",
             "default": "./dist/ethics-core/index.js"
+        },
+        "./web": {
+            "types": "./dist/web/index.d.ts",
+            "default": "./dist/web/index.js"
+        },
+        "./web/client-core": {
+            "types": "./dist/web/client-core.d.ts",
+            "default": "./dist/web/client-core.js"
         }
     },
     "scripts": {

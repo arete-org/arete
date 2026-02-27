@@ -1,10 +1,9 @@
 /**
- * @arete-module: MessageProcessor
- * @arete-risk: high
- * @arete-ethics: high
- * @arete-scope: core
- *
  * @description: Core message processing and AI response generation. Handles message analysis, AI model selection, and response generation.
+ * @arete-scope: core
+ * @arete-module: MessageProcessor
+ * @arete-risk: high - Processing failures can break all user interactions or generate inappropriate content.
+ * @arete-ethics: high - Controls AI response generation, content filtering, and provenance tracking.
  *
  * @impact
  * Risk: Processing failures can break all user interactions or generate inappropriate content. Orchestrates the entire message-to-response pipeline including context building, planning, and response delivery.
@@ -48,7 +47,8 @@ import {
 } from '../commands/image/contextResolver.js';
 import { buildResponseMetadata } from './response/metadata.js';
 import { buildFooterEmbed } from './response/provenanceFooter.js';
-import type { ResponseMetadata } from '@arete/backend/ethics-core';
+import type { ResponseMetadata } from '@arete/contracts/ethics-core';
+import { botApi, isDiscordApiClientError } from '../api/botApi.js';
 import type {
     ImageBackgroundType,
     ImageRenderModel,
@@ -746,15 +746,6 @@ export class MessageProcessor {
                                 );
                             }
 
-                            const headers: Record<string, string> = {
-                                'Content-Type': 'application/json',
-                            };
-                            if (config.traceApiToken) {
-                                headers['X-Arete-Trace-Token'] =
-                                    config.traceApiToken;
-                            }
-
-                            const traceUrl = `${config.backendBaseUrl}/api/traces`;
                             const maxAttempts = 3;
 
                             for (
@@ -763,37 +754,38 @@ export class MessageProcessor {
                                 attempt += 1
                             ) {
                                 try {
-                                    const response = await fetch(traceUrl, {
-                                        method: 'POST',
-                                        headers,
-                                        body: JSON.stringify(responseMetadata),
-                                    });
-                                    if (!response.ok) {
-                                        const errorText = await response.text();
-                                        if (
-                                            response.status >= 500 &&
-                                            attempt < maxAttempts
-                                        ) {
-                                            logger.warn(
-                                                `Trace API retry ${attempt}/${maxAttempts} failed with ${response.status}; backing off before retry.`
-                                            );
-                                            await new Promise((resolve) =>
-                                                setTimeout(
-                                                    resolve,
-                                                    250 * attempt
-                                                )
-                                            );
-                                            continue;
-                                        }
-                                        throw new Error(
-                                            `Trace API ${response.status}: ${errorText}`
-                                        );
-                                    }
+                                    await botApi.postTraces(responseMetadata);
                                     logger.debug(
                                         `Persisted response metadata for response ${responseMetadata.responseId} via backend API.`
                                     );
                                     return;
                                 } catch (error) {
+                                    if (
+                                        isDiscordApiClientError(error) &&
+                                        error.status !== null &&
+                                        error.status >= 400 &&
+                                        error.status < 500 &&
+                                        error.status !== 429
+                                    ) {
+                                        logger.warn(
+                                            `Trace API request failed with non-retriable status ${error.status}; not retrying. Message: ${error.message}`
+                                        );
+                                        throw error;
+                                    }
+                                    if (
+                                        isDiscordApiClientError(error) &&
+                                        error.status !== null &&
+                                        error.status >= 500 &&
+                                        attempt < maxAttempts
+                                    ) {
+                                        logger.warn(
+                                            `Trace API retry ${attempt}/${maxAttempts} failed with ${error.status}; backing off before retry.`
+                                        );
+                                        await new Promise((resolve) =>
+                                            setTimeout(resolve, 250 * attempt)
+                                        );
+                                        continue;
+                                    }
                                     if (attempt < maxAttempts) {
                                         logger.warn(
                                             `Trace API attempt ${attempt}/${maxAttempts} failed; retrying. Error: ${(error as Error)?.message ?? error}`

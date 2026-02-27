@@ -1,22 +1,28 @@
 /**
+ * @description: Renders the trace view for a response, including provenance metadata, citations, and integrity/status states.
+ * @arete-scope: web
+ * @arete-module: TracePage
+ * @arete-risk: medium - Trace rendering errors can hide provenance signals and mislead users reviewing outputs.
+ * @arete-ethics: high - Provenance visibility directly supports transparency, accountability, and informed trust.
+ */
+/**
  * TracePage displays the full provenance trace for a bot response, including metadata,
  * citations, and technical details. Handles various states including loading, errors,
  * stale traces, and integrity check failures.
  */
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import type {
+    GetTraceResponse,
+    GetTraceStaleResponse,
+} from '@arete/contracts/web';
+import { api, isApiClientError } from '../utils/api';
 // Define the actual server response metadata structure
-interface ServerMetadata {
-    responseId?: string;
-    timestamp: string;
-    model: string;
-    modelVersion?: string;
-    provenance?: string;
-    riskTier?: string;
-    chainHash?: string;
-    licenseContext?: string;
-    reasoningEffort: string;
-    runtimeContext: {
+type ServerMetadata = GetTraceResponse & {
+    timestamp?: string;
+    model?: string;
+    reasoningEffort?: string;
+    runtimeContext?: {
         modelVersion: string;
         conversationSnapshot: string;
     };
@@ -26,15 +32,7 @@ interface ServerMetadata {
         total_tokens: number;
     };
     finishReason?: string;
-    staleAfter: string;
-    confidence?: number;
-    tradeoffCount?: number;
-    citations?: Array<{
-        title: string;
-        url: string;
-        snippet?: string;
-    }>;
-}
+};
 
 // Reuse the shared provenance contracts, but model the transport layer differences so the
 // React page can consume the JSON payload without re-defining the entire schema.
@@ -43,8 +41,8 @@ type SerializableResponseMetadata = ServerMetadata;
 // Helper to extract payload from 410 (stale) responses
 const extractPayload = (data: unknown): ServerMetadata | null => {
     if (data && typeof data === 'object' && 'metadata' in data) {
-        const obj = data as { metadata?: ServerMetadata };
-        return obj.metadata || null;
+        const stalePayload = data as GetTraceStaleResponse;
+        return (stalePayload.metadata as ServerMetadata) || null;
     }
     return null;
 };
@@ -85,23 +83,10 @@ const TracePage = (): JSX.Element => {
             setTraceData(null);
 
             try {
-                console.log('=== Trace Page - Making Request ===');
-                console.log('Request URL:', `/api/traces/${responseId}`);
-                const response = await fetch(`/api/traces/${responseId}`, {
-                    headers: {
-                        Accept: 'application/json',
-                    },
-                });
-                console.log('Response status:', response.status);
-                console.log('Response ok:', response.ok);
-                console.log(
-                    'Response headers:',
-                    Object.fromEntries(response.headers.entries())
-                );
+                const traceResult = await api.getTrace(responseId);
 
-                if (response.status === 200) {
-                    const payload =
-                        (await response.json()) as SerializableResponseMetadata;
+                if (traceResult.status === 200) {
+                    const payload = traceResult.data as SerializableResponseMetadata;
 
                     // Debug logging
                     console.log('=== Trace Page Debug ===');
@@ -143,19 +128,8 @@ const TracePage = (): JSX.Element => {
                     return;
                 }
 
-                if (response.status === 404) {
-                    if (!isMounted) {
-                        return;
-                    }
-
-                    setLoadingState('not-found');
-                    return;
-                }
-
-                if (response.status === 410) {
-                    const payload = extractPayload(
-                        await response.json().catch(() => null)
-                    );
+                if (traceResult.status === 410) {
+                    const payload = extractPayload(traceResult.data);
 
                     if (!isMounted) {
                         return;
@@ -168,24 +142,6 @@ const TracePage = (): JSX.Element => {
                     setLoadingState('stale');
                     return;
                 }
-
-                if (response.status === 409) {
-                    if (!isMounted) {
-                        return;
-                    }
-
-                    setLoadingState('hash-mismatch');
-                    return;
-                }
-
-                const message = await response.text();
-
-                if (!isMounted) {
-                    return;
-                }
-
-                setErrorMessage(message || 'Failed to load trace.');
-                setLoadingState('error');
             } catch (error) {
                 console.error('=== Trace Page - Error ===');
                 console.error('Error:', error);
@@ -205,9 +161,31 @@ const TracePage = (): JSX.Element => {
                     return;
                 }
 
+                if (isApiClientError(error)) {
+                    if (error.status === 404) {
+                        setLoadingState('not-found');
+                        return;
+                    }
+
+                    if (error.status === 409) {
+                        setLoadingState('hash-mismatch');
+                        return;
+                    }
+
+                    setErrorMessage(
+                        error.details || error.message || 'Failed to load trace.'
+                    );
+                    setLoadingState('error');
+                    return;
+                }
+
+                const errorLike =
+                    typeof error === 'object' && error !== null
+                        ? (error as { message?: unknown })
+                        : null;
                 setErrorMessage(
-                    error instanceof Error
-                        ? error.message
+                    errorLike && typeof errorLike.message === 'string'
+                        ? errorLike.message
                         : 'Failed to load trace.'
                 );
                 setLoadingState('error');
@@ -468,7 +446,11 @@ const TracePage = (): JSX.Element => {
                 <h2>Citations</h2>
                 {traceData?.citations && traceData.citations.length > 0 ? (
                     <ul>
-                        {traceData.citations.map((citation, index) => {
+                        {traceData.citations.map((citation: {
+                            title: string;
+                            url: string;
+                            snippet?: string;
+                        }, index: number) => {
                             const urlString =
                                 typeof citation.url === 'string'
                                     ? citation.url

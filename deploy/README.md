@@ -19,10 +19,37 @@ Services:
 
 - backend: `OPENAI_API_KEY`, `TRACE_API_TOKEN`
 - discord-bot: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`
-
-Why `TRACE_API_TOKEN`? It's a shared key used to authenticate trace uploads from the bot to the backend.
+    > Why `TRACE_API_TOKEN`? It's a shared key used to authenticate trace uploads from the bot to the backend.
 
 ## Optional environment
+
+### Optional Services
+
+- **Cloudflare Turnstile (abuse prevention)**  
+  Turnstile protects public endpoints from abuse.  
+  If **both keys** are set, CAPTCHA is enforced.  
+  If **neither key** is set, CAPTCHA is skipped.
+  ```env
+  TURNSTILE_SITE_KEY=...
+  TURNSTILE_SECRET_KEY=...
+  ```
+- **Cloudinary (image uploads)**  
+  If Cloudinary credentials are provided, images can be uploaded and referenced in traces.  
+  If not, the system falls back to attaching images directly in Discord.
+  ```env
+  CLOUDINARY_CLOUD_NAME=...
+  CLOUDINARY_API_KEY=...
+  CLOUDINARY_API_SECRET=...
+  ```
+  > If these are missing, images are still delivered via Discord attachments.
+- **Storage Path**  
+  Response traces are stored in SQLite:
+  ```env
+  PROVENANCE_SQLITE_PATH=/data/provenance.db
+  ```
+  > On Fly.io, `/data` is backed by a persistent volume. On other hosts, point this path at a durable directory.
+
+### Optional Environment Variables
 
 - backend: `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY` (both required to enable CAPTCHA)
 - backend: `GITHUB_WEBHOOK_SECRET` (enables blog sync)
@@ -31,7 +58,6 @@ Why `TRACE_API_TOKEN`? It's a shared key used to authenticate trace uploads from
 - backend: `ARETE_DEFAULT_MODEL`, `ARETE_DEFAULT_REASONING_EFFORT`, `ARETE_DEFAULT_VERBOSITY` (reflect defaults)
 - backend: `TRACE_API_RATE_LIMIT`, `TRACE_API_RATE_LIMIT_WINDOW_MS`, `TRACE_API_MAX_BODY_BYTES` (trace ingestion limits)
 - bot: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (optional image uploads)
-    - If these are missing, images are still delivered via Discord attachments.
 
 ## Start
 

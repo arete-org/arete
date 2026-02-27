@@ -47,6 +47,7 @@ The `cursor.dictionary` file contains ARETE-specific terms to prevent auto-corre
 - `/ethics-audit` - Audit ethics tags for accuracy
 - `/format-code` - Format code with Prettier
 - `/type-check` - Run TypeScript type checking
+- `pre-review` task - Run full pre-review checks (ARETE tags, OpenAPI links, types, lint)
 
 ## Usage
 

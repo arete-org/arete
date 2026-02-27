@@ -10,6 +10,7 @@ openapi: 3.1.0
 # - GET /api/blog-posts/{postId}: Blog post (public)
 # - POST /api/webhook/github: GitHub discussion webhook (signature when configured)
 # - GET /config.json: Runtime config (public)
+# - Operation/code index: docs/api/operation-map.md
 
 # ====================
 # Public API metadata
@@ -67,6 +68,11 @@ paths:
     /api/reflect:
         post:
             operationId: postReflect
+            x-codeRefs:
+                - packages/backend/src/handlers/reflect.ts#createReflectHandler
+                - packages/web/src/utils/api.ts#reflectQuestion
+                - packages/contracts/src/web/types.ts#PostReflectRequest
+                - packages/contracts/src/web/types.ts#PostReflectResponse
             summary: Generate a reflective response
             description: |
                 Generate a reflective response from a question in the JSON body.
@@ -103,6 +109,8 @@ paths:
                     $ref: '#/components/responses/ServiceUnavailable'
         options:
             operationId: optionsReflect
+            x-codeRefs:
+                - packages/backend/src/handlers/reflect.ts#createReflectHandler
             summary: CORS preflight
             description: |
                 Handle CORS preflight for the reflect endpoint.
@@ -117,6 +125,11 @@ paths:
     /api/traces:
         post:
             operationId: postTraces
+            x-codeRefs:
+                - packages/backend/src/handlers/trace.ts#handleTraceUpsertRequest
+                - packages/discord-bot/src/api/traces.ts#postTraces
+                - packages/contracts/src/web/types.ts#PostTracesRequest
+                - packages/contracts/src/web/types.ts#PostTracesResponse
             summary: Upsert trace metadata
             description: |
                 Store ResponseMetadata for a responseId.
@@ -155,6 +168,12 @@ paths:
     /api/traces/{responseId}:
         get:
             operationId: getTrace
+            x-codeRefs:
+                - packages/backend/src/handlers/trace.ts#handleTraceRequest
+                - packages/discord-bot/src/api/traces.ts#getTrace
+                - packages/web/src/utils/api.ts#getTrace
+                - packages/contracts/src/web/types.ts#GetTraceResponse
+                - packages/contracts/src/web/types.ts#GetTraceStaleResponse
             summary: Fetch a stored trace
             description: |
                 Return stored ResponseMetadata by response ID.
@@ -181,6 +200,10 @@ paths:
     /api/blog-posts:
         get:
             operationId: listBlogPosts
+            x-codeRefs:
+                - packages/backend/src/handlers/blog.ts#handleBlogIndexRequest
+                - packages/web/src/utils/api.ts#getBlogIndex
+                - packages/contracts/src/web/types.ts#ListBlogPostsResponse
             summary: List blog posts
             description: |
                 Return the public blog index (trailing slash accepted).
@@ -198,6 +221,10 @@ paths:
     /api/blog-posts/{postId}:
         get:
             operationId: getBlogPost
+            x-codeRefs:
+                - packages/backend/src/handlers/blog.ts#handleBlogPostRequest
+                - packages/web/src/utils/api.ts#getBlogPost
+                - packages/contracts/src/web/types.ts#GetBlogPostResponse
             summary: Fetch a blog post
             description: |
                 Return a single blog post by numeric id.
@@ -222,6 +249,8 @@ paths:
     /api/webhook/github:
         post:
             operationId: postGitHubWebhook
+            x-codeRefs:
+                - packages/backend/src/handlers/webhook.ts#createWebhookHandler
             summary: Ingest GitHub discussion webhook
             description: |
                 Accept GitHub discussion events to sync blog posts.
@@ -255,6 +284,10 @@ paths:
     /config.json:
         get:
             operationId: getRuntimeConfig
+            x-codeRefs:
+                - packages/backend/src/handlers/config.ts#createRuntimeConfigHandler
+                - packages/web/src/utils/api.ts#getRuntimeConfig
+                - packages/contracts/src/web/types.ts#GetRuntimeConfigResponse
             summary: Fetch runtime config
             description: |
                 Return public runtime configuration for web clients.

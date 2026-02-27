@@ -3,7 +3,7 @@
 _A living document for ARETE’s ethical licensing approach_
 
 Version: 0.1
-Last updated: 2025-10-18
+Last updated: 2026-02-05
 
 ---
 
@@ -16,7 +16,7 @@ ARETE is released under a **dual-license model**:
 This dual structure combines the openness and accessibility of the MIT License with the moral commitments of the Hippocratic License v3, reflecting ARETE’s foundational principle: **freedom with responsibility**.
 
 All components of the project are, by default, dual-licensed under both terms unless otherwise noted in their respective directories.  
-Both `MIT_LICENSE.md` and `HIPPOCRATIC_LICENSE.md` are included in the repository root for clarity.
+Both `MIT_LICENSE.md` and `HIPPOCRATIC_LICENSE.md` are included in the repository root.
 
 ---
 
@@ -128,8 +128,4 @@ Feedback and proposals are welcome via:
 
 ## Closing Thought
 
-The goal isn’t to police behavior through licensing—it’s to help ensure that what we build reflects the values we care about.
-
-A license, like a compass, doesn’t force a direction—but it helps keep us oriented toward what matters.
-
----
+The goal isn’t to police behavior through licensing, but to help ensure that what we build reflects the values we care about. A license, like a compass, doesn’t force a direction—but it helps keep us oriented toward what matters.

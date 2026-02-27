@@ -34,6 +34,15 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 - Record LLM costs via `ChannelContextManager.recordLLMUsage()`.
 - Keep interfaces serializable for future UI integration.
 - Use fail-open design: if uncertain, do not block execution.
+- For API boundary code, keep OpenAPI links current:
+  - code annotations: `@api.operationId` + `@api.path`
+  - spec references: `x-codeRefs` in `docs/api/openapi.yaml`
+
+## Communication Style
+
+- Prefer a junior-friendly teaching tone by default.
+- Explain decisions in plain language first, then include technical detail.
+- Keep explanations concrete and actionable.
 
 ## ARETE Header Format
 
@@ -57,6 +66,15 @@ Example:
 
 - Pre-review: `pnpm pre-review`
 - ARETE tags: `pnpm validate-arete-tags`
+- OpenAPI linking: `pnpm validate-openapi-links`
+
+## CodeRabbit CLI
+
+- CodeRabbit is installed in the terminal and can be used for code review support.
+- Run `cr -h` to view available commands.
+- Prefer CodeRabbit with `--prompt-only`.
+- To review uncommitted changes: `coderabbit --prompt-only -t uncommitted`.
+- Run CodeRabbit no more than 3 times per set of changes.
 
 ## Context Hints
 

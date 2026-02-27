@@ -27,6 +27,10 @@ type WebhookDeps = {
 
 const createWebhookHandler =
     ({ writeBlogPost, verifyGitHubSignature, logRequest }: WebhookDeps) =>
+    /**
+     * @api.operationId: postGitHubWebhook
+     * @api.path: POST /api/webhook/github
+     */
     async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
         try {
             const maxBodyBytes = 256 * 1024;
