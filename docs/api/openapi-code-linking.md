@@ -26,6 +26,24 @@ Example:
 export type GetTraceResponse = ResponseMetadata;
 ```
 
+## Spec-Side Code References
+
+Each operation in `openapi.yaml` should include an `x-codeRefs` list with
+repo-root-relative references to implementation and contract locations.
+
+Example:
+
+```yaml
+get:
+    operationId: getTrace
+    x-codeRefs:
+        - packages/backend/src/handlers/trace.ts#handleTraceRequest
+        - packages/web/src/utils/api.ts#getTrace
+        - packages/contracts/src/web/types.ts#GetTraceResponse
+```
+
+This enables navigation from spec -> code and provides input for drift checks.
+
 ## Naming Convention
 
 For route-specific payload types, derive names from `operationId`:
@@ -34,7 +52,7 @@ For route-specific payload types, derive names from `operationId`:
 - `getTrace` -> `GetTraceResponse`, `GetTraceStaleResponse`
 - `getRuntimeConfig` -> `GetRuntimeConfigResponse`
 
-Shared sub-models can stay domain-shaped:
+Shared sub-models (reused across multiple operations) can stay domain-shaped:
 
 - `BlogAuthor`
 - `BlogPostMetadata`
