@@ -4,7 +4,7 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 
 ## Project Overview
 
-- Monorepo for ARETE (ethics-first AI framework) with Discord bot, backend core, and web site.
+- Monorepo for ARETE (transparency- and provenance-focused AI framework) with Discord bot, backend core, and web site.
 - Core principles: interpretability, traceability, cost tracking, fail-open behavior.
 - Required annotations: `@arete-module`, `@arete-risk`, `@arete-ethics`, `@arete-scope`.
 - Structured logging is mandatory; use scoped loggers from `packages/discord-bot/src/utils/logger.ts`.

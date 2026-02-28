@@ -188,13 +188,13 @@
             "parent": "Provenance",
             "entrypoints": [
                 "packages/backend/src/handlers/trace.ts",
-                "packages/backend/src/shared/sqliteTraceStore.ts",
-                "packages/backend/src/shared/traceStoreUtils.ts",
-                "packages/backend/src/contracts/webSchemas.ts"
+                "packages/backend/src/storage/traces/sqliteTraceStore.ts",
+                "packages/backend/src/storage/traces/traceStoreUtils.ts",
+                "packages/contracts/src/web/schemas.ts"
             ],
             "page_notes": [
                 {
-                    "content": "Focus on packages/backend/src/handlers/trace.ts, packages/backend/src/shared/sqliteTraceStore.ts, packages/backend/src/shared/traceStoreUtils.ts, and packages/backend/src/contracts/webSchemas.ts.",
+                    "content": "Focus on packages/backend/src/handlers/trace.ts, packages/backend/src/storage/traces/sqliteTraceStore.ts, packages/backend/src/storage/traces/traceStoreUtils.ts, and packages/contracts/src/web/schemas.ts.",
                     "author": "Maintainer"
                 },
                 {
@@ -202,7 +202,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Call out that packages/backend/src/contracts/webSchemas.ts is a temporary backend-local mirror of the shared runtime schemas.",
+                    "content": "Call out the ownership split clearly: contracts define the shared runtime schemas, backend validates and stores trace data, and clients read and display it.",
                     "author": "Maintainer"
                 }
             ]
