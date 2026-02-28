@@ -9,7 +9,7 @@
 import test from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import { assertValidResponseMetadata } from '../src/shared/traceStoreUtils';
+import { assertValidResponseMetadata } from '../src/storage/traces/traceStoreUtils.js';
 
 const baseMetadata = {
     responseId: 'response_123',

@@ -1,19 +1,18 @@
 /**
- * @arete-module: PromptRegistry
- * @arete-risk: moderate
- * @arete-ethics: high
+ * @description: Manages prompt templates and rendering for AI interactions.
+ * Handles prompt loading, caching, and variable substitution.
  * @arete-scope: utility
- *
- * @description: Manages prompt templates and rendering for AI interactions. Handles prompt loading, caching, and variable substitution.
- *
- * @impact
- * Risk: Template errors can break AI interactions or cause unexpected behavior. Manages prompt lifecycle and variable interpolation.
- * Ethics: Controls the prompts that shape AI behavior and responses, directly affecting the ethical framing and guidance provided to the AI.
+ * @arete-module: PromptRegistry
+ * @arete-risk: moderate - Template errors can break AI interactions or distort prompt behavior.
+ * @arete-ethics: high - Prompt handling directly shapes the framing and transparency of AI responses.
  */
 
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
+
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Literal union of every prompt key currently supported. Keeping this list
@@ -97,7 +96,7 @@ const KNOWN_PROMPT_KEYS = new Set<PromptKey>([
  * TypeScript source or the compiled JavaScript output.
  */
 const resolveRelativePath = (target: string): string => {
-    return path.resolve(__dirname, target);
+    return path.resolve(currentDirectory, target);
 };
 
 /**
@@ -131,7 +130,7 @@ export class PromptRegistry {
 
     constructor(options: PromptRegistryOptions = {}) {
         const defaults = this.loadPromptFile(
-            resolveRelativePath('../../../src/shared/prompts/defaults.yaml'),
+            resolveRelativePath('./defaults.yaml'),
             false
         );
         const merged: PromptMap = { ...defaults };

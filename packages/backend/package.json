@@ -1,33 +1,17 @@
 {
     "name": "@arete/backend",
     "private": true,
+    "type": "module",
     "main": "dist/server.js",
-    "types": "dist/index.d.ts",
-    "exports": {
-        ".": {
-            "types": "./dist/index.d.ts",
-            "default": "./dist/index.js"
-        },
-        "./server": {
-            "types": "./dist/server.d.ts",
-            "default": "./dist/server.js"
-        },
-        "./shared": {
-            "types": "./dist/shared/index.d.ts",
-            "default": "./dist/shared/index.js"
-        },
-        "./ethics-core": {
-            "types": "./dist/ethics-core/index.d.ts",
-            "default": "./dist/ethics-core/index.js"
-        }
-    },
     "scripts": {
-        "build": "tsc -p tsconfig.json"
+        "build": "pnpm --dir ../.. --filter @arete/contracts run build && tsc -p tsconfig.json"
     },
     "dependencies": {
+        "@arete/contracts": "workspace:*",
         "better-sqlite3": "catalog:",
-        "date-fns": "catalog:",
+        "dotenv": "catalog:",
         "js-yaml": "catalog:",
+        "winston-daily-rotate-file": "catalog:",
         "zod": "catalog:",
         "winston": "catalog:"
     },

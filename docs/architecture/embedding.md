@@ -269,17 +269,27 @@ To embed ARETE from a different domain, you have two options:
 
 ### Option 1: Environment Variable (Recommended)
 
-Set the `ARETE_FRAME_ANCESTORS` environment variable with a comma-separated list of domains:
+Set the backend allowlist environment variables with comma-separated domains:
 
 ```bash
+ARETE_ALLOWED_ORIGINS=https://yourblog.com,https://anotherdomain.com
 ARETE_FRAME_ANCESTORS=https://yourblog.com,https://anotherdomain.com,http://localhost:3000
 ```
 
-This will add your domains to the default allowed list. The environment variable is read by both the production server (`server.js`) and the development server (`vite.config.ts`).
+Use:
+
+- `ARETE_ALLOWED_ORIGINS` for CORS origins
+- `ARETE_FRAME_ANCESTORS` for CSP `frame-ancestors`
+
+These values are read by the backend runtime configuration in `packages/backend/src/config.ts`
+and applied by the backend server in `packages/backend/src/server.ts`.
 
 ### Option 2: Code Configuration
 
-1. **CORS configuration**: Update the `setCorsHeaders` function in `server.js` to include your domain in `Access-Control-Allow-Origin`
-2. **CSP configuration**: Update the `frame-ancestors` directive in `server.js` (around line 1276) and `packages/web/vite.config.ts` (around line 14) to allow your domain
+Only do this if the environment variables are not enough.
 
-Note: Multiple domains can be configured by listing them in the CSP `frame-ancestors` directive (space-separated).
+1. **Backend defaults**: Update the default origin/ancestor lists in `packages/backend/src/config.ts`
+2. **CORS behavior**: Update `setCorsHeaders` in `packages/backend/src/handlers/reflect.ts`
+3. **CSP behavior**: Update the HTML response CSP handling in `packages/backend/src/server.ts`
+
+Note: The root `server.js` file is only a startup shim. It is not where backend CORS or CSP behavior lives.

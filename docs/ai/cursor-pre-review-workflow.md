@@ -269,7 +269,7 @@ Every module must include:
 1. **Start with the checklist**: Follow `.cursor/pre-review-checklist.md`
 2. **Use the prompts**: Reference `.cursor/arete-prompts.md`
 3. **Ask questions**: Use inline chat to understand ARETE patterns
-4. **Learn the framework**: Understand ARETE's ethics-first approach
+4. **Learn the framework**: Understand ARETE's transparency- and provenance-focused approach
 
 ## Future Enhancements
 

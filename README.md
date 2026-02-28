@@ -87,7 +87,7 @@ For the minimum DIY experience, run via Docker and open the web UI.
   
   > If pnpm isn't available yet, run `corepack enable` once (Node 16.10+), then re-run `pnpm install`.
 
-3. Configure environment variables
+2. Configure environment variables
 
   ```bash
   cp .env.example .env
@@ -106,15 +106,24 @@ For the minimum DIY experience, run via Docker and open the web UI.
   
   > See [.env.example](.env.example) for the full list and descriptions of optional settings.
 
-3. Run the services
-  Start the backend and web interface:
+3. Start the backend and web app:
   ```bash
-  pnpm start:dev
+  pnpm dev
   ```
-  In another terminal, start the Discord bot (optional):
+
+4. Optionally start the Discord bot in another terminal:
   ```bash
-  pnpm start:bot
+  pnpm dev:bot
   ```
+
+Local dev now follows the same package boundary as production:
+
+- the backend runs as the API server at `BACKEND_BASE_URL` (default: `http://localhost:3000`)
+- the web app still uses relative browser requests like `/api/*`
+- Vite proxies those web requests to `BACKEND_BASE_URL`
+- the Discord bot calls `BACKEND_BASE_URL` directly
+
+If you need shared route shapes, use `@arete/contracts`. Do not import backend internals into web or discord-bot.
 
 ---
 

@@ -5,7 +5,7 @@
  * @arete-risk: moderate - Parsing failures can drop provenance data but should not block responses.
  * @arete-ethics: moderate - Incorrect parsing could misreport provenance or confidence to users.
  */
-import { logger } from '../shared/logger';
+import { logger } from './logger.js';
 
 // --- Marker configuration ---
 const METADATA_MARKER = '<ARETE_METADATA>';

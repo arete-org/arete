@@ -7,16 +7,16 @@
  * @arete-ethics: high - Incorrect metadata harms transparency and user trust.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { PostReflectRequestSchema } from '../contracts/webSchemas';
-import { SimpleRateLimiter } from '../services/rateLimiter';
+import { PostReflectRequestSchema } from '@arete/contracts/web/schemas';
+import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import type {
     SimpleOpenAIService,
     OpenAIResponseMetadata,
     ResponseMetadataRuntimeContext,
-} from '../services/openaiService';
-import type { ResponseMetadata } from '../ethics-core';
-import { runtimeConfig } from '../config';
-import { logger } from '../shared/logger';
+} from '../services/openaiService.js';
+import type { ResponseMetadata } from '../ethics-core/index.js';
+import { runtimeConfig } from '../config.js';
+import { logger } from '../utils/logger.js';
 
 type LogRequest = (
     req: IncomingMessage,

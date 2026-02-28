@@ -23,8 +23,6 @@
         "baseUrl": ".",
         "paths": {
             "@/*": ["./packages/*/src"],
-            "@arete/backend": ["./packages/backend/src/index.ts"],
-            "@arete/backend/*": ["./packages/backend/src/*"],
             "@arete/contracts": ["./packages/contracts/src/index.ts"],
             "@arete/contracts/*": ["./packages/contracts/src/*"],
             "@components/*": ["./packages/web/src/components/*"],

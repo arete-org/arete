@@ -82,30 +82,17 @@ In plain English:
 - transport validation protects web/bot from bad responses
 - backend validation protects the server from bad requests
 
-## Temporary Backend Schema Mirror
+## Backend Runtime Schemas
 
-Right now the backend keeps a local schema mirror at:
+The backend now imports the same runtime schemas the clients use:
 
-- `packages/backend/src/contracts/webSchemas.ts`
+- `@arete/contracts/web/schemas`
 
-This is temporary.
+That means:
 
-Why it exists:
-
-- the web/bot clients can cleanly consume runtime schemas from
-  `@arete/contracts/web/schemas`
-- the backend's current TypeScript/module setup does not yet consume those same
-  runtime schemas cleanly without widening build/config scope
-
-What to do for now:
-
-- keep the backend mirror aligned with `packages/contracts/src/web/schemas.ts`
-- keep the shared route shapes small and explicit
-- prefer updating both files in the same PR when runtime route validation changes
-
-In other words: this is a temporary duplicate.
-For now, update both files together.
-Later, we should remove the duplicate and use one shared runtime schema source.
+- `packages/contracts/src/web/schemas.ts` is the one runtime schema source
+- backend request validation and client response validation stay aligned
+- route validation changes only need one schema update
 
 ## Naming Convention
 

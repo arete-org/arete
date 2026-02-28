@@ -79,6 +79,12 @@ const cspPlugin = () => ({
     },
 });
 
+const trimTrailingSlashes = (value: string): string => value.replace(/\/+$/, '');
+
+const backendBaseUrl = trimTrailingSlashes(
+    process.env.BACKEND_BASE_URL?.trim() || 'http://localhost:3000'
+);
+
 // Vite configuration keeps things lean while allowing TypeScript paths for components and styles.
 export default defineConfig({
     plugins: [react(), cspPlugin()],
@@ -86,11 +92,11 @@ export default defineConfig({
         port: 5173,
         proxy: {
             '/api': {
-                target: 'http://localhost:3000',
+                target: backendBaseUrl,
                 changeOrigin: true,
             },
             '/config.json': {
-                target: 'http://localhost:3000',
+                target: backendBaseUrl,
                 changeOrigin: true,
             },
         },

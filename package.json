@@ -6,9 +6,13 @@
         "packages/*"
     ],
     "scripts": {
-        "start:dev": "concurrently \"pnpm exec ts-node --transpile-only packages/backend/src/server.ts\" \"pnpm --filter @arete/web dev\"",
-        "start:backend": "pnpm exec ts-node --transpile-only packages/backend/src/server.ts",
-        "start:bot": "pnpm build && pnpm --filter @arete/discord-bot dev",
+        "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:web\"",
+        "dev:backend": "pnpm --filter @arete/contracts run build && pnpm exec tsx packages/backend/src/server.ts",
+        "dev:web": "pnpm --filter @arete/web dev",
+        "dev:bot": "pnpm --filter @arete/discord-bot dev",
+        "start:dev": "pnpm dev",
+        "start:backend": "pnpm dev:backend",
+        "start:bot": "pnpm dev:bot",
         "start:prod-test": "pnpm --filter @arete/backend build && cross-env NODE_ENV=production node server.js",
         "dev:prod-test": "concurrently \"pnpm --filter @arete/backend build && cross-env NODE_ENV=production node server.js\" \"pnpm --filter @arete/web dev\"",
         "build": "pnpm -r build",
@@ -40,7 +44,6 @@
         "eslint-config-prettier": "catalog:",
         "eslint-plugin-react-hooks": "catalog:",
         "prettier": "catalog:",
-        "ts-node": "catalog:",
         "tsx": "catalog:",
         "typescript": "catalog:"
     },

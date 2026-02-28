@@ -11,8 +11,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { SqliteTraceStore } from '../src/shared/sqliteTraceStore';
-import type { ResponseMetadata } from '../src/ethics-core';
+import { SqliteTraceStore } from '../src/storage/traces/sqliteTraceStore.js';
+import type { ResponseMetadata } from '../src/ethics-core/index.js';
 
 test('TraceStore round trips metadata with citation URLs', async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-store-'));
