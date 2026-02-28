@@ -1,18 +1,13 @@
 /**
- * @arete-module: Pseudonymization
- * @arete-risk: moderate
- * @arete-ethics: high
- * @arete-scope: utility
- *
  * @description: Utilities for namespacing and hashing Discord identifiers with HMAC-SHA256.
  * The goal is to avoid ever storing or logging raw IDs while still preserving
  * uniqueness for audit and deduplication. Always store the full 64-hex digest
  * for maximum entropy, and expose only short prefixes (10-12 chars) in logs or
  * admin surfaces.
- *
- * @impact
- * Risk: Hashing mistakes can lead to data loss or mismatched audits.
- * Ethics: Prevents accidental storage or logging of raw user identifiers.
+ * @arete-scope: utility
+ * @arete-module: Pseudonymization
+ * @arete-risk: moderate - Hashing mistakes can lead to data loss or mismatched audits.
+ * @arete-ethics: high - Prevents accidental storage or logging of raw user identifiers.
  */
 
 import crypto from 'node:crypto';

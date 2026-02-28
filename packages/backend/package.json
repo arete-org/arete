@@ -4,7 +4,7 @@
     "type": "module",
     "main": "dist/server.js",
     "scripts": {
-        "build": "pnpm --dir ../.. --filter @arete/contracts run build && tsc -p tsconfig.json"
+        "build": "pnpm --dir ../.. --filter @arete/contracts run build && tsc -p tsconfig.json && node -e \"const fs=require('node:fs'); fs.mkdirSync('dist/services/prompts',{recursive:true}); fs.copyFileSync('src/services/prompts/defaults.yaml','dist/services/prompts/defaults.yaml');\""
     },
     "dependencies": {
         "@arete/contracts": "workspace:*",

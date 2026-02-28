@@ -5,9 +5,10 @@
  * @arete-risk: high - Server failures can break user access or data integrity.
  * @arete-ethics: high - Response generation and trace storage affect user trust and privacy.
  */
+import './bootstrapEnv.js';
+
 import http from 'node:http';
 import path from 'node:path';
-import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { runtimeConfig } from './config.js';
@@ -29,17 +30,8 @@ import { createBlogHandlers } from './handlers/blog.js';
 import { createWebhookHandler } from './handlers/webhook.js';
 import { createRuntimeConfigHandler } from './handlers/config.js';
 
-// --- Environment bootstrap ---
-// Load environment variables from .env file when present (skip inside containers).
-const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
-const repoEnvPath = path.join(currentDirectory, '../../../.env');
-
-if (fs.existsSync(repoEnvPath)) {
-    const dotenv = await import('dotenv');
-    dotenv.config({ path: repoEnvPath });
-}
-
 // --- Path configuration ---
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(currentDirectory, '../../web/dist');
 const DATA_DIR = process.env.ARETE_DATA_DIR || '/data';
 const BLOG_POSTS_DIR = path.join(DATA_DIR, 'blog-posts');

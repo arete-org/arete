@@ -1,14 +1,9 @@
 /**
- * @arete-module: EthicsEvaluators
- * @arete-risk: moderate
- * @arete-ethics: high
- * @arete-scope: core
- *
  * @description: Contains ethical evaluation logic and risk assessment algorithms.
- *
- * @impact
- * Risk: Evaluation failures can lead to inappropriate AI behavior or missed ethical concerns. Implements provenance and risk tier computation.
- * Ethics: Determines the ethical classification and risk assessment of AI responses, affecting transparency, accountability, and user trust.
+ * @arete-scope: core
+ * @arete-module: EthicsEvaluators
+ * @arete-risk: moderate - Evaluation failures can lead to inappropriate AI behavior or missed ethical concerns.
+ * @arete-ethics: high - These classifiers influence transparency, accountability, and user trust in AI responses.
  */
 
 import { Provenance, RiskTier } from './types.js';
