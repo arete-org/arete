@@ -1,22 +1,17 @@
 /**
- * @arete-module: TraceStore
- * @arete-risk: moderate
- * @arete-ethics: high
- * @arete-scope: utility
- *
  * @description: Shared helpers and factory for persistence of response provenance metadata.
- *
- * @impact
- * Risk: Storage failures can break audit trails and transparency features.
- * Ethics: Controls trace storage and audit trail management. Ensures all AI responses are traceable and auditable, supporting transparency and accountability.
+ * @arete-scope: utility
+ * @arete-module: TraceStore
+ * @arete-risk: moderate - Storage failures can break audit trails and transparency features.
+ * @arete-ethics: high - Controls trace storage ensuring AI responses are traceable and auditable.
  */
 
-import { logger } from '../../utils/logger';
-import { SqliteTraceStore } from './sqliteTraceStore';
+import { logger } from '../../utils/logger.js';
+import { SqliteTraceStore } from './sqliteTraceStore.js';
 import {
     assertValidResponseMetadata,
     traceStoreJsonReplacer,
-} from './traceStoreUtils';
+} from './traceStoreUtils.js';
 
 export type TraceStore = SqliteTraceStore;
 

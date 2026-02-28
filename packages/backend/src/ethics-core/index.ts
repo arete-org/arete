@@ -13,7 +13,7 @@ export type {
     ConfidenceScore,
     Citation,
     ResponseMetadata,
-} from './types';
+} from './types.js';
 
 // Export functions
-export { computeProvenance, computeRiskTier } from './evaluators';
+export { computeProvenance, computeRiskTier } from './evaluators.js';

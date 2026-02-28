@@ -22,10 +22,7 @@ For routes with runtime validation, the current pattern is:
 - compile-time types in `packages/contracts/src/web/types.ts`
 - runtime schemas in `packages/contracts/src/web/schemas.ts`
 - shared client response validation in `packages/contracts/src/web/client-core.ts`
-
-For now, backend request validation for the same routes uses a temporary copy in
-`packages/backend/src/contracts/webSchemas.ts`.
-See `docs/api/openapi-code-linking.md` for the short maintainer note.
+- backend request validation imports those same runtime schemas directly
 
 ## Reflection Endpoint
 

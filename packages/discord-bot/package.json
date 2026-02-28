@@ -57,7 +57,6 @@
         "copyfiles": "catalog:",
         "cross-env": "catalog:",
         "rimraf": "catalog:",
-        "ts-node-dev": "catalog:",
         "tsx": "catalog:",
         "typescript": "catalog:"
     }

@@ -7,6 +7,7 @@
  */
 const fs = require('node:fs');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 
 const entryPath = path.join(
     __dirname,
@@ -23,4 +24,9 @@ if (!fs.existsSync(entryPath)) {
     process.exit(1);
 }
 
-require(entryPath);
+import(pathToFileURL(entryPath).href).catch((error) => {
+    console.error(
+        `Failed to start backend entrypoint: ${error instanceof Error ? error.message : String(error)}`
+    );
+    process.exit(1);
+});

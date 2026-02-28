@@ -6,8 +6,8 @@
  * @arete-ethics: moderate - Accepting spoofed payloads could mislead users.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { GitHubDiscussion } from '../storage/blogStore';
-import { logger } from '../utils/logger';
+import type { GitHubDiscussion } from '../storage/blogStore.js';
+import { logger } from '../utils/logger.js';
 
 type LogRequest = (
     req: IncomingMessage,

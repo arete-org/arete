@@ -5,12 +5,12 @@
  * @arete-risk: high - Trace persistence failures undermine auditing and trust.
  * @arete-ethics: high - Missing provenance data reduces transparency guarantees.
  */
-import type { ResponseMetadata } from '../ethics-core';
+import type { ResponseMetadata } from '../ethics-core/index.js';
 import {
     createTraceStoreFromEnv,
     type TraceStore,
-} from '../storage/traces/traceStore';
-import { logger } from '../utils/logger';
+} from '../storage/traces/traceStore.js';
+import { logger } from '../utils/logger.js';
 
 // --- Trace store initialization ---
 const createTraceStore = (): TraceStore => createTraceStoreFromEnv();

@@ -8,12 +8,12 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
-import type { ResponseMetadata } from '../../ethics-core';
-import { logger } from '../../utils/logger';
+import type { ResponseMetadata } from '../../ethics-core/index.js';
+import { logger } from '../../utils/logger.js';
 import {
     assertValidResponseMetadata,
     traceStoreJsonReplacer,
-} from './traceStoreUtils';
+} from './traceStoreUtils.js';
 
 const BUSY_MAX_ATTEMPTS = 5;
 const BUSY_RETRY_DELAY_MS = 50;

@@ -17,12 +17,12 @@ import Database from 'better-sqlite3';
 import crypto from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
-import { logger } from '../../utils/logger';
+import { logger } from '../../utils/logger.js';
 import {
     pseudonymizeActorId,
     pseudonymizeIncidentPointers,
     shortHash,
-} from '../../utils/pseudonymization';
+} from '../../utils/pseudonymization.js';
 
 const BUSY_MAX_ATTEMPTS = 5;
 const BUSY_RETRY_DELAY_MS = 50;

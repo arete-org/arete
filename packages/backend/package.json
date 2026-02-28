@@ -1,14 +1,17 @@
 {
     "name": "@arete/backend",
     "private": true,
+    "type": "module",
     "main": "dist/server.js",
     "scripts": {
-        "build": "tsc -p tsconfig.json"
+        "build": "pnpm --dir ../.. --filter @arete/contracts run build && tsc -p tsconfig.json"
     },
     "dependencies": {
+        "@arete/contracts": "workspace:*",
         "better-sqlite3": "catalog:",
-        "date-fns": "catalog:",
+        "dotenv": "catalog:",
         "js-yaml": "catalog:",
+        "winston-daily-rotate-file": "catalog:",
         "zod": "catalog:",
         "winston": "catalog:"
     },

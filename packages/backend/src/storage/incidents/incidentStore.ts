@@ -5,8 +5,8 @@
  * @arete-risk: high - Misconfiguration can block incident storage or create inconsistent data paths.
  * @arete-ethics: high - Protects against storing raw Discord identifiers without hashing.
  */
-import { logger } from '../../utils/logger';
-import { SqliteIncidentStore } from './sqliteIncidentStore';
+import { logger } from '../../utils/logger.js';
+import { SqliteIncidentStore } from './sqliteIncidentStore.js';
 
 const incidentStoreLogger =
     typeof logger.child === 'function'
@@ -83,4 +83,4 @@ export type {
     IncidentPointers,
     IncidentRecord,
     IncidentStatus,
-} from './sqliteIncidentStore';
+} from './sqliteIncidentStore.js';

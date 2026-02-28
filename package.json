@@ -7,7 +7,7 @@
     ],
     "scripts": {
         "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:web\"",
-        "dev:backend": "pnpm exec ts-node --transpile-only packages/backend/src/server.ts",
+        "dev:backend": "pnpm --filter @arete/contracts run build && pnpm exec tsx packages/backend/src/server.ts",
         "dev:web": "pnpm --filter @arete/web dev",
         "dev:bot": "pnpm --filter @arete/discord-bot dev",
         "start:dev": "pnpm dev",
@@ -44,7 +44,6 @@
         "eslint-config-prettier": "catalog:",
         "eslint-plugin-react-hooks": "catalog:",
         "prettier": "catalog:",
-        "ts-node": "catalog:",
         "tsx": "catalog:",
         "typescript": "catalog:"
     },

@@ -7,8 +7,8 @@
  * @arete-ethics: high - Maintains integrity of provenance metadata and audit trails.
  */
 
-import type { ResponseMetadata } from '../../ethics-core';
-import { ResponseMetadataSchema } from '../../contracts/webSchemas';
+import type { ResponseMetadata } from '../../ethics-core/index.js';
+import { ResponseMetadataSchema } from '@arete/contracts/web/schemas';
 
 export const traceStoreJsonReplacer = (_key: string, value: unknown) => {
     if (value instanceof URL) {

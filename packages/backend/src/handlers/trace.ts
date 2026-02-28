@@ -6,11 +6,11 @@
  * @arete-ethics: high - Provenance access impacts user trust and auditability.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { PostTracesRequestSchema } from '../contracts/webSchemas';
-import type { ResponseMetadata } from '../ethics-core';
-import type { SimpleRateLimiter } from '../services/rateLimiter';
-import { logger } from '../utils/logger';
-import { type TraceStore } from '../storage/traces/traceStore';
+import { PostTracesRequestSchema } from '@arete/contracts/web/schemas';
+import type { ResponseMetadata } from '../ethics-core/index.js';
+import type { SimpleRateLimiter } from '../services/rateLimiter.js';
+import { logger } from '../utils/logger.js';
+import { type TraceStore } from '../storage/traces/traceStore.js';
 
 // Shared log function signature used by handlers.
 type LogRequest = (

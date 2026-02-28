@@ -8,34 +8,39 @@
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-import { runtimeConfig } from './config';
+import { runtimeConfig } from './config.js';
 import {
     SimpleOpenAIService,
     buildResponseMetadata,
-} from './services/openaiService';
-import { SimpleRateLimiter } from './services/rateLimiter';
-import type { ResponseMetadata } from './ethics-core';
-import { createTraceStore, storeTrace } from './services/traceStore';
-import { createBlogStore } from './storage/blogStore';
-import { createAssetResolver } from './http/assets';
-import { verifyGitHubSignature } from './utils/github';
-import { logRequest } from './utils/requestLogger';
-import { logger } from './utils/logger';
-import { createReflectHandler } from './handlers/reflect';
-import { createTraceHandlers } from './handlers/trace';
-import { createBlogHandlers } from './handlers/blog';
-import { createWebhookHandler } from './handlers/webhook';
-import { createRuntimeConfigHandler } from './handlers/config';
+} from './services/openaiService.js';
+import { SimpleRateLimiter } from './services/rateLimiter.js';
+import type { ResponseMetadata } from './ethics-core/index.js';
+import { createTraceStore, storeTrace } from './services/traceStore.js';
+import { createBlogStore } from './storage/blogStore.js';
+import { createAssetResolver } from './http/assets.js';
+import { verifyGitHubSignature } from './utils/github.js';
+import { logRequest } from './utils/requestLogger.js';
+import { logger } from './utils/logger.js';
+import { createReflectHandler } from './handlers/reflect.js';
+import { createTraceHandlers } from './handlers/trace.js';
+import { createBlogHandlers } from './handlers/blog.js';
+import { createWebhookHandler } from './handlers/webhook.js';
+import { createRuntimeConfigHandler } from './handlers/config.js';
 
 // --- Environment bootstrap ---
 // Load environment variables from .env file when present (skip inside containers).
-if (fs.existsSync(path.join(__dirname, '../../../.env'))) {
-    require('dotenv').config();
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+const repoEnvPath = path.join(currentDirectory, '../../../.env');
+
+if (fs.existsSync(repoEnvPath)) {
+    const dotenv = await import('dotenv');
+    dotenv.config({ path: repoEnvPath });
 }
 
 // --- Path configuration ---
-const DIST_DIR = path.join(__dirname, '../../web/dist');
+const DIST_DIR = path.join(currentDirectory, '../../web/dist');
 const DATA_DIR = process.env.ARETE_DATA_DIR || '/data';
 const BLOG_POSTS_DIR = path.join(DATA_DIR, 'blog-posts');
 

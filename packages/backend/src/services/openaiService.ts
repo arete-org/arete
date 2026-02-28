@@ -6,15 +6,15 @@
  * @arete-ethics: high - Misreported provenance impacts trust and transparency.
  */
 import crypto from 'node:crypto';
-import { extractTextAndMetadata } from '../utils/metadata';
-import { runtimeConfig } from '../config';
-import { logger } from '../utils/logger';
+import { extractTextAndMetadata } from '../utils/metadata.js';
+import { runtimeConfig } from '../config.js';
+import { logger } from '../utils/logger.js';
 import type {
     ResponseMetadata,
     Provenance,
     Citation,
     RiskTier,
-} from '../ethics-core';
+} from '../ethics-core/index.js';
 
 // --- OpenAI response typing ---
 type OpenAIUsage = {

@@ -6,7 +6,7 @@
  * @arete-ethics: moderate - Logs must avoid leaking sensitive user data.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { logger } from './logger';
+import { logger } from './logger.js';
 
 /**
  * Builds a short log entry for monitoring within Fly.io logs.

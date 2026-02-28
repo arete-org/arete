@@ -20,7 +20,7 @@ import {
     pseudonymizeActorId,
     pseudonymizeIncidentPointers,
     shortHash,
-} from '../src/utils/pseudonymization';
+} from '../src/utils/pseudonymization.js';
 
 const SECRET_A = 'test-secret-a';
 const SECRET_B = 'test-secret-b';
