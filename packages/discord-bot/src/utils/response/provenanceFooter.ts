@@ -35,7 +35,7 @@ const RISK_TIER_COLORS: Record<RiskTier, string> = {
  * Builds the provenance footer embed and button components for a Discord message.
  *
  * @param responseMetadata - Metadata describing the generated response and its provenance.
- * @param webBaseUrl - Base URL for linking to the full trace; defaults to https://arete.org when falsy.
+ * @param webBaseUrl - Base URL for linking to the full trace; defaults to the configured web origin when falsy.
  */
 export function buildFooterEmbed(
     responseMetadata: ResponseMetadata,

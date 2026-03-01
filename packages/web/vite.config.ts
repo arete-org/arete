@@ -38,7 +38,6 @@ const cspPlugin = () => ({
                     // Allow embedding from production domains and localhost for development
                     // Note: localhost is included to allow dev servers to embed even when running in production mode
                     const frameAncestors = [
-                        'https://jordanmakes.fly.dev',
                         'https://ai.jordanmakes.dev',
                         'https://portfolio.jordanmakes.dev',
                         'https://jordanmakes.dev',
