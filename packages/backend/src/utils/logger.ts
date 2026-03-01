@@ -7,7 +7,6 @@
  */
 
 import fs from 'fs';
-import DailyRotateFile from 'winston-daily-rotate-file';
 import { createLogger, format, transports } from 'winston';
 
 const { combine, timestamp, printf, colorize } = format;
@@ -72,7 +71,43 @@ const logFormat = printf(({ level, message, timestamp }) => {
 
 // --- Logger output configuration ---
 const logDirectory = process.env.LOG_DIR || 'logs';
-fs.mkdirSync(logDirectory, { recursive: true });
+let canWriteLogDirectory = true;
+try {
+    fs.mkdirSync(logDirectory, { recursive: true });
+} catch (error) {
+    canWriteLogDirectory = false;
+    const err = error as NodeJS.ErrnoException;
+    if (err?.code === 'EACCES' || err?.code === 'EPERM') {
+        console.warn(
+            `Logger cannot create log directory "${logDirectory}" due to permissions (${err.code}). Continuing with console logging only.`
+        );
+    } else {
+        console.warn(
+            `Logger failed to create log directory "${logDirectory}". Continuing with console logging only. Error: ${err?.message ?? String(error)}`
+        );
+    }
+}
+
+type DailyRotateFileConstructor =
+    typeof import('winston-daily-rotate-file');
+type DailyRotateFileModule = DailyRotateFileConstructor & {
+    default?: DailyRotateFileConstructor;
+};
+
+let DailyRotateFile: DailyRotateFileConstructor | null = null;
+try {
+    // Load the rotating file transport lazily so a missing optional package
+    // does not take the backend down during startup.
+    const dailyRotateFileModule = (await import(
+        'winston-daily-rotate-file'
+    )) as DailyRotateFileModule;
+    DailyRotateFile =
+        dailyRotateFileModule.default ?? dailyRotateFileModule;
+} catch (error) {
+    console.warn(
+        `Logger could not load winston-daily-rotate-file. Continuing with console logging only. Error: ${error instanceof Error ? error.message : String(error)}`
+    );
+}
 
 /**
  * Winston logger instance with console and file transports
@@ -88,17 +123,21 @@ export const logger = createLogger({
     ),
     transports: [
         new transports.Console(),
-        new DailyRotateFile({
-            dirname: logDirectory,
-            filename: '%DATE%.log',
-            datePattern: 'YYYY-MM-DD',
-            maxFiles: '30d',
-            format: format.combine(
-                format.uncolorize(),
-                format.timestamp(),
-                format.json()
-            ),
-        }),
+        ...(canWriteLogDirectory && DailyRotateFile
+            ? [
+                  new DailyRotateFile({
+                      dirname: logDirectory,
+                      filename: '%DATE%.log',
+                      datePattern: 'YYYY-MM-DD',
+                      maxFiles: '30d',
+                      format: format.combine(
+                          format.uncolorize(),
+                          format.timestamp(),
+                          format.json()
+                      ),
+                  }),
+              ]
+            : []),
     ],
     exitOnError: false,
 });
