@@ -48,7 +48,7 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 
 - Order: `@description`, `@arete-scope`, `@arete-module`, `@arete-risk`, `@arete-ethics` (colon required).
 - Risk/Ethics annotations must include a short rationale on the same line.
-- Canonical reference: `docs/architecture/arete-annotations.md`.
+- Canonical reference: `docs/architecture/footnote-annotations.md`.
 
 Example:
 

@@ -79,7 +79,7 @@ graph TD
 
 ### 4. Project-Specific Prompts
 
-**File**: `.cursor/arete-prompts.md`
+**File**: `.cursor/footnote-prompts.md`
 
 **Categories**:
 
@@ -123,7 +123,7 @@ pnpm pre-review
 ### Step 4: Use Inline Chat with Project Prompts
 
 - Use `Ctrl+K` (or `Cmd+K` on Mac) for inline chat
-- Apply prompts from `.cursor/arete-prompts.md`
+- Apply prompts from `.cursor/footnote-prompts.md`
 - Focus on complexity, comments, and framework compliance
 
 **Example prompts**:
@@ -209,7 +209,7 @@ Every module must include:
 
 ### Issue: Inadequate Comments
 
-**Solution**: Use comment quality prompts from `.cursor/arete-prompts.md`
+**Solution**: Use comment quality prompts from `.cursor/footnote-prompts.md`
 **Prevention**: Follow commenting standards in `cursor.rules`
 
 ### Issue: Inconsistent Logging
@@ -252,7 +252,7 @@ Every module must include:
 ### For Contributors
 
 1. **Always run validation first**: `pnpm pre-review`
-2. **Use structured prompts**: Follow `.cursor/arete-prompts.md`
+2. **Use structured prompts**: Follow `.cursor/footnote-prompts.md`
 3. **Follow the checklist**: Use `.cursor/pre-review-checklist.md`
 4. **Ask specific questions**: Use inline chat effectively
 5. **Document decisions**: Explain "why" not just "how"
@@ -267,7 +267,7 @@ Every module must include:
 ### For New Contributors
 
 1. **Start with the checklist**: Follow `.cursor/pre-review-checklist.md`
-2. **Use the prompts**: Reference `.cursor/arete-prompts.md`
+2. **Use the prompts**: Reference `.cursor/footnote-prompts.md`
 3. **Ask questions**: Use inline chat to understand project patterns
 4. **Learn the framework**: Understand Footnote's transparency- and provenance-focused approach
 

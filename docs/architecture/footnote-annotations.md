@@ -1,6 +1,6 @@
-# ARETE Annotations
+# Footnote Annotations
 
-This document defines the required header annotations for ARETE modules and the allowed values.
+This document defines the required header annotations for Footnote modules and the allowed values.
 
 ## Required Header Format
 

@@ -110,7 +110,7 @@ This architecture allows Footnote to:
 - Cloudflare Workers AI Documentation: https://developers.cloudflare.com/workers-ai/
 - AI Toolkit for Visual Studio Code: https://code.visualstudio.com/docs/intelligentapps/overview
 - Model Context Protocol (MCP): https://modelcontextprotocol.io
-- Ethics core repository: https://github.com/arete-org/ethics-core
+- Ethics core repository
 
 ---
 

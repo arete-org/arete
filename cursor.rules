@@ -101,7 +101,7 @@ export interface SimpleConfig {
 - Keep all public interfaces serializable for future web UI integration (e.g., Cognitive Budget panel).
 
 ## Current `@arete-*` Module Tagging
-- Canonical reference: `docs/architecture/arete-annotations.md`.
+- Canonical reference: `docs/architecture/footnote-annotations.md`.
 - Every module must include the current structured `@arete-*` annotations in its JSDoc header.
 - Use this format (and order) for consistency and machine-parseability:
 
@@ -204,7 +204,7 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 1. **Complete implementation**
 2. **Run automated validation**: `pnpm pre-review` (validates `@arete-*` tags, OpenAPI code links, types, linting)
 3. **Use Cursor's Bugbot (Review PR)** for automated code quality analysis
-4. **Use inline chat (`Ctrl+K`)** with project-specific prompts (see `.cursor/arete-prompts.md`)
+4. **Use inline chat (`Ctrl+K`)** with project-specific prompts (see `.cursor/footnote-prompts.md`)
 5. **Accept suggested simplifications or comments** in-place
 6. **Open human PR review** for logic, ethics, and integration focus
 
@@ -214,7 +214,7 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 - **OpenAPI linking validation**: `pnpm validate-openapi-links`
 - **Cursor tasks**: Use `.cursor/tasks.json` commands for quick access
 - **Checklist**: Follow `.cursor/pre-review-checklist.md` before Cursor analysis
-- **Prompts**: Use `.cursor/arete-prompts.md` for consistent, effective Cursor interactions
+- **Prompts**: Use `.cursor/footnote-prompts.md` for consistent, effective Cursor interactions
 
 ## Testing
 - Add or update tests for any new functionality.

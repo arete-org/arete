@@ -65,7 +65,7 @@ jobs:
               with:
                   node-version: '20'
 
-            - name: Validate ARETE tags
+            - name: Validate Footnote tags
               if: matrix.language == 'javascript-typescript'
               run: node scripts/validate-arete-tags.js
 
