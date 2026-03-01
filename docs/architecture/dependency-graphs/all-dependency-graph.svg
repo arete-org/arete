@@ -4765,48 +4765,48 @@
 <path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M946.25,-4427.78C958.93,-4425.59 972.08,-4421.2 982.01,-4412.82 1027.87,-4374.12 1041.52,-4298.95 1045.47,-4264.22"/>
 <polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="1047.52,-4264.76 1046.04,-4258.57 1043.35,-4264.33 1047.52,-4264.76"/>
 </g>
-<!-- packages/web/src/components/MeetOpenPhilosophy.tsx -->
+<!-- packages/web/src/components/AskPanel.tsx -->
 <g id="node150" class="node">
-<title>packages/web/src/components/MeetOpenPhilosophy.tsx</title>
-<g id="a_node150"><a xlink:href="packages/web/src/components/MeetOpenPhilosophy.tsx" xlink:title="MeetOpenPhilosophy.tsx">
+<title>packages/web/src/components/AskPanel.tsx</title>
+<g id="a_node150"><a xlink:href="packages/web/src/components/AskPanel.tsx" xlink:title="AskPanel.tsx">
 <path fill="#bbfeff" stroke="black" d="M789.09,-4439.07C789.09,-4439.07 729.93,-4439.07 729.93,-4439.07 726.84,-4439.07 723.76,-4435.99 723.76,-4432.9 723.76,-4432.9 723.76,-4426.74 723.76,-4426.74 723.76,-4423.65 726.84,-4420.57 729.93,-4420.57 729.93,-4420.57 789.09,-4420.57 789.09,-4420.57 792.18,-4420.57 795.26,-4423.65 795.26,-4426.74 795.26,-4426.74 795.26,-4432.9 795.26,-4432.9 795.26,-4435.99 792.18,-4439.07 789.09,-4439.07"/>
-<text xml:space="preserve" text-anchor="start" x="731.76" y="-4426.52" font-family="Helvetica,sans-Serif" font-size="9.00">MeetOpenPhilosophy.tsx</text>
+<text xml:space="preserve" text-anchor="start" x="731.76" y="-4426.52" font-family="Helvetica,sans-Serif" font-size="9.00">AskPanel.tsx</text>
 </a>
 </g>
 </g>
-<!-- packages/web/src/components/MeetOpenPhilosophy.tsx&#45;&gt;node_modules/.pnpm -->
+<!-- packages/web/src/components/AskPanel.tsx&#45;&gt;node_modules/.pnpm -->
 <g id="edge489" class="edge">
-<title>packages/web/src/components/MeetOpenPhilosophy.tsx&#45;&gt;node_modules/.pnpm</title>
+<title>packages/web/src/components/AskPanel.tsx&#45;&gt;node_modules/.pnpm</title>
 <path fill="none" stroke="#000000" stroke-opacity="0.200000" d="M795.71,-4426.79C803.58,-4424.38 811.06,-4420.38 816.01,-4413.82 827.36,-4398.78 812.11,-1715.42 824.01,-1700.82 869.34,-1645.22 912.53,-1685.65 982.01,-1667.82 1038,-1653.45 1068.81,-1673.74 1106.39,-1629.82 1149.76,-1579.13 1155.15,-1361.17 1155.8,-1298.65"/>
 <polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-opacity="0.200000" points="1157.9,-1299.03 1155.85,-1293.02 1153.7,-1299 1157.9,-1299.03"/>
 </g>
-<!-- packages/web/src/components/MeetOpenPhilosophy.tsx&#45;&gt;packages/contracts/src/ethics&#45;core/index.ts -->
+<!-- packages/web/src/components/AskPanel.tsx&#45;&gt;packages/contracts/src/ethics&#45;core/index.ts -->
 <g id="edge488" class="edge">
-<title>packages/web/src/components/MeetOpenPhilosophy.tsx&#45;&gt;packages/contracts/src/ethics&#45;core/index.ts</title>
+<title>packages/web/src/components/AskPanel.tsx&#45;&gt;packages/contracts/src/ethics&#45;core/index.ts</title>
 <path fill="none" stroke="#000000" stroke-opacity="0.200000" d="M795.57,-4432.96C803.44,-4435.37 810.95,-4439.34 816.01,-4445.82 831.81,-4466.07 813.59,-4653.35 824.01,-4676.82 865.7,-4770.76 896.09,-4796.09 990.01,-4837.82 1100.63,-4886.97 1140.72,-4855.82 1261.76,-4855.82 1261.76,-4855.82 1261.76,-4855.82 1344.51,-4855.82 1371.24,-4855.82 1442.07,-4862.34 1464.51,-4847.82 1486.31,-4833.72 1497.54,-4804.36 1502.72,-4785.67"/>
 <polygon fill="none" stroke="#000000" stroke-opacity="0.200000" points="1504.75,-4786.2 1504.21,-4779.86 1500.69,-4785.16 1504.75,-4786.2"/>
 </g>
-<!-- packages/web/src/components/MeetOpenPhilosophy.tsx&#45;&gt;packages/web/src/data/examplePrompts.json -->
+<!-- packages/web/src/components/AskPanel.tsx&#45;&gt;packages/web/src/data/examplePrompts.json -->
 <g id="edge484" class="edge">
-<title>packages/web/src/components/MeetOpenPhilosophy.tsx&#45;&gt;packages/web/src/data/examplePrompts.json</title>
+<title>packages/web/src/components/AskPanel.tsx&#45;&gt;packages/web/src/data/examplePrompts.json</title>
 <path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M795.65,-4433.55C803.33,-4435.96 810.73,-4439.78 816.01,-4445.82 831.98,-4464.08 807.99,-4481.6 824.01,-4499.82 829.02,-4505.52 835.38,-4509.79 842.3,-4512.98"/>
 <polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="841.46,-4514.91 847.81,-4515.15 842.99,-4511 841.46,-4514.91"/>
 </g>
-<!-- packages/web/src/components/MeetOpenPhilosophy.tsx&#45;&gt;packages/web/src/utils/api.ts -->
+<!-- packages/web/src/components/AskPanel.tsx&#45;&gt;packages/web/src/utils/api.ts -->
 <g id="edge485" class="edge">
-<title>packages/web/src/components/MeetOpenPhilosophy.tsx&#45;&gt;packages/web/src/utils/api.ts</title>
+<title>packages/web/src/components/AskPanel.tsx&#45;&gt;packages/web/src/utils/api.ts</title>
 <path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M795.72,-4434.2C803.21,-4436.6 810.51,-4440.26 816.01,-4445.82 825.41,-4455.33 813.69,-4466.32 824.01,-4474.82 851.2,-4497.2 957.04,-4461.99 982.01,-4486.82 997.51,-4502.23 980.48,-4565.16 990.01,-4584.82 997.6,-4600.47 1011.97,-4613.79 1024.38,-4623.15"/>
 <polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="1022.85,-4624.63 1028.94,-4626.43 1025.3,-4621.22 1022.85,-4624.63"/>
 </g>
-<!-- packages/web/src/components/MeetOpenPhilosophy.tsx&#45;&gt;packages/web/src/utils/runtimeConfig.ts -->
+<!-- packages/web/src/components/AskPanel.tsx&#45;&gt;packages/web/src/utils/runtimeConfig.ts -->
 <g id="edge486" class="edge">
-<title>packages/web/src/components/MeetOpenPhilosophy.tsx&#45;&gt;packages/web/src/utils/runtimeConfig.ts</title>
+<title>packages/web/src/components/AskPanel.tsx&#45;&gt;packages/web/src/utils/runtimeConfig.ts</title>
 <path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M795.7,-4433.17C803.47,-4435.58 810.91,-4439.5 816.01,-4445.82 832.11,-4465.74 810.54,-4539.03 824.01,-4560.82 833.15,-4575.6 848.94,-4586.19 863.93,-4593.46"/>
 <polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="863.04,-4595.36 869.37,-4595.91 864.76,-4591.53 863.04,-4595.36"/>
 </g>
-<!-- packages/web/src/components/MeetOpenPhilosophy.tsx&#45;&gt;packages/web/src/components/ProvenanceFooter.tsx -->
+<!-- packages/web/src/components/AskPanel.tsx&#45;&gt;packages/web/src/components/ProvenanceFooter.tsx -->
 <g id="edge487" class="edge">
-<title>packages/web/src/components/MeetOpenPhilosophy.tsx&#45;&gt;packages/web/src/components/ProvenanceFooter.tsx</title>
+<title>packages/web/src/components/AskPanel.tsx&#45;&gt;packages/web/src/components/ProvenanceFooter.tsx</title>
 <path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M795.76,-4437.69C804.95,-4439.71 814.85,-4441.87 824.01,-4443.82 831.01,-4445.31 838.36,-4446.85 845.65,-4448.36"/>
 <polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="844.87,-4450.35 851.17,-4449.5 845.72,-4446.23 844.87,-4450.35"/>
 </g>
