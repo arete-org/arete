@@ -1,9 +1,9 @@
 /**
  * @description: Builds response metadata for provenance, risk, and trace storage.
- * @arete-scope: utility
- * @arete-module: ResponseMetadataBuilder
- * @arete-risk: moderate - Metadata errors can break trace integrity or auditing.
- * @arete-ethics: moderate - Provenance accuracy affects transparency and trust.
+ * @footnote-scope: utility
+ * @footnote-module: ResponseMetadataBuilder
+ * @footnote-risk: moderate - Metadata errors can break trace integrity or auditing.
+ * @footnote-ethics: moderate - Provenance accuracy affects transparency and trust.
  */
 import crypto from 'node:crypto';
 import type {
@@ -11,7 +11,7 @@ import type {
     RiskTier,
     Provenance,
     Citation,
-} from '@arete/contracts/ethics-core';
+} from '@footnote/contracts/ethics-core';
 import { AssistantMetadataPayload } from '../openaiService.js';
 
 interface RuntimeContext {
@@ -71,3 +71,4 @@ export function buildResponseMetadata(
         citations,
     };
 }
+

@@ -1,9 +1,9 @@
 /**
  * @description: Winston-based logging utility with console and rotating file transports for backend operations.
- * @arete-scope: utility
- * @arete-module: Logger
- * @arete-risk: low - Logging failures can make debugging difficult but should not break request handling.
- * @arete-ethics: moderate - Logs may contain user data affecting privacy and auditability.
+ * @footnote-scope: utility
+ * @footnote-module: Logger
+ * @footnote-risk: low - Logging failures can make debugging difficult but should not break request handling.
+ * @footnote-ethics: moderate - Logs may contain user data affecting privacy and auditability.
  */
 
 import fs from 'fs';
@@ -189,3 +189,4 @@ export const logLLMCostSummary = (getTotals?: LLMCostSummaryProvider) => {
         );
     }
 };
+

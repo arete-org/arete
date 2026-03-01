@@ -1,8 +1,8 @@
 /**
- * @arete-module: LLMCostEstimator
- * @arete-risk: moderate
- * @arete-ethics: high
- * @arete-scope: core
+ * @footnote-module: LLMCostEstimator
+ * @footnote-risk: moderate
+ * @footnote-ethics: high
+ * @footnote-scope: core
  *
  * @description: Tracks OpenAI API usage and costs per channel/guild/global for budget enforcement and transparency
  *
@@ -17,7 +17,7 @@ import type { ModelCostBreakdown, CostStatistics } from './pricing.js';
 import type { ChannelContextManager } from '../state/ChannelContextManager.js';
 
 /**
- * @arete-logger: llmCostEstimator
+ * @footnote-logger: llmCostEstimator
  *
  * @logs
  * LLM cost breakdowns, channel/guild totals, global totals, and context manager usage
@@ -461,3 +461,4 @@ export class LLMCostEstimator {
         );
     }
 }
+

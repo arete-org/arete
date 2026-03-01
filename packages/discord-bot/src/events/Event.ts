@@ -1,9 +1,9 @@
 /**
  * @description: Base event class for Discord.js events with error handling and registration.
- * @arete-scope: interface
- * @arete-module: EventBase
- * @arete-risk: moderate - Event wiring issues can prevent handlers from firing.
- * @arete-ethics: low - This module is infrastructural and does not process content.
+ * @footnote-scope: interface
+ * @footnote-module: EventBase
+ * @footnote-risk: moderate - Event wiring issues can prevent handlers from firing.
+ * @footnote-ethics: low - This module is infrastructural and does not process content.
  */
 
 import { Client, ClientEvents } from 'discord.js';
@@ -85,3 +85,4 @@ export abstract class Event {
         }
     }
 }
+

@@ -1,9 +1,9 @@
 /**
  * @description: Defines voice processing and timeout constants for audio workflows.
- * @arete-scope: utility
- * @arete-module: VoiceConstants
- * @arete-risk: moderate - Incorrect constants can destabilize audio buffers or retries.
- * @arete-ethics: moderate - Voice timing affects capture boundaries and consent.
+ * @footnote-scope: utility
+ * @footnote-module: VoiceConstants
+ * @footnote-risk: moderate - Incorrect constants can destabilize audio buffers or retries.
+ * @footnote-ethics: moderate - Voice timing affects capture boundaries and consent.
  */
 // Audio processing constants
 export const AUDIO_CONSTANTS = {
@@ -44,3 +44,4 @@ export const RECONNECTION_CONSTANTS = {
     // Exponential backoff multiplier
     RECONNECT_BACKOFF_MULTIPLIER: 2,
 } as const;
+

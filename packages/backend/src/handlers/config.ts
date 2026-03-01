@@ -1,9 +1,9 @@
 /**
  * @description: Serves runtime configuration for the web app.
- * @arete-scope: interface
- * @arete-module: RuntimeConfigHandler
- * @arete-risk: low - Misconfiguration affects UX but not core data integrity.
- * @arete-ethics: moderate - Incorrect exposure of config could mislead users.
+ * @footnote-scope: interface
+ * @footnote-module: RuntimeConfigHandler
+ * @footnote-risk: low - Misconfiguration affects UX but not core data integrity.
+ * @footnote-ethics: moderate - Incorrect exposure of config could mislead users.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
@@ -66,3 +66,4 @@ const createRuntimeConfigHandler =
     };
 
 export { createRuntimeConfigHandler };
+

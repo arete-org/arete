@@ -1,8 +1,8 @@
 /**
- * @arete-module: IncidentStoreTests
- * @arete-risk: low
- * @arete-ethics: high
- * @arete-scope: test
+ * @footnote-module: IncidentStoreTests
+ * @footnote-risk: low
+ * @footnote-ethics: high
+ * @footnote-scope: test
  *
  * @description: Integration tests to ensure incidents and audit events are persisted with
  * pseudonymized Discord identifiers (namespaced HMAC) and no raw IDs leak into
@@ -135,3 +135,4 @@ test('SqliteIncidentStore pseudonymizes pointers and audit actors', async () => 
         await fs.rm(tempRoot, { recursive: true, force: true });
     }
 });
+

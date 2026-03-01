@@ -1,9 +1,9 @@
 /**
  * @description: Validates bidirectional links between OpenAPI operations and code annotations to prevent spec/code drift.
- * @arete-scope: utility
- * @arete-module: OpenApiLinksValidator
- * @arete-risk: moderate - Broken link validation can allow stale API contracts to pass CI checks.
- * @arete-ethics: moderate - Accurate API traceability supports transparent and reliable system behavior.
+ * @footnote-scope: utility
+ * @footnote-module: OpenApiLinksValidator
+ * @footnote-risk: moderate - Broken link validation can allow stale API contracts to pass CI checks.
+ * @footnote-ethics: moderate - Accurate API traceability supports transparent and reliable system behavior.
  */
 /**
  * Purpose:
@@ -321,3 +321,4 @@ const main = (): void => {
 };
 
 main();
+

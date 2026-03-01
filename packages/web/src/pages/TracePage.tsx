@@ -1,9 +1,9 @@
 /**
  * @description: Renders the trace view for a response, including provenance metadata, citations, and integrity/status states.
- * @arete-scope: web
- * @arete-module: TracePage
- * @arete-risk: medium - Trace rendering errors can hide provenance signals and mislead users reviewing outputs.
- * @arete-ethics: high - Provenance visibility directly supports transparency, accountability, and informed trust.
+ * @footnote-scope: web
+ * @footnote-module: TracePage
+ * @footnote-risk: medium - Trace rendering errors can hide provenance signals and mislead users reviewing outputs.
+ * @footnote-ethics: high - Provenance visibility directly supports transparency, accountability, and informed trust.
  */
 /**
  * TracePage displays the full provenance trace for a bot response, including metadata,
@@ -15,7 +15,7 @@ import { Link, useParams } from 'react-router-dom';
 import type {
     GetTraceResponse,
     GetTraceStaleResponse,
-} from '@arete/contracts/web';
+} from '@footnote/contracts/web';
 import { api, isApiClientError } from '../utils/api';
 // Define the actual server response metadata structure
 type ServerMetadata = GetTraceResponse & {
@@ -506,7 +506,7 @@ const TracePage = (): JSX.Element => {
                         <dd>
                             <span>See license strategy for reuse details.</span>{' '}
                             <a
-                                href="https://github.com/arete-org/arete/blob/main/docs/LICENSE_STRATEGY.md"
+                                href="https://github.com/footnote-ai/footnote/blob/main/docs/LICENSE_STRATEGY.md"
                                 target="_blank"
                                 rel="noopener noreferrer"
                             >
@@ -521,3 +521,4 @@ const TracePage = (): JSX.Element => {
 };
 
 export default TracePage;
+

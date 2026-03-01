@@ -1,9 +1,9 @@
 /**
  * @description: Tracks image generation token budgets and refresh cadence.
- * @arete-scope: utility
- * @arete-module: ImageTokenManager
- * @arete-risk: moderate - Token miscounts can skew rate limiting or cost controls.
- * @arete-ethics: low - Token tracking does not process user content directly.
+ * @footnote-scope: utility
+ * @footnote-module: ImageTokenManager
+ * @footnote-risk: moderate - Token miscounts can skew rate limiting or cost controls.
+ * @footnote-ethics: low - Token tracking does not process user content directly.
  */
 import { logger } from './logger.js';
 import {
@@ -298,3 +298,4 @@ function formatCountdown(seconds: number): string {
 
     return `${remainingSeconds}s`;
 }
+

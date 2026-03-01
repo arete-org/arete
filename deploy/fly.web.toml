@@ -1,12 +1,12 @@
 # Fly app: web (static + proxy)
-app = 'arete-web'
+app = 'footnote-web'
 primary_region = 'ord'
 
 [build]
   dockerfile = 'Dockerfile.web'
 
 [env]
-  BACKEND_HOST = 'arete-backend.internal'
+  BACKEND_HOST = 'footnote-backend.internal'
 
 [[services]]
   internal_port = 80

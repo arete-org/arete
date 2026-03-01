@@ -1,9 +1,9 @@
 /**
  * @description: Provides a package-local API client for web routes with shared transport and error parsing.
- * @arete-scope: utility
- * @arete-module: WebApiClient
- * @arete-risk: moderate - Incorrect request handling can break chat/blog/trace experiences.
- * @arete-ethics: moderate - Consistent error handling helps keep fallback behavior transparent.
+ * @footnote-scope: utility
+ * @footnote-module: WebApiClient
+ * @footnote-risk: moderate - Incorrect request handling can break chat/blog/trace experiences.
+ * @footnote-ethics: moderate - Consistent error handling helps keep fallback behavior transparent.
  */
 
 import type {
@@ -15,19 +15,19 @@ import type {
     ListBlogPostsResponse,
     PostReflectRequest,
     PostReflectResponse,
-} from '@arete/contracts/web';
+} from '@footnote/contracts/web';
 import {
     GetTraceApiResponseSchema,
     PostReflectResponseSchema,
     createSchemaResponseValidator,
-} from '@arete/contracts/web/schemas';
+} from '@footnote/contracts/web/schemas';
 import {
     createApiTransport,
     isApiClientError as isSharedApiClientError,
     type ApiClientError,
     type ApiJsonResult,
     type CreateApiTransportOptions,
-} from '@arete/contracts/web/client-core';
+} from '@footnote/contracts/web/client-core';
 
 type CreateWebApiClientOptions = CreateApiTransportOptions;
 
@@ -167,3 +167,4 @@ export const createWebApiClient = ({
 
 export const api = createWebApiClient();
 export type { ApiClientError, ApiErrorResponse };
+

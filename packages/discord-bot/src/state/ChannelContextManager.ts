@@ -1,8 +1,8 @@
 /**
- * @arete-module: ChannelContextManager
- * @arete-risk: high
- * @arete-ethics: high
- * @arete-scope: core
+ * @footnote-module: ChannelContextManager
+ * @footnote-risk: high
+ * @footnote-ethics: high
+ * @footnote-scope: core
  *
  * @description: In-memory state manager tracking recent messages and metrics per channel for engagement decisions.
  *
@@ -500,3 +500,4 @@ export class ChannelContextManager {
         return Math.max(1, roughEstimate);
     }
 }
+

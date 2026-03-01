@@ -3,7 +3,7 @@
 If you landed here first, start with the main README for the big-picture overview:
 `README.md`
 
-This folder defines the minimal 3-service split for local/self-hosted Docker Compose.
+This folder defines the minimal three-service split for local/self-hosted Docker Compose.
 
 Services:
 
@@ -29,33 +29,33 @@ Services:
   Turnstile protects public endpoints from abuse.  
   If **both keys** are set, CAPTCHA is enforced.  
   If **neither key** is set, CAPTCHA is skipped.
-  ```env
-  TURNSTILE_SITE_KEY=...
-  TURNSTILE_SECRET_KEY=...
-  ```
+    ```env
+    TURNSTILE_SITE_KEY=...
+    TURNSTILE_SECRET_KEY=...
+    ```
 - **Cloudinary (image uploads)**  
   If Cloudinary credentials are provided, images can be uploaded and referenced in traces.  
   If not, the system falls back to attaching images directly in Discord.
-  ```env
-  CLOUDINARY_CLOUD_NAME=...
-  CLOUDINARY_API_KEY=...
-  CLOUDINARY_API_SECRET=...
-  ```
-  > If these are missing, images are still delivered via Discord attachments.
+    ```env
+    CLOUDINARY_CLOUD_NAME=...
+    CLOUDINARY_API_KEY=...
+    CLOUDINARY_API_SECRET=...
+    ```
+    > If these are missing, images are still delivered via Discord attachments.
 - **Storage Path**  
   Response traces are stored in SQLite:
-  ```env
-  PROVENANCE_SQLITE_PATH=/data/provenance.db
-  ```
-  > On Fly.io, `/data` is backed by a persistent volume. On other hosts, point this path at a durable directory.
+    ```env
+    PROVENANCE_SQLITE_PATH=/data/provenance.db
+    ```
+    > On Fly.io, `/data` is backed by a persistent volume. On other hosts, point this path at a durable directory.
 
 ### Optional Environment Variables
 
 - backend: `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY` (both required to enable CAPTCHA)
 - backend: `GITHUB_WEBHOOK_SECRET` (enables blog sync)
 - backend/bot: `LOG_LEVEL` (defaults to `debug`)
-- backend: `ARETE_ALLOWED_ORIGINS`, `ARETE_FRAME_ANCESTORS` (override CORS/CSP allowlists)
-- backend: `ARETE_DEFAULT_MODEL`, `ARETE_DEFAULT_REASONING_EFFORT`, `ARETE_DEFAULT_VERBOSITY` (reflect defaults)
+- backend: `ALLOWED_ORIGINS`, `FRAME_ANCESTORS` (override CORS/CSP allowlists)
+- backend: `DEFAULT_MODEL`, `DEFAULT_REASONING_EFFORT`, `DEFAULT_VERBOSITY` (reflect defaults)
 - backend: `TRACE_API_RATE_LIMIT`, `TRACE_API_RATE_LIMIT_WINDOW_MS`, `TRACE_API_MAX_BODY_BYTES` (trace ingestion limits)
 - bot: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (optional image uploads)
 
@@ -77,7 +77,7 @@ Services:
   (Requires Fly CLI: https://fly.io/docs/flyctl/install/)
   The scripts read `.env` and will prompt for any missing values.
   Note: we use three separate Fly apps to mirror the Docker Compose service split.
-  Note: web uses `BACKEND_HOST=arete-backend.internal` in `deploy/fly.web.toml`; update it if the backend app name changes.
+  Note: web uses `BACKEND_HOST=footnote-backend.internal` in `deploy/fly.web.toml`; update it if the backend app name changes.
   GitHub Actions deploys use `.github/workflows/fly-deploy.yml` and only need the `FLY_API_TOKEN` secret; app names come from `deploy/fly.*.toml`.
   Secrets per app:
     - backend: `OPENAI_API_KEY`, `TRACE_API_TOKEN`
@@ -88,6 +88,6 @@ Services:
 ## Notes
 
 - Only the web service is exposed on host port 8080 (`http://localhost:8080`) to avoid admin privileges.
-- The backend listens internally on port 3000 and stores data in `/data` (Docker volume: `arete-data`).
+- The backend listens internally on port 3000 and stores data in `/data` (Docker volume: `footnote-data`).
 - Blog post JSONs are stored in backend-owned storage under `/data/blog-posts` and served via backend endpoints.
 - The web app fetches runtime config from `/config.json` (proxied to the backend) to read `TURNSTILE_SITE_KEY`.

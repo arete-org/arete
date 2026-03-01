@@ -1,9 +1,9 @@
 /**
  * @description: Trace endpoint methods for Discord bot backend integration.
- * @arete-scope: utility
- * @arete-module: DiscordTraceApi
- * @arete-risk: moderate - Trace API failures reduce provenance reliability and debugging context.
- * @arete-ethics: moderate - Missing provenance data can weaken transparency and auditability.
+ * @footnote-scope: utility
+ * @footnote-module: DiscordTraceApi
+ * @footnote-risk: moderate - Trace API failures reduce provenance reliability and debugging context.
+ * @footnote-ethics: moderate - Missing provenance data can weaken transparency and auditability.
  */
 
 import type {
@@ -11,12 +11,12 @@ import type {
     GetTraceStaleResponse,
     PostTracesRequest,
     PostTracesResponse,
-} from '@arete/contracts/web';
+} from '@footnote/contracts/web';
 import {
     GetTraceApiResponseSchema,
     PostTracesResponseSchema,
     createSchemaResponseValidator,
-} from '@arete/contracts/web/schemas';
+} from '@footnote/contracts/web/schemas';
 import type { ApiJsonResult, ApiRequester } from './client.js';
 
 export type CreateTraceApiOptions = {
@@ -49,7 +49,7 @@ export const createTraceApi = (
         const headers: Record<string, string> = {};
 
         if (traceApiToken) {
-            headers['X-Arete-Trace-Token'] = traceApiToken;
+            headers['X-Trace-Token'] = traceApiToken;
         }
 
         const response = await requestJson<PostTracesResponse>('/api/traces', {
@@ -92,3 +92,4 @@ export const createTraceApi = (
         getTrace,
     };
 };
+

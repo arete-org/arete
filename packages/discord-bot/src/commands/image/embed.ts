@@ -1,9 +1,9 @@
 /**
  * @description: Formats image command metadata into Discord embed-safe text.
- * @arete-scope: utility
- * @arete-module: ImageEmbedFormatting
- * @arete-risk: low - Formatting errors can truncate or mislabel embed details.
- * @arete-ethics: low - Embeds present metadata without additional processing.
+ * @footnote-scope: utility
+ * @footnote-module: ImageEmbedFormatting
+ * @footnote-risk: low - Formatting errors can truncate or mislabel embed details.
+ * @footnote-ethics: low - Embeds present metadata without additional processing.
  */
 import { EmbedBuilder, type APIEmbedField } from 'discord.js';
 import {
@@ -138,3 +138,4 @@ export function chunkString(value: string, chunkSize: number): string[] {
     }
     return chunks;
 }
+

@@ -1,9 +1,9 @@
 /**
  * @description: Validates shared API transport response validation and normalized errors.
- * @arete-scope: test
- * @arete-module: WebApiClientCoreTests
- * @arete-risk: low - Tests only cover transport behavior with stubbed fetch responses.
- * @arete-ethics: low - Uses synthetic payloads and no live external services.
+ * @footnote-scope: test
+ * @footnote-module: WebApiClientCoreTests
+ * @footnote-risk: low - Tests only cover transport behavior with stubbed fetch responses.
+ * @footnote-ethics: low - Uses synthetic payloads and no live external services.
  */
 
 import test from 'node:test';
@@ -116,3 +116,4 @@ test('requestJson throws invalid_payload when response validator throws', async 
         }
     );
 });
+

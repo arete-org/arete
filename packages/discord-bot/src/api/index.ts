@@ -1,9 +1,9 @@
 /**
  * @description: Composes the Discord bot package-local backend API client.
- * @arete-scope: utility
- * @arete-module: DiscordApiClient
- * @arete-risk: moderate - Misconfigured client settings can break bot/backend communication.
- * @arete-ethics: moderate - Consistent API behavior supports predictable fail-open handling.
+ * @footnote-scope: utility
+ * @footnote-module: DiscordApiClient
+ * @footnote-risk: moderate - Misconfigured client settings can break bot/backend communication.
+ * @footnote-ethics: moderate - Consistent API behavior supports predictable fail-open handling.
  */
 
 import {
@@ -54,4 +54,5 @@ export { isDiscordApiClientError } from './client.js';
 export type {
     PostTracesRequest,
     PostTracesResponse,
-} from '@arete/contracts/web';
+} from '@footnote/contracts/web';
+

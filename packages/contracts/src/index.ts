@@ -1,9 +1,9 @@
 /**
  * @description: Public entry point for shared type contracts used across packages.
- * @arete-scope: interface
- * @arete-module: ContractsIndex
- * @arete-risk: low - Incorrect exports can cause type drift between packages.
- * @arete-ethics: moderate - Types document data meaning but do not execute logic.
+ * @footnote-scope: interface
+ * @footnote-module: ContractsIndex
+ * @footnote-risk: low - Incorrect exports can cause type drift between packages.
+ * @footnote-ethics: moderate - Types document data meaning but do not execute logic.
  */
 
 // This file is intentionally small. It only re-exports types so every package
@@ -35,3 +35,4 @@ export type {
     ListBlogPostsResponse,
     GetBlogPostResponse,
 } from './web';
+

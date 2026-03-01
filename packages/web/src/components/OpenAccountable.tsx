@@ -15,7 +15,7 @@ const PRINCIPLES: Principle[] = [
         description:
             "Everything's in the open. Explore the code, learn from it, or make it your own.",
         link: {
-            href: 'https://github.com/arete-org/arete/tree/main',
+            href: 'https://github.com/footnote-ai/footnote/tree/main',
             label: 'Source code',
             external: true,
         },
@@ -34,7 +34,7 @@ const PRINCIPLES: Principle[] = [
         description:
             'MIT + Hippocratic — open for everyone, grounded in ethics.',
         link: {
-            href: 'https://github.com/arete-org/arete/blob/main/docs/LICENSE_STRATEGY.md',
+            href: 'https://github.com/footnote-ai/footnote/blob/main/docs/LICENSE_STRATEGY.md',
             label: 'Licensing',
             external: true,
         },

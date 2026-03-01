@@ -1,17 +1,17 @@
-# ARETE-Specific Cursor Prompts
+# Footnote-Specific Cursor Prompts
 
-This file contains reusable prompts for Cursor's inline chat (`Ctrl+K`) and codebase chat (`Ctrl+L`) that are specifically tailored to ARETE's architecture, ethics framework, and development standards.
+This file contains reusable prompts for Cursor's inline chat (`Ctrl+K`) and codebase chat (`Ctrl+L`) that are specifically tailored to Footnote's architecture, ethics framework, and development standards.
 
 ## Module Analysis Prompts
 
-### ARETE Tagging Compliance
+### `@footnote-*` Tagging Compliance
 
 ```
-Check this function/module for ARETE module tagging compliance. Does it have:
-- @arete-module tag with descriptive name
-- @arete-risk level (critical/high/moderate/low)
-- @arete-ethics level (critical/high/moderate/low)
-- @arete-scope (core/utility/interface/test)
+Check this function/module for `@footnote-*` module tagging compliance. Does it have:
+- @footnote-module tag with descriptive name
+- @footnote-risk level (critical/high/moderate/low)
+- @footnote-ethics level (critical/high/moderate/low)
+- @footnote-scope (core/utility/interface/test)
 - @description explaining what it does
 - @impact explaining risks and ethical implications
 ```
@@ -59,10 +59,10 @@ Review the comments in this code. Do they:
 - Use parenthetical explanations for technical terms?
 ```
 
-### ARETE Framework Compliance
+### Project Framework Compliance
 
 ```
-Check this code for ARETE framework compliance:
+Check this code for project framework compliance:
 - Does it use the structured logger (utils/logger.ts)?
 - Are all LLM interactions tracked with ChannelContextManager.recordLLMUsage()?
 - Does it follow fail-open design (don't block when uncertain)?
@@ -122,7 +122,7 @@ Review the test coverage for this module:
 
 ```
 Check if this code needs updates to validation scripts:
-- Should validate-arete-tags.js catch any issues here?
+- Should validate-footnote-tags.js catch any issues here?
 - Are there new patterns that need automated checking?
 - Should this trigger any CI/CD validation steps?
 - Are there any manual checks that could be automated?
@@ -152,7 +152,7 @@ Check this code for transparency and auditability:
 - Is the code readable and well-documented?
 ```
 
-## Specific ARETE Components
+## Project-Specific Components
 
 ### Discord Bot Analysis
 
@@ -191,7 +191,7 @@ Analyze this ethics core code for:
 
 ### For Inline Chat (`Ctrl+K`)
 
-- "Check ARETE tagging compliance"
+- "Check `@footnote-*` tagging compliance"
 - "Analyze complexity and suggest simplifications"
 - "Review comments for quality and completeness"
 - "Check fail-open design compliance"
@@ -199,27 +199,28 @@ Analyze this ethics core code for:
 
 ### For Codebase Chat (`Ctrl+L`)
 
-- "How does this integrate with ARETE's ethics framework?"
+- "How does this integrate with Footnote's ethics framework?"
 - "What are the potential risks of this change?"
 - "How would this scale with additional model providers?"
 - "Are there any ethical implications I should consider?"
-- "Does this maintain ARETE's transparency requirements?"
+- "Does this maintain Footnote's transparency requirements?"
 
 ## Usage Tips
 
 1. **Be Specific**: Include context about what you're trying to achieve
-2. **Reference Standards**: Mention specific ARETE requirements when relevant
+2. **Reference Standards**: Mention specific project requirements when relevant
 3. **Ask Follow-ups**: Use multiple prompts to drill down into specific areas
 4. **Combine Analysis**: Use multiple prompts together for comprehensive review
 5. **Document Findings**: Keep notes on what Cursor discovers for human review
 
 ## Example Workflow
 
-1. **Start with tagging**: "Check ARETE tagging compliance"
+1. **Start with tagging**: "Check `@footnote-*` tagging compliance"
 2. **Analyze complexity**: "Analyze this function for complexity issues"
 3. **Review comments**: "Review the comments in this code"
-4. **Check compliance**: "Check this code for ARETE framework compliance"
+4. **Check compliance**: "Check this code for project framework compliance"
 5. **Future-proofing**: "Analyze this code for future compatibility"
 6. **Ethics review**: "Perform an ethical safety review of this code"
 
 This systematic approach ensures comprehensive analysis while leveraging Cursor's capabilities effectively.
+

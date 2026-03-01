@@ -1,13 +1,13 @@
 {
     "snippets": {
-        "arete-risk-header": {
-            "prefix": "arete-risk",
+        "footnote-risk-header": {
+            "prefix": "footnote-risk",
             "body": [
                 "/**",
-                " * @arete-module: ${1:Module name}",
-                " * @arete-risk: ${2|critical,high,moderate,low|}",
-                " * @arete-ethics: ${3|critical,high,moderate,low|}",
-                " * @arete-scope: ${4:Scope of change}",
+                " * @footnote-module: ${1:Module name}",
+                " * @footnote-risk: ${2|critical,high,moderate,low|}",
+                " * @footnote-ethics: ${3|critical,high,moderate,low|}",
+                " * @footnote-scope: ${4:Scope of change}",
                 " * @description",
                 " * ${5:Summary of functionality and rationale}",
                 " * ",
@@ -16,24 +16,24 @@
                 " * Ethics: ${7:Ethics impact details}",
                 " */"
             ],
-            "description": "ARETE risk/ethics header template"
+            "description": "Footnote risk/ethics header template"
         },
-        "arete-logger": {
-            "prefix": "arete-log",
+        "footnote-logger": {
+            "prefix": "footnote-log",
             "body": [
                 "logger.${1|debug,info,warn,error|}('${2:message}', { ${3:context} });"
             ],
-            "description": "ARETE structured logging"
+            "description": "Footnote structured logging"
         },
-        "arete-cost-tracking": {
-            "prefix": "arete-cost",
+        "footnote-cost-tracking": {
+            "prefix": "footnote-cost",
             "body": [
                 "ChannelContextManager.recordLLMUsage(${1:tokens}, ${2:cost});"
             ],
-            "description": "ARETE cost tracking"
+            "description": "Footnote cost tracking"
         },
-        "arete-error-handling": {
-            "prefix": "arete-try",
+        "footnote-error-handling": {
+            "prefix": "footnote-try",
             "body": [
                 "try {",
                 "  ${1:// risky operation}",
@@ -42,16 +42,17 @@
                 "  ${3:// error handling}",
                 "}"
             ],
-            "description": "ARETE error handling pattern"
+            "description": "Footnote error handling pattern"
         },
-        "arete-interface": {
-            "prefix": "arete-interface",
+        "footnote-interface": {
+            "prefix": "footnote-interface",
             "body": [
                 "export interface ${1:InterfaceName} {",
                 "  ${2:property}: ${3:type};",
                 "}"
             ],
-            "description": "ARETE interface template"
+            "description": "Footnote interface template"
         }
     }
 }
+

@@ -1,5 +1,5 @@
 # Fly app: backend (API + persistence)
-app = 'arete-backend'
+app = 'footnote-backend'
 primary_region = 'ord'
 
 [build]
@@ -7,8 +7,8 @@ primary_region = 'ord'
 
 [env]
   NODE_ENV = 'production'
-  ARETE_ALLOWED_ORIGINS = 'https://arete-web.fly.dev'
-  ARETE_FRAME_ANCESTORS = 'https://arete-web.fly.dev'
+  ALLOWED_ORIGINS = 'https://ai.jordanmakes.dev'
+  FRAME_ANCESTORS = 'https://ai.jordanmakes.dev'
 
 # Backend listens on 3000; keep this in sync with server.js.
 # No public service is defined; access is via Fly internal networking only.

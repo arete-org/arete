@@ -1,12 +1,12 @@
 /**
  * @description: Handles trace storage and retrieval endpoints.
- * @arete-scope: interface
- * @arete-module: TraceHandlers
- * @arete-risk: high - Trace loss undermines transparency guarantees.
- * @arete-ethics: high - Provenance access impacts user trust and auditability.
+ * @footnote-scope: interface
+ * @footnote-module: TraceHandlers
+ * @footnote-risk: high - Trace loss undermines transparency guarantees.
+ * @footnote-ethics: high - Provenance access impacts user trust and auditability.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { PostTracesRequestSchema } from '@arete/contracts/web/schemas';
+import { PostTracesRequestSchema } from '@footnote/contracts/web/schemas';
 import type { ResponseMetadata } from '../ethics-core/index.js';
 import type { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { logger } from '../utils/logger.js';
@@ -40,7 +40,7 @@ type TraceReadResult =
     | { status: 'error'; errorMessage: string };
 
 // Shared header name so auth checks stay consistent and easy to update.
-const TRACE_TOKEN_HEADER = 'x-arete-trace-token';
+const TRACE_TOKEN_HEADER = 'x-trace-token';
 
 // Helper to send JSON consistently (status + headers + serialized payload).
 const sendJson = (
@@ -463,3 +463,4 @@ const createTraceHandlers = ({
 };
 
 export { createTraceHandlers };
+

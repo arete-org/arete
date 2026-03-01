@@ -1,13 +1,13 @@
 {
-    "name": "@arete/backend",
+    "name": "@footnote/backend",
     "private": true,
     "type": "module",
     "main": "dist/server.js",
     "scripts": {
-        "build": "pnpm --dir ../.. --filter @arete/contracts run build && tsc -p tsconfig.json && node -e \"const fs=require('node:fs'); fs.mkdirSync('dist/services/prompts',{recursive:true}); fs.copyFileSync('src/services/prompts/defaults.yaml','dist/services/prompts/defaults.yaml');\""
+        "build": "pnpm --dir ../.. --filter @footnote/contracts run build && tsc -p tsconfig.json && node -e \"const fs=require('node:fs'); fs.mkdirSync('dist/services/prompts',{recursive:true}); fs.copyFileSync('src/services/prompts/defaults.yaml','dist/services/prompts/defaults.yaml');\""
     },
     "dependencies": {
-        "@arete/contracts": "workspace:*",
+        "@footnote/contracts": "workspace:*",
         "better-sqlite3": "catalog:",
         "dotenv": "catalog:",
         "js-yaml": "catalog:",

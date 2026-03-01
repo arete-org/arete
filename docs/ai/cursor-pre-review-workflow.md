@@ -1,15 +1,15 @@
-# ARETE Cursor Pre-Review Workflow
+# Footnote Cursor Pre-Review Workflow
 
 ## Overview
 
-ARETE uses Cursor IDE's automated analysis capabilities to perform structural pre-review before human code review. This workflow augments human judgment by focusing on mechanical thoroughness while preserving human expertise for logic, ethics, and integration decisions.
+Footnote uses Cursor IDE's automated analysis capabilities to perform structural pre-review before human code review. This workflow augments human judgment by focusing on mechanical thoroughness while preserving human expertise for logic, ethics, and integration decisions.
 
 ## Philosophy
 
 - **Augment, Don't Replace**: Cursor handles mechanical consistency; humans handle ethical judgment
 - **Traceability First**: All AI interactions must be auditable and explainable
 - **Fail-Open Design**: When uncertain, don't block execution
-- **Ethics-Aligned Development**: Every change maintains ARETE's ethical framework
+- **Ethics-Aligned Development**: Every change maintains the project's ethical framework
 
 ## Workflow Architecture
 
@@ -20,7 +20,7 @@ graph TD
     C -->|No| D[Fix Issues]
     D --> B
     C -->|Yes| E[Use Cursor Bugbot]
-    E --> F[Use Inline Chat with ARETE Prompts]
+    E --> F[Use Inline Chat with Project Prompts]
     F --> G[Accept Cursor Suggestions]
     G --> H[Open Human PR Review]
     H --> I[Human Focus: Logic, Ethics, Integration]
@@ -35,12 +35,12 @@ graph TD
 ```json
 {
     "scripts": {
-        "pre-review": "pnpm validate-arete-tags && pnpm validate-openapi-links && pnpm type-check && pnpm lint-check"
+        "pre-review": "pnpm validate-footnote-tags && pnpm validate-openapi-links && pnpm type-check && pnpm lint-check"
     }
 }
 ```
 
-**Purpose**: Ensures ARETE-specific requirements are met before Cursor analysis.
+**Purpose**: Ensures project-specific requirements are met before Cursor analysis.
 
 ### 2. Cursor Task Integration
 
@@ -54,7 +54,7 @@ graph TD
     "tasks": {
         "pre-review": {
             "command": "pnpm pre-review",
-            "description": "Run automated validation pipeline (ARETE tags, types, linting)"
+            "description": "Run automated validation pipeline (`@footnote-*` tags, types, linting)"
         }
     }
 }
@@ -69,7 +69,7 @@ graph TD
 **Sections**:
 
 - Automated validation steps
-- ARETE-specific requirements
+- project-specific requirements
 - Code quality standards
 - Framework compliance
 - Pre-Cursor analysis questions
@@ -77,9 +77,9 @@ graph TD
 
 **Purpose**: Ensures comprehensive coverage before Cursor analysis.
 
-### 4. ARETE-Specific Prompts
+### 4. Project-Specific Prompts
 
-**File**: `.cursor/arete-prompts.md`
+**File**: `.cursor/footnote-prompts.md`
 
 **Categories**:
 
@@ -90,7 +90,7 @@ graph TD
 - Ethics & safety prompts
 - Component-specific prompts
 
-**Purpose**: Provides consistent, effective Cursor interactions tailored to ARETE's needs.
+**Purpose**: Provides consistent, effective Cursor interactions tailored to Footnote's needs.
 
 ## Detailed Workflow Steps
 
@@ -108,7 +108,7 @@ pnpm pre-review
 
 **What it checks**:
 
-- ARETE module tagging compliance
+- `@footnote-*` module tagging compliance
 - OpenAPI <-> code link integrity
 - TypeScript type safety
 - ESLint code quality
@@ -120,16 +120,16 @@ pnpm pre-review
 - Let it analyze code quality, bugs, and security issues
 - Review suggested fixes and improvements
 
-### Step 4: Use Inline Chat with ARETE Prompts
+### Step 4: Use Inline Chat with Project Prompts
 
 - Use `Ctrl+K` (or `Cmd+K` on Mac) for inline chat
-- Apply prompts from `.cursor/arete-prompts.md`
+- Apply prompts from `.cursor/footnote-prompts.md`
 - Focus on complexity, comments, and framework compliance
 
 **Example prompts**:
 
 ```
-Check this function for ARETE module tagging compliance
+Check this function for `@footnote-*` module tagging compliance
 Analyze this function for complexity issues
 Review the comments in this code for quality and completeness
 ```
@@ -148,7 +148,7 @@ Review the comments in this code for quality and completeness
     - Integration concerns
     - Architectural decisions
 
-## ARETE-Specific Requirements
+## Project-Specific Requirements
 
 ### Module Documentation
 
@@ -157,10 +157,10 @@ Every module must include:
 ```typescript
 /**
  * @description: <1-3 lines summarizing what this module does.>
- * @arete-scope: <core|utility|interface|test>
- * @arete-module: <ModuleName>
- * @arete-risk: <high|moderate|low>
- * @arete-ethics: <high|moderate|low>
+ * @footnote-scope: <core|utility|interface|test>
+ * @footnote-module: <ModuleName>
+ * @footnote-risk: <high|moderate|low>
+ * @footnote-ethics: <high|moderate|low>
  *
  * @impact
  * Risk: <What could break or be compromised if mishandled.>
@@ -189,7 +189,7 @@ Every module must include:
 ### Quantitative Metrics
 
 - **Reduction in human review time**: Focus on logic vs. mechanics
-- **Fewer ARETE tagging violations**: Automated validation catches issues
+- **Fewer tagging violations**: Automated validation catches issues
 - **Improved comment quality**: Measured by contributor feedback
 - **Faster onboarding**: New contributors follow structured checklist
 
@@ -197,19 +197,19 @@ Every module must include:
 
 - **Human reviewer satisfaction**: Focus on high-value decisions
 - **Code maintainability**: Better documentation and structure
-- **Ethical compliance**: Consistent adherence to ARETE framework
+- **Ethical compliance**: Consistent adherence to the project's framework
 - **Knowledge transfer**: Comments help new contributors understand
 
 ## Troubleshooting
 
-### Issue: Missing ARETE Tags
+### Issue: Missing `@footnote-*` Tags
 
-**Solution**: Run `pnpm validate-arete-tags` first
+**Solution**: Run `pnpm validate-footnote-tags` first
 **Prevention**: Use pre-review checklist
 
 ### Issue: Inadequate Comments
 
-**Solution**: Use comment quality prompts from `.cursor/arete-prompts.md`
+**Solution**: Use comment quality prompts from `.cursor/footnote-prompts.md`
 **Prevention**: Follow commenting standards in `cursor.rules`
 
 ### Issue: Inconsistent Logging
@@ -231,9 +231,9 @@ Every module must include:
 
 ### CI/CD Pipeline
 
-- `pnpm validate-arete-tags` runs in CI
+- `pnpm validate-footnote-tags` runs in CI
 - Prevents merging code with missing tags
-- Enforces ARETE standards automatically
+- Enforces project standards automatically
 
 ### Development Environment
 
@@ -252,7 +252,7 @@ Every module must include:
 ### For Contributors
 
 1. **Always run validation first**: `pnpm pre-review`
-2. **Use structured prompts**: Follow `.cursor/arete-prompts.md`
+2. **Use structured prompts**: Follow `.cursor/footnote-prompts.md`
 3. **Follow the checklist**: Use `.cursor/pre-review-checklist.md`
 4. **Ask specific questions**: Use inline chat effectively
 5. **Document decisions**: Explain "why" not just "how"
@@ -267,9 +267,9 @@ Every module must include:
 ### For New Contributors
 
 1. **Start with the checklist**: Follow `.cursor/pre-review-checklist.md`
-2. **Use the prompts**: Reference `.cursor/arete-prompts.md`
-3. **Ask questions**: Use inline chat to understand ARETE patterns
-4. **Learn the framework**: Understand ARETE's transparency- and provenance-focused approach
+2. **Use the prompts**: Reference `.cursor/footnote-prompts.md`
+3. **Ask questions**: Use inline chat to understand project patterns
+4. **Learn the framework**: Understand Footnote's transparency- and provenance-focused approach
 
 ## Future Enhancements
 
@@ -289,18 +289,19 @@ Every module must include:
 
 ## Conclusion
 
-The ARETE Cursor Pre-Review Workflow represents a comprehensive approach to augmenting human code review with AI assistance. By focusing on mechanical consistency while preserving human judgment for ethical and architectural decisions, this workflow maintains ARETE's commitment to traceable, ethics-aligned development.
+The Footnote Cursor Pre-Review Workflow represents a comprehensive approach to augmenting human code review with AI assistance. By focusing on mechanical consistency while preserving human judgment for ethical and architectural decisions, this workflow maintains the project's commitment to traceable, ethics-aligned development.
 
 The key to success is the integration of automated validation, structured prompts, and clear workflows that ensure both efficiency and quality. Human reviewers can focus on what matters most—ethical implications, logical correctness, and system integration—while Cursor handles the mechanical aspects of code quality and consistency.
 
-This approach scales well with team growth, maintains high standards, and ensures that ARETE's ethical framework is consistently applied across all development work.
+This approach scales well with team growth, maintains high standards, and ensures that the project's ethical framework is consistently applied across all development work.
 
 ---
 
 **Template Note**: This document can be adapted for other projects by:
 
-1. Replacing ARETE-specific requirements with project-specific standards
+1. Replacing Footnote-specific requirements with project-specific standards
 2. Updating validation scripts to match project needs
 3. Customizing prompts for project architecture
 4. Adapting the checklist for project-specific requirements
 5. Modifying success metrics for project goals
+

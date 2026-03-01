@@ -1,9 +1,9 @@
 /**
  * @description: Minimal OpenAI client wrapper and response metadata builder for reflect API.
- * @arete-scope: utility
- * @arete-module: ReflectOpenAIService
- * @arete-risk: high - Incorrect handling can degrade responses or metadata integrity.
- * @arete-ethics: high - Misreported provenance impacts trust and transparency.
+ * @footnote-scope: utility
+ * @footnote-module: ReflectOpenAIService
+ * @footnote-risk: high - Incorrect handling can degrade responses or metadata integrity.
+ * @footnote-ethics: high - Misreported provenance impacts trust and transparency.
  */
 import crypto from 'node:crypto';
 import { extractTextAndMetadata } from '../utils/metadata.js';
@@ -146,10 +146,10 @@ class SimpleOpenAIService {
         logger.debug('=== Raw AI Response Debug ===');
         logger.debug(`Raw content length: ${rawContent.length}`);
         logger.debug(
-            `Contains ARETE_METADATA: ${rawContent.includes('<ARETE_METADATA>')}`
+            `Contains RESPONSE_METADATA: ${rawContent.includes('<RESPONSE_METADATA>')}`
         );
-        if (rawContent.includes('<ARETE_METADATA>')) {
-            const metadataStart = rawContent.indexOf('<ARETE_METADATA>');
+        if (rawContent.includes('<RESPONSE_METADATA>')) {
+            const metadataStart = rawContent.indexOf('<RESPONSE_METADATA>');
             logger.debug(
                 `Metadata block: ${rawContent.substring(metadataStart, metadataStart + 200)}`
             );
@@ -157,7 +157,7 @@ class SimpleOpenAIService {
         logger.debug('============================');
 
         // --- Metadata extraction ---
-        // Extract the <ARETE_METADATA> block without leaking it into the user-visible response.
+        // Extract the <RESPONSE_METADATA> block without leaking it into the user-visible response.
         const { normalizedText, metadata: parsedMetadata } =
             extractTextAndMetadata(rawContent);
 
@@ -244,3 +244,4 @@ const buildResponseMetadata = (
 
 export type { OpenAIResponseMetadata, ResponseMetadataRuntimeContext };
 export { SimpleOpenAIService, buildResponseMetadata };
+

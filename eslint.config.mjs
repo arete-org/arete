@@ -1,9 +1,9 @@
 /**
  * @description: Defines monorepo lint rules, shared globals, and import guardrails across packages.
- * @arete-scope: utility
- * @arete-module: EslintConfig
- * @arete-risk: moderate - Misconfigured lint rules can hide unsafe imports or weaken code quality checks.
- * @arete-ethics: low - Lint policy affects traceability and consistency but does not directly process user data.
+ * @footnote-scope: utility
+ * @footnote-module: EslintConfig
+ * @footnote-risk: moderate - Misconfigured lint rules can hide unsafe imports or weaken code quality checks.
+ * @footnote-ethics: low - Lint policy affects traceability and consistency but does not directly process user data.
  */
 import js from '@eslint/js';
 import tseslint from '@typescript-eslint/eslint-plugin';
@@ -116,7 +116,7 @@ export default [
         files: ['packages/*/**/*.{ts,tsx,js,jsx}'],
         rules: {
             // In package code, don't hop into another package with relative paths.
-            // Use the package name (e.g. @arete/backend) and its public exports.
+            // Use the package name (e.g. @footnote/backend) and its public exports.
             'no-restricted-imports': [
                 'error',
                 {
@@ -124,7 +124,7 @@ export default [
                         {
                             group: restrictedPackageImportPatterns,
                             message:
-                                'Import across packages via workspace package names (e.g. @arete/backend) instead of relative paths.',
+                                'Import across packages via workspace package names (e.g. @footnote/backend) instead of relative paths.',
                         },
                     ],
                 },
@@ -146,27 +146,27 @@ export default [
                 'error',
                 {
                     selector:
-                        'ImportDeclaration[source.value=/^@arete\\/backend(\\/|$)/]',
+                        'ImportDeclaration[source.value=/^@footnote\\/backend(\\/|$)/]',
                     message:
-                        'Avoid @arete/backend imports outside backend. Web/bot should call the backend via /api/* with package-local API clients, and contracts should stay dependency-light.',
+                        'Avoid @footnote/backend imports outside backend. Web/bot should call the backend via /api/* with package-local API clients, and contracts should stay dependency-light.',
                 },
                 {
                     selector:
-                        'ImportExpression[source.value=/^@arete\\/backend(\\/|$)/]',
+                        'ImportExpression[source.value=/^@footnote\\/backend(\\/|$)/]',
                     message:
-                        'Avoid @arete/backend dynamic imports outside backend. Web/bot should call the backend via /api/* with package-local API clients, and contracts should stay dependency-light.',
+                        'Avoid @footnote/backend dynamic imports outside backend. Web/bot should call the backend via /api/* with package-local API clients, and contracts should stay dependency-light.',
                 },
                 {
                     selector:
-                        'ExportNamedDeclaration[source.value=/^@arete\\/backend(\\/|$)/]',
+                        'ExportNamedDeclaration[source.value=/^@footnote\\/backend(\\/|$)/]',
                     message:
-                        'Avoid re-exporting @arete/backend modules outside backend. Web/bot should call the backend via /api/* with package-local API clients, and contracts should stay dependency-light.',
+                        'Avoid re-exporting @footnote/backend modules outside backend. Web/bot should call the backend via /api/* with package-local API clients, and contracts should stay dependency-light.',
                 },
                 {
                     selector:
-                        'ExportAllDeclaration[source.value=/^@arete\\/backend(\\/|$)/]',
+                        'ExportAllDeclaration[source.value=/^@footnote\\/backend(\\/|$)/]',
                     message:
-                        'Avoid re-exporting @arete/backend modules outside backend. Web/bot should call the backend via /api/* with package-local API clients, and contracts should stay dependency-light.',
+                        'Avoid re-exporting @footnote/backend modules outside backend. Web/bot should call the backend via /api/* with package-local API clients, and contracts should stay dependency-light.',
                 },
             ],
         },
@@ -195,3 +195,4 @@ export default [
     },
     ...(prettierConfig ? [prettierConfig] : []),
 ];
+

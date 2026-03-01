@@ -1,5 +1,5 @@
 /**
- * Header component displays the site header with ARETE title, breadcrumb trail, navigation buttons, and theme toggle.
+ * Header component displays the site header with Footnote title, breadcrumb trail, navigation buttons, and theme toggle.
  * This header is sticky and follows the user as they scroll, providing consistent navigation.
  */
 import { Link, useLocation } from 'react-router-dom';
@@ -33,7 +33,7 @@ const Header = ({ breadcrumbItems }: HeaderProps): JSX.Element => {
                         to="/"
                         style={{ textDecoration: 'none', color: 'inherit' }}
                     >
-                        <p className="site-mark">ARETE</p>
+                        <p className="site-mark">Footnote</p>
                     </Link>
                     <Breadcrumb items={breadcrumbItems} />
                 </div>
@@ -90,10 +90,10 @@ const Header = ({ breadcrumbItems }: HeaderProps): JSX.Element => {
                     )}
                     <a
                         className="header-button secondary"
-                        href="https://github.com/arete-org/arete"
+                        href="https://github.com/footnote-ai/footnote"
                         target="_blank"
                         rel="noreferrer"
-                        aria-label="View ARETE project on GitHub (opens in new tab)"
+                        aria-label="View Footnote project on GitHub (opens in new tab)"
                     >
                         GitHub <span aria-hidden="true">↗</span>
                     </a>

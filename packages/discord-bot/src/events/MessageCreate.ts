@@ -1,8 +1,8 @@
 /**
- * @arete-module: MessageCreate
- * @arete-risk: high
- * @arete-ethics: high
- * @arete-scope: core
+ * @footnote-module: MessageCreate
+ * @footnote-risk: high
+ * @footnote-ethics: high
+ * @footnote-scope: core
  *
  * @description: Handles the 'messageCreate' event from Discord.js, processing messages that mention the bot or are replies. Manages engagement logic, catch-up thresholds, and bot-to-bot conversation limits.
  *
@@ -29,7 +29,7 @@ import type {
 } from '../engagement/RealtimeEngagementFilter.js';
 
 /**
- * @arete-logger: messageCreate
+ * @footnote-logger: messageCreate
  *
  * @logs
  * Message processing events, engagement decisions, catchup triggers, bot conversation tracking, and error conditions
@@ -834,3 +834,4 @@ export class MessageCreate extends Event {
         return undefined;
     }
 }
+

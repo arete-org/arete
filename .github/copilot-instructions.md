@@ -1,11 +1,11 @@
-# ARETE Project - Copilot Instructions
+# Footnote Project - Copilot Instructions
 
-This project follows strict ARETE framework principles for ethical AI development.
+This project follows strict project framework principles for ethical AI development.
 
 ## Key Rules:
 
-- Always include ARETE module annotations (@arete-module, @arete-risk, @arete-ethics, @arete-scope)
-- Use structured logging with scoped loggers (@arete-logger, @logs)
+- Always include the current module annotations (@footnote-module, @footnote-risk, @footnote-ethics, @footnote-scope)
+- Use structured logging with scoped loggers (@footnote-logger, @logs)
 - Follow TypeScript best practices
 - Maintain cost tracking for all LLM interactions
 
@@ -18,10 +18,11 @@ This project follows strict ARETE framework principles for ethical AI developmen
 
 ## Critical Requirements:
 
-1. Every module must have proper ARETE annotations
+1. Every module must have proper `@footnote-*` annotations
 2. All LLM calls must record costs via ChannelContextManager
 3. Use fail-open design patterns
 4. Maintain backward compatibility
 5. Include comprehensive error handling
 
 See `cursor.rules` for complete guidelines.
+

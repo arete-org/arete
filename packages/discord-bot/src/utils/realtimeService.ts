@@ -1,8 +1,8 @@
 /**
- * @arete-module: RealtimeService
- * @arete-risk: high
- * @arete-ethics: high
- * @arete-scope: core
+ * @footnote-module: RealtimeService
+ * @footnote-risk: high
+ * @footnote-ethics: high
+ * @footnote-scope: core
  *
  * @description: Core real-time AI session management and WebSocket coordination.
  *
@@ -230,3 +230,4 @@ export class RealtimeSession extends EventEmitter {
         );
     }
 }
+

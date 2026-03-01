@@ -4,7 +4,7 @@ import type {
     ResponseMetadata,
     RiskTier,
     Citation,
-} from '@arete/contracts/ethics-core';
+} from '@footnote/contracts/ethics-core';
 
 interface ProvenanceFooterProps {
     metadata?: ResponseMetadata | null;

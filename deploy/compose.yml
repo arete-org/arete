@@ -1,4 +1,4 @@
-name: arete
+name: footnote
 
 services:
     backend:
@@ -11,7 +11,7 @@ services:
             - ../.env
         volumes:
             # Named volume keeps SQLite/provenance data across restarts.
-            - arete-data:/data
+            - footnote-data:/data
         networks:
             - backend-network
         restart: unless-stopped
@@ -51,4 +51,4 @@ networks:
         driver: bridge
 
 volumes:
-    arete-data:
+    footnote-data:

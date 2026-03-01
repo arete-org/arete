@@ -1,9 +1,9 @@
 /**
  * @description: Handles rate limiting for Discord and web API interactions.
- * @arete-scope: utility
- * @arete-module: RateLimiter
- * @arete-risk: moderate - Incorrect limits can cause abuse or block valid users.
- * @arete-ethics: moderate - Rate limits affect user access and fairness.
+ * @footnote-scope: utility
+ * @footnote-module: RateLimiter
+ * @footnote-risk: moderate - Incorrect limits can cause abuse or block valid users.
+ * @footnote-ethics: moderate - Rate limits affect user access and fairness.
  */
 
 type RateLimitScope = 'user' | 'channel' | 'guild' | 'session';
@@ -185,3 +185,4 @@ export function createGuildRateLimiter(
             'Hit the rate limit for this server/guild. Please try again later.',
     });
 }
+

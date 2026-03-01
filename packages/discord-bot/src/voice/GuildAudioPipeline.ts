@@ -1,9 +1,9 @@
 /**
  * @description: Buffers, frames, and encodes PCM audio for Discord voice playback.
- * @arete-scope: core
- * @arete-module: GuildAudioPipeline
- * @arete-risk: high - Audio pipeline failures disrupt voice output or leak resources.
- * @arete-ethics: high - Voice content requires careful handling and privacy safeguards.
+ * @footnote-scope: core
+ * @footnote-module: GuildAudioPipeline
+ * @footnote-risk: high - Audio pipeline failures disrupt voice output or leak resources.
+ * @footnote-ethics: high - Voice content requires careful handling and privacy safeguards.
  */
 import { PassThrough } from 'stream';
 import { opus } from 'prism-media';
@@ -135,3 +135,4 @@ export class GuildAudioPipeline {
         this.resourceCreated = true;
     }
 }
+

@@ -4,10 +4,10 @@
  * uniqueness for audit and deduplication. Always store the full 64-hex digest
  * for maximum entropy, and expose only short prefixes (10-12 chars) in logs or
  * admin surfaces.
- * @arete-scope: utility
- * @arete-module: Pseudonymization
- * @arete-risk: moderate - Hashing mistakes can lead to data loss or mismatched audits.
- * @arete-ethics: high - Prevents accidental storage or logging of raw user identifiers.
+ * @footnote-scope: utility
+ * @footnote-module: Pseudonymization
+ * @footnote-risk: moderate - Hashing mistakes can lead to data loss or mismatched audits.
+ * @footnote-ethics: high - Prevents accidental storage or logging of raw user identifiers.
  */
 
 import crypto from 'node:crypto';
@@ -91,3 +91,4 @@ export function pseudonymizeIncidentPointers(
 
     return clone;
 }
+

@@ -1,9 +1,9 @@
 /**
  * @description: Loads and validates Discord bot environment configuration and defaults.
- * @arete-scope: utility
- * @arete-module: EnvConfig
- * @arete-risk: high - Misconfiguration can break auth, rate limits, or cost tracking.
- * @arete-ethics: moderate - Incorrect settings can alter safety behavior or disclosure.
+ * @footnote-scope: utility
+ * @footnote-module: EnvConfig
+ * @footnote-risk: high - Misconfiguration can break auth, rate limits, or cost tracking.
+ * @footnote-ethics: moderate - Incorrect settings can alter safety behavior or disclosure.
  */
 
 import dotenv from 'dotenv';
@@ -146,9 +146,9 @@ const DEFAULT_COST_ESTIMATOR_CONFIG = {
 /**
  * Default bot mention names for engagement detection
  * @type {string[]}
- * @property {string[]} BOT_MENTION_NAMES - Comma-separated list of names the bot responds to (default: "arete,ari")
+ * @property {string[]} BOT_MENTION_NAMES - Comma-separated list of names the bot responds to (default: "footnote,ari")
  */
-const DEFAULT_BOT_MENTION_NAMES = ['arete', 'ari'] as const;
+const DEFAULT_BOT_MENTION_NAMES = ['footnote', 'ari'] as const;
 
 /**
  * Default engagement scoring weights (0-1 range, higher = more influence)
@@ -254,7 +254,7 @@ logger.info(`Using web base URL: ${webBaseUrl}`);
 
 const rawBackendBaseUrl = process.env.BACKEND_BASE_URL?.trim();
 const fallbackBackendBaseUrl = flyAppName
-    ? 'http://arete-backend.internal:3000'
+    ? 'http://footnote-backend.internal:3000'
     : 'http://localhost:3000';
 const backendBaseUrl =
     rawBackendBaseUrl && rawBackendBaseUrl.length > 0
@@ -625,3 +625,4 @@ export const config = {
         ),
     },
 } as const;
+

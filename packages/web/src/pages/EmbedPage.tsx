@@ -3,7 +3,7 @@ import Header from '@components/Header';
 import AskMeAnything from '@components/AskMeAnything';
 
 /**
- * EmbedPage component provides a minimal embeddable version of ARETE
+ * EmbedPage component provides a minimal embeddable version of Footnote
  * that includes the header, title/subtitle, "I'm Arí" section, and AskMeAnything.
  * Designed for iframe embedding in external sites.
  * Automatically communicates height to parent window to eliminate scrollbars.
@@ -43,11 +43,11 @@ const EmbedPage = (): JSX.Element => {
 
             // Debug logging (can be removed in production)
             if (process.env.NODE_ENV === 'development') {
-                console.log('[ARETE Embed] Sending height:', height);
+                console.log('[Footnote Embed] Sending height:', height);
             }
 
             window.parent.postMessage(
-                { type: 'arete-embed-height', height },
+                { type: 'footnote-embed-height', height },
                 '*' // Allow any origin - parent should validate origin for security
             );
         };
@@ -107,15 +107,15 @@ const EmbedPage = (): JSX.Element => {
                     Ethics-first, private, and easy to run yourself.
                 </p>
 
-                <div className="arete" aria-labelledby="arete-title">
-                    <div className="arete-background" aria-hidden="true">
-                        {/* Symbolic constellation representing ARETE's ethical framework. */}
+                <div className="intro-card" aria-labelledby="intro-card-title">
+                    <div className="intro-card-background" aria-hidden="true">
+                        {/* Symbolic constellation representing Footnote's ethical framework. */}
                         <svg
                             viewBox="0 0 320 120"
                             role="presentation"
                             focusable="false"
                         >
-                            <g className="arete-constellation">
+                            <g className="intro-card-constellation">
                                 <circle cx="30" cy="60" r="4" />
                                 <circle cx="110" cy="30" r="3" />
                                 <circle cx="200" cy="65" r="4" />
@@ -124,16 +124,16 @@ const EmbedPage = (): JSX.Element => {
                             </g>
                         </svg>
                     </div>
-                    <div className="arete-content">
-                        <div className="arete-logo">
+                    <div className="intro-card-content">
+                        <div className="intro-card-logo">
                             <img
                                 src="/assets/logo.jpg"
-                                alt="ARETE logo - a compass-like design with a capital A"
-                                className="arete-logo-image"
+                                alt="Footnote logo - a compass-like design with a capital A"
+                                className="intro-card-logo-image"
                             />
                         </div>
-                        <div className="arete-text">
-                            <h2 id="arete-title">I'm Arí,</h2>
+                        <div className="intro-card-text">
+                            <h2 id="intro-card-title">I'm Arí,</h2>
                             <p>
                                 I'm an AI built for clarity and care, not speed
                                 or persuasion. I explain how I think, and

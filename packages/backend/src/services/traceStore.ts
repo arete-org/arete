@@ -1,9 +1,9 @@
 /**
  * @description: Initializes trace storage and normalizes metadata for persistence.
- * @arete-scope: utility
- * @arete-module: TraceStoreService
- * @arete-risk: high - Trace persistence failures undermine auditing and trust.
- * @arete-ethics: high - Missing provenance data reduces transparency guarantees.
+ * @footnote-scope: utility
+ * @footnote-module: TraceStoreService
+ * @footnote-risk: high - Trace persistence failures undermine auditing and trust.
+ * @footnote-ethics: high - Missing provenance data reduces transparency guarantees.
  */
 import type { ResponseMetadata } from '../ethics-core/index.js';
 import {
@@ -40,3 +40,4 @@ const storeTrace = async (
 };
 
 export { createTraceStore, storeTrace };
+

@@ -1,9 +1,9 @@
 /**
  * @description: Manages Discord voice connections and cleanup routines.
- * @arete-scope: core
- * @arete-module: VoiceConnectionManager
- * @arete-risk: high - Connection leaks can destabilize voice playback or capture.
- * @arete-ethics: high - Voice connection control affects consent and session boundaries.
+ * @footnote-scope: core
+ * @footnote-module: VoiceConnectionManager
+ * @footnote-risk: high - Connection leaks can destabilize voice playback or capture.
+ * @footnote-ethics: high - Voice connection control affects consent and session boundaries.
  */
 import { VoiceConnection, VoiceConnectionStatus } from '@discordjs/voice';
 import { Client } from 'discord.js';
@@ -156,3 +156,4 @@ export async function cleanupVoiceConnection(
     const manager = new VoiceConnectionManager();
     return manager.cleanupVoiceConnection(connection, client);
 }
+

@@ -1,5 +1,5 @@
 {
-    "name": "arete",
+    "name": "footnote",
     "private": true,
     "packageManager": "pnpm@10.27.0",
     "workspaces": [
@@ -7,19 +7,19 @@
     ],
     "scripts": {
         "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:web\"",
-        "dev:backend": "pnpm --filter @arete/contracts run build && pnpm exec tsx packages/backend/src/server.ts",
-        "dev:web": "pnpm --filter @arete/web dev",
-        "dev:bot": "pnpm --filter @arete/discord-bot dev",
+        "dev:backend": "pnpm --filter @footnote/contracts run build && pnpm exec tsx packages/backend/src/server.ts",
+        "dev:web": "pnpm --filter @footnote/web dev",
+        "dev:bot": "pnpm --filter @footnote/discord-bot dev",
         "start:dev": "pnpm dev",
         "start:backend": "pnpm dev:backend",
         "start:bot": "pnpm dev:bot",
-        "start:prod-test": "pnpm --filter @arete/backend build && cross-env NODE_ENV=production node server.js",
-        "dev:prod-test": "concurrently \"pnpm --filter @arete/backend build && cross-env NODE_ENV=production node server.js\" \"pnpm --filter @arete/web dev\"",
+        "start:prod-test": "pnpm --filter @footnote/backend build && cross-env NODE_ENV=production node server.js",
+        "dev:prod-test": "concurrently \"pnpm --filter @footnote/backend build && cross-env NODE_ENV=production node server.js\" \"pnpm --filter @footnote/web dev\"",
         "build": "pnpm -r build",
-        "validate-arete-tags": "node scripts/validate-arete-tags.js",
+        "validate-footnote-tags": "node scripts/validate-footnote-tags.js",
         "validate-openapi-links": "pnpm exec tsx scripts/validate-openapi-links.ts",
         "blog-sync": "node scripts/blog-sync.js",
-        "pre-review": "pnpm validate-arete-tags && pnpm validate-openapi-links && pnpm type-check && pnpm lint-check",
+        "pre-review": "pnpm validate-footnote-tags && pnpm validate-openapi-links && pnpm type-check && pnpm lint-check",
         "type-check": "pnpm exec tsc --noEmit",
         "lint-check": "pnpm exec eslint packages/"
     },
@@ -62,3 +62,4 @@
         "jsonwebtoken": "catalog:"
     }
 }
+

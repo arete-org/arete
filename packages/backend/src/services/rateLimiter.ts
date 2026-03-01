@@ -1,9 +1,9 @@
 /**
  * @description: Simple in-memory rate limiter for backend endpoints.
- * @arete-scope: utility
- * @arete-module: SimpleRateLimiter
- * @arete-risk: low - Rate limiter failures could allow abuse but not data loss.
- * @arete-ethics: moderate - Rate limiting protects fair access and abuse prevention.
+ * @footnote-scope: utility
+ * @footnote-module: SimpleRateLimiter
+ * @footnote-risk: low - Rate limiter failures could allow abuse but not data loss.
+ * @footnote-ethics: moderate - Rate limiting protects fair access and abuse prevention.
  */
 // --- Types ---
 type RateLimiterOptions = {
@@ -69,3 +69,4 @@ class SimpleRateLimiter {
 }
 
 export { SimpleRateLimiter };
+

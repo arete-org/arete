@@ -1,9 +1,9 @@
 /**
  * @description: Handles blog index and post read endpoints.
- * @arete-scope: interface
- * @arete-module: BlogHandlers
- * @arete-risk: moderate - Blog retrieval failures degrade content availability.
- * @arete-ethics: low - Public content delivery has minimal ethics impact.
+ * @footnote-scope: interface
+ * @footnote-module: BlogHandlers
+ * @footnote-risk: moderate - Blog retrieval failures degrade content availability.
+ * @footnote-ethics: low - Public content delivery has minimal ethics impact.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
@@ -135,3 +135,4 @@ const createBlogHandlers = ({
 };
 
 export { createBlogHandlers };
+

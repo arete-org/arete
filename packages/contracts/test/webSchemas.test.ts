@@ -1,9 +1,9 @@
 /**
  * @description: Unit tests for shared reflect/traces runtime schemas in contracts.
- * @arete-scope: test
- * @arete-module: WebContractSchemasTests
- * @arete-risk: low - Tests only validate schema behavior for known payload shapes.
- * @arete-ethics: low - Uses synthetic metadata and no user-identifying data.
+ * @footnote-scope: test
+ * @footnote-module: WebContractSchemasTests
+ * @footnote-risk: low - Tests only validate schema behavior for known payload shapes.
+ * @footnote-ethics: low - Uses synthetic metadata and no user-identifying data.
  */
 
 import test from 'node:test';
@@ -40,14 +40,14 @@ const baseMetadata = {
 
 test('PostReflectRequestSchema enforces strict request payload rules', () => {
     assert.equal(
-        PostReflectRequestSchema.safeParse({ question: 'What is ARETE?' })
+        PostReflectRequestSchema.safeParse({ question: 'What is Footnote?' })
             .success,
         true
     );
 
     assert.equal(
         PostReflectRequestSchema.safeParse({
-            question: 'What is ARETE?',
+            question: 'What is Footnote?',
             extra: true,
         }).success,
         false
@@ -142,3 +142,4 @@ test('ApiErrorResponseSchema enforces strict known error envelope fields', () =>
         false
     );
 });
+

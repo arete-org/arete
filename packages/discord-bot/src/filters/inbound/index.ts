@@ -1,9 +1,9 @@
 /**
  * @description: Placeholder entry point for inbound filters (pre-processing) before core logic.
- * @arete-scope: interface
- * @arete-module: InboundFilters
- * @arete-risk: low - No active filters means no behavioral changes yet.
- * @arete-ethics: low - Placeholder does not alter user content.
+ * @footnote-scope: interface
+ * @footnote-module: InboundFilters
+ * @footnote-risk: low - No active filters means no behavioral changes yet.
+ * @footnote-ethics: low - Placeholder does not alter user content.
  */
 
 export interface InboundFilterResult {
@@ -15,3 +15,4 @@ export interface InboundFilterResult {
 export const runInboundFilters = (content: string): InboundFilterResult => {
     return { content, changes: [] };
 };
+

@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import ProvenanceFooter from './ProvenanceFooter';
-import type { ResponseMetadata } from '@arete/contracts/ethics-core';
+import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import examplePrompts from '../data/examplePrompts.json';
 import { loadRuntimeConfig } from '../utils/runtimeConfig';
 import { api, isApiClientError } from '../utils/api';
@@ -21,7 +21,7 @@ declare global {
 const FALLBACK_REFLECTION =
     'I was unable to generate a response - please try again later.';
 
-const MeetArete = (): JSX.Element => {
+const AskPanel = (): JSX.Element => {
     const [question, setQuestion] = useState('');
     const [status, setStatus] = useState('');
     const [answer, setAnswer] = useState('');
@@ -650,4 +650,4 @@ const MeetArete = (): JSX.Element => {
     );
 };
 
-export default MeetArete;
+export default AskPanel;

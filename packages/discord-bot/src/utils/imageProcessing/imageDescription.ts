@@ -1,9 +1,9 @@
 /**
  * @description: Builds and executes OpenAI vision requests to describe images for Discord users.
- * @arete-scope: utility
- * @arete-module: ImageDescriptionProcessor
- * @arete-risk: moderate - Failures can block image understanding or inflate costs.
- * @arete-ethics: moderate - Image descriptions may expose sensitive content if mishandled.
+ * @footnote-scope: utility
+ * @footnote-module: ImageDescriptionProcessor
+ * @footnote-risk: moderate - Failures can block image understanding or inflate costs.
+ * @footnote-ethics: moderate - Image descriptions may expose sensitive content if mishandled.
  */
 
 import OpenAI from 'openai';
@@ -333,3 +333,4 @@ export async function generateImageDescriptionRequest(
             : null,
     };
 }
+

@@ -1,9 +1,9 @@
 /**
  * @description: Handles provenance footer interactions, lenses, and trace lookups.
- * @arete-scope: interface
- * @arete-module: ProvenanceInteractions
- * @arete-risk: moderate - Interaction failures can block provenance navigation.
- * @arete-ethics: high - Provenance access affects user trust and accountability.
+ * @footnote-scope: interface
+ * @footnote-module: ProvenanceInteractions
+ * @footnote-risk: moderate - Interaction failures can block provenance navigation.
+ * @footnote-ethics: high - Provenance access affects user trust and accountability.
  */
 import type {
     ButtonInteraction,
@@ -24,7 +24,7 @@ import {
     TextInputBuilder,
     TextInputStyle,
 } from 'discord.js';
-import type { ResponseMetadata, Citation } from '@arete/contracts/ethics-core';
+import type { ResponseMetadata, Citation } from '@footnote/contracts/ethics-core';
 import { logger } from '../logger.js';
 import { ResponseHandler } from './ResponseHandler.js';
 import {
@@ -507,7 +507,7 @@ export async function generateAlternativeLensMessage(
     const systemPromptLines = [
         'You are an ethics editor who rewrites assistant responses using a specified philosophical or cultural lens.',
         'Preserve factual accuracy and original intent while foregrounding the requested perspective.',
-        'Respond in natural markdown with no JSON, tool calls, or metadata markers (like <ARETE_METADATA>).',
+        'Respond in natural markdown with no JSON, tool calls, or metadata markers (like <RESPONSE_METADATA>).',
     ];
     const metadataSummary = formatMetadataSummary(context.metadata);
     const userPromptSections = [
@@ -1545,3 +1545,4 @@ export async function handleAlternativeLensSubmit(
         clearAlternativeLensInProgress(messageId);
     }
 }
+

@@ -1,9 +1,9 @@
 /**
  * @description: Manages realtime session options and applies runtime updates.
- * @arete-scope: utility
- * @arete-module: RealtimeSessionConfig
- * @arete-risk: moderate - Incorrect options can break realtime sessions or increase costs.
- * @arete-ethics: moderate - Session settings influence audio handling and consent.
+ * @footnote-scope: utility
+ * @footnote-module: RealtimeSessionConfig
+ * @footnote-risk: moderate - Incorrect options can break realtime sessions or increase costs.
+ * @footnote-ethics: moderate - Session settings influence audio handling and consent.
  */
 import WebSocket from 'ws';
 import { RealtimeSessionOptions } from '../utils/realtimeService.js';
@@ -129,3 +129,4 @@ export class RealtimeSessionConfig {
         logger.debug('Enabled VAD for session');
     }
 }
+

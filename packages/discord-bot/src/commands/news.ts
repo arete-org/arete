@@ -1,8 +1,8 @@
 /**
- * @arete-module: NewsCommand
- * @arete-risk: moderate
- * @arete-ethics: moderate
- * @arete-scope: interface
+ * @footnote-module: NewsCommand
+ * @footnote-risk: moderate
+ * @footnote-ethics: moderate
+ * @footnote-scope: interface
  *
  * @description: Fetches and processes news data from external sources.
  *
@@ -369,3 +369,4 @@ const newsCommand: Command = {
 };
 
 export default newsCommand;
+
