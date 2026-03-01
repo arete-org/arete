@@ -114,8 +114,6 @@ This puts Footnote closer to work on:
 - **Human-in-the-loop oversight**: designing systems that expect review, correction, and escalation instead of assuming a single-shot answer is enough.
 - **Model documentation practices** (e.g., model cards): making limits and intended use explicit, even when the underlying system is probabilistic.
 
-### A note on complementary tools
-
 Some open-source projects (for example, initiatives like “Facet” in the explainability space) aim to make model behavior more interpretable. That work can complement Footnote: model interpretability helps answer “what patterns does this model rely on?”, while Footnote is primarily about making _assistant behavior and outputs_ reviewable and steerable through traces, provenance, and user-facing inspection surfaces.
 
 ## Where to go next
