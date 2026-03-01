@@ -1,12 +1,12 @@
-# Embedding ARETE
+# Embedding Footnote
 
-ARETE provides an embeddable version that can be integrated into external websites via iframe. The embed route includes the full header, title/subtitle, "I'm Arí" introduction section, and the interactive "Ask me anything" component.
+Footnote provides an embeddable version that can be integrated into external websites via iframe. The embed route includes the full header, title/subtitle, "I'm Arí" introduction section, and the interactive "Ask me anything" component.
 
 ## Embedding via iframe
 
 ### Basic Usage
 
-Add the following iframe code to embed ARETE in your website:
+Add the following iframe code to embed Footnote in your website:
 
 ```html
 <iframe
@@ -15,7 +15,7 @@ Add the following iframe code to embed ARETE in your website:
     height="800"
     frameborder="0"
     allow="clipboard-read; clipboard-write"
-    title="ARETE - Ethics-first AI assistant"
+    title="Footnote - Ethics-first AI assistant"
 ></iframe>
 ```
 
@@ -34,7 +34,7 @@ For a responsive embed that adapts to different screen sizes, use CSS:
             src="https://arete.fly.dev/embed"
             style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"
             allow="clipboard-read; clipboard-write"
-            title="ARETE - Ethics-first AI assistant"
+            title="Footnote - Ethics-first AI assistant"
         ></iframe>
     </div>
 </div>
@@ -50,14 +50,14 @@ Or with a fixed aspect ratio (recommended for better UX):
         src="https://arete.fly.dev/embed"
         style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"
         allow="clipboard-read; clipboard-write"
-        title="ARETE - Ethics-first AI assistant"
+        title="Footnote - Ethics-first AI assistant"
     ></iframe>
 </div>
 ```
 
 ### Dynamic Height (No Scrollbar)
 
-ARETE's embed automatically communicates its height to the parent window, allowing the iframe to resize dynamically and eliminate scrollbars. Add this script to your page to enable automatic resizing:
+Footnote's embed automatically communicates its height to the parent window, allowing the iframe to resize dynamically and eliminate scrollbars. Add this script to your page to enable automatic resizing:
 
 ```html
 <iframe
@@ -66,7 +66,7 @@ ARETE's embed automatically communicates its height to the parent window, allowi
     width="100%"
     frameborder="0"
     allow="clipboard-read; clipboard-write"
-    title="ARETE - Ethics-first AI assistant"
+    title="Footnote - Ethics-first AI assistant"
     style="border: none; width: 100%; min-height: 800px;"
 ></iframe>
 
@@ -74,7 +74,7 @@ ARETE's embed automatically communicates its height to the parent window, allowi
     (function () {
         const iframe = document.getElementById('arete-embed');
         if (!iframe) {
-            console.warn('ARETE embed: iframe element not found');
+            console.warn('Footnote embed: iframe element not found');
             return;
         }
 
@@ -92,7 +92,7 @@ ARETE's embed automatically communicates its height to the parent window, allowi
                 if (newHeight && newHeight > 0) {
                     iframe.style.height = newHeight + 'px';
                     // Debug logging (remove in production)
-                    // console.log('ARETE embed resized to:', newHeight + 'px');
+                    // console.log('Footnote embed resized to:', newHeight + 'px');
                 }
             }
         });
@@ -111,7 +111,7 @@ If you're not using dynamic height, the embed route content typically requires a
 
 - **Minimum height**: 800px
 - **Recommended height**: 1000px or use `height: 100%` with the responsive approach above
-- **Maximum width**: 1200px (ARETE's content is optimized for this width)
+- **Maximum width**: 1200px (Footnote's content is optimized for this width)
 
 ### Example: Full HTML Page with Dynamic Height
 
@@ -121,7 +121,7 @@ If you're not using dynamic height, the embed route content typically requires a
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>ARETE Embedded</title>
+        <title>Footnote Embedded</title>
         <style>
             body {
                 margin: 0;
@@ -148,7 +148,7 @@ If you're not using dynamic height, the embed route content typically requires a
                 id="arete-embed"
                 src="https://arete.fly.dev/embed"
                 allow="clipboard-read; clipboard-write"
-                title="ARETE - Ethics-first AI assistant"
+                title="Footnote - Ethics-first AI assistant"
             ></iframe>
         </div>
 
@@ -156,7 +156,7 @@ If you're not using dynamic height, the embed route content typically requires a
             (function () {
                 const iframe = document.getElementById('arete-embed');
                 if (!iframe) {
-                    console.warn('ARETE embed: iframe element not found');
+                    console.warn('Footnote embed: iframe element not found');
                     return;
                 }
 
@@ -229,22 +229,22 @@ If you see scrollbars in the iframe:
 
 ### Limitations and Considerations
 
-1. **Theme**: The embedded ARETE respects the system theme (light/dark mode) but theme switching is available within the embed.
+1. **Theme**: The embedding respects the system theme (light/dark mode) but theme switching is available within the embed.
 
 2. **Navigation**: Links in the header may navigate within the iframe. Consider adding `target="_top"` or `target="_blank"` if you want links to open in the parent page or a new tab.
 
 3. **API Rate Limiting**: The `/api/reflect` endpoint has rate limiting per IP and session to prevent abuse.
 
-4. **CAPTCHA**: The interactive component requires Cloudflare Turnstile CAPTCHA verification. This must be configured on the ARETE instance.
+4. **CAPTCHA**: The interactive component requires Cloudflare Turnstile CAPTCHA verification. This must be configured on the Footnote instance.
 
 5. **Responsive Behavior**: The embed is designed to work well on desktop and tablet devices. Mobile responsiveness is optimized but may require additional styling considerations.
 
 ## Embed-Specific Considerations
 
-- **Mobile responsiveness**: Shared `global.css` applies additional padding and stacking below ~560px and ~480px. At 320–414px, the ARETE intro and AMA form stack vertically; keep the iframe container at `width: 100%` with no CSS transforms to avoid forced zoom/scroll.
+- **Mobile responsiveness**: Shared `global.css` applies additional padding and stacking below ~560px and ~480px. At 320–414px, the Footnote intro and AMA form stack vertically; keep the iframe container at `width: 100%` with no CSS transforms to avoid forced zoom/scroll.
 - **Header links**: On `/embed`, `Setup` and `Blog` buttons automatically open in a new tab with `target="_blank"`/`rel="noopener noreferrer"`. GitHub always opens in a new tab.
 - **Height messaging**: The embed posts `arete-embed-height` messages on load, resize, mutations, and a 500ms interval. Ensure the parent listener stays attached and validates origin as needed.
-- **Trimmed UI**: The embed shows only the header, hero copy, ARETE intro, and Ask Me Anything. No blog grid or other site sections render.
+- **Trimmed UI**: The embed shows only the header, hero copy, Footnote intro, and Ask Me Anything. No blog grid or other site sections render.
 - **Iframe container**: Prefer dynamic height (listener above) over hard-coding short heights; if hard-coding, use at least 800px and let the iframe scroll be hidden.
 
 ## Customization
@@ -257,7 +257,7 @@ If you need to customize the embed appearance, you can:
 
 ## Support
 
-For issues or questions about embedding ARETE:
+For issues or questions about embedding Footnote:
 
 - Check the [main README](../README.md) for deployment instructions
 - Review [SECURITY.md](../../SECURITY.md) for security considerations
@@ -265,7 +265,7 @@ For issues or questions about embedding ARETE:
 
 ## Updating Allowed Origins
 
-To embed ARETE from a different domain, you have two options:
+To embed Footnote from a different domain, you have two options:
 
 ### Option 1: Environment Variable (Recommended)
 

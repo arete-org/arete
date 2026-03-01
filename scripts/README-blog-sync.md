@@ -53,7 +53,7 @@ The script will:
 🚀 Starting manual blog sync with GitHub App...
 📡 Fetching discussions from GitHub...
 📚 Found 3 blog discussions
-✅ Synced blog post: Getting Started with ARETE (#123)
+✅ Synced blog post: Getting Started with Footnote (#123)
 ✅ Synced blog post: Advanced Configuration (#124)
 ✅ Synced blog post: Troubleshooting Guide (#125)
 📝 Updated blog index with 3 posts

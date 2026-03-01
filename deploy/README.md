@@ -3,7 +3,7 @@
 If you landed here first, start with the main README for the big-picture overview:
 `README.md`
 
-This folder defines the minimal 3-service split for local/self-hosted Docker Compose.
+This folder defines the minimal three-service split for local/self-hosted Docker Compose.
 
 Services:
 

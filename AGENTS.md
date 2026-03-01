@@ -4,7 +4,7 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 
 ## Project Overview
 
-- Monorepo for ARETE (transparency- and provenance-focused AI framework) with Discord bot, backend core, and web site.
+- Monorepo for Footnote (a transparency- and provenance-focused AI framework) with Discord bot, backend core, and web site.
 - Core principles: interpretability, traceability, cost tracking, fail-open behavior.
 - Required annotations: `@arete-module`, `@arete-risk`, `@arete-ethics`, `@arete-scope`.
 - Structured logging is mandatory; use scoped loggers from `packages/discord-bot/src/utils/logger.ts`.
@@ -16,7 +16,7 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 - Web app: `packages/web/src`
 - Server wrapper: `server.js`
 - Environment templates: `.env.example`
-- Project docs: `README.md`, `docs/PHILOSOPHY.md`, `SECURITY.md`
+- Project docs: `README.md`, `docs/Philosophy_new.md`, `SECURITY.md`
 
 ## Preferred Context (load first)
 
@@ -44,7 +44,7 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 - Explain decisions in plain language first, then include technical detail.
 - Keep explanations concrete and actionable.
 
-## ARETE Header Format
+## Current `@arete-*` Header Format
 
 - Order: `@description`, `@arete-scope`, `@arete-module`, `@arete-risk`, `@arete-ethics` (colon required).
 - Risk/Ethics annotations must include a short rationale on the same line.
@@ -65,7 +65,7 @@ Example:
 ## Testing & Validation
 
 - Pre-review: `pnpm pre-review`
-- ARETE tags: `pnpm validate-arete-tags`
+- `@arete-*` tags: `pnpm validate-arete-tags`
 - OpenAPI linking: `pnpm validate-openapi-links`
 
 ## CodeRabbit CLI

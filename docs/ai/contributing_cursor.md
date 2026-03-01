@@ -1,4 +1,4 @@
-# AI-Assisted Development in ARETE
+# AI-Assisted Development in Footnote
 
 Cursor and Traycer are configured to follow the project's ethical and technical principles.
 
@@ -19,7 +19,7 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 
 - **Structured logging**: All AI edits must preserve existing logging patterns
 - **Cost tracking**: Never remove `ChannelContextManager.recordLLMUsage()` calls
-- **Risk annotations**: Preserve all ARETE module annotations (`@arete-module`, `@arete-risk`, `@arete-ethics`, `@arete-scope`, `@description`, `@impact`)
+- **Risk annotations**: Preserve all current module annotations (`@arete-module`, `@arete-risk`, `@arete-ethics`, `@arete-scope`, `@description`, `@impact`)
 - **Licensing**: Maintain all license headers and provenance comments
 
 ## Process
@@ -61,7 +61,7 @@ For API boundary changes, keep OpenAPI and code links aligned:
   - `coderabbit --prompt-only -t uncommitted`
 - Limit CodeRabbit to 3 runs max per set of changes.
 
-### ARETE Module Tagging
+### Current `@arete-*` Module Tagging
 
 - `@arete-risk`: Technical fragility (low, moderate, high)
 - `@arete-ethics`: Human impact sensitivity (low, moderate, high)
@@ -85,7 +85,7 @@ For API boundary changes, keep OpenAPI and code links aligned:
  */
 ```
 
-### ARETE Scoped Logger Tagging
+### Current `@arete-*` Scoped Logger Tagging
 
 - `@arete-logger`: Logger module identifier (matches the child logger name)
 - `@logs`: What specific operations, events, or data this logger logs

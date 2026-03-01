@@ -1,13 +1,13 @@
 # Security Policy
 
-ARETE is an open, ethics-first reasoning assistant built for transparency and auditability.  
+Footnote is an open, ethics-first reasoning assistant built for transparency and auditability.  
 Security, in this context, means protecting **technical integrity**, ensuring **ethical safety**, and preserving **data provenance**.
 
 ---
 
 ## Supported Versions
 
-ARETE is in **active development (pre-1.0)**.  
+Footnote is in **active development (pre-1.0)**.  
 Security updates are applied continuously on the `main` branch and deployed to Fly.io through verified GitHub Actions.
 
 | Version   | Supported | Notes                           |
@@ -50,7 +50,7 @@ If you discover a **security**, **privacy**, or **ethical-safety** issue (such a
 
 ## Ethical Safety & Incident Response
 
-ARETE treats **ethical failures as security incidents**.  
+Footnote treats **ethical failures as security incidents**.  
 If you encounter behavior that could cause real-world harm (e.g., unsafe advice, biased reasoning, coercive responses):
 
 - Report it via **“Report Issue”** button in Discord under each response.
@@ -64,4 +64,4 @@ If you encounter behavior that could cause real-world harm (e.g., unsafe advice,
 > “Honesty is the first chapter in the book of wisdom.” – Thomas Jefferson
 > “The more hidden the mechanism, the more powerful it becomes.” – Hannah Arendt
 
-Thank you for helping make ARETE safer, more trustworthy, and more accountable.
+Thank you for helping make Footnote safer, more trustworthy, and more accountable.

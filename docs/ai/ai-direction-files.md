@@ -1,4 +1,4 @@
-# ARETE AI Direction Files Index
+# Footnote AI Direction Files Index
 
 _Coordinated guidance for AI assistants and developers._
 
@@ -6,7 +6,7 @@ _Coordinated guidance for AI assistants and developers._
 
 ### `cursor.rules` - **Complete Development Rules**
 
-- ARETE principles, Module tagging, scoped logger patterns, TypeScript standards
+- Footnote principles, module tagging, scoped logger patterns, and TypeScript standards
 - All other files reference this as the authoritative source
 
 ## 🤖 AI Assistant Files

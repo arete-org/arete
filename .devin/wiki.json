@@ -1,7 +1,7 @@
 {
     "repo_notes": [
         {
-            "content": "ARETE is a transparency- and provenance-focused AI framework, not a generic chat app. Its main product feature is inspectability: users should be able to see why an answer was produced, not just the answer itself.",
+            "content": "Footnote is a transparency- and provenance-focused AI framework, not a generic chat app. Its main product feature is inspectability: users should be able to see why an answer was produced, not just the answer itself.",
             "author": "Maintainer"
         },
         {
@@ -82,7 +82,7 @@
         },
         {
             "title": "Glossary",
-            "purpose": "Define the main ARETE terms in one place so the rest of the wiki stays easy to read. Include provenance, confidence, riskTier, tradeoffCount, citations, chainHash, staleAfter, trace retrieval, and trace display.",
+            "purpose": "Define the main Footnote terms in one place so the rest of the wiki stays easy to read. Include provenance, confidence, riskTier, tradeoffCount, citations, chainHash, staleAfter, trace retrieval, and trace display.",
             "parent": "Architecture",
             "entrypoints": [
                 "packages/contracts/src/ethics-core",
@@ -98,7 +98,7 @@
         },
         {
             "title": "Provenance",
-            "purpose": "Explain why ARETE is different: answers are designed to be inspectable. Cover provenance metadata, confidence, risk tier, tradeoffs, citations, chain integrity fields, and stale trace behavior as user-facing features.",
+            "purpose": "Explain why Footnote is different: answers are designed to be inspectable. Cover provenance metadata, confidence, risk tier, tradeoffs, citations, chain integrity fields, and stale trace behavior as user-facing features.",
             "parent": "Architecture",
             "entrypoints": [
                 "packages/contracts/src/ethics-core",
@@ -251,7 +251,7 @@
         },
         {
             "title": "Observability",
-            "purpose": "Document how ARETE records operational context and model usage. Cover structured logging, logging hygiene, and where cost tracking and transparency-related observability live in the codebase.",
+            "purpose": "Document how Footnote records operational context and model usage. Cover structured logging, logging hygiene, and where cost tracking and transparency-related observability live in the codebase.",
             "parent": "Architecture",
             "entrypoints": [
                 "packages/discord-bot/src/utils/logger.ts",
