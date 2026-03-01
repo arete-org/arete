@@ -1,9 +1,9 @@
 /**
  * @description: Ensures outbound link normalization behaves safely and predictably.
- * @arete-scope: test
- * @arete-module: OutboundFiltersTests
- * @arete-risk: low - Tests only validate formatting helpers.
- * @arete-ethics: moderate - Guards against accidental content distortion.
+ * @footnote-scope: test
+ * @footnote-module: OutboundFiltersTests
+ * @footnote-risk: low - Tests only validate formatting helpers.
+ * @footnote-ethics: moderate - Guards against accidental content distortion.
  */
 
 import test from 'node:test';
@@ -210,3 +210,4 @@ test('normalizeOutboundLinks skips raw HTML blocks', () => {
     );
     assert.deepEqual(result.changes, ['wrapped_urls:1']);
 });
+

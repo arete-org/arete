@@ -1,9 +1,9 @@
 /**
  * @description: Ethics-core contract exports for provenance and response metadata.
- * @arete-scope: interface
- * @arete-module: EthicsCoreContractsIndex
- * @arete-risk: low - Export mistakes can misalign types across packages.
- * @arete-ethics: moderate - Types document data meaning but do not execute logic.
+ * @footnote-scope: interface
+ * @footnote-module: EthicsCoreContractsIndex
+ * @footnote-risk: low - Export mistakes can misalign types across packages.
+ * @footnote-ethics: moderate - Types document data meaning but do not execute logic.
  */
 
 // This file is intentionally small. It only re-exports types so every package
@@ -16,3 +16,4 @@ export type {
     Citation,
     ResponseMetadata,
 } from './types';
+

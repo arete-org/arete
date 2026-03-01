@@ -1,9 +1,9 @@
 /**
  * @description: Winston-based logging utility with console and file transports. Provides structured logging for all bot operations.
- * @arete-scope: utility
- * @arete-module: Logger
- * @arete-risk: low - Logging failures hinder debugging and observability but should not halt bot execution.
- * @arete-ethics: moderate - Logs may include sensitive user-derived content, so redaction and retention discipline are required.
+ * @footnote-scope: utility
+ * @footnote-module: Logger
+ * @footnote-risk: low - Logging failures hinder debugging and observability but should not halt bot execution.
+ * @footnote-ethics: moderate - Logs may include sensitive user-derived content, so redaction and retention discipline are required.
  */
 
 import fs from 'fs';
@@ -195,3 +195,4 @@ export const logLLMCostSummary = (getTotals?: LLMCostSummaryProvider) => {
         );
     }
 };
+

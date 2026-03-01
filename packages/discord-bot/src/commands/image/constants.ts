@@ -1,9 +1,9 @@
 /**
  * @description: Provides shared constants for the image command and embed limits.
- * @arete-scope: utility
- * @arete-module: ImageCommandConstants
- * @arete-risk: low - Constant drift can cause UI truncation or mismatched defaults.
- * @arete-ethics: low - Constants are non-sensitive configuration values.
+ * @footnote-scope: utility
+ * @footnote-module: ImageCommandConstants
+ * @footnote-risk: low - Constant drift can cause UI truncation or mismatched defaults.
+ * @footnote-ethics: low - Constants are non-sensitive configuration values.
  */
 // Pull resolved defaults from the central image configuration so every caller
 // sees the same values even when operators override them via environment
@@ -47,3 +47,4 @@ export const IMAGE_VARIATION_CANCEL_CUSTOM_ID_PREFIX =
 // When the prompt is already near the embed field budget, skip prompt
 // enlargement to avoid duplicate/truncated fields.
 export const PROMPT_ADJUSTMENT_MIN_REMAINING_RATIO = 0.2;
+

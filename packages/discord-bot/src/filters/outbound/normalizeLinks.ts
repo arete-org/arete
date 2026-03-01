@@ -1,9 +1,9 @@
 /**
  * @description: Normalizes outbound URLs into Markdown autolinks (<url>) without reflowing formatting.
- * @arete-scope: interface
- * @arete-module: NormalizeOutboundLinks
- * @arete-risk: moderate - Linkification errors can distort meaning or intent.
- * @arete-ethics: moderate - Formatting changes shape user interpretation and trust.
+ * @footnote-scope: interface
+ * @footnote-module: NormalizeOutboundLinks
+ * @footnote-risk: moderate - Linkification errors can distort meaning or intent.
+ * @footnote-ethics: moderate - Formatting changes shape user interpretation and trust.
  */
 
 // used only to run a Markdown parse so we can target edits by source offsets (no re-serialization/reflow).
@@ -212,3 +212,4 @@ const linkifySegment = (segment: string): { text: string; count: number } => {
     result += segment.slice(cursor);
     return { text: result, count };
 };
+

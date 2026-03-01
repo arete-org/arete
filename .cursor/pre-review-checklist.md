@@ -1,20 +1,20 @@
-# ARETE Pre-Review Checklist
+# Footnote Pre-Review Checklist
 
-Use this checklist before opening a PR to ensure your code meets ARETE's standards and is ready for Cursor's automated analysis.
+Use this checklist before opening a PR to ensure your code meets the project's standards and is ready for Cursor's automated analysis.
 
 ## Automated Validation (Run First)
 
-- [ ] **ARETE Module Tags**: `pnpm validate-arete-tags` passes
+- [ ] **`@footnote-*` Module Tags**: `pnpm validate-footnote-tags` passes
 - [ ] **OpenAPI Linking**: `pnpm validate-openapi-links` passes (for API boundary changes)
 - [ ] **TypeScript**: `pnpm type-check` passes
 - [ ] **Linting**: `pnpm lint-check` passes
 - [ ] **Quick Check**: `pnpm pre-review` passes
 
-## ARETE-Specific Requirements
+## Project-Specific Requirements
 
 ### Module Documentation
 
-- [ ] **ARETE Module Header**: Contains all required tags (`@arete-module`, `@arete-risk`, `@arete-ethics`, `@arete-scope`)
+- [ ] **Module Header**: Contains all required tags (`@footnote-module`, `@footnote-risk`, `@footnote-ethics`, `@footnote-scope`)
 - [ ] **Risk Level**: Accurately reflects technical fragility (critical/high/moderate/low)
 - [ ] **Ethics Level**: Accurately reflects human/governance impact (critical/high/moderate/low)
 - [ ] **Scope**: Correctly categorized (core/utility/interface/test)
@@ -37,7 +37,7 @@ Use this checklist before opening a PR to ensure your code meets ARETE's standar
 - [ ] **External Dependencies**: API behaviors and context are documented
 - [ ] **Technical Terms**: Parenthetical explanations provided (e.g., `technicalTerm (plainEnglish)`)
 
-### ARETE Framework Compliance
+### Project Framework Compliance
 
 - [ ] **Utility Reuse**: Existing utilities used before adding new modules
 - [ ] **RAM-Only Buffers**: No persistence to disk or database
@@ -91,14 +91,14 @@ After completing the checklist, use these Cursor features:
 Your code is ready for human review when:
 
 - ✅ All automated checks pass
-- ✅ ARETE-specific requirements are met
+- ✅ Project-specific requirements are met
 - ✅ Cursor analysis shows no major issues
 - ✅ Comments explain the "why" behind decisions
 - ✅ Risk and ethics implications are clearly documented
 
 ## Common Issues to Avoid
 
-- **Missing ARETE tags** - Run `pnpm validate-arete-tags` first
+- **Missing `@footnote-*` tags** - Run `pnpm validate-footnote-tags` first
 - **Inadequate comments** - Focus on business logic and decisions
 - **Inconsistent logging** - Use structured logger throughout
 - **Missing cost tracking** - All LLM calls must be tracked
@@ -108,3 +108,4 @@ Your code is ready for human review when:
 ---
 
 **Remember**: This checklist ensures Cursor can focus on architectural and complexity analysis while human reviewers focus on logic, ethics, and integration decisions.
+

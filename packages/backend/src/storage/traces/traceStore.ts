@@ -1,9 +1,9 @@
 /**
  * @description: Shared helpers and factory for persistence of response provenance metadata.
- * @arete-scope: utility
- * @arete-module: TraceStore
- * @arete-risk: moderate - Storage failures can break audit trails and transparency features.
- * @arete-ethics: high - Controls trace storage ensuring AI responses are traceable and auditable.
+ * @footnote-scope: utility
+ * @footnote-module: TraceStore
+ * @footnote-risk: moderate - Storage failures can break audit trails and transparency features.
+ * @footnote-ethics: high - Controls trace storage ensuring AI responses are traceable and auditable.
  */
 
 import { logger } from '../../utils/logger.js';
@@ -58,3 +58,4 @@ export function createTraceStoreFromEnv(): TraceStore {
 }
 
 export const defaultTraceStore = createTraceStoreFromEnv();
+

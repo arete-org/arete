@@ -1,9 +1,9 @@
 /**
  * @description: Implements the /help command to list available bot commands.
- * @arete-scope: interface
- * @arete-module: HelpCommand
- * @arete-risk: low - Failures only affect help visibility and do not impact core behavior.
- * @arete-ethics: low - Provides informational output without sensitive processing.
+ * @footnote-scope: interface
+ * @footnote-module: HelpCommand
+ * @footnote-risk: low - Failures only affect help visibility and do not impact core behavior.
+ * @footnote-ethics: low - Provides informational output without sensitive processing.
  */
 import {
     ChatInputCommandInteraction,
@@ -60,3 +60,4 @@ const helpCommand: Command = {
 };
 
 export default helpCommand;
+

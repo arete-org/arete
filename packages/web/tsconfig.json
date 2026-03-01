@@ -8,15 +8,15 @@
         "paths": {
             "@components/*": ["components/*"],
             "@pages/*": ["pages/*"],
-            "@arete/contracts": ["../../contracts/src/index.ts"],
-            "@arete/contracts/ethics-core": [
+            "@footnote/contracts": ["../../contracts/src/index.ts"],
+            "@footnote/contracts/ethics-core": [
                 "../../contracts/src/ethics-core/index.ts"
             ],
-            "@arete/contracts/web": ["../../contracts/src/web/index.ts"],
-            "@arete/contracts/web/schemas": [
+            "@footnote/contracts/web": ["../../contracts/src/web/index.ts"],
+            "@footnote/contracts/web/schemas": [
                 "../../contracts/src/web/schemas.ts"
             ],
-            "@arete/contracts/*": ["../../contracts/src/*"],
+            "@footnote/contracts/*": ["../../contracts/src/*"],
             "@styles/*": ["styles/*"],
             "@theme": ["theme"],
             "@types/*": ["types/*"]

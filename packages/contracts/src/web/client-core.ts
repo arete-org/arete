@@ -1,9 +1,9 @@
 /**
  * @description: Shared API transport and error normalization for package-local clients.
- * @arete-scope: utility
- * @arete-module: WebApiClientCore
- * @arete-risk: moderate - Shared transport regressions can impact multiple clients.
- * @arete-ethics: moderate - Consistent error behavior helps maintain transparent fail-open handling.
+ * @footnote-scope: utility
+ * @footnote-module: WebApiClientCore
+ * @footnote-risk: moderate - Shared transport regressions can impact multiple clients.
+ * @footnote-ethics: moderate - Consistent error behavior helps maintain transparent fail-open handling.
  */
 
 import type { NormalizedApiError } from './types';
@@ -397,3 +397,4 @@ export const createApiTransport = ({
         requestJson,
     };
 };
+

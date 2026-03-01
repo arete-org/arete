@@ -1,11 +1,11 @@
-# ARETE Development Rules for Codex
+# Footnote Development Rules for Codex
 # 
 # This file directs Codex to use the main project rules.
 # For complete development guidelines, see: cursor.rules
 #
 # Key points for AI assistants:
-# - Always include ARETE module annotations (@arete-module, @arete-risk, @arete-ethics, @arete-scope)
-# - Use structured logging with scoped loggers following the @arete-logger pattern
+# - Always include the current module annotations (@footnote-module, @footnote-risk, @footnote-ethics, @footnote-scope)
+# - Use structured logging with scoped loggers following the @footnote-logger pattern
 # - Follow TypeScript best practices and fail-open design patterns
 # - Maintain cost tracking for all LLM interactions via ChannelContextManager
 # - Preserve provenance comments and licensing headers
@@ -14,7 +14,7 @@
 # - Detailed module tagging requirements
 # - Scoped logger formatting standards  
 # - TypeScript and code quality standards
-# - ARETE framework principles
+# - Project framework principles
 # - Testing requirements
 #
 # The cursor.rules file contains the authoritative, up-to-date guidelines

@@ -1,8 +1,8 @@
 /**
- * @arete-module: RealtimeEngagementFilter
- * @arete-risk: high
- * @arete-ethics: high
- * @arete-scope: core
+ * @footnote-module: RealtimeEngagementFilter
+ * @footnote-risk: high
+ * @footnote-ethics: high
+ * @footnote-scope: core
  *
  * @description: Weighted scoring system for engagement decisions during catchup events, analyzing context, cost, and conversation dynamics
  *
@@ -20,7 +20,7 @@ import type { CostStatistics } from '../utils/pricing.js';
 import { TECHNICAL_KEYWORDS } from '../utils/CatchupFilter.js';
 
 /**
- * @arete-logger: realtimeEngagementFilter
+ * @footnote-logger: realtimeEngagementFilter
  *
  * @logs
  * Engagement decisions, scoring breakdowns, filter initialization, and error conditions
@@ -615,3 +615,4 @@ export class RealtimeEngagementFilter {
         return decision;
     }
 }
+

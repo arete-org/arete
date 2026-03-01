@@ -1,9 +1,9 @@
 /**
  * @description: Extends Discord.js types with bot-specific client properties.
- * @arete-scope interface
- * @arete-module DiscordTypeExtensions
- * @arete-risk: low - Type drift can break command registration or tooling.
- * @arete-ethics: low - Types do not change runtime behavior.
+ * @footnote-scope interface
+ * @footnote-module DiscordTypeExtensions
+ * @footnote-risk: low - Type drift can break command registration or tooling.
+ * @footnote-ethics: low - Types do not change runtime behavior.
  */
 
 import { Collection, Client as DiscordClient } from 'discord.js';
@@ -28,3 +28,4 @@ declare module 'discord.js' {
         handlers: Collection<string, unknown>;
     }
 }
+

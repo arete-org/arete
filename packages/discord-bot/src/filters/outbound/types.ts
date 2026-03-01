@@ -1,9 +1,9 @@
 /**
  * @description: Shared types for outbound message filters and pipeline composition.
- * @arete-scope: interface
- * @arete-module: OutboundFilterTypes
- * @arete-risk: low - Typing mismatches could hide filter output errors.
- * @arete-ethics: low - Type safety affects developer clarity more than user impact.
+ * @footnote-scope: interface
+ * @footnote-module: OutboundFilterTypes
+ * @footnote-risk: low - Typing mismatches could hide filter output errors.
+ * @footnote-ethics: low - Type safety affects developer clarity more than user impact.
  */
 
 export interface OutboundFilterResult {
@@ -13,3 +13,4 @@ export interface OutboundFilterResult {
 
 // Outbound filters operate on plain text and describe their edits for logging.
 export type OutboundFilter = (content: string) => OutboundFilterResult;
+

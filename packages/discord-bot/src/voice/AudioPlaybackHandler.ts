@@ -1,8 +1,8 @@
 /**
- * @arete-module: AudioPlaybackHandler
- * @arete-risk: high
- * @arete-ethics: high
- * @arete-scope: core
+ * @footnote-module: AudioPlaybackHandler
+ * @footnote-risk: high
+ * @footnote-ethics: high
+ * @footnote-scope: core
  *
  * @description: Manages AI-generated audio playback to Discord voice channels.
  *
@@ -318,3 +318,4 @@ export class AudioPlaybackHandler {
         this.pipelineCleanupTimers.clear();
     }
 }
+

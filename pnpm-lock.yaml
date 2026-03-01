@@ -264,7 +264,7 @@ importers:
 
   packages/backend:
     dependencies:
-      '@arete/contracts':
+      '@footnote/contracts':
         specifier: workspace:*
         version: link:../contracts
       better-sqlite3:
@@ -307,12 +307,12 @@ importers:
 
   packages/discord-bot:
     dependencies:
-      '@arete/contracts':
-        specifier: workspace:*
-        version: link:../contracts
       '@discordjs/voice':
         specifier: 'catalog:'
         version: 0.19.0(opusscript@0.0.8)
+      '@footnote/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@openai/agents':
         specifier: 'catalog:'
         version: 0.3.7(@cfworker/json-schema@4.1.1)(hono@4.11.3)(ws@8.18.3)(zod@4.0.17)
@@ -422,7 +422,7 @@ importers:
 
   packages/web:
     dependencies:
-      '@arete/contracts':
+      '@footnote/contracts':
         specifier: workspace:*
         version: link:../contracts
       '@marsidev/react-turnstile':

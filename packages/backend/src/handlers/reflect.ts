@@ -1,13 +1,13 @@
 /**
  * @description: Handles /api/reflect requests as the trimmed-down web chat
  * surface and dispatches AI responses with metadata.
- * @arete-scope: interface
- * @arete-module: ReflectHandler
- * @arete-risk: high - Failures block AI responses and provenance capture.
- * @arete-ethics: high - Incorrect metadata harms transparency and user trust.
+ * @footnote-scope: interface
+ * @footnote-module: ReflectHandler
+ * @footnote-risk: high - Failures block AI responses and provenance capture.
+ * @footnote-ethics: high - Incorrect metadata harms transparency and user trust.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { PostReflectRequestSchema } from '@arete/contracts/web/schemas';
+import { PostReflectRequestSchema } from '@footnote/contracts/web/schemas';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import type {
     SimpleOpenAIService,
@@ -797,10 +797,10 @@ const createReflectHandler =
                     return;
                 }
 
-                const systemPrompt = `You are Arete, an AI assistant that helps people think through tough questions while staying honest and fair. You explore multiple ethical perspectives, trace your sources, and show how you reach your conclusions. Be helpful, thoughtful, and transparent in your responses.
+                const systemPrompt = `You are Ari, an AI assistant from the Footnote project. You help people think through tough questions while staying honest and fair. You explore multiple ethical perspectives, trace your sources, and show how you reach your conclusions. Be helpful, thoughtful, and transparent in your responses.
 
 RESPONSE METADATA PAYLOAD
-After your conversational reply, leave a blank line and append a single JSON object on its own line prefixed with <ARETE_METADATA>.
+After your conversational reply, leave a blank line and append a single JSON object on its own line prefixed with <RESPONSE_METADATA>.
 This metadata records provenance and confidence for downstream systems.
 
 Required fields:
@@ -810,11 +810,11 @@ Required fields:
   - citations: array of {"title": string, "url": fully-qualified URL, "snippet"?: string} objects (use [] if none)
 
 Example:
-<ARETE_METADATA>{"provenance":"Retrieved","confidence":0.78,"tradeoffCount":1,"citations":[{"title":"Example","url":"https://example.com"}]}
+<RESPONSE_METADATA>{"provenance":"Retrieved","confidence":0.78,"tradeoffCount":1,"citations":[{"title":"Example","url":"https://example.com"}]}
 
 Guidelines:
   - Emit valid, minified JSON (no comments, no code fences, no trailing text)
-  - Always include the <ARETE_METADATA> block after every response
+  - Always include the <RESPONSE_METADATA> block after every response
   - Use "Inferred" for reasoning-based answers, "Retrieved" for fact-based, "Speculative" for uncertain answers`;
 
                 // Assemble OpenAI messages with a system prompt + user question.
@@ -928,3 +928,4 @@ Guidelines:
 };
 
 export { createReflectHandler };
+

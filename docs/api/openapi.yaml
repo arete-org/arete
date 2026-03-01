@@ -16,7 +16,7 @@ openapi: 3.1.0
 # Public API metadata
 # ====================
 info:
-    title: ARETE Backend API
+    title: Footnote Backend API
     # Versioning: bump when request/response shapes, status codes, or auth requirements change; docs-only edits can skip.
     version: 1.0.0
     license:
@@ -312,7 +312,7 @@ components:
         TraceToken:
             type: apiKey
             in: header
-            name: x-arete-trace-token
+            name: x-trace-token
             description: Shared secret for trusted trace ingestion.
         # GitHub webhook signature verification.
         GitHubWebhookSignature:

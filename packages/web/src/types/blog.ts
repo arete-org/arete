@@ -7,7 +7,7 @@ import type {
     BlogAuthor as ContractBlogAuthor,
     BlogPost as ContractBlogPost,
     BlogPostMetadata as ContractBlogPostMetadata,
-} from '@arete/contracts/web';
+} from '@footnote/contracts/web';
 
 export type BlogAuthor = ContractBlogAuthor;
 export type BlogPostMetadata = ContractBlogPostMetadata;

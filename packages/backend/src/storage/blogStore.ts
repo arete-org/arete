@@ -1,9 +1,9 @@
 /**
  * @description: Reads and writes blog post JSON payloads to backend-owned storage.
- * @arete-scope: utility
- * @arete-module: BlogStore
- * @arete-risk: moderate - Storage failures can break blog sync or serve stale data.
- * @arete-ethics: low - Blog content is public, but integrity still matters.
+ * @footnote-scope: utility
+ * @footnote-module: BlogStore
+ * @footnote-risk: moderate - Storage failures can break blog sync or serve stale data.
+ * @footnote-ethics: low - Blog content is public, but integrity still matters.
  */
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -174,3 +174,4 @@ const createBlogStore = (blogPostsDir: string) => {
 };
 
 export { createBlogStore };
+

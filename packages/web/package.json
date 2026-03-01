@@ -1,5 +1,5 @@
 {
-    "name": "@arete/web",
+    "name": "@footnote/web",
     "version": "0.0.1",
     "private": true,
     "type": "module",
@@ -10,7 +10,7 @@
         "type-check": "tsc --noEmit"
     },
     "dependencies": {
-        "@arete/contracts": "workspace:*",
+        "@footnote/contracts": "workspace:*",
         "@marsidev/react-turnstile": "catalog:",
         "react": "catalog:",
         "react-dom": "catalog:",

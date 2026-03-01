@@ -1,9 +1,9 @@
 /**
  * @description: Verifies trace metadata runtime validation behavior in shared store helpers.
- * @arete-scope: test
- * @arete-module: TraceStoreUtilsValidationTests
- * @arete-risk: low - Test-only coverage for validation edge cases.
- * @arete-ethics: low - Uses synthetic metadata payloads only.
+ * @footnote-scope: test
+ * @footnote-module: TraceStoreUtilsValidationTests
+ * @footnote-risk: low - Test-only coverage for validation edge cases.
+ * @footnote-ethics: low - Uses synthetic metadata payloads only.
  */
 
 import test from 'node:test';
@@ -84,3 +84,4 @@ test('assertValidResponseMetadata rejects missing responseId', () => {
         /responseId/i
     );
 });
+

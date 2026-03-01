@@ -1,9 +1,9 @@
 /**
  * @description: Handles GitHub webhook ingestion for blog updates.
- * @arete-scope: interface
- * @arete-module: WebhookHandler
- * @arete-risk: moderate - Malformed payloads can break sync if not guarded.
- * @arete-ethics: moderate - Accepting spoofed payloads could mislead users.
+ * @footnote-scope: interface
+ * @footnote-module: WebhookHandler
+ * @footnote-risk: moderate - Malformed payloads can break sync if not guarded.
+ * @footnote-ethics: moderate - Accepting spoofed payloads could mislead users.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { GitHubDiscussion } from '../storage/blogStore.js';
@@ -24,6 +24,8 @@ type WebhookDeps = {
     ) => boolean;
     logRequest: LogRequest;
 };
+
+const DEFAULT_WEBHOOK_REPOSITORY = 'footnote-ai/footnote';
 
 const createWebhookHandler =
     ({ writeBlogPost, verifyGitHubSignature, logRequest }: WebhookDeps) =>
@@ -187,8 +189,11 @@ const createWebhookHandler =
             }
 
             // --- Repo + category gating ---
+            const expectedRepository =
+                process.env.GITHUB_WEBHOOK_REPOSITORY?.trim() ||
+                DEFAULT_WEBHOOK_REPOSITORY;
             const repository = payload.repository as { full_name?: string };
-            if (repository.full_name !== 'arete-org/arete') {
+            if (repository.full_name !== expectedRepository) {
                 res.statusCode = 200;
                 res.setHeader(
                     'Content-Type',
@@ -257,3 +262,4 @@ const createWebhookHandler =
     };
 
 export { createWebhookHandler };
+

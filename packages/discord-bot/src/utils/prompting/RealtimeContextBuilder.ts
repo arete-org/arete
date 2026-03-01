@@ -1,9 +1,9 @@
 /**
  * @description: Builds realtime prompt context for audio sessions and participants.
- * @arete-scope: core
- * @arete-module: RealtimeContextBuilder
- * @arete-risk: high - Context errors can degrade realtime responses or routing.
- * @arete-ethics: high - Realtime transcripts impact privacy and consent.
+ * @footnote-scope: core
+ * @footnote-module: RealtimeContextBuilder
+ * @footnote-risk: high - Context errors can degrade realtime responses or routing.
+ * @footnote-ethics: high - Realtime transcripts impact privacy and consent.
  */
 import { renderPrompt } from '../env.js';
 
@@ -56,3 +56,4 @@ export class RealtimeContextBuilder {
         };
     }
 }
+

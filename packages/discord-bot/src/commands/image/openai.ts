@@ -1,9 +1,9 @@
 /**
  * @description: Calls the OpenAI Responses API for image generation and metadata handling.
- * @arete-scope: utility
- * @arete-module: ImageOpenAIClient
- * @arete-risk: high - API failures or misuse can break image delivery and cost controls.
- * @arete-ethics: high - Generates user-visible content with safety and provenance implications.
+ * @footnote-scope: utility
+ * @footnote-module: ImageOpenAIClient
+ * @footnote-risk: high - API failures or misuse can break image delivery and cost controls.
+ * @footnote-ethics: high - Generates user-visible content with safety and provenance implications.
  */
 import { OpenAI } from 'openai';
 import type {
@@ -406,3 +406,4 @@ function parseAnnotationFields(rawText: string | null): AnnotationFields {
         return { title: null, description: null, note, adjustedPrompt: null };
     }
 }
+

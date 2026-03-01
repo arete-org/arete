@@ -1,5 +1,5 @@
 # Fly app: discord bot (no HTTP service)
-app = 'arete-bot'
+app = 'footnote-discord'
 primary_region = 'ord'
 
 [build]
@@ -7,7 +7,7 @@ primary_region = 'ord'
 
 [env]
   NODE_ENV = 'production'
-  BACKEND_BASE_URL = 'http://arete-backend.internal:3000'
+  BACKEND_BASE_URL = 'http://footnote-backend.internal:3000'
 
 [processes]
   app = 'node dist/index.js'

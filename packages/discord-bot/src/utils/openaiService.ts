@@ -1,8 +1,8 @@
 /**
- * @arete-module: OpenAIService
- * @arete-risk: high
- * @arete-ethics: high
- * @arete-scope: core
+ * @footnote-module: OpenAIService
+ * @footnote-risk: high
+ * @footnote-ethics: high
+ * @footnote-scope: core
  *
  * @description: Handles all LLM interactions and API calls with high cost/resource impact.
  *
@@ -142,7 +142,7 @@ export interface OpenAIResponse {
         cost?: string;
     };
     newPresence?: ActivityOptions;
-    metadata?: AssistantMetadataPayload | null; // Parsed footer metadata emitted via <ARETE_METADATA>{...}
+    metadata?: AssistantMetadataPayload | null; // Parsed footer metadata emitted via <RESPONSE_METADATA>{...}
 }
 
 /**
@@ -248,7 +248,7 @@ export const IMAGE_DESCRIPTION_MODEL: ImageDescriptionModelType =
     IMAGE_DESCRIPTION_CONFIG.model;
 export const DEFAULT_EMBEDDING_MODEL: EmbeddingModelType =
     'text-embedding-3-small';
-const METADATA_MARKER = '<ARETE_METADATA>'; // Marker appended to chat completions so we can reliably split conversational text and metadata
+const METADATA_MARKER = '<RESPONSE_METADATA>'; // Marker appended to chat completions so we can reliably split conversational text and metadata
 
 let isDirectoryInitialized = false; // Tracks if output directories have been initialized
 
@@ -614,7 +614,7 @@ export class OpenAIService {
     }
 
     /**
-     * Splits the assistant's raw reply into the human-facing body and the optional `<ARETE_METADATA>{...}` payload.
+     * Splits the assistant's raw reply into the human-facing body and the optional `<RESPONSE_METADATA>{...}` payload.
      * If parsing fails we drop the marker so users never see stray debug text.
      * @param {string} rawOutputText - The raw output text from the OpenAI API
      * @returns {text: string; metadata: AssistantMetadataPayload | null} - The text and metadata from the OpenAI API
@@ -1131,3 +1131,4 @@ async function ensureDirectories(): Promise<void> {
         throw new Error('Failed to initialize output directories');
     }
 }
+

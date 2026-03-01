@@ -1,8 +1,8 @@
 /**
- * @arete-module: Main
- * @arete-risk: high
- * @arete-ethics: high
- * @arete-scope: core
+ * @footnote-module: Main
+ * @footnote-risk: high
+ * @footnote-ethics: high
+ * @footnote-scope: core
  *
  * @description: Main orchestration point controlling system initialization, authentication, and event routing.
  *
@@ -1080,7 +1080,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             );
             await interaction.reply({
                 content:
-                    "This feature isn't active yet. To report ethical or security issues, please follow the instructions in [SECURITY.md](https://github.com/arete-org/arete/blob/main/SECURITY.md).",
+                    "This feature isn't active yet. To report ethical or security issues, please follow the instructions in [SECURITY.md](https://github.com/footnote-ai/footnote/blob/main/SECURITY.md).",
                 flags: [1 << 6], // [1 << 6] = EPHEMERAL
             });
             return;
@@ -1258,3 +1258,4 @@ appServer.listen(WEBHOOK_PORT, () => {
   console.log(`GitHub webhook server listening on port ${WEBHOOK_PORT}`);
 });
 */
+

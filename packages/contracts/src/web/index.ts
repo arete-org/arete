@@ -1,9 +1,9 @@
 /**
  * @description: Public exports for web API contract types and runtime schemas.
- * @arete-scope: interface
- * @arete-module: WebContractsIndex
- * @arete-risk: low - Incorrect exports can cause type mismatches.
- * @arete-ethics: low - Export surface only; no runtime behavior.
+ * @footnote-scope: interface
+ * @footnote-module: WebContractsIndex
+ * @footnote-risk: low - Incorrect exports can cause type mismatches.
+ * @footnote-ethics: low - Export surface only; no runtime behavior.
  */
 
 // Shared error envelopes.
@@ -63,3 +63,4 @@ export {
     ResponseMetadataSchema,
     createSchemaResponseValidator,
 } from './schemas';
+

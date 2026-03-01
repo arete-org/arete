@@ -86,7 +86,7 @@ In plain English:
 
 The backend now imports the same runtime schemas the clients use:
 
-- `@arete/contracts/web/schemas`
+- `@footnote/contracts/web/schemas`
 
 That means:
 

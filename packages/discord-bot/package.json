@@ -1,5 +1,5 @@
 {
-    "name": "@arete/discord-bot",
+    "name": "@footnote/discord-bot",
     "version": "1.0.0",
     "private": true,
     "type": "module",
@@ -20,7 +20,7 @@
         "watch": "tsc -w"
     },
     "dependencies": {
-        "@arete/contracts": "workspace:*",
+        "@footnote/contracts": "workspace:*",
         "@discordjs/voice": "catalog:",
         "@openai/agents": "catalog:",
         "@sapphire/shapeshift": "catalog:",

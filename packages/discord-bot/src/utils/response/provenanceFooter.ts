@@ -1,9 +1,9 @@
 /**
  * @description: Builds provenance footer embeds with trace metadata and actions.
- * @arete-scope: interface
- * @arete-module: ProvenanceFooter
- * @arete-risk: moderate - Footer errors can hide provenance or break user actions.
- * @arete-ethics: high - Provenance display affects transparency and accountability.
+ * @footnote-scope: interface
+ * @footnote-module: ProvenanceFooter
+ * @footnote-risk: moderate - Footer errors can hide provenance or break user actions.
+ * @footnote-ethics: high - Provenance display affects transparency and accountability.
  */
 import { EmbedBuilder } from './EmbedBuilder.js';
 import { ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
@@ -12,7 +12,7 @@ import type {
     ResponseMetadata,
     RiskTier,
     Citation,
-} from '@arete/contracts/ethics-core';
+} from '@footnote/contracts/ethics-core';
 
 // Footer payload type: Embed plus interactive components (buttons)
 type ProvenanceFooterPayload = {
@@ -35,7 +35,7 @@ const RISK_TIER_COLORS: Record<RiskTier, string> = {
  * Builds the provenance footer embed and button components for a Discord message.
  *
  * @param responseMetadata - Metadata describing the generated response and its provenance.
- * @param webBaseUrl - Base URL for linking to the full trace; defaults to https://arete.org when falsy.
+ * @param webBaseUrl - Base URL for linking to the full trace; defaults to the configured web origin when falsy.
  */
 export function buildFooterEmbed(
     responseMetadata: ResponseMetadata,
@@ -170,3 +170,4 @@ ${citationLines}`); // Push citations to new line for readability
     // Return the ProvenanceFooterPayload - Embed plus interactive components (buttons)
     return { embeds: [embed], components: [actionRow] };
 }
+

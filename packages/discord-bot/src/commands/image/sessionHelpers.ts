@@ -1,9 +1,9 @@
 /**
  * @description: Coordinates image generation flows, retries, and embed formatting helpers.
- * @arete-scope: utility
- * @arete-module: ImageSessionHelpers
- * @arete-risk: moderate - Workflow errors can create duplicate charges or invalid responses.
- * @arete-ethics: moderate - Session behavior affects user expectations and transparency.
+ * @footnote-scope: utility
+ * @footnote-module: ImageSessionHelpers
+ * @footnote-risk: moderate - Workflow errors can create duplicate charges or invalid responses.
+ * @footnote-ethics: moderate - Session behavior affects user expectations and transparency.
  */
 import {
     ActionRowBuilder,
@@ -152,7 +152,7 @@ export async function executeImageGeneration(
 
     const finalImageBuffer = Buffer.from(finalImageBase64, 'base64');
     const extension = context.outputFormat ?? 'png';
-    const finalImageFileName = `arete-image-${Date.now()}.${extension}`;
+    const finalImageFileName = `footnote-image-${Date.now()}.${extension}`;
     let imageUrl: string | null = null;
 
     if (isCloudinaryConfigured) {
@@ -634,3 +634,4 @@ export function createImageAttachment(
 }
 
 export type { ImageGenerationContext };
+

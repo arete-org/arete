@@ -1,8 +1,8 @@
 /**
- * @arete-module: EventManager
- * @arete-risk: high
- * @arete-ethics: moderate
- * @arete-scope: core
+ * @footnote-module: EventManager
+ * @footnote-risk: high
+ * @footnote-ethics: moderate
+ * @footnote-scope: core
  *
  * @description: Manages Discord event loading and binding for the entire bot.
  *
@@ -208,3 +208,4 @@ export class EventManager {
         return this.events.length;
     }
 }
+

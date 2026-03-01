@@ -1,6 +1,6 @@
 # Decision Record: Cloudflare Turnstile Selection
 
-**Decision:** Adopt **Cloudflare Turnstile** as the human verification mechanism for ARETE web interactions.  
+**Decision:** Adopt **Cloudflare Turnstile** as the human verification mechanism for Footnote web interactions.  
 **Date:** 2025-10-27  
 **Status:** Accepted  
 **License Context:** MIT + HL3
@@ -9,8 +9,8 @@
 
 ## 1. Context
 
-ARETE’s public endpoints (e.g., API gateway, registration forms, demo interface) require protection against automated abuse.  
-A human-verification mechanism is needed to prevent spam, brute-force attempts, and scripted probes while staying consistent with ARETE’s ethical commitments to transparency, user dignity, and privacy.
+Footnote's public endpoints (e.g., API gateway, registration forms, demo interface) require protection against automated abuse.  
+A human-verification mechanism is needed to prevent spam, brute-force attempts, and scripted probes while staying consistent with the project's ethical commitments to transparency, user dignity, and privacy.
 
 Candidate solutions evaluated:
 
@@ -37,7 +37,7 @@ Turnstile will operate in _Invisible mode_ (`size: 'invisible'`, `execution: 'ex
 | **Self-hosting fit** | Requires Google scripts                                 | Works with CDN or custom backend                | Compatible with decentralized deployments         |
 | **Licensing**        | Proprietary                                             | Free under Cloudflare ToS                       | No conflict with MIT + HL3 dual license           |
 
-ARETE’s ethical stance prioritizes user autonomy and minimal data collection.  
+Footnote's ethical stance prioritizes user autonomy and minimal data collection.  
 Turnstile verifies _browser integrity_ rather than _personal identity_, aligning with the project’s guiding principle: **verify function, not essence**.
 
 ---
@@ -45,7 +45,7 @@ Turnstile verifies _browser integrity_ rather than _personal identity_, aligning
 ## 4. Alternatives Considered
 
 **reCAPTCHA:** Technically mature but inconsistent with transparency and privacy principles; conflicts with community self-hosting goals.  
-**hCaptcha:** More privacy-aware than reCAPTCHA but monetizes user attention and carries commercial license restrictions incompatible with ARETE’s open philosophy.
+**hCaptcha:** More privacy-aware than reCAPTCHA but monetizes user attention and carries commercial license restrictions incompatible with the project's open philosophy.
 
 ---
 
@@ -54,7 +54,7 @@ Turnstile verifies _browser integrity_ rather than _personal identity_, aligning
 - Introduces a limited dependency on Cloudflare infrastructure, mitigated by modular design and future pluggable verification options.
 - Improves UX and accessibility for users.
 - Reduces telemetry exposure and simplifies compliance documentation.
-- Opens a future path toward an **ARETE-native attestation system** modeled on Turnstile's privacy design.
+- Opens a future path toward a **Footnote-native attestation system** modeled on Turnstile's privacy design.
 
 ## 6. Implementation Notes
 

@@ -1,4 +1,4 @@
-# AI-Assisted Development in ARETE
+# AI-Assisted Development in Footnote
 
 Cursor and Traycer are configured to follow the project's ethical and technical principles.
 
@@ -19,7 +19,7 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 
 - **Structured logging**: All AI edits must preserve existing logging patterns
 - **Cost tracking**: Never remove `ChannelContextManager.recordLLMUsage()` calls
-- **Risk annotations**: Preserve all ARETE module annotations (`@arete-module`, `@arete-risk`, `@arete-ethics`, `@arete-scope`, `@description`, `@impact`)
+- **Risk annotations**: Preserve all current module annotations (`@footnote-module`, `@footnote-risk`, `@footnote-ethics`, `@footnote-scope`, `@description`, `@impact`)
 - **Licensing**: Maintain all license headers and provenance comments
 
 ## Process
@@ -42,7 +42,7 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 
 ## Ethics Integration
 
-- **Risk assessment**: Modules are tagged with structured annotations separating technical risk (`@arete-risk`) from ethical sensitivity (`@arete-ethics`). See the tagging format in `cursor.rules` for details.
+- **Risk assessment**: Modules are tagged with structured annotations separating technical risk (`@footnote-risk`) from ethical sensitivity (`@footnote-ethics`). See the tagging format in `cursor.rules` for details.
 - **Governance**: Decision-making modules require extra scrutiny
 - **Accountability**: All changes must maintain audit trails
 
@@ -61,11 +61,11 @@ For API boundary changes, keep OpenAPI and code links aligned:
   - `coderabbit --prompt-only -t uncommitted`
 - Limit CodeRabbit to 3 runs max per set of changes.
 
-### ARETE Module Tagging
+### Current `@footnote-*` Module Tagging
 
-- `@arete-risk`: Technical fragility (low, moderate, high)
-- `@arete-ethics`: Human impact sensitivity (low, moderate, high)
-- `@arete-scope`: Logical role (core, utility, interface, test)
+- `@footnote-risk`: Technical fragility (low, moderate, high)
+- `@footnote-ethics`: Human impact sensitivity (low, moderate, high)
+- `@footnote-scope`: Logical role (core, utility, interface, test)
 - `@description`: 1-3 line summary of module purpose
 - `@impact`: Separate Risk and Ethics impact statements
 
@@ -74,10 +74,10 @@ For API boundary changes, keep OpenAPI and code links aligned:
 ```typescript
 /**
  * @description: <1-3 lines summarizing what this module does.>
- * @arete-scope: <core|utility|interface|test>
- * @arete-module: <ModuleName>
- * @arete-risk: <low|moderate|high>
- * @arete-ethics: <low|moderate|high>
+ * @footnote-scope: <core|utility|interface|test>
+ * @footnote-module: <ModuleName>
+ * @footnote-risk: <low|moderate|high>
+ * @footnote-ethics: <low|moderate|high>
  *
  * @impact
  * Risk: <What could break or be compromised if mishandled.>
@@ -85,9 +85,9 @@ For API boundary changes, keep OpenAPI and code links aligned:
  */
 ```
 
-### ARETE Scoped Logger Tagging
+### Current `@footnote-*` Scoped Logger Tagging
 
-- `@arete-logger`: Logger module identifier (matches the child logger name)
+- `@footnote-logger`: Logger module identifier (matches the child logger name)
 - `@logs`: What specific operations, events, or data this logger logs
 - `@impact`: Separate Risk and Ethics impact statements for logging concerns
 
@@ -95,7 +95,7 @@ For API boundary changes, keep OpenAPI and code links aligned:
 
 ```typescript
 /**
- * @arete-logger: <loggerName>
+ * @footnote-logger: <loggerName>
  *
  * @logs
  * <What this scoped logger tracks and logs>
@@ -106,3 +106,4 @@ For API boundary changes, keep OpenAPI and code links aligned:
  */
 const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 ```
+

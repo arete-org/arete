@@ -1,4 +1,4 @@
-# ARETE Development Rules
+# Footnote Development Rules
 # These guide both human contributors and AI tools (Cursor, Traycer)
 # toward traceable, ethics-aligned, maintainable code.
 
@@ -92,7 +92,7 @@ export interface SimpleConfig {
 }
 ```
 
-## ARETE Framework Principles
+## Project Framework Principles
 - Reuse existing utilities (`logger.ts`, `env.ts`, `pricing.ts`, `openaiService.ts`) before adding new modules.
 - Every LLM interaction must record tokens and cost via `ChannelContextManager.recordLLMUsage()`.
 - All buffers are RAM-only (no persistence to disk or database).
@@ -100,36 +100,36 @@ export interface SimpleConfig {
 - Log every decision at debug level with structured data.
 - Keep all public interfaces serializable for future web UI integration (e.g., Cognitive Budget panel).
 
-## ARETE Module Tagging
-- Canonical reference: `docs/architecture/arete-annotations.md`.
-- Every module must include structured ARETE annotations in its JSDoc header.
+## Current `@footnote-*` Module Tagging
+- Canonical reference: `docs/architecture/footnote-annotations.md`.
+- Every module must include the current structured `@footnote-*` annotations in its JSDoc header.
 - Use this format (and order) for consistency and machine-parseability:
 
 ```typescript
 /**
  * @description: <1-3 lines summarizing what this module does.>
- * @arete-scope: <core|utility|interface|test>
- * @arete-module: <ModuleName>
- * @arete-risk: <low|moderate|high> - <What could break or be compromised if mishandled.>
- * @arete-ethics: <low|moderate|high> - <What human or governance impacts errors could cause.>
+ * @footnote-scope: <core|utility|interface|test>
+ * @footnote-module: <ModuleName>
+ * @footnote-risk: <low|moderate|high> - <What could break or be compromised if mishandled.>
+ * @footnote-ethics: <low|moderate|high> - <What human or governance impacts errors could cause.>
  */
 ```
 
-- **@arete-risk**: Technical fragility (stability, security, data integrity)
-- **@arete-ethics**: Human/governance impact (privacy, fairness, transparency, social harm)
-- **@arete-scope**: Logical role in the system (helps auto-group modules)
-- Run `pnpm validate-arete-tags` before committing; CI enforces this to guarantee standardized risk/ethics levels.
+- **@footnote-risk**: Technical fragility (stability, security, data integrity)
+- **@footnote-ethics**: Human/governance impact (privacy, fairness, transparency, social harm)
+- **@footnote-scope**: Logical role in the system (helps auto-group modules)
+- Run `pnpm validate-footnote-tags` before committing; CI enforces this to guarantee standardized risk/ethics levels.
 - Keep annotations under 10 lines for readability
 - Separate technical risk from ethical sensitivity for clarity
 - Enable future automated audit tools (e.g., `pnpm audit-risk`)
 
-## ARETE Scoped Logger Tagging
-- Every scoped logger must include structured ARETE annotations in its JSDoc header.
+## Current `@footnote-*` Scoped Logger Tagging
+- Every scoped logger must include the current structured `@footnote-*` annotations in its JSDoc header.
 - Use this format for consistency and machine-parseability:
 
 ```typescript
 /**
- * @arete-logger: <loggerName>
+ * @footnote-logger: <loggerName>
  * 
  * @logs
  * <What this scoped logger tracks and logs>
@@ -141,7 +141,7 @@ export interface SimpleConfig {
 const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 ```
 
-- **@arete-logger**: Logger module identifier (matches the child logger name)
+- **@footnote-logger**: Logger module identifier (matches the child logger name)
 - **@logs**: What specific operations, events, or data this logger logs
 - Follow the same formatting standards as module headers for consistency
 
@@ -175,7 +175,7 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 ## Pre-Review Analysis with Cursor
 - **Use Cursor for structural pre-review** before human code review to catch complexity, inconsistencies, and missing documentation.
 - This augments human review by focusing on mechanical thoroughness while preserving human judgment for logic, ethics, and integration decisions.
-- **Prerequisites**: Always run `pnpm pre-review` first to ensure ARETE-specific validation (including OpenAPI code-link checks) passes before Cursor analysis.
+- **Prerequisites**: Always run `pnpm pre-review` first to ensure project-specific validation (including OpenAPI code-link checks) passes before Cursor analysis.
 
 ### Complexity Triage
 - Prompt Cursor to identify functions that do too many things, deep conditionals, or unclear data flow.
@@ -196,25 +196,25 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 - Seed lightweight architectural review before merge decisions.
 
 ### Consistency Enforcement
-- Ensure doc comments and logging consistently follow ARETE provenance schema (risk tiers, license context, etc.).
-- Verify ARETE module tagging compliance across new code.
+- Ensure doc comments and logging consistently follow the project's provenance schema (risk tiers, license context, etc.).
+- Verify `@footnote-*` module tagging compliance across new code.
 - Check that structured logging patterns are maintained.
 
 ### Recommended Workflow
 1. **Complete implementation**
-2. **Run automated validation**: `pnpm pre-review` (validates ARETE tags, OpenAPI code links, types, linting)
+2. **Run automated validation**: `pnpm pre-review` (validates `@footnote-*` tags, OpenAPI code links, types, linting)
 3. **Use Cursor's Bugbot (Review PR)** for automated code quality analysis
-4. **Use inline chat (`Ctrl+K`)** with ARETE-specific prompts (see `.cursor/arete-prompts.md`)
+4. **Use inline chat (`Ctrl+K`)** with project-specific prompts (see `.cursor/footnote-prompts.md`)
 5. **Accept suggested simplifications or comments** in-place
 6. **Open human PR review** for logic, ethics, and integration focus
 
 ### Integration with Existing Tools
 - **Pre-review pipeline**: `pnpm pre-review`
-- **ARETE validation**: `pnpm validate-arete-tags` (enforced by CI)
+- **`@footnote-*` validation**: `pnpm validate-footnote-tags` (enforced by CI)
 - **OpenAPI linking validation**: `pnpm validate-openapi-links`
 - **Cursor tasks**: Use `.cursor/tasks.json` commands for quick access
 - **Checklist**: Follow `.cursor/pre-review-checklist.md` before Cursor analysis
-- **Prompts**: Use `.cursor/arete-prompts.md` for consistent, effective Cursor interactions
+- **Prompts**: Use `.cursor/footnote-prompts.md` for consistent, effective Cursor interactions
 
 ## Testing
 - Add or update tests for any new functionality.

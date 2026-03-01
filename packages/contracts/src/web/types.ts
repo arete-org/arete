@@ -1,9 +1,9 @@
 /**
  * @description: Shared web API contract types for request and response payloads.
- * @arete-scope: interface
- * @arete-module: WebContracts
- * @arete-risk: low - Contract drift can break client/server compatibility.
- * @arete-ethics: moderate - Contract clarity supports transparent behavior.
+ * @footnote-scope: interface
+ * @footnote-module: WebContracts
+ * @footnote-risk: low - Contract drift can break client/server compatibility.
+ * @footnote-ethics: moderate - Contract clarity supports transparent behavior.
  */
 
 import type { ResponseMetadata } from '../ethics-core';
@@ -125,3 +125,4 @@ export type ListBlogPostsResponse = BlogPostMetadata[];
  * @api.path: GET /api/blog-posts/{postId}
  */
 export type GetBlogPostResponse = BlogPost;
+

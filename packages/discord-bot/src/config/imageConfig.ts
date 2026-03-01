@@ -1,9 +1,9 @@
 /**
  * @description: Reads image command configuration with environment overrides and defaults.
- * @arete-scope: utility
- * @arete-module: ImageConfig
- * @arete-risk: moderate - Bad config can spike costs or break image generation.
- * @arete-ethics: moderate - Config affects output style and safety behavior.
+ * @footnote-scope: utility
+ * @footnote-module: ImageConfig
+ * @footnote-risk: moderate - Bad config can spike costs or break image generation.
+ * @footnote-ethics: moderate - Config affects output style and safety behavior.
  */
 import { logger } from '../utils/logger.js';
 import type {
@@ -235,3 +235,4 @@ export const imageConfig: ImageConfiguration = {
 export function getImageModelTokenMultiplier(model: ImageRenderModel): number {
     return imageConfig.tokens.modelTokenMultipliers[model] ?? 1;
 }
+

@@ -1,8 +1,8 @@
-# ARETE
+# Footnote
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Hippocratic License HL3-CORE](https://img.shields.io/static/v1?label=Hippocratic%20License&message=HL3-CORE&labelColor=5e2751&color=bc8c3d)](https://firstdonoharm.dev/version/3/0/core.html)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/arete-org/arete)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/footnote-ai/footnote)
 
 **Mindful and honest AI.**  
 Transparent, private, easy to run yourself — under your rules.
@@ -11,11 +11,9 @@ Transparent, private, easy to run yourself — under your rules.
 
 ---
 
-## What is ARETE?
+## What is Footnote?
 
-> Assistant for Realtime Ethical Thought and Evaluation  
-
-ARETE is an AI assistant that tries to show its work — Its responses carry trace metadata you can easily inspect, unlike other assistants which give you polished answers but hide the trail.  
+Footnote is an AI assistant that tries to show its work — its responses carry trace metadata you can easily inspect, unlike other assistants which give you polished answers but hide the trail.
 
 Every response includes:
 
@@ -25,13 +23,13 @@ Every response includes:
 - what constraints and safety checks were applied
 - a trace artifact suitable for review or audit
 
-ARETE is built for human oversight, rather than “just believe me.”
+Footnote is built for human oversight, rather than “just believe me.”
 
 ---
 
 ## What you can try today
 
-ARETE is a working prototype delivering these core features:
+Footnote is a working prototype delivering these core features:
 
 - **Response traces** (artifacts + metadata) stored for later inspection
 - **Risk tiering** and citations
@@ -43,7 +41,7 @@ ARETE is a working prototype delivering these core features:
 
 ## Architecture at a glance
 
-ARETE is three small services that work together:
+Footnote is three small services that work together:
 
 - **Discord bot**  
   Conversational interface in Discord (chat, images, voice)
@@ -63,58 +61,64 @@ ARETE is three small services that work together:
 
 For the minimum DIY experience, run via Docker and open the web UI.
 
-1. Clone the repository 
-  ```bash
-  git clone https://github.com/arete-org/arete.git && cd arete
-  ```
+1. Clone the repository
+
+```bash
+git clone https://github.com/footnote-ai/footnote.git && cd footnote
+```
 
 2. Create a config file
-  ```bash
-  cp .env.example .env
-  ```
+
+```bash
+cp .env.example .env
+```
 
 3. Start via Docker / Compose
-  (See [deploy/](deploy/) for the current compose topology and commands)
+   (See [deploy/](deploy/) for the current compose topology and commands)
 
 4. Open the web UI (the default URL is typically [http://localhost:5173](http://localhost:5173))
 
 ### Option B: Local dev (pnpm)
 
 1. Install dependencies
-  ```bash
-  pnpm install
-  ```
-  
-  > If pnpm isn't available yet, run `corepack enable` once (Node 16.10+), then re-run `pnpm install`.
+
+```bash
+pnpm install
+```
+
+> If pnpm isn't available yet, run `corepack enable` once (Node 16.10+), then re-run `pnpm install`.
 
 2. Configure environment variables
 
-  ```bash
-  cp .env.example .env
-  ```
-  
-  At minimum:
-  ```
-  DISCORD_TOKEN=...
-  DISCORD_CLIENT_ID=...
-  DISCORD_GUILD_ID=...
-  DISCORD_USER_ID=...
-  OPENAI_API_KEY=...
-  TRACE_API_TOKEN=...
-  INCIDENT_PSEUDONYMIZATION_SECRET=...
-  ```
-  
-  > See [.env.example](.env.example) for the full list and descriptions of optional settings.
+```bash
+cp .env.example .env
+```
+
+At minimum:
+
+```
+DISCORD_TOKEN=...
+DISCORD_CLIENT_ID=...
+DISCORD_GUILD_ID=...
+DISCORD_USER_ID=...
+OPENAI_API_KEY=...
+TRACE_API_TOKEN=...
+INCIDENT_PSEUDONYMIZATION_SECRET=...
+```
+
+> See [.env.example](.env.example) for the full list and descriptions of optional settings.
 
 3. Start the backend and web app:
-  ```bash
-  pnpm dev
-  ```
+
+```bash
+pnpm dev
+```
 
 4. Optionally start the Discord bot in another terminal:
-  ```bash
-  pnpm dev:bot
-  ```
+
+```bash
+pnpm dev:bot
+```
 
 Local dev now follows the same package boundary as production:
 
@@ -123,13 +127,13 @@ Local dev now follows the same package boundary as production:
 - Vite proxies those web requests to `BACKEND_BASE_URL`
 - the Discord bot calls `BACKEND_BASE_URL` directly
 
-If you need shared route shapes, use `@arete/contracts`. Do not import backend internals into web or discord-bot.
+If you need shared route shapes, use `@footnote/contracts`. Do not import backend internals into web or discord-bot.
 
 ---
 
 ## License
 
-ARETE is dual-licensed under MIT and the Hippocratic License v3 (HL3-CORE).
+Footnote is dual-licensed under MIT and the Hippocratic License v3 (HL3-CORE).
 
 See our [license strategy](docs/LICENSE_STRATEGY.md) for details.
 

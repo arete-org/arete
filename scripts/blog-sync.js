@@ -2,10 +2,10 @@
 
 /**
  * @description: Syncs blog posts from GitHub Discussions using GitHub App auth.
- * @arete-scope utility
- * @arete-module BlogSyncScript
- * @arete-risk: low - Script misuse can overwrite blog data or exceed API limits.
- * @arete-ethics: low - Operates on public repo content without user data.
+ * @footnote-scope utility
+ * @footnote-module BlogSyncScript
+ * @footnote-risk: low - Script misuse can overwrite blog data or exceed API limits.
+ * @footnote-ethics: low - Operates on public repo content without user data.
  */
 
 // Load environment variables from .env file
@@ -25,8 +25,10 @@ const BLOG_POSTS_DIR = path.join(
 );
 const GITHUB_APP_ID = process.env.GITHUB_APP_ID;
 const GITHUB_APP_PRIVATE_KEY_PATH = process.env.GITHUB_APP_PRIVATE_KEY_PATH;
-const REPO_OWNER = 'arete-org';
-const REPO_NAME = 'arete';
+const DEFAULT_REPO_OWNER = 'footnote-ai';
+const DEFAULT_REPO_NAME = 'footnote';
+const REPO_OWNER = process.env.GITHUB_REPO_OWNER || DEFAULT_REPO_OWNER;
+const REPO_NAME = process.env.GITHUB_REPO_NAME || DEFAULT_REPO_NAME;
 const CATEGORY_NAME = 'Blog';
 
 /**
@@ -69,7 +71,7 @@ async function getInstallationToken() {
             headers: {
                 Authorization: `Bearer ${jwt}`,
                 Accept: 'application/vnd.github.v3+json',
-                'User-Agent': 'ARETE-Blog-Sync',
+                'User-Agent': 'Footnote-Blog-Sync',
             },
         }
     );
@@ -99,7 +101,7 @@ async function getInstallationToken() {
             headers: {
                 Authorization: `Bearer ${jwt}`,
                 Accept: 'application/vnd.github.v3+json',
-                'User-Agent': 'ARETE-Blog-Sync',
+                'User-Agent': 'Footnote-Blog-Sync',
             },
         }
     );
@@ -125,7 +127,7 @@ async function fetchDiscussions() {
         headers: {
             Authorization: `token ${token}`,
             Accept: 'application/vnd.github.v3+json',
-            'User-Agent': 'ARETE-Blog-Sync',
+            'User-Agent': 'Footnote-Blog-Sync',
         },
     });
 
@@ -155,7 +157,7 @@ async function fetchCommentsCount(discussionNumber) {
             headers: {
                 Authorization: `token ${token}`,
                 Accept: 'application/vnd.github.v3+json',
-                'User-Agent': 'ARETE-Blog-Sync',
+                'User-Agent': 'Footnote-Blog-Sync',
             },
         });
 
@@ -292,3 +294,4 @@ if (require.main === module) {
 }
 
 module.exports = { syncBlog, fetchDiscussions, writeBlogPost };
+

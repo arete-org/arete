@@ -1,9 +1,9 @@
 /**
  * @description: Manages interactive image variation flows (modals, buttons, selects).
- * @arete-scope: interface
- * @arete-module: ImageVariationSessions
- * @arete-risk: moderate - Interaction bugs can lock users or duplicate requests.
- * @arete-ethics: moderate - Variation prompts influence generated content.
+ * @footnote-scope: interface
+ * @footnote-module: ImageVariationSessions
+ * @footnote-risk: moderate - Interaction bugs can lock users or duplicate requests.
+ * @footnote-ethics: moderate - Variation prompts influence generated content.
  */
 import {
     ActionRowBuilder,
@@ -575,3 +575,4 @@ export function buildPromptModal(
         new ActionRowBuilder<TextInputBuilder>().addComponents(promptInput)
     );
 }
+

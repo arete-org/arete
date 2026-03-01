@@ -1,9 +1,9 @@
 /**
  * @description: Defines ethics-core types used for provenance, risk, and metadata.
- * @arete-scope: interface
- * @arete-module: EthicsCoreRuntimeTypes
- * @arete-risk: low - Type drift can break downstream assumptions or validations.
- * @arete-ethics: low - Types document semantics without processing data.
+ * @footnote-scope: interface
+ * @footnote-module: EthicsCoreRuntimeTypes
+ * @footnote-risk: low - Type drift can break downstream assumptions or validations.
+ * @footnote-ethics: low - Types document semantics without processing data.
  */
 
 /**
@@ -54,3 +54,4 @@ export type ResponseMetadata = {
     citations: Citation[]; // Sources consulted
     imageDescriptions?: string[]; // Optional image description payloads captured during response generation
 };
+

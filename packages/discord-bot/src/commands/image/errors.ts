@@ -1,9 +1,9 @@
 /**
  * @description: Normalizes image generation errors into user-facing messages.
- * @arete-scope: utility
- * @arete-module: ImageErrorHandling
- * @arete-risk: low - Incorrect mappings can mislead users or hide recoverable issues.
- * @arete-ethics: low - Error copy affects transparency but not sensitive processing.
+ * @footnote-scope: utility
+ * @footnote-module: ImageErrorHandling
+ * @footnote-risk: low - Incorrect mappings can mislead users or hide recoverable issues.
+ * @footnote-ethics: low - Error copy affects transparency but not sensitive processing.
  */
 import { CombinedPropertyError } from '@sapphire/shapeshift';
 import { APIError } from 'openai/error';
@@ -132,3 +132,4 @@ function extractApiErrorCode(error: APIError): string | undefined {
 
     return undefined;
 }
+

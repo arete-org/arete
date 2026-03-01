@@ -1,9 +1,9 @@
 /**
  * @description: Provides shared HTTP transport utilities for Discord bot backend API calls.
- * @arete-scope: utility
- * @arete-module: DiscordApiTransport
- * @arete-risk: moderate - Transport mistakes can break bot-side backend communication.
- * @arete-ethics: moderate - Normalized error handling supports transparent fail-open behavior.
+ * @footnote-scope: utility
+ * @footnote-module: DiscordApiTransport
+ * @footnote-risk: moderate - Transport mistakes can break bot-side backend communication.
+ * @footnote-ethics: moderate - Normalized error handling supports transparent fail-open behavior.
  */
 
 import {
@@ -14,8 +14,8 @@ import {
     type ApiRequestOptions,
     type ApiRequester,
     type CreateApiTransportOptions as SharedCreateApiTransportOptions,
-} from '@arete/contracts/web/client-core';
-import type { ApiErrorResponse } from '@arete/contracts/web';
+} from '@footnote/contracts/web/client-core';
+import type { ApiErrorResponse } from '@footnote/contracts/web';
 
 export type DiscordApiClientError = ApiClientError;
 
@@ -50,3 +50,4 @@ export const createApiTransport = ({
 };
 
 export type { ApiErrorResponse, ApiJsonResult, ApiRequestOptions, ApiRequester };
+

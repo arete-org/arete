@@ -1,8 +1,8 @@
 /**
- * @arete-module: CommandHandler
- * @arete-risk: high
- * @arete-ethics: moderate
- * @arete-scope: core
+ * @footnote-module: CommandHandler
+ * @footnote-risk: high
+ * @footnote-ethics: moderate
+ * @footnote-scope: core
  *
  * @description: Manages Discord slash command deployment and registration.
  *
@@ -179,3 +179,4 @@ export class CommandHandler {
         }
     }
 }
+

@@ -1,9 +1,9 @@
 /**
  * @description: Factory for creating the incident store with env-driven configuration and pseudonymization checks.
- * @arete-scope: utility
- * @arete-module: IncidentStoreFactory
- * @arete-risk: high - Misconfiguration can block incident storage or create inconsistent data paths.
- * @arete-ethics: high - Protects against storing raw Discord identifiers without hashing.
+ * @footnote-scope: utility
+ * @footnote-module: IncidentStoreFactory
+ * @footnote-risk: high - Misconfiguration can block incident storage or create inconsistent data paths.
+ * @footnote-ethics: high - Protects against storing raw Discord identifiers without hashing.
  */
 import { logger } from '../../utils/logger.js';
 import { SqliteIncidentStore } from './sqliteIncidentStore.js';
@@ -84,3 +84,4 @@ export type {
     IncidentRecord,
     IncidentStatus,
 } from './sqliteIncidentStore.js';
+

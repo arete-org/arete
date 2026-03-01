@@ -1,8 +1,8 @@
 /**
- * @arete-module: SqliteIncidentStore
- * @arete-risk: high
- * @arete-ethics: high
- * @arete-scope: utility
+ * @footnote-module: SqliteIncidentStore
+ * @footnote-risk: high
+ * @footnote-ethics: high
+ * @footnote-scope: utility
  *
  * @description: Persists incidents and audit events to SQLite with retry/backoff handling.
  * Discord-facing identifiers are pseudonymized via HMAC to avoid storing or
@@ -365,3 +365,4 @@ export class SqliteIncidentStore {
         this.db.close();
     }
 }
+

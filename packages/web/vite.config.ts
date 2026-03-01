@@ -1,10 +1,10 @@
 // @ts-nocheck
 /**
  * @description: Configures the web Vite dev server, CSP headers, aliases, and backend proxy routing.
- * @arete-scope: interface
- * @arete-module: WebViteConfig
- * @arete-risk: moderate - Misconfigured proxy or CSP settings can break local integration and embed behavior.
- * @arete-ethics: moderate - Incorrect embed or proxy settings can weaken transparency and consent expectations around web interactions.
+ * @footnote-scope: interface
+ * @footnote-module: WebViteConfig
+ * @footnote-risk: moderate - Misconfigured proxy or CSP settings can break local integration and embed behavior.
+ * @footnote-ethics: moderate - Incorrect embed or proxy settings can weaken transparency and consent expectations around web interactions.
  */
 import { fileURLToPath, URL } from 'node:url';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -38,7 +38,6 @@ const cspPlugin = () => ({
                     // Allow embedding from production domains and localhost for development
                     // Note: localhost is included to allow dev servers to embed even when running in production mode
                     const frameAncestors = [
-                        'https://jordanmakes.fly.dev',
                         'https://ai.jordanmakes.dev',
                         'https://portfolio.jordanmakes.dev',
                         'https://jordanmakes.dev',
@@ -48,10 +47,10 @@ const cspPlugin = () => ({
                         'http://localhost:5173',
                     ];
 
-                    // Allow additional domains via ARETE_FRAME_ANCESTORS environment variable (comma-separated)
-                    if (process.env.ARETE_FRAME_ANCESTORS) {
+                    // Allow additional domains via FRAME_ANCESTORS environment variable (comma-separated)
+                    if (process.env.FRAME_ANCESTORS) {
                         const additionalDomains =
-                            process.env.ARETE_FRAME_ANCESTORS.split(',')
+                            process.env.FRAME_ANCESTORS.split(',')
                                 .map((domain) => domain.trim())
                                 .map((domain) => domain.replace(/\/+$/, '')) // Remove trailing slashes
                                 .filter((domain) => domain.length > 0);
@@ -117,7 +116,7 @@ export default defineConfig({
                 new URL('./src/components', import.meta.url)
             ),
             '@pages': fileURLToPath(new URL('./src/pages', import.meta.url)),
-            '@arete/contracts/ethics-core': fileURLToPath(
+            '@footnote/contracts/ethics-core': fileURLToPath(
                 new URL('../contracts/src/ethics-core/index.ts', import.meta.url)
             ),
             '@styles': fileURLToPath(new URL('./src/styles', import.meta.url)),
@@ -126,3 +125,4 @@ export default defineConfig({
         dedupe: ['react', 'react-dom'],
     },
 });
+

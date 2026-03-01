@@ -27,11 +27,11 @@ COPY packages/contracts/src/ packages/contracts/src/
 COPY packages/discord-bot/ packages/discord-bot/
 
 # --- Build ---
-RUN pnpm --filter @arete/contracts run build \
+RUN pnpm --filter @footnote/contracts run build \
   && pnpm exec tsc -p packages/discord-bot/tsconfig.json \
   && mkdir -p packages/discord-bot/dist/utils/prompts \
   && cp packages/discord-bot/src/utils/prompts/defaults.yaml packages/discord-bot/dist/utils/prompts/defaults.yaml \
-  && CI=true pnpm --filter @arete/discord-bot... install --prod
+  && CI=true pnpm --filter @footnote/discord-bot... install --prod
 
 # === Runtime stage ===
 FROM node:22-slim
