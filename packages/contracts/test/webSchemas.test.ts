@@ -40,14 +40,14 @@ const baseMetadata = {
 
 test('PostReflectRequestSchema enforces strict request payload rules', () => {
     assert.equal(
-        PostReflectRequestSchema.safeParse({ question: 'What is ARETE?' })
+        PostReflectRequestSchema.safeParse({ question: 'What is Footnote?' })
             .success,
         true
     );
 
     assert.equal(
         PostReflectRequestSchema.safeParse({
-            question: 'What is ARETE?',
+            question: 'What is Footnote?',
             extra: true,
         }).success,
         false
