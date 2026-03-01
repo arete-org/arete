@@ -3,7 +3,7 @@ const Footer = (): JSX.Element => (
     <footer className="site-footer">
         <div className="footer-links">
             <a
-                href="https://github.com/arete-org/arete"
+                href="https://github.com/footnote-ai/footnote"
                 target="_blank"
                 rel="noreferrer"
                 aria-label="View Footnote project on GitHub (opens in new tab)"
@@ -17,7 +17,7 @@ const Footer = (): JSX.Element => (
                 ·
             </span>
             <a
-                href="https://github.com/arete-org/arete/discussions"
+                href="https://github.com/footnote-ai/footnote/discussions"
                 target="_blank"
                 rel="noreferrer"
                 aria-label="Join the discussion on GitHub (opens in new tab)"
@@ -31,7 +31,7 @@ const Footer = (): JSX.Element => (
                 ·
             </span>
             <a
-                href="https://github.com/arete-org/arete/blob/main/docs/Philosophy.md"
+                href="https://github.com/footnote-ai/footnote/blob/main/docs/Philosophy.md"
                 target="_blank"
                 rel="noreferrer"
                 aria-label="Read Footnote philosophy document (opens in new tab)"

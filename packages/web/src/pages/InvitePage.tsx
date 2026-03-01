@@ -112,13 +112,13 @@ const InvitePage: React.FC = () => {
                                         paddingTop: '3rem',
                                     }}
                                 >
-                                    {`git clone https://github.com/arete-org/arete.git && cd arete`}
+                                    {`git clone https://github.com/footnote-ai/footnote.git && cd footnote`}
                                 </pre>
                                 <button
                                     className="cta-button secondary"
                                     onClick={async () => {
                                         try {
-                                            const cloneCommands = `git clone https://github.com/arete-org/arete.git && cd arete`;
+                                            const cloneCommands = `git clone https://github.com/footnote-ai/footnote.git && cd footnote`;
                                             await navigator.clipboard.writeText(
                                                 cloneCommands
                                             );
@@ -135,7 +135,7 @@ const InvitePage: React.FC = () => {
                                                 document.createElement(
                                                     'textarea'
                                                 );
-                                            textArea.value = `git clone https://github.com/arete-org/arete.git && cd arete`;
+                                            textArea.value = `git clone https://github.com/footnote-ai/footnote.git && cd footnote`;
                                             document.body.appendChild(textArea);
                                             textArea.select();
                                             document.execCommand('copy');
@@ -1292,7 +1292,7 @@ WEB_BASE_URL=https://your-domain.com       # Base URL for web server (String)`}
                                     Comprehensive setup and configuration guides
                                 </p>
                                 <a
-                                    href="https://github.com/arete-org/arete/blob/main/README.md"
+                                    href="https://github.com/footnote-ai/footnote/blob/main/README.md"
                                     className="cta-button"
                                     target="_blank"
                                     rel="noopener noreferrer"
@@ -1319,7 +1319,7 @@ WEB_BASE_URL=https://your-domain.com       # Base URL for web server (String)`}
                                 <h3>Support</h3>
                                 <p>Get help from the community</p>
                                 <a
-                                    href="https://github.com/arete-org/arete/issues"
+                                    href="https://github.com/footnote-ai/footnote/issues"
                                     className="cta-button"
                                     target="_blank"
                                     rel="noopener noreferrer"

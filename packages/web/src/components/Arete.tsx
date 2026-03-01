@@ -44,7 +44,7 @@ const Arete = (): JSX.Element => (
                     </a>
                     <a
                         className="cta-button secondary"
-                        href="https://github.com/arete-org/arete"
+                        href="https://github.com/footnote-ai/footnote"
                         target="_blank"
                         rel="noreferrer"
                         aria-label="View Footnote project on GitHub (opens in new tab)"

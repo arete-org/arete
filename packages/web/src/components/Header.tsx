@@ -90,7 +90,7 @@ const Header = ({ breadcrumbItems }: HeaderProps): JSX.Element => {
                     )}
                     <a
                         className="header-button secondary"
-                        href="https://github.com/arete-org/arete"
+                        href="https://github.com/footnote-ai/footnote"
                         target="_blank"
                         rel="noreferrer"
                         aria-label="View Footnote project on GitHub (opens in new tab)"
