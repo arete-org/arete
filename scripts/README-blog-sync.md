@@ -14,7 +14,11 @@ This utility allows you to manually synchronize blog posts from GitHub Discussio
     ```bash
     export GITHUB_APP_ID=your_app_id_here
     export GITHUB_APP_PRIVATE_KEY_PATH=./keys/github-app-key.pem
+    export GITHUB_REPO_OWNER=footnote-ai
+    export GITHUB_REPO_NAME=footnote
     ```
+
+    `GITHUB_REPO_OWNER` and `GITHUB_REPO_NAME` are optional. They default to `footnote-ai` and `footnote`.
 
 ## Usage
 

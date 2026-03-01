@@ -25,6 +25,8 @@ type WebhookDeps = {
     logRequest: LogRequest;
 };
 
+const DEFAULT_WEBHOOK_REPOSITORY = 'footnote-ai/footnote';
+
 const createWebhookHandler =
     ({ writeBlogPost, verifyGitHubSignature, logRequest }: WebhookDeps) =>
     /**
@@ -187,8 +189,11 @@ const createWebhookHandler =
             }
 
             // --- Repo + category gating ---
+            const expectedRepository =
+                process.env.GITHUB_WEBHOOK_REPOSITORY?.trim() ||
+                DEFAULT_WEBHOOK_REPOSITORY;
             const repository = payload.repository as { full_name?: string };
-            if (repository.full_name !== 'arete-org/arete') {
+            if (repository.full_name !== expectedRepository) {
                 res.statusCode = 200;
                 res.setHeader(
                     'Content-Type',
