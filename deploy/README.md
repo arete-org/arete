@@ -88,6 +88,7 @@ Services:
 ## Notes
 
 - Only the web service is exposed on host port 8080 (`http://localhost:8080`) to avoid admin privileges.
-- The backend listens internally on port 3000 and stores data in `/data` (Docker volume: `arete-data`).
+- The backend listens internally on port 3000 and stores data in `/data` (Docker volume: `footnote-data`).
+- If you have an older local setup using the `arete-data` volume, migrate or rename that volume before removing it.
 - Blog post JSONs are stored in backend-owned storage under `/data/blog-posts` and served via backend endpoints.
 - The web app fetches runtime config from `/config.json` (proxied to the backend) to read `TURNSTILE_SITE_KEY`.
