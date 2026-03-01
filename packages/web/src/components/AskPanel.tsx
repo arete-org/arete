@@ -21,7 +21,7 @@ declare global {
 const FALLBACK_REFLECTION =
     'I was unable to generate a response - please try again later.';
 
-const MeetArete = (): JSX.Element => {
+const AskPanel = (): JSX.Element => {
     const [question, setQuestion] = useState('');
     const [status, setStatus] = useState('');
     const [answer, setAnswer] = useState('');
@@ -650,4 +650,4 @@ const MeetArete = (): JSX.Element => {
     );
 };
 
-export default MeetArete;
+export default AskPanel;
