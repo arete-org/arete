@@ -146,9 +146,9 @@ const DEFAULT_COST_ESTIMATOR_CONFIG = {
 /**
  * Default bot mention names for engagement detection
  * @type {string[]}
- * @property {string[]} BOT_MENTION_NAMES - Comma-separated list of names the bot responds to (default: "arete,ari")
+ * @property {string[]} BOT_MENTION_NAMES - Comma-separated list of names the bot responds to (default: "footnote,ari")
  */
-const DEFAULT_BOT_MENTION_NAMES = ['arete', 'ari'] as const;
+const DEFAULT_BOT_MENTION_NAMES = ['footnote', 'ari'] as const;
 
 /**
  * Default engagement scoring weights (0-1 range, higher = more influence)

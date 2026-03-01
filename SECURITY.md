@@ -23,7 +23,7 @@ If you discover a **security**, **privacy**, or **ethical-safety** issue (such a
 
 1. **Do not open a public GitHub issue.**  
    Instead, email the maintainer directly:  
-   **security.arete@proton.me**
+   **footnote-security@protonmail.com**
 
 2. Include:
     - A clear description of the issue and potential impact.
