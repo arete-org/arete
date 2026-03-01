@@ -3,7 +3,7 @@ import Header from '@components/Header';
 import AskMeAnything from '@components/AskMeAnything';
 
 /**
- * EmbedPage component provides a minimal embeddable version of ARETE
+ * EmbedPage component provides a minimal embeddable version of Footnote
  * that includes the header, title/subtitle, "I'm Arí" section, and AskMeAnything.
  * Designed for iframe embedding in external sites.
  * Automatically communicates height to parent window to eliminate scrollbars.
@@ -43,7 +43,7 @@ const EmbedPage = (): JSX.Element => {
 
             // Debug logging (can be removed in production)
             if (process.env.NODE_ENV === 'development') {
-                console.log('[ARETE Embed] Sending height:', height);
+                console.log('[Footnote Embed] Sending height:', height);
             }
 
             window.parent.postMessage(
@@ -109,7 +109,7 @@ const EmbedPage = (): JSX.Element => {
 
                 <div className="arete" aria-labelledby="arete-title">
                     <div className="arete-background" aria-hidden="true">
-                        {/* Symbolic constellation representing ARETE's ethical framework. */}
+                        {/* Symbolic constellation representing Footnote's ethical framework. */}
                         <svg
                             viewBox="0 0 320 120"
                             role="presentation"

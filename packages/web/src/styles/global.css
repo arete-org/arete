@@ -1,5 +1,5 @@
 /*
-  Simplified ARETE landing page styles
+  Simplified Footnote landing page styles
   Organized for maintainability and clarity
 */
 
@@ -659,7 +659,7 @@ section:has(.site-header-sticky) {
         color-mix(in srgb, var(--accent-hover) 55%, transparent 45%);
 }
 
-/* ===== MEET ARETE ===== */
+/* ===== MEET FOOTNOTE ===== */
 .meet-copy {
     width: 100%;
 }
@@ -1729,7 +1729,7 @@ div.interaction-status:not(.interaction-status-visible) *,
     }
 }
 
-/* ===== ARETE SECTION ===== */
+/* ===== FOOTNOTE SECTION ===== */
 .arete {
     position: relative;
     overflow: hidden;
@@ -3056,7 +3056,7 @@ kbd {
         gap: 0.5rem;
     }
 
-    /* Keep ARETE mark at full size - don't shrink yet */
+    /* Keep the Footnote mark at full size - don't shrink yet */
     .site-tagline {
         font-size: 0.85rem;
     }
@@ -3080,7 +3080,7 @@ kbd {
         gap: 0.35rem;
     }
 
-    /* Only shrink ARETE mark at 400px and below */
+    /* Only shrink the Footnote mark at 400px and below */
     .site-mark {
         font-size: 1.5rem;
         letter-spacing: 0.16em;
@@ -3103,7 +3103,7 @@ kbd {
 }
 
 @media (max-width: 350px) {
-    /* Further shrink ARETE mark only at very small sizes */
+    /* Further shrink the Footnote mark only at very small sizes */
     .site-mark {
         font-size: 1.3rem;
         letter-spacing: 0.12em;

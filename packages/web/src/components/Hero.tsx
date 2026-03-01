@@ -1,7 +1,7 @@
 import Header from './Header';
 import AskMeAnything from './AskMeAnything';
 
-// Hero banner introduces ARETE's tone and provides the primary calls to action.
+// Hero banner introduces Footnote's tone and provides the primary calls to action.
 const Hero = (): JSX.Element => {
     // No breadcrumbs on home page
     const breadcrumbItems: never[] = [];
@@ -18,7 +18,7 @@ const Hero = (): JSX.Element => {
 
                 <div className="arete" aria-labelledby="arete-title">
                     <div className="arete-background" aria-hidden="true">
-                        {/* Symbolic constellation representing ARETE's ethical framework. */}
+                        {/* Symbolic constellation representing Footnote's ethical framework. */}
                         <svg
                             viewBox="0 0 320 120"
                             role="presentation"

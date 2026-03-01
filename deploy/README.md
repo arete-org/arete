@@ -29,25 +29,25 @@ Services:
   Turnstile protects public endpoints from abuse.  
   If **both keys** are set, CAPTCHA is enforced.  
   If **neither key** is set, CAPTCHA is skipped.
-  ```env
-  TURNSTILE_SITE_KEY=...
-  TURNSTILE_SECRET_KEY=...
-  ```
+    ```env
+    TURNSTILE_SITE_KEY=...
+    TURNSTILE_SECRET_KEY=...
+    ```
 - **Cloudinary (image uploads)**  
   If Cloudinary credentials are provided, images can be uploaded and referenced in traces.  
   If not, the system falls back to attaching images directly in Discord.
-  ```env
-  CLOUDINARY_CLOUD_NAME=...
-  CLOUDINARY_API_KEY=...
-  CLOUDINARY_API_SECRET=...
-  ```
-  > If these are missing, images are still delivered via Discord attachments.
+    ```env
+    CLOUDINARY_CLOUD_NAME=...
+    CLOUDINARY_API_KEY=...
+    CLOUDINARY_API_SECRET=...
+    ```
+    > If these are missing, images are still delivered via Discord attachments.
 - **Storage Path**  
   Response traces are stored in SQLite:
-  ```env
-  PROVENANCE_SQLITE_PATH=/data/provenance.db
-  ```
-  > On Fly.io, `/data` is backed by a persistent volume. On other hosts, point this path at a durable directory.
+    ```env
+    PROVENANCE_SQLITE_PATH=/data/provenance.db
+    ```
+    > On Fly.io, `/data` is backed by a persistent volume. On other hosts, point this path at a durable directory.
 
 ### Optional Environment Variables
 
@@ -89,6 +89,5 @@ Services:
 
 - Only the web service is exposed on host port 8080 (`http://localhost:8080`) to avoid admin privileges.
 - The backend listens internally on port 3000 and stores data in `/data` (Docker volume: `footnote-data`).
-- If you have an older local setup using the `arete-data` volume, migrate or rename that volume before removing it.
 - Blog post JSONs are stored in backend-owned storage under `/data/blog-posts` and served via backend endpoints.
 - The web app fetches runtime config from `/config.json` (proxied to the backend) to read `TURNSTILE_SITE_KEY`.

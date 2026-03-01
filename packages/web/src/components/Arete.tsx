@@ -1,8 +1,8 @@
-// Section explaining ARETE's philosophy and commitment to ethical AI.
+// Section explaining Footnote's philosophy and commitment to transparent AI.
 const Arete = (): JSX.Element => (
     <section className="arete" aria-labelledby="arete-title">
         <div className="arete-background" aria-hidden="true">
-            {/* Symbolic constellation representing ARETE's ethical framework. */}
+            {/* Symbolic constellation representing Footnote's ethical framework. */}
             <svg viewBox="0 0 320 120" role="presentation" focusable="false">
                 <g className="arete-constellation">
                     <circle cx="30" cy="60" r="4" />
