@@ -5,7 +5,7 @@
  * @arete-risk: low - Config fetch failures only disable optional client features.
  * @arete-ethics: low - Exposes only non-sensitive configuration to the client.
  */
-import type { GetRuntimeConfigResponse } from '@arete/contracts/web';
+import type { GetRuntimeConfigResponse } from '@footnote/contracts/web';
 import { api } from './api';
 
 export type RuntimeConfig = GetRuntimeConfigResponse;

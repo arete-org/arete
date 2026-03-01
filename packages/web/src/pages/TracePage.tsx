@@ -15,7 +15,7 @@ import { Link, useParams } from 'react-router-dom';
 import type {
     GetTraceResponse,
     GetTraceStaleResponse,
-} from '@arete/contracts/web';
+} from '@footnote/contracts/web';
 import { api, isApiClientError } from '../utils/api';
 // Define the actual server response metadata structure
 type ServerMetadata = GetTraceResponse & {

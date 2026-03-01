@@ -11,12 +11,12 @@ import type {
     GetTraceStaleResponse,
     PostTracesRequest,
     PostTracesResponse,
-} from '@arete/contracts/web';
+} from '@footnote/contracts/web';
 import {
     GetTraceApiResponseSchema,
     PostTracesResponseSchema,
     createSchemaResponseValidator,
-} from '@arete/contracts/web/schemas';
+} from '@footnote/contracts/web/schemas';
 import type { ApiJsonResult, ApiRequester } from './client.js';
 
 export type CreateTraceApiOptions = {

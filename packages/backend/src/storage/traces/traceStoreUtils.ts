@@ -8,7 +8,7 @@
  */
 
 import type { ResponseMetadata } from '../../ethics-core/index.js';
-import { ResponseMetadataSchema } from '@arete/contracts/web/schemas';
+import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 
 export const traceStoreJsonReplacer = (_key: string, value: unknown) => {
     if (value instanceof URL) {

@@ -11,7 +11,7 @@ import type {
     RiskTier,
     Provenance,
     Citation,
-} from '@arete/contracts/ethics-core';
+} from '@footnote/contracts/ethics-core';
 import { AssistantMetadataPayload } from '../openaiService.js';
 
 interface RuntimeContext {

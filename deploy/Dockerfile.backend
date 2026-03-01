@@ -29,9 +29,9 @@ COPY packages/backend/src/ packages/backend/src/
 COPY packages/contracts/src/ packages/contracts/src/
 
 # --- Build ---
-RUN pnpm --filter @arete/contracts run build \
-  && pnpm --filter @arete/backend run build \
-  && CI=true pnpm --filter @arete/backend... install --prod
+RUN pnpm --filter @footnote/contracts run build \
+  && pnpm --filter @footnote/backend run build \
+  && CI=true pnpm --filter @footnote/backend... install --prod
 
 # --- Runtime ---
 FROM node:22-slim

@@ -127,7 +127,7 @@ Local dev now follows the same package boundary as production:
 - Vite proxies those web requests to `BACKEND_BASE_URL`
 - the Discord bot calls `BACKEND_BASE_URL` directly
 
-If you need shared route shapes, use `@arete/contracts`. Do not import backend internals into web or discord-bot.
+If you need shared route shapes, use `@footnote/contracts`. Do not import backend internals into web or discord-bot.
 
 ---
 

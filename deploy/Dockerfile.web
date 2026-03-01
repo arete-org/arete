@@ -24,8 +24,8 @@ COPY packages/backend/src/ packages/backend/src/
 COPY packages/contracts/src/ packages/contracts/src/
 
 # --- Build ---
-RUN pnpm --filter @arete/contracts run build \
-  && pnpm --filter @arete/web run build
+RUN pnpm --filter @footnote/contracts run build \
+  && pnpm --filter @footnote/web run build
 
 # === Runtime stage ===
 FROM caddy:2.10.2-alpine

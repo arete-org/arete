@@ -116,7 +116,7 @@ export default defineConfig({
                 new URL('./src/components', import.meta.url)
             ),
             '@pages': fileURLToPath(new URL('./src/pages', import.meta.url)),
-            '@arete/contracts/ethics-core': fileURLToPath(
+            '@footnote/contracts/ethics-core': fileURLToPath(
                 new URL('../contracts/src/ethics-core/index.ts', import.meta.url)
             ),
             '@styles': fileURLToPath(new URL('./src/styles', import.meta.url)),

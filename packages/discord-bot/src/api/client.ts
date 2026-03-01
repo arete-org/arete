@@ -14,8 +14,8 @@ import {
     type ApiRequestOptions,
     type ApiRequester,
     type CreateApiTransportOptions as SharedCreateApiTransportOptions,
-} from '@arete/contracts/web/client-core';
-import type { ApiErrorResponse } from '@arete/contracts/web';
+} from '@footnote/contracts/web/client-core';
+import type { ApiErrorResponse } from '@footnote/contracts/web';
 
 export type DiscordApiClientError = ApiClientError;
 

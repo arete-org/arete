@@ -15,19 +15,19 @@ import type {
     ListBlogPostsResponse,
     PostReflectRequest,
     PostReflectResponse,
-} from '@arete/contracts/web';
+} from '@footnote/contracts/web';
 import {
     GetTraceApiResponseSchema,
     PostReflectResponseSchema,
     createSchemaResponseValidator,
-} from '@arete/contracts/web/schemas';
+} from '@footnote/contracts/web/schemas';
 import {
     createApiTransport,
     isApiClientError as isSharedApiClientError,
     type ApiClientError,
     type ApiJsonResult,
     type CreateApiTransportOptions,
-} from '@arete/contracts/web/client-core';
+} from '@footnote/contracts/web/client-core';
 
 type CreateWebApiClientOptions = CreateApiTransportOptions;
 

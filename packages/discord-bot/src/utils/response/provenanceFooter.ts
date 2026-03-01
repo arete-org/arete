@@ -12,7 +12,7 @@ import type {
     ResponseMetadata,
     RiskTier,
     Citation,
-} from '@arete/contracts/ethics-core';
+} from '@footnote/contracts/ethics-core';
 
 // Footer payload type: Embed plus interactive components (buttons)
 type ProvenanceFooterPayload = {

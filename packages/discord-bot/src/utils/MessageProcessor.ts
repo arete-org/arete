@@ -47,7 +47,7 @@ import {
 } from '../commands/image/contextResolver.js';
 import { buildResponseMetadata } from './response/metadata.js';
 import { buildFooterEmbed } from './response/provenanceFooter.js';
-import type { ResponseMetadata } from '@arete/contracts/ethics-core';
+import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { botApi, isDiscordApiClientError } from '../api/botApi.js';
 import type {
     ImageBackgroundType,

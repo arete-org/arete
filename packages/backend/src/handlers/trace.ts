@@ -6,7 +6,7 @@
  * @arete-ethics: high - Provenance access impacts user trust and auditability.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { PostTracesRequestSchema } from '@arete/contracts/web/schemas';
+import { PostTracesRequestSchema } from '@footnote/contracts/web/schemas';
 import type { ResponseMetadata } from '../ethics-core/index.js';
 import type { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { logger } from '../utils/logger.js';

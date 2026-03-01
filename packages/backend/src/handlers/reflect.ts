@@ -7,7 +7,7 @@
  * @arete-ethics: high - Incorrect metadata harms transparency and user trust.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { PostReflectRequestSchema } from '@arete/contracts/web/schemas';
+import { PostReflectRequestSchema } from '@footnote/contracts/web/schemas';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import type {
     SimpleOpenAIService,

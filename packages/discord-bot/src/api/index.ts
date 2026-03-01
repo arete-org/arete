@@ -54,4 +54,4 @@ export { isDiscordApiClientError } from './client.js';
 export type {
     PostTracesRequest,
     PostTracesResponse,
-} from '@arete/contracts/web';
+} from '@footnote/contracts/web';

@@ -916,7 +916,7 @@ WEB_BASE_URL=https://your-domain.com       # Base URL for web server (String)`}
                         </p>
                         <p>
                             To run only the web UI, use:{' '}
-                            <code>pnpm --filter @arete/web dev</code>
+                            <code>pnpm --filter @footnote/web dev</code>
                         </p>
                     </div>
 

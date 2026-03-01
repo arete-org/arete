@@ -15,7 +15,7 @@ import {
     SupportedModel,
 } from '../openaiService.js';
 import { ActivityOptions } from 'discord.js';
-import type { RiskTier } from '@arete/contracts/ethics-core';
+import type { RiskTier } from '@footnote/contracts/ethics-core';
 import { DEFAULT_IMAGE_OUTPUT_COMPRESSION } from '../../commands/image/constants.js';
 import type { ImageQualityType } from '../../commands/image/types.js';
 
