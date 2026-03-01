@@ -146,10 +146,10 @@ class SimpleOpenAIService {
         logger.debug('=== Raw AI Response Debug ===');
         logger.debug(`Raw content length: ${rawContent.length}`);
         logger.debug(
-            `Contains ARETE_METADATA: ${rawContent.includes('<ARETE_METADATA>')}`
+            `Contains FOOTNOTE_METADATA: ${rawContent.includes('<FOOTNOTE_METADATA>')}`
         );
-        if (rawContent.includes('<ARETE_METADATA>')) {
-            const metadataStart = rawContent.indexOf('<ARETE_METADATA>');
+        if (rawContent.includes('<FOOTNOTE_METADATA>')) {
+            const metadataStart = rawContent.indexOf('<FOOTNOTE_METADATA>');
             logger.debug(
                 `Metadata block: ${rawContent.substring(metadataStart, metadataStart + 200)}`
             );
@@ -157,7 +157,7 @@ class SimpleOpenAIService {
         logger.debug('============================');
 
         // --- Metadata extraction ---
-        // Extract the <ARETE_METADATA> block without leaking it into the user-visible response.
+        // Extract the <FOOTNOTE_METADATA> block without leaking it into the user-visible response.
         const { normalizedText, metadata: parsedMetadata } =
             extractTextAndMetadata(rawContent);
 

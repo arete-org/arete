@@ -61,7 +61,7 @@ Footnote's embed automatically communicates its height to the parent window, all
 
 ```html
 <iframe
-    id="arete-embed"
+    id="footnote-embed"
     src="https://ai.jordanmakes.dev/embed"
     width="100%"
     frameborder="0"
@@ -72,7 +72,7 @@ Footnote's embed automatically communicates its height to the parent window, all
 
 <script>
     (function () {
-        const iframe = document.getElementById('arete-embed');
+        const iframe = document.getElementById('footnote-embed');
         if (!iframe) {
             console.warn('Footnote embed: iframe element not found');
             return;
@@ -87,7 +87,7 @@ Footnote's embed automatically communicates its height to the parent window, all
             // Optional: Validate origin for security (recommended in production)
             // if (event.origin !== 'https://ai.jordanmakes.dev') return;
 
-            if (event.data && event.data.type === 'arete-embed-height') {
+            if (event.data && event.data.type === 'footnote-embed-height') {
                 const newHeight = event.data.height;
                 if (newHeight && newHeight > 0) {
                     iframe.style.height = newHeight + 'px';
@@ -145,7 +145,7 @@ If you're not using dynamic height, the embed route content typically requires a
     <body>
         <div class="embed-container">
             <iframe
-                id="arete-embed"
+                id="footnote-embed"
                 src="https://ai.jordanmakes.dev/embed"
                 allow="clipboard-read; clipboard-write"
                 title="Footnote - Ethics-first AI assistant"
@@ -154,7 +154,7 @@ If you're not using dynamic height, the embed route content typically requires a
 
         <script>
             (function () {
-                const iframe = document.getElementById('arete-embed');
+                const iframe = document.getElementById('footnote-embed');
                 if (!iframe) {
                     console.warn('Footnote embed: iframe element not found');
                     return;
@@ -171,7 +171,7 @@ If you're not using dynamic height, the embed route content typically requires a
 
                     if (
                         event.data &&
-                        event.data.type === 'arete-embed-height'
+                        event.data.type === 'footnote-embed-height'
                     ) {
                         const newHeight = event.data.height;
                         if (newHeight && newHeight > 0) {
@@ -221,7 +221,7 @@ If you see scrollbars in the iframe:
     });
     ```
 
-3. **Ensure iframe ID matches**: The iframe must have `id="arete-embed"` (or update the script to match your ID).
+3. **Ensure iframe ID matches**: The iframe must have `id="footnote-embed"` (or update the script to match your ID).
 
 4. **Check iframe scrolling attribute**: Make sure `scrolling="no"` is set on the iframe, or add `iframe.style.overflow = 'hidden'`.
 
@@ -243,7 +243,7 @@ If you see scrollbars in the iframe:
 
 - **Mobile responsiveness**: Shared `global.css` applies additional padding and stacking below ~560px and ~480px. At 320–414px, the Footnote intro and AMA form stack vertically; keep the iframe container at `width: 100%` with no CSS transforms to avoid forced zoom/scroll.
 - **Header links**: On `/embed`, `Setup` and `Blog` buttons automatically open in a new tab with `target="_blank"`/`rel="noopener noreferrer"`. GitHub always opens in a new tab.
-- **Height messaging**: The embed posts `arete-embed-height` messages on load, resize, mutations, and a 500ms interval. Ensure the parent listener stays attached and validates origin as needed.
+- **Height messaging**: The embed posts `footnote-embed-height` messages on load, resize, mutations, and a 500ms interval. Ensure the parent listener stays attached and validates origin as needed.
 - **Trimmed UI**: The embed shows only the header, hero copy, Footnote intro, and Ask Me Anything. No blog grid or other site sections render.
 - **Iframe container**: Prefer dynamic height (listener above) over hard-coding short heights; if hard-coding, use at least 800px and let the iframe scroll be hidden.
 

@@ -23,7 +23,7 @@ const supportsLocalStorage = (): boolean =>
     typeof window !== 'undefined' && !!window.localStorage;
 
 // Dedicate a storage key so the preference persists between visits.
-const STORAGE_KEY = 'arete-theme-preference';
+const STORAGE_KEY = 'footnote-theme-preference';
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 

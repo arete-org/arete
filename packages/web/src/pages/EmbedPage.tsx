@@ -47,7 +47,7 @@ const EmbedPage = (): JSX.Element => {
             }
 
             window.parent.postMessage(
-                { type: 'arete-embed-height', height },
+                { type: 'footnote-embed-height', height },
                 '*' // Allow any origin - parent should validate origin for security
             );
         };

@@ -152,7 +152,7 @@ export async function executeImageGeneration(
 
     const finalImageBuffer = Buffer.from(finalImageBase64, 'base64');
     const extension = context.outputFormat ?? 'png';
-    const finalImageFileName = `arete-image-${Date.now()}.${extension}`;
+    const finalImageFileName = `footnote-image-${Date.now()}.${extension}`;
     let imageUrl: string | null = null;
 
     if (isCloudinaryConfigured) {

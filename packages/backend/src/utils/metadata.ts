@@ -8,7 +8,7 @@
 import { logger } from './logger.js';
 
 // --- Marker configuration ---
-const METADATA_MARKER = '<ARETE_METADATA>';
+const METADATA_MARKER = '<FOOTNOTE_METADATA>';
 
 type MetadataParseResult = {
     normalizedText: string;
@@ -16,7 +16,7 @@ type MetadataParseResult = {
 };
 
 /**
- * Extracts text and metadata from AI response that may contain <ARETE_METADATA> payload.
+ * Extracts text and metadata from AI response that may contain <FOOTNOTE_METADATA> payload.
  */
 function extractTextAndMetadata(
     rawOutputText: string | null | undefined

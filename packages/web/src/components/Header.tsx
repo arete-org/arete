@@ -1,5 +1,5 @@
 /**
- * Header component displays the site header with ARETE title, breadcrumb trail, navigation buttons, and theme toggle.
+ * Header component displays the site header with Footnote title, breadcrumb trail, navigation buttons, and theme toggle.
  * This header is sticky and follows the user as they scroll, providing consistent navigation.
  */
 import { Link, useLocation } from 'react-router-dom';

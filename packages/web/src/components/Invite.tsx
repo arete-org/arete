@@ -1,4 +1,4 @@
-// Sequence describing how to self-host ARETE without losing control of the infrastructure.
+// Sequence describing how to self-host Footnote without losing control of the infrastructure.
 interface InviteStep {
     title: string;
     description: string;
