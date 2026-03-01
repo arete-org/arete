@@ -38,8 +38,6 @@ Depending on the question, that can include:
 - key assumptions,
 - uncertainty when it’s filling in gaps.
 
-Links: [trace page source](../packages/web/src/pages/TracePage.tsx), [OpenAPI trace definitions](./api/openapi.yaml), [citation handling](../packages/discord-bot/src/utils/openaiService.ts)
-
 #### Brief example
 
 **Not checkable:**
@@ -49,6 +47,8 @@ Links: [trace page source](../packages/web/src/pages/TracePage.tsx), [OpenAPI tr
 **More checkable:**
 
 > “Yes—based on the cited source and the stored trace. I’m assuming you mean the current implementation; if the deployed version or date is different, the answer changes.”
+
+Links: [trace page source](../packages/web/src/pages/TracePage.tsx), [OpenAPI trace definitions](./api/openapi.yaml), [citation handling](../packages/discord-bot/src/utils/openaiService.ts)
 
 ## Why build it this way
 
@@ -124,5 +124,6 @@ Some open-source projects (for example, initiatives like “Facet” in the expl
 
 - Project history: [History.md](./History.md)
 - Architecture: [docs/architecture](./architecture/)
-- Roadmap/issues: [GitHub issues](https://github.com/arete-org/arete/issues), [GitHub discussions](https://github.com/arete-org/arete/discussions)
+- Key decisions: [docs/decisions](./decisions/)
+- Roadmap: [GitHub issues](https://github.com/arete-org/arete/issues), [GitHub discussions](https://github.com/arete-org/arete/discussions)
 - Licensing: [LICENSE_STRATEGY.md](./LICENSE_STRATEGY.md) (MIT + HL3)

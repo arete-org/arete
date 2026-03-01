@@ -46,8 +46,6 @@ Today Footnote is:
 Current features include: Trace metadata storage and retrieval, citations, risk tiering, and self-hosting support. The user-facing experience today centers on the web demo, Discord interactions, and a trace viewer you can open to view what shaped a response without digging through logs.
 
 Demo: [ai.jordanmakes.dev](https://ai.jordanmakes.dev)
-Repo: [github.com/arete-org/arete](https://github.com/arete-org/arete)
-Discord bot: [packages/discord-bot](../packages/discord-bot/)
 
 ## Why the name “Footnote”
 
@@ -61,6 +59,10 @@ Long term, I want Footnote to be more than one bot. I want it to be a reusable a
 
 Today, the clearest implemented control surface is provenance and reviewability: traces, citations, metadata, and trace inspection. **Ari** is the current baseline configuration. Later, Footnote may support multiple profiles, with different rulesets and defaults.
 
-Roadmap: [GitHub issues](https://github.com/arete-org/arete/issues), [GitHub discussions](https://github.com/arete-org/arete/discussions)
-Architecture notes: [docs/architecture](./architecture/)
-Key decisions: [docs/decisions](./decisions/)
+## Where to go next
+
+- Philosophy: [Philosophy.md](./Philosophy.md)
+- Architecture: [docs/architecture](./architecture/)
+- Key decisions: [docs/decisions](./decisions/)
+- Roadmap: [GitHub issues](https://github.com/arete-org/arete/issues), [GitHub discussions](https://github.com/arete-org/arete/discussions)
+- Licensing: [LICENSE_STRATEGY.md](./LICENSE_STRATEGY.md) (MIT + HL3)
