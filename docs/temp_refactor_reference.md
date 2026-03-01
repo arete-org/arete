@@ -26,7 +26,12 @@ This reference turns those findings into a clean branch list.
 - `pnpm pre-review` is still a shell chain instead of one orchestrated validation flow.
 - `scripts/validate-footnote-tags.js` is regex-heavy and misses `.tsx` coverage.
 - Annotation docs and allowed values have drifted.
+- AI-facing guidance is duplicated across `cursor.rules`, `AGENTS.md`, `.cursor/*`, and `docs/ai/*`, which makes drift likely.
+- Some AI-facing docs and snippets advertise invalid annotation values (`critical`, `medium`) or require blocks (`@impact`) that the validator does not enforce.
+- Some AI-tooling docs reference commands or tasks that do not exist, which makes the workflow unreliable in practice.
 - Cursor config is spread across multiple files and contains stale references.
+- Shared constraints for Cursor, Codex, and Devin are not centralized, so different agents are being steered by different contract shapes.
+- AI-tooling guidance mixes CI-enforced rules with advisory heuristics, which makes the real contract harder for humans and agents to follow.
 - The `@footnote-*` validator checks structure, not whether the implementation matches the annotations.
 
 ### Quality / implementation concerns
@@ -70,7 +75,7 @@ This reference turns those findings into a clean branch list.
 
 ## 2. `refactor/annotation-governance-core`
 
-**Purpose:** Make `@footnote-*` validation consistent, explicit, and easier to maintain.
+**Purpose:** Make `@footnote-*` validation and AI-facing annotation guidance consistent, explicit, and easier to maintain.
 
 **Why this branch exists:** The current validator is regex-based, misses `.tsx`, and allows drift between docs and enforcement.
 
@@ -79,7 +84,8 @@ This reference turns those findings into a clean branch list.
 - Replace regex parsing with a structured parser.
 - Validate both `.ts` and `.tsx`.
 - Enforce tag order and required rationale text.
-- Update docs to match the real schema.
+- Update docs, snippets, and prompts to match the real schema.
+- Separate CI-enforced requirements from advisory authoring guidance.
 - Standardize valid values:
   - scope: `core`, `utility`, `interface`, `web`, `test`
   - level: `low`, `moderate`, `high`
@@ -188,17 +194,24 @@ This reference turns those findings into a clean branch list.
 
 ---
 
-## 8. `refactor/cursor-config-generation`
+## 8. `refactor/ai-tooling-contract-generation`
 
-**Purpose:** Consolidate Cursor configuration into one source of truth.
+**Purpose:** Consolidate shared AI-tooling constraints into one source of truth and derive tool-specific config from it.
 
-**Why this branch exists:** Cursor config is spread across many files and contains stale references.
+**Why this branch exists:** Cursor config is spread across many files, some AI-tooling docs are stale, and different agents currently consume different contract shapes.
 
 **What should go in this branch:**
-- Add a single manifest for Cursor config.
-- Generate the JSON config/task/snippet files from that manifest.
+- Add a single machine-readable manifest for shared agent constraints:
+  - allowed `@footnote-*` values
+  - required header order
+  - protected/excluded paths
+  - required validation commands
+  - review workflow steps
+- Generate Cursor config/task/snippet files from that manifest where practical.
+- Add thin tool-specific adapters for Codex/Devin-facing docs instead of duplicating policy text.
 - Remove invalid or stale path references.
 - Align generated files with the annotation schema and lint rules.
+- Add validation that documented commands, tasks, and referenced files actually exist.
 
 **What should not go in this branch:**
 - No dynamic runtime prompt system.
@@ -268,11 +281,13 @@ This reference turns those findings into a clean branch list.
 
 **Purpose:** Fix docs that currently create false confidence.
 
-**Why this branch exists:** Some AI/process docs look complete but are only scaffolds.
+**Why this branch exists:** Some AI/process docs look complete but are only scaffolds, and some active AI-tooling docs no longer match the enforced workflow.
 
 **What should go in this branch:**
 - Finish or trim `docs/ai/refactoring_guru_playbook.md`.
 - Update AI workflow docs to match the real enforcement pipeline.
+- Remove or rewrite stale instructions that point to nonexistent commands, tasks, or tag values.
+- Reduce repeated policy prose so one canonical doc defines the contract and the others act as short entrypoints.
 - Add a short reviewer checklist for common AI-generated-code failures:
   - stubs
   - disabled logic
