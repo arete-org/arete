@@ -68,6 +68,18 @@ Example:
 - `@footnote-*` tags: `pnpm validate-footnote-tags`
 - OpenAPI linking: `pnpm validate-openapi-links`
 
+## Review Communication for Correctness/Safety-Critical Changes
+
+- When reviewing or summarizing changes that affect correctness or safety
+  (schemas, validators, CI gates, auth, provenance/audit logging, policy enforcement),
+  explicitly state:
+  - invariants (what must always be true)
+  - at least one realistic failure mode
+  - the test(s), validation(s), or CI check(s) that would catch that failure
+- If no such check exists, say so plainly as a gap.
+- Do not present correctness/safety-critical changes as review-ready unless those invariants,
+  failure modes, and checks can be explained concretely from the code and validation setup.
+
 ## CodeRabbit CLI
 
 - CodeRabbit is installed in the terminal and can be used for code review support.

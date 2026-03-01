@@ -200,6 +200,18 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 - Verify `@footnote-*` module tagging compliance across new code.
 - Check that structured logging patterns are maintained.
 
+### Correctness/Safety-Critical Review Output
+- For changes affecting schemas, validators, CI gates, auth, provenance/audit logging,
+  policy enforcement, or other correctness/safety-critical behavior, the assistant must
+  include in its review or summary:
+  - 2-5 invariants the change relies on or enforces
+  - at least one realistic failure mode
+  - the tests, lint rules, validation steps, or CI checks that would catch that failure
+- If no such check exists, state that explicitly as a review gap.
+- Do not describe a correctness/safety-critical change as ready to merge unless the
+  invariants, failure modes, and checks can be explained concretely from the code and
+  validation setup.
+
 ### Recommended Workflow
 1. **Complete implementation**
 2. **Run automated validation**: `pnpm pre-review` (validates `@footnote-*` tags, OpenAPI code links, types, linting)
