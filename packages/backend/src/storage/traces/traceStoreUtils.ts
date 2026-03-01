@@ -1,10 +1,10 @@
 /**
  * @description: Shared helpers for trace store serialization and validation. Split out to
  * avoid circular imports between the trace store factory and SQLite backend.
- * @arete-scope: utility
- * @arete-module: TraceStoreUtils
- * @arete-risk: moderate - Validation mistakes can corrupt or reject audit data.
- * @arete-ethics: high - Maintains integrity of provenance metadata and audit trails.
+ * @footnote-scope: utility
+ * @footnote-module: TraceStoreUtils
+ * @footnote-risk: moderate - Validation mistakes can corrupt or reject audit data.
+ * @footnote-ethics: high - Maintains integrity of provenance metadata and audit trails.
  */
 
 import type { ResponseMetadata } from '../../ethics-core/index.js';
@@ -38,3 +38,4 @@ export function assertValidResponseMetadata(
         `Trace record "${source}" for response "${responseId}" is invalid (${issuePath}: ${issueMessage}).`
     );
 }
+

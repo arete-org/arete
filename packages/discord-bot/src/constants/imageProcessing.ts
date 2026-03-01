@@ -1,9 +1,9 @@
 /**
  * @description: Shared prompt templates for image processing tasks.
- * @arete-scope: utility
- * @arete-module: ImageProcessingConstants
- * @arete-risk: moderate - Prompt changes can alter vision outputs or cost patterns.
- * @arete-ethics: moderate - Prompt wording affects extracted content and privacy handling.
+ * @footnote-scope: utility
+ * @footnote-module: ImageProcessingConstants
+ * @footnote-risk: moderate - Prompt changes can alter vision outputs or cost patterns.
+ * @footnote-ethics: moderate - Prompt wording affects extracted content and privacy handling.
  */
 
 import type OpenAI from 'openai';
@@ -70,3 +70,4 @@ export const IMAGE_DESCRIPTION_CONFIG: ImageDescriptionConfig = {
     keyElementsMax: 7, // Avoids overly long bullet lists that bloat metadata.
     extractedTextLineLimit: 20, // Keeps OCR dumps short enough for embeds and logs.
 };
+

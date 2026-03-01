@@ -17,8 +17,8 @@
         },
         "riskTags": {
             "description": "Include risk/ethics tags in module headers",
-            "pattern": "@arete-risk:\\s*(critical|high|medium|low)",
-            "example": "@arete-risk: high"
+            "pattern": "@footnote-risk:\\s*(critical|high|medium|low)",
+            "example": "@footnote-risk: high"
         },
         "asyncAwait": {
             "description": "Prefer async/await over promises",

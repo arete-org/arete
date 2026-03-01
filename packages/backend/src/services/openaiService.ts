@@ -1,9 +1,9 @@
 /**
  * @description: Minimal OpenAI client wrapper and response metadata builder for reflect API.
- * @arete-scope: utility
- * @arete-module: ReflectOpenAIService
- * @arete-risk: high - Incorrect handling can degrade responses or metadata integrity.
- * @arete-ethics: high - Misreported provenance impacts trust and transparency.
+ * @footnote-scope: utility
+ * @footnote-module: ReflectOpenAIService
+ * @footnote-risk: high - Incorrect handling can degrade responses or metadata integrity.
+ * @footnote-ethics: high - Misreported provenance impacts trust and transparency.
  */
 import crypto from 'node:crypto';
 import { extractTextAndMetadata } from '../utils/metadata.js';
@@ -244,3 +244,4 @@ const buildResponseMetadata = (
 
 export type { OpenAIResponseMetadata, ResponseMetadataRuntimeContext };
 export { SimpleOpenAIService, buildResponseMetadata };
+

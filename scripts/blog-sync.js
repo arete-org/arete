@@ -2,10 +2,10 @@
 
 /**
  * @description: Syncs blog posts from GitHub Discussions using GitHub App auth.
- * @arete-scope utility
- * @arete-module BlogSyncScript
- * @arete-risk: low - Script misuse can overwrite blog data or exceed API limits.
- * @arete-ethics: low - Operates on public repo content without user data.
+ * @footnote-scope utility
+ * @footnote-module BlogSyncScript
+ * @footnote-risk: low - Script misuse can overwrite blog data or exceed API limits.
+ * @footnote-ethics: low - Operates on public repo content without user data.
  */
 
 // Load environment variables from .env file
@@ -294,3 +294,4 @@ if (require.main === module) {
 }
 
 module.exports = { syncBlog, fetchDiscussions, writeBlogPost };
+

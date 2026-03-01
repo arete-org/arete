@@ -35,7 +35,7 @@ graph TD
 ```json
 {
     "scripts": {
-        "pre-review": "pnpm validate-arete-tags && pnpm validate-openapi-links && pnpm type-check && pnpm lint-check"
+        "pre-review": "pnpm validate-footnote-tags && pnpm validate-openapi-links && pnpm type-check && pnpm lint-check"
     }
 }
 ```
@@ -54,7 +54,7 @@ graph TD
     "tasks": {
         "pre-review": {
             "command": "pnpm pre-review",
-            "description": "Run automated validation pipeline (`@arete-*` tags, types, linting)"
+            "description": "Run automated validation pipeline (`@footnote-*` tags, types, linting)"
         }
     }
 }
@@ -108,7 +108,7 @@ pnpm pre-review
 
 **What it checks**:
 
-- `@arete-*` module tagging compliance
+- `@footnote-*` module tagging compliance
 - OpenAPI <-> code link integrity
 - TypeScript type safety
 - ESLint code quality
@@ -129,7 +129,7 @@ pnpm pre-review
 **Example prompts**:
 
 ```
-Check this function for `@arete-*` module tagging compliance
+Check this function for `@footnote-*` module tagging compliance
 Analyze this function for complexity issues
 Review the comments in this code for quality and completeness
 ```
@@ -157,10 +157,10 @@ Every module must include:
 ```typescript
 /**
  * @description: <1-3 lines summarizing what this module does.>
- * @arete-scope: <core|utility|interface|test>
- * @arete-module: <ModuleName>
- * @arete-risk: <high|moderate|low>
- * @arete-ethics: <high|moderate|low>
+ * @footnote-scope: <core|utility|interface|test>
+ * @footnote-module: <ModuleName>
+ * @footnote-risk: <high|moderate|low>
+ * @footnote-ethics: <high|moderate|low>
  *
  * @impact
  * Risk: <What could break or be compromised if mishandled.>
@@ -202,9 +202,9 @@ Every module must include:
 
 ## Troubleshooting
 
-### Issue: Missing `@arete-*` Tags
+### Issue: Missing `@footnote-*` Tags
 
-**Solution**: Run `pnpm validate-arete-tags` first
+**Solution**: Run `pnpm validate-footnote-tags` first
 **Prevention**: Use pre-review checklist
 
 ### Issue: Inadequate Comments
@@ -231,7 +231,7 @@ Every module must include:
 
 ### CI/CD Pipeline
 
-- `pnpm validate-arete-tags` runs in CI
+- `pnpm validate-footnote-tags` runs in CI
 - Prevents merging code with missing tags
 - Enforces project standards automatically
 
@@ -304,3 +304,4 @@ This approach scales well with team growth, maintains high standards, and ensure
 3. Customizing prompts for project architecture
 4. Adapting the checklist for project-specific requirements
 5. Modifying success metrics for project goals
+

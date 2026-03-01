@@ -1,9 +1,9 @@
 /**
  * @description: Loads runtime configuration for the web app from the backend.
- * @arete-scope: utility
- * @arete-module: RuntimeConfigLoader
- * @arete-risk: low - Config fetch failures only disable optional client features.
- * @arete-ethics: low - Exposes only non-sensitive configuration to the client.
+ * @footnote-scope: utility
+ * @footnote-module: RuntimeConfigLoader
+ * @footnote-risk: low - Config fetch failures only disable optional client features.
+ * @footnote-ethics: low - Exposes only non-sensitive configuration to the client.
  */
 import type { GetRuntimeConfigResponse } from '@footnote/contracts/web';
 import { api } from './api';
@@ -49,3 +49,4 @@ export const loadRuntimeConfig = async (): Promise<RuntimeConfig> => {
 
     return inFlightConfig;
 };
+

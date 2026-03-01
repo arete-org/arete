@@ -1,10 +1,10 @@
 /**
  * @description: Manages prompt templates and rendering for AI interactions.
  * Handles prompt loading, caching, and variable substitution.
- * @arete-scope: utility
- * @arete-module: PromptRegistry
- * @arete-risk: moderate - Template errors can break AI interactions or distort prompt behavior.
- * @arete-ethics: high - Prompt handling directly shapes the framing and transparency of AI responses.
+ * @footnote-scope: utility
+ * @footnote-module: PromptRegistry
+ * @footnote-risk: moderate - Template errors can break AI interactions or distort prompt behavior.
+ * @footnote-ethics: high - Prompt handling directly shapes the framing and transparency of AI responses.
  */
 
 import fs from 'fs';
@@ -315,3 +315,4 @@ export const renderPrompt = (
 if (!activePromptRegistry) {
     activePromptRegistry = new PromptRegistry();
 }
+

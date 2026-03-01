@@ -1,9 +1,9 @@
 /**
  * @description: Stores follow-up image generation context for retries and variations.
- * @arete-scope: utility
- * @arete-module: ImageFollowUpCache
- * @arete-risk: moderate - Cache mistakes can repeat incorrect prompts or settings.
- * @arete-ethics: low - Caches user-provided inputs without additional inference.
+ * @footnote-scope: utility
+ * @footnote-module: ImageFollowUpCache
+ * @footnote-risk: moderate - Cache mistakes can repeat incorrect prompts or settings.
+ * @footnote-ethics: low - Caches user-provided inputs without additional inference.
  */
 import type {
     ImageBackgroundType,
@@ -120,3 +120,4 @@ export function evictFollowUpContext(responseId: string): void {
 }
 
 export { DEFAULT_FOLLOW_UP_TTL_MS };
+

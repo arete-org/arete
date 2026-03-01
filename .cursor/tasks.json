@@ -17,7 +17,7 @@
         },
         "pre-review": {
             "command": "pnpm pre-review",
-            "description": "Run automated validation pipeline (@arete tags, types, linting)"
+            "description": "Run automated validation pipeline (@Footnote tags, types, linting)"
         },
         "format-code": {
             "command": "pnpm prettier --write packages/",
@@ -29,3 +29,4 @@
         }
     }
 }
+

@@ -1,9 +1,9 @@
 /**
  * @description: Delegates to the compiled backend server entrypoint.
- * @arete-scope: backend
- * @arete-module: BackendServerShim
- * @arete-risk: medium - Missing build output prevents backend startup.
- * @arete-ethics: low - Shim only impacts availability, not data handling.
+ * @footnote-scope: backend
+ * @footnote-module: BackendServerShim
+ * @footnote-risk: medium - Missing build output prevents backend startup.
+ * @footnote-ethics: low - Shim only impacts availability, not data handling.
  */
 const fs = require('node:fs');
 const path = require('node:path');
@@ -30,3 +30,4 @@ import(pathToFileURL(entryPath).href).catch((error) => {
     );
     process.exit(1);
 });
+

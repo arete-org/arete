@@ -1,9 +1,9 @@
 /**
  * @description: Initiates voice conversations with AI using Discord voice channels.
- * @arete-scope: interface
- * @arete-module: CallCommand
- * @arete-risk: high - Handles voice channel joining, connection management, and realtime session creation; failures can orphan connections or break voice functionality.
- * @arete-ethics: high - Enables AI participation in voice channels, affecting user privacy, consent, and social dynamics.
+ * @footnote-scope: interface
+ * @footnote-module: CallCommand
+ * @footnote-risk: high - Handles voice channel joining, connection management, and realtime session creation; failures can orphan connections or break voice functionality.
+ * @footnote-ethics: high - Enables AI participation in voice channels, affecting user privacy, consent, and social dynamics.
  */
 
 import { logger } from '../utils/logger.js';
@@ -394,3 +394,4 @@ const safeReply = async (
 };
 
 export default callCommand;
+

@@ -1,9 +1,9 @@
 /**
  * @description: Extracts and parses metadata appended to AI responses.
- * @arete-scope: utility
- * @arete-module: ResponseMetadataParser
- * @arete-risk: moderate - Parsing failures can drop provenance data but should not block responses.
- * @arete-ethics: moderate - Incorrect parsing could misreport provenance or confidence to users.
+ * @footnote-scope: utility
+ * @footnote-module: ResponseMetadataParser
+ * @footnote-risk: moderate - Parsing failures can drop provenance data but should not block responses.
+ * @footnote-ethics: moderate - Incorrect parsing could misreport provenance or confidence to users.
  */
 import { logger } from './logger.js';
 
@@ -68,3 +68,4 @@ function extractTextAndMetadata(
 }
 
 export { METADATA_MARKER, extractTextAndMetadata };
+

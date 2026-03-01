@@ -1,9 +1,9 @@
 /**
  * @description: Builds provenance footer embeds with trace metadata and actions.
- * @arete-scope: interface
- * @arete-module: ProvenanceFooter
- * @arete-risk: moderate - Footer errors can hide provenance or break user actions.
- * @arete-ethics: high - Provenance display affects transparency and accountability.
+ * @footnote-scope: interface
+ * @footnote-module: ProvenanceFooter
+ * @footnote-risk: moderate - Footer errors can hide provenance or break user actions.
+ * @footnote-ethics: high - Provenance display affects transparency and accountability.
  */
 import { EmbedBuilder } from './EmbedBuilder.js';
 import { ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
@@ -170,3 +170,4 @@ ${citationLines}`); // Push citations to new line for readability
     // Return the ProvenanceFooterPayload - Embed plus interactive components (buttons)
     return { embeds: [embed], components: [actionRow] };
 }
+

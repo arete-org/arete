@@ -1,8 +1,8 @@
 /**
- * @arete-module: CatchupFilter
- * @arete-risk: moderate
- * @arete-ethics: moderate
- * @arete-scope: utility
+ * @footnote-module: CatchupFilter
+ * @footnote-risk: moderate
+ * @footnote-ethics: moderate
+ * @footnote-scope: utility
  *
  * @description: Provides lightweight, deterministic heuristics that decide whether the planner
  * should be skipped for catchup events. The filter analyzes recent conversation
@@ -450,3 +450,4 @@ export class CatchupFilter {
         return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 }
+

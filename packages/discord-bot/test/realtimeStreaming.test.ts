@@ -1,9 +1,9 @@
 /**
  * @description: Tests realtime streaming flow integration for audio handlers.
- * @arete-scope: test
- * @arete-module: RealtimeStreamingTests
- * @arete-risk: low - Test failures indicate streaming regressions only.
- * @arete-ethics: low - No user content is processed in test fixtures.
+ * @footnote-scope: test
+ * @footnote-module: RealtimeStreamingTests
+ * @footnote-risk: low - Test failures indicate streaming regressions only.
+ * @footnote-ethics: low - No user content is processed in test fixtures.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -150,3 +150,4 @@ test('VoiceSessionManager forwards multi-speaker audio with display names', asyn
 
     manager.removeSession('guild-1');
 });
+

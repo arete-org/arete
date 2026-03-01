@@ -16,7 +16,7 @@ This directory contains Cursor-specific configuration files for the Footnote pro
 
 ### Risk/Ethics Tags
 
-All modules are tagged with `@arete-risk` and `@arete-ethics` levels:
+All modules are tagged with `@footnote-risk` and `@footnote-ethics` levels:
 
 - **Critical**: Core system functionality, voice processing, AI interactions
 - **High**: Important utilities, command handlers, session management
@@ -37,7 +37,7 @@ The `cursor.dictionary` file contains project-specific terms to prevent auto-cor
 - Cost tracking with `ChannelContextManager.recordLLMUsage()`
 - Error handling with try/catch and informative messages
 - Risk/ethics tags in module headers
-- Scoped logger tagging with `@arete-logger` and `@logs`
+- Scoped logger tagging with `@footnote-logger` and `@logs`
 - Async/await over promises
 
 ### Available Tasks
@@ -47,7 +47,7 @@ The `cursor.dictionary` file contains project-specific terms to prevent auto-cor
 - `/ethics-audit` - Audit ethics tags for accuracy
 - `/format-code` - Format code with Prettier
 - `/type-check` - Run TypeScript type checking
-- `pre-review` task - Run full pre-review checks (`@arete-*` tags, OpenAPI links, types, lint)
+- `pre-review` task - Run full pre-review checks (`@footnote-*` tags, OpenAPI links, types, lint)
 
 ## Usage
 
@@ -59,3 +59,4 @@ Cursor will automatically use these configurations when working in the Footnote 
 - Use appropriate logging and error handling with scoped loggers
 - Respect the domain-specific vocabulary
 - Apply proper formatting standards for module and logger headers
+

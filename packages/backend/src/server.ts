@@ -1,9 +1,9 @@
 /**
  * @description: Serves the web app and API endpoints for reflect, traces, and GitHub webhooks.
- * @arete-scope: core
- * @arete-module: WebServer
- * @arete-risk: high - Server failures can break user access or data integrity.
- * @arete-ethics: high - Response generation and trace storage affect user trust and privacy.
+ * @footnote-scope: core
+ * @footnote-module: WebServer
+ * @footnote-risk: high - Server failures can break user access or data integrity.
+ * @footnote-ethics: high - Response generation and trace storage affect user trust and privacy.
  */
 import './bootstrapEnv.js';
 
@@ -371,3 +371,4 @@ const host = process.env.HOST || '::';
 server.listen(port, host, () => {
     logger.info(`Simple server available on ${host}:${port}`);
 });
+

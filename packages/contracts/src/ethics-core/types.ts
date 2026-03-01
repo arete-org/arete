@@ -1,9 +1,9 @@
 /**
  * @description: Shared type contracts for response provenance, risk, and metadata.
- * @arete-scope: interface
- * @arete-module: EthicsCoreContracts
- * @arete-risk: low - Incorrect shapes can break UI assumptions or validation.
- * @arete-ethics: moderate - Types document data meaning but do not execute logic.
+ * @footnote-scope: interface
+ * @footnote-module: EthicsCoreContracts
+ * @footnote-risk: low - Incorrect shapes can break UI assumptions or validation.
+ * @footnote-ethics: moderate - Types document data meaning but do not execute logic.
  */
 
 // This file is the single source of truth for cross-package metadata shapes.
@@ -51,3 +51,4 @@ export type ResponseMetadata = {
     citations: Citation[]; // Sources used for the answer.
     imageDescriptions?: string[]; // Optional captions for any images used.
 };
+

@@ -1,9 +1,9 @@
 /**
  * @description: Validates SQLite trace storage round trips metadata correctly.
- * @arete-scope: test
- * @arete-module: TraceStoreTests
- * @arete-risk: low - Tests cover trace persistence without affecting production.
- * @arete-ethics: low - Uses synthetic metadata only.
+ * @footnote-scope: test
+ * @footnote-module: TraceStoreTests
+ * @footnote-risk: low - Tests cover trace persistence without affecting production.
+ * @footnote-ethics: low - Uses synthetic metadata only.
  */
 import test from 'node:test';
 import { strict as assert } from 'node:assert';
@@ -68,3 +68,4 @@ test('TraceStore round trips metadata with citation URLs', async () => {
         await fs.rm(tempRoot, { recursive: true, force: true });
     }
 });
+

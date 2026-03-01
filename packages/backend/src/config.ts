@@ -1,9 +1,9 @@
 /**
  * @description: Centralizes backend runtime configuration defaults and env parsing.
- * @arete-scope: utility
- * @arete-module: BackendRuntimeConfig
- * @arete-risk: moderate - Misconfiguration can break API behavior or security controls.
- * @arete-ethics: moderate - Incorrect defaults can weaken abuse protections.
+ * @footnote-scope: utility
+ * @footnote-module: BackendRuntimeConfig
+ * @footnote-risk: moderate - Misconfiguration can break API behavior or security controls.
+ * @footnote-ethics: moderate - Incorrect defaults can weaken abuse protections.
  */
 type RuntimeConfig = {
     openai: {
@@ -79,3 +79,4 @@ const runtimeConfig: RuntimeConfig = {
 };
 
 export { runtimeConfig };
+

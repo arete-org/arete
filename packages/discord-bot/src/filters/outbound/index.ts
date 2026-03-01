@@ -1,9 +1,9 @@
 /**
  * @description: Runs outbound message filters before content is sent to Discord.
- * @arete-scope: interface
- * @arete-module: OutboundFilters
- * @arete-risk: moderate - Filter failures could distort messages or degrade formatting.
- * @arete-ethics: moderate - Outbound normalization influences transparency and user trust.
+ * @footnote-scope: interface
+ * @footnote-module: OutboundFilters
+ * @footnote-risk: moderate - Filter failures could distort messages or degrade formatting.
+ * @footnote-ethics: moderate - Outbound normalization influences transparency and user trust.
  */
 
 import { logger } from '../../utils/logger.js';
@@ -11,7 +11,7 @@ import { normalizeOutboundLinks } from './normalizeLinks.js';
 import type { OutboundFilter, OutboundFilterResult } from './types.js';
 
 /**
- * @arete-logger: outboundFilters
+ * @footnote-logger: outboundFilters
  *
  * @logs
  * Outbound filter execution, changes applied, and filter error conditions.
@@ -60,3 +60,4 @@ export const runOutboundFilters = (content: string): OutboundFilterResult => {
 };
 
 export type { OutboundFilter, OutboundFilterResult } from './types.js';
+

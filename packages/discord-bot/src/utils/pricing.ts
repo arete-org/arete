@@ -1,8 +1,8 @@
 /**
- * @arete-module: Pricing
- * @arete-risk: high
- * @arete-ethics: high
- * @arete-scope: core
+ * @footnote-module: Pricing
+ * @footnote-risk: high
+ * @footnote-ethics: high
+ * @footnote-scope: core
  *
  * @description: Handles all pricing calculations and estimations for text and image generation.
  *
@@ -445,3 +445,4 @@ export function describeTokenUsage(usage?: {
 }
 
 export { TEXT_MODEL_PRICING, IMAGE_GENERATION_COST_TABLE };
+

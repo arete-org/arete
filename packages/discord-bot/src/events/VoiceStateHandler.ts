@@ -1,8 +1,8 @@
 /**
- * @arete-module: VoiceStateHandler
- * @arete-risk: high
- * @arete-ethics: high
- * @arete-scope: core
+ * @footnote-module: VoiceStateHandler
+ * @footnote-risk: high
+ * @footnote-ethics: high
+ * @footnote-scope: core
  *
  * @description: Handles Discord voice state changes and coordinates voice session management.
  *
@@ -394,3 +394,4 @@ export async function cleanupVoiceConnection(
 }
 
 export default VoiceStateHandler;
+

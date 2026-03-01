@@ -1,10 +1,10 @@
 // @ts-nocheck
 /**
  * @description: Configures the web Vite dev server, CSP headers, aliases, and backend proxy routing.
- * @arete-scope: interface
- * @arete-module: WebViteConfig
- * @arete-risk: moderate - Misconfigured proxy or CSP settings can break local integration and embed behavior.
- * @arete-ethics: moderate - Incorrect embed or proxy settings can weaken transparency and consent expectations around web interactions.
+ * @footnote-scope: interface
+ * @footnote-module: WebViteConfig
+ * @footnote-risk: moderate - Misconfigured proxy or CSP settings can break local integration and embed behavior.
+ * @footnote-ethics: moderate - Incorrect embed or proxy settings can weaken transparency and consent expectations around web interactions.
  */
 import { fileURLToPath, URL } from 'node:url';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -125,3 +125,4 @@ export default defineConfig({
         dedupe: ['react', 'react-dom'],
     },
 });
+

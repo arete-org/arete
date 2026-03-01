@@ -1,10 +1,10 @@
 /**
  * @description: Handles /api/reflect requests as the trimmed-down web chat
  * surface and dispatches AI responses with metadata.
- * @arete-scope: interface
- * @arete-module: ReflectHandler
- * @arete-risk: high - Failures block AI responses and provenance capture.
- * @arete-ethics: high - Incorrect metadata harms transparency and user trust.
+ * @footnote-scope: interface
+ * @footnote-module: ReflectHandler
+ * @footnote-risk: high - Failures block AI responses and provenance capture.
+ * @footnote-ethics: high - Incorrect metadata harms transparency and user trust.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { PostReflectRequestSchema } from '@footnote/contracts/web/schemas';
@@ -928,3 +928,4 @@ Guidelines:
 };
 
 export { createReflectHandler };
+

@@ -1,9 +1,9 @@
 /**
  * @description: Defines monorepo lint rules, shared globals, and import guardrails across packages.
- * @arete-scope: utility
- * @arete-module: EslintConfig
- * @arete-risk: moderate - Misconfigured lint rules can hide unsafe imports or weaken code quality checks.
- * @arete-ethics: low - Lint policy affects traceability and consistency but does not directly process user data.
+ * @footnote-scope: utility
+ * @footnote-module: EslintConfig
+ * @footnote-risk: moderate - Misconfigured lint rules can hide unsafe imports or weaken code quality checks.
+ * @footnote-ethics: low - Lint policy affects traceability and consistency but does not directly process user data.
  */
 import js from '@eslint/js';
 import tseslint from '@typescript-eslint/eslint-plugin';
@@ -195,3 +195,4 @@ export default [
     },
     ...(prettierConfig ? [prettierConfig] : []),
 ];
+

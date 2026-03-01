@@ -4,14 +4,14 @@ This file contains reusable prompts for Cursor's inline chat (`Ctrl+K`) and code
 
 ## Module Analysis Prompts
 
-### `@arete-*` Tagging Compliance
+### `@footnote-*` Tagging Compliance
 
 ```
-Check this function/module for `@arete-*` module tagging compliance. Does it have:
-- @arete-module tag with descriptive name
-- @arete-risk level (critical/high/moderate/low)
-- @arete-ethics level (critical/high/moderate/low)
-- @arete-scope (core/utility/interface/test)
+Check this function/module for `@footnote-*` module tagging compliance. Does it have:
+- @footnote-module tag with descriptive name
+- @footnote-risk level (critical/high/moderate/low)
+- @footnote-ethics level (critical/high/moderate/low)
+- @footnote-scope (core/utility/interface/test)
 - @description explaining what it does
 - @impact explaining risks and ethical implications
 ```
@@ -122,7 +122,7 @@ Review the test coverage for this module:
 
 ```
 Check if this code needs updates to validation scripts:
-- Should validate-arete-tags.js catch any issues here?
+- Should validate-footnote-tags.js catch any issues here?
 - Are there new patterns that need automated checking?
 - Should this trigger any CI/CD validation steps?
 - Are there any manual checks that could be automated?
@@ -191,7 +191,7 @@ Analyze this ethics core code for:
 
 ### For Inline Chat (`Ctrl+K`)
 
-- "Check `@arete-*` tagging compliance"
+- "Check `@footnote-*` tagging compliance"
 - "Analyze complexity and suggest simplifications"
 - "Review comments for quality and completeness"
 - "Check fail-open design compliance"
@@ -215,7 +215,7 @@ Analyze this ethics core code for:
 
 ## Example Workflow
 
-1. **Start with tagging**: "Check `@arete-*` tagging compliance"
+1. **Start with tagging**: "Check `@footnote-*` tagging compliance"
 2. **Analyze complexity**: "Analyze this function for complexity issues"
 3. **Review comments**: "Review the comments in this code"
 4. **Check compliance**: "Check this code for project framework compliance"
@@ -223,3 +223,4 @@ Analyze this ethics core code for:
 6. **Ethics review**: "Perform an ethical safety review of this code"
 
 This systematic approach ensures comprehensive analysis while leveraging Cursor's capabilities effectively.
+

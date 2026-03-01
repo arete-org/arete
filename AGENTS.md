@@ -6,7 +6,7 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 
 - Monorepo for Footnote (a transparency- and provenance-focused AI framework) with Discord bot, backend core, and web site.
 - Core principles: interpretability, traceability, cost tracking, fail-open behavior.
-- Required annotations: `@arete-module`, `@arete-risk`, `@arete-ethics`, `@arete-scope`.
+- Required annotations: `@footnote-module`, `@footnote-risk`, `@footnote-ethics`, `@footnote-scope`.
 - Structured logging is mandatory; use scoped loggers from `packages/discord-bot/src/utils/logger.ts`.
 
 ## Primary Entrypoints
@@ -44,9 +44,9 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 - Explain decisions in plain language first, then include technical detail.
 - Keep explanations concrete and actionable.
 
-## Current `@arete-*` Header Format
+## Current `@footnote-*` Header Format
 
-- Order: `@description`, `@arete-scope`, `@arete-module`, `@arete-risk`, `@arete-ethics` (colon required).
+- Order: `@description`, `@footnote-scope`, `@footnote-module`, `@footnote-risk`, `@footnote-ethics` (colon required).
 - Risk/Ethics annotations must include a short rationale on the same line.
 - Canonical reference: `docs/architecture/footnote-annotations.md`.
 
@@ -55,17 +55,17 @@ Example:
 ```ts
 /**
  * @description: Handles realtime audio streaming and event dispatch for the bot.
- * @arete-scope: core
- * @arete-module: RealtimeEventHandler
- * @arete-risk: high - Audio/event failures can break live conversations or leak resources.
- * @arete-ethics: high - Realtime audio handling impacts privacy and consent expectations.
+ * @footnote-scope: core
+ * @footnote-module: RealtimeEventHandler
+ * @footnote-risk: high - Audio/event failures can break live conversations or leak resources.
+ * @footnote-ethics: high - Realtime audio handling impacts privacy and consent expectations.
  */
 ```
 
 ## Testing & Validation
 
 - Pre-review: `pnpm pre-review`
-- `@arete-*` tags: `pnpm validate-arete-tags`
+- `@footnote-*` tags: `pnpm validate-footnote-tags`
 - OpenAPI linking: `pnpm validate-openapi-links`
 
 ## CodeRabbit CLI
@@ -86,3 +86,4 @@ Example:
 ## Exclusions
 
 Avoid loading secrets, logs, traces, or build artifacts (see `.codexignore`).
+

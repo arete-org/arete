@@ -108,17 +108,17 @@ export interface SimpleConfig {
 ```typescript
 /**
  * @description: <1-3 lines summarizing what this module does.>
- * @arete-scope: <core|utility|interface|test>
- * @arete-module: <ModuleName>
- * @arete-risk: <low|moderate|high> - <What could break or be compromised if mishandled.>
- * @arete-ethics: <low|moderate|high> - <What human or governance impacts errors could cause.>
+ * @footnote-scope: <core|utility|interface|test>
+ * @footnote-module: <ModuleName>
+ * @footnote-risk: <low|moderate|high> - <What could break or be compromised if mishandled.>
+ * @footnote-ethics: <low|moderate|high> - <What human or governance impacts errors could cause.>
  */
 ```
 
-- **@arete-risk**: Technical fragility (stability, security, data integrity)
-- **@arete-ethics**: Human/governance impact (privacy, fairness, transparency, social harm)
-- **@arete-scope**: Logical role in the system (helps auto-group modules)
-- Run `pnpm validate-arete-tags` before committing; CI enforces this to guarantee standardized risk/ethics levels.
+- **@footnote-risk**: Technical fragility (stability, security, data integrity)
+- **@footnote-ethics**: Human/governance impact (privacy, fairness, transparency, social harm)
+- **@footnote-scope**: Logical role in the system (helps auto-group modules)
+- Run `pnpm validate-footnote-tags` before committing; CI enforces this to guarantee standardized risk/ethics levels.
 - Keep annotations under 10 lines for readability
 - Separate technical risk from ethical sensitivity for clarity
 - Enable future automated audit tools (e.g., `pnpm audit-risk`)
@@ -129,7 +129,7 @@ export interface SimpleConfig {
 
 ```typescript
 /**
- * @arete-logger: <loggerName>
+ * @footnote-logger: <loggerName>
  * 
  * @logs
  * <What this scoped logger tracks and logs>
@@ -141,7 +141,7 @@ export interface SimpleConfig {
 const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 ```
 
-- **@arete-logger**: Logger module identifier (matches the child logger name)
+- **@footnote-logger**: Logger module identifier (matches the child logger name)
 - **@logs**: What specific operations, events, or data this logger logs
 - Follow the same formatting standards as module headers for consistency
 
@@ -210,7 +210,7 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 
 ### Integration with Existing Tools
 - **Pre-review pipeline**: `pnpm pre-review`
-- **`@arete-*` validation**: `pnpm validate-arete-tags` (enforced by CI)
+- **`@footnote-*` validation**: `pnpm validate-footnote-tags` (enforced by CI)
 - **OpenAPI linking validation**: `pnpm validate-openapi-links`
 - **Cursor tasks**: Use `.cursor/tasks.json` commands for quick access
 - **Checklist**: Follow `.cursor/pre-review-checklist.md` before Cursor analysis

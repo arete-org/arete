@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Validates ARETE module annotations across the repository.
+ * Validates Footnote module annotations across the repository.
  * Checks for required tags and enforces canonical risk and ethics levels.
  */
 
@@ -10,10 +10,10 @@ const path = require('path');
 
 const REQUIRED_TAGS = [
     '@description',
-    '@arete-module',
-    '@arete-risk',
-    '@arete-ethics',
-    '@arete-scope',
+    '@footnote-module',
+    '@footnote-risk',
+    '@footnote-ethics',
+    '@footnote-scope',
 ];
 const ALLOWED_LEVELS = new Set(['high', 'moderate', 'low']);
 const ALLOWED_SCOPES = new Set(['core', 'utility', 'interface', 'test']);
@@ -50,7 +50,7 @@ function walk(dir, onFile) {
 
 function logError(filePath, message) {
     hasErrors = true;
-    console.error(`ARETE tag error in ${filePath}: ${message}`);
+    console.error(`Footnote tag error in ${filePath}: ${message}`);
 }
 
 function extractTagValue(block, tag) {
@@ -73,20 +73,20 @@ function validateFile(filePath) {
     }
 
     const content = fs.readFileSync(filePath, 'utf8');
-    if (!content.includes('@arete-module')) {
+    if (!content.includes('@footnote-module')) {
         return;
     }
 
     const relativePath = path.relative(repoRoot, filePath);
     const blocks = content.match(/\/\*\*[\s\S]*?\*\//g);
     const headerBlock = blocks
-        ? blocks.find((block) => block.includes('@arete-module'))
+        ? blocks.find((block) => block.includes('@footnote-module'))
         : null;
 
     if (!headerBlock) {
         logError(
             relativePath,
-            'Found @arete-module reference but could not parse the JSDoc block.'
+            'Found @footnote-module reference but could not parse the JSDoc block.'
         );
         return;
     }
@@ -103,36 +103,36 @@ function validateFile(filePath) {
         values[tag] = value;
     }
 
-    const riskValue = values['@arete-risk'];
+    const riskValue = values['@footnote-risk'];
     const riskLevel = normalizeLevel(riskValue);
     if (riskValue && !riskLevel) {
-        logError(relativePath, 'Missing @arete-risk level before description.');
+        logError(relativePath, 'Missing @footnote-risk level before description.');
     } else if (riskLevel && !ALLOWED_LEVELS.has(riskLevel)) {
         logError(
             relativePath,
-            `Invalid @arete-risk level "${riskLevel}" (from "${riskValue}"). Expected one of: ${Array.from(ALLOWED_LEVELS).join(', ')}.`
+            `Invalid @footnote-risk level "${riskLevel}" (from "${riskValue}"). Expected one of: ${Array.from(ALLOWED_LEVELS).join(', ')}.`
         );
     }
 
-    const ethicsValue = values['@arete-ethics'];
+    const ethicsValue = values['@footnote-ethics'];
     const ethicsLevel = normalizeLevel(ethicsValue);
     if (ethicsValue && !ethicsLevel) {
         logError(
             relativePath,
-            'Missing @arete-ethics level before description.'
+            'Missing @footnote-ethics level before description.'
         );
     } else if (ethicsLevel && !ALLOWED_LEVELS.has(ethicsLevel)) {
         logError(
             relativePath,
-            `Invalid @arete-ethics level "${ethicsLevel}" (from "${ethicsValue}"). Expected one of: ${Array.from(ALLOWED_LEVELS).join(', ')}.`
+            `Invalid @footnote-ethics level "${ethicsLevel}" (from "${ethicsValue}"). Expected one of: ${Array.from(ALLOWED_LEVELS).join(', ')}.`
         );
     }
 
-    const scope = values['@arete-scope'];
+    const scope = values['@footnote-scope'];
     if (scope && !ALLOWED_SCOPES.has(scope)) {
         logError(
             relativePath,
-            `Invalid @arete-scope value "${scope}". Expected one of: ${Array.from(ALLOWED_SCOPES).join(', ')}.`
+            `Invalid @footnote-scope value "${scope}". Expected one of: ${Array.from(ALLOWED_SCOPES).join(', ')}.`
         );
     }
 }
@@ -141,15 +141,16 @@ walk(repoRoot, validateFile);
 
 if (filesValidated > 0) {
     console.log(
-        `Validated ${filesValidated} ARETE-tagged module${filesValidated === 1 ? '' : 's'}.`
+        `Validated ${filesValidated} Footnote-tagged module${filesValidated === 1 ? '' : 's'}.`
     );
 } else {
-    console.log('No ARETE-tagged modules found to validate.');
+    console.log('No Footnote-tagged modules found to validate.');
 }
 
 if (hasErrors) {
-    console.error('ARETE tag validation failed.');
+    console.error('Footnote tag validation failed.');
     process.exit(1);
 }
 
 process.exit(0);
+

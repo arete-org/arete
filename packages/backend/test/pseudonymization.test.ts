@@ -1,8 +1,8 @@
 /**
- * @arete-module: PseudonymizationTests
- * @arete-risk: low
- * @arete-ethics: high
- * @arete-scope: test
+ * @footnote-module: PseudonymizationTests
+ * @footnote-risk: low
+ * @footnote-ethics: high
+ * @footnote-scope: test
  *
  * @description: Unit tests to ensure Discord identifiers are namespaced, hashed, and safely
  * shortened for display without leaking raw values.
@@ -135,3 +135,4 @@ test('pseudonymizeActorId is idempotent and null-safe', () => {
     assert.equal(pseudonymizeActorId(null, SECRET_A), null);
     assert.equal(pseudonymizeActorId(undefined, SECRET_A), null);
 });
+

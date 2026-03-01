@@ -1,8 +1,8 @@
 /**
- * @arete-module: Main
- * @arete-risk: high
- * @arete-ethics: high
- * @arete-scope: core
+ * @footnote-module: Main
+ * @footnote-risk: high
+ * @footnote-ethics: high
+ * @footnote-scope: core
  *
  * @description: Main orchestration point controlling system initialization, authentication, and event routing.
  *
@@ -1258,3 +1258,4 @@ appServer.listen(WEBHOOK_PORT, () => {
   console.log(`GitHub webhook server listening on port ${WEBHOOK_PORT}`);
 });
 */
+

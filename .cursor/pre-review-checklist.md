@@ -4,7 +4,7 @@ Use this checklist before opening a PR to ensure your code meets the project's s
 
 ## Automated Validation (Run First)
 
-- [ ] **`@arete-*` Module Tags**: `pnpm validate-arete-tags` passes
+- [ ] **`@footnote-*` Module Tags**: `pnpm validate-footnote-tags` passes
 - [ ] **OpenAPI Linking**: `pnpm validate-openapi-links` passes (for API boundary changes)
 - [ ] **TypeScript**: `pnpm type-check` passes
 - [ ] **Linting**: `pnpm lint-check` passes
@@ -14,7 +14,7 @@ Use this checklist before opening a PR to ensure your code meets the project's s
 
 ### Module Documentation
 
-- [ ] **Module Header**: Contains all required tags (`@arete-module`, `@arete-risk`, `@arete-ethics`, `@arete-scope`)
+- [ ] **Module Header**: Contains all required tags (`@footnote-module`, `@footnote-risk`, `@footnote-ethics`, `@footnote-scope`)
 - [ ] **Risk Level**: Accurately reflects technical fragility (critical/high/moderate/low)
 - [ ] **Ethics Level**: Accurately reflects human/governance impact (critical/high/moderate/low)
 - [ ] **Scope**: Correctly categorized (core/utility/interface/test)
@@ -98,7 +98,7 @@ Your code is ready for human review when:
 
 ## Common Issues to Avoid
 
-- **Missing `@arete-*` tags** - Run `pnpm validate-arete-tags` first
+- **Missing `@footnote-*` tags** - Run `pnpm validate-footnote-tags` first
 - **Inadequate comments** - Focus on business logic and decisions
 - **Inconsistent logging** - Use structured logger throughout
 - **Missing cost tracking** - All LLM calls must be tracked
@@ -108,3 +108,4 @@ Your code is ready for human review when:
 ---
 
 **Remember**: This checklist ensures Cursor can focus on architectural and complexity analysis while human reviewers focus on logic, ethics, and integration decisions.
+

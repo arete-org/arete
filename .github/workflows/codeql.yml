@@ -67,7 +67,7 @@ jobs:
 
             - name: Validate Footnote tags
               if: matrix.language == 'javascript-typescript'
-              run: node scripts/validate-arete-tags.js
+              run: node scripts/validate-footnote-tags.js
 
             # Add any setup steps before running the `github/codeql-action/init` action.
             # This includes steps like installing compilers or runtimes (`actions/setup-node`
@@ -109,3 +109,4 @@ jobs:
               uses: github/codeql-action/analyze@v4
               with:
                   category: '/language:${{matrix.language}}'
+

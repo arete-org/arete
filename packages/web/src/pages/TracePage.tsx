@@ -1,9 +1,9 @@
 /**
  * @description: Renders the trace view for a response, including provenance metadata, citations, and integrity/status states.
- * @arete-scope: web
- * @arete-module: TracePage
- * @arete-risk: medium - Trace rendering errors can hide provenance signals and mislead users reviewing outputs.
- * @arete-ethics: high - Provenance visibility directly supports transparency, accountability, and informed trust.
+ * @footnote-scope: web
+ * @footnote-module: TracePage
+ * @footnote-risk: medium - Trace rendering errors can hide provenance signals and mislead users reviewing outputs.
+ * @footnote-ethics: high - Provenance visibility directly supports transparency, accountability, and informed trust.
  */
 /**
  * TracePage displays the full provenance trace for a bot response, including metadata,
@@ -521,3 +521,4 @@ const TracePage = (): JSX.Element => {
 };
 
 export default TracePage;
+

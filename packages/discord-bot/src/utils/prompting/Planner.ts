@@ -1,9 +1,9 @@
 /**
  * @description: Plans bot actions and LLM options before responding to messages.
- * @arete-scope: core
- * @arete-module: Planner
- * @arete-risk: high - Planning errors can trigger wrong modality or unsafe actions.
- * @arete-ethics: high - Plan selection affects user trust and safety outcomes.
+ * @footnote-scope: core
+ * @footnote-module: Planner
+ * @footnote-risk: high - Planning errors can trigger wrong modality or unsafe actions.
+ * @footnote-ethics: high - Plan selection affects user trust and safety outcomes.
  */
 import { renderPrompt } from '../env.js';
 import { logger } from '../logger.js';
@@ -627,3 +627,4 @@ export class Planner {
         return Math.min(100, Math.max(1, Math.round(value)));
     }
 }
+

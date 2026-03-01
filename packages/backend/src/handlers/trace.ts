@@ -1,9 +1,9 @@
 /**
  * @description: Handles trace storage and retrieval endpoints.
- * @arete-scope: interface
- * @arete-module: TraceHandlers
- * @arete-risk: high - Trace loss undermines transparency guarantees.
- * @arete-ethics: high - Provenance access impacts user trust and auditability.
+ * @footnote-scope: interface
+ * @footnote-module: TraceHandlers
+ * @footnote-risk: high - Trace loss undermines transparency guarantees.
+ * @footnote-ethics: high - Provenance access impacts user trust and auditability.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { PostTracesRequestSchema } from '@footnote/contracts/web/schemas';
@@ -463,3 +463,4 @@ const createTraceHandlers = ({
 };
 
 export { createTraceHandlers };
+

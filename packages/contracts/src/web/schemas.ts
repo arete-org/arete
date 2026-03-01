@@ -1,9 +1,9 @@
 /**
  * @description: Runtime schemas for high-value web API routes (reflect + traces).
- * @arete-scope: interface
- * @arete-module: WebContractSchemas
- * @arete-risk: moderate - Schema drift can reject valid traffic or allow invalid payloads.
- * @arete-ethics: moderate - Validation quality affects provenance clarity and user trust.
+ * @footnote-scope: interface
+ * @footnote-module: WebContractSchemas
+ * @footnote-risk: moderate - Schema drift can reject valid traffic or allow invalid payloads.
+ * @footnote-ethics: moderate - Validation quality affects provenance clarity and user trust.
  */
 
 import { z } from 'zod';
@@ -147,3 +147,4 @@ export const createSchemaResponseValidator =
             error: formatSchemaIssues(parsed.error),
         };
     };
+
