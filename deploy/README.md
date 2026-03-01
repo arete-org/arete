@@ -77,7 +77,7 @@ Services:
   (Requires Fly CLI: https://fly.io/docs/flyctl/install/)
   The scripts read `.env` and will prompt for any missing values.
   Note: we use three separate Fly apps to mirror the Docker Compose service split.
-  Note: web uses `BACKEND_HOST=arete-backend.internal` in `deploy/fly.web.toml`; update it if the backend app name changes.
+  Note: web uses `BACKEND_HOST=footnote-backend.internal` in `deploy/fly.web.toml`; update it if the backend app name changes.
   GitHub Actions deploys use `.github/workflows/fly-deploy.yml` and only need the `FLY_API_TOKEN` secret; app names come from `deploy/fly.*.toml`.
   Secrets per app:
     - backend: `OPENAI_API_KEY`, `TRACE_API_TOKEN`

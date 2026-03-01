@@ -10,7 +10,7 @@ Add the following iframe code to embed Footnote in your website:
 
 ```html
 <iframe
-    src="https://arete.fly.dev/embed"
+    src="https://ai.jordanmakes.dev/embed"
     width="100%"
     height="800"
     frameborder="0"
@@ -31,7 +31,7 @@ For a responsive embed that adapts to different screen sizes, use CSS:
         style="position: relative; padding-bottom: 100%; height: 0; overflow: hidden;"
     >
         <iframe
-            src="https://arete.fly.dev/embed"
+            src="https://ai.jordanmakes.dev/embed"
             style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"
             allow="clipboard-read; clipboard-write"
             title="Footnote - Ethics-first AI assistant"
@@ -47,7 +47,7 @@ Or with a fixed aspect ratio (recommended for better UX):
     style="position: relative; width: 100%; max-width: 1200px; margin: 0 auto; aspect-ratio: 16 / 10;"
 >
     <iframe
-        src="https://arete.fly.dev/embed"
+        src="https://ai.jordanmakes.dev/embed"
         style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"
         allow="clipboard-read; clipboard-write"
         title="Footnote - Ethics-first AI assistant"
@@ -62,7 +62,7 @@ Footnote's embed automatically communicates its height to the parent window, all
 ```html
 <iframe
     id="arete-embed"
-    src="https://arete.fly.dev/embed"
+    src="https://ai.jordanmakes.dev/embed"
     width="100%"
     frameborder="0"
     allow="clipboard-read; clipboard-write"
@@ -85,7 +85,7 @@ Footnote's embed automatically communicates its height to the parent window, all
         // Listen for height messages from embed
         window.addEventListener('message', (event) => {
             // Optional: Validate origin for security (recommended in production)
-            // if (event.origin !== 'https://arete.fly.dev') return;
+            // if (event.origin !== 'https://ai.jordanmakes.dev') return;
 
             if (event.data && event.data.type === 'arete-embed-height') {
                 const newHeight = event.data.height;
@@ -146,7 +146,7 @@ If you're not using dynamic height, the embed route content typically requires a
         <div class="embed-container">
             <iframe
                 id="arete-embed"
-                src="https://arete.fly.dev/embed"
+                src="https://ai.jordanmakes.dev/embed"
                 allow="clipboard-read; clipboard-write"
                 title="Footnote - Ethics-first AI assistant"
             ></iframe>
@@ -167,7 +167,7 @@ If you're not using dynamic height, the embed route content typically requires a
                 // Listen for height messages from embed
                 window.addEventListener('message', (event) => {
                     // Optional: Validate origin for security (recommended in production)
-                    // if (event.origin !== 'https://arete.fly.dev') return;
+                    // if (event.origin !== 'https://ai.jordanmakes.dev') return;
 
                     if (
                         event.data &&
@@ -194,15 +194,15 @@ If you're not using dynamic height, the embed route content typically requires a
 
 The embed route is configured to allow:
 
-- **Embedding from**: `https://jordanmakes.fly.dev`
-- **API requests**: The `/api/reflect` endpoint accepts cross-origin requests from `https://jordanmakes.fly.dev`
+- **Embedding from**: `https://ai.jordanmakes.dev`
+- **API requests**: The `/api/reflect` endpoint accepts cross-origin requests from `https://ai.jordanmakes.dev`
 - **CORS headers**: Configured for POST and OPTIONS requests
 
 ### Content Security Policy
 
 The embed route uses a Content Security Policy that:
 
-- Allows iframe embedding from `https://jordanmakes.fly.dev` via `frame-ancestors`
+- Allows iframe embedding from `https://ai.jordanmakes.dev` via `frame-ancestors`
 - Permits necessary resources for scripts, styles, and images
 - Supports Cloudflare Turnstile CAPTCHA integration
 

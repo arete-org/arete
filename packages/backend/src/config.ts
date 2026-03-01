@@ -41,12 +41,11 @@ const parseCsvEnv = (
 const defaultAllowedOrigins = [
     'http://localhost:8080',
     'http://localhost:3000',
+    'https://ai.jordanmakes.dev',
 ];
 const defaultFrameAncestors = [
     "'self'",
-    'https://arete-web.fly.dev',
     'https://ai.jordanmakes.dev',
-    'https://jordanmakes.fly.dev',
     ...defaultAllowedOrigins,
 ];
 

@@ -254,7 +254,7 @@ logger.info(`Using web base URL: ${webBaseUrl}`);
 
 const rawBackendBaseUrl = process.env.BACKEND_BASE_URL?.trim();
 const fallbackBackendBaseUrl = flyAppName
-    ? 'http://arete-backend.internal:3000'
+    ? 'http://footnote-backend.internal:3000'
     : 'http://localhost:3000';
 const backendBaseUrl =
     rawBackendBaseUrl && rawBackendBaseUrl.length > 0
