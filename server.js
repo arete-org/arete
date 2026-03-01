@@ -19,7 +19,7 @@ const entryPath = path.join(
 
 if (!fs.existsSync(entryPath)) {
     console.error(
-        'Backend build output not found. Run: pnpm build --filter @arete/backend'
+        'Backend build output not found. Run: pnpm build --filter @footnote/backend'
     );
     process.exit(1);
 }

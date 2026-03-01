@@ -1730,7 +1730,7 @@ div.interaction-status:not(.interaction-status-visible) *,
 }
 
 /* ===== FOOTNOTE SECTION ===== */
-.arete {
+.intro-card {
     position: relative;
     overflow: hidden;
     padding: clamp(1.5rem, 3vw, 2.6rem);
@@ -1748,7 +1748,7 @@ div.interaction-status:not(.interaction-status-visible) *,
         border-color var(--transition-speed) ease;
 }
 
-.arete::after {
+.intro-card::after {
     content: '';
     position: absolute;
     inset: 0;
@@ -1758,19 +1758,19 @@ div.interaction-status:not(.interaction-status-visible) *,
     pointer-events: none;
 }
 
-.arete:hover,
-.arete:focus-within {
+.intro-card:hover,
+.intro-card:focus-within {
     transform: translateY(-6px);
     box-shadow: 0 24px 48px var(--shadow);
     border-color: color-mix(in srgb, var(--accent) 60%, var(--border) 40%);
 }
 
-.arete:hover::after,
-.arete:focus-within::after {
+.intro-card:hover::after,
+.intro-card:focus-within::after {
     border-color: color-mix(in srgb, var(--accent) 45%, transparent 55%);
 }
 
-[data-theme='dark'] .arete {
+[data-theme='dark'] .intro-card {
     background-color: color-mix(
         in srgb,
         var(--bg-alt) 82%,
@@ -1783,13 +1783,13 @@ div.interaction-status:not(.interaction-status-visible) *,
     );
 }
 
-.arete-background {
+.intro-card-background {
     position: absolute;
     inset: 0;
     pointer-events: none;
 }
 
-.arete-background svg {
+.intro-card-background svg {
     position: absolute;
     top: clamp(0.75rem, 2vw, 1.4rem);
     right: clamp(0.75rem, 2vw, 1.4rem);
@@ -1798,27 +1798,27 @@ div.interaction-status:not(.interaction-status-visible) *,
     opacity: 0.28;
 }
 
-.arete-constellation circle {
+.intro-card-constellation circle {
     fill: color-mix(in srgb, var(--accent) 38%, rgba(255, 255, 255, 0.7) 62%);
     stroke: color-mix(in srgb, var(--accent) 50%, transparent 50%);
     stroke-width: 1.4;
 }
 
-.arete-constellation path {
+.intro-card-constellation path {
     stroke: color-mix(in srgb, var(--accent) 40%, rgba(255, 255, 255, 0.4) 60%);
     stroke-width: 1.4;
     fill: none;
     stroke-dasharray: 4 6;
 }
 
-.arete-constellation text {
+.intro-card-constellation text {
     font-family: var(--mono-font);
     font-size: 0.75rem;
     letter-spacing: 0.08em;
     fill: color-mix(in srgb, var(--text) 42%, var(--accent) 58%);
 }
 
-.arete-content {
+.intro-card-content {
     display: grid;
     gap: clamp(1rem, 3vw, 2rem);
     grid-template-columns: 140px 1fr;
@@ -1826,40 +1826,40 @@ div.interaction-status:not(.interaction-status-visible) *,
 }
 
 @media (max-width: 480px) {
-    .arete-content {
+    .intro-card-content {
         grid-template-columns: 1fr;
         align-items: center;
     }
 
-    .arete-logo-image {
+    .intro-card-logo-image {
         width: 100px;
         height: 100px;
     }
 }
 
-.arete-logo {
+.intro-card-logo {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
 }
 
-.arete-logo-image {
+.intro-card-logo-image {
     width: 140px;
     height: 140px;
     object-fit: cover;
     border-radius: 50%;
 }
 
-.arete-text h2 {
+.intro-card-text h2 {
     margin-bottom: 1rem;
 }
 
-.arete-text p {
+.intro-card-text p {
     margin-bottom: 0.8rem;
 }
 
-.arete-text p:last-child {
+.intro-card-text p:last-child {
     margin-bottom: 0;
 }
 
@@ -2863,7 +2863,7 @@ kbd {
 }
 
 @media (max-width: 600px) {
-    .arete-content {
+    .intro-card-content {
         grid-template-columns: 1fr;
         align-items: center;
     }

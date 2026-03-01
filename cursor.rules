@@ -100,9 +100,9 @@ export interface SimpleConfig {
 - Log every decision at debug level with structured data.
 - Keep all public interfaces serializable for future web UI integration (e.g., Cognitive Budget panel).
 
-## Current `@arete-*` Module Tagging
+## Current `@footnote-*` Module Tagging
 - Canonical reference: `docs/architecture/footnote-annotations.md`.
-- Every module must include the current structured `@arete-*` annotations in its JSDoc header.
+- Every module must include the current structured `@footnote-*` annotations in its JSDoc header.
 - Use this format (and order) for consistency and machine-parseability:
 
 ```typescript
@@ -123,8 +123,8 @@ export interface SimpleConfig {
 - Separate technical risk from ethical sensitivity for clarity
 - Enable future automated audit tools (e.g., `pnpm audit-risk`)
 
-## Current `@arete-*` Scoped Logger Tagging
-- Every scoped logger must include the current structured `@arete-*` annotations in its JSDoc header.
+## Current `@footnote-*` Scoped Logger Tagging
+- Every scoped logger must include the current structured `@footnote-*` annotations in its JSDoc header.
 - Use this format for consistency and machine-parseability:
 
 ```typescript
@@ -197,12 +197,12 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 
 ### Consistency Enforcement
 - Ensure doc comments and logging consistently follow the project's provenance schema (risk tiers, license context, etc.).
-- Verify `@arete-*` module tagging compliance across new code.
+- Verify `@footnote-*` module tagging compliance across new code.
 - Check that structured logging patterns are maintained.
 
 ### Recommended Workflow
 1. **Complete implementation**
-2. **Run automated validation**: `pnpm pre-review` (validates `@arete-*` tags, OpenAPI code links, types, linting)
+2. **Run automated validation**: `pnpm pre-review` (validates `@footnote-*` tags, OpenAPI code links, types, linting)
 3. **Use Cursor's Bugbot (Review PR)** for automated code quality analysis
 4. **Use inline chat (`Ctrl+K`)** with project-specific prompts (see `.cursor/footnote-prompts.md`)
 5. **Accept suggested simplifications or comments** in-place

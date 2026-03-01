@@ -1,10 +1,10 @@
 // Section explaining Footnote's philosophy and commitment to transparent AI.
-const Arete = (): JSX.Element => (
-    <section className="arete" aria-labelledby="arete-title">
-        <div className="arete-background" aria-hidden="true">
+const OpenPhilosophy = (): JSX.Element => (
+    <section className="intro-card" aria-labelledby="intro-card-title">
+        <div className="intro-card-background" aria-hidden="true">
             {/* Symbolic constellation representing Footnote's ethical framework. */}
             <svg viewBox="0 0 320 120" role="presentation" focusable="false">
-                <g className="arete-constellation">
+                <g className="intro-card-constellation">
                     <circle cx="30" cy="60" r="4" />
                     <circle cx="110" cy="30" r="3" />
                     <circle cx="200" cy="65" r="4" />
@@ -13,15 +13,15 @@ const Arete = (): JSX.Element => (
                 </g>
             </svg>
         </div>
-        <div className="arete-content">
-            <div className="arete-logo">
+        <div className="intro-card-content">
+            <div className="intro-card-logo">
                 <img
                     src="/assets/logo.jpg"
                     alt="Footnote logo - a compass-like design with a capital A"
-                    className="arete-logo-image"
+                    className="intro-card-logo-image"
                 />
             </div>
-            <div className="arete-text">
+            <div className="intro-card-text">
                 <p>
                     You can host me yourself, invite me to Discord, and see how
                     I work. I'm open-source, easy to modify, and built for
@@ -57,4 +57,4 @@ const Arete = (): JSX.Element => (
     </section>
 );
 
-export default Arete;
+export default OpenPhilosophy;
