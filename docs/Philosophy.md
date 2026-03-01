@@ -38,8 +38,6 @@ Depending on the question, that can include:
 - key assumptions,
 - uncertainty when it’s filling in gaps.
 
-#### Brief example
-
 **Not checkable:**
 
 > “Yes, that’s true.”
@@ -72,7 +70,7 @@ A few constraints matter beyond the assistant’s output:
 - **Plurality.** The system should make room for different value frameworks and user goals, especially when questions involve trade-offs.
 - **Accessibility.** Where possible, users should have practical options: how they host, which model/provider they use, and what costs they take on.
 
-## Profiles are rulesets
+### Profiles as rulesets
 
 **Ari** is the current baseline configuration.
 
