@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Hippocratic License HL3-CORE](https://img.shields.io/static/v1?label=Hippocratic%20License&message=HL3-CORE&labelColor=5e2751&color=bc8c3d)](https://firstdonoharm.dev/version/3/0/core.html)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/arete-org/arete)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/footnote-ai/footnote)
 
 **Mindful and honest AI.**  
 Transparent, private, easy to run yourself — under your rules.
@@ -64,7 +64,7 @@ For the minimum DIY experience, run via Docker and open the web UI.
 1. Clone the repository
 
 ```bash
-git clone https://github.com/arete-org/arete.git && cd arete
+git clone https://github.com/footnote-ai/footnote.git && cd footnote
 ```
 
 2. Create a config file

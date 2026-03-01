@@ -33,7 +33,7 @@ node scripts/blog-sync.js
 ## What it does
 
 1. **Authenticates with GitHub App**: Uses JWT tokens for secure authentication
-2. **Fetches Discussions**: Retrieves all discussions from the "Blog" category in the arete-org/arete repository
+2. **Fetches Discussions**: Retrieves all discussions from the "Blog" category in the footnote-ai/footnote repository
 3. **Processes Posts**: Converts each discussion into a blog post JSON file
 4. **Fetches Comments**: Gets the actual comment count for each discussion
 5. **Updates Index**: Creates/updates the blog index with all posts
@@ -63,7 +63,7 @@ The script will:
 ## Troubleshooting
 
 - **"GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY_PATH environment variables are required"**: Set your GitHub App credentials as shown in setup
-- **"GitHub App not installed on arete-org/arete"**: Make sure you've installed the GitHub App on your repository
+- **"GitHub App not installed on footnote-ai/footnote"**: Make sure you've installed the GitHub App on your repository
 - **"Could not fetch comments"**: This is a warning, posts will still sync with comment count 0
 
 ## Files Created

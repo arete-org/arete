@@ -64,5 +64,5 @@ Today, the clearest implemented control surface is provenance and reviewability:
 - Philosophy: [Philosophy.md](./Philosophy.md)
 - Architecture: [docs/architecture](./architecture/)
 - Key decisions: [docs/decisions](./decisions/)
-- Roadmap: [GitHub issues](https://github.com/arete-org/arete/issues), [GitHub discussions](https://github.com/arete-org/arete/discussions)
+- Roadmap: [GitHub issues](https://github.com/footnote-ai/footnote/issues), [GitHub discussions](https://github.com/footnote-ai/footnote/discussions)
 - Licensing: [LICENSE_STRATEGY.md](./LICENSE_STRATEGY.md) (MIT + HL3)

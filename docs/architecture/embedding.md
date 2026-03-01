@@ -261,7 +261,7 @@ For issues or questions about embedding Footnote:
 
 - Check the [main README](../README.md) for deployment instructions
 - Review [SECURITY.md](../../SECURITY.md) for security considerations
-- Open an issue on [GitHub](https://github.com/arete-org/arete) for support
+- Open an issue on [GitHub](https://github.com/footnote-ai/footnote) for support
 
 ## Updating Allowed Origins
 

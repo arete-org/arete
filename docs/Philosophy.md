@@ -121,5 +121,5 @@ Some open-source projects (for example, initiatives like “Facet” in the expl
 - Project history: [History.md](./History.md)
 - Architecture: [docs/architecture](./architecture/)
 - Key decisions: [docs/decisions](./decisions/)
-- Roadmap: [GitHub issues](https://github.com/arete-org/arete/issues), [GitHub discussions](https://github.com/arete-org/arete/discussions)
+- Roadmap: [GitHub issues](https://github.com/footnote-ai/footnote/issues), [GitHub discussions](https://github.com/footnote-ai/footnote/discussions)
 - Licensing: [LICENSE_STRATEGY.md](./LICENSE_STRATEGY.md) (MIT + HL3)
