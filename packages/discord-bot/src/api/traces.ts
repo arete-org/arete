@@ -49,7 +49,7 @@ export const createTraceApi = (
         const headers: Record<string, string> = {};
 
         if (traceApiToken) {
-            headers['X-Arete-Trace-Token'] = traceApiToken;
+            headers['X-Trace-Token'] = traceApiToken;
         }
 
         const response = await requestJson<PostTracesResponse>('/api/traces', {

@@ -54,8 +54,8 @@ Services:
 - backend: `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY` (both required to enable CAPTCHA)
 - backend: `GITHUB_WEBHOOK_SECRET` (enables blog sync)
 - backend/bot: `LOG_LEVEL` (defaults to `debug`)
-- backend: `ARETE_ALLOWED_ORIGINS`, `ARETE_FRAME_ANCESTORS` (override CORS/CSP allowlists)
-- backend: `ARETE_DEFAULT_MODEL`, `ARETE_DEFAULT_REASONING_EFFORT`, `ARETE_DEFAULT_VERBOSITY` (reflect defaults)
+- backend: `ALLOWED_ORIGINS`, `FRAME_ANCESTORS` (override CORS/CSP allowlists)
+- backend: `DEFAULT_MODEL`, `DEFAULT_REASONING_EFFORT`, `DEFAULT_VERBOSITY` (reflect defaults)
 - backend: `TRACE_API_RATE_LIMIT`, `TRACE_API_RATE_LIMIT_WINDOW_MS`, `TRACE_API_MAX_BODY_BYTES` (trace ingestion limits)
 - bot: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (optional image uploads)
 

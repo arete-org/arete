@@ -40,7 +40,7 @@ type TraceReadResult =
     | { status: 'error'; errorMessage: string };
 
 // Shared header name so auth checks stay consistent and easy to update.
-const TRACE_TOKEN_HEADER = 'x-arete-trace-token';
+const TRACE_TOKEN_HEADER = 'x-trace-token';
 
 // Helper to send JSON consistently (status + headers + serialized payload).
 const sendJson = (

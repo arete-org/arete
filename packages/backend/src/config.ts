@@ -51,21 +51,21 @@ const defaultFrameAncestors = [
 
 // --- Environment parsing ---
 const allowedOrigins = parseCsvEnv(
-    process.env.ARETE_ALLOWED_ORIGINS,
+    process.env.ALLOWED_ORIGINS,
     defaultAllowedOrigins
 );
 const frameAncestors = parseCsvEnv(
-    process.env.ARETE_FRAME_ANCESTORS,
+    process.env.FRAME_ANCESTORS,
     defaultFrameAncestors
 );
 
 // --- Runtime config ---
 const runtimeConfig: RuntimeConfig = {
     openai: {
-        defaultModel: process.env.ARETE_DEFAULT_MODEL || 'gpt-5-mini',
+        defaultModel: process.env.DEFAULT_MODEL || 'gpt-5-mini',
         defaultReasoningEffort:
-            process.env.ARETE_DEFAULT_REASONING_EFFORT || 'low',
-        defaultVerbosity: process.env.ARETE_DEFAULT_VERBOSITY || 'low',
+            process.env.DEFAULT_REASONING_EFFORT || 'low',
+        defaultVerbosity: process.env.DEFAULT_VERBOSITY || 'low',
         defaultChannelContext: {
             channelId: 'default',
         },

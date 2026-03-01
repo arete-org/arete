@@ -47,10 +47,10 @@ const cspPlugin = () => ({
                         'http://localhost:5173',
                     ];
 
-                    // Allow additional domains via ARETE_FRAME_ANCESTORS environment variable (comma-separated)
-                    if (process.env.ARETE_FRAME_ANCESTORS) {
+                    // Allow additional domains via FRAME_ANCESTORS environment variable (comma-separated)
+                    if (process.env.FRAME_ANCESTORS) {
                         const additionalDomains =
-                            process.env.ARETE_FRAME_ANCESTORS.split(',')
+                            process.env.FRAME_ANCESTORS.split(',')
                                 .map((domain) => domain.trim())
                                 .map((domain) => domain.replace(/\/+$/, '')) // Remove trailing slashes
                                 .filter((domain) => domain.length > 0);

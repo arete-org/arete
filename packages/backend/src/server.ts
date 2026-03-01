@@ -33,7 +33,7 @@ import { createRuntimeConfigHandler } from './handlers/config.js';
 // --- Path configuration ---
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(currentDirectory, '../../web/dist');
-const DATA_DIR = process.env.ARETE_DATA_DIR || '/data';
+const DATA_DIR = process.env.DATA_DIR || '/data';
 const BLOG_POSTS_DIR = path.join(DATA_DIR, 'blog-posts');
 
 // --- Storage and asset helpers ---

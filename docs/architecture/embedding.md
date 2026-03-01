@@ -272,14 +272,14 @@ To embed Footnote from a different domain, you have two options:
 Set the backend allowlist environment variables with comma-separated domains:
 
 ```bash
-ARETE_ALLOWED_ORIGINS=https://yourblog.com,https://anotherdomain.com
-ARETE_FRAME_ANCESTORS=https://yourblog.com,https://anotherdomain.com,http://localhost:3000
+ALLOWED_ORIGINS=https://yourblog.com,https://anotherdomain.com
+FRAME_ANCESTORS=https://yourblog.com,https://anotherdomain.com,http://localhost:3000
 ```
 
 Use:
 
-- `ARETE_ALLOWED_ORIGINS` for CORS origins
-- `ARETE_FRAME_ANCESTORS` for CSP `frame-ancestors`
+- `ALLOWED_ORIGINS` for CORS origins
+- `FRAME_ANCESTORS` for CSP `frame-ancestors`
 
 These values are read by the backend runtime configuration in `packages/backend/src/config.ts`
 and applied by the backend server in `packages/backend/src/server.ts`.
