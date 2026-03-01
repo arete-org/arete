@@ -37,7 +37,7 @@ const Hero = (): JSX.Element => {
                         <div className="arete-logo">
                             <img
                                 src="/assets/logo.jpg"
-                                alt="ARETE logo - a compass-like design with a capital A"
+                                alt="Footnote logo - a compass-like design with a capital A"
                                 className="arete-logo-image"
                             />
                         </div>

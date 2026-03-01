@@ -6,7 +6,7 @@ const Footer = (): JSX.Element => (
                 href="https://github.com/arete-org/arete"
                 target="_blank"
                 rel="noreferrer"
-                aria-label="View ARETE project on GitHub (opens in new tab)"
+                aria-label="View Footnote project on GitHub (opens in new tab)"
             >
                 <span className="link-icon" aria-hidden="true">
                     ↗
@@ -31,10 +31,10 @@ const Footer = (): JSX.Element => (
                 ·
             </span>
             <a
-                href="https://github.com/arete-org/arete/blob/main/docs/PHILOSOPHY.md"
+                href="https://github.com/arete-org/arete/blob/main/docs/Philosophy.md"
                 target="_blank"
                 rel="noreferrer"
-                aria-label="Read ARETE philosophy document (opens in new tab)"
+                aria-label="Read Footnote philosophy document (opens in new tab)"
             >
                 <span className="link-icon" aria-hidden="true">
                     ↗

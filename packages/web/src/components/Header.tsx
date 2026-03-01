@@ -33,7 +33,7 @@ const Header = ({ breadcrumbItems }: HeaderProps): JSX.Element => {
                         to="/"
                         style={{ textDecoration: 'none', color: 'inherit' }}
                     >
-                        <p className="site-mark">ARETE</p>
+                        <p className="site-mark">Footnote</p>
                     </Link>
                     <Breadcrumb items={breadcrumbItems} />
                 </div>
@@ -93,7 +93,7 @@ const Header = ({ breadcrumbItems }: HeaderProps): JSX.Element => {
                         href="https://github.com/arete-org/arete"
                         target="_blank"
                         rel="noreferrer"
-                        aria-label="View ARETE project on GitHub (opens in new tab)"
+                        aria-label="View Footnote project on GitHub (opens in new tab)"
                     >
                         GitHub <span aria-hidden="true">↗</span>
                     </a>

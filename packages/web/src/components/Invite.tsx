@@ -25,7 +25,7 @@ const STEPS: InviteStep[] = [
 // Section inviting operators to walk through the deployment steps at a human pace.
 const Invite = (): JSX.Element => (
     <section className="invite" aria-labelledby="invite-title">
-        <h2 id="invite-title">Invite ARETE to your server</h2>
+        <h2 id="invite-title">Invite Footnote to your server</h2>
         <div className="card-grid" role="list">
             {STEPS.map((step) => (
                 <article key={step.title} className="card" role="listitem">

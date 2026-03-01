@@ -17,7 +17,7 @@ const Arete = (): JSX.Element => (
             <div className="arete-logo">
                 <img
                     src="/assets/logo.jpg"
-                    alt="ARETE logo - a compass-like design with a capital A"
+                    alt="Footnote logo - a compass-like design with a capital A"
                     className="arete-logo-image"
                 />
             </div>
@@ -31,7 +31,7 @@ const Arete = (): JSX.Element => (
                     <a
                         className="cta-button primary"
                         href="/invite/"
-                        aria-label="Invite ARETE to Discord server"
+                        aria-label="Invite Footnote to Discord server"
                     >
                         Invite to Discord <span aria-hidden="true">↗</span>
                     </a>
@@ -47,7 +47,7 @@ const Arete = (): JSX.Element => (
                         href="https://github.com/arete-org/arete"
                         target="_blank"
                         rel="noreferrer"
-                        aria-label="View ARETE project on GitHub (opens in new tab)"
+                        aria-label="View Footnote project on GitHub (opens in new tab)"
                     >
                         GitHub <span aria-hidden="true">↗</span>
                     </a>
