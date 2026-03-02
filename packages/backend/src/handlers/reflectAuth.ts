@@ -172,6 +172,38 @@ type VerifyTurnstileInput = {
     tokenSource: 'header' | 'none';
 };
 
+const normalizeHostname = (value: string | undefined): string | null => {
+    if (!value) {
+        return null;
+    }
+
+    const trimmedValue = value.trim().toLowerCase();
+    if (trimmedValue.length === 0) {
+        return null;
+    }
+
+    const withoutProtocol = trimmedValue.replace(/^[a-z]+:\/\//, '');
+    const hostname = withoutProtocol.split('/')[0]?.split(':')[0]?.trim();
+    return hostname && hostname.length > 0 ? hostname : null;
+};
+
+const getAllowedTurnstileHostnames = (
+    requestHost: string | undefined
+): string[] => {
+    const configuredHostnames =
+        process.env.TURNSTILE_ALLOWED_HOSTNAMES
+            ?.split(',')
+            .map((hostname) => normalizeHostname(hostname))
+            .filter((hostname): hostname is string => Boolean(hostname)) ?? [];
+
+    if (configuredHostnames.length > 0) {
+        return configuredHostnames;
+    }
+
+    const normalizedRequestHost = normalizeHostname(requestHost);
+    return normalizedRequestHost ? [normalizedRequestHost] : [];
+};
+
 export const verifyTurnstileCaptcha = async ({
     clientIp,
     requestHost,
@@ -301,6 +333,11 @@ export const verifyTurnstileCaptcha = async ({
             'error-codes'?: string[];
             'challenge-ts'?: string;
         };
+        const normalizedResponseHostname = normalizeHostname(
+            verificationData.hostname
+        );
+        const normalizedRequestHost = normalizeHostname(requestHost);
+        const normalizedRequestOrigin = normalizeHostname(requestOrigin);
 
         logger.debug(
             `Turnstile verification response: ${JSON.stringify(verificationData, null, 2)}`
@@ -319,11 +356,9 @@ export const verifyTurnstileCaptcha = async ({
             logger.error(
                 `  Challenge timestamp: ${verificationData['challenge-ts'] || 'N/A'}`
             );
-            logger.error(
-                `  Hostname from response: ${verificationData.hostname || 'N/A'}`
-            );
-            logger.error(`  Request hostname: ${requestHost || 'N/A'}`);
-            logger.error(`  Request origin: ${requestOrigin || 'N/A'}`);
+            logger.error(`  Hostname from response: ${normalizedResponseHostname || 'N/A'}`);
+            logger.error(`  Request hostname: ${normalizedRequestHost || 'N/A'}`);
+            logger.error(`  Request origin: ${normalizedRequestOrigin || 'N/A'}`);
 
             return {
                 success: false,
@@ -338,13 +373,44 @@ export const verifyTurnstileCaptcha = async ({
             };
         }
 
+        const allowedHostnames = getAllowedTurnstileHostnames(requestHost);
+        const hostnameMatches = Boolean(
+            normalizedResponseHostname &&
+                allowedHostnames.includes(normalizedResponseHostname)
+        );
+        if (!hostnameMatches) {
+            logger.error('CAPTCHA verification FAILED:');
+            logger.error('  Error codes: hostname mismatch');
+            logger.error(`  Token source: ${tokenSource}`);
+            logger.error(`  Token length: ${turnstileToken?.length || 0}`);
+            logger.error(
+                `  Challenge timestamp: ${verificationData['challenge-ts'] || 'N/A'}`
+            );
+            logger.error(`  Hostname from response: ${normalizedResponseHostname || 'N/A'}`);
+            logger.error(`  Request hostname: ${normalizedRequestHost || 'N/A'}`);
+            logger.error(`  Request origin: ${normalizedRequestOrigin || 'N/A'}`);
+            logger.error(
+                `  Allowed hostnames: ${allowedHostnames.join(', ') || 'N/A'}`
+            );
+
+            return {
+                success: false,
+                error: {
+                    statusCode: 403,
+                    payload: {
+                        error: 'CAPTCHA verification failed',
+                        details: 'hostname mismatch',
+                    },
+                    logLabel: `reflect captcha-hostname-mismatch source=${tokenSource}`,
+                },
+            };
+        }
+
         logger.info(
             `CAPTCHA verification SUCCESS for token from ${tokenSource}`
         );
-        logger.info(
-            `  Hostname verified: ${verificationData.hostname || 'N/A'}`
-        );
-        logger.info(`  Expected hostname: ${requestHost || 'N/A'}`);
+        logger.info(`  Hostname verified: ${normalizedResponseHostname || 'N/A'}`);
+        logger.info(`  Expected hostname: ${normalizedRequestHost || 'N/A'}`);
         logger.info(
             `  Challenge timestamp: ${verificationData['challenge-ts'] || 'N/A'}`
         );
