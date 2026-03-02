@@ -262,7 +262,10 @@ function parseFileLocation(location) {
  * @param {CommandResult} result
  * @returns {Diagnostic[]}
  */
-function parseFootnoteTagDiagnostics(result) {
+function parseFootnoteTagDiagnostics(
+    result,
+    fallbackFile = 'scripts/validate-footnote-tags.ts'
+) {
     const diagnostics = [];
     const combinedOutput = `${result.stdout}\n${result.stderr}`;
 
@@ -284,7 +287,7 @@ function parseFootnoteTagDiagnostics(result) {
     // fallback diagnostic so the failure is still visible in CI.
     if (diagnostics.length === 0 && result.status !== 0) {
         diagnostics.push({
-            file: 'scripts/validate-footnote-tags.js',
+            file: fallbackFile,
             line: 1,
             message:
                 result.stderr.trim() ||
@@ -671,9 +674,29 @@ function main() {
     /** @type {Validator[]} */
     const validators = [
         {
+            name: 'check-annotation-schema',
+            shouldRun: () => true,
+            run: () =>
+                runCommand(pnpmBinary, [
+                    'exec',
+                    'tsx',
+                    'scripts/check-annotation-schema.ts',
+                ]),
+            parse: (result) =>
+                parseFootnoteTagDiagnostics(
+                    result,
+                    'scripts/annotation-schema.runtime.json'
+                ),
+        },
+        {
             name: 'validate-footnote-tags',
             shouldRun: () => !changedOnly || changedTypeScriptFiles.length > 0,
-            run: () => runCommand(process.execPath, ['scripts/validate-footnote-tags.js']),
+            run: () =>
+                runCommand(pnpmBinary, [
+                    'exec',
+                    'tsx',
+                    'scripts/validate-footnote-tags.ts',
+                ]),
             parse: (result) => {
                 const diagnostics = parseFootnoteTagDiagnostics(result);
                 // This validator checks the whole repo, not just one file. In changed-only mode
@@ -790,4 +813,10 @@ function main() {
     process.exit(failed ? 1 : 0);
 }
 
-main();
+if (require.main === module) {
+    main();
+}
+
+module.exports = {
+    parseFootnoteTagDiagnostics,
+};
