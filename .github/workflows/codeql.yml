@@ -67,7 +67,7 @@ jobs:
 
             - name: Validate Footnote tags
               if: matrix.language == 'javascript-typescript'
-              run: node scripts/validate-footnote-tags.js
+              run: pnpm validate-footnote-tags
 
             # Add any setup steps before running the `github/codeql-action/init` action.
             # This includes steps like installing compilers or runtimes (`actions/setup-node`
