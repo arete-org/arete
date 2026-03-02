@@ -5,11 +5,15 @@
             "author": "Maintainer"
         },
         {
-            "content": "Do not describe provenance as background metadata only. When a page covers provenance fields like confidence, riskTier, tradeoffCount, citations, chainHash, or staleAfter, also explain where users see those fields in the web app or Discord bot and why they matter.",
+            "content": "Keep the landing page polished and curated. The Introduction page should feel editorial, not like a raw index dump, and it should explain how to navigate the rest of the wiki in plain language.",
             "author": "Maintainer"
         },
         {
-            "content": "Keep the wiki flow-first and junior-friendly. Prefer explaining one request moving through the system over listing isolated modules. Use plain language first, then technical detail.",
+            "content": "Use short menu titles wherever possible. Put nuance into purpose statements and page notes instead of long navigation labels.",
+            "author": "Maintainer"
+        },
+        {
+            "content": "Keep the wiki flow-first and junior-friendly. Prefer explaining one request moving through the system over listing isolated modules.",
             "author": "Maintainer"
         },
         {
@@ -17,44 +21,67 @@
             "author": "Maintainer"
         },
         {
-            "content": "For pages about routes or data flow, prefer this shape: purpose, key concepts, how it works, key ownership boundaries, typical flow, failure modes, and related pages. Use worked examples where helpful, but keep them short.",
+            "content": "For pages about routes or data flow, prefer this shape: purpose, key concepts, how it works, ownership boundaries, typical flow, failure modes, and how to test.",
             "author": "Maintainer"
         },
         {
-            "content": "Each page must include: Purpose, Key concepts, Ownership boundaries, Typical flow, Failure modes, How to test, and Related pages.",
+            "content": "Each page should include: Purpose, Key concepts, Ownership boundaries, Typical flow, Failure modes, How to test, and Related pages.",
             "author": "Maintainer"
         },
         {
-            "content": "Treat docs freshness as part of the contract. If a PR changes route shapes, runtime schemas, provenance fields, or trace behavior, the matching wiki page should be updated in the same PR.",
+            "content": "Treat docs freshness as part of the contract. If a PR changes route shapes, runtime schemas, provenance fields, trace behavior, or user-visible feature flows, the matching wiki page should be updated in the same PR.",
             "author": "Maintainer"
         },
         {
-            "content": "Do not over-focus on secondary surfaces like the blog or generic deployment setup when summarizing the repo. Prioritize reflection, trace handling, provenance display, contracts, and API-only package boundaries.",
+            "content": "Use screenshots selectively on user-facing pages such as Discord and Web features. One or two tightly cropped images are enough when they make the feature easier to understand.",
             "author": "Maintainer"
         }
     ],
     "pages": [
         {
-            "title": "Onboarding",
-            "purpose": "Help a new contributor get oriented quickly. Start with the main entrypoints, the most important docs, and the shortest path to understanding reflection, traces, and provenance.",
+            "title": "Introduction",
+            "purpose": "Welcome a new contributor with a polished overview of what Footnote is, why provenance matters, how the wiki is organized, and what to read first.",
             "entrypoints": [
                 "README.md",
                 "cursor.rules",
+                "AGENTS.md",
                 "packages/backend/src",
                 "packages/web/src",
                 "packages/discord-bot/src"
             ],
             "page_notes": [
                 {
-                    "content": "Canonical read order starts here: Onboarding -> Architecture -> Glossary -> Provenance -> Reflect: End-to-End Trace.",
+                    "content": "Use this as the curated landing page. Include sections for what Footnote is, why it is different, how to read the wiki, a first-30-minutes walkthrough, and suggested reading paths.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Include a simple 'first 30 minutes' section: run the backend, open the web app, trigger one reflect request, and inspect the resulting trace.",
+                    "content": "Start here, then read Architecture, Glossary, and Provenance. Use Packages when you want to find where a feature lives in code.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Include a 'first contribution' suggestion, ideally a small doc or UI clarity change related to provenance or trace display.",
+                    "content": "Include a simple first-run path: start the backend, open the web app, trigger one reflect request, and inspect the resulting trace.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Foundations",
+            "purpose": "Group the shared ideas that apply across the whole product: architecture, vocabulary, trace flow, provenance, and observability.",
+            "entrypoints": [
+                "README.md",
+                "docs/api/openapi.yaml",
+                "packages/contracts/src",
+                "packages/backend/src",
+                "packages/web/src",
+                "packages/discord-bot/src"
+            ],
+            "page_notes": [
+                {
+                    "content": "Read this after Introduction. It should explain the shared ideas before readers dive into package-specific feature pages.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Keep this section concept-first. Save detailed feature tours for the Packages branch of the wiki.",
                     "author": "Maintainer"
                 }
             ]
@@ -62,6 +89,7 @@
         {
             "title": "Architecture",
             "purpose": "Explain the monorepo at a high level: what the backend, web app, Discord bot, and contracts package each do, and how they connect through the backend API.",
+            "parent": "Foundations",
             "entrypoints": [
                 "packages/backend/src",
                 "packages/web/src",
@@ -71,19 +99,15 @@
             ],
             "page_notes": [
                 {
-                    "content": "Read this after Onboarding, then move to Glossary and Provenance.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Make the package boundary obvious: contracts define shared API shapes, backend owns execution and validation, and web/Discord are clients of backend APIs.",
+                    "content": "Use this as the system map. Make the package boundary obvious: contracts define shared shapes, backend owns execution and validation, and web and Discord are backend API clients.",
                     "author": "Maintainer"
                 }
             ]
         },
         {
             "title": "Glossary",
-            "purpose": "Define the main Footnote terms in one place so the rest of the wiki stays easy to read. Include provenance, confidence, riskTier, tradeoffCount, citations, chainHash, staleAfter, trace retrieval, and trace display.",
-            "parent": "Architecture",
+            "purpose": "Define the main Footnote terms in one place so the rest of the wiki stays easy to read.",
+            "parent": "Foundations",
             "entrypoints": [
                 "packages/contracts/src/ethics-core",
                 "packages/contracts/src/web/types.ts",
@@ -91,15 +115,19 @@
             ],
             "page_notes": [
                 {
-                    "content": "Read this right after Architecture. Other pages should use it as the plain-language reference for shared terms instead of redefining them from scratch.",
+                    "content": "Keep this page lightweight and definitional. Other pages should link back here instead of redefining common terms from scratch.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Include provenance, confidence, risk tier, tradeoff count, citations, chain hash, stale-after behavior, trace retrieval, and trace display.",
                     "author": "Maintainer"
                 }
             ]
         },
         {
             "title": "Provenance",
-            "purpose": "Explain why Footnote is different: answers are designed to be inspectable. Cover provenance metadata, confidence, risk tier, tradeoffs, citations, chain integrity fields, and stale trace behavior as user-facing features.",
-            "parent": "Architecture",
+            "purpose": "Explain why Footnote is different: answers are designed to be inspectable, traceable, and understandable to users.",
+            "parent": "Foundations",
             "entrypoints": [
                 "packages/contracts/src/ethics-core",
                 "packages/backend/src/handlers/reflect.ts",
@@ -109,36 +137,19 @@
             ],
             "page_notes": [
                 {
-                    "content": "Read this after Glossary, then move to Reflect: End-to-End Trace before branching into the route and client pages.",
+                    "content": "Explain both product meaning and engineering shape. A reader should understand why provenance exists before they read where the fields are stored or displayed.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Explain both the product meaning and the engineering shape. A reader should understand why these fields exist before seeing where they are stored.",
+                    "content": "Point readers to Trace Flow for the concrete end-to-end walkthrough.",
                     "author": "Maintainer"
                 }
             ]
         },
         {
-            "title": "Contracts: Ethics & Web",
-            "purpose": "Document the shared provenance metadata model in packages/contracts/src/ethics-core and the web API contract shapes in packages/contracts/src/web. Show the difference between compile-time types and runtime schemas.",
-            "parent": "Architecture",
-            "entrypoints": [
-                "packages/contracts/src/ethics-core",
-                "packages/contracts/src/web/types.ts",
-                "packages/contracts/src/web/schemas.ts",
-                "docs/api/openapi.yaml"
-            ],
-            "page_notes": [
-                {
-                    "content": "Key ownership boundaries: authoritative wire contract in docs/api/openapi.yaml, shared TypeScript shapes in packages/contracts/src/web/types.ts, runtime schemas in packages/contracts/src/web/schemas.ts.",
-                    "author": "Maintainer"
-                }
-            ]
-        },
-        {
-            "title": "Reflect: End-to-End Trace",
-            "purpose": "Walk through one reflect request from start to finish: POST /api/reflect, trace creation/storage, GET /api/traces/{responseId}, and how the result appears in the web app and Discord bot.",
-            "parent": "Provenance",
+            "title": "Trace Flow",
+            "purpose": "Walk through one reflect request from start to finish: request handling, trace creation, storage, retrieval, and display in the web app and Discord bot.",
+            "parent": "Foundations",
             "entrypoints": [
                 "packages/backend/src/handlers/reflect.ts",
                 "packages/backend/src/handlers/trace.ts",
@@ -152,40 +163,89 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "After this page, branch into Reflection API, Trace Storage, Web Trace Viewer, and Discord Provenance.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Related later pages: Observability, OpenAPI Code Links, and Package Boundaries.",
+                    "content": "After this page, branch into the package-specific pages for Backend Reflect, Backend Traces, Discord Provenance, Web Reflect, and Web Traces.",
                     "author": "Maintainer"
                 }
             ]
         },
         {
-            "title": "Reflection API",
-            "purpose": "Document the POST /api/reflect flow from request to response. Cover request validation, AI response generation, metadata creation, and how the endpoint returns both answer content and provenance metadata.",
-            "parent": "Provenance",
+            "title": "Observability",
+            "purpose": "Document how Footnote records operational context and model usage through structured logging, logging hygiene, and cost tracking.",
+            "parent": "Foundations",
             "entrypoints": [
-                "packages/backend/src/handlers/reflect.ts",
-                "packages/contracts/src/web/types.ts",
-                "packages/contracts/src/web/schemas.ts",
-                "packages/web/src/utils/api.ts"
+                "packages/discord-bot/src/utils/logger.ts",
+                "packages/backend/src/utils/logger.ts",
+                "packages/discord-bot/src/state/ChannelContextManager.ts",
+                "AGENTS.md",
+                "cursor.rules"
             ],
             "page_notes": [
                 {
-                    "content": "Focus on packages/backend/src/handlers/reflect.ts, packages/contracts/src/web/types.ts, packages/contracts/src/web/schemas.ts, and packages/web/src/utils/api.ts.",
+                    "content": "Focus on structured logging, privacy-aware log content, and where LLM costs are recorded and surfaced.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Include a small worked example and note the ownership boundaries: contracts define shapes, backend validates/produces data, web displays it.",
+                    "content": "Include failure modes and where to look when debugging trace, provenance, or cost-accounting issues.",
                     "author": "Maintainer"
                 }
             ]
         },
         {
-            "title": "Trace Storage",
-            "purpose": "Document how traces are stored, validated, retrieved, and expired. Cover POST /api/traces, GET /api/traces/{responseId}, the trace store, and stale trace behavior.",
-            "parent": "Provenance",
+            "title": "Packages",
+            "purpose": "Group the major code areas by package so contributors can quickly find where features live and which surfaces they affect.",
+            "entrypoints": [
+                "packages/backend/src",
+                "packages/contracts/src",
+                "packages/discord-bot/src",
+                "packages/web/src"
+            ],
+            "page_notes": [
+                {
+                    "content": "Use this section when you already know which product area you are working in. Keep package pages practical and feature-oriented.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Backend, Contracts, Discord, and Web should be hub pages that branch into concrete features such as traces, voice, images, incidents, embeds, and shared schemas.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Backend",
+            "purpose": "Explain the backend package as the execution core of Footnote: request handling, validation, storage, tracing, and policy-aware server behavior.",
+            "parent": "Packages",
+            "entrypoints": [
+                "packages/backend/src",
+                "server.js",
+                "docs/api/openapi.yaml"
+            ],
+            "page_notes": [
+                {
+                    "content": "Make it clear that the backend owns execution, persistence, and validation. Web and Discord should be described as clients of backend HTTP APIs.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Backend Reflect",
+            "purpose": "Document the POST /api/reflect flow from request validation to model execution, metadata creation, and response formatting.",
+            "parent": "Backend",
+            "entrypoints": [
+                "packages/backend/src/handlers/reflect.ts",
+                "packages/contracts/src/web/types.ts",
+                "packages/contracts/src/web/schemas.ts"
+            ],
+            "page_notes": [
+                {
+                    "content": "Use one worked example to show how a reflect request becomes an answer plus provenance metadata.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Backend Traces",
+            "purpose": "Document how traces are validated, stored, retrieved, and expired in the backend.",
+            "parent": "Backend",
             "entrypoints": [
                 "packages/backend/src/handlers/trace.ts",
                 "packages/backend/src/storage/traces/sqliteTraceStore.ts",
@@ -194,90 +254,233 @@
             ],
             "page_notes": [
                 {
-                    "content": "Focus on packages/backend/src/handlers/trace.ts, packages/backend/src/storage/traces/sqliteTraceStore.ts, packages/backend/src/storage/traces/traceStoreUtils.ts, and packages/contracts/src/web/schemas.ts.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Include failure modes and where to look: missing trace, stale trace, schema mismatch, store failure, and the relevant loggers or log fields.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Call out the ownership split clearly: contracts define the shared runtime schemas, backend validates and stores trace data, and clients read and display it.",
+                    "content": "Focus on stale traces, missing traces, schema mismatch, store failures, and where those failures are logged or surfaced.",
                     "author": "Maintainer"
                 }
             ]
         },
         {
-            "title": "Web Trace Viewer",
-            "purpose": "Document how the web app exposes provenance to users. Cover the trace page, reflect UI, web API client, and how metadata becomes visible and understandable in the browser.",
-            "parent": "Provenance",
+            "title": "Incidents",
+            "purpose": "Explain how incident records, audit events, and pseudonymized identifiers are stored and tested in the backend.",
+            "parent": "Backend",
             "entrypoints": [
-                "packages/web/src/pages/TracePage.tsx",
-                "packages/web/src/components/AskMeAnything.tsx",
-                "packages/web/src/components/MeetArete.tsx",
+                "packages/backend/src/storage/incidents/sqliteIncidentStore.ts",
+                "packages/backend/src/utils/pseudonymization.ts",
+                "packages/backend/test/incidentStore.test.ts",
+                "packages/backend/test/pseudonymization.test.ts"
+            ],
+            "page_notes": [
+                {
+                    "content": "Be clear about why Discord-facing identifiers are pseudonymized, where raw IDs must not appear, and how tests enforce those expectations.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Config",
+            "purpose": "Document backend configuration loading, environment bootstrap, public config exposure, and failure behavior when config is incomplete.",
+            "parent": "Backend",
+            "entrypoints": [
+                "packages/backend/src/bootstrapEnv.ts",
+                "packages/backend/src/config.ts",
+                "packages/backend/src/handlers/config.ts"
+            ],
+            "page_notes": [
+                {
+                    "content": "Explain which config is private, which config is exposed to clients, and where fail-open behavior is intentional.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Contracts",
+            "purpose": "Document the shared metadata and API shapes in the contracts package, and show the difference between compile-time types and runtime schemas.",
+            "parent": "Packages",
+            "entrypoints": [
+                "packages/contracts/src/ethics-core",
+                "packages/contracts/src/web/types.ts",
+                "packages/contracts/src/web/schemas.ts",
+                "docs/api/openapi.yaml"
+            ],
+            "page_notes": [
+                {
+                    "content": "Use this page when you want the concrete code side of shared contracts. Keep Foundations focused on meaning, and use this page for where the shared shapes live in code.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Be explicit about the ownership split: OpenAPI defines the wire contract, shared TypeScript types document usage, and runtime schemas enforce data at runtime.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Discord",
+            "purpose": "Explain the Discord bot package as the chat-first surface for Footnote, including responses, images, voice, and provenance features.",
+            "parent": "Packages",
+            "entrypoints": [
+                "packages/discord-bot/src/index.ts",
+                "packages/discord-bot/src/events",
+                "packages/discord-bot/src/commands",
+                "packages/discord-bot/src/api"
+            ],
+            "page_notes": [
+                {
+                    "content": "Keep this page practical. Describe what the bot can do for users before branching into specific features such as images, voice, responses, and provenance.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Responses",
+            "purpose": "Document the core Discord response flow, from message intake and planner gating to response formatting and send behavior.",
+            "parent": "Discord",
+            "entrypoints": [
+                "packages/discord-bot/src/events/MessageCreate.ts",
+                "packages/discord-bot/src/utils/MessageProcessor.ts",
+                "packages/discord-bot/src/utils/response/ResponseHandler.ts",
+                "packages/discord-bot/src/utils/openaiService.ts"
+            ],
+            "page_notes": [
+                {
+                    "content": "Focus on the user-facing response path: when the bot chooses to respond, how catchup heuristics limit noise, and where formatting and provenance are attached.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Images",
+            "purpose": "Document the Discord image-generation flow, including command handling, prompt/session state, upload behavior, and result delivery.",
+            "parent": "Discord",
+            "entrypoints": [
+                "packages/discord-bot/src/commands/image.ts",
+                "packages/discord-bot/src/commands/image",
+                "packages/discord-bot/src/config/imageConfig.ts"
+            ],
+            "page_notes": [
+                {
+                    "content": "Include one cropped Discord screenshot that shows the image flow in context so the feature feels concrete before readers dive into the command code.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Voice",
+            "purpose": "Document the Discord voice and realtime flow, including audio capture, playback, session management, and consent-sensitive behavior.",
+            "parent": "Discord",
+            "entrypoints": [
+                "packages/discord-bot/src/voice/VoiceSessionManager.ts",
+                "packages/discord-bot/src/voice/AudioCaptureHandler.ts",
+                "packages/discord-bot/src/voice/AudioPlaybackHandler.ts",
+                "packages/discord-bot/src/realtime/RealtimeAudioHandler.ts"
+            ],
+            "page_notes": [
+                {
+                    "content": "Include one screenshot or diagram that makes the voice experience tangible. Explain both the live user experience and the privacy-sensitive engineering concerns.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Provenance",
+            "purpose": "Document how the Discord bot exposes transparency features such as provenance footers, interactions, and trace links to end users.",
+            "parent": "Discord",
+            "entrypoints": [
+                "packages/discord-bot/src/api/traces.ts",
+                "packages/discord-bot/src/utils/response/provenanceFooter.ts",
+                "packages/discord-bot/src/utils/response/provenanceInteractions.ts",
+                "packages/discord-bot/src/utils/response/metadata.ts"
+            ],
+            "page_notes": [
+                {
+                    "content": "Include one screenshot of the provenance footer or interaction surface. Make the user-facing story clear before explaining the trace API calls behind it.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Web",
+            "purpose": "Explain the web package as the main browser surface for asking questions, inspecting traces, and browsing public content.",
+            "parent": "Packages",
+            "entrypoints": [
+                "packages/web/src",
+                "packages/web/src/App.tsx",
                 "packages/web/src/utils/api.ts"
             ],
             "page_notes": [
                 {
-                    "content": "Focus on packages/web/src/pages/TracePage.tsx, packages/web/src/components/AskMeAnything.tsx, packages/web/src/components/MeetArete.tsx, and packages/web/src/utils/api.ts.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Explain what the user actually sees, not just where the fetch happens.",
+                    "content": "Keep this page user-facing. Describe what users can do in the web app before diving into individual pages and components.",
                     "author": "Maintainer"
                 }
             ]
         },
         {
-            "title": "Discord Provenance",
-            "purpose": "Document how the Discord bot exposes transparency features to end users. Cover provenance footers, trace links, trace writes, trace reads, and why the bot is moving toward a thinner API-client shape.",
-            "parent": "Provenance",
+            "title": "Web Reflect",
+            "purpose": "Document the web ask flow: how the UI sends reflect requests, displays answers, and exposes provenance cues in the browser.",
+            "parent": "Web",
             "entrypoints": [
-                "packages/discord-bot/src/api",
-                "packages/discord-bot/src/utils/response/provenanceFooter.ts",
-                "packages/discord-bot/src/utils/response/provenanceInteractions.ts",
-                "packages/discord-bot/src/utils/MessageProcessor.ts"
+                "packages/web/src/components/AskMeAnything.tsx",
+                "packages/web/src/components/AskPanel.tsx",
+                "packages/web/src/utils/api.ts"
             ],
             "page_notes": [
                 {
-                    "content": "Focus on packages/discord-bot/src/api, packages/discord-bot/src/utils/response/provenanceFooter.ts, packages/discord-bot/src/utils/response/provenanceInteractions.ts, and packages/discord-bot/src/utils/MessageProcessor.ts.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Make the user-facing story clear: where provenance appears in Discord, what users can click, and how that connects back to backend trace APIs.",
+                    "content": "Include one screenshot of the ask-and-answer flow so readers can connect the components to the real user experience.",
                     "author": "Maintainer"
                 }
             ]
         },
         {
-            "title": "Observability",
-            "purpose": "Document how Footnote records operational context and model usage. Cover structured logging, logging hygiene, and where cost tracking and transparency-related observability live in the codebase.",
-            "parent": "Architecture",
+            "title": "Web Traces",
+            "purpose": "Document how the web app retrieves, renders, and explains trace data to users.",
+            "parent": "Web",
             "entrypoints": [
-                "packages/discord-bot/src/utils/logger.ts",
-                "packages/discord-bot/src/state/ChannelContextManager.ts",
-                "AGENTS.md",
-                "cursor.rules"
+                "packages/web/src/pages/TracePage.tsx",
+                "packages/web/src/components/ProvenanceFooter.tsx",
+                "packages/web/src/utils/api.ts"
             ],
             "page_notes": [
                 {
-                    "content": "This is part of the later branch after the main provenance flow pages.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Focus on packages/discord-bot/src/utils/logger.ts, ChannelContextManager.recordLLMUsage usage, and related logging/cost patterns called out in AGENTS.md and cursor.rules.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Include failure modes and where to look when debugging trace or provenance issues.",
+                    "content": "Include one screenshot of the trace page and call out the key provenance fields users actually see.",
                     "author": "Maintainer"
                 }
             ]
         },
         {
-            "title": "OpenAPI Code Links",
-            "purpose": "Document how the authoritative OpenAPI spec connects to code. Cover docs/api/openapi.yaml, @api.operationId and @api.path tags, x-codeRefs, runtime validation schemas, and the validate-openapi-links script.",
-            "parent": "Architecture",
+            "title": "Blog",
+            "purpose": "Document the web blog experience, including list pages, post rendering, provenance display, and supporting fetch utilities.",
+            "parent": "Web",
+            "entrypoints": [
+                "packages/web/src/pages/BlogListPage.tsx",
+                "packages/web/src/pages/BlogPostPage.tsx",
+                "packages/web/src/components/BlogPostCard.tsx",
+                "packages/web/src/components/BlogProvenance.tsx",
+                "packages/web/src/utils/blog.ts"
+            ],
+            "page_notes": [
+                {
+                    "content": "Keep this page lightweight. The blog is a secondary surface, so explain it clearly without letting it overshadow reflect, traces, and provenance.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Embed",
+            "purpose": "Document the embeddable web surface and how iframe sizing, hosting expectations, and external integrations work.",
+            "parent": "Web",
+            "entrypoints": [
+                "packages/web/src/pages/EmbedPage.tsx",
+                "packages/web/src/utils/api.ts"
+            ],
+            "page_notes": [
+                {
+                    "content": "Explain the user-facing embed experience, then describe the messaging and sizing behavior that make it work across host pages.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "OpenAPI",
+            "purpose": "Document how the authoritative OpenAPI spec connects to code, runtime schemas, and validation tooling across the repository.",
             "entrypoints": [
                 "docs/api/openapi.yaml",
                 "docs/api/openapi-code-linking.md",
@@ -287,37 +490,11 @@
             ],
             "page_notes": [
                 {
-                    "content": "This is part of the later branch after the main provenance flow pages.",
+                    "content": "Be explicit about the split: openapi.yaml is the wire contract, code annotations and x-codeRefs help navigation, and runtime schemas enforce data at runtime.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Be explicit about the split: openapi.yaml is the authoritative wire contract, @api tags and x-codeRefs help navigation, and runtime schemas enforce data at runtime.",
-                    "author": "Maintainer"
-                }
-            ]
-        },
-        {
-            "title": "Package Boundaries",
-            "purpose": "Explain the package-separation direction of the repo. Show why web and Discord bot should talk to the backend through HTTP APIs, how package-local API clients work, and how this supports clearer ownership and safer evolution.",
-            "parent": "Architecture",
-            "entrypoints": [
-                "packages/web/src/utils/api.ts",
-                "packages/discord-bot/src/api",
-                "packages/contracts/src/web",
-                "eslint.config.js",
-                "docs/api/openapi-code-linking.md"
-            ],
-            "page_notes": [
-                {
-                    "content": "This is part of the later branch after the main provenance flow pages.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Repeat the repo rule here: avoid cross-package runtime imports from backend into web or discord-bot.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Describe current progress honestly, including temporary rough edges that still exist while the repo is being separated.",
+                    "content": "Keep this top-level so contributors can find the API contract quickly from anywhere in the wiki.",
                     "author": "Maintainer"
                 }
             ]
