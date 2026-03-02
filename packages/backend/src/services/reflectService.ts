@@ -9,9 +9,9 @@
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type { PostReflectResponse } from '@footnote/contracts/web';
 import type {
+    OpenAIService,
     OpenAIResponseMetadata,
     ResponseMetadataRuntimeContext,
-    SimpleOpenAIService,
 } from './openaiService.js';
 import { logger } from '../utils/logger.js';
 
@@ -20,7 +20,7 @@ import { logger } from '../utils/logger.js';
  * The HTTP handler injects these so the core logic stays transport-agnostic.
  */
 export type CreateReflectServiceOptions = {
-    openaiService: SimpleOpenAIService;
+    openaiService: OpenAIService;
     storeTrace: (metadata: ResponseMetadata) => Promise<void>;
     buildResponseMetadata: (
         assistantMetadata: OpenAIResponseMetadata,

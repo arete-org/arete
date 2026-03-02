@@ -11,6 +11,7 @@ import http from 'node:http';
 
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { createReflectHandler } from '../src/handlers/reflect.js';
+import type { OpenAIService } from '../src/services/openaiService.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 
 type MutableEnv = NodeJS.ProcessEnv & {
@@ -42,7 +43,15 @@ const createMetadata = (): ResponseMetadata => ({
 
 const createTestServer = (): Promise<TestServer> =>
     new Promise((resolve) => {
-        const openaiService = {
+        const serviceRateLimit = Number.parseInt(
+            process.env.REFLECT_SERVICE_RATE_LIMIT || '30',
+            10
+        );
+        const serviceRateLimitWindowMs = Number.parseInt(
+            process.env.REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS || '60000',
+            10
+        );
+        const openaiService: OpenAIService = {
             async generateResponse() {
                 return {
                     normalizedText: 'service response',
@@ -58,11 +67,15 @@ const createTestServer = (): Promise<TestServer> =>
         };
 
         const handler = createReflectHandler({
-            openaiService: openaiService as never,
+            openaiService,
             ipRateLimiter: new SimpleRateLimiter({ limit: 5, window: 60000 }),
             sessionRateLimiter: new SimpleRateLimiter({
                 limit: 5,
                 window: 60000,
+            }),
+            serviceRateLimiter: new SimpleRateLimiter({
+                limit: serviceRateLimit,
+                window: serviceRateLimitWindowMs,
             }),
             storeTrace: async () => undefined,
             logRequest: () => undefined,
@@ -213,5 +226,60 @@ test('reflect service requests use a separate service rate limiter bucket', asyn
         env.REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS = previousServiceWindow;
         env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
         env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
+test('reflect trusted service requests stay in one bucket even if client IP changes', async () => {
+    const env = process.env as MutableEnv;
+    const previousServiceToken = env.REFLECT_SERVICE_TOKEN;
+    const previousServiceLimit = env.REFLECT_SERVICE_RATE_LIMIT;
+    const previousServiceWindow = env.REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+    const previousTrustProxy = process.env.WEB_TRUST_PROXY;
+
+    env.REFLECT_SERVICE_TOKEN = 'service-secret';
+    env.REFLECT_SERVICE_RATE_LIMIT = '1';
+    env.REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS = '60000';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+    process.env.WEB_TRUST_PROXY = 'true';
+
+    const server = await createTestServer();
+
+    try {
+        const firstResponse = await fetch(`${server.url}/api/reflect`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Service-Token': 'service-secret',
+                'X-Forwarded-For': '203.0.113.10',
+            },
+            body: JSON.stringify({ question: 'first request' }),
+        });
+        assert.equal(firstResponse.status, 200);
+
+        const secondResponse = await fetch(`${server.url}/api/reflect`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Service-Token': 'service-secret',
+                'X-Forwarded-For': '203.0.113.99',
+            },
+            body: JSON.stringify({ question: 'second request' }),
+        });
+        assert.equal(secondResponse.status, 429);
+        const payload = (await secondResponse.json()) as {
+            error: string;
+        };
+        assert.equal(payload.error, 'Too many requests from this service');
+    } finally {
+        await server.close();
+        env.REFLECT_SERVICE_TOKEN = previousServiceToken;
+        env.REFLECT_SERVICE_RATE_LIMIT = previousServiceLimit;
+        env.REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS = previousServiceWindow;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+        process.env.WEB_TRUST_PROXY = previousTrustProxy;
     }
 });

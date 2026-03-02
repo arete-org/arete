@@ -10,7 +10,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import type {
-    SimpleOpenAIService,
+    OpenAIService,
     OpenAIResponseMetadata,
     ResponseMetadataRuntimeContext,
 } from '../services/openaiService.js';
@@ -34,15 +34,17 @@ type LogRequest = (
     res: ServerResponse,
     extra?: string
 ) => void;
+
 type BuildResponseMetadata = (
     assistantMetadata: OpenAIResponseMetadata,
     runtimeContext: ResponseMetadataRuntimeContext
 ) => ResponseMetadata;
 
 type ReflectHandlerDeps = {
-    openaiService: SimpleOpenAIService | null;
+    openaiService: OpenAIService | null;
     ipRateLimiter: SimpleRateLimiter | null;
     sessionRateLimiter: SimpleRateLimiter | null;
+    serviceRateLimiter: SimpleRateLimiter | null;
     storeTrace: (metadata: ResponseMetadata) => Promise<void>;
     logRequest: LogRequest;
     buildResponseMetadata: BuildResponseMetadata;
@@ -62,11 +64,11 @@ const setCorsHeaders = (res: ServerResponse, req: IncomingMessage): void => {
 
     const sanitizedAllowedOrigins = Array.isArray(allowedOrigins)
         ? allowedOrigins.filter(
-              (o) =>
-                  typeof o === 'string' &&
-                  o !== '*' &&
-                  o.toLowerCase() !== 'null' &&
-                  o.trim() !== ''
+              (allowedOrigin) =>
+                  typeof allowedOrigin === 'string' &&
+                  allowedOrigin !== '*' &&
+                  allowedOrigin.toLowerCase() !== 'null' &&
+                  allowedOrigin.trim() !== ''
           )
         : [];
 
@@ -127,6 +129,7 @@ const createReflectHandler = ({
     openaiService,
     ipRateLimiter,
     sessionRateLimiter,
+    serviceRateLimiter,
     storeTrace,
     logRequest,
     buildResponseMetadata,
@@ -140,11 +143,13 @@ const createReflectHandler = ({
               defaultModel: runtimeConfig.openai.defaultModel,
           })
         : null;
+
     // If OpenAI is unavailable, we keep the handler alive and return 503 later instead of failing startup.
     // The controller keeps public and trusted-service limiter buckets separate.
     const rateLimitController = createReflectRateLimitController({
         ipRateLimiter,
         sessionRateLimiter,
+        serviceRateLimiter,
     });
 
     /**
@@ -196,6 +201,7 @@ const createReflectHandler = ({
                 if (parsedRequestResult.error.logLabel === 'reflect invalid-json') {
                     logger.warn('Reflect handler received invalid JSON body.');
                 }
+
                 sendJson(
                     res,
                     parsedRequestResult.error.statusCode,
@@ -211,6 +217,7 @@ const createReflectHandler = ({
                 req,
                 process.env.WEB_TRUST_PROXY === 'true'
             );
+
             // Auth decides whether this caller is a trusted service or a public browser/API caller.
             const authResult = resolveReflectAuth(req);
             if (!authResult.success) {
@@ -229,6 +236,7 @@ const createReflectHandler = ({
                 logger.debug(
                     `Turnstile token extraction: source=${authResult.data.tokenSource}, length=${authResult.data.turnstileToken?.length || 0}`
                 );
+
                 const captchaResult = await verifyTurnstileCaptcha({
                     clientIp: identity.clientIp,
                     requestHost:
@@ -272,49 +280,36 @@ const createReflectHandler = ({
                 return;
             }
 
-            try {
-                if (!reflectService) {
-                    sendJson(res, 503, {
-                        error: 'Service temporarily unavailable. Please try again later.',
-                    });
-                    logRequest(req, res, 'reflect service-unavailable');
-                    return;
-                }
-
-                // From here on, the request is fully normalized and can delegate to the shared workflow.
-                const reflectResponse = await reflectService.runReflect({
-                    question: parsedRequestResult.data.question,
+            if (!reflectService) {
+                sendJson(res, 503, {
+                    error: 'Service temporarily unavailable. Please try again later.',
                 });
-                sendJson(res, 200, reflectResponse);
-                logRequest(
-                    req,
-                    res,
-                    `reflect success questionLength=${parsedRequestResult.data.question.length}`
-                );
-            } catch (openaiError) {
-                sendJson(res, 502, {
-                    error: 'AI generation failed',
-                    details:
-                        openaiError instanceof Error
-                            ? openaiError.message
-                            : 'Unknown OpenAI error',
-                });
-                logRequest(
-                    req,
-                    res,
-                    `reflect openai-error ${openaiError instanceof Error ? openaiError.message : 'unknown error'}`
-                );
+                logRequest(req, res, 'reflect service-unavailable');
+                return;
             }
-        } catch (error) {
-            sendJson(res, 500, {
-                error: 'Internal server error',
+
+            // From here on, the request is fully normalized and can delegate to the shared workflow.
+            const reflectResponse = await reflectService.runReflect({
+                question: parsedRequestResult.data.question,
+            });
+            sendJson(res, 200, reflectResponse);
+            logRequest(
+                req,
+                res,
+                `reflect success questionLength=${parsedRequestResult.data.question.length}`
+            );
+        } catch (openaiError) {
+            sendJson(res, 502, {
+                error: 'AI generation failed',
                 details:
-                    error instanceof Error ? error.message : 'Unknown error',
+                    openaiError instanceof Error
+                        ? openaiError.message
+                        : 'Unknown OpenAI error',
             });
             logRequest(
                 req,
                 res,
-                `reflect error ${error instanceof Error ? error.message : 'unknown error'}`
+                `reflect openai-error ${openaiError instanceof Error ? openaiError.message : 'unknown error'}`
             );
         }
     };

@@ -23,6 +23,7 @@ type LimiterRef = {
 type CreateReflectRateLimitControllerOptions = {
     ipRateLimiter: SimpleRateLimiter | null;
     sessionRateLimiter: SimpleRateLimiter | null;
+    serviceRateLimiter: SimpleRateLimiter | null;
 };
 
 /**
@@ -32,6 +33,7 @@ type CreateReflectRateLimitControllerOptions = {
 export const createReflectRateLimitController = ({
     ipRateLimiter,
     sessionRateLimiter,
+    serviceRateLimiter,
 }: CreateReflectRateLimitControllerOptions) => {
     // These are created lazily so we only allocate fallback state if the caller did not inject a limiter.
     const fallbackIpLimiter: LimiterRef = { current: null };
@@ -97,7 +99,7 @@ export const createReflectRateLimitController = ({
         fallbackSessionLimiter
     );
     const activeServiceRateLimiter = getLimiter(
-        null,
+        serviceRateLimiter,
         'service',
         'REFLECT_SERVICE_RATE_LIMIT',
         'REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS',
@@ -134,7 +136,7 @@ export const createReflectRateLimitController = ({
             // Keep service callers off the public IP/session buckets so bot traffic
             // cannot consume the browser allowance.
             const serviceRateLimitResult = activeServiceRateLimiter.check(
-                `${serviceAuth.rateLimitKey}:${identity.clientIp}`
+                serviceAuth.rateLimitKey ?? 'trusted-service'
             );
             if (!serviceRateLimitResult.allowed) {
                 return {
