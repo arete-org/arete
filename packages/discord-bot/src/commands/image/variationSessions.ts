@@ -2,8 +2,8 @@
  * @description: Manages interactive image variation flows (modals, buttons, selects).
  * @footnote-scope: interface
  * @footnote-module: ImageVariationSessions
- * @footnote-risk: moderate - Interaction bugs can lock users or duplicate requests.
- * @footnote-ethics: moderate - Variation prompts influence generated content.
+ * @footnote-risk: medium - Interaction bugs can lock users or duplicate requests.
+ * @footnote-ethics: medium - Variation prompts influence generated content.
  */
 import {
     ActionRowBuilder,

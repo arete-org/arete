@@ -2,7 +2,7 @@
  * @description: Base event class for Discord.js events with error handling and registration.
  * @footnote-scope: interface
  * @footnote-module: EventBase
- * @footnote-risk: moderate - Event wiring issues can prevent handlers from firing.
+ * @footnote-risk: medium - Event wiring issues can prevent handlers from firing.
  * @footnote-ethics: low - This module is infrastructural and does not process content.
  */
 

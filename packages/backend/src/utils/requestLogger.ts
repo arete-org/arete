@@ -3,7 +3,7 @@
  * @footnote-scope: utility
  * @footnote-module: RequestLogger
  * @footnote-risk: low - Logging failures reduce observability but do not block requests.
- * @footnote-ethics: moderate - Logs must avoid leaking sensitive user data.
+ * @footnote-ethics: medium - Logs must avoid leaking sensitive user data.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { logger } from './logger.js';

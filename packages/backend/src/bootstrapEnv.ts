@@ -2,8 +2,8 @@
  * @description: Loads backend environment variables from the repo .env file before config-dependent modules initialize.
  * @footnote-scope: utility
  * @footnote-module: BackendEnvBootstrap
- * @footnote-risk: moderate - Late env loading can leave the backend running with incorrect security or model defaults.
- * @footnote-ethics: moderate - Incorrect startup configuration can weaken transparency and abuse-prevention safeguards.
+ * @footnote-risk: medium - Late env loading can leave the backend running with incorrect security or model defaults.
+ * @footnote-ethics: medium - Incorrect startup configuration can weaken transparency and abuse-prevention safeguards.
  */
 
 import fs from 'node:fs';

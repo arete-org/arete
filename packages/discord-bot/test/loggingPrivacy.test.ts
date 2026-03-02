@@ -1,14 +1,9 @@
 /**
- * @description: Validates that logging utilities redact or avoid leaking sensitive Discord
- * data, and that verbose logging is gated behind explicit flags.
+ * @description: Validates that logging utilities redact or avoid leaking sensitive Discord data, and that verbose logging is gated behind explicit flags.
  * @footnote-scope: test
  * @footnote-module: LoggingPrivacyTests
  * @footnote-risk: low - Logging regressions can leak sensitive data.
  * @footnote-ethics: high - Protects user privacy by preventing raw identifiers in logs.
- *
- * @impact
- * Risk: Logging regressions can leak sensitive data.
- * Ethics: Protects user privacy by preventing raw identifiers in logs.
  */
 
 import test from 'node:test';

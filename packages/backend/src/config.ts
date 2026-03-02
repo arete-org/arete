@@ -2,8 +2,8 @@
  * @description: Centralizes backend runtime configuration defaults and env parsing.
  * @footnote-scope: utility
  * @footnote-module: BackendRuntimeConfig
- * @footnote-risk: moderate - Misconfiguration can break API behavior or security controls.
- * @footnote-ethics: moderate - Incorrect defaults can weaken abuse protections.
+ * @footnote-risk: medium - Misconfiguration can break API behavior or security controls.
+ * @footnote-ethics: medium - Incorrect defaults can weaken abuse protections.
  */
 type RuntimeConfig = {
     openai: {

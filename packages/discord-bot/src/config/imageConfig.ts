@@ -2,8 +2,8 @@
  * @description: Reads image command configuration with environment overrides and defaults.
  * @footnote-scope: utility
  * @footnote-module: ImageConfig
- * @footnote-risk: moderate - Bad config can spike costs or break image generation.
- * @footnote-ethics: moderate - Config affects output style and safety behavior.
+ * @footnote-risk: medium - Bad config can spike costs or break image generation.
+ * @footnote-ethics: medium - Config affects output style and safety behavior.
  */
 import { logger } from '../utils/logger.js';
 import type {

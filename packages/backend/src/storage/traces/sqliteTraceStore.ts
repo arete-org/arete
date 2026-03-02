@@ -2,8 +2,8 @@
  * @description: Persists provenance traces in SQLite with retry handling and validation.
  * @footnote-scope: utility
  * @footnote-module: SqliteTraceStore
- * @footnote-risk: moderate - Storage errors can drop trace records or corrupt metadata.
- * @footnote-ethics: moderate - Trace accuracy underpins transparency and auditability.
+ * @footnote-risk: medium - Storage errors can drop trace records or corrupt metadata.
+ * @footnote-ethics: medium - Trace accuracy underpins transparency and auditability.
  */
 import Database from 'better-sqlite3';
 import fs from 'fs';

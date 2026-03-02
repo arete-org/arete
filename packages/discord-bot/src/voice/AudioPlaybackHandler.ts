@@ -1,14 +1,9 @@
 /**
- * @footnote-module: AudioPlaybackHandler
- * @footnote-risk: high
- * @footnote-ethics: high
- * @footnote-scope: core
- *
  * @description: Manages AI-generated audio playback to Discord voice channels.
- *
- * @impact
- * Risk: Handles audio queuing, pipeline management, and playback coordination. Failures can cause audio glitches, dropped responses, or channel disruption.
- * Ethics: Controls how and when AI-generated speech is delivered to users in voice channels, affecting the quality and timing of AI participation.
+ * @footnote-scope: core
+ * @footnote-module: AudioPlaybackHandler
+ * @footnote-risk: high - Handles audio queuing, pipeline management, and playback coordination. Failures can cause audio glitches, dropped responses, or channel disruption.
+ * @footnote-ethics: high - Controls how and when AI-generated speech is delivered to users in voice channels, affecting the quality and timing of AI participation.
  */
 
 import {

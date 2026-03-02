@@ -1,14 +1,9 @@
 /**
- * @footnote-module: OpenAIService
- * @footnote-risk: high
- * @footnote-ethics: high
- * @footnote-scope: core
- *
  * @description: Handles all LLM interactions and API calls with high cost/resource impact.
- *
- * @impact
- * Risk: API failures can break AI functionality or cause unexpected costs. Manages all OpenAI API communication including chat completions, embeddings, TTS, and image analysis.
- * Ethics: Manages cost tracking and API usage transparency. Every API call must be logged and cost-tracked to ensure responsible resource consumption and auditability.
+ * @footnote-scope: core
+ * @footnote-module: OpenAIService
+ * @footnote-risk: high - API failures can break AI functionality or cause unexpected costs. Manages all OpenAI API communication including chat completions, embeddings, TTS, and image analysis.
+ * @footnote-ethics: high - Manages cost tracking and API usage transparency. Every API call must be logged and cost-tracked to ensure responsible resource consumption and auditability.
  */
 
 import { fileURLToPath } from 'url';

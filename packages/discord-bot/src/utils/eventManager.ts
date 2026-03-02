@@ -1,14 +1,9 @@
 /**
- * @footnote-module: EventManager
- * @footnote-risk: high
- * @footnote-ethics: moderate
- * @footnote-scope: core
- *
  * @description: Manages Discord event loading and binding for the entire bot.
- *
- * @impact
- * Risk: Handles dynamic event loading and dependency injection. Failures can prevent event handlers from registering, breaking core bot functionality.
- * Ethics: Determines which event handlers are active, indirectly affecting how the bot monitors and responds to user actions.
+ * @footnote-scope: core
+ * @footnote-module: EventManager
+ * @footnote-risk: high - Handles dynamic event loading and dependency injection. Failures can prevent event handlers from registering, breaking core bot functionality.
+ * @footnote-ethics: medium - Determines which event handlers are active, indirectly affecting how the bot monitors and responds to user actions.
  */
 
 import { Client } from 'discord.js';

@@ -3,7 +3,7 @@
  * @footnote-scope: utility
  * @footnote-module: SimpleRateLimiter
  * @footnote-risk: low - Rate limiter failures could allow abuse but not data loss.
- * @footnote-ethics: moderate - Rate limiting protects fair access and abuse prevention.
+ * @footnote-ethics: medium - Rate limiting protects fair access and abuse prevention.
  */
 // --- Types ---
 type RateLimiterOptions = {

@@ -1,18 +1,9 @@
 /**
- * @footnote-module: CatchupFilter
- * @footnote-risk: moderate
- * @footnote-ethics: moderate
+ * @description: Provides lightweight, deterministic heuristics that decide whether the planner should be skipped for catchup events. The filter analyzes recent conversation history to weed out obvious non-response scenarios before we incur an LLM call.
  * @footnote-scope: utility
- *
- * @description: Provides lightweight, deterministic heuristics that decide whether the planner
- * should be skipped for catchup events. The filter analyzes recent conversation
- * history to weed out obvious non-response scenarios before we incur an LLM call.
- *
- * @impact
- * Risk: Overly aggressive heuristics could cause the bot to miss legitimate
- * engagement opportunities. The filter intentionally fails open to minimise risk.
- * Ethics: Reduces unnecessary AI engagement, lowering the chance of spamming or
- * intruding on human-only conversations.
+ * @footnote-module: CatchupFilter
+ * @footnote-risk: medium - Overly aggressive heuristics could cause the bot to miss legitimate
+ * @footnote-ethics: medium - Reduces unnecessary AI engagement, lowering the chance of spamming or
  */
 
 import { Message } from 'discord.js';

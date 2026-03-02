@@ -3,7 +3,7 @@
  * @footnote-scope: utility
  * @footnote-module: EnvConfig
  * @footnote-risk: high - Misconfiguration can break auth, rate limits, or cost tracking.
- * @footnote-ethics: moderate - Incorrect settings can alter safety behavior or disclosure.
+ * @footnote-ethics: medium - Incorrect settings can alter safety behavior or disclosure.
  */
 
 import dotenv from 'dotenv';

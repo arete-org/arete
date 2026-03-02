@@ -2,8 +2,8 @@
  * @description: Builds system and developer prompts for image generation requests.
  * @footnote-scope: utility
  * @footnote-module: ImagePromptBuilder
- * @footnote-risk: moderate - Prompt errors can degrade outputs or raise costs.
- * @footnote-ethics: moderate - Prompt framing shapes model behavior and safety.
+ * @footnote-risk: medium - Prompt errors can degrade outputs or raise costs.
+ * @footnote-ethics: medium - Prompt framing shapes model behavior and safety.
  */
 import { renderPrompt } from '../../utils/env.js';
 

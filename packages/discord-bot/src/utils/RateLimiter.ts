@@ -2,8 +2,8 @@
  * @description: Handles rate limiting for Discord and web API interactions.
  * @footnote-scope: utility
  * @footnote-module: RateLimiter
- * @footnote-risk: moderate - Incorrect limits can cause abuse or block valid users.
- * @footnote-ethics: moderate - Rate limits affect user access and fairness.
+ * @footnote-risk: medium - Incorrect limits can cause abuse or block valid users.
+ * @footnote-ethics: medium - Rate limits affect user access and fairness.
  */
 
 type RateLimitScope = 'user' | 'channel' | 'guild' | 'session';

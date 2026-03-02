@@ -3,7 +3,7 @@
  * Handles prompt loading, caching, and variable substitution.
  * @footnote-scope: utility
  * @footnote-module: PromptRegistry
- * @footnote-risk: moderate - Template errors can break AI interactions or distort prompt behavior.
+ * @footnote-risk: medium - Template errors can break AI interactions or distort prompt behavior.
  * @footnote-ethics: high - Prompt handling directly shapes the framing and transparency of AI responses.
  */
 

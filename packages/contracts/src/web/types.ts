@@ -3,7 +3,7 @@
  * @footnote-scope: interface
  * @footnote-module: WebContracts
  * @footnote-risk: low - Contract drift can break client/server compatibility.
- * @footnote-ethics: moderate - Contract clarity supports transparent behavior.
+ * @footnote-ethics: medium - Contract clarity supports transparent behavior.
  */
 
 import type { ResponseMetadata } from '../ethics-core';

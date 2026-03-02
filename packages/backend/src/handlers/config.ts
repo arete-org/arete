@@ -3,7 +3,7 @@
  * @footnote-scope: interface
  * @footnote-module: RuntimeConfigHandler
  * @footnote-risk: low - Misconfiguration affects UX but not core data integrity.
- * @footnote-ethics: moderate - Incorrect exposure of config could mislead users.
+ * @footnote-ethics: medium - Incorrect exposure of config could mislead users.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 

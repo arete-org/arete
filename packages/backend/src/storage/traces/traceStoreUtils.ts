@@ -3,7 +3,7 @@
  * avoid circular imports between the trace store factory and SQLite backend.
  * @footnote-scope: utility
  * @footnote-module: TraceStoreUtils
- * @footnote-risk: moderate - Validation mistakes can corrupt or reject audit data.
+ * @footnote-risk: medium - Validation mistakes can corrupt or reject audit data.
  * @footnote-ethics: high - Maintains integrity of provenance metadata and audit trails.
  */
 

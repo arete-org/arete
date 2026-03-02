@@ -1,14 +1,9 @@
 /**
- * @footnote-module: CommandHandler
- * @footnote-risk: high
- * @footnote-ethics: moderate
- * @footnote-scope: core
- *
  * @description: Manages Discord slash command deployment and registration.
- *
- * @impact
- * Risk: Handles command discovery, validation, and API registration. Failures can prevent users from accessing bot features or cause command registration errors.
- * Ethics: Controls which commands are available to users, affecting the bot's capabilities and user interaction surface.
+ * @footnote-scope: core
+ * @footnote-module: CommandHandler
+ * @footnote-risk: high - Handles command discovery, validation, and API registration. Failures can prevent users from accessing bot features or cause command registration errors.
+ * @footnote-ethics: medium - Controls which commands are available to users, affecting the bot's capabilities and user interaction surface.
  */
 
 import { REST, Routes, Collection } from 'discord.js';

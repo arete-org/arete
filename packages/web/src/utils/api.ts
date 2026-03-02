@@ -2,8 +2,8 @@
  * @description: Provides a package-local API client for web routes with shared transport and error parsing.
  * @footnote-scope: utility
  * @footnote-module: WebApiClient
- * @footnote-risk: moderate - Incorrect request handling can break chat/blog/trace experiences.
- * @footnote-ethics: moderate - Consistent error handling helps keep fallback behavior transparent.
+ * @footnote-risk: medium - Incorrect request handling can break chat/blog/trace experiences.
+ * @footnote-ethics: medium - Consistent error handling helps keep fallback behavior transparent.
  */
 
 import type {

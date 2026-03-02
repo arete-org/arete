@@ -2,8 +2,8 @@
  * @description: Provides shared HTTP transport utilities for Discord bot backend API calls.
  * @footnote-scope: utility
  * @footnote-module: DiscordApiTransport
- * @footnote-risk: moderate - Transport mistakes can break bot-side backend communication.
- * @footnote-ethics: moderate - Normalized error handling supports transparent fail-open behavior.
+ * @footnote-risk: medium - Transport mistakes can break bot-side backend communication.
+ * @footnote-ethics: medium - Normalized error handling supports transparent fail-open behavior.
  */
 
 import {

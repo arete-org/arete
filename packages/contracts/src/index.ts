@@ -3,7 +3,7 @@
  * @footnote-scope: interface
  * @footnote-module: ContractsIndex
  * @footnote-risk: low - Incorrect exports can cause type drift between packages.
- * @footnote-ethics: moderate - Types document data meaning but do not execute logic.
+ * @footnote-ethics: medium - Types document data meaning but do not execute logic.
  */
 
 // This file is intentionally small. It only re-exports types so every package

@@ -2,8 +2,8 @@
  * @description: Normalizes outbound URLs into Markdown autolinks (<url>) without reflowing formatting.
  * @footnote-scope: interface
  * @footnote-module: NormalizeOutboundLinks
- * @footnote-risk: moderate - Linkification errors can distort meaning or intent.
- * @footnote-ethics: moderate - Formatting changes shape user interpretation and trust.
+ * @footnote-risk: medium - Linkification errors can distort meaning or intent.
+ * @footnote-ethics: medium - Formatting changes shape user interpretation and trust.
  */
 
 // used only to run a Markdown parse so we can target edits by source offsets (no re-serialization/reflow).

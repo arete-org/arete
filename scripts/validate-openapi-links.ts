@@ -2,8 +2,8 @@
  * @description: Validates bidirectional links between OpenAPI operations and code annotations to prevent spec/code drift.
  * @footnote-scope: utility
  * @footnote-module: OpenApiLinksValidator
- * @footnote-risk: moderate - Broken link validation can allow stale API contracts to pass CI checks.
- * @footnote-ethics: moderate - Accurate API traceability supports transparent and reliable system behavior.
+ * @footnote-risk: medium - Broken link validation can allow stale API contracts to pass CI checks.
+ * @footnote-ethics: medium - Accurate API traceability supports transparent and reliable system behavior.
  */
 /**
  * Purpose:

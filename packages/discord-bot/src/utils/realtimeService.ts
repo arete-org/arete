@@ -1,14 +1,9 @@
 /**
- * @footnote-module: RealtimeService
- * @footnote-risk: high
- * @footnote-ethics: high
- * @footnote-scope: core
- *
  * @description: Core real-time AI session management and WebSocket coordination.
- *
- * @impact
- * Risk: Session failures can break all real-time AI functionality and waste resources. Manages WebSocket connections, session lifecycle, and audio streaming coordination.
- * Ethics: Controls real-time AI interactions in voice channels, affecting user privacy, consent, and the quality of live AI participation.
+ * @footnote-scope: core
+ * @footnote-module: RealtimeService
+ * @footnote-risk: high - Session failures can break all real-time AI functionality and waste resources. Manages WebSocket connections, session lifecycle, and audio streaming coordination.
+ * @footnote-ethics: high - Controls real-time AI interactions in voice channels, affecting user privacy, consent, and the quality of live AI participation.
  */
 
 import { EventEmitter } from 'events';

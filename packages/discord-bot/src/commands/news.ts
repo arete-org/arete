@@ -1,14 +1,9 @@
 /**
- * @footnote-module: NewsCommand
- * @footnote-risk: moderate
- * @footnote-ethics: moderate
- * @footnote-scope: interface
- *
  * @description: Fetches and processes news data from external sources.
- *
- * @impact
- * Risk: Handles web search, content filtering, and news summarization. Failures can return stale data or break the command.
- * Ethics: Presents curated news content to users, affecting information access and potential bias in source selection.
+ * @footnote-scope: interface
+ * @footnote-module: NewsCommand
+ * @footnote-risk: medium - Handles web search, content filtering, and news summarization. Failures can return stale data or break the command.
+ * @footnote-ethics: medium - Presents curated news content to users, affecting information access and potential bias in source selection.
  */
 
 import { SlashCommandBuilder } from 'discord.js';

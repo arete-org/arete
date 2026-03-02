@@ -2,8 +2,8 @@
  * @description: Coordinates image generation flows, retries, and embed formatting helpers.
  * @footnote-scope: utility
  * @footnote-module: ImageSessionHelpers
- * @footnote-risk: moderate - Workflow errors can create duplicate charges or invalid responses.
- * @footnote-ethics: moderate - Session behavior affects user expectations and transparency.
+ * @footnote-risk: medium - Workflow errors can create duplicate charges or invalid responses.
+ * @footnote-ethics: medium - Session behavior affects user expectations and transparency.
  */
 import {
     ActionRowBuilder,

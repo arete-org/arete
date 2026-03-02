@@ -2,8 +2,8 @@
  * @description: Shared API transport and error normalization for package-local clients.
  * @footnote-scope: utility
  * @footnote-module: WebApiClientCore
- * @footnote-risk: moderate - Shared transport regressions can impact multiple clients.
- * @footnote-ethics: moderate - Consistent error behavior helps maintain transparent fail-open handling.
+ * @footnote-risk: medium - Shared transport regressions can impact multiple clients.
+ * @footnote-ethics: medium - Consistent error behavior helps maintain transparent fail-open handling.
  */
 
 import type { NormalizedApiError } from './types';

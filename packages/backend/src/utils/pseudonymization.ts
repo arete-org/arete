@@ -6,7 +6,7 @@
  * admin surfaces.
  * @footnote-scope: utility
  * @footnote-module: Pseudonymization
- * @footnote-risk: moderate - Hashing mistakes can lead to data loss or mismatched audits.
+ * @footnote-risk: medium - Hashing mistakes can lead to data loss or mismatched audits.
  * @footnote-ethics: high - Prevents accidental storage or logging of raw user identifiers.
  */
 
