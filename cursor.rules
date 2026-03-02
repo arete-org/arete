@@ -124,26 +124,24 @@ export interface SimpleConfig {
 - Enable future automated audit tools (e.g., `pnpm audit-risk`)
 
 ## Current `@footnote-*` Scoped Logger Tagging
-- Every scoped logger must include the current structured `@footnote-*` annotations in its JSDoc header.
-- Use this format for consistency and machine-parseability:
+- Scoped logger annotations are a documentation convention. They are not part of the enforced five-tag module header schema.
+- Use this format when documenting a scoped logger:
 
 ```typescript
 /**
  * @footnote-logger: <loggerName>
- * 
- * @logs
- * <What this scoped logger tracks and logs>
- * 
- * Logging notes:
- * Risk: <Logging-specific risks if any>
- * Ethics: <Logging-specific ethical impacts if any>
+ * @logs: <What this scoped logger tracks and logs.>
+ * @footnote-risk: <low|medium|high> - <What could go wrong if this logger is noisy, missing, or leaks data.>
+ * @footnote-ethics: <low|medium|high> - <What privacy, transparency, or governance harm poor logging could cause.>
  */
 const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 ```
 
 - **@footnote-logger**: Logger module identifier (matches the child logger name)
 - **@logs**: What specific operations, events, or data this logger logs
-- Follow the same formatting standards as module headers for consistency
+- **@footnote-risk**: Technical blast radius if logging fails, misleads, or leaks data
+- **@footnote-ethics**: Privacy, transparency, or governance harm from poor logging behavior
+- Follow the same tag style as module headers for consistency
 
 ## Code Changes
 - Prefer small, well-scoped diffs.

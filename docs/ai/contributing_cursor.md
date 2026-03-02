@@ -58,7 +58,7 @@ For API boundary changes, keep OpenAPI and code links aligned:
 - CodeRabbit is available in the terminal for review support.
 - Run `cr -h` to inspect available commands.
 - Prefer prompt-only mode for shareable review text:
-  - `coderabbit --prompt-only -t uncommitted`
+    - `coderabbit --prompt-only -t uncommitted`
 - Limit CodeRabbit to 3 runs max per set of changes.
 
 ### Current `@footnote-*` Module Tagging
@@ -68,7 +68,7 @@ For API boundary changes, keep OpenAPI and code links aligned:
 - `@footnote-scope`: Logical role (`core`, `utility`, `interface`, `web`, `test`)
 - `@description`: 1-3 line summary of module purpose
 
-**Formatting Standards:**
+**Required module header format:**
 
 ```typescript
 /**
@@ -80,32 +80,31 @@ For API boundary changes, keep OpenAPI and code links aligned:
  */
 ```
 
-**Rubric reminders:**
-
-- Use `@footnote-risk` for technical blast radius if the module fails or is misused.
-- Use `@footnote-ethics` for user-facing or governance harm if the module behaves incorrectly.
-- `low`: localized helper or presentation issues
-- `medium`: feature-level disruption, hidden metadata, or misleading UI
-- `high`: core flow failure, provenance loss, privacy harm, or major trust damage
-
 ### Current `@footnote-*` Scoped Logger Tagging
 
 - `@footnote-logger`: Logger module identifier (matches the child logger name)
 - `@logs`: What specific operations, events, or data this logger logs
+- `@footnote-risk`: Technical blast radius if logging is missing, noisy, misleading, or leaks data
+- `@footnote-ethics`: User-facing or governance harm if logging behavior weakens privacy, transparency, or accountability
 
-**Formatting Standards:**
+Logger annotations are documentation conventions for scoped loggers (not currently enforced by validation).
+
+**Scoped logger documentation format:**
 
 ```typescript
 /**
  * @footnote-logger: <loggerName>
- *
- * @logs
- * <What this scoped logger tracks and logs>
- *
- * Logging notes:
- * Risk: <Logging-specific risks if any>
- * Ethics: <Logging-specific ethical impacts if any>
+ * @logs: <What this scoped logger tracks and logs.>
+ * @footnote-risk: <low|medium|high> - <What could go wrong if this logger is noisy, missing, or leaks data.>
+ * @footnote-ethics: <low|medium|high> - <What privacy, transparency, or governance harm poor logging could cause.>
  */
 const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 ```
 
+**Rubric reminders:**
+
+- Use `@footnote-risk` for technical blast radius if the module fails or is misused.
+- Use `@footnote-ethics` for user-facing or governance harm if the module behaves incorrectly.
+- `low`: e.g. localized helper or presentation issues
+- `medium`: e.g. feature-level disruption, hidden metadata, or misleading UI
+- `high`: e.g. core flow failure, provenance loss, privacy harm, or major trust damage

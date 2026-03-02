@@ -1,14 +1,9 @@
 /**
- * @footnote-module: RealtimeEngagementFilter
- * @footnote-risk: high
- * @footnote-ethics: high
- * @footnote-scope: core
- *
  * @description: Weighted scoring system for engagement decisions during catchup events, analyzing context, cost, and conversation dynamics
- *
- * @impact
- * Risk - Overly aggressive scoring causes spam; overly conservative scoring causes missed engagement.
- * Ethics - Controls bot's social awareness and respect for human conversations.
+ * @footnote-scope: core
+ * @footnote-module: RealtimeEngagementFilter
+ * @footnote-risk: high - Overly aggressive scoring causes spam; overly conservative scoring causes missed engagement.
+ * @footnote-ethics: high - Controls bot's social awareness and respect for human conversations.
  */
 
 import { Message } from 'discord.js';
@@ -21,13 +16,9 @@ import { TECHNICAL_KEYWORDS } from '../utils/CatchupFilter.js';
 
 /**
  * @footnote-logger: realtimeEngagementFilter
- *
- * @logs
- * Engagement decisions, scoring breakdowns, filter initialization, and error conditions
- *
- * @impact
- * Risk - Overly aggressive scoring causes spam; overly conservative scoring causes missed engagement.
- * Ethics - Controls bot's social awareness and respect for human conversations.
+ * @logs: Engagement decisions, scoring breakdowns, filter initialization, and error conditions.
+ * @footnote-risk: high - Missing logs can hide scoring regressions that cause spammy or absent engagement.
+ * @footnote-ethics: high - These records explain how the bot balances social awareness, restraint, and respect for human conversations.
  */
 const engagementLogger = logger.child({ module: 'realtimeEngagementFilter' });
 
