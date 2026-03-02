@@ -47,6 +47,23 @@ function collectMessages(files: Record<string, string>): string[] {
     return messages;
 }
 
+function collectMessagesWithScanRoots(
+    files: Record<string, string>,
+    scanRoots?: string[]
+): string[] {
+    let messages: string[] = [];
+
+    withTempRepo(files, (repoRoot) => {
+        const result = validateFootnoteAnnotations({
+            repoRoot,
+            scanRoots,
+        });
+        messages = result.diagnostics.map((diagnostic) => diagnostic.message);
+    });
+
+    return messages;
+}
+
 test('accepts a valid .ts file', () => {
     const messages = collectMessages({
         'packages/example/src/valid.ts': `/**
@@ -177,6 +194,42 @@ export const unknownTag = true;
     assert.ok(
         messages.some((message) =>
             message.includes('Unknown module header tag "@impact"')
+        )
+    );
+});
+
+test('scans scripts by default when no scan roots are provided', () => {
+    const messages = collectMessagesWithScanRoots({
+        'scripts/valid-script.ts': `/**
+ * @description: Handles a valid script module header.
+ * @footnote-scope: utility
+ * @footnote-module: ValidScript
+ * @footnote-risk: low - Validation should pass for scripts under the default scan roots.
+ * @footnote-ethics: low - This fixture only checks repository governance behavior.
+ */
+export const scriptValue = 1;
+`,
+    });
+
+    assert.deepEqual(messages, []);
+});
+
+test('rejects header tags that omit the required colon', () => {
+    const messages = collectMessages({
+        'packages/example/src/missing-colon.ts': `/**
+ * @description Handles a header tag that forgot the colon.
+ * @footnote-scope: utility
+ * @footnote-module: MissingColon
+ * @footnote-risk: low - The validator should fail malformed header syntax.
+ * @footnote-ethics: low - This fixture only tests static governance behavior.
+ */
+export const missingColon = true;
+`,
+    });
+
+    assert.ok(
+        messages.some((message) =>
+            message.includes('@description must use ":" after the tag name')
         )
     );
 });
