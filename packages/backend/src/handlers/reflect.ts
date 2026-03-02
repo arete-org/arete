@@ -102,8 +102,11 @@ const readHeaderValue = (
         return null;
     }
 
-    const rawValue = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-    const trimmedValue = rawValue.trim();
+    if (Array.isArray(headerValue)) {
+        return null;
+    }
+
+    const trimmedValue = headerValue.trim();
     return trimmedValue.length > 0 ? trimmedValue : null;
 };
 
@@ -818,11 +821,9 @@ const createReflectHandler = ({
 
             if (serviceAuth.isTrustedService) {
                 // Service callers are bucketed separately so bot traffic does not consume browser limits.
-                const serviceRateLimitKey = serviceAuth.isTrustedService
-                    ? serviceAuth.rateLimitKey
-                    : `${serviceAuth.rateLimitKey}:${clientIp}`;
+                const serviceRateLimitKey = serviceAuth.rateLimitKey!;
                 const serviceRateLimitResult = activeServiceRateLimiter.check(
-                    serviceRateLimitKey ?? `${serviceAuth.rateLimitKey}:${clientIp}`
+                    serviceRateLimitKey
                 );
                 if (!serviceRateLimitResult.allowed) {
                     res.statusCode = 429;
