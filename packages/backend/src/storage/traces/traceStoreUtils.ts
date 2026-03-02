@@ -6,8 +6,7 @@
  * @footnote-risk: medium - Validation mistakes can corrupt or reject audit data.
  * @footnote-ethics: high - Maintains integrity of provenance metadata and audit trails.
  */
-
-import type { ResponseMetadata } from '../../ethics-core/index.js';
+import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 
 export const traceStoreJsonReplacer = (_key: string, value: unknown) => {

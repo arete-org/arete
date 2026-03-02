@@ -7,6 +7,7 @@
  * @footnote-ethics: high - Incorrect metadata harms transparency and user trust.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { PostReflectRequestSchema } from '@footnote/contracts/web/schemas';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import type {
@@ -14,7 +15,6 @@ import type {
     OpenAIResponseMetadata,
     ResponseMetadataRuntimeContext,
 } from '../services/openaiService.js';
-import type { ResponseMetadata } from '../ethics-core/index.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
