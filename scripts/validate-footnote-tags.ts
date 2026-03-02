@@ -418,12 +418,20 @@ function parseCliArguments(argv: string[]): ValidateAnnotationOptions {
         const argument = argv[index];
 
         if (argument === '--root') {
+            if (index + 1 >= argv.length) {
+                console.error('Missing value for --root.');
+                process.exit(1);
+            }
             options.repoRoot = path.resolve(argv[index + 1]);
             index += 1;
             continue;
         }
 
         if (argument === '--scan-root') {
+            if (index + 1 >= argv.length) {
+                console.error('Missing value for --scan-root.');
+                process.exit(1);
+            }
             const nextValue = argv[index + 1];
             options.scanRoots = options.scanRoots ?? [];
             options.scanRoots.push(nextValue);
