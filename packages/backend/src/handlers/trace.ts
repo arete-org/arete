@@ -6,8 +6,8 @@
  * @footnote-ethics: high - Provenance access impacts user trust and auditability.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { PostTracesRequestSchema } from '@footnote/contracts/web/schemas';
-import type { ResponseMetadata } from '../ethics-core/index.js';
 import type { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { logger } from '../utils/logger.js';
 import { type TraceStore } from '../storage/traces/traceStore.js';

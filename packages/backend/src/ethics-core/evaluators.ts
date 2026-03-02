@@ -5,8 +5,7 @@
  * @footnote-risk: medium - Evaluation failures can lead to inappropriate AI behavior or missed ethical concerns.
  * @footnote-ethics: high - These classifiers influence transparency, accountability, and user trust in AI responses.
  */
-
-import { Provenance, RiskTier } from './types.js';
+import type { Provenance, RiskTier } from '@footnote/contracts/ethics-core';
 import { logger } from '../utils/logger.js';
 
 /**

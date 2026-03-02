@@ -5,10 +5,13 @@
  * @footnote-risk: medium - Storage errors can drop trace records or corrupt metadata.
  * @footnote-ethics: medium - Trace accuracy underpins transparency and auditability.
  */
+import type {
+    Citation,
+    ResponseMetadata,
+} from '@footnote/contracts/ethics-core';
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
-import type { ResponseMetadata } from '../../ethics-core/index.js';
 import { logger } from '../../utils/logger.js';
 import {
     assertValidResponseMetadata,
@@ -73,7 +76,8 @@ export class SqliteTraceStore {
     }
 
     private normalizeMetadata(metadata: ResponseMetadata): ResponseMetadata {
-        const normalizedCitations = metadata.citations.map((citation) => {
+        const normalizedCitations = metadata.citations.map(
+            (citation: Citation) => {
             if (!citation || typeof citation !== 'object') {
                 throw new Error(
                     `Invalid citation entry for response "${metadata.responseId}".`
@@ -94,7 +98,8 @@ export class SqliteTraceStore {
                 ...citation,
                 url,
             };
-        });
+            }
+        );
 
         return {
             ...metadata,

@@ -10,6 +10,7 @@ import './bootstrapEnv.js';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 
 import { runtimeConfig } from './config.js';
 import {
@@ -17,7 +18,6 @@ import {
     buildResponseMetadata,
 } from './services/openaiService.js';
 import { SimpleRateLimiter } from './services/rateLimiter.js';
-import type { ResponseMetadata } from './ethics-core/index.js';
 import { createTraceStore, storeTrace } from './services/traceStore.js';
 import { createBlogStore } from './storage/blogStore.js';
 import { createAssetResolver } from './http/assets.js';

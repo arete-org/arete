@@ -5,7 +5,7 @@
  * @footnote-risk: high - Trace persistence failures undermine auditing and trust.
  * @footnote-ethics: high - Missing provenance data reduces transparency guarantees.
  */
-import type { ResponseMetadata } from '../ethics-core/index.js';
+import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import {
     createTraceStoreFromEnv,
     type TraceStore,
