@@ -247,7 +247,62 @@ type OpenAITool = OpenAIWebSearchTool | OpenAIFunctionTool;
 const isFunctionTool = (tool: OpenAITool): tool is OpenAIFunctionTool =>
     tool.type === 'function';
 
+const FOOTNOTE_REPO_OWNER = 'footnote-ai';
+const FOOTNOTE_REPO_NAME = 'footnote';
+const FOOTNOTE_REPO_SLUG = `${FOOTNOTE_REPO_OWNER}/${FOOTNOTE_REPO_NAME}`;
 const DEEPWIKI_FOOTNOTE_URL = 'https://deepwiki.com/footnote-ai/footnote';
+const REPO_HINT_QUERY_TERMS: Record<RepoSearchHint, string[]> = {
+    architecture: ['architecture'],
+    backend: ['backend'],
+    contracts: ['contracts'],
+    discord: ['discord'],
+    images: ['image generation'],
+    onboarding: ['onboarding', 'getting started'],
+    web: ['web'],
+    observability: ['observability'],
+    openapi: ['openapi'],
+    prompts: ['prompts'],
+    provenance: ['provenance'],
+    reflect: ['reflect'],
+    traces: ['traces'],
+    voice: ['voice'],
+};
+
+function dedupeSearchTerms(terms: string[]): string[] {
+    const seen = new Set<string>();
+    const uniqueTerms: string[] = [];
+
+    for (const term of terms) {
+        const normalizedTerm = term.trim().toLowerCase();
+        if (!normalizedTerm || seen.has(normalizedTerm)) {
+            continue;
+        }
+
+        seen.add(normalizedTerm);
+        uniqueTerms.push(term.trim());
+    }
+
+    return uniqueTerms;
+}
+
+export function buildRepoExplainerQuery(
+    webSearch: OpenAIOptions['webSearch']
+): string {
+    const rawQuery = webSearch?.query?.trim() ?? '';
+    const hintTerms =
+        webSearch?.repoHints?.flatMap(
+            (hint) => REPO_HINT_QUERY_TERMS[hint] ?? [hint]
+        ) ?? [];
+
+    return dedupeSearchTerms([
+        FOOTNOTE_REPO_SLUG,
+        FOOTNOTE_REPO_OWNER,
+        FOOTNOTE_REPO_NAME,
+        'DeepWiki',
+        ...hintTerms,
+        rawQuery,
+    ]).join(' ');
+}
 
 export function buildWebSearchInstruction(
     webSearch: OpenAIOptions['webSearch']
@@ -255,6 +310,7 @@ export function buildWebSearchInstruction(
     const query = webSearch?.query?.trim() ?? '';
 
     if (webSearch?.searchIntent === 'repo_explainer') {
+        const repoQuery = buildRepoExplainerQuery(webSearch);
         const hintText =
             webSearch.repoHints && webSearch.repoHints.length > 0
                 ? ` Focus areas: ${webSearch.repoHints.join(', ')}.`
@@ -262,9 +318,11 @@ export function buildWebSearchInstruction(
 
         return [
             'The planner marked this as a Footnote repository explanation lookup.',
+            `Treat ${FOOTNOTE_REPO_SLUG} as the canonical repo identity for this search.`,
             `Prefer DeepWiki results from ${DEEPWIKI_FOOTNOTE_URL} when they are relevant.`,
             'If DeepWiki coverage is thin, use broader web context instead of getting stuck.',
-            `Search query: ${query}.${hintText}`.trim(),
+            `Search query: ${repoQuery}.${hintText}`.trim(),
+            `Original planner query: ${query}.`,
         ].join(' ');
     }
 
@@ -1170,4 +1228,3 @@ async function ensureDirectories(): Promise<void> {
         throw new Error('Failed to initialize output directories');
     }
 }
-

@@ -176,6 +176,7 @@ discord:
                   - Search whenever retrieved context would materially improve confidence, specificity, grounding, or source quality.
                   - Repo_explainer questions should usually search.
                   - Complex historical, policy, governance, or analytical questions should usually search.
+                  - If the user explicitly says to look it up, do a search, refer to your docs, or check your docs, and the topic is Footnote itself, use repo_explainer and search.
                   - Always emit a concise, non-empty webSearch.query.
                   - Always set webSearch.searchIntent to either repo_explainer or current_facts.
                   - Use repo_explainer for questions about Footnote itself, repo architecture, package ownership, feature flow, provenance, traces, observability, onboarding, or where to start.
@@ -183,6 +184,7 @@ discord:
                   - When searchIntent is repo_explainer, include repoHints when the package or theme is clear.
                   - repoHints may only use these values: architecture, backend, contracts, discord, images, onboarding, web, observability, openapi, prompts, provenance, reflect, traces, voice.
                   - Do not invent freeform repoHints.
+                  - For repo_explainer, anchor the query to Footnote's canonical repo identity: footnote-ai/footnote.
                   - For repo_explainer, prefer queries that help retrieve Footnote DeepWiki pages and related Footnote-specific context.
 
                 Always include a `riskTier` classification in your function call:

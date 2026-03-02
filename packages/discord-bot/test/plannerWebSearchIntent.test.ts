@@ -13,7 +13,10 @@ import path from 'path';
 
 import { Planner, type Plan } from '../src/utils/prompting/Planner.js';
 import { buildRepoExplainerResponseHint } from '../src/utils/MessageProcessor.js';
-import { buildWebSearchInstruction } from '../src/utils/openaiService.js';
+import {
+    buildRepoExplainerQuery,
+    buildWebSearchInstruction,
+} from '../src/utils/openaiService.js';
 
 function normalizePlan(plan: Partial<Plan>): Plan {
     const planner = new Planner({} as never);
@@ -144,6 +147,19 @@ test('buildWebSearchInstruction prefers DeepWiki for repo explainers', () => {
     assert.match(instruction, /Focus areas: discord, provenance/);
 });
 
+test('buildRepoExplainerQuery anchors repo searches to the canonical repo identity', () => {
+    const query = buildRepoExplainerQuery({
+        query: 'tell me about your onboarding process',
+        searchIntent: 'repo_explainer',
+        repoHints: ['onboarding'],
+    });
+
+    assert.match(query, /footnote-ai\/footnote/);
+    assert.match(query, /DeepWiki/);
+    assert.match(query, /onboarding/);
+    assert.match(query, /getting started/);
+});
+
 test('buildRepoExplainerResponseHint only appears for repo-explainer message plans', () => {
     const repoHint = buildRepoExplainerResponseHint({
         action: 'message',
@@ -212,4 +228,9 @@ test('mirrored planner prompts stay aligned and remove repoQuery guidance', () =
     assert.equal(backendPlannerSection.includes('repoQuery'), false);
     assert.equal(backendPlannerSection.includes('searchIntent'), true);
     assert.equal(backendPlannerSection.includes('repoHints'), true);
+    assert.equal(backendPlannerSection.includes('footnote-ai/footnote'), true);
+    assert.equal(
+        backendPlannerSection.includes('refer to your docs'),
+        true
+    );
 });
