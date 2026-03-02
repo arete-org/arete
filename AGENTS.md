@@ -64,7 +64,7 @@ Example:
 
 ## Testing & Validation
 
-- Pre-review: `pnpm pre-review`
+- Review: `pnpm review`
 - `@footnote-*` tags: `pnpm validate-footnote-tags`
 - OpenAPI linking: `pnpm validate-openapi-links`
 

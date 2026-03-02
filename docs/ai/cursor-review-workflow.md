@@ -1,8 +1,8 @@
-# Footnote Cursor Pre-Review Workflow
+# Footnote Cursor Review Workflow
 
 ## Overview
 
-Footnote uses Cursor IDE's automated analysis capabilities to perform structural pre-review before human code review. This workflow augments human judgment by focusing on mechanical thoroughness while preserving human expertise for logic, ethics, and integration decisions.
+Footnote uses Cursor IDE's automated analysis capabilities to perform structural review analysis before human code review. This workflow augments human judgment by focusing on mechanical thoroughness while preserving human expertise for logic, ethics, and integration decisions.
 
 ## Philosophy
 
@@ -35,7 +35,7 @@ graph TD
 ```json
 {
     "scripts": {
-        "pre-review": "pnpm validate-footnote-tags && pnpm validate-openapi-links && pnpm type-check && pnpm lint-check"
+        "review": "node scripts/review.js"
     }
 }
 ```
@@ -49,11 +49,11 @@ graph TD
 ```json
 {
     "commands": {
-        "pre-review": "pnpm pre-review"
+        "review": "pnpm review"
     },
     "tasks": {
-        "pre-review": {
-            "command": "pnpm pre-review",
+        "review": {
+            "command": "pnpm review",
             "description": "Run automated validation pipeline (`@footnote-*` tags, types, linting)"
         }
     }
@@ -62,9 +62,9 @@ graph TD
 
 **Purpose**: Provides quick access to validation commands through Cursor's interface.
 
-### 3. Pre-Review Checklist
+### 3. Review Checklist
 
-**File**: `.cursor/pre-review-checklist.md`
+**File**: `.cursor/review-checklist.md`
 
 **Sections**:
 
@@ -103,7 +103,7 @@ graph TD
 ### Step 2: Run Automated Validation
 
 ```bash
-pnpm pre-review
+pnpm review
 ```
 
 **What it checks**:
@@ -205,7 +205,7 @@ Every module must include:
 ### Issue: Missing `@footnote-*` Tags
 
 **Solution**: Run `pnpm validate-footnote-tags` first
-**Prevention**: Use pre-review checklist
+**Prevention**: Use review checklist
 
 ### Issue: Inadequate Comments
 
@@ -251,9 +251,9 @@ Every module must include:
 
 ### For Contributors
 
-1. **Always run validation first**: `pnpm pre-review`
+1. **Always run validation first**: `pnpm review`
 2. **Use structured prompts**: Follow `.cursor/footnote-prompts.md`
-3. **Follow the checklist**: Use `.cursor/pre-review-checklist.md`
+3. **Follow the checklist**: Use `.cursor/review-checklist.md`
 4. **Ask specific questions**: Use inline chat effectively
 5. **Document decisions**: Explain "why" not just "how"
 
@@ -266,7 +266,7 @@ Every module must include:
 
 ### For New Contributors
 
-1. **Start with the checklist**: Follow `.cursor/pre-review-checklist.md`
+1. **Start with the checklist**: Follow `.cursor/review-checklist.md`
 2. **Use the prompts**: Reference `.cursor/footnote-prompts.md`
 3. **Ask questions**: Use inline chat to understand project patterns
 4. **Learn the framework**: Understand Footnote's transparency- and provenance-focused approach
@@ -289,7 +289,7 @@ Every module must include:
 
 ## Conclusion
 
-The Footnote Cursor Pre-Review Workflow represents a comprehensive approach to augmenting human code review with AI assistance. By focusing on mechanical consistency while preserving human judgment for ethical and architectural decisions, this workflow maintains the project's commitment to traceable, ethics-aligned development.
+The Footnote Cursor Review Workflow represents a comprehensive approach to augmenting human code review with AI assistance. By focusing on mechanical consistency while preserving human judgment for ethical and architectural decisions, this workflow maintains the project's commitment to traceable, ethics-aligned development.
 
 The key to success is the integration of automated validation, structured prompts, and clear workflows that ensure both efficiency and quality. Human reviewers can focus on what matters most—ethical implications, logical correctness, and system integration—while Cursor handles the mechanical aspects of code quality and consistency.
 

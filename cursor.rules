@@ -172,10 +172,10 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 - To review uncommitted changes, run: `coderabbit --prompt-only -t uncommitted`.
 - Run CodeRabbit no more than 3 times per set of changes.
 
-## Pre-Review Analysis with Cursor
-- **Use Cursor for structural pre-review** before human code review to catch complexity, inconsistencies, and missing documentation.
+## Review Analysis with Cursor
+- **Use Cursor for structural review analysis** before human code review to catch complexity, inconsistencies, and missing documentation.
 - This augments human review by focusing on mechanical thoroughness while preserving human judgment for logic, ethics, and integration decisions.
-- **Prerequisites**: Always run `pnpm pre-review` first to ensure project-specific validation (including OpenAPI code-link checks) passes before Cursor analysis.
+- **Prerequisites**: Always run `pnpm review` first to ensure project-specific validation (including OpenAPI code-link checks) passes before Cursor analysis.
 
 ### Complexity Triage
 - Prompt Cursor to identify functions that do too many things, deep conditionals, or unclear data flow.
@@ -214,18 +214,18 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 
 ### Recommended Workflow
 1. **Complete implementation**
-2. **Run automated validation**: `pnpm pre-review` (validates `@footnote-*` tags, OpenAPI code links, types, linting)
+2. **Run automated validation**: `pnpm review` (validates `@footnote-*` tags, OpenAPI code links, types, linting)
 3. **Use Cursor's Bugbot (Review PR)** for automated code quality analysis
 4. **Use inline chat (`Ctrl+K`)** with project-specific prompts (see `.cursor/footnote-prompts.md`)
 5. **Accept suggested simplifications or comments** in-place
 6. **Open human PR review** for logic, ethics, and integration focus
 
 ### Integration with Existing Tools
-- **Pre-review pipeline**: `pnpm pre-review`
+- **Review pipeline**: `pnpm review`
 - **`@footnote-*` validation**: `pnpm validate-footnote-tags` (enforced by CI)
 - **OpenAPI linking validation**: `pnpm validate-openapi-links`
 - **Cursor tasks**: Use `.cursor/tasks.json` commands for quick access
-- **Checklist**: Follow `.cursor/pre-review-checklist.md` before Cursor analysis
+- **Checklist**: Follow `.cursor/review-checklist.md` before Cursor analysis
 - **Prompts**: Use `.cursor/footnote-prompts.md` for consistent, effective Cursor interactions
 
 ## Testing

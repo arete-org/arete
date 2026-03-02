@@ -1,4 +1,4 @@
-# Footnote Pre-Review Checklist
+# Footnote Review Checklist
 
 Use this checklist before opening a PR to ensure your code meets the project's standards and is ready for Cursor's automated analysis.
 
@@ -8,7 +8,7 @@ Use this checklist before opening a PR to ensure your code meets the project's s
 - [ ] **OpenAPI Linking**: `pnpm validate-openapi-links` passes (for API boundary changes)
 - [ ] **TypeScript**: `pnpm type-check` passes
 - [ ] **Linting**: `pnpm lint-check` passes
-- [ ] **Quick Check**: `pnpm pre-review` passes
+- [ ] **Quick Check**: `pnpm review` passes
 
 ## Project-Specific Requirements
 

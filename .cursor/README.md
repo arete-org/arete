@@ -47,7 +47,7 @@ The `cursor.dictionary` file contains project-specific terms to prevent auto-cor
 - `/ethics-audit` - Audit ethics tags for accuracy
 - `/format-code` - Format code with Prettier
 - `/type-check` - Run TypeScript type checking
-- `pre-review` task - Run full pre-review checks (`@footnote-*` tags, OpenAPI links, types, lint)
+- `review` task - Run full review checks (`@footnote-*` tags, OpenAPI links, types, lint)
 
 ## Usage
 

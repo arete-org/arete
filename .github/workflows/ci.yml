@@ -22,7 +22,7 @@ jobs:
             - run: corepack enable
             - run: corepack prepare pnpm@10.26.2 --activate
             - run: pnpm install --frozen-lockfile
-            - run: pnpm pre-review
+            - run: pnpm review
             - run: pnpm -r build
 
     docker:
