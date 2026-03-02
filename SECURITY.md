@@ -3,6 +3,8 @@
 Footnote is an open, ethics-first reasoning assistant built for transparency and auditability.  
 Security, in this context, means protecting **technical integrity**, ensuring **ethical safety**, and preserving **data provenance**.
 
+> “Honesty is the first chapter in the book of wisdom.” – Thomas Jefferson  
+
 ---
 
 ## Supported Versions
@@ -56,12 +58,5 @@ If you encounter behavior that could cause real-world harm (e.g., unsafe advice,
 - Report it via **“Report Issue”** button in Discord under each response.
 - Each confirmed case is logged in `docs/INCIDENTS.md` with anonymized context.
 - Recurrent failures trigger review and escalation to the Ethics Advisory process.
-
----
-
-## Guiding Principle
-
-> “Honesty is the first chapter in the book of wisdom.” – Thomas Jefferson
-> “The more hidden the mechanism, the more powerful it becomes.” – Hannah Arendt
 
 Thank you for helping make Footnote safer, more trustworthy, and more accountable.
