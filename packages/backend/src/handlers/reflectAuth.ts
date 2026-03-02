@@ -187,21 +187,14 @@ const normalizeHostname = (value: string | undefined): string | null => {
     return hostname && hostname.length > 0 ? hostname : null;
 };
 
-const getAllowedTurnstileHostnames = (
-    requestHost: string | undefined
-): string[] => {
+const getAllowedTurnstileHostnames = (): string[] => {
     const configuredHostnames =
         process.env.TURNSTILE_ALLOWED_HOSTNAMES
             ?.split(',')
             .map((hostname) => normalizeHostname(hostname))
             .filter((hostname): hostname is string => Boolean(hostname)) ?? [];
 
-    if (configuredHostnames.length > 0) {
-        return configuredHostnames;
-    }
-
-    const normalizedRequestHost = normalizeHostname(requestHost);
-    return normalizedRequestHost ? [normalizedRequestHost] : [];
+    return configuredHostnames;
 };
 
 export const verifyTurnstileCaptcha = async ({
@@ -373,7 +366,7 @@ export const verifyTurnstileCaptcha = async ({
             };
         }
 
-        const allowedHostnames = getAllowedTurnstileHostnames(requestHost);
+        const allowedHostnames = getAllowedTurnstileHostnames();
         const hostnameMatches = Boolean(
             normalizedResponseHostname &&
                 allowedHostnames.includes(normalizedResponseHostname)

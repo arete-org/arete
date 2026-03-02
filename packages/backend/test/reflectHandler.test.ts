@@ -17,6 +17,7 @@ import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 type MutableEnv = NodeJS.ProcessEnv & {
     TURNSTILE_SECRET_KEY?: string;
     TURNSTILE_SITE_KEY?: string;
+    TURNSTILE_ALLOWED_HOSTNAMES?: string;
     TRACE_API_TOKEN?: string;
     REFLECT_SERVICE_TOKEN?: string;
     REFLECT_SERVICE_RATE_LIMIT?: string;
@@ -364,11 +365,13 @@ test('reflect rate limits public callers before calling Turnstile', async () => 
     const env = process.env as MutableEnv;
     const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
     const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+    const previousAllowedHostnames = env.TURNSTILE_ALLOWED_HOSTNAMES;
     const originalFetch = globalThis.fetch;
     let turnstileCalls = 0;
 
     env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
     env.TURNSTILE_SITE_KEY = 'turnstile-site';
+    env.TURNSTILE_ALLOWED_HOSTNAMES = '127.0.0.1';
 
     globalThis.fetch = (async (input, init) => {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
@@ -424,5 +427,6 @@ test('reflect rate limits public callers before calling Turnstile', async () => 
         await server.close();
         env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
         env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+        env.TURNSTILE_ALLOWED_HOSTNAMES = previousAllowedHostnames;
     }
 });

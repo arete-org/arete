@@ -66,14 +66,14 @@ test('verifyTurnstileCaptcha rejects successful responses with the wrong hostnam
     }
 });
 
-test('verifyTurnstileCaptcha accepts request-host matches when no explicit allowlist is set', async () => {
+test('verifyTurnstileCaptcha accepts successful responses only when the hostname is explicitly allowed', async () => {
     const env = process.env as MutableEnv;
     const previousSecret = env.TURNSTILE_SECRET_KEY;
     const previousAllowedHostnames = env.TURNSTILE_ALLOWED_HOSTNAMES;
     const originalFetch = globalThis.fetch;
 
     env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
-    delete env.TURNSTILE_ALLOWED_HOSTNAMES;
+    env.TURNSTILE_ALLOWED_HOSTNAMES = 'localhost';
 
     globalThis.fetch = (async () => {
         return new Response(
