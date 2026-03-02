@@ -28,6 +28,15 @@ type TestServer = {
     url: string;
 };
 
+type CreateTestServerOptions = {
+    openaiService?: OpenAIService;
+    logRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        extra?: string
+    ) => void;
+};
+
 const createMetadata = (): ResponseMetadata => ({
     responseId: 'reflect_test_response',
     provenance: 'Inferred',
@@ -41,7 +50,9 @@ const createMetadata = (): ResponseMetadata => ({
     citations: [],
 });
 
-const createTestServer = (): Promise<TestServer> =>
+const createTestServer = (
+    options: CreateTestServerOptions = {}
+): Promise<TestServer> =>
     new Promise((resolve) => {
         const serviceRateLimit = Number.parseInt(
             process.env.REFLECT_SERVICE_RATE_LIMIT || '30',
@@ -51,7 +62,7 @@ const createTestServer = (): Promise<TestServer> =>
             process.env.REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS || '60000',
             10
         );
-        const openaiService: OpenAIService = {
+        const defaultOpenaiService: OpenAIService = {
             async generateResponse() {
                 return {
                     normalizedText: 'service response',
@@ -65,6 +76,7 @@ const createTestServer = (): Promise<TestServer> =>
                 };
             },
         };
+        const openaiService = options.openaiService ?? defaultOpenaiService;
 
         const handler = createReflectHandler({
             openaiService,
@@ -78,7 +90,7 @@ const createTestServer = (): Promise<TestServer> =>
                 window: serviceRateLimitWindowMs,
             }),
             storeTrace: async () => undefined,
-            logRequest: () => undefined,
+            logRequest: options.logRequest ?? (() => undefined),
             buildResponseMetadata: () => createMetadata(),
             maxReflectBodyBytes: 20000,
         });
@@ -281,5 +293,60 @@ test('reflect trusted service requests stay in one bucket even if client IP chan
         env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
         env.TURNSTILE_SITE_KEY = previousTurnstileSite;
         process.env.WEB_TRUST_PROXY = previousTrustProxy;
+    }
+});
+
+test('reflect does not expose raw upstream error details to clients', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+    const loggedEvents: string[] = [];
+
+    env.TRACE_API_TOKEN = 'trace-secret';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    const server = await createTestServer({
+        openaiService: {
+            async generateResponse() {
+                throw new Error('OpenAI upstream leaked diagnostic details');
+            },
+        },
+        logRequest: (_req, _res, extra) => {
+            if (extra) {
+                loggedEvents.push(extra);
+            }
+        },
+    });
+
+    try {
+        const response = await fetch(`${server.url}/api/reflect`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+            },
+            body: JSON.stringify({ question: 'What changed?' }),
+        });
+
+        assert.equal(response.status, 502);
+        const payload = (await response.json()) as {
+            error: string;
+            details?: string;
+        };
+        assert.deepEqual(payload, {
+            error: 'AI generation failed',
+        });
+        assert.ok(
+            loggedEvents.some((entry) =>
+                entry.includes('OpenAI upstream leaked diagnostic details')
+            )
+        );
+    } finally {
+        await server.close();
+        env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
     }
 });

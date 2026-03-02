@@ -299,17 +299,18 @@ const createReflectHandler = ({
                 `reflect success questionLength=${parsedRequestResult.data.question.length}`
             );
         } catch (openaiError) {
+            const errorMessage =
+                openaiError instanceof Error
+                    ? openaiError.message
+                    : String(openaiError);
+
             sendJson(res, 502, {
                 error: 'AI generation failed',
-                details:
-                    openaiError instanceof Error
-                        ? openaiError.message
-                        : 'Unknown OpenAI error',
             });
             logRequest(
                 req,
                 res,
-                `reflect openai-error ${openaiError instanceof Error ? openaiError.message : 'unknown error'}`
+                `reflect openai-error ${errorMessage}`
             );
         }
     };
