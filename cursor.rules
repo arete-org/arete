@@ -18,7 +18,12 @@
 - **Always include meaningful comments** - AI assistants tend to avoid comments, but they're essential for collaboration and learning.
 - Comments serve as documentation for future maintainers and community contributors.
 - Prioritize comments that explain "why" and "what", not just "how".
-- Write comments for competent developers - focus on knowledge transfer, not basic explanations.
+- Write comments so a junior contributor can follow the code without guessing.
+- Prefer short, plain language over dense jargon or architecture shorthand.
+- A good comment should help a reader answer three questions quickly:
+  - what is happening here?
+  - why does this code exist?
+  - what could go wrong if someone changes or removes it?
 
 ### **Code Comments (// and /* */)**
 - Add comments for complex business logic, non-obvious algorithms, or important decisions.
@@ -26,19 +31,34 @@
 - Document workarounds, edge cases, and potential gotchas.
 - Include context about external dependencies or API behaviors.
 - Use parenthetical explanations for technical terms: `technicalTerm (plainEnglish)`.
+- Keep comments concrete. Name the trigger, the behavior, and the consequence.
 
 **Good Code Comments:**
 ```typescript
-// Reset the counter when we post a message to prevent catch-up loops
+/**
+ * @description: Tracks one user's upload session so follow-up chunks are stitched together.
+ * @footnote-scope: core
+ * @footnote-module: UploadSessionTracker
+ * @footnote-risk: medium - Session mix-ups can attach chunks to the wrong upload and corrupt files.
+ * @footnote-ethics: low - This module coordinates uploads but does not make user-facing decisions.
+ */
+
+// Ignore the bot's own messages so we do not trigger another planning pass from our reply.
 if (message.author.id === message.client.user!.id) {
     this.resetCounter(channelKey);
     return;
 }
 
-// Apply catch-up filter to avoid unnecessary LLM calls during message floods (rapid-fire messages)
+// Keep the oldest message when trimming so the summary still has the start of the conversation.
+if (recentMessages.length > MAX_CONTEXT_MESSAGES) {
+    recentMessages = recentMessages.slice(0, 1).concat(recentMessages.slice(-19));
+}
+
+// Skip a new LLM call during message floods (rapid-fire messages) when the catch-up filter says
+// the user is still in the middle of sending context.
 const filterDecision = await this.catchupFilter.shouldSkipPlanner(message, recentMessages, channelKey);
 
-// Use fail-open design (don't block execution when uncertain)
+// Fail open here: if the config is missing, keep the feature working instead of blocking users.
 if (!this.config.enabled) {
     return;
 }
@@ -64,11 +84,13 @@ enabled = true;
 - Complex types with business logic or non-obvious relationships
 - Types where hover documentation helps developers understand requirements
 - Interfaces that benefit AI assistants for better context understanding
+- File headers and exported functions where a new contributor would otherwise need to read the whole file first
 
 **When to skip JSDoc:**
 - Simple, self-explanatory interfaces where property names are clear
 - Internal types that are obvious from context
 - Types that are just data containers without business meaning
+- Tiny helpers where the name already says enough and a comment would repeat the code
 
 **Good JSDoc Example:**
 ```typescript

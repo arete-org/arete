@@ -43,6 +43,8 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 - Prefer a junior-friendly teaching tone by default.
 - Explain decisions in plain language first, then include technical detail.
 - Keep explanations concrete and actionable.
+- Write code comments in the same style: short, plain-language, and easy for a junior contributor to follow.
+- Prefer comments that explain purpose, trigger, and consequence over comments that restate the code.
 
 ## Current `@footnote-*` Header Format
 
