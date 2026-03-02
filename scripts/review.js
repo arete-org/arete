@@ -5,16 +5,16 @@
  * @description: Runs the repository's review checks in one place and emits a single, predictable diagnostic format.
  * @footnote-scope: utility
  * @footnote-module: ReviewOrchestrator
- * @footnote-risk: moderate - Broken orchestration can hide validation failures or block contributor workflows.
+ * @footnote-risk: medium - Broken orchestration can hide validation failures or block contributor workflows.
  * @footnote-ethics: low - Validation output supports traceability, but it does not directly process user-facing data.
  */
 
 /**
- * Why this file exists:
+ * What this file does:
  * - Contributors should only need one command (`pnpm review`) before opening a PR.
  * - CI should use the exact same orchestration logic as local development.
- * - Each underlying tool reports problems differently, so we normalize everything into
- *   one small JSON shape that humans and machines can both consume reliably.
+ * - Each tool reports problems a little differently, so we normalize everything into one
+ *   small JSON shape that both humans and CI can read.
  *
  * High-level flow:
  * 1. Confirm the required local binaries exist before doing any real work.
@@ -33,8 +33,8 @@ const { spawnSync } = require('node:child_process');
 /**
  * Stable diagnostic payload emitted by the orchestrator.
  *
- * Keep this shape small so terminal output stays readable and CI can parse it easily.
- * Some upstream tools do not report a line number, so we use `1` instead of guessing.
+ * Keep this shape small so the terminal stays readable and CI can parse it easily.
+ * Some tools do not report a line number, so we use `1` instead of guessing.
  * @typedef {{
  *   file: string;
  *   line: number;
@@ -46,8 +46,8 @@ const { spawnSync } = require('node:child_process');
 /**
  * Minimal wrapper around `spawnSync` output.
  *
- * Keeping only the fields we actually use makes the parser code easier to read than passing
- * the full Node child-process result object through the entire file.
+ * Keeping only the fields we use is easier to read than passing the full child-process result
+ * through the whole file.
  * @typedef {{
  *   status: number;
  *   stdout: string;
@@ -60,7 +60,7 @@ const { spawnSync } = require('node:child_process');
  * Description of one validator step in the pipeline.
  *
  * `shouldRun` lets `--changed-only` skip work safely.
- * `run` owns the subprocess invocation.
+ * `run` starts the subprocess.
  * `parse` converts tool-specific output into the shared diagnostic shape.
  * @typedef {{
  *   name: string;
@@ -81,11 +81,11 @@ const trackedTypeScriptRoots = new Set(['packages', 'mcp']);
 /**
  * Convert paths into repository-relative POSIX-style strings.
  *
- * We do this for two reasons:
- * - CI and local machines should print the same file paths even when separators differ.
- * - Relative paths are easier to scan than long absolute paths in validation output.
+ * Why this exists:
+ * - CI and local machines should print the same path style even when separators differ.
+ * - Relative paths are easier to scan than long absolute paths.
  *
- * If a path cannot be made safely relative to the repo root, we leave it as-is and only
+ * If a path cannot be made safely relative to the repo root, leave it as-is and only
  * normalize the slashes.
  * @param {string} targetPath
  * @returns {string}
@@ -111,8 +111,7 @@ function normalizePath(targetPath) {
 /**
  * Emit one diagnostic as a single JSON line.
  *
- * Newline-delimited JSON keeps the output stable for CI while still being readable enough
- * for a person who wants to eyeball the raw log.
+ * Newline-delimited JSON keeps the output stable for CI and still readable in raw logs.
  * @param {Diagnostic} diagnostic
  */
 function printDiagnostic(diagnostic) {
@@ -122,15 +121,15 @@ function printDiagnostic(diagnostic) {
 /**
  * Run a subprocess and capture UTF-8 output.
  *
- * We usually call tools directly because argument handling is simpler that way.
+ * We usually call tools directly because argument handling stays simpler that way.
  * Windows is the exception: `.cmd` files like `pnpm.cmd` need `cmd.exe` to launch cleanly.
  * @param {string} command
  * @param {string[]} args
  * @returns {CommandResult}
  */
 function runCommand(command, args) {
-    // `pnpm.cmd` is a Windows batch file. Routing it through `cmd.exe` avoids Windows-specific
-    // launch errors and behaves like the command a contributor would type by hand.
+    // `pnpm.cmd` is a Windows batch file. Running it through `cmd.exe` matches what a
+    // contributor would type by hand and avoids Windows-specific launch errors.
     const executable =
         isWindows && command.toLowerCase().endsWith('.cmd')
             ? 'cmd.exe'
@@ -158,8 +157,8 @@ function runCommand(command, args) {
 /**
  * Run a git command and return the non-empty output lines.
  *
- * This helper keeps the changed-file logic below readable and treats git failures as
- * "no data available" rather than crashing the whole review command.
+ * This keeps the changed-file logic readable and treats git failures as "no data" instead of
+ * crashing the whole review command.
  * @param {string[]} args
  * @returns {string[]}
  */
@@ -178,12 +177,12 @@ function readGitLines(args) {
 /**
  * Collect files changed since `HEAD`, plus any untracked files.
  *
- * Why this is slightly broader than a simple `git diff`:
+ * This is a little broader than `git diff` on purpose:
  * - New files need to be linted and type-checked too.
  * - Deleted files still matter for cross-file validators, because removing a file can break
  *   an OpenAPI code reference or another repository-wide invariant.
- * - Repositories without a first commit yet do not have `HEAD`, so we fall back to git's
- *   tracked/untracked file listing in that case.
+ * - A brand new repo does not have `HEAD` yet, so we fall back to git's tracked and
+ *   untracked file listing in that case.
  * @returns {string[]}
  */
 function getChangedFiles() {
@@ -203,9 +202,8 @@ function getChangedFiles() {
 /**
  * Create a temporary `tsconfig` that only includes the changed TypeScript files.
  *
- * TypeScript does not have a simple CLI flag for "check only these files, but still use the
- * repo's normal compiler settings." To do that, we create a small temporary config that
- * extends the root config and lists only the changed files.
+ * TypeScript does not have a simple flag for "check only these files, but keep the repo's
+ * normal compiler settings." We create a small temporary config to do that.
  * @param {string[]} files
  * @returns {{ cleanup: () => void; configPath: string }}
  */
@@ -232,8 +230,8 @@ function createChangedOnlyTsconfig(files) {
 /**
  * Parse a `file:line` location string from validator output.
  *
- * Some validators bundle several locations into one sentence. Breaking them back into a
- * structured shape lets us keep the final output consistent.
+ * Some validators bundle several locations into one sentence. Breaking them apart keeps the
+ * final output consistent.
  * @param {string} location
  * @returns {{ file: string; line: number } | null}
  */
@@ -252,8 +250,8 @@ function parseFileLocation(location) {
 /**
  * Parse output from the Footnote tag validator.
  *
- * That script currently emits plain English error lines instead of JSON, so we match the
- * known error sentence structure and convert it into the shared diagnostic payload.
+ * That script prints plain-English error lines instead of JSON, so we match the known error
+ * sentence shape and convert it into the shared diagnostic payload.
  * @param {CommandResult} result
  * @returns {Diagnostic[]}
  */
@@ -278,8 +276,8 @@ function parseFootnoteTagDiagnostics(
         });
     }
 
-    // If the validator failed but did not print any recognizable error lines, surface a
-    // fallback diagnostic so the failure is still visible in CI.
+    // If the validator failed but we could not parse a file-level error, keep one fallback
+    // error so the failure is still visible in CI.
     if (diagnostics.length === 0 && result.status !== 0) {
         diagnostics.push({
             file: fallbackFile,
@@ -339,8 +337,8 @@ function parseOpenApiDiagnostics(result) {
         );
         if (annotationMatch) {
             const [, operationId, locations] = annotationMatch;
-            // One OpenAPI problem may point at several code annotations. We split them into
-            // separate diagnostics so editors and CI can associate each location cleanly.
+            // One OpenAPI problem may mention several code locations. Split them up so editors
+            // and CI can point at each file cleanly.
             for (const locationText of locations.split(', ')) {
                 const location = parseFileLocation(locationText);
                 if (!location) {
@@ -451,8 +449,8 @@ function parseTypeScriptDiagnostics(result) {
 /**
  * Parse JSON output from ESLint.
  *
- * ESLint already supports structured output, so this is the simplest parser in the file:
- * decode the JSON, then map each ESLint message into the shared diagnostic shape.
+ * ESLint already supports structured output, so this parser just decodes the JSON and maps
+ * each message into the shared diagnostic shape.
  * @param {CommandResult} result
  * @returns {Diagnostic[]}
  */
@@ -507,8 +505,8 @@ function parseEslintDiagnostics(result) {
 /**
  * Check that the required locally-installed binaries are available before any validator runs.
  *
- * This makes failures much friendlier for contributors. A missing `tsx` binary should produce
- * a direct "install dependencies first" message instead of a long subprocess stack trace.
+ * This makes failures friendlier for contributors. A missing `tsx` binary should produce a
+ * direct "install dependencies first" message instead of a long subprocess stack trace.
  * @returns {Diagnostic[]}
  */
 function preflightBinaries() {
@@ -599,7 +597,7 @@ function filterDiagnosticsToChangedFiles(diagnostics, changedFiles) {
  *
  * In `--changed-only` mode, we normally hide problems from untouched files.
  * The exception is a validator-level failure that points at the validator script itself.
- * We keep that message so the contributor still sees why the whole step failed.
+ * Keep that message so the contributor still sees why the whole step failed.
  * @param {Diagnostic[]} diagnostics
  * @param {Diagnostic[]} filteredDiagnostics
  * @returns {Diagnostic[]}
@@ -644,7 +642,7 @@ function main() {
 
     const changedFiles = changedOnly ? getChangedFiles() : [];
     const changedFileSet = new Set(changedFiles);
-    // Deleted files are useful for deciding whether repo-wide validators should run, but we
+    // Deleted files still matter when deciding whether repo-wide validators should run, but we
     // cannot pass deleted paths to tools like ESLint or TypeScript.
     const existingChangedFiles = changedFiles.filter((filePath) =>
         fs.existsSync(path.resolve(repoRoot, filePath))
@@ -654,7 +652,7 @@ function main() {
         existingChangedFiles.filter(isTrackedTypeScriptSource);
     const changedLintableFiles = existingChangedFiles.filter(isLintablePackageSource);
     // OpenAPI link validation is cross-file by nature. We still limit when it runs, but once
-    // it does run, it needs the full repo/spec view to catch broken references correctly.
+    // it does run it needs the full repo and spec view to catch broken references correctly.
     const shouldRunOpenApiInChangedMode = changedFiles.some(
         (filePath) =>
             filePath === 'docs/api/openapi.yaml' ||
@@ -694,7 +692,7 @@ function main() {
                 const diagnostics = parseFootnoteTagDiagnostics(result);
                 // This validator checks the whole repo, not just one file. In changed-only mode
                 // we hide unrelated file errors, but we still keep the fallback "validator
-                // failed" message so the failure is not invisible.
+                // failed" message so the failure does not disappear.
                 if (!changedOnly) {
                     return diagnostics;
                 }

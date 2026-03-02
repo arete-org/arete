@@ -15,7 +15,7 @@
 - Use generics thoughtfully when they clarify intent.
 
 ## Commenting Standards
-- **Always include meaningful comments** - AI assistants tend to avoid comments, but they're essential for collaboration and learning.
+- **Add meaningful comments when a new contributor would otherwise have to guess** (AI assistants tend to under-comment important decisions), but preserve readability.
 - Comments serve as documentation for future maintainers and community contributors.
 - Prioritize comments that explain "why" and "what", not just "how".
 - Write comments so a junior contributor can follow the code without guessing.

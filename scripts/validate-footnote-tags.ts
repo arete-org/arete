@@ -159,8 +159,8 @@ function parseModuleHeader(sourceFile: ts.SourceFile): ParsedHeader | null {
             continue;
         }
 
-        // Only the file-leading JSDoc blocks count here. We flatten wrapped tag text so the
-        // validator can treat multi-line descriptions the same as one-line descriptions.
+        // Only the file header counts here. Fold wrapped tag lines together so multi-line
+        // descriptions validate the same way as one-line descriptions.
         const rawLines = blockText.split(/\r?\n/);
         const startLine =
             sourceFile.getLineAndCharacterOfPosition(range.pos).line + 1;
@@ -200,7 +200,7 @@ function parseModuleHeader(sourceFile: ts.SourceFile): ParsedHeader | null {
                 continue;
             }
 
-            // Treat a plain text line after a tag as a continuation of that tag's value.
+            // A plain text line after a tag belongs to that tag.
             if (currentTag) {
                 currentTag.value = `${currentTag.value} ${lineText}`.trim();
             }
@@ -290,7 +290,7 @@ function validateFile(
     const orderedRequiredTags: ParsedTag[] = [];
     const seenTags = new Set<string>();
 
-    // First pass: reject unknown tags and keep the required tags in the order they appeared.
+    // Reject unknown tags first, then remember the required tags in the order we saw them.
     for (const tag of header.tags) {
         if (!allowedTagSet.has(tag.tagName)) {
             diagnostics.push({
@@ -317,8 +317,8 @@ function validateFile(
         requiredTagEntries.set(annotationTag, tag);
     }
 
-    // We stop after the first order mistake because the later positions are often noise once
-    // one tag is out of place.
+    // Stop at the first order mistake. Later order errors are usually just noise once one tag
+    // is already out of place.
     for (
         let index = 0;
         index < Math.min(orderedRequiredTags.length, schema.requiredTags.length);
@@ -428,7 +428,7 @@ function parseCliArguments(argv: string[]): ValidateAnnotationOptions {
                 console.error('Missing value for --root.');
                 process.exit(1);
             }
-            // Resolve once here so every later path comparison uses the same absolute root.
+            // Resolve the root once so later path checks compare the same absolute form.
             options.repoRoot = path.resolve(argv[index + 1]);
             index += 1;
             continue;
