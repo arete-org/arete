@@ -1,51 +1,43 @@
 # LICENSE_STRATEGY.md
 
-_A living document for Footnote's ethical licensing approach_
+_A living document for Footnote's licensing approach_
 
 Version: 0.1
-Last updated: 2026-02-05
+Last updated: 2026-03-02
 
 ---
 
 ## Current Status
 
-Footnote is released under a **dual-license model**:
+Footnote is released under a **dual-license model**, combining the openness and accessibility of the [MIT License](../MIT_LICENSE.md) with the moral commitments of the [Hippocratic License v3](../HIPPOCRATIC_LICENSE.md).
 
-> **MIT License + Hippocratic License v3 (HL3)**
-
-This dual structure combines the openness and accessibility of the MIT License with the moral commitments of the Hippocratic License v3, reflecting the project's foundational principle: **freedom with responsibility**.
-
-All components of the project are, by default, dual-licensed under both terms unless otherwise noted in their respective directories.  
-Both `MIT_LICENSE.md` and `HIPPOCRATIC_LICENSE.md` are included in the repository root.
+All components of the project are, by default, dual-licensed under both terms unless otherwise noted.  
 
 ---
 
-## Motivation: “AI Done Right”
+## Motivation
 
-Footnote was imagined not just as another AI tool, but as a **moral co-thinker**. Its design centers around transparency, value reasoning, and public auditability. Its outputs are explainable, traceable, and ethically weighted.  
-To be consistent with that mission, the **terms under which the project itself is built and used** must also be morally coherent and transparent.
+Footnote's design centers around transparency, value reasoning, and public auditability. Its outputs are ethically weighted and traceable. To be consistent with that mission, the terms under which the project itself is built and used must also be transparent and morally coherent.  
 
-The **Hippocratic License v3** aligns with this vision by embedding moral constraints directly into the license itself. Specifically, it forbids uses that violate fundamental human rights, and allows modular extensions to cover additional harms (e.g., surveillance, labor exploitation, environmental destruction).
-
-This licensing shift is not a symbolic gesture—it is a deliberate extension of the project's **provenance-aware architecture**, where ethical lineage is treated not as annotation, but as a **foundational element** of system design.
+The Hippocratic License aligns with this vision by embedding moral constraints directly into the license itself. Specifically, it forbids uses that violate fundamental human rights, and allows modular extensions to cover additional harms (e.g., surveillance, labor exploitation, environmental destruction).
 
 ---
 
 ## Active Scope
 
-The following **HL3 clauses** are currently active within Footnote's ethical scope:
+The following HL3 clauses are currently active within Footnote's ethical scope:
 
 - **Human Rights Clause** — Forbids use in systems that infringe upon internationally recognized human rights, including bodily autonomy and freedom of expression.
 - **No State Violence / Torture / Genocide Clause** — Disallows deployment for violence, detention, or state coercion.
 - **Slavery / Forced Labor Clause** — Prohibits use in systems tied to forced labor, trafficking, or exploitative labor conditions.
 
-These represent the project's **ethical baseline**—a non-negotiable set of moral commitments embedded in its license and provenance model.
+These represent the project's ethical baseline.
 
 ---
 
-## Anticipated Modules
+## Future Modules
 
-As Footnote's domain, architecture, and adoption mature, I intend to evaluate adding further HL3 modules that align with our moral commitments and technical risk landscape. Below are candidate modules; each will be introduced only after rigorous deliberation and community feedback.
+As Footnote's domain, architecture, and adoption mature, we intend to evaluate adding further HL3 modules that align with our moral commitments and technical risk landscape. Candidate modules include:
 
 - **Surveillance & Privacy Clause**  
   Restricts deployment in systems designed for unwarranted surveillance, biometric tracking, mass data profiling, or persistent behavior monitoring.
@@ -89,7 +81,7 @@ Each new module will be added only after:
 
 ## Integration with the Project's Ethical Architecture
 
-Licensing in Footnote isn't a static text file—it’s an active part of its ethical reasoning layer.  
+Licensing in Footnote is an active part of the ethical reasoning layer.  
 Every reasoning session, code artifact, and document may carry metadata such as:
 
 ```json
@@ -98,34 +90,17 @@ Every reasoning session, code artifact, and document may carry metadata such as:
 "license_provenance": "LICENSE_STRATEGY.md@v0.2"
 ```
 
-This connects licensing to provenance: any AI reasoning process can reference its ethical lineage directly, reinforcing transparency and moral accountability.
-
----
-
-## Future Work
-
-- Add `license_context` to TerminusDB schema
-- Extend `/explain` command to include license lineage
-- Draft `USE_POLICY.md` with clear “red lines” and examples
-- Write `ETHICS_DECISIONS.md` entry explaining rationale
-- Consider a `LICENSE_FAQ.md` to help contributors navigate concerns
-- Reach out to legal/ethical advisors for review of HL3 interpretation
-- Seek legal and ethical review of dual-license interoperability
+This connects licensing to provenance: any AI reasoning process can reference its ethical lineage directly.
 
 ---
 
 ## Community Participation
 
-Licensing is not a one-time choice but a living social contract.
-Contributors and users are invited to participate in shaping this evolving framework.
+Licensing is not a one-time choice but a living social contract. Contributors and users are invited to participate in shaping this evolving framework!
 
 Feedback and proposals are welcome via:
 
 - GitHub Discussions
 - Pull Requests to this file
 
----
-
-## Closing Thought
-
-The goal isn’t to police behavior through licensing, but to help ensure that what we build reflects the values we care about. A license, like a compass, doesn’t force a direction—but it helps keep us oriented toward what matters.
+The goal isn’t to police behavior through licensing, but to help ensure that what we build reflects the values we care about. Like a compass, licensing doesn’t force a direction, but helps keep us oriented toward what matters.
