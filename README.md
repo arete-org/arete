@@ -22,6 +22,8 @@ Every response includes:
 - what trade-offs it considered
 - what constraints and safety checks were applied
 
+![footnote_chat](https://github.com/user-attachments/assets/963e6144-7d83-4d90-a580-7fc5a01d3566)
+
 Footnote is built for human oversight, rather than “just believe me.”
 
 ---
