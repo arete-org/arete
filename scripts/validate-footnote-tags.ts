@@ -233,7 +233,7 @@ function parseModuleHeader(sourceFile: ts.SourceFile): ParsedHeader | null {
         }
     }
 
-    return headerBlocks.at(-1) ?? null;
+    return headerBlocks[0] ?? null;
 }
 
 function validateRationaleTag(

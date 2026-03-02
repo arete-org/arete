@@ -233,3 +233,27 @@ export const missingColon = true;
         )
     );
 });
+
+test('uses the first matching JSDoc block as the module header', () => {
+    const messages = collectMessages({
+        'packages/example/src/first-header-wins.ts': `/**
+ * @description: Declares the real module header at the top of the file.
+ * @footnote-scope: utility
+ * @footnote-module: FirstHeaderWins
+ * @footnote-risk: low - The validator should keep using the file header.
+ * @footnote-ethics: low - This fixture only checks parser behavior.
+ */
+
+/**
+ * @description: This later block should not replace the module header.
+ * @footnote-scope: utility
+ * @footnote-module: WrongHeader
+ * @footnote-risk: low - This block exists to catch parser regressions.
+ * @footnote-ethics: low - This block is only a secondary comment.
+ */
+export const firstHeaderWins = true;
+`,
+    });
+
+    assert.deepEqual(messages, []);
+});
