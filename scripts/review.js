@@ -76,7 +76,7 @@ const pnpmBinary = isWindows ? 'pnpm.cmd' : 'pnpm';
 const changedOnly = process.argv.includes('--changed-only');
 
 /** @type {ReadonlySet<string>} */
-const trackedTypeScriptRoots = new Set(['packages', 'mcp']);
+const trackedTypeScriptRoots = new Set(['packages', 'scripts', 'mcp']);
 
 /**
  * Convert paths into repository-relative POSIX-style strings.
