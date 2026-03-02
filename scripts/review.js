@@ -125,18 +125,19 @@ function printDiagnostic(diagnostic) {
  *
  * We avoid a shell by default because it makes argument handling more predictable. The one
  * exception is Windows `.cmd` files such as `pnpm.cmd`; those need to be launched through
- * `cmd.exe` to avoid `EINVAL` failures from `spawnSync`.
+ * the standard `cmd.exe` executable to avoid `EINVAL` failures from `spawnSync`.
  * @param {string} command
  * @param {string[]} args
  * @returns {CommandResult}
  */
 function runCommand(command, args) {
     // On Windows, calling `pnpm.cmd` directly via `spawnSync` can fail even though the same
-    // command works fine in an interactive terminal. Routing through `cmd.exe` keeps the
-    // automation behavior aligned with how contributors actually run pnpm locally.
+    // command works fine in an interactive terminal. Routing through the standard `cmd.exe`
+    // executable keeps the automation behavior aligned with how contributors actually run
+    // pnpm locally, without depending on environment-provided shell paths.
     const executable =
         isWindows && command.toLowerCase().endsWith('.cmd')
-            ? process.env.ComSpec || 'cmd.exe'
+            ? 'cmd.exe'
             : command;
     const executableArgs =
         isWindows && command.toLowerCase().endsWith('.cmd')
