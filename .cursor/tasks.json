@@ -17,7 +17,7 @@
         },
         "review": {
             "command": "pnpm review",
-            "description": "Run automated validation pipeline (@Footnote tags, types, linting)"
+            "description": "Run `@footnote-*` tag, OpenAPI link, type-check, and lint validation"
         },
         "format-code": {
             "command": "pnpm prettier --write packages/",

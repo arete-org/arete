@@ -123,18 +123,19 @@ function printDiagnostic(diagnostic) {
 /**
  * Run a subprocess and capture UTF-8 output.
  *
- * We avoid a shell by default because it makes argument handling more predictable. The one
- * exception is Windows `.cmd` files such as `pnpm.cmd`; those need to be launched through
- * the standard `cmd.exe` executable to avoid `EINVAL` failures from `spawnSync`.
+ * Most of the time we call tools directly instead of going through a shell. That keeps the
+ * arguments simpler and more predictable.
+ *
+ * Windows is the main exception. Commands like `pnpm.cmd` are batch files, and `spawnSync`
+ * can fail when we call them directly. Running them through `cmd.exe` matches how a developer
+ * would run the same command in a normal Windows terminal.
  * @param {string} command
  * @param {string[]} args
  * @returns {CommandResult}
  */
 function runCommand(command, args) {
-    // On Windows, calling `pnpm.cmd` directly via `spawnSync` can fail even though the same
-    // command works fine in an interactive terminal. Routing through the standard `cmd.exe`
-    // executable keeps the automation behavior aligned with how contributors actually run
-    // pnpm locally, without depending on environment-provided shell paths.
+    // `pnpm.cmd` is a Windows batch file. Routing it through `cmd.exe` avoids Windows-specific
+    // launch errors and behaves like the command a contributor would type by hand.
     const executable =
         isWindows && command.toLowerCase().endsWith('.cmd')
             ? 'cmd.exe'
@@ -207,9 +208,9 @@ function getChangedFiles() {
 /**
  * Create a temporary `tsconfig` that only includes the changed TypeScript files.
  *
- * TypeScript does not offer a clean "type-check only these files but still use the repo
- * compiler options" CLI mode, so we generate a tiny throwaway config that extends the root
- * config and narrows the file list.
+ * TypeScript does not have a simple CLI flag for "check only these files, but still use the
+ * repo's normal compiler settings." To do that, we create a small temporary config that
+ * extends the root config and lists only the changed files.
  * @param {string[]} files
  * @returns {{ cleanup: () => void; configPath: string }}
  */
@@ -478,7 +479,15 @@ function parseEslintDiagnostics(result) {
                 }
             }
         } catch (_error) {
-            // Fall through to a generic failure diagnostic below.
+            diagnostics.push({
+                file: 'eslint.config.mjs',
+                line: 1,
+                message:
+                    _error instanceof Error
+                        ? `Failed to parse ESLint JSON output: ${_error.message}`
+                        : 'Failed to parse ESLint JSON output.',
+                severity: 'error',
+            });
         }
     }
 
@@ -587,6 +596,41 @@ function filterDiagnosticsToChangedFiles(diagnostics, changedFiles) {
     return diagnostics.filter((diagnostic) => changedFiles.has(diagnostic.file));
 }
 
+/**
+ * Keep validator-level fallback diagnostics visible even in changed-only mode.
+ *
+ * In `--changed-only` mode, we usually show only diagnostics for touched files.
+ *
+ * Some validators cannot point to a changed file when they fail. Instead, they report the
+ * problem against the validator script itself. We keep those messages so the contributor still
+ * sees why the step failed.
+ * @param {Diagnostic[]} diagnostics
+ * @param {Diagnostic[]} filteredDiagnostics
+ * @returns {Diagnostic[]}
+ */
+function mergeValidatorFallbackDiagnostics(diagnostics, filteredDiagnostics) {
+    const mergedDiagnostics = [...filteredDiagnostics];
+    const fallbackDiagnostics = diagnostics.filter(
+        (diagnostic) => diagnostic.file === 'scripts/validate-footnote-tags.js'
+    );
+
+    for (const fallbackDiagnostic of fallbackDiagnostics) {
+        const alreadyIncluded = mergedDiagnostics.some(
+            (diagnostic) =>
+                diagnostic.file === fallbackDiagnostic.file &&
+                diagnostic.line === fallbackDiagnostic.line &&
+                diagnostic.message === fallbackDiagnostic.message &&
+                diagnostic.severity === fallbackDiagnostic.severity
+        );
+
+        if (!alreadyIncluded) {
+            mergedDiagnostics.push(fallbackDiagnostic);
+        }
+    }
+
+    return mergedDiagnostics;
+}
+
 function main() {
     const preflightDiagnostics = preflightBinaries();
     if (preflightDiagnostics.length > 0) {
@@ -632,11 +676,21 @@ function main() {
             run: () => runCommand(process.execPath, ['scripts/validate-footnote-tags.js']),
             parse: (result) => {
                 const diagnostics = parseFootnoteTagDiagnostics(result);
-                // The validator itself is repo-wide. In changed-only mode we filter the emitted
-                // diagnostics afterward so contributors only see problems tied to touched files.
-                return changedOnly
-                    ? filterDiagnosticsToChangedFiles(diagnostics, changedFileSet)
-                    : diagnostics;
+                // This validator checks the whole repo, not just one file. In changed-only mode
+                // we hide unrelated file errors, but we still keep the fallback "validator
+                // failed" message so the failure is not invisible.
+                if (!changedOnly) {
+                    return diagnostics;
+                }
+
+                const filteredDiagnostics = filterDiagnosticsToChangedFiles(
+                    diagnostics,
+                    changedFileSet
+                );
+                return mergeValidatorFallbackDiagnostics(
+                    diagnostics,
+                    filteredDiagnostics
+                );
             },
         },
         {
