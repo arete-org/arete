@@ -14,12 +14,12 @@ Use this checklist before opening a PR to ensure your code meets the project's s
 
 ### Module Documentation
 
-- [ ] **Module Header**: Contains all required tags in order (`@description`, `@footnote-scope`, `@footnote-module`, `@footnote-risk`, `@footnote-ethics`)
+- [ ] **Module Header**: Uses the exact ordered syntax `@description:`, `@footnote-scope:`, `@footnote-module:`, `@footnote-risk:`, `@footnote-ethics:` (colon required)
 - [ ] **Risk Level**: Uses `low`, `medium`, or `high` with a short same-line rationale
 - [ ] **Ethics Level**: Uses `low`, `medium`, or `high` with a short same-line rationale
 - [ ] **Scope**: Correctly categorized (`core`, `utility`, `interface`, `web`, or `test`)
 - [ ] **Description**: 1-3 lines explaining what the module does
-- [ ] **No Unknown Tags**: Old header tags like `@impact` are removed or converted to plain comments
+- [ ] **No Unknown Tags**: Old header tags like `@impact` are removed or converted to plain comments outside the module header
 
 ### Code Quality
 
