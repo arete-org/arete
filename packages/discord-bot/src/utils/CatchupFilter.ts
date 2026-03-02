@@ -2,8 +2,8 @@
  * @description: Provides lightweight, deterministic heuristics that decide whether the planner should be skipped for catchup events. The filter analyzes recent conversation history to weed out obvious non-response scenarios before we incur an LLM call.
  * @footnote-scope: utility
  * @footnote-module: CatchupFilter
- * @footnote-risk: medium - Overly aggressive heuristics could cause the bot to miss legitimate
- * @footnote-ethics: medium - Reduces unnecessary AI engagement, lowering the chance of spamming or
+ * @footnote-risk: medium - Overly aggressive heuristics could cause the bot to miss legitimate messages.
+ * @footnote-ethics: medium - Reduces unnecessary AI engagement, lowering the chance of spamming or unwanted interactions.
  */
 
 import { Message } from 'discord.js';
@@ -248,7 +248,8 @@ export class CatchupFilter {
         // Collapse whitespace to evaluate pure emoji sequences.
         const squashed = trimmed.replace(/\s+/g, '');
         // eslint-disable-next-line no-misleading-character-class -- Unicode emoji sequences require combining characters.
-        const emojiRegex = /^(?:\p{Extended_Pictographic}[\u{200D}\u{FE0F}]*)+$/u;
+        const emojiRegex =
+            /^(?:\p{Extended_Pictographic}[\u{200D}\u{FE0F}]*)+$/u;
         if (emojiRegex.test(squashed)) {
             return true;
         }
@@ -441,4 +442,3 @@ export class CatchupFilter {
         return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 }
-
