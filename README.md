@@ -13,7 +13,7 @@ Transparent, private, easy to run yourself — under your rules.
 
 ## What is Footnote?
 
-Footnote is an AI assistant that tries to show its work — its responses carry trace metadata you can easily inspect, unlike other assistants which give you polished answers but hide the trail.
+Footnote is an AI assistant that tries to show its work — its responses carry trace metadata you can easily inspect.  
 
 Every response includes:
 
@@ -21,80 +21,40 @@ Every response includes:
 - what sources it relied on
 - what trade-offs it considered
 - what constraints and safety checks were applied
-- a trace artifact suitable for review or audit
 
 Footnote is built for human oversight, rather than “just believe me.”
 
 ---
 
-## What you can try today
+## Try it today
 
-Footnote is a working prototype delivering these core features:
+Footnote is a working prototype with:
 
-- **Response traces** (artifacts + metadata) stored for later inspection
-- **Risk tiering** and citations
-- **Web demo** with a quick “ask” flow with provenance data
-- **Discord bot** provides provenance as first-class while preserving usability
-- **Self-hosting** via Docker (recommended for easiest setup), or to the cloud via Fly
-
----
-
-## Architecture at a glance
-
-Footnote is three small services that work together:
-
-- **Discord bot**  
-  Conversational interface in Discord (chat, images, voice)
-
-- **Web interface**  
-  Public-facing site with a quick chat demo and trace viewer.
-
-- **Backend API**  
-  Central brains: handles traces, configuration, rate limits, etc.
-  OpenAI is currently the only LLM provider. A provider pipeline (cloud + local) is planned.
+- **Web demo** with a quick “ask” flow
+- **Discord bot** provides seamless and rich interaction
+- **Self-hosting** via Docker, or in the cloud (Fly.io)
 
 ---
 
 ## Getting Started
 
-### Option A: Docker (recommended)
-
-For the minimum DIY experience, run via Docker and open the web UI.
-
-1. Clone the repository
-
-```bash
-git clone https://github.com/footnote-ai/footnote.git && cd footnote
-```
-
-2. Create a config file
-
-```bash
-cp .env.example .env
-```
-
-3. Start via Docker / Compose
-   (See [deploy/](deploy/) for the current compose topology and commands)
-
-4. Open the web UI (the default URL is typically [http://localhost:5173](http://localhost:5173))
-
-### Option B: Local dev (pnpm)
-
 1. Install dependencies
+
+> If pnpm isn't available yet, run `corepack enable` once (Node 16.10+), then `pnpm install`
 
 ```bash
 pnpm install
 ```
 
-> If pnpm isn't available yet, run `corepack enable` once (Node 16.10+), then re-run `pnpm install`.
-
-2. Configure environment variables
+2. Set environment variables
 
 ```bash
 cp .env.example .env
 ```
 
-At minimum:
+> This is the minimum config—See [.env.example](.env.example) for the full list.
+
+> OpenAI is currently the only LLM provider—Broader model/provider support is planned.
 
 ```
 DISCORD_TOKEN=...
@@ -105,8 +65,6 @@ OPENAI_API_KEY=...
 TRACE_API_TOKEN=...
 INCIDENT_PSEUDONYMIZATION_SECRET=...
 ```
-
-> See [.env.example](.env.example) for the full list and descriptions of optional settings.
 
 3. Start the backend and web app:
 
@@ -119,15 +77,6 @@ pnpm dev
 ```bash
 pnpm dev:bot
 ```
-
-Local dev now follows the same package boundary as production:
-
-- the backend runs as the API server at `BACKEND_BASE_URL` (default: `http://localhost:3000`)
-- the web app still uses relative browser requests like `/api/*`
-- Vite proxies those web requests to `BACKEND_BASE_URL`
-- the Discord bot calls `BACKEND_BASE_URL` directly
-
-If you need shared route shapes, use `@footnote/contracts`. Do not import backend internals into web or discord-bot.
 
 ---
 
