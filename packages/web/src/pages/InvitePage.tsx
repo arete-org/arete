@@ -1,3 +1,11 @@
+/**
+ * @description: Renders the self-hosting setup page with copyable commands and deployment guidance.
+ * @footnote-scope: web
+ * @footnote-module: InvitePage
+ * @footnote-risk: medium - Incorrect setup instructions can derail local installs or deployment attempts.
+ * @footnote-ethics: medium - Clear setup guidance affects user autonomy, hosting control, and privacy expectations.
+ */
+
 import React, { useState } from 'react';
 import Header from '@components/Header';
 import Footer from '@components/Footer';

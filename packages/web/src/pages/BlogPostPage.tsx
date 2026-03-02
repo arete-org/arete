@@ -1,4 +1,12 @@
 /**
+ * @description: Fetches and renders an individual blog post with markdown formatting and provenance metadata.
+ * @footnote-scope: web
+ * @footnote-module: BlogPostPage
+ * @footnote-risk: medium - Rendering or fetch failures can hide post content or break blog navigation.
+ * @footnote-ethics: medium - Accurate blog presentation affects attribution, context, and reader trust.
+ */
+
+/**
  * BlogPostPage component displays individual blog posts with markdown rendering.
  * Uses discussion number as URL parameter to fetch and display the full post content.
  */

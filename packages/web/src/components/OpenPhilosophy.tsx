@@ -1,3 +1,11 @@
+/**
+ * @description: Presents the short philosophy section and primary project actions on the landing page.
+ * @footnote-scope: web
+ * @footnote-module: OpenPhilosophySection
+ * @footnote-risk: low - Rendering issues affect a content section but do not break application state.
+ * @footnote-ethics: medium - Philosophy copy shapes how users understand Footnote's transparency and privacy goals.
+ */
+
 // Section explaining Footnote's philosophy and commitment to transparent AI.
 const OpenPhilosophy = (): JSX.Element => (
     <section className="intro-card" aria-labelledby="intro-card-title">

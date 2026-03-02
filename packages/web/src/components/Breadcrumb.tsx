@@ -1,4 +1,12 @@
 /**
+ * @description: Displays breadcrumb navigation for blog and setup pages within the web experience.
+ * @footnote-scope: web
+ * @footnote-module: BreadcrumbNav
+ * @footnote-risk: low - Breadcrumb issues only affect navigation cues on a subset of pages.
+ * @footnote-ethics: low - Clear navigation supports orientation and transparency but does not handle sensitive content.
+ */
+
+/**
  * Breadcrumb component displays navigation trail for blog and invite pages.
  * Shows current page and provides links back to parent pages and home.
  */

@@ -1,3 +1,11 @@
+/**
+ * @description: Defines the web app route tree and stitches together the landing page and standalone pages.
+ * @footnote-scope: web
+ * @footnote-module: WebAppRoutes
+ * @footnote-risk: medium - Routing mistakes can hide key web surfaces or send users to broken pages.
+ * @footnote-ethics: medium - The top-level route map affects access to transparency and self-hosting guidance.
+ */
+
 import { Routes, Route } from 'react-router-dom';
 import Hero from '@components/Hero';
 import Invite from '@components/Invite';

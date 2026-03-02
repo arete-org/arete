@@ -1,3 +1,11 @@
+/**
+ * @description: Showcases Footnote's capabilities with themed feature cards on the landing page.
+ * @footnote-scope: web
+ * @footnote-module: ServicesSection
+ * @footnote-risk: low - Feature card regressions mainly affect product communication and layout quality.
+ * @footnote-ethics: low - The section describes capabilities but does not process user content.
+ */
+
 import { useState, useEffect } from 'react';
 import { useTheme } from '../theme';
 

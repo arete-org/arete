@@ -1,3 +1,11 @@
+/**
+ * @description: Renders the site footer links for source code, discussion, philosophy, and licensing references.
+ * @footnote-scope: web
+ * @footnote-module: SiteFooter
+ * @footnote-risk: low - Footer link regressions reduce navigation quality but do not break core flows.
+ * @footnote-ethics: low - Accurate footer references support transparency but do not process user data.
+ */
+
 // Quiet footer reiterating licensing and lineage without drawing too much attention.
 const Footer = (): JSX.Element => (
     <footer className="site-footer">

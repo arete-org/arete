@@ -1,3 +1,11 @@
+/**
+ * @description: Displays confidence, citations, and provenance metadata for web responses.
+ * @footnote-scope: web
+ * @footnote-module: ProvenanceFooter
+ * @footnote-risk: medium - Footer rendering bugs can hide provenance signals or show malformed metadata.
+ * @footnote-ethics: high - Provenance visibility directly supports transparency, accountability, and informed trust.
+ */
+
 import type { CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import type {

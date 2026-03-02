@@ -1,4 +1,12 @@
 /**
+ * @description: Shows authorship, timestamps, and discussion metadata for blog posts in the web UI.
+ * @footnote-scope: web
+ * @footnote-module: BlogProvenance
+ * @footnote-risk: medium - Metadata rendering errors can hide provenance details or show stale attribution.
+ * @footnote-ethics: medium - Provenance visibility shapes user trust in authorship and publication history.
+ */
+
+/**
  * BlogProvenance component displays author information, timestamps,
  * GitHub discussion link, and comment count for blog posts.
  * Follows the same patterns as ProvenanceFooter for consistency.

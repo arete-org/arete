@@ -1,4 +1,12 @@
 /**
+ * @description: Lists blog posts with pagination and infinite-scroll behavior for the web site.
+ * @footnote-scope: web
+ * @footnote-module: BlogListPage
+ * @footnote-risk: low - List-loading bugs affect content discovery but stay localized to the blog index.
+ * @footnote-ethics: low - This page displays public posts and does not handle sensitive user content.
+ */
+
+/**
  * BlogListPage component displays a list of blog posts with infinite scroll functionality.
  * Uses Intersection Observer API to load more posts as the user scrolls.
  */

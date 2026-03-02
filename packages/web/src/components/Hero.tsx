@@ -1,3 +1,11 @@
+/**
+ * @description: Renders the landing page hero content and primary calls to action for the web site.
+ * @footnote-scope: web
+ * @footnote-module: HeroSection
+ * @footnote-risk: low - Hero regressions affect first impressions and CTA flow but do not break backend state.
+ * @footnote-ethics: medium - The hero sets user expectations about privacy, honesty, and transparency.
+ */
+
 import Header from './Header';
 import AskMeAnything from './AskMeAnything';
 
