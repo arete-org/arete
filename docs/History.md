@@ -1,8 +1,8 @@
 # History
 
-Footnote started as a hobby genAI project and turned into something more specific: building an assistant you can easily inspect, review, and steer.
+_Written by the project creator._ 
 
-(Last updated: 2026-02-28)
+> TL;DR: Footnote started as a hobby genAI project which grew into an assistant you can inspect, review, and steer.
 
 ## How it started
 
@@ -14,11 +14,7 @@ It was funny for a minute, but it got uncomfortable. It didn’t just copy the s
 
 That discomfort stuck with me. Besides affecting me personally, it also highlighted a wider issue: modern AI assistants can earn trust through familiarity, despite being easy to misunderstand and hard to control or audit. I wanted to address some of these pitfalls with generative AI.
 
-I drew inspiration from one of my favorite sci-fi characters, Daneel Olivaw, by Isaac Asimov. Daneel is written as a capable assistant who’s defined as much by his constraints as by his competence. I especially appreciate how he’s _careful_, and how the story treats that as a feature and not a bug.
-
-What I kept noticing is that Daneel’s helpfulness doesn’t come from sounding confident or having a strong personality, but from being predictable in ways that matter. He doesn’t treat conversation as something to win. When the right move is unclear, he’s willing to slow down, ask questions, consider the wider ramifications, and hold back. And when he does act, it’s usually legible enough that you can argue with it—meaning you can reason about what he did, why, and where the boundaries were.
-
-That mattered to me more once I’d seen how easily a bot could charismatically borrow my voice and create a false sense of alignment with me. I took almost the opposite lesson from Daneel: That trust should be earned through transparency, consistency, and restraint.
+I drew inspiration from one of my favorite sci-fi characters, Daneel Olivaw, by Isaac Asimov. Daneel is written as a capable assistant who’s defined as much by his constraints as by his competence. I especially appreciate how he’s _careful_, and how the story treats that as a feature and not a bug. His helpfulness doesn’t come from sounding confident or having a strong personality. He doesn’t treat conversation as something to win. He's caring, and predictable in ways that matter. When the right move is unclear, he’s willing to slow down, ask questions, and consider the wider impact. When he does act, you can reason about what he did, why, and where the boundaries were. That mattered to me more once I’d seen how easily a bot could charismatically borrow my voice and create a false sense of alignment with me. I took almost the opposite lesson from Daneel: That trust should be earned through transparency, consistency, and restraint.
 
 For a while, I approached this as a character reference: “Make the assistant feel more like _that_.” Over time, I realized the character itself wasn’t the point, but rather the shape of the behavior. I thought perhaps I could get closer to that shape by building a system with explicit constraints, predictable results, and an easy way to verify answers by tracing from trigger to result.
 
@@ -35,29 +31,15 @@ So I started asking different questions:
 
 That’s the through-line to Footnote: make assistant behavior something you can inspect, discuss, and tighten over time. The details live in [Philosophy.md](Philosophy.md).
 
-## What it is today
+### Why "Footnote"?  
 
-Today Footnote is:
+I wanted a name that describes a behavior. “Footnote” points to the idea that an answer shouldn’t be a dead end. If you care, you should be able to click through and see what it relied on—sources, assumptions, active rules, tool use, and so on.
 
-- a Discord bot,
-- a web interface, and
-- a backend API.
+## The Future
 
-Current features include: Trace metadata storage and retrieval, citations, risk tiering, and self-hosting support. The user-facing experience today centers on the web demo, Discord interactions, and a trace viewer you can open to view what shaped a response without digging through logs.
+Long term, more than a single bot, I want Footnote to be a _reusable approach_—patterns and tools for assistants that are easier to audit and steer.
 
-Demo: [ai.jordanmakes.dev](https://ai.jordanmakes.dev)
-
-## Why the name “Footnote”
-
-I wanted a name that describes a behavior.
-
-“Footnote” points to the idea that an answer shouldn’t be a dead end. If you care, you should be able to click through and see what it relied on—sources, assumptions, active rules, tool use, and so on.
-
-## Where it’s heading
-
-Long term, I want Footnote to be more than one bot. I want it to be a reusable approach: patterns and tools for assistants that are easier to steer and easier to audit.
-
-Today, the clearest implemented control surface is provenance and reviewability: traces, citations, metadata, and trace inspection. **Ari** is the current baseline configuration. Later, Footnote may support multiple profiles, with different rulesets and defaults.
+Currently, Footnote is focused on provenance and reviewability, with Ari as the baseline configuration. Later, Footnote may support multiple profiles, with different rulesets and defaults.
 
 ## Where to go next
 
