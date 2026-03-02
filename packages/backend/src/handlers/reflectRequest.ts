@@ -56,6 +56,7 @@ export const parseReflectRequest = async (
                 contentLength > maxReflectBodyBytes
             ) {
                 // Reject obviously oversized requests before buffering them in memory.
+                req.resume();
                 return {
                     success: false,
                     error: {
@@ -88,14 +89,38 @@ export const parseReflectRequest = async (
         });
 
         await new Promise<void>((resolve, reject) => {
-            // Treat the forced destroy from our own size guard as a handled outcome, not a server error.
-            req.on('end', () => resolve());
-            req.on('error', (error) => {
-                if (bodyTooLarge) {
-                    resolve();
+            let settled = false;
+            const resolveOnce = () => {
+                if (settled) {
                     return;
                 }
+
+                settled = true;
+                resolve();
+            };
+            const rejectOnce = (error: Error) => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
                 reject(error);
+            };
+
+            // Treat the forced destroy from our own size guard as a handled outcome, not a server error.
+            req.on('end', () => resolveOnce());
+            req.on('close', () => {
+                if (bodyTooLarge) {
+                    resolveOnce();
+                }
+            });
+            req.on('error', (error) => {
+                if (bodyTooLarge) {
+                    resolveOnce();
+                    return;
+                }
+
+                rejectOnce(error);
             });
         });
 
