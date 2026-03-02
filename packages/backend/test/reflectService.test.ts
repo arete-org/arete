@@ -73,3 +73,43 @@ test('createReflectService records backend token usage and estimated cost', asyn
     assert.equal(usageRecords[0].outputCostUsd, 0.00016);
     assert.equal(usageRecords[0].totalCostUsd, 0.00019);
 });
+
+test('createReflectService passes the effective model to response metadata building', async () => {
+    let capturedRuntimeContextModelVersion: string | null = null;
+    const openaiService: OpenAIService = {
+        async generateResponse() {
+            return {
+                normalizedText: 'reflect response',
+                metadata: {
+                    model: 'gpt-5.1',
+                    usage: {
+                        prompt_tokens: 12,
+                        completion_tokens: 8,
+                        total_tokens: 20,
+                    },
+                    confidence: 0.5,
+                    provenance: 'Inferred',
+                    tradeoffCount: 0,
+                    citations: [],
+                },
+            };
+        },
+    };
+
+    const reflectService = createReflectService({
+        openaiService,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedRuntimeContextModelVersion = runtimeContext.modelVersion;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    await reflectService.runReflect({
+        question: 'What changed?',
+    });
+
+    assert.equal(capturedRuntimeContextModelVersion, 'gpt-5.1');
+});

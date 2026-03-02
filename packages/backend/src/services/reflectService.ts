@@ -113,7 +113,7 @@ export const createReflectService = ({
         });
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
-            modelVersion: defaultModel,
+            modelVersion: usageModel,
             conversationSnapshot: `${question}\n\n${normalizedText}`,
         };
 
