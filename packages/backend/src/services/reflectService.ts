@@ -6,7 +6,10 @@
  * @footnote-risk: high - Mistakes here change the canonical reflect behavior used by multiple callers.
  * @footnote-ethics: high - This workflow owns the AI response and provenance metadata users rely on.
  */
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type {
+    ResponseMetadata,
+    RiskTier,
+} from '@footnote/contracts/ethics-core';
 import type { PostReflectResponse } from '@footnote/contracts/web';
 import type {
     OpenAIService,
@@ -42,6 +45,16 @@ export type RunReflectInput = {
     question: string;
 };
 
+/**
+ * Shared message-generation input used by the Discord/backend unified path.
+ */
+export type RunReflectMessagesInput = {
+    messages: Array<{ role: string; content: string }>;
+    conversationSnapshot: string;
+    riskTier?: RiskTier;
+    model?: string;
+};
+
 // The reflect prompt stays in backend so every caller gets the same behavior and metadata rules.
 const REFLECT_SYSTEM_PROMPT = `You are Ari, an AI assistant from the Footnote project. You help people think through tough questions while staying honest and fair. You explore multiple ethical perspectives, trace your sources, and show how you reach your conclusions. Be helpful, thoughtful, and transparent in your responses.
 
@@ -75,18 +88,18 @@ export const createReflectService = ({
     defaultModel,
     recordUsage = recordBackendLLMUsage,
 }: CreateReflectServiceOptions) => {
-    const runReflect = async ({
-        question,
-    }: RunReflectInput): Promise<PostReflectResponse> => {
-        // Keep prompt assembly here so reflect behavior lives in one backend module.
-        const messages = [
-            { role: 'system', content: REFLECT_SYSTEM_PROMPT },
-            { role: 'user', content: question.trim() },
-        ];
-
+    const runReflectMessages = async ({
+        messages,
+        conversationSnapshot,
+        riskTier = 'Low',
+        model,
+    }: RunReflectMessagesInput): Promise<{
+        message: string;
+        metadata: ResponseMetadata;
+    }> => {
         // The OpenAI wrapper already handles provider-specific request/retry details.
         const aiResponse = await openaiService.generateResponse(
-            defaultModel,
+            model ?? defaultModel,
             messages
         );
 
@@ -122,7 +135,7 @@ export const createReflectService = ({
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
-            conversationSnapshot: `${question}\n\n${normalizedText}`,
+            conversationSnapshot: `${conversationSnapshot}\n\n${normalizedText}`,
         };
 
         // Metadata is the contract that downstream UIs and trace storage rely on.
@@ -130,6 +143,13 @@ export const createReflectService = ({
             assistantMetadata,
             runtimeContext
         );
+        const normalizedResponseMetadata: ResponseMetadata =
+            responseMetadata.riskTier === riskTier
+                ? responseMetadata
+                : {
+                      ...responseMetadata,
+                      riskTier,
+                  };
 
         // These logs are intentionally verbose because metadata mismatches are hard to debug later.
         logger.debug('=== Server Metadata Debug ===');
@@ -140,15 +160,15 @@ export const createReflectService = ({
             `Assistant metadata confidence: ${(assistantMetadata as { confidence?: number })?.confidence}`
         );
         logger.debug(
-            `Built response metadata: ${JSON.stringify(responseMetadata, null, 2)}`
+            `Built response metadata: ${JSON.stringify(normalizedResponseMetadata, null, 2)}`
         );
         logger.debug(
-            `Response metadata confidence: ${(responseMetadata as { confidence?: number }).confidence}`
+            `Response metadata confidence: ${(normalizedResponseMetadata as { confidence?: number }).confidence}`
         );
         logger.debug('================================');
 
         // Trace writes stay fire-and-forget so a storage hiccup does not block the user response.
-        storeTrace(responseMetadata).catch((error) => {
+        storeTrace(normalizedResponseMetadata).catch((error) => {
             logger.error(
                 `Background trace storage error: ${error instanceof Error ? error.message : String(error)}`
             );
@@ -156,11 +176,33 @@ export const createReflectService = ({
 
         return {
             message: normalizedText,
-            metadata: responseMetadata,
+            metadata: normalizedResponseMetadata,
+        };
+    };
+
+    const runReflect = async ({
+        question,
+    }: RunReflectInput): Promise<PostReflectResponse> => {
+        // Keep prompt assembly here so the public web reflect path stays stable.
+        const messages = [
+            { role: 'system', content: REFLECT_SYSTEM_PROMPT },
+            { role: 'user', content: question.trim() },
+        ];
+        const response = await runReflectMessages({
+            messages,
+            conversationSnapshot: question.trim(),
+        });
+
+        return {
+            action: 'message',
+            message: response.message,
+            modality: 'text',
+            metadata: response.metadata,
         };
     };
 
     return {
         runReflect,
+        runReflectMessages,
     };
 };

@@ -12,7 +12,6 @@ import { logger } from '../utils/logger.js';
 import { OpenAIService } from '../utils/openaiService.js';
 import { MessageProcessor } from '../utils/MessageProcessor.js';
 import { CatchupFilter } from '../utils/CatchupFilter.js';
-import { Planner } from '../utils/prompting/Planner.js';
 import { config } from '../utils/env.js';
 import { ResponseHandler } from '../utils/response/ResponseHandler.js';
 import { ChannelContextManager } from '../state/ChannelContextManager.js';
@@ -146,7 +145,6 @@ export class MessageCreate extends Event {
 
         this.messageProcessor = new MessageProcessor({
             openaiService: dependencies.openaiService,
-            planner: new Planner(dependencies.openaiService),
         });
         this.catchupFilter = new CatchupFilter(dependencies.openaiService);
 

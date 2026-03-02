@@ -11,6 +11,52 @@ import type { ApiResponseValidationResult } from './client-core';
 
 const ProvenanceSchema = z.enum(['Retrieved', 'Inferred', 'Speculative']);
 const RiskTierSchema = z.enum(['Low', 'Medium', 'High']);
+const ReflectSurfaceSchema = z.enum(['web', 'discord']);
+const ReflectTriggerKindSchema = z.enum([
+    'submit',
+    'direct',
+    'invoked',
+    'catchup',
+]);
+const ReflectConversationMessageSchema = z
+    .object({
+        role: z.enum(['system', 'user', 'assistant']),
+        content: z.string().min(1),
+        authorName: z.string().min(1).optional(),
+        authorId: z.string().min(1).optional(),
+        messageId: z.string().min(1).optional(),
+        createdAt: z.string().min(1).optional(),
+    })
+    .strict();
+const ReflectAttachmentSchema = z
+    .object({
+        kind: z.literal('image'),
+        url: z.string().url(),
+        contentType: z.string().min(1).optional(),
+    })
+    .strict();
+const ReflectCapabilitiesSchema = z
+    .object({
+        canReact: z.boolean(),
+        canGenerateImages: z.boolean(),
+        canUseTts: z.boolean(),
+    })
+    .strict();
+const ReflectImageRequestSchema = z
+    .object({
+        prompt: z.string().min(1),
+        aspectRatio: z
+            .enum(['auto', 'square', 'portrait', 'landscape'])
+            .optional(),
+        background: z.string().min(1).optional(),
+        quality: z.enum(['low', 'medium', 'high', 'auto']).optional(),
+        style: z.string().min(1).optional(),
+        allowPromptAdjustment: z.boolean().optional(),
+        followUpResponseId: z.string().min(1).optional(),
+        outputFormat: z.enum(['png', 'webp', 'jpeg']).optional(),
+        outputCompression: z.number().int().min(1).max(100).optional(),
+    })
+    .strict();
 
 /**
  * Shared citation schema used in reflect/traces metadata payloads.
@@ -50,7 +96,30 @@ export const ResponseMetadataSchema = z
  */
 export const PostReflectRequestSchema = z
     .object({
-        question: z.string().min(1).max(3072),
+        surface: ReflectSurfaceSchema,
+        trigger: z
+            .object({
+                kind: ReflectTriggerKindSchema,
+                messageId: z.string().min(1).optional(),
+            })
+            .strict(),
+        latestUserInput: z.string().min(1).max(3072),
+        conversation: z
+            .array(ReflectConversationMessageSchema)
+            .min(1)
+            .max(64),
+        attachments: z.array(ReflectAttachmentSchema).max(8).optional(),
+        capabilities: ReflectCapabilitiesSchema.optional(),
+        sessionId: z.string().min(1).max(128).optional(),
+        surfaceContext: z
+            .object({
+                channelId: z.string().min(1).optional(),
+                guildId: z.string().min(1).optional(),
+                userId: z.string().min(1).optional(),
+                requestHost: z.string().min(1).optional(),
+            })
+            .strict()
+            .optional(),
     })
     .strict();
 
@@ -58,12 +127,36 @@ export const PostReflectRequestSchema = z
  * @api.operationId: postReflect
  * @api.path: POST /api/reflect
  */
-export const PostReflectResponseSchema = z
-    .object({
-        message: z.string(),
-        metadata: ResponseMetadataSchema,
-    })
-    .passthrough();
+export const PostReflectResponseSchema = z.discriminatedUnion('action', [
+    z
+        .object({
+            action: z.literal('message'),
+            message: z.string(),
+            modality: z.enum(['text', 'tts']),
+            metadata: ResponseMetadataSchema,
+        })
+        .passthrough(),
+    z
+        .object({
+            action: z.literal('react'),
+            reaction: z.string().min(1),
+            metadata: z.null(),
+        })
+        .passthrough(),
+    z
+        .object({
+            action: z.literal('ignore'),
+            metadata: z.null(),
+        })
+        .passthrough(),
+    z
+        .object({
+            action: z.literal('image'),
+            imageRequest: ReflectImageRequestSchema,
+            metadata: z.null(),
+        })
+        .passthrough(),
+]);
 
 /**
  * @api.operationId: postTraces

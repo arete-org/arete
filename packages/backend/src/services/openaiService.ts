@@ -44,10 +44,16 @@ type GenerateResponseResult = {
     metadata: OpenAIResponseMetadata;
 };
 
+type GenerateResponseOptions = {
+    expectMetadata?: boolean;
+    maxCompletionTokens?: number;
+};
+
 interface OpenAIService {
     generateResponse(
         model: string,
-        messages: Array<{ role: string; content: string }>
+        messages: Array<{ role: string; content: string }>,
+        options?: GenerateResponseOptions
     ): Promise<GenerateResponseResult>;
 }
 
@@ -65,12 +71,13 @@ class SimpleOpenAIService implements OpenAIService {
 
     async generateResponse(
         model: string,
-        messages: Array<{ role: string; content: string }>
+        messages: Array<{ role: string; content: string }>,
+        options: GenerateResponseOptions = {}
     ): Promise<GenerateResponseResult> {
         const requestBody = JSON.stringify({
             model: model,
             messages: messages,
-            max_completion_tokens: 4000,
+            max_completion_tokens: options.maxCompletionTokens ?? 4000,
         });
 
         const performRequest = async (attempt: number): Promise<Response> => {
@@ -148,42 +155,47 @@ class SimpleOpenAIService implements OpenAIService {
             data.choices?.[0]?.message?.content ||
             'I was unable to generate a response.';
 
-        // --- Metadata inspection (no user content) ---
-        // Debug metadata extraction without logging full user content.
-        logger.debug('=== Raw AI Response Debug ===');
-        logger.debug(`Raw content length: ${rawContent.length}`);
-        logger.debug(
-            `Contains RESPONSE_METADATA: ${rawContent.includes('<RESPONSE_METADATA>')}`
-        );
-        if (rawContent.includes('<RESPONSE_METADATA>')) {
-            const metadataStart = rawContent.indexOf('<RESPONSE_METADATA>');
-            logger.debug(
-                `Metadata block: ${rawContent.substring(metadataStart, metadataStart + 200)}`
-            );
-        }
-        logger.debug('============================');
+        const expectMetadata = options.expectMetadata !== false;
 
-        // --- Metadata extraction ---
-        // Extract the <RESPONSE_METADATA> block without leaking it into the user-visible response.
-        const { normalizedText, metadata: parsedMetadata } =
-            extractTextAndMetadata(rawContent);
+        let normalizedText = rawContent.trimEnd();
+        let parsedMetadata: ParsedMetadata | null = null;
+        if (expectMetadata) {
+            // --- Metadata inspection (no user content) ---
+            // Debug metadata extraction without logging full user content.
+            logger.debug('=== Raw AI Response Debug ===');
+            logger.debug(`Raw content length: ${rawContent.length}`);
+            logger.debug(
+                `Contains RESPONSE_METADATA: ${rawContent.includes('<RESPONSE_METADATA>')}`
+            );
+            if (rawContent.includes('<RESPONSE_METADATA>')) {
+                const metadataStart = rawContent.indexOf('<RESPONSE_METADATA>');
+                logger.debug(
+                    `Metadata block: ${rawContent.substring(metadataStart, metadataStart + 200)}`
+                );
+            }
+            logger.debug('============================');
+
+            // Extract the <RESPONSE_METADATA> block without leaking it into the user-visible response.
+            const extracted = extractTextAndMetadata(rawContent);
+            normalizedText = extracted.normalizedText;
+            parsedMetadata = extracted.metadata as ParsedMetadata | null;
+        }
 
         // --- Metadata normalization ---
         // Normalize the optional metadata fields into a predictable structure.
-        const parsed = parsedMetadata as ParsedMetadata | null;
         const assistantMetadata: OpenAIResponseMetadata = {
             model: model,
             usage: data.usage as OpenAIUsage,
             finishReason: data.choices?.[0]?.finish_reason,
-            ...(parsed && {
-                ...(typeof parsed.confidence === 'number' &&
-                    parsed.confidence >= 0 &&
-                    parsed.confidence <= 1 && {
-                        confidence: parsed.confidence,
+            ...(parsedMetadata && {
+                ...(typeof parsedMetadata.confidence === 'number' &&
+                    parsedMetadata.confidence >= 0 &&
+                    parsedMetadata.confidence <= 1 && {
+                        confidence: parsedMetadata.confidence,
                     }),
-                provenance: parsed.provenance,
-                tradeoffCount: parsed.tradeoffCount,
-                citations: parsed.citations,
+                provenance: parsedMetadata.provenance,
+                tradeoffCount: parsedMetadata.tradeoffCount,
+                citations: parsedMetadata.citations,
             }),
         };
 
@@ -250,6 +262,7 @@ const buildResponseMetadata = (
 };
 
 export type {
+    GenerateResponseOptions,
     OpenAIService,
     OpenAIResponseMetadata,
     ResponseMetadataRuntimeContext,

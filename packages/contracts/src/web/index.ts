@@ -13,7 +13,20 @@ export type { ApiErrorResponse, NormalizedApiError } from './types';
  * @api.operationId: postReflect
  * @api.path: POST /api/reflect
  */
-export type { PostReflectRequest, PostReflectResponse } from './types';
+export type {
+    ReflectSurface,
+    ReflectTriggerKind,
+    ReflectConversationMessage,
+    ReflectAttachment,
+    ReflectCapabilities,
+    ReflectImageRequest,
+    PostReflectRequest,
+    ReflectMessageActionResponse,
+    ReflectReactActionResponse,
+    ReflectIgnoreActionResponse,
+    ReflectImageActionResponse,
+    PostReflectResponse,
+} from './types';
 
 /**
  * @api.operationId: postTraces

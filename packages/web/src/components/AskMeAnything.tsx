@@ -385,7 +385,25 @@ const AskMeAnything = (): JSX.Element => {
 
         try {
             const payload = await api.reflectQuestion(
-                { question: trimmedQuestion },
+                {
+                    surface: 'web',
+                    trigger: { kind: 'submit' },
+                    latestUserInput: trimmedQuestion,
+                    conversation: [
+                        {
+                            role: 'user',
+                            content: trimmedQuestion,
+                        },
+                    ],
+                    capabilities: {
+                        canReact: false,
+                        canGenerateImages: false,
+                        canUseTts: false,
+                    },
+                    surfaceContext: {
+                        requestHost: window.location.host,
+                    },
+                },
                 {
                     turnstileToken:
                         !isCaptchaDisabled && resolvedToken
@@ -394,6 +412,12 @@ const AskMeAnything = (): JSX.Element => {
                     signal: controller.signal,
                 }
             );
+
+            if (payload.action !== 'message') {
+                throw new Error(
+                    `Reflect API returned unsupported action for web surface: ${payload.action}`
+                );
+            }
 
             // Clear timeout once we have a response
             clearTimeout(timeoutId);

@@ -6,15 +6,14 @@
  * @footnote-ethics: medium - Accurate validation and identity handling support fair abuse controls.
  */
 import type { IncomingMessage } from 'node:http';
+import type { PostReflectRequest } from '@footnote/contracts/web';
 import { PostReflectRequestSchema } from '@footnote/contracts/web/schemas';
 import type { ReflectFailureResponse } from './reflectResponses.js';
 
 /**
  * Parsed reflect request after JSON/body validation.
  */
-export type ParsedReflectRequest = {
-    question: string;
-};
+export type ParsedReflectRequest = PostReflectRequest;
 
 /**
  * Client identity used for abuse controls.
@@ -153,14 +152,14 @@ export const parseReflectRequest = async (
         };
     }
 
-    // Schema validation catches both missing questions and malformed JSON shapes.
+    // Schema validation catches malformed request shapes before they reach the planner.
     const parsedRequest = PostReflectRequestSchema.safeParse(parsedBody);
     if (!parsedRequest.success) {
-        const isQuestionTooLong = parsedRequest.error.issues.some(
+        const isLatestUserInputTooLong = parsedRequest.error.issues.some(
             (issue) =>
                 issue.code === 'too_big' &&
                 issue.path.length === 1 &&
-                issue.path[0] === 'question'
+                issue.path[0] === 'latestUserInput'
         );
 
         const firstIssue = parsedRequest.error.issues[0];
@@ -174,30 +173,50 @@ export const parseReflectRequest = async (
         return {
             success: false,
             error: {
-                statusCode: isQuestionTooLong ? 413 : 400,
+                statusCode: isLatestUserInputTooLong ? 413 : 400,
                 payload: {
-                    error: isQuestionTooLong
-                        ? 'Question parameter too long'
-                        : 'Question parameter is required',
+                    error: isLatestUserInputTooLong
+                        ? 'latestUserInput parameter too long'
+                        : 'Invalid reflect request payload',
                     details: `${issuePath}: ${issueMessage}`,
                 },
-                logLabel: isQuestionTooLong
-                    ? 'reflect question-too-long'
-                    : 'reflect missing-question',
+                logLabel: isLatestUserInputTooLong
+                    ? 'reflect latest-user-input-too-long'
+                    : 'reflect invalid-request',
             },
         };
     }
 
-    const question = parsedRequest.data.question.trim();
-    if (question.length === 0) {
+    const latestUserInput = parsedRequest.data.latestUserInput.trim();
+    if (latestUserInput.length === 0) {
         return {
             success: false,
             error: {
                 statusCode: 400,
                 payload: {
-                    error: 'Question parameter is required',
+                    error: 'latestUserInput parameter is required',
                 },
-                logLabel: 'reflect missing-question',
+                logLabel: 'reflect missing-latest-user-input',
+            },
+        };
+    }
+
+    const normalizedConversation = parsedRequest.data.conversation.map(
+        (message) => ({
+            ...message,
+            content: message.content.trim(),
+        })
+    );
+    if (normalizedConversation.some((message) => message.content.length === 0)) {
+        return {
+            success: false,
+            error: {
+                statusCode: 400,
+                payload: {
+                    error: 'Invalid reflect request payload',
+                    details: 'conversation.content: Message content must not be blank',
+                },
+                logLabel: 'reflect blank-conversation-message',
             },
         };
     }
@@ -205,7 +224,9 @@ export const parseReflectRequest = async (
     return {
         success: true,
         data: {
-            question,
+            ...parsedRequest.data,
+            latestUserInput,
+            conversation: normalizedConversation,
         },
     };
 };

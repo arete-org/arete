@@ -62,6 +62,7 @@ test('createReflectService records backend token usage and estimated cost', asyn
         question: 'What changed?',
     });
 
+    assert.equal(response.action, 'message');
     assert.equal(response.message, 'reflect response');
     assert.equal(usageRecords.length, 1);
     assert.equal(usageRecords[0].feature, 'reflect');
@@ -149,6 +150,7 @@ test('createReflectService swallows usage recording failures', async () => {
         question: 'What changed?',
     });
 
+    assert.equal(response.action, 'message');
     assert.equal(response.message, 'reflect response');
     assert.equal(response.metadata.responseId, 'reflect_test_response');
 });

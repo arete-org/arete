@@ -10,8 +10,12 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type { PostReflectRequest } from '@footnote/contracts/web';
 import { createReflectHandler } from '../src/handlers/reflect.js';
-import type { OpenAIService } from '../src/services/openaiService.js';
+import type {
+    GenerateResponseOptions,
+    OpenAIService,
+} from '../src/services/openaiService.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 
 type MutableEnv = NodeJS.ProcessEnv & {
@@ -54,6 +58,26 @@ const createMetadata = (): ResponseMetadata => ({
     citations: [],
 });
 
+const createReflectRequest = (
+    overrides: Partial<PostReflectRequest> = {}
+): PostReflectRequest => ({
+    surface: 'discord',
+    trigger: { kind: 'direct' },
+    latestUserInput: 'What changed?',
+    conversation: [
+        {
+            role: 'user',
+            content: 'What changed?',
+        },
+    ],
+    capabilities: {
+        canReact: true,
+        canGenerateImages: true,
+        canUseTts: true,
+    },
+    ...overrides,
+});
+
 const createTestServer = (
     options: CreateTestServerOptions = {}
 ): Promise<TestServer> =>
@@ -67,7 +91,21 @@ const createTestServer = (
             10
         );
         const defaultOpenaiService: OpenAIService = {
-            async generateResponse() {
+            async generateResponse(
+                _model,
+                _messages,
+                options?: GenerateResponseOptions
+            ) {
+                if (options?.expectMetadata === false) {
+                    return {
+                        normalizedText:
+                            '{"action":"message","modality":"text","riskTier":"Low","reasoning":"The request expects a reply."}',
+                        metadata: {
+                            model: 'gpt-5-mini',
+                        },
+                    };
+                }
+
                 return {
                     normalizedText: 'service response',
                     metadata: {
@@ -147,14 +185,17 @@ test('reflect accepts trusted service calls with x-trace-token and no turnstile 
                 'Content-Type': 'application/json',
                 'X-Trace-Token': 'trace-secret',
             },
-            body: JSON.stringify({ question: 'What changed?' }),
+            body: JSON.stringify(createReflectRequest()),
         });
 
         assert.equal(response.status, 200);
         const payload = (await response.json()) as {
+            action: string;
             message: string;
+            modality: string;
             metadata: ResponseMetadata;
         };
+        assert.equal(payload.action, 'message');
         assert.equal(payload.message, 'service response');
         assert.equal(payload.metadata.responseId, 'reflect_test_response');
     } finally {
@@ -183,7 +224,7 @@ test('reflect rejects public calls without service token or turnstile token', as
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ question: 'What changed?' }),
+            body: JSON.stringify(createReflectRequest()),
         });
 
         assert.equal(response.status, 403);
@@ -193,6 +234,53 @@ test('reflect rejects public calls without service token or turnstile token', as
         };
         assert.equal(payload.error, 'CAPTCHA verification failed');
         assert.equal(payload.details, 'Missing turnstile token');
+    } finally {
+        await server.close();
+        env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
+test('reflect constrains web requests to message actions', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+
+    env.TRACE_API_TOKEN = 'trace-secret';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    const server = await createTestServer();
+
+    try {
+        const response = await fetch(`${server.url}/api/reflect`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+            },
+            body: JSON.stringify(
+                createReflectRequest({
+                    surface: 'web',
+                    trigger: { kind: 'submit' },
+                    capabilities: {
+                        canReact: false,
+                        canGenerateImages: false,
+                        canUseTts: false,
+                    },
+                })
+            ),
+        });
+
+        assert.equal(response.status, 200);
+        const payload = (await response.json()) as {
+            action: string;
+            metadata: ResponseMetadata;
+        };
+        assert.equal(payload.action, 'message');
+        assert.equal(payload.metadata.responseId, 'reflect_test_response');
     } finally {
         await server.close();
         env.TRACE_API_TOKEN = previousTraceToken;
@@ -224,7 +312,14 @@ test('reflect service requests use a separate service rate limiter bucket', asyn
                 'Content-Type': 'application/json',
                 'X-Service-Token': 'service-secret',
             },
-            body: JSON.stringify({ question: 'first request' }),
+            body: JSON.stringify(
+                createReflectRequest({
+                    latestUserInput: 'first request',
+                    conversation: [
+                        { role: 'user', content: 'first request' },
+                    ],
+                })
+            ),
         });
         assert.equal(firstResponse.status, 200);
 
@@ -234,7 +329,14 @@ test('reflect service requests use a separate service rate limiter bucket', asyn
                 'Content-Type': 'application/json',
                 'X-Service-Token': 'service-secret',
             },
-            body: JSON.stringify({ question: 'second request' }),
+            body: JSON.stringify(
+                createReflectRequest({
+                    latestUserInput: 'second request',
+                    conversation: [
+                        { role: 'user', content: 'second request' },
+                    ],
+                })
+            ),
         });
         assert.equal(secondResponse.status, 429);
         const payload = (await secondResponse.json()) as {
@@ -277,7 +379,14 @@ test('reflect trusted service requests stay in one bucket even if client IP chan
                 'X-Service-Token': 'service-secret',
                 'X-Forwarded-For': '203.0.113.10',
             },
-            body: JSON.stringify({ question: 'first request' }),
+            body: JSON.stringify(
+                createReflectRequest({
+                    latestUserInput: 'first request',
+                    conversation: [
+                        { role: 'user', content: 'first request' },
+                    ],
+                })
+            ),
         });
         assert.equal(firstResponse.status, 200);
 
@@ -288,7 +397,14 @@ test('reflect trusted service requests stay in one bucket even if client IP chan
                 'X-Service-Token': 'service-secret',
                 'X-Forwarded-For': '203.0.113.99',
             },
-            body: JSON.stringify({ question: 'second request' }),
+            body: JSON.stringify(
+                createReflectRequest({
+                    latestUserInput: 'second request',
+                    conversation: [
+                        { role: 'user', content: 'second request' },
+                    ],
+                })
+            ),
         });
         assert.equal(secondResponse.status, 429);
         const payload = (await secondResponse.json()) as {
@@ -337,7 +453,7 @@ test('reflect does not expose raw upstream error details to clients', async () =
                 'Content-Type': 'application/json',
                 'X-Trace-Token': 'trace-secret',
             },
-            body: JSON.stringify({ question: 'What changed?' }),
+            body: JSON.stringify(createReflectRequest()),
         });
 
         assert.equal(response.status, 502);
@@ -407,7 +523,21 @@ test('reflect rate limits public callers before calling Turnstile', async () => 
                 'Content-Type': 'application/json',
                 'X-Turnstile-Token': 'captcha-token',
             },
-            body: JSON.stringify({ question: 'first public request' }),
+            body: JSON.stringify(
+                createReflectRequest({
+                    surface: 'web',
+                    trigger: { kind: 'submit' },
+                    latestUserInput: 'first public request',
+                    conversation: [
+                        { role: 'user', content: 'first public request' },
+                    ],
+                    capabilities: {
+                        canReact: false,
+                        canGenerateImages: false,
+                        canUseTts: false,
+                    },
+                })
+            ),
         });
         assert.equal(firstResponse.status, 200);
         assert.equal(turnstileCalls, 1);
@@ -418,7 +548,21 @@ test('reflect rate limits public callers before calling Turnstile', async () => 
                 'Content-Type': 'application/json',
                 'X-Turnstile-Token': 'captcha-token',
             },
-            body: JSON.stringify({ question: 'second public request' }),
+            body: JSON.stringify(
+                createReflectRequest({
+                    surface: 'web',
+                    trigger: { kind: 'submit' },
+                    latestUserInput: 'second public request',
+                    conversation: [
+                        { role: 'user', content: 'second public request' },
+                    ],
+                    capabilities: {
+                        canReact: false,
+                        canGenerateImages: false,
+                        canUseTts: false,
+                    },
+                })
+            ),
         });
         assert.equal(secondResponse.status, 429);
         assert.equal(turnstileCalls, 1);
