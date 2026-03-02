@@ -378,7 +378,7 @@ export class Planner {
 
             const plannerPrompt = renderPrompt('discord.planner.system', {
                 webSearchHint:
-                    'When the user asks for lookup or verification, choose web_search and emit a clear query. If a search could plausibly add useful context, lean toward searching rather than guessing or skipping retrieval. Use searchIntent repo_explainer for Footnote repo/package/feature/provenance questions, and current_facts for changing external facts. If you truly cannot form a useful query, fall back to tool_choice: none.',
+                    'For substantive questions, lean toward web_search rather than skipping retrieval. Search whenever retrieved context would materially improve confidence, specificity, grounding, or source quality. Repo_explainer questions should usually search. Complex historical, policy, governance, or analytical questions should usually search too. Use searchIntent repo_explainer for Footnote repo/package/feature/provenance questions, and current_facts for changing external facts. If you truly cannot form a useful query, fall back to tool_choice: none.',
             }).content;
             const openaiResponse = await this.openaiService.generateResponse(
                 PLANNING_MODEL,
