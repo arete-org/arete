@@ -11,7 +11,7 @@ import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { PostReflectRequestSchema } from '@footnote/contracts/web/schemas';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import type {
-    SimpleOpenAIService,
+    OpenAIService,
     OpenAIResponseMetadata,
     ResponseMetadataRuntimeContext,
 } from '../services/openaiService.js';
@@ -29,9 +29,10 @@ type BuildResponseMetadata = (
 ) => ResponseMetadata;
 
 type ReflectHandlerDeps = {
-    openaiService: SimpleOpenAIService | null;
+    openaiService: OpenAIService | null;
     ipRateLimiter: SimpleRateLimiter | null;
     sessionRateLimiter: SimpleRateLimiter | null;
+    serviceRateLimiter: SimpleRateLimiter | null;
     storeTrace: (metadata: ResponseMetadata) => Promise<void>;
     logRequest: LogRequest;
     buildResponseMetadata: BuildResponseMetadata;
@@ -144,6 +145,7 @@ const createReflectHandler = ({
     openaiService,
     ipRateLimiter,
     sessionRateLimiter,
+    serviceRateLimiter,
     storeTrace,
     logRequest,
     buildResponseMetadata,
@@ -805,7 +807,7 @@ const createReflectHandler = ({
                 fallbackSessionLimiter
             );
             const activeServiceRateLimiter = getLimiter(
-                null,
+                serviceRateLimiter,
                 'service',
                 'REFLECT_SERVICE_RATE_LIMIT',
                 'REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS',

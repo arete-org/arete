@@ -11,6 +11,7 @@ import http from 'node:http';
 
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { createReflectHandler } from '../src/handlers/reflect.js';
+import type { OpenAIService } from '../src/services/openaiService.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 
 type MutableEnv = NodeJS.ProcessEnv & {
@@ -42,7 +43,15 @@ const createMetadata = (): ResponseMetadata => ({
 
 const createTestServer = (): Promise<TestServer> =>
     new Promise((resolve) => {
-        const openaiService = {
+        const serviceRateLimit = Number.parseInt(
+            process.env.REFLECT_SERVICE_RATE_LIMIT || '30',
+            10
+        );
+        const serviceRateLimitWindowMs = Number.parseInt(
+            process.env.REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS || '60000',
+            10
+        );
+        const openaiService: OpenAIService = {
             async generateResponse() {
                 return {
                     normalizedText: 'service response',
@@ -58,11 +67,15 @@ const createTestServer = (): Promise<TestServer> =>
         };
 
         const handler = createReflectHandler({
-            openaiService: openaiService as never,
+            openaiService,
             ipRateLimiter: new SimpleRateLimiter({ limit: 5, window: 60000 }),
             sessionRateLimiter: new SimpleRateLimiter({
                 limit: 5,
                 window: 60000,
+            }),
+            serviceRateLimiter: new SimpleRateLimiter({
+                limit: serviceRateLimit,
+                window: serviceRateLimitWindowMs,
             }),
             storeTrace: async () => undefined,
             logRequest: () => undefined,

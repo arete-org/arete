@@ -14,6 +14,7 @@ import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 
 import { runtimeConfig } from './config.js';
 import {
+    type OpenAIService,
     SimpleOpenAIService,
     buildResponseMetadata,
 } from './services/openaiService.js';
@@ -42,9 +43,10 @@ const { resolveAsset, mimeMap } = createAssetResolver(DIST_DIR);
 
 // --- Service state ---
 let traceStore: ReturnType<typeof createTraceStore> | null = null;
-let openaiService: SimpleOpenAIService | null = null;
+let openaiService: OpenAIService | null = null;
 let ipRateLimiter: SimpleRateLimiter | null = null;
 let sessionRateLimiter: SimpleRateLimiter | null = null;
+let serviceRateLimiter: SimpleRateLimiter | null = null;
 let traceWriteLimiter: SimpleRateLimiter | null = null;
 
 // --- Service initialization ---
@@ -103,6 +105,15 @@ const initializeServices = () => {
         ),
     });
 
+    // Trusted service calls get their own limiter so internal callers do not consume browser quota.
+    serviceRateLimiter = new SimpleRateLimiter({
+        limit: parseInt(process.env.REFLECT_SERVICE_RATE_LIMIT || '30', 10),
+        window: parseInt(
+            process.env.REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS || '60000',
+            10
+        ),
+    });
+
     // Separate limiter for trace ingestion to avoid coupling to reflect limits.
     traceWriteLimiter = new SimpleRateLimiter({
         limit: parseInt(process.env.TRACE_API_RATE_LIMIT || '10', 10),
@@ -118,6 +129,7 @@ const initializeServices = () => {
         () => {
             ipRateLimiter?.cleanup();
             sessionRateLimiter?.cleanup();
+            serviceRateLimiter?.cleanup();
             traceWriteLimiter?.cleanup();
         },
         2 * 60 * 1000
@@ -209,6 +221,7 @@ const handleReflectRequest = createReflectHandler({
     openaiService,
     ipRateLimiter,
     sessionRateLimiter,
+    serviceRateLimiter,
     storeTrace: storeTraceWithStore,
     logRequest,
     buildResponseMetadata,
