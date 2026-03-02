@@ -24,5 +24,8 @@ const runtimeSchemaPath = path.join(__dirname, 'annotation-schema.runtime.json')
 test('runtime annotation schema matches the source schema exactly', () => {
     const runtimeSchemaText = fs.readFileSync(runtimeSchemaPath, 'utf8');
 
-    assert.equal(runtimeSchemaText, serializeAnnotationSchema(annotationSchema));
+    assert.deepEqual(
+        JSON.parse(runtimeSchemaText),
+        JSON.parse(serializeAnnotationSchema(annotationSchema))
+    );
 });

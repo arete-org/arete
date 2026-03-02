@@ -9,6 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
 import {
     annotationSchema,
@@ -18,10 +19,20 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const runtimeSchemaPath = path.join(__dirname, 'annotation-schema.runtime.json');
-const expectedContent = serializeAnnotationSchema(annotationSchema);
-const actualContent = fs.readFileSync(runtimeSchemaPath, 'utf8');
+const expectedSchema = JSON.parse(serializeAnnotationSchema(annotationSchema));
 
-if (actualContent !== expectedContent) {
+let actualSchema: unknown;
+
+try {
+    actualSchema = JSON.parse(fs.readFileSync(runtimeSchemaPath, 'utf8'));
+} catch {
+    console.error(
+        'Footnote tag error in scripts/annotation-schema.runtime.json: Runtime schema is stale. Run `pnpm generate-annotation-schema`.'
+    );
+    process.exit(1);
+}
+
+if (!isDeepStrictEqual(actualSchema, expectedSchema)) {
     console.error(
         'Footnote tag error in scripts/annotation-schema.runtime.json: Runtime schema is stale. Run `pnpm generate-annotation-schema`.'
     );

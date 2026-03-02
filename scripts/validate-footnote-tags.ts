@@ -25,6 +25,7 @@ export interface ValidationDiagnostic {
 }
 
 interface ParsedTag {
+    hasColon: boolean;
     line: number;
     rawValue: string;
     tagName: string;
@@ -118,7 +119,11 @@ function getRelativePath(repoRoot: string, filePath: string): string {
     return path.relative(repoRoot, filePath).split(path.sep).join('/');
 }
 
-function getTagToken(lineText: string): { tagName: string; value: string } {
+function getTagToken(lineText: string): {
+    hasColon: boolean;
+    tagName: string;
+    value: string;
+} {
     let cursor = 1;
     while (
         cursor < lineText.length &&
@@ -129,12 +134,18 @@ function getTagToken(lineText: string): { tagName: string; value: string } {
     }
 
     const tagName = lineText.slice(0, cursor);
-    let remainder = lineText.slice(cursor).trimStart();
-    if (remainder.startsWith(':')) {
-        remainder = remainder.slice(1).trim();
+    if (cursor >= lineText.length || lineText[cursor] !== ':') {
+        return {
+            hasColon: false,
+            tagName,
+            value: lineText.slice(cursor).trim(),
+        };
     }
 
+    const remainder = lineText.slice(cursor + 1).trim();
+
     return {
+        hasColon: true,
         tagName,
         value: remainder,
     };
@@ -191,6 +202,7 @@ function parseModuleHeader(sourceFile: ts.SourceFile): ParsedHeader | null {
             if (lineText.startsWith('@')) {
                 const parsedTag = getTagToken(lineText);
                 currentTag = {
+                    hasColon: parsedTag.hasColon,
                     line: lineNumber,
                     rawValue: parsedTag.value,
                     tagName: parsedTag.tagName,
@@ -292,6 +304,15 @@ function validateFile(
 
     // Reject unknown tags first, then remember the required tags in the order we saw them.
     for (const tag of header.tags) {
+        if (!tag.hasColon) {
+            diagnostics.push({
+                filePath: relativeFilePath,
+                line: tag.line,
+                message: `Line ${tag.line}: ${tag.tagName} must use ":" after the tag name.`,
+            });
+            continue;
+        }
+
         if (!allowedTagSet.has(tag.tagName)) {
             diagnostics.push({
                 filePath: relativeFilePath,
