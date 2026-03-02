@@ -13,6 +13,11 @@ import type {
     OpenAIResponseMetadata,
     ResponseMetadataRuntimeContext,
 } from './openaiService.js';
+import {
+    estimateBackendTextCost,
+    recordBackendLLMUsage,
+    type BackendLLMCostRecord,
+} from './llmCostRecorder.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -27,6 +32,7 @@ export type CreateReflectServiceOptions = {
         runtimeContext: ResponseMetadataRuntimeContext
     ) => ResponseMetadata;
     defaultModel: string;
+    recordUsage?: (record: BackendLLMCostRecord) => void;
 };
 
 /**
@@ -67,6 +73,7 @@ export const createReflectService = ({
     storeTrace,
     buildResponseMetadata,
     defaultModel,
+    recordUsage = recordBackendLLMUsage,
 }: CreateReflectServiceOptions) => {
     const runReflect = async ({
         question,
@@ -84,6 +91,27 @@ export const createReflectService = ({
         );
 
         const { normalizedText, metadata: assistantMetadata } = aiResponse;
+        const usageModel = assistantMetadata.model || defaultModel;
+        const promptTokens = assistantMetadata.usage?.prompt_tokens ?? 0;
+        const completionTokens = assistantMetadata.usage?.completion_tokens ?? 0;
+        const totalTokens =
+            assistantMetadata.usage?.total_tokens ??
+            promptTokens + completionTokens;
+        const estimatedCost = estimateBackendTextCost(
+            usageModel,
+            promptTokens,
+            completionTokens
+        );
+        recordUsage({
+            feature: 'reflect',
+            model: usageModel,
+            promptTokens,
+            completionTokens,
+            totalTokens,
+            ...estimatedCost,
+            timestamp: Date.now(),
+        });
+
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: defaultModel,
             conversationSnapshot: `${question}\n\n${normalizedText}`,

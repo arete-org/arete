@@ -1,0 +1,75 @@
+/**
+ * @description: Covers backend cost recording in the shared reflect service.
+ * @footnote-scope: test
+ * @footnote-module: ReflectServiceTests
+ * @footnote-risk: medium - Missing tests could let backend reflect stop recording usage silently.
+ * @footnote-ethics: medium - Cost accounting is part of responsible backend AI operation.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import { createReflectService } from '../src/services/reflectService.js';
+import type { OpenAIService } from '../src/services/openaiService.js';
+import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
+
+const createMetadata = (): ResponseMetadata => ({
+    responseId: 'reflect_test_response',
+    provenance: 'Inferred',
+    confidence: 0.5,
+    riskTier: 'Low',
+    tradeoffCount: 0,
+    chainHash: 'abc123def456',
+    licenseContext: 'MIT + HL3',
+    modelVersion: 'gpt-5-mini',
+    staleAfter: new Date(Date.now() + 60000).toISOString(),
+    citations: [],
+});
+
+test('createReflectService records backend token usage and estimated cost', async () => {
+    const usageRecords: BackendLLMCostRecord[] = [];
+    const openaiService: OpenAIService = {
+        async generateResponse() {
+            return {
+                normalizedText: 'reflect response',
+                metadata: {
+                    model: 'gpt-5-mini',
+                    usage: {
+                        prompt_tokens: 120,
+                        completion_tokens: 80,
+                        total_tokens: 200,
+                    },
+                    confidence: 0.5,
+                    provenance: 'Inferred',
+                    tradeoffCount: 0,
+                    citations: [],
+                },
+            };
+        },
+    };
+
+    const reflectService = createReflectService({
+        openaiService,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: (record) => {
+            usageRecords.push(record);
+        },
+    });
+
+    const response = await reflectService.runReflect({
+        question: 'What changed?',
+    });
+
+    assert.equal(response.message, 'reflect response');
+    assert.equal(usageRecords.length, 1);
+    assert.equal(usageRecords[0].feature, 'reflect');
+    assert.equal(usageRecords[0].model, 'gpt-5-mini');
+    assert.equal(usageRecords[0].promptTokens, 120);
+    assert.equal(usageRecords[0].completionTokens, 80);
+    assert.equal(usageRecords[0].totalTokens, 200);
+    assert.equal(usageRecords[0].inputCostUsd, 0.00003);
+    assert.equal(usageRecords[0].outputCostUsd, 0.00016);
+    assert.equal(usageRecords[0].totalCostUsd, 0.00019);
+});
