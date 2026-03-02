@@ -14,10 +14,10 @@ import path from 'node:path';
 
 import { validateFootnoteAnnotations } from './validate-footnote-tags';
 
-function withTempRepo(
+function withTempRepo<T>(
     files: Record<string, string>,
-    callback: (repoRoot: string) => void
-): void {
+    callback: (repoRoot: string) => T
+): T {
     const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'footnote-tags-'));
 
     for (const [relativePath, content] of Object.entries(files)) {
@@ -27,41 +27,31 @@ function withTempRepo(
     }
 
     try {
-        callback(repoRoot);
+        return callback(repoRoot);
     } finally {
         fs.rmSync(repoRoot, { force: true, recursive: true });
     }
 }
 
 function collectMessages(files: Record<string, string>): string[] {
-    let messages: string[] = [];
-
-    withTempRepo(files, (repoRoot) => {
-        const result = validateFootnoteAnnotations({
+    return withTempRepo(files, (repoRoot) =>
+        validateFootnoteAnnotations({
             repoRoot,
             scanRoots: ['packages'],
-        });
-        messages = result.diagnostics.map((diagnostic) => diagnostic.message);
-    });
-
-    return messages;
+        }).diagnostics.map((diagnostic) => diagnostic.message)
+    );
 }
 
 function collectMessagesWithScanRoots(
     files: Record<string, string>,
     scanRoots?: string[]
 ): string[] {
-    let messages: string[] = [];
-
-    withTempRepo(files, (repoRoot) => {
-        const result = validateFootnoteAnnotations({
+    return withTempRepo(files, (repoRoot) =>
+        validateFootnoteAnnotations({
             repoRoot,
             scanRoots,
-        });
-        messages = result.diagnostics.map((diagnostic) => diagnostic.message);
-    });
-
-    return messages;
+        }).diagnostics.map((diagnostic) => diagnostic.message)
+    );
 }
 
 test('accepts a valid .ts file', () => {

@@ -81,7 +81,9 @@ function walkDirectory(directoryPath: string, filePaths: string[]): void {
         return;
     }
 
-    for (const entry of fs.readdirSync(directoryPath, { withFileTypes: true })) {
+    for (const entry of fs.readdirSync(directoryPath, {
+        withFileTypes: true,
+    })) {
         if (entry.isDirectory()) {
             if (ignoredDirectories.has(entry.name)) {
                 continue;
@@ -342,7 +344,8 @@ function validateFile(
     // is already out of place.
     for (
         let index = 0;
-        index < Math.min(orderedRequiredTags.length, schema.requiredTags.length);
+        index <
+        Math.min(orderedRequiredTags.length, schema.requiredTags.length);
         index += 1
     ) {
         const expectedTag = requiredTags[index];
@@ -423,7 +426,10 @@ export function validateFootnoteAnnotations(
     const repoRoot = options.repoRoot ?? defaultRepoRoot;
     const filePaths =
         options.filePaths ??
-        collectAnnotationFilePaths(repoRoot, options.scanRoots ?? ['packages', 'scripts']);
+        collectAnnotationFilePaths(
+            repoRoot,
+            options.scanRoots ?? ['packages', 'scripts']
+        );
     const diagnostics = filePaths.flatMap((filePath) =>
         validateFile(filePath, repoRoot)
     );
@@ -434,7 +440,7 @@ export function validateFootnoteAnnotations(
     };
 }
 
-function formatDiagnostic(diagnostic: ValidationDiagnostic): string {
+export function formatDiagnostic(diagnostic: ValidationDiagnostic): string {
     return `Footnote tag error in ${diagnostic.filePath}: ${diagnostic.message}`;
 }
 
@@ -470,7 +476,7 @@ function parseCliArguments(argv: string[]): ValidateAnnotationOptions {
     return options;
 }
 
-function runCli(): void {
+export function runCli(): void {
     const { diagnostics, filesValidated } = validateFootnoteAnnotations(
         parseCliArguments(process.argv.slice(2))
     );
@@ -494,5 +500,3 @@ if (
 ) {
     runCli();
 }
-
-export { formatDiagnostic, runCli };
