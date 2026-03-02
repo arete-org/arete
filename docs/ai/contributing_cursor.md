@@ -29,7 +29,7 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 - **Refactors**: Follow Refactoring.Guru discipline (`Smell -> Technique -> Steps`; keep tests green)
 - **Testing**: All new functionality must include appropriate tests
 - **Documentation**: Update relevant docs when adding new features
-- **Validation**: Run `pnpm pre-review` before review; this includes OpenAPI
+- **Validation**: Run `pnpm review` before review; this includes OpenAPI
   code-link validation via `pnpm validate-openapi-links`
 - **Communication style**: Prefer a junior-friendly teaching tone by default
   (plain language first, then technical detail)

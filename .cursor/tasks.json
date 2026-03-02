@@ -8,16 +8,16 @@
         "lint-check": "pnpm eslint packages/",
         "format-check": "pnpm prettier --check packages/",
         "format-fix": "pnpm prettier --write packages/",
-        "pre-review": "pnpm pre-review"
+        "review": "pnpm review"
     },
     "tasks": {
         "cost-summary": {
             "command": "pnpm exec tsx -e \"import { logLLMCostSummary } from './packages/discord-bot/src/utils/logger.ts'; logLLMCostSummary();\"",
             "description": "Check LLM cost summary for current session"
         },
-        "pre-review": {
-            "command": "pnpm pre-review",
-            "description": "Run automated validation pipeline (@Footnote tags, types, linting)"
+        "review": {
+            "command": "pnpm review",
+            "description": "Run `@footnote-*` tag, OpenAPI link, type-check, and lint validation"
         },
         "format-code": {
             "command": "pnpm prettier --write packages/",
