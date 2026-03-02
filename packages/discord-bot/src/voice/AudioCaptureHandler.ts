@@ -1,14 +1,9 @@
 /**
- * @footnote-module: AudioCaptureHandler
- * @footnote-risk: high
- * @footnote-ethics: high
- * @footnote-scope: core
- *
  * @description: Captures and processes real-time user voice data from Discord voice channels.
- *
- * @impact
- * Risk: Handles Opus decoding, PCM conversion, and audio chunk emission. Failures can cause audio loss, processing errors, or memory leaks.
- * Ethics: Processes user voice data in real-time, directly affecting privacy, consent, and the handling of sensitive audio information.
+ * @footnote-scope: core
+ * @footnote-module: AudioCaptureHandler
+ * @footnote-risk: high - Handles Opus decoding, PCM conversion, and audio chunk emission. Failures can cause audio loss, processing errors, or memory leaks.
+ * @footnote-ethics: high - Processes user voice data in real-time, directly affecting privacy, consent, and the handling of sensitive audio information.
  */
 
 import type { VoiceConnection, VoiceReceiver } from '@discordjs/voice';

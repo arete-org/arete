@@ -3,7 +3,7 @@
  * @footnote-scope: interface
  * @footnote-module: ResponseHandler
  * @footnote-risk: high - Response failures can drop user interactions or spam channels.
- * @footnote-ethics: moderate - Response handling affects user transparency and feedback.
+ * @footnote-ethics: medium - Response handling affects user transparency and feedback.
  */
 
 import {

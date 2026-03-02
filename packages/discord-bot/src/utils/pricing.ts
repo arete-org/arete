@@ -1,14 +1,9 @@
 /**
- * @footnote-module: Pricing
- * @footnote-risk: high
- * @footnote-ethics: high
- * @footnote-scope: core
- *
  * @description: Handles all pricing calculations and estimations for text and image generation.
- *
- * @impact
- * Risk: Incorrect pricing calculations can lead to unexpected costs.
- * Ethics: Inaccurate pricing information for LLM interactions can erode trust.
+ * @footnote-scope: core
+ * @footnote-module: Pricing
+ * @footnote-risk: high - Incorrect pricing calculations can lead to unexpected costs.
+ * @footnote-ethics: high - Inaccurate pricing information for LLM interactions can erode trust.
  */
 
 import crypto from 'node:crypto';

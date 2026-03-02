@@ -2,7 +2,7 @@
  * @description: Builds provenance footer embeds with trace metadata and actions.
  * @footnote-scope: interface
  * @footnote-module: ProvenanceFooter
- * @footnote-risk: moderate - Footer errors can hide provenance or break user actions.
+ * @footnote-risk: medium - Footer errors can hide provenance or break user actions.
  * @footnote-ethics: high - Provenance display affects transparency and accountability.
  */
 import { EmbedBuilder } from './EmbedBuilder.js';

@@ -19,7 +19,7 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 
 - **Structured logging**: All AI edits must preserve existing logging patterns
 - **Cost tracking**: Never remove `ChannelContextManager.recordLLMUsage()` calls
-- **Risk annotations**: Preserve all current module annotations (`@footnote-module`, `@footnote-risk`, `@footnote-ethics`, `@footnote-scope`, `@description`, `@impact`)
+- **Risk annotations**: Preserve the required module annotations (`@description`, `@footnote-scope`, `@footnote-module`, `@footnote-risk`, `@footnote-ethics`)
 - **Licensing**: Maintain all license headers and provenance comments
 
 ## Process
@@ -58,30 +58,25 @@ For API boundary changes, keep OpenAPI and code links aligned:
 - CodeRabbit is available in the terminal for review support.
 - Run `cr -h` to inspect available commands.
 - Prefer prompt-only mode for shareable review text:
-  - `coderabbit --prompt-only -t uncommitted`
+    - `coderabbit --prompt-only -t uncommitted`
 - Limit CodeRabbit to 3 runs max per set of changes.
 
 ### Current `@footnote-*` Module Tagging
 
-- `@footnote-risk`: Technical fragility (low, moderate, high)
-- `@footnote-ethics`: Human impact sensitivity (low, moderate, high)
-- `@footnote-scope`: Logical role (core, utility, interface, test)
+- `@footnote-risk`: Technical blast radius (low, medium, high)
+- `@footnote-ethics`: User-facing or governance harm (low, medium, high)
+- `@footnote-scope`: Logical role (`core`, `utility`, `interface`, `web`, `test`)
 - `@description`: 1-3 line summary of module purpose
-- `@impact`: Separate Risk and Ethics impact statements
 
-**Formatting Standards:**
+**Required module header format:**
 
 ```typescript
 /**
  * @description: <1-3 lines summarizing what this module does.>
- * @footnote-scope: <core|utility|interface|test>
+ * @footnote-scope: <core|utility|interface|web|test>
  * @footnote-module: <ModuleName>
- * @footnote-risk: <low|moderate|high>
- * @footnote-ethics: <low|moderate|high>
- *
- * @impact
- * Risk: <What could break or be compromised if mishandled.>
- * Ethics: <What human or governance effect errors could cause.>
+ * @footnote-risk: <low|medium|high> - <What could break or be compromised if mishandled.>
+ * @footnote-ethics: <low|medium|high> - <What human or governance effect errors could cause.>
  */
 ```
 
@@ -89,21 +84,27 @@ For API boundary changes, keep OpenAPI and code links aligned:
 
 - `@footnote-logger`: Logger module identifier (matches the child logger name)
 - `@logs`: What specific operations, events, or data this logger logs
-- `@impact`: Separate Risk and Ethics impact statements for logging concerns
+- `@footnote-risk`: Technical blast radius if logging is missing, noisy, misleading, or leaks data
+- `@footnote-ethics`: User-facing or governance harm if logging behavior weakens privacy, transparency, or accountability
 
-**Formatting Standards:**
+Logger annotations are documentation conventions for scoped loggers (not currently enforced by validation).
+
+**Scoped logger documentation format:**
 
 ```typescript
 /**
  * @footnote-logger: <loggerName>
- *
- * @logs
- * <What this scoped logger tracks and logs>
- *
- * @impact
- * Risk: <Logging-specific risks if any>
- * Ethics: <Logging-specific ethical impacts if any>
+ * @logs: <What this scoped logger tracks and logs.>
+ * @footnote-risk: <low|medium|high> - <What could go wrong if this logger is noisy, missing, or leaks data.>
+ * @footnote-ethics: <low|medium|high> - <What privacy, transparency, or governance harm poor logging could cause.>
  */
 const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 ```
 
+**Rubric reminders:**
+
+- Use `@footnote-risk` for technical blast radius if the module fails or is misused.
+- Use `@footnote-ethics` for user-facing or governance harm if the module behaves incorrectly.
+- `low`: e.g. localized helper or presentation issues
+- `medium`: e.g. feature-level disruption, hidden metadata, or misleading UI
+- `high`: e.g. core flow failure, provenance loss, privacy harm, or major trust damage

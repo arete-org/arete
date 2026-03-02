@@ -1,17 +1,9 @@
 /**
- * @footnote-module: SqliteIncidentStore
- * @footnote-risk: high
- * @footnote-ethics: high
+ * @description: Persists incidents and audit events to SQLite with retry/backoff handling. Discord-facing identifiers are pseudonymized via HMAC to avoid storing or logging raw IDs. Full digests are stored for uniqueness; only short prefixes should be surfaced in operator logs.
  * @footnote-scope: utility
- *
- * @description: Persists incidents and audit events to SQLite with retry/backoff handling.
- * Discord-facing identifiers are pseudonymized via HMAC to avoid storing or
- * logging raw IDs. Full digests are stored for uniqueness; only short prefixes
- * should be surfaced in operator logs.
- *
- * @impact
- * Risk: Storage errors or hashing mistakes can break audit trails.
- * Ethics: Ensures incident records avoid raw Discord identifiers.
+ * @footnote-module: SqliteIncidentStore
+ * @footnote-risk: high - Storage errors or hashing mistakes can break audit trails.
+ * @footnote-ethics: high - Ensures incident records avoid raw Discord identifiers.
  */
 import Database from 'better-sqlite3';
 import crypto from 'node:crypto';

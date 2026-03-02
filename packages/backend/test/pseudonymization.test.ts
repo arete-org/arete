@@ -1,15 +1,9 @@
 /**
- * @footnote-module: PseudonymizationTests
- * @footnote-risk: low
- * @footnote-ethics: high
+ * @description: Unit tests to ensure Discord identifiers are namespaced, hashed, and safely shortened for display without leaking raw values.
  * @footnote-scope: test
- *
- * @description: Unit tests to ensure Discord identifiers are namespaced, hashed, and safely
- * shortened for display without leaking raw values.
- *
- * @impact
- * Risk: Test failures may hide regressions in privacy protections.
- * Ethics: Helps prevent raw identifiers from leaking into logs or storage.
+ * @footnote-module: PseudonymizationTests
+ * @footnote-risk: low - Test failures may hide regressions in privacy protections.
+ * @footnote-ethics: high - Helps prevent raw identifiers from leaking into logs or storage.
  */
 
 import test from 'node:test';

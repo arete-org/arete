@@ -1,3 +1,11 @@
+/**
+ * @description: Hosts the embeddable Footnote page and coordinates iframe sizing behavior for external sites.
+ * @footnote-scope: web
+ * @footnote-module: EmbedPage
+ * @footnote-risk: medium - Embed sizing or messaging bugs can break integrations and hide the interactive surface.
+ * @footnote-ethics: high - The embed experience affects how external users encounter prompts, responses, and provenance cues.
+ */
+
 import { useEffect, useRef } from 'react';
 import Header from '@components/Header';
 import AskMeAnything from '@components/AskMeAnything';

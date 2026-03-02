@@ -15,10 +15,15 @@
 - Use generics thoughtfully when they clarify intent.
 
 ## Commenting Standards
-- **Always include meaningful comments** - AI assistants tend to avoid comments, but they're essential for collaboration and learning.
+- **Add meaningful comments when a new contributor would otherwise have to guess** (AI assistants tend to under-comment important decisions), but preserve readability.
 - Comments serve as documentation for future maintainers and community contributors.
 - Prioritize comments that explain "why" and "what", not just "how".
-- Write comments for competent developers - focus on knowledge transfer, not basic explanations.
+- Write comments so a junior contributor can follow the code without guessing.
+- Prefer short, plain language over dense jargon or architecture shorthand.
+- A good comment should help a reader answer three questions quickly:
+  - what is happening here?
+  - why does this code exist?
+  - what could go wrong if someone changes or removes it?
 
 ### **Code Comments (// and /* */)**
 - Add comments for complex business logic, non-obvious algorithms, or important decisions.
@@ -26,19 +31,34 @@
 - Document workarounds, edge cases, and potential gotchas.
 - Include context about external dependencies or API behaviors.
 - Use parenthetical explanations for technical terms: `technicalTerm (plainEnglish)`.
+- Keep comments concrete. Name the trigger, the behavior, and the consequence.
 
 **Good Code Comments:**
 ```typescript
-// Reset the counter when we post a message to prevent catch-up loops
+/**
+ * @description: Tracks one user's upload session so follow-up chunks are stitched together.
+ * @footnote-scope: core
+ * @footnote-module: UploadSessionTracker
+ * @footnote-risk: medium - Session mix-ups can attach chunks to the wrong upload and corrupt files.
+ * @footnote-ethics: low - This module coordinates uploads but does not make user-facing decisions.
+ */
+
+// Ignore the bot's own messages so we do not trigger another planning pass from our reply.
 if (message.author.id === message.client.user!.id) {
     this.resetCounter(channelKey);
     return;
 }
 
-// Apply catch-up filter to avoid unnecessary LLM calls during message floods (rapid-fire messages)
+// Keep the oldest message when trimming so the summary still has the start of the conversation.
+if (recentMessages.length > MAX_CONTEXT_MESSAGES) {
+    recentMessages = recentMessages.slice(0, 1).concat(recentMessages.slice(-19));
+}
+
+// Skip a new LLM call during message floods (rapid-fire messages) when the catch-up filter says
+// the user is still in the middle of sending context.
 const filterDecision = await this.catchupFilter.shouldSkipPlanner(message, recentMessages, channelKey);
 
-// Use fail-open design (don't block execution when uncertain)
+// Fail open here: if the config is missing, keep the feature working instead of blocking users.
 if (!this.config.enabled) {
     return;
 }
@@ -64,11 +84,13 @@ enabled = true;
 - Complex types with business logic or non-obvious relationships
 - Types where hover documentation helps developers understand requirements
 - Interfaces that benefit AI assistants for better context understanding
+- File headers and exported functions where a new contributor would otherwise need to read the whole file first
 
 **When to skip JSDoc:**
 - Simple, self-explanatory interfaces where property names are clear
 - Internal types that are obvious from context
 - Types that are just data containers without business meaning
+- Tiny helpers where the name already says enough and a comment would repeat the code
 
 **Good JSDoc Example:**
 ```typescript
@@ -108,15 +130,15 @@ export interface SimpleConfig {
 ```typescript
 /**
  * @description: <1-3 lines summarizing what this module does.>
- * @footnote-scope: <core|utility|interface|test>
+ * @footnote-scope: <core|utility|interface|web|test>
  * @footnote-module: <ModuleName>
- * @footnote-risk: <low|moderate|high> - <What could break or be compromised if mishandled.>
- * @footnote-ethics: <low|moderate|high> - <What human or governance impacts errors could cause.>
+ * @footnote-risk: <low|medium|high> - <What could break or be compromised if mishandled.>
+ * @footnote-ethics: <low|medium|high> - <What human or governance impacts errors could cause.>
  */
 ```
 
-- **@footnote-risk**: Technical fragility (stability, security, data integrity)
-- **@footnote-ethics**: Human/governance impact (privacy, fairness, transparency, social harm)
+- **@footnote-risk**: Technical blast radius if the module fails, is misconfigured, or is misused
+- **@footnote-ethics**: User-facing or governance harm if the module behaves incorrectly
 - **@footnote-scope**: Logical role in the system (helps auto-group modules)
 - Run `pnpm validate-footnote-tags` before committing; CI enforces this to guarantee standardized risk/ethics levels.
 - Keep annotations under 10 lines for readability
@@ -124,26 +146,24 @@ export interface SimpleConfig {
 - Enable future automated audit tools (e.g., `pnpm audit-risk`)
 
 ## Current `@footnote-*` Scoped Logger Tagging
-- Every scoped logger must include the current structured `@footnote-*` annotations in its JSDoc header.
-- Use this format for consistency and machine-parseability:
+- Scoped logger annotations are a documentation convention. They are not part of the enforced five-tag module header schema.
+- Use this format when documenting a scoped logger:
 
 ```typescript
 /**
  * @footnote-logger: <loggerName>
- * 
- * @logs
- * <What this scoped logger tracks and logs>
- * 
- * @impact
- * Risk: <Logging-specific risks if any>
- * Ethics: <Logging-specific ethical impacts if any>
+ * @logs: <What this scoped logger tracks and logs.>
+ * @footnote-risk: <low|medium|high> - <What could go wrong if this logger is noisy, missing, or leaks data.>
+ * @footnote-ethics: <low|medium|high> - <What privacy, transparency, or governance harm poor logging could cause.>
  */
 const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 ```
 
 - **@footnote-logger**: Logger module identifier (matches the child logger name)
 - **@logs**: What specific operations, events, or data this logger logs
-- Follow the same formatting standards as module headers for consistency
+- **@footnote-risk**: Technical blast radius if logging fails, misleads, or leaks data
+- **@footnote-ethics**: Privacy, transparency, or governance harm from poor logging behavior
+- Follow the same tag style as module headers for consistency
 
 ## Code Changes
 - Prefer small, well-scoped diffs.

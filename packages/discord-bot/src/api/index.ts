@@ -2,8 +2,8 @@
  * @description: Composes the Discord bot package-local backend API client.
  * @footnote-scope: utility
  * @footnote-module: DiscordApiClient
- * @footnote-risk: moderate - Misconfigured client settings can break bot/backend communication.
- * @footnote-ethics: moderate - Consistent API behavior supports predictable fail-open handling.
+ * @footnote-risk: medium - Misconfigured client settings can break bot/backend communication.
+ * @footnote-ethics: medium - Consistent API behavior supports predictable fail-open handling.
  */
 
 import {

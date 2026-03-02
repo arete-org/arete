@@ -1,14 +1,9 @@
 /**
- * @footnote-module: RealtimeAudioHandler
- * @footnote-risk: high
- * @footnote-ethics: high
- * @footnote-scope: core
- *
  * @description: Manages real-time audio streaming to OpenAI Realtime API.
- *
- * @impact
- * Risk: Handles audio buffering, speaker annotation, and commit timing. Failures can cause audio desync, dropped frames, or API errors.
- * Ethics: Streams user audio to external AI services, affecting privacy, data handling, and the quality of real-time AI interactions.
+ * @footnote-scope: core
+ * @footnote-module: RealtimeAudioHandler
+ * @footnote-risk: high - Handles audio buffering, speaker annotation, and commit timing. Failures can cause audio desync, dropped frames, or API errors.
+ * @footnote-ethics: high - Streams user audio to external AI services, affecting privacy, data handling, and the quality of real-time AI interactions.
  */
 
 import WebSocket from 'ws';

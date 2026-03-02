@@ -2,8 +2,8 @@
  * @description: Shared prompt templates for image processing tasks.
  * @footnote-scope: utility
  * @footnote-module: ImageProcessingConstants
- * @footnote-risk: moderate - Prompt changes can alter vision outputs or cost patterns.
- * @footnote-ethics: moderate - Prompt wording affects extracted content and privacy handling.
+ * @footnote-risk: medium - Prompt changes can alter vision outputs or cost patterns.
+ * @footnote-ethics: medium - Prompt wording affects extracted content and privacy handling.
  */
 
 import type OpenAI from 'openai';

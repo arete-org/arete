@@ -1,4 +1,12 @@
 /**
+ * @description: Renders a preview card for blog list entries with summary metadata and navigation links.
+ * @footnote-scope: web
+ * @footnote-module: BlogPostCard
+ * @footnote-risk: low - Card rendering bugs affect blog discovery but stay localized to list views.
+ * @footnote-ethics: low - This component presents public blog metadata without handling sensitive content.
+ */
+
+/**
  * BlogPostCard component displays a preview card for a blog post
  * with title, excerpt, author, and date information.
  */

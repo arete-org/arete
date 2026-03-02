@@ -1,4 +1,12 @@
 /**
+ * @description: Fetches blog index and post data from the backend and shapes it for the web UI.
+ * @footnote-scope: utility
+ * @footnote-module: WebBlogApi
+ * @footnote-risk: low - Fetch failures degrade blog availability but should fail open with empty states.
+ * @footnote-ethics: low - This utility only reads public blog content and does not handle private user data.
+ */
+
+/**
  * Utility functions for fetching blog posts and index from backend endpoints.
  * Uses discussion number as identifier/slug for routing.
  */

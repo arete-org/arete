@@ -2,8 +2,8 @@
  * @description: Manages realtime session options and applies runtime updates.
  * @footnote-scope: utility
  * @footnote-module: RealtimeSessionConfig
- * @footnote-risk: moderate - Incorrect options can break realtime sessions or increase costs.
- * @footnote-ethics: moderate - Session settings influence audio handling and consent.
+ * @footnote-risk: medium - Incorrect options can break realtime sessions or increase costs.
+ * @footnote-ethics: medium - Session settings influence audio handling and consent.
  */
 import WebSocket from 'ws';
 import { RealtimeSessionOptions } from '../utils/realtimeService.js';

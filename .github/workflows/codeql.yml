@@ -65,9 +65,21 @@ jobs:
               with:
                   node-version: '20'
 
+            - name: Enable Corepack
+              if: matrix.language == 'javascript-typescript'
+              run: corepack enable
+
+            - name: Activate pnpm
+              if: matrix.language == 'javascript-typescript'
+              run: corepack prepare pnpm@10.27.0 --activate
+
+            - name: Install dependencies
+              if: matrix.language == 'javascript-typescript'
+              run: pnpm install --frozen-lockfile
+
             - name: Validate Footnote tags
               if: matrix.language == 'javascript-typescript'
-              run: node scripts/validate-footnote-tags.js
+              run: pnpm validate-footnote-tags
 
             # Add any setup steps before running the `github/codeql-action/init` action.
             # This includes steps like installing compilers or runtimes (`actions/setup-node`

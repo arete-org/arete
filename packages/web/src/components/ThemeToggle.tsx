@@ -1,3 +1,11 @@
+/**
+ * @description: Toggles the site theme and plays the associated UI sounds for the web header.
+ * @footnote-scope: web
+ * @footnote-module: ThemeToggle
+ * @footnote-risk: low - Toggle issues affect presentation and polish but do not damage core data flows.
+ * @footnote-ethics: low - Theme controls influence accessibility and comfort, not sensitive decision-making.
+ */
+
 import { useTheme } from '../theme';
 import { useRef } from 'react';
 

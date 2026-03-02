@@ -2,12 +2,8 @@
  * @description: Manages prompt templates and rendering for AI interactions. Handles prompt loading, caching, and variable substitution.
  * @footnote-scope: utility
  * @footnote-module: PromptRegistry
- * @footnote-risk: moderate - Template errors can break AI interactions or cause unexpected behavior.
+ * @footnote-risk: medium - Template errors can break AI interactions or cause unexpected behavior.
  * @footnote-ethics: high - Prompt framing directly shapes AI behavior and output safety.
- *
- * @impact
- * Risk: Template errors can break AI interactions or cause unexpected behavior. Manages prompt lifecycle and variable interpolation.
- * Ethics: Controls the prompts that shape AI behavior and responses, directly affecting the ethical framing and guidance provided to the AI.
  */
 
 import fs from 'fs';

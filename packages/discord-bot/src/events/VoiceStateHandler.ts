@@ -1,14 +1,9 @@
 /**
- * @footnote-module: VoiceStateHandler
- * @footnote-risk: high
- * @footnote-ethics: high
- * @footnote-scope: core
- *
  * @description: Handles Discord voice state changes and coordinates voice session management.
- *
- * @impact
- * Risk: Manages voice connections, audio handlers, and realtime session creation. Failures can break all voice functionality or leave orphaned connections.
- * Ethics: Controls when and how the AI participates in voice channels, affecting user privacy and consent in real-time audio interactions.
+ * @footnote-scope: core
+ * @footnote-module: VoiceStateHandler
+ * @footnote-risk: high - Manages voice connections, audio handlers, and realtime session creation. Failures can break all voice functionality or leave orphaned connections.
+ * @footnote-ethics: high - Controls when and how the AI participates in voice channels, affecting user privacy and consent in real-time audio interactions.
  */
 
 import {

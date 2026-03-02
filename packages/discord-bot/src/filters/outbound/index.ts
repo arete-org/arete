@@ -2,8 +2,8 @@
  * @description: Runs outbound message filters before content is sent to Discord.
  * @footnote-scope: interface
  * @footnote-module: OutboundFilters
- * @footnote-risk: moderate - Filter failures could distort messages or degrade formatting.
- * @footnote-ethics: moderate - Outbound normalization influences transparency and user trust.
+ * @footnote-risk: medium - Filter failures could distort messages or degrade formatting.
+ * @footnote-ethics: medium - Outbound normalization influences transparency and user trust.
  */
 
 import { logger } from '../../utils/logger.js';
@@ -12,13 +12,9 @@ import type { OutboundFilter, OutboundFilterResult } from './types.js';
 
 /**
  * @footnote-logger: outboundFilters
- *
- * @logs
- * Outbound filter execution, changes applied, and filter error conditions.
- *
- * @impact
- * Risk: Missing or noisy logs can obscure formatting decisions.
- * Ethics: Logs touch message metadata and should avoid raw content leakage.
+ * @logs: Outbound filter execution, changes applied, and filter error conditions.
+ * @footnote-risk: medium - Missing or noisy logs can obscure formatting decisions and make filter behavior harder to debug.
+ * @footnote-ethics: medium - Logs touch message metadata and should avoid raw content leakage or misleading audit trails.
  */
 const outboundFilterLogger = logger.child({ module: 'outboundFilters' });
 

@@ -1,3 +1,11 @@
+/**
+ * @description: Hosts the interactive ask panel for submitting questions and rendering reflective responses on the website.
+ * @footnote-scope: web
+ * @footnote-module: AskPanel
+ * @footnote-risk: medium - Submission or rendering bugs can break the public question-and-answer experience.
+ * @footnote-ethics: high - This panel mediates user prompts, model output, and provenance cues in a public-facing interface.
+ */
+
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import ProvenanceFooter from './ProvenanceFooter';

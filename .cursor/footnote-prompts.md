@@ -122,7 +122,7 @@ Review the test coverage for this module:
 
 ```
 Check if this code needs updates to validation scripts:
-- Should validate-footnote-tags.js catch any issues here?
+- Should validate-footnote-tags.ts catch any issues here?
 - Are there new patterns that need automated checking?
 - Should this trigger any CI/CD validation steps?
 - Are there any manual checks that could be automated?

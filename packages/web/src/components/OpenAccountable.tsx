@@ -1,3 +1,11 @@
+/**
+ * @description: Highlights the project commitments around openness, self-hosting, and licensing on the landing page.
+ * @footnote-scope: web
+ * @footnote-module: OpenAccountableSection
+ * @footnote-risk: low - Copy or link regressions weaken a marketing section but do not affect core behavior.
+ * @footnote-ethics: medium - This section communicates governance and transparency commitments that shape user trust.
+ */
+
 // Pillars emphasising openness so future contributors understand the governance philosophy.
 interface Principle {
     title: string;

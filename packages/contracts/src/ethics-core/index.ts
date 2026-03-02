@@ -3,7 +3,7 @@
  * @footnote-scope: interface
  * @footnote-module: EthicsCoreContractsIndex
  * @footnote-risk: low - Export mistakes can misalign types across packages.
- * @footnote-ethics: moderate - Types document data meaning but do not execute logic.
+ * @footnote-ethics: medium - Types document data meaning but do not execute logic.
  */
 
 // This file is intentionally small. It only re-exports types so every package

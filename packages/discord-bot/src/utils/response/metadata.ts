@@ -2,8 +2,8 @@
  * @description: Builds response metadata for provenance, risk, and trace storage.
  * @footnote-scope: utility
  * @footnote-module: ResponseMetadataBuilder
- * @footnote-risk: moderate - Metadata errors can break trace integrity or auditing.
- * @footnote-ethics: moderate - Provenance accuracy affects transparency and trust.
+ * @footnote-risk: medium - Metadata errors can break trace integrity or auditing.
+ * @footnote-ethics: medium - Provenance accuracy affects transparency and trust.
  */
 import crypto from 'node:crypto';
 import type {

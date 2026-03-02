@@ -2,7 +2,7 @@
  * @description: Contains ethical evaluation logic and risk assessment algorithms.
  * @footnote-scope: core
  * @footnote-module: EthicsEvaluators
- * @footnote-risk: moderate - Evaluation failures can lead to inappropriate AI behavior or missed ethical concerns.
+ * @footnote-risk: medium - Evaluation failures can lead to inappropriate AI behavior or missed ethical concerns.
  * @footnote-ethics: high - These classifiers influence transparency, accountability, and user trust in AI responses.
  */
 

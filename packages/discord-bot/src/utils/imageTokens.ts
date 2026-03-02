@@ -2,7 +2,7 @@
  * @description: Tracks image generation token budgets and refresh cadence.
  * @footnote-scope: utility
  * @footnote-module: ImageTokenManager
- * @footnote-risk: moderate - Token miscounts can skew rate limiting or cost controls.
+ * @footnote-risk: medium - Token miscounts can skew rate limiting or cost controls.
  * @footnote-ethics: low - Token tracking does not process user content directly.
  */
 import { logger } from './logger.js';

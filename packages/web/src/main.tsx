@@ -1,3 +1,11 @@
+/**
+ * @description: Boots the Footnote web application and mounts the router and theme providers into the browser root.
+ * @footnote-scope: web
+ * @footnote-module: WebAppEntry
+ * @footnote-risk: medium - Broken bootstrapping can blank the site or disable global providers.
+ * @footnote-ethics: medium - Entry wiring controls whether users can reach the interface and its transparency features.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';

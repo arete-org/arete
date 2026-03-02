@@ -2,7 +2,7 @@
  * @description: Shared helpers and factory for persistence of response provenance metadata.
  * @footnote-scope: utility
  * @footnote-module: TraceStore
- * @footnote-risk: moderate - Storage failures can break audit trails and transparency features.
+ * @footnote-risk: medium - Storage failures can break audit trails and transparency features.
  * @footnote-ethics: high - Controls trace storage ensuring AI responses are traceable and auditable.
  */
 

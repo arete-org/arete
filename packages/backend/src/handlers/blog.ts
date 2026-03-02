@@ -2,7 +2,7 @@
  * @description: Handles blog index and post read endpoints.
  * @footnote-scope: interface
  * @footnote-module: BlogHandlers
- * @footnote-risk: moderate - Blog retrieval failures degrade content availability.
+ * @footnote-risk: medium - Blog retrieval failures degrade content availability.
  * @footnote-ethics: low - Public content delivery has minimal ethics impact.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';

@@ -2,8 +2,8 @@
  * @description: Builds and executes OpenAI vision requests to describe images for Discord users.
  * @footnote-scope: utility
  * @footnote-module: ImageDescriptionProcessor
- * @footnote-risk: moderate - Failures can block image understanding or inflate costs.
- * @footnote-ethics: moderate - Image descriptions may expose sensitive content if mishandled.
+ * @footnote-risk: medium - Failures can block image understanding or inflate costs.
+ * @footnote-ethics: medium - Image descriptions may expose sensitive content if mishandled.
  */
 
 import OpenAI from 'openai';

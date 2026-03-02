@@ -16,12 +16,23 @@ This directory contains Cursor-specific configuration files for the Footnote pro
 
 ### Risk/Ethics Tags
 
-All modules are tagged with `@footnote-risk` and `@footnote-ethics` levels:
+All modules use the shared Footnote header format and include `@footnote-risk` and `@footnote-ethics`:
 
-- **Critical**: Core system functionality, voice processing, AI interactions
-- **High**: Important utilities, command handlers, session management
-- **Medium**: News processing, trace storage, prompt management
-- **Low**: Simple utilities, configuration files
+- **High**: Broad failure impact, privacy-sensitive flows, or major user-facing behavior
+- **Medium**: Important utilities, API boundaries, and shared workflow logic
+- **Low**: Narrow-scope helpers, simple presentation logic, and test-only code
+
+Module headers use this order:
+
+```ts
+/**
+ * @description: <1-3 lines summarizing what this module does.>
+ * @footnote-scope: <core|utility|interface|web|test>
+ * @footnote-module: <ModuleName>
+ * @footnote-risk: <low|medium|high> - <What could break or be compromised if mishandled.>
+ * @footnote-ethics: <low|medium|high> - <What human or governance effect errors could cause.>
+ */
+```
 
 ### Domain Dictionary
 
@@ -37,7 +48,7 @@ The `cursor.dictionary` file contains project-specific terms to prevent auto-cor
 - Cost tracking with `ChannelContextManager.recordLLMUsage()`
 - Error handling with try/catch and informative messages
 - Risk/ethics tags in module headers
-- Scoped logger tagging with `@footnote-logger` and `@logs`
+- Scoped logger documentation with `@footnote-logger` and `@logs`
 - Async/await over promises
 
 ### Available Tasks
@@ -58,5 +69,5 @@ Cursor will automatically use these configurations when working in the Footnote 
 - Follow established code patterns and conventions
 - Use appropriate logging and error handling with scoped loggers
 - Respect the domain-specific vocabulary
-- Apply proper formatting standards for module and logger headers
+- Apply the current module-header and scoped-logger documentation formats
 

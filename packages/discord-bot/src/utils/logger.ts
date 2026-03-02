@@ -3,7 +3,7 @@
  * @footnote-scope: utility
  * @footnote-module: Logger
  * @footnote-risk: low - Logging failures hinder debugging and observability but should not halt bot execution.
- * @footnote-ethics: moderate - Logs may include sensitive user-derived content, so redaction and retention discipline are required.
+ * @footnote-ethics: medium - Logs may include sensitive user-derived content, so redaction and retention discipline are required.
  */
 
 import fs from 'fs';

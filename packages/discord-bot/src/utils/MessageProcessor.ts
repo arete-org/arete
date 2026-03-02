@@ -4,10 +4,6 @@
  * @footnote-module: MessageProcessor
  * @footnote-risk: high - Processing failures can break all user interactions or generate inappropriate content.
  * @footnote-ethics: high - Controls AI response generation, content filtering, and provenance tracking.
- *
- * @impact
- * Risk: Processing failures can break all user interactions or generate inappropriate content. Orchestrates the entire message-to-response pipeline including context building, planning, and response delivery.
- * Ethics: Controls AI response generation and content filtering. Manages model selection, prompt construction, response validation, and provenance tracking. All processing is logged and cost-tracked for transparency.
  */
 
 import fs from 'fs';

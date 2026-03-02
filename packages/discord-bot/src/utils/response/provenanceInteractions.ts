@@ -2,7 +2,7 @@
  * @description: Handles provenance footer interactions, lenses, and trace lookups.
  * @footnote-scope: interface
  * @footnote-module: ProvenanceInteractions
- * @footnote-risk: moderate - Interaction failures can block provenance navigation.
+ * @footnote-risk: medium - Interaction failures can block provenance navigation.
  * @footnote-ethics: high - Provenance access affects user trust and accountability.
  */
 import type {

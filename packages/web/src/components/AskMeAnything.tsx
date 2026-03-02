@@ -1,3 +1,11 @@
+/**
+ * @description: Provides the embeddable ask experience used on the landing page and iframe surfaces.
+ * @footnote-scope: web
+ * @footnote-module: AskMeAnything
+ * @footnote-risk: medium - Input, Turnstile, or response rendering failures can break the primary interactive web flow.
+ * @footnote-ethics: high - This component brokers live user prompts and transparency metadata in a public-facing context.
+ */
+
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import ProvenanceFooter from './ProvenanceFooter';

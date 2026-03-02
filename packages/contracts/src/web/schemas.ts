@@ -2,8 +2,8 @@
  * @description: Runtime schemas for high-value web API routes (reflect + traces).
  * @footnote-scope: interface
  * @footnote-module: WebContractSchemas
- * @footnote-risk: moderate - Schema drift can reject valid traffic or allow invalid payloads.
- * @footnote-ethics: moderate - Validation quality affects provenance clarity and user trust.
+ * @footnote-risk: medium - Schema drift can reject valid traffic or allow invalid payloads.
+ * @footnote-ethics: medium - Validation quality affects provenance clarity and user trust.
  */
 
 import { z } from 'zod';

@@ -1,14 +1,9 @@
 /**
- * @footnote-module: ChannelContextManager
- * @footnote-risk: high
- * @footnote-ethics: high
- * @footnote-scope: core
- *
  * @description: In-memory state manager tracking recent messages and metrics per channel for engagement decisions.
- *
- * @impact
- * Risk: Memory leaks if eviction fails; state inconsistency if concurrent updates race. Excessive reduction/manipulation/deletion of context can lead to poor decision making.
- * Ethics: Respects Discord ToS by keeping all data volatile. Exposing PII to users outside of proper channel scope can lead to privacy violations.
+ * @footnote-scope: core
+ * @footnote-module: ChannelContextManager
+ * @footnote-risk: high - Memory leaks if eviction fails; state inconsistency if concurrent updates race. Excessive reduction/manipulation/deletion of context can lead to poor decision making.
+ * @footnote-ethics: high - Respects Discord ToS by keeping all data volatile. Exposing PII to users outside of proper channel scope can lead to privacy violations.
  */
 
 import { Message } from 'discord.js';

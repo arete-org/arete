@@ -3,7 +3,7 @@
  * @footnote-scope: utility
  * @footnote-module: Logger
  * @footnote-risk: low - Logging failures can make debugging difficult but should not break request handling.
- * @footnote-ethics: moderate - Logs may contain user data affecting privacy and auditability.
+ * @footnote-ethics: medium - Logs may contain user data affecting privacy and auditability.
  */
 
 import fs from 'fs';

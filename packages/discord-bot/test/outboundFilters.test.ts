@@ -3,7 +3,7 @@
  * @footnote-scope: test
  * @footnote-module: OutboundFiltersTests
  * @footnote-risk: low - Tests only validate formatting helpers.
- * @footnote-ethics: moderate - Guards against accidental content distortion.
+ * @footnote-ethics: medium - Guards against accidental content distortion.
  */
 
 import test from 'node:test';

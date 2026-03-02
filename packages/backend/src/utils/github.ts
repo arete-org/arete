@@ -2,8 +2,8 @@
  * @description: Verifies GitHub webhook signatures for incoming requests.
  * @footnote-scope: utility
  * @footnote-module: GitHubWebhookVerifier
- * @footnote-risk: moderate - Incorrect verification could accept spoofed payloads.
- * @footnote-ethics: moderate - Spoofed data could mislead users or poison content.
+ * @footnote-risk: medium - Incorrect verification could accept spoofed payloads.
+ * @footnote-ethics: medium - Spoofed data could mislead users or poison content.
  */
 import crypto from 'node:crypto';
 import { logger } from './logger.js';

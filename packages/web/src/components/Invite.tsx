@@ -1,3 +1,11 @@
+/**
+ * @description: Presents the short invite and self-hosting steps on the landing page.
+ * @footnote-scope: web
+ * @footnote-module: InviteSection
+ * @footnote-risk: low - Incorrect copy or links can confuse setup expectations but do not affect runtime state.
+ * @footnote-ethics: medium - Self-hosting guidance shapes operator understanding of control, privacy, and deployment choices.
+ */
+
 // Sequence describing how to self-host Footnote without losing control of the infrastructure.
 interface InviteStep {
     title: string;

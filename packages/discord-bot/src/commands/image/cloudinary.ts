@@ -2,8 +2,8 @@
  * @description: Uploads generated images to Cloudinary and formats metadata for embeds.
  * @footnote-scope: utility
  * @footnote-module: ImageCloudinary
- * @footnote-risk: moderate - Upload failures or metadata drift can break image delivery.
- * @footnote-ethics: moderate - Handles user-generated images and related metadata.
+ * @footnote-risk: medium - Upload failures or metadata drift can break image delivery.
+ * @footnote-ethics: medium - Handles user-generated images and related metadata.
  */
 import { v2 as cloudinary } from 'cloudinary';
 import { logger } from '../../utils/logger.js';

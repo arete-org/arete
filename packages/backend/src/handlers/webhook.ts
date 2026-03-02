@@ -2,8 +2,8 @@
  * @description: Handles GitHub webhook ingestion for blog updates.
  * @footnote-scope: interface
  * @footnote-module: WebhookHandler
- * @footnote-risk: moderate - Malformed payloads can break sync if not guarded.
- * @footnote-ethics: moderate - Accepting spoofed payloads could mislead users.
+ * @footnote-risk: medium - Malformed payloads can break sync if not guarded.
+ * @footnote-ethics: medium - Accepting spoofed payloads could mislead users.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { GitHubDiscussion } from '../storage/blogStore.js';

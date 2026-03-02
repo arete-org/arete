@@ -1,14 +1,9 @@
 /**
- * @footnote-module: LLMCostEstimator
- * @footnote-risk: moderate
- * @footnote-ethics: high
- * @footnote-scope: core
- *
  * @description: Tracks OpenAI API usage and costs per channel/guild/global for budget enforcement and transparency
- *
- * @impact
- * Risk: Memory leaks if not properly managed; state inconsistency if concurrent updates race.
- * Ethics: Provides cost transparency and enables budget controls; high-importance for responsible AI resource consumption.
+ * @footnote-scope: core
+ * @footnote-module: LLMCostEstimator
+ * @footnote-risk: medium - Memory leaks if not properly managed; state inconsistency if concurrent updates race.
+ * @footnote-ethics: high - Provides cost transparency and enables budget controls; high-importance for responsible AI resource consumption.
  */
 
 import { logger, logLLMCostSummary, type LLMCostTotals } from './logger.js';
@@ -18,13 +13,9 @@ import type { ChannelContextManager } from '../state/ChannelContextManager.js';
 
 /**
  * @footnote-logger: llmCostEstimator
- *
- * @logs
- * LLM cost breakdowns, channel/guild totals, global totals, and context manager usage
- *
- * @impact
- * Risk: Memory leaks if not properly managed; state inconsistency if concurrent updates race.
- * Ethics: Provides cost transparency and enables budget controls; high-importance for responsible AI resource consumption.
+ * @logs: LLM cost breakdowns, channel totals, guild totals, global totals, and context manager usage.
+ * @footnote-risk: medium - Missing cost logs can hide accounting errors, budget drift, or context-manager integration failures.
+ * @footnote-ethics: high - Cost logging supports transparency and responsible resource usage across AI interactions.
  */
 const costLogger = logger.child({ module: 'llmCostEstimator' });
 

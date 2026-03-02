@@ -2,8 +2,8 @@
  * @description: Extracts and parses metadata appended to AI responses.
  * @footnote-scope: utility
  * @footnote-module: ResponseMetadataParser
- * @footnote-risk: moderate - Parsing failures can drop provenance data but should not block responses.
- * @footnote-ethics: moderate - Incorrect parsing could misreport provenance or confidence to users.
+ * @footnote-risk: medium - Parsing failures can drop provenance data but should not block responses.
+ * @footnote-ethics: medium - Incorrect parsing could misreport provenance or confidence to users.
  */
 import { logger } from './logger.js';
 

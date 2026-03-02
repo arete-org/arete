@@ -1,3 +1,11 @@
+/**
+ * @description: Provides the web theme context, persistence, and DOM synchronization for light and dark mode.
+ * @footnote-scope: web
+ * @footnote-module: WebThemeProvider
+ * @footnote-risk: low - Theme state bugs affect presentation but do not corrupt core application data.
+ * @footnote-ethics: low - Theme behavior influences accessibility expectations but does not process sensitive content.
+ */
+
 import {
     createContext,
     PropsWithChildren,

@@ -2,7 +2,7 @@
  * @description: Reads and writes blog post JSON payloads to backend-owned storage.
  * @footnote-scope: utility
  * @footnote-module: BlogStore
- * @footnote-risk: moderate - Storage failures can break blog sync or serve stale data.
+ * @footnote-risk: medium - Storage failures can break blog sync or serve stale data.
  * @footnote-ethics: low - Blog content is public, but integrity still matters.
  */
 import path from 'node:path';

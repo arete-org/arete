@@ -2,7 +2,7 @@
  * @description: Stores follow-up image generation context for retries and variations.
  * @footnote-scope: utility
  * @footnote-module: ImageFollowUpCache
- * @footnote-risk: moderate - Cache mistakes can repeat incorrect prompts or settings.
+ * @footnote-risk: medium - Cache mistakes can repeat incorrect prompts or settings.
  * @footnote-ethics: low - Caches user-provided inputs without additional inference.
  */
 import type {

@@ -1,14 +1,9 @@
 /**
- * @footnote-module: VoiceSessionManager
- * @footnote-risk: high
- * @footnote-ethics: high
- * @footnote-scope: core
- *
  * @description: Manages voice session state and coordinates audio event handling.
- *
- * @impact
- * Risk: Handles session creation, audio chunk forwarding, and cleanup. Failures can cause memory leaks, orphaned sessions, or audio processing errors.
- * Ethics: Manages the lifecycle of voice interactions, affecting when and how user audio is processed and how AI responses are delivered.
+ * @footnote-scope: core
+ * @footnote-module: VoiceSessionManager
+ * @footnote-risk: high - Handles session creation, audio chunk forwarding, and cleanup. Failures can cause memory leaks, orphaned sessions, or audio processing errors.
+ * @footnote-ethics: high - Manages the lifecycle of voice interactions, affecting when and how user audio is processed and how AI responses are delivered.
  */
 
 import { VoiceConnection } from '@discordjs/voice';

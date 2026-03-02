@@ -3,7 +3,7 @@
  * @footnote-scope: interface
  * @footnote-module: EthicsCoreContracts
  * @footnote-risk: low - Incorrect shapes can break UI assumptions or validation.
- * @footnote-ethics: moderate - Types document data meaning but do not execute logic.
+ * @footnote-ethics: medium - Types document data meaning but do not execute logic.
  */
 
 // This file is the single source of truth for cross-package metadata shapes.

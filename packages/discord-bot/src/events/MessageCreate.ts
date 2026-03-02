@@ -1,14 +1,9 @@
 /**
- * @footnote-module: MessageCreate
- * @footnote-risk: high
- * @footnote-ethics: high
- * @footnote-scope: core
- *
  * @description: Handles the 'messageCreate' event from Discord.js, processing messages that mention the bot or are replies. Manages engagement logic, catch-up thresholds, and bot-to-bot conversation limits.
- *
- * @impact
- * Risk: Message processing failures can break user interactions or create inappropriate responses. Manages mention detection, catch-up logic, and bot conversation tracking.
- * Ethics: Controls user interaction frequency and AI response behavior. Governs engagement thresholds, thread restrictions, and bot-to-bot conversation limits to prevent spam and ensure respectful interaction.
+ * @footnote-scope: core
+ * @footnote-module: MessageCreate
+ * @footnote-risk: high - Message processing failures can break user interactions or create inappropriate responses. Manages mention detection, catch-up logic, and bot conversation tracking.
+ * @footnote-ethics: high - Controls user interaction frequency and AI response behavior. Governs engagement thresholds, thread restrictions, and bot-to-bot conversation limits to prevent spam and ensure respectful interaction.
  */
 
 import { Message } from 'discord.js';
@@ -30,13 +25,9 @@ import type {
 
 /**
  * @footnote-logger: messageCreate
- *
- * @logs
- * Message processing events, engagement decisions, catchup triggers, bot conversation tracking, and error conditions
- *
- * @impact
- * Risk - Message processing failures can break user interactions or create inappropriate responses. Manages mention detection, catch-up logic, and bot conversation tracking.
- * Ethics - Controls user interaction frequency and AI response behavior. Governs engagement thresholds, thread restrictions, and bot-to-bot conversation limits to prevent spam and ensure respectful interaction.
+ * @logs: Message processing events, engagement decisions, catchup triggers, bot conversation tracking, and error conditions.
+ * @footnote-risk: high - Missing or misleading logs can hide message-routing failures, catch-up decisions, and bot conversation loops.
+ * @footnote-ethics: high - These logs document interaction frequency and engagement decisions that affect respectful participation and user trust.
  */
 const messageLogger = logger.child({ module: 'messageCreate' });
 

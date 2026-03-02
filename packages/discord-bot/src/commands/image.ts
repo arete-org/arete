@@ -3,7 +3,7 @@
  * @footnote-scope: interface
  * @footnote-module: ImageCommand
  * @footnote-risk: high - Miswiring can break image generation or overload downstream services.
- * @footnote-ethics: moderate - Image generation affects user content expectations and safety.
+ * @footnote-ethics: medium - Image generation affects user content expectations and safety.
  */
 import {
     AttachmentBuilder,

@@ -1,18 +1,9 @@
 /**
- * @footnote-module: CatchupFilter
- * @footnote-risk: moderate
- * @footnote-ethics: moderate
+ * @description: Provides lightweight, deterministic heuristics that decide whether the planner should be skipped for catchup events. The filter analyzes recent conversation history to weed out obvious non-response scenarios before we incur an LLM call.
  * @footnote-scope: utility
- *
- * @description: Provides lightweight, deterministic heuristics that decide whether the planner
- * should be skipped for catchup events. The filter analyzes recent conversation
- * history to weed out obvious non-response scenarios before we incur an LLM call.
- *
- * @impact
- * Risk: Overly aggressive heuristics could cause the bot to miss legitimate
- * engagement opportunities. The filter intentionally fails open to minimise risk.
- * Ethics: Reduces unnecessary AI engagement, lowering the chance of spamming or
- * intruding on human-only conversations.
+ * @footnote-module: CatchupFilter
+ * @footnote-risk: medium - Overly aggressive heuristics could cause the bot to miss legitimate messages.
+ * @footnote-ethics: medium - Reduces unnecessary AI engagement, lowering the chance of spamming or unwanted interactions.
  */
 
 import { Message } from 'discord.js';
@@ -254,10 +245,10 @@ export class CatchupFilter {
             return true;
         }
 
-        // Collapse whitespace to evaluate pure emoji sequences.
+        // Remove spaces so a message like "😀 😀" still counts as emoji-only.
         const squashed = trimmed.replace(/\s+/g, '');
-        // eslint-disable-next-line no-misleading-character-class -- Unicode emoji sequences require combining characters.
-        const emojiRegex = /^(?:\p{Extended_Pictographic}[\u{200D}\u{FE0F}]*)+$/u;
+        const emojiRegex =
+            /^(?:\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\u{FE0F})*(?:\u{200D}\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\u{FE0F})*)*)+$/u;
         if (emojiRegex.test(squashed)) {
             return true;
         }
@@ -450,4 +441,3 @@ export class CatchupFilter {
         return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 }
-

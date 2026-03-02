@@ -1,16 +1,9 @@
 /**
- * @footnote-module: IncidentStoreTests
- * @footnote-risk: low
- * @footnote-ethics: high
+ * @description: Integration tests to ensure incidents and audit events are persisted with pseudonymized Discord identifiers (namespaced HMAC) and no raw IDs leak into storage.
  * @footnote-scope: test
- *
- * @description: Integration tests to ensure incidents and audit events are persisted with
- * pseudonymized Discord identifiers (namespaced HMAC) and no raw IDs leak into
- * storage.
- *
- * @impact
- * Risk: Missing coverage could allow raw IDs to be stored in production.
- * Ethics: Confirms privacy guarantees for incident audit trails.
+ * @footnote-module: IncidentStoreTests
+ * @footnote-risk: low - Missing coverage could allow raw IDs to be stored in production.
+ * @footnote-ethics: high - Confirms privacy guarantees for incident audit trails.
  */
 
 import test from 'node:test';

@@ -2,8 +2,8 @@
  * @description: Defines voice processing and timeout constants for audio workflows.
  * @footnote-scope: utility
  * @footnote-module: VoiceConstants
- * @footnote-risk: moderate - Incorrect constants can destabilize audio buffers or retries.
- * @footnote-ethics: moderate - Voice timing affects capture boundaries and consent.
+ * @footnote-risk: medium - Incorrect constants can destabilize audio buffers or retries.
+ * @footnote-ethics: medium - Voice timing affects capture boundaries and consent.
  */
 // Audio processing constants
 export const AUDIO_CONSTANTS = {

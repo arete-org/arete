@@ -1,4 +1,12 @@
 /**
+ * @description: Renders the sticky site header, navigation actions, breadcrumbs, and theme toggle.
+ * @footnote-scope: web
+ * @footnote-module: SiteHeader
+ * @footnote-risk: low - Header regressions mostly affect navigation and discoverability across the site.
+ * @footnote-ethics: low - Navigation clarity supports transparency, but this component does not process sensitive content.
+ */
+
+/**
  * Header component displays the site header with Footnote title, breadcrumb trail, navigation buttons, and theme toggle.
  * This header is sticky and follows the user as they scroll, providing consistent navigation.
  */

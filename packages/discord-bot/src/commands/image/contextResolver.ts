@@ -2,8 +2,8 @@
  * @description: Resolves image generation context from messages and defaults.
  * @footnote-scope: utility
  * @footnote-module: ImageContextResolver
- * @footnote-risk: moderate - Incorrect context resolution can drive unintended model usage.
- * @footnote-ethics: moderate - Context affects user intent and safety handling.
+ * @footnote-risk: medium - Incorrect context resolution can drive unintended model usage.
+ * @footnote-ethics: medium - Context affects user intent and safety handling.
  */
 import type { Message } from 'discord.js';
 import { logger } from '../../utils/logger.js';

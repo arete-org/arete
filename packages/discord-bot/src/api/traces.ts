@@ -2,8 +2,8 @@
  * @description: Trace endpoint methods for Discord bot backend integration.
  * @footnote-scope: utility
  * @footnote-module: DiscordTraceApi
- * @footnote-risk: moderate - Trace API failures reduce provenance reliability and debugging context.
- * @footnote-ethics: moderate - Missing provenance data can weaken transparency and auditability.
+ * @footnote-risk: medium - Trace API failures reduce provenance reliability and debugging context.
+ * @footnote-ethics: medium - Missing provenance data can weaken transparency and auditability.
  */
 
 import type {

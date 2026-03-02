@@ -1,14 +1,9 @@
 /**
- * @footnote-module: Main
- * @footnote-risk: high
- * @footnote-ethics: high
- * @footnote-scope: core
- *
  * @description: Main orchestration point controlling system initialization, authentication, and event routing.
- *
- * @impact
- * Risk: Failure here can halt the application or expose tokens and credentials.
- * Ethics: Determines which modules (including cost tracking and audit systems) are initialized, affecting transparency and accountability across the bot.
+ * @footnote-scope: core
+ * @footnote-module: Main
+ * @footnote-risk: high - Failure here can halt the application or expose tokens and credentials.
+ * @footnote-ethics: high - Determines which modules (including cost tracking and audit systems) are initialized, affecting transparency and accountability across the bot.
  */
 
 import { Client, GatewayIntentBits, Events, Collection } from 'discord.js';
