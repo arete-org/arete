@@ -106,12 +106,23 @@ const initializeServices = () => {
     });
 
     // Trusted service calls get their own limiter so internal callers do not consume browser quota.
+    const serviceRateLimit = Number(
+        process.env.REFLECT_SERVICE_RATE_LIMIT || '30'
+    );
+    const serviceRateLimitWindow = Number(
+        process.env.REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS || '60000'
+    );
+    const validatedLimit =
+        Number.isFinite(serviceRateLimit) && serviceRateLimit > 0
+            ? Math.floor(serviceRateLimit)
+            : 30;
+    const validatedWindow =
+        Number.isFinite(serviceRateLimitWindow) && serviceRateLimitWindow > 0
+            ? Math.floor(serviceRateLimitWindow)
+            : 60000;
     serviceRateLimiter = new SimpleRateLimiter({
-        limit: parseInt(process.env.REFLECT_SERVICE_RATE_LIMIT || '30', 10),
-        window: parseInt(
-            process.env.REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS || '60000',
-            10
-        ),
+        limit: validatedLimit,
+        window: validatedWindow,
     });
 
     // Separate limiter for trace ingestion to avoid coupling to reflect limits.

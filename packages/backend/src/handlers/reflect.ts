@@ -818,8 +818,11 @@ const createReflectHandler = ({
 
             if (serviceAuth.isTrustedService) {
                 // Service callers are bucketed separately so bot traffic does not consume browser limits.
+                const serviceRateLimitKey = serviceAuth.isTrustedService
+                    ? serviceAuth.rateLimitKey
+                    : `${serviceAuth.rateLimitKey}:${clientIp}`;
                 const serviceRateLimitResult = activeServiceRateLimiter.check(
-                    `${serviceAuth.rateLimitKey}:${clientIp}`
+                    serviceRateLimitKey ?? `${serviceAuth.rateLimitKey}:${clientIp}`
                 );
                 if (!serviceRateLimitResult.allowed) {
                     res.statusCode = 429;
