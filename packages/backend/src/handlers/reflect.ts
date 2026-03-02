@@ -231,6 +231,22 @@ const createReflectHandler = ({
                 return;
             }
 
+            // Rate limiting happens after auth so trusted services and public users land in different buckets.
+            const rateLimitResult = rateLimitController.checkRateLimit(
+                authResult.data.serviceAuth,
+                identity
+            );
+            if (!rateLimitResult.success) {
+                sendJson(
+                    res,
+                    rateLimitResult.error.statusCode,
+                    rateLimitResult.error.payload,
+                    rateLimitResult.error.extraHeaders
+                );
+                logRequest(req, res, rateLimitResult.error.logLabel);
+                return;
+            }
+
             if (!authResult.data.skipCaptcha) {
                 // Trusted services skip this block. Public callers must satisfy Turnstile.
                 logger.debug(
@@ -263,22 +279,6 @@ const createReflectHandler = ({
             }
 
             logSuccessfulAuthStep(req, res, logRequest, authResult.data);
-
-            // Rate limiting happens after auth so trusted services and public users land in different buckets.
-            const rateLimitResult = rateLimitController.checkRateLimit(
-                authResult.data.serviceAuth,
-                identity
-            );
-            if (!rateLimitResult.success) {
-                sendJson(
-                    res,
-                    rateLimitResult.error.statusCode,
-                    rateLimitResult.error.payload,
-                    rateLimitResult.error.extraHeaders
-                );
-                logRequest(req, res, rateLimitResult.error.logLabel);
-                return;
-            }
 
             if (!reflectService) {
                 sendJson(res, 503, {

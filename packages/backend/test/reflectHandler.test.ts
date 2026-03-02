@@ -30,6 +30,9 @@ type TestServer = {
 
 type CreateTestServerOptions = {
     openaiService?: OpenAIService;
+    ipRateLimiter?: SimpleRateLimiter;
+    sessionRateLimiter?: SimpleRateLimiter;
+    serviceRateLimiter?: SimpleRateLimiter;
     logRequest?: (
         req: http.IncomingMessage,
         res: http.ServerResponse,
@@ -80,15 +83,21 @@ const createTestServer = (
 
         const handler = createReflectHandler({
             openaiService,
-            ipRateLimiter: new SimpleRateLimiter({ limit: 5, window: 60000 }),
-            sessionRateLimiter: new SimpleRateLimiter({
-                limit: 5,
-                window: 60000,
-            }),
-            serviceRateLimiter: new SimpleRateLimiter({
-                limit: serviceRateLimit,
-                window: serviceRateLimitWindowMs,
-            }),
+            ipRateLimiter:
+                options.ipRateLimiter ??
+                new SimpleRateLimiter({ limit: 5, window: 60000 }),
+            sessionRateLimiter:
+                options.sessionRateLimiter ??
+                new SimpleRateLimiter({
+                    limit: 5,
+                    window: 60000,
+                }),
+            serviceRateLimiter:
+                options.serviceRateLimiter ??
+                new SimpleRateLimiter({
+                    limit: serviceRateLimit,
+                    window: serviceRateLimitWindowMs,
+                }),
             storeTrace: async () => undefined,
             logRequest: options.logRequest ?? (() => undefined),
             buildResponseMetadata: () => createMetadata(),
@@ -346,6 +355,73 @@ test('reflect does not expose raw upstream error details to clients', async () =
     } finally {
         await server.close();
         env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
+test('reflect rate limits public callers before calling Turnstile', async () => {
+    const env = process.env as MutableEnv;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+    const originalFetch = globalThis.fetch;
+    let turnstileCalls = 0;
+
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    globalThis.fetch = (async (input, init) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url === 'https://challenges.cloudflare.com/turnstile/v0/siteverify') {
+            turnstileCalls += 1;
+            return new Response(
+                JSON.stringify({
+                    success: true,
+                    hostname: '127.0.0.1',
+                    'challenge-ts': new Date().toISOString(),
+                }),
+                {
+                    status: 200,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                }
+            );
+        }
+
+        return originalFetch(input, init);
+    }) as typeof fetch;
+
+    const server = await createTestServer({
+        ipRateLimiter: new SimpleRateLimiter({ limit: 1, window: 60000 }),
+        sessionRateLimiter: new SimpleRateLimiter({ limit: 5, window: 60000 }),
+    });
+
+    try {
+        const firstResponse = await fetch(`${server.url}/api/reflect`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Turnstile-Token': 'captcha-token',
+            },
+            body: JSON.stringify({ question: 'first public request' }),
+        });
+        assert.equal(firstResponse.status, 200);
+        assert.equal(turnstileCalls, 1);
+
+        const secondResponse = await fetch(`${server.url}/api/reflect`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Turnstile-Token': 'captcha-token',
+            },
+            body: JSON.stringify({ question: 'second public request' }),
+        });
+        assert.equal(secondResponse.status, 429);
+        assert.equal(turnstileCalls, 1);
+    } finally {
+        globalThis.fetch = originalFetch;
+        await server.close();
         env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
         env.TURNSTILE_SITE_KEY = previousTurnstileSite;
     }
