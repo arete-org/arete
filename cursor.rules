@@ -170,6 +170,9 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 - Preserve provenance comments, cost tracking, and licensing headers.
 - Never remove risk annotations or audit metadata without explicit reason.
 - Maintain backward compatibility unless explicitly breaking for a versioned release.
+- After any file edit, run ESLint by default before wrapping up the change.
+- Prefer linting only the touched files when the repo tooling supports it cleanly.
+- If the repo only exposes a broader lint command, run that broader command and call out the wider scope in the summary.
 
 ## Refactoring.Guru discipline
 - Use `docs/ai/refactoring_guru_playbook.md` as the canonical refactoring reference.
@@ -234,11 +237,12 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 
 ### Recommended Workflow
 1. **Complete implementation**
-2. **Run automated validation**: `pnpm review` (validates `@footnote-*` tags, OpenAPI code links, types, linting)
-3. **Use Cursor's Bugbot (Review PR)** for automated code quality analysis
-4. **Use inline chat (`Ctrl+K`)** with project-specific prompts (see `.cursor/footnote-prompts.md`)
-5. **Accept suggested simplifications or comments** in-place
-6. **Open human PR review** for logic, ethics, and integration focus
+2. **Run ESLint by default** on the touched files when possible; otherwise run the broader repo lint command and note the wider scope
+3. **Run automated validation**: `pnpm review` (validates `@footnote-*` tags, OpenAPI code links, types, linting)
+4. **Use Cursor's Bugbot (Review PR)** for automated code quality analysis
+5. **Use inline chat (`Ctrl+K`)** with project-specific prompts (see `.cursor/footnote-prompts.md`)
+6. **Accept suggested simplifications or comments** in-place
+7. **Open human PR review** for logic, ethics, and integration focus
 
 ### Integration with Existing Tools
 - **Review pipeline**: `pnpm review`
