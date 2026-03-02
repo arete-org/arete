@@ -35,11 +35,11 @@ Footnote is a working prototype with:
 
 1. Install dependencies
 
-> If pnpm isn't available yet, run `corepack enable` once (Node 16.10+), then `pnpm install`
-
 ```bash
 pnpm install
 ```
+
+> If pnpm isn't available yet, run `corepack enable` once (Node 16.10+), then `pnpm install`
 
 2. Set environment variables
 
