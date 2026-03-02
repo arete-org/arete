@@ -33,9 +33,8 @@ const { spawnSync } = require('node:child_process');
 /**
  * Stable diagnostic payload emitted by the orchestrator.
  *
- * We keep this intentionally small so the output is easy to read in a terminal and easy to
- * parse in CI logs. Some upstream validators do not report a precise line number, so `line`
- * falls back to `1` in those cases instead of inventing a fake location.
+ * Keep this shape small so terminal output stays readable and CI can parse it easily.
+ * Some upstream tools do not report a line number, so we use `1` instead of guessing.
  * @typedef {{
  *   file: string;
  *   line: number;
@@ -123,12 +122,8 @@ function printDiagnostic(diagnostic) {
 /**
  * Run a subprocess and capture UTF-8 output.
  *
- * Most of the time we call tools directly instead of going through a shell. That keeps the
- * arguments simpler and more predictable.
- *
- * Windows is the main exception. Commands like `pnpm.cmd` are batch files, and `spawnSync`
- * can fail when we call them directly. Running them through `cmd.exe` matches how a developer
- * would run the same command in a normal Windows terminal.
+ * We usually call tools directly because argument handling is simpler that way.
+ * Windows is the exception: `.cmd` files like `pnpm.cmd` need `cmd.exe` to launch cleanly.
  * @param {string} command
  * @param {string[]} args
  * @returns {CommandResult}
@@ -409,8 +404,8 @@ function parseOpenApiDiagnostics(result) {
 /**
  * Parse TypeScript compiler output emitted with `--pretty false`.
  *
- * We deliberately disable pretty formatting when invoking `tsc` so the output stays plain
- * text and stable across terminals, shells, and CI logs.
+ * We disable pretty formatting so the output stays plain text and does not change between
+ * local terminals and CI logs.
  * @param {CommandResult} result
  * @returns {Diagnostic[]}
  */
@@ -602,11 +597,9 @@ function filterDiagnosticsToChangedFiles(diagnostics, changedFiles) {
 /**
  * Keep validator-level fallback diagnostics visible even in changed-only mode.
  *
- * In `--changed-only` mode, we usually show only diagnostics for touched files.
- *
- * Some validators cannot point to a changed file when they fail. Instead, they report the
- * problem against the validator script itself. We keep those messages so the contributor still
- * sees why the step failed.
+ * In `--changed-only` mode, we normally hide problems from untouched files.
+ * The exception is a validator-level failure that points at the validator script itself.
+ * We keep that message so the contributor still sees why the whole step failed.
  * @param {Diagnostic[]} diagnostics
  * @param {Diagnostic[]} filteredDiagnostics
  * @returns {Diagnostic[]}
@@ -614,7 +607,7 @@ function filterDiagnosticsToChangedFiles(diagnostics, changedFiles) {
 function mergeValidatorFallbackDiagnostics(diagnostics, filteredDiagnostics) {
     const mergedDiagnostics = [...filteredDiagnostics];
     const fallbackDiagnostics = diagnostics.filter(
-        (diagnostic) => diagnostic.file === 'scripts/validate-footnote-tags.js'
+        (diagnostic) => diagnostic.file === 'scripts/validate-footnote-tags.ts'
     );
 
     for (const fallbackDiagnostic of fallbackDiagnostics) {

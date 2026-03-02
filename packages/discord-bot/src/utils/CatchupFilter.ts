@@ -245,11 +245,10 @@ export class CatchupFilter {
             return true;
         }
 
-        // Collapse whitespace to evaluate pure emoji sequences.
+        // Remove spaces so a message like "😀 😀" still counts as emoji-only.
         const squashed = trimmed.replace(/\s+/g, '');
-        // eslint-disable-next-line no-misleading-character-class -- Unicode emoji sequences require combining characters.
         const emojiRegex =
-            /^(?:\p{Extended_Pictographic}[\u{200D}\u{FE0F}]*)+$/u;
+            /^(?:\p{Extended_Pictographic}(?:\u{200D}|\u{FE0F})*)+$/u;
         if (emojiRegex.test(squashed)) {
             return true;
         }
