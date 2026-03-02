@@ -38,6 +38,22 @@ type ResponseCreateParams = ResponseCreateParamsNonStreaming;
 export type { GPT5ModelType } from './pricing.js';
 export type SupportedModel = GPT5ModelType;
 export type EmbeddingModelType = 'text-embedding-3-small'; // Dimensions: 1546
+export type WebSearchIntent = 'repo_explainer' | 'current_facts';
+export type RepoSearchHint =
+    | 'architecture'
+    | 'backend'
+    | 'contracts'
+    | 'discord'
+    | 'images'
+    | 'onboarding'
+    | 'web'
+    | 'observability'
+    | 'openapi'
+    | 'prompts'
+    | 'provenance'
+    | 'reflect'
+    | 'traces'
+    | 'voice';
 
 // Defines the structure of a message to be sent to the OpenAI API
 export interface OpenAIMessage {
@@ -77,6 +93,8 @@ export interface OpenAIOptions {
         query?: string;
         allowedDomains?: string[]; // Up to 20 domains
         searchContextSize?: 'low' | 'medium' | 'high';
+        searchIntent?: WebSearchIntent;
+        repoHints?: RepoSearchHint[];
         userLocation?: {
             type?: 'approximate' | 'exact';
             country?: string; // ISO country code (e.g., 'US', 'GB')
@@ -228,6 +246,30 @@ type OpenAITool = OpenAIWebSearchTool | OpenAIFunctionTool;
 
 const isFunctionTool = (tool: OpenAITool): tool is OpenAIFunctionTool =>
     tool.type === 'function';
+
+const DEEPWIKI_FOOTNOTE_URL = 'https://deepwiki.com/footnote-ai/footnote';
+
+export function buildWebSearchInstruction(
+    webSearch: OpenAIOptions['webSearch']
+): string {
+    const query = webSearch?.query?.trim() ?? '';
+
+    if (webSearch?.searchIntent === 'repo_explainer') {
+        const hintText =
+            webSearch.repoHints && webSearch.repoHints.length > 0
+                ? ` Focus areas: ${webSearch.repoHints.join(', ')}.`
+                : '';
+
+        return [
+            'The planner marked this as a Footnote repository explanation lookup.',
+            `Prefer DeepWiki results from ${DEEPWIKI_FOOTNOTE_URL} when they are relevant.`,
+            'If DeepWiki coverage is thin, use broader web context instead of getting stuck.',
+            `Search query: ${query}.${hintText}`.trim(),
+        ].join(' ');
+    }
+
+    return `The planner instructed you to perform a web search for: ${query}`;
+}
 
 // ====================
 // Constants / Variables
@@ -424,7 +466,9 @@ export class OpenAIService {
                                   content: [
                                       {
                                           type: 'input_text' as const,
-                                          text: `The planner instructed you to perform a web search for: ${options.webSearch?.query}`,
+                                          text: buildWebSearchInstruction(
+                                              options.webSearch
+                                          ),
                                       },
                                   ],
                               },

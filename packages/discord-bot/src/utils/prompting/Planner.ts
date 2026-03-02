@@ -12,7 +12,9 @@ import {
     OpenAIMessage,
     OpenAIOptions,
     OpenAIResponse,
+    RepoSearchHint,
     SupportedModel,
+    WebSearchIntent,
 } from '../openaiService.js';
 import { ActivityOptions } from 'discord.js';
 import type { RiskTier } from '@footnote/contracts/ethics-core';
@@ -50,6 +52,25 @@ type ImagePlanRequest = {
     outputCompression?: number;
 };
 
+const REPO_SEARCH_HINTS: RepoSearchHint[] = [
+    'architecture',
+    'backend',
+    'contracts',
+    'discord',
+    'images',
+    'onboarding',
+    'web',
+    'observability',
+    'openapi',
+    'prompts',
+    'provenance',
+    'reflect',
+    'traces',
+    'voice',
+];
+
+const REPO_SEARCH_HINT_SET = new Set<RepoSearchHint>(REPO_SEARCH_HINTS);
+
 const defaultPlan: Plan = {
     action: 'ignore',
     modality: 'text',
@@ -61,6 +82,8 @@ const defaultPlan: Plan = {
             query: '',
             allowedDomains: [],
             searchContextSize: 'low',
+            searchIntent: 'current_facts',
+            repoHints: [],
             userLocation: { type: 'approximate' },
         },
     },
@@ -199,6 +222,21 @@ const planFunction = {
                                 description:
                                     'Default to low for a quick verification or one fact. Use medium for comparisons or when multiple sources are needed. Use high only for complex or high-stakes questions where missing context could change the answer.',
                             },
+                            searchIntent: {
+                                type: 'string',
+                                enum: ['repo_explainer', 'current_facts'],
+                                description:
+                                    'Use repo_explainer for questions about the Footnote project, its packages, architecture, provenance, trace flow, observability, or onboarding. Use current_facts for general web lookups about changing external facts.',
+                            },
+                            repoHints: {
+                                type: 'array',
+                                items: {
+                                    type: 'string',
+                                    enum: REPO_SEARCH_HINTS,
+                                },
+                                description:
+                                    'Optional Footnote-specific focus areas for repo_explainer searches. Use only values from the allowed list.',
+                            },
                             /*userLocation: {
                 type: "object",
                 properties: {
@@ -211,7 +249,7 @@ const planFunction = {
                 required: ["type"]
               }*/
                         },
-                        required: ['query', 'searchContextSize'],
+                        required: ['query', 'searchContextSize', 'searchIntent'],
                     },
                     ttsOptions: {
                         type: 'object',
@@ -340,7 +378,7 @@ export class Planner {
 
             const plannerPrompt = renderPrompt('discord.planner.system', {
                 webSearchHint:
-                    'When the user asks for lookup/verification/what’s new/availability, choose web_search and emit a clear query (no empty strings). If you can’t form a query, fall back to tool_choice: none.',
+                    'When the user asks for lookup or verification, choose web_search and emit a clear query. If a search could plausibly add useful context, lean toward searching rather than guessing or skipping retrieval. Use searchIntent repo_explainer for Footnote repo/package/feature/provenance questions, and current_facts for changing external facts. If you truly cannot form a useful query, fall back to tool_choice: none.',
             }).content;
             const openaiResponse = await this.openaiService.generateResponse(
                 PLANNING_MODEL,
@@ -397,13 +435,10 @@ export class Planner {
     }
 
     private validatePlan(plan: Partial<Plan>): Plan {
-        //logger.debug(`Validating plan: ${JSON.stringify(plan)}`);
-        //logger.debug(`Default plan: ${JSON.stringify(defaultPlan)}`);
-
-        // Deep copy of defaultPlan
+        // Clone the default so every branch starts from the same safe baseline.
         const validatedPlan: Plan = JSON.parse(JSON.stringify(defaultPlan));
 
-        // Merge openaiOptions (with nested ttsOptions)
+        // Merge top-level OpenAI options first, then merge nested TTS settings.
         if (plan.openaiOptions) {
             validatedPlan.openaiOptions = {
                 ...validatedPlan.openaiOptions,
@@ -419,12 +454,10 @@ export class Planner {
             };
         }
 
-        // Merge other top-level properties
         const mergedPlan: Plan = {
             ...validatedPlan,
             ...plan,
             openaiOptions: validatedPlan.openaiOptions,
-            //repoQuery: (plan.repoQuery ?? validatedPlan.repoQuery ?? '') as string
         };
 
         if (plan.imageRequest) {
@@ -436,7 +469,7 @@ export class Planner {
         // Ensure callers always see a supported risk tier value
         mergedPlan.riskTier = this.normalizeRiskTier(plan.riskTier);
 
-        // Normalize planner tool_choice to the expected object shape for web search.
+        // Normalize simple tool strings into the object shape expected by the response client.
         const toolChoice = mergedPlan.openaiOptions?.tool_choice;
         if (toolChoice === 'web_search') {
             mergedPlan.openaiOptions = {
@@ -448,8 +481,7 @@ export class Planner {
             };
         }
 
-        // Image actions must never trigger TTS or web search; enforce text modality
-        // and clear tool/web search hints to avoid accidental spend.
+        // Image actions must never carry web search state or TTS leftovers.
         if (mergedPlan.action === 'image') {
             mergedPlan.modality = 'text';
             mergedPlan.openaiOptions = {
@@ -459,25 +491,26 @@ export class Planner {
             };
         }
 
-        // Ensure web search always carries a user location type (required by OpenAI API)
+        // Web searches need a stable internal shape before downstream code builds instructions.
         if (
             typeof mergedPlan.openaiOptions?.tool_choice === 'object' &&
             mergedPlan.openaiOptions.tool_choice?.type === 'web_search'
         ) {
-            const webSearch = mergedPlan.openaiOptions.webSearch ?? {};
-            mergedPlan.openaiOptions = {
-                ...mergedPlan.openaiOptions,
-                webSearch: {
-                    ...webSearch,
-                    userLocation: {
-                        type: webSearch.userLocation?.type ?? 'approximate',
-                        country: webSearch.userLocation?.country,
-                        city: webSearch.userLocation?.city,
-                        region: webSearch.userLocation?.region,
-                        timezone: webSearch.userLocation?.timezone,
-                    },
-                },
-            };
+            const webSearch = this.normalizeWebSearchOptions(
+                mergedPlan.openaiOptions.webSearch
+            );
+            if (!webSearch.query) {
+                mergedPlan.openaiOptions = {
+                    ...mergedPlan.openaiOptions,
+                    tool_choice: 'none',
+                    webSearch: undefined,
+                };
+            } else {
+                mergedPlan.openaiOptions = {
+                    ...mergedPlan.openaiOptions,
+                    webSearch,
+                };
+            }
         }
 
         // Clear ttsOptions when modality isn't tts
@@ -508,6 +541,90 @@ export class Planner {
         }
 
         return DEFAULT_RISK_TIER;
+    }
+
+    private normalizeWebSearchOptions(
+        webSearch: OpenAIOptions['webSearch']
+    ): NonNullable<OpenAIOptions['webSearch']> {
+        const searchIntent = this.normalizeSearchIntent(webSearch?.searchIntent);
+        const searchContextSize =
+            searchIntent === 'repo_explainer'
+                ? webSearch?.searchContextSize === 'high'
+                    ? 'high'
+                    : 'medium'
+                : this.normalizeSearchContextSize(webSearch?.searchContextSize);
+
+        return {
+            query:
+                typeof webSearch?.query === 'string'
+                    ? webSearch.query.trim()
+                    : '',
+            allowedDomains: Array.isArray(webSearch?.allowedDomains)
+                ? webSearch.allowedDomains
+                : [],
+            searchContextSize,
+            searchIntent,
+            repoHints: this.normalizeRepoHints(webSearch?.repoHints),
+            userLocation: {
+                type: webSearch?.userLocation?.type ?? 'approximate',
+                country: webSearch?.userLocation?.country,
+                city: webSearch?.userLocation?.city,
+                region: webSearch?.userLocation?.region,
+                timezone: webSearch?.userLocation?.timezone,
+            },
+        };
+    }
+
+    private normalizeSearchIntent(candidate: unknown): WebSearchIntent {
+        if (
+            candidate === 'repo_explainer' ||
+            candidate === 'current_facts'
+        ) {
+            return candidate;
+        }
+
+        if (candidate !== undefined) {
+            logger.warn(
+                `Planner returned unsupported web search intent "${candidate}", defaulting to current_facts.`
+            );
+        }
+
+        return 'current_facts';
+    }
+
+    private normalizeSearchContextSize(
+        candidate: unknown
+    ): NonNullable<OpenAIOptions['webSearch']>['searchContextSize'] {
+        if (
+            candidate === 'low' ||
+            candidate === 'medium' ||
+            candidate === 'high'
+        ) {
+            return candidate;
+        }
+
+        return 'low';
+    }
+
+    private normalizeRepoHints(candidate: unknown): RepoSearchHint[] {
+        if (!Array.isArray(candidate)) {
+            return [];
+        }
+
+        const normalizedHints = new Set<RepoSearchHint>();
+
+        for (const rawHint of candidate) {
+            if (typeof rawHint !== 'string') {
+                continue;
+            }
+
+            const normalizedHint = rawHint.trim().toLowerCase();
+            if (REPO_SEARCH_HINT_SET.has(normalizedHint as RepoSearchHint)) {
+                normalizedHints.add(normalizedHint as RepoSearchHint);
+            }
+        }
+
+        return Array.from(normalizedHints);
     }
 
     private normalizeImageRequest(

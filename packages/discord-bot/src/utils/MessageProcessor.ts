@@ -59,6 +59,26 @@ type MessageProcessorOptions = {
     systemPrompt?: string;
 };
 
+export function buildRepoExplainerResponseHint(plan: Pick<Plan, 'action' | 'openaiOptions'>): string | null {
+    if (plan.action !== 'message') {
+        return null;
+    }
+
+    const toolChoice = plan.openaiOptions?.tool_choice;
+    const isWebSearch =
+        typeof toolChoice === 'object' && toolChoice?.type === 'web_search';
+
+    if (!isWebSearch || plan.openaiOptions?.webSearch?.searchIntent !== 'repo_explainer') {
+        return null;
+    }
+
+    return [
+        'Planner note: this is a Footnote repo-explanation lookup.',
+        'Prefer DeepWiki-backed explanation when available.',
+        'Use broader web context if the wiki is thin.',
+    ].join(' ');
+}
+
 const MAIN_MODEL: SupportedModel = 'gpt-5.2';
 const PLAN_CONTEXT_SIZE = 8;
 const RESPONSE_CONTEXT_SIZE = 24;
@@ -589,6 +609,15 @@ export class MessageProcessor {
                         message,
                         RESPONSE_CONTEXT_SIZE
                     );
+
+                const repoExplainerHint =
+                    buildRepoExplainerResponseHint(plan);
+                if (repoExplainerHint) {
+                    responseContext.push({
+                        role: 'system',
+                        content: repoExplainerHint,
+                    });
+                }
 
                 // Add Planner payload as context
                 // TODO: Sanitize planner payload before including it in the prompt.
