@@ -17,6 +17,7 @@ import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 type MutableEnv = NodeJS.ProcessEnv & {
     TURNSTILE_SECRET_KEY?: string;
     TURNSTILE_SITE_KEY?: string;
+    TURNSTILE_ALLOWED_HOSTNAMES?: string;
     TRACE_API_TOKEN?: string;
     REFLECT_SERVICE_TOKEN?: string;
     REFLECT_SERVICE_RATE_LIMIT?: string;
@@ -26,6 +27,18 @@ type MutableEnv = NodeJS.ProcessEnv & {
 type TestServer = {
     close: () => Promise<void>;
     url: string;
+};
+
+type CreateTestServerOptions = {
+    openaiService?: OpenAIService;
+    ipRateLimiter?: SimpleRateLimiter;
+    sessionRateLimiter?: SimpleRateLimiter;
+    serviceRateLimiter?: SimpleRateLimiter;
+    logRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        extra?: string
+    ) => void;
 };
 
 const createMetadata = (): ResponseMetadata => ({
@@ -41,7 +54,9 @@ const createMetadata = (): ResponseMetadata => ({
     citations: [],
 });
 
-const createTestServer = (): Promise<TestServer> =>
+const createTestServer = (
+    options: CreateTestServerOptions = {}
+): Promise<TestServer> =>
     new Promise((resolve) => {
         const serviceRateLimit = Number.parseInt(
             process.env.REFLECT_SERVICE_RATE_LIMIT || '30',
@@ -51,7 +66,7 @@ const createTestServer = (): Promise<TestServer> =>
             process.env.REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS || '60000',
             10
         );
-        const openaiService: OpenAIService = {
+        const defaultOpenaiService: OpenAIService = {
             async generateResponse() {
                 return {
                     normalizedText: 'service response',
@@ -65,20 +80,27 @@ const createTestServer = (): Promise<TestServer> =>
                 };
             },
         };
+        const openaiService = options.openaiService ?? defaultOpenaiService;
 
         const handler = createReflectHandler({
             openaiService,
-            ipRateLimiter: new SimpleRateLimiter({ limit: 5, window: 60000 }),
-            sessionRateLimiter: new SimpleRateLimiter({
-                limit: 5,
-                window: 60000,
-            }),
-            serviceRateLimiter: new SimpleRateLimiter({
-                limit: serviceRateLimit,
-                window: serviceRateLimitWindowMs,
-            }),
+            ipRateLimiter:
+                options.ipRateLimiter ??
+                new SimpleRateLimiter({ limit: 5, window: 60000 }),
+            sessionRateLimiter:
+                options.sessionRateLimiter ??
+                new SimpleRateLimiter({
+                    limit: 5,
+                    window: 60000,
+                }),
+            serviceRateLimiter:
+                options.serviceRateLimiter ??
+                new SimpleRateLimiter({
+                    limit: serviceRateLimit,
+                    window: serviceRateLimitWindowMs,
+                }),
             storeTrace: async () => undefined,
-            logRequest: () => undefined,
+            logRequest: options.logRequest ?? (() => undefined),
             buildResponseMetadata: () => createMetadata(),
             maxReflectBodyBytes: 20000,
         });
@@ -281,5 +303,130 @@ test('reflect trusted service requests stay in one bucket even if client IP chan
         env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
         env.TURNSTILE_SITE_KEY = previousTurnstileSite;
         process.env.WEB_TRUST_PROXY = previousTrustProxy;
+    }
+});
+
+test('reflect does not expose raw upstream error details to clients', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+    const loggedEvents: string[] = [];
+
+    env.TRACE_API_TOKEN = 'trace-secret';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    const server = await createTestServer({
+        openaiService: {
+            async generateResponse() {
+                throw new Error('OpenAI upstream leaked diagnostic details');
+            },
+        },
+        logRequest: (_req, _res, extra) => {
+            if (extra) {
+                loggedEvents.push(extra);
+            }
+        },
+    });
+
+    try {
+        const response = await fetch(`${server.url}/api/reflect`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+            },
+            body: JSON.stringify({ question: 'What changed?' }),
+        });
+
+        assert.equal(response.status, 502);
+        const payload = (await response.json()) as {
+            error: string;
+            details?: string;
+        };
+        assert.deepEqual(payload, {
+            error: 'AI generation failed',
+        });
+        assert.ok(
+            loggedEvents.some((entry) =>
+                entry.includes('OpenAI upstream leaked diagnostic details')
+            )
+        );
+    } finally {
+        await server.close();
+        env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
+test('reflect rate limits public callers before calling Turnstile', async () => {
+    const env = process.env as MutableEnv;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+    const previousAllowedHostnames = env.TURNSTILE_ALLOWED_HOSTNAMES;
+    const originalFetch = globalThis.fetch;
+    let turnstileCalls = 0;
+
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+    env.TURNSTILE_ALLOWED_HOSTNAMES = '127.0.0.1';
+
+    globalThis.fetch = (async (input, init) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url === 'https://challenges.cloudflare.com/turnstile/v0/siteverify') {
+            turnstileCalls += 1;
+            return new Response(
+                JSON.stringify({
+                    success: true,
+                    hostname: '127.0.0.1',
+                    'challenge-ts': new Date().toISOString(),
+                }),
+                {
+                    status: 200,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                }
+            );
+        }
+
+        return originalFetch(input, init);
+    }) as typeof fetch;
+
+    const server = await createTestServer({
+        ipRateLimiter: new SimpleRateLimiter({ limit: 1, window: 60000 }),
+        sessionRateLimiter: new SimpleRateLimiter({ limit: 5, window: 60000 }),
+    });
+
+    try {
+        const firstResponse = await fetch(`${server.url}/api/reflect`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Turnstile-Token': 'captcha-token',
+            },
+            body: JSON.stringify({ question: 'first public request' }),
+        });
+        assert.equal(firstResponse.status, 200);
+        assert.equal(turnstileCalls, 1);
+
+        const secondResponse = await fetch(`${server.url}/api/reflect`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Turnstile-Token': 'captcha-token',
+            },
+            body: JSON.stringify({ question: 'second public request' }),
+        });
+        assert.equal(secondResponse.status, 429);
+        assert.equal(turnstileCalls, 1);
+    } finally {
+        globalThis.fetch = originalFetch;
+        await server.close();
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+        env.TURNSTILE_ALLOWED_HOSTNAMES = previousAllowedHostnames;
     }
 });

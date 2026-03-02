@@ -8,7 +8,6 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
-import { PostReflectRequestSchema } from '@footnote/contracts/web/schemas';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import type {
     OpenAIService,
@@ -16,13 +15,26 @@ import type {
     ResponseMetadataRuntimeContext,
 } from '../services/openaiService.js';
 import { runtimeConfig } from '../config.js';
+import { createReflectService } from '../services/reflectService.js';
 import { logger } from '../utils/logger.js';
+import {
+    type ReflectAuthContext,
+    resolveReflectAuth,
+    verifyTurnstileCaptcha,
+} from './reflectAuth.js';
+import {
+    getRequestIdentity,
+    parseReflectRequest,
+} from './reflectRequest.js';
+import { createReflectRateLimitController } from './reflectRateLimit.js';
+import { sendJson } from './reflectResponses.js';
 
 type LogRequest = (
     req: IncomingMessage,
     res: ServerResponse,
     extra?: string
 ) => void;
+
 type BuildResponseMetadata = (
     assistantMetadata: OpenAIResponseMetadata,
     runtimeContext: ResponseMetadataRuntimeContext
@@ -39,15 +51,8 @@ type ReflectHandlerDeps = {
     maxReflectBodyBytes: number;
 };
 
-type LimiterRef = {
-    current: SimpleRateLimiter | null;
-};
-
-type ServiceAuth = {
-    isTrustedService: boolean;
-    authSource: 'x-trace-token' | 'x-service-token' | null;
-    rateLimitKey: string | null;
-};
+// The handler keeps transport concerns here and pushes business logic into helpers/services.
+// That split is what lets future callers reuse the reflect workflow without copying HTTP code.
 
 /**
  * Applies credentialed CORS headers only for explicitly allowed browser origins.
@@ -57,14 +62,13 @@ const setCorsHeaders = (res: ServerResponse, req: IncomingMessage): void => {
     const allowedOrigins = runtimeConfig.cors.allowedOrigins;
     const origin = req.headers.origin;
 
-    // Sanitize configured allowed origins: remove wildcards, "null", and falsy values.
     const sanitizedAllowedOrigins = Array.isArray(allowedOrigins)
         ? allowedOrigins.filter(
-              (o) =>
-                  typeof o === 'string' &&
-                  o !== '*' &&
-                  o.toLowerCase() !== 'null' &&
-                  o.trim() !== ''
+              (allowedOrigin) =>
+                  typeof allowedOrigin === 'string' &&
+                  allowedOrigin !== '*' &&
+                  allowedOrigin.toLowerCase() !== 'null' &&
+                  allowedOrigin.trim() !== ''
           )
         : [];
 
@@ -79,7 +83,6 @@ const setCorsHeaders = (res: ServerResponse, req: IncomingMessage): void => {
             : -1;
 
     if (allowedIndex === -1 || !origin) {
-        // No safe origin matched; omit credentialed CORS headers.
         return;
     }
 
@@ -94,56 +97,34 @@ const setCorsHeaders = (res: ServerResponse, req: IncomingMessage): void => {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
 };
 
-// Normalize Node's string-or-string[] header shape into one trimmed value.
-const readHeaderValue = (
-    headerValue: string | string[] | undefined
-): string | null => {
-    if (!headerValue) {
-        return null;
+/**
+ * Logs the auth outcome that was actually used for this request.
+ * We keep this separate from the auth helper so the route owns request logging.
+ */
+const logSuccessfulAuthStep = (
+    req: IncomingMessage,
+    res: ServerResponse,
+    logRequest: LogRequest,
+    authContext: ReflectAuthContext
+): void => {
+    if (authContext.skipCaptcha && authContext.skipReason) {
+        logger.info(`Skipping CAPTCHA verification (${authContext.skipReason})`);
+        logRequest(req, res, `reflect captcha-skipped-${authContext.skipReason}`);
+        return;
     }
 
-    if (Array.isArray(headerValue)) {
-        return null;
-    }
-
-    const trimmedValue = headerValue.trim();
-    return trimmedValue.length > 0 ? trimmedValue : null;
+    logRequest(req, res, `reflect captcha-verified source=${authContext.tokenSource}`);
 };
 
 /**
- * Trusted internal callers can authenticate with either the trace token or a
- * dedicated reflect service token. This lets server-side clients skip CAPTCHA
- * while still staying on a separate rate-limit path from the public web flow.
+ * Thin HTTP adapter for the reflect workflow.
+ * High-level flow:
+ * 1. CORS + method guard
+ * 2. Request parsing
+ * 3. Auth / CAPTCHA
+ * 4. Rate limiting
+ * 5. Shared reflect workflow
  */
-const getServiceAuth = (req: IncomingMessage): ServiceAuth => {
-    const traceToken = process.env.TRACE_API_TOKEN?.trim() || null;
-    const reflectServiceToken =
-        process.env.REFLECT_SERVICE_TOKEN?.trim() || null;
-    const traceHeaderValue = readHeaderValue(req.headers['x-trace-token']);
-    if (traceToken && traceHeaderValue === traceToken) {
-        return {
-            isTrustedService: true,
-            authSource: 'x-trace-token',
-            rateLimitKey: 'trace-token',
-        };
-    }
-
-    const serviceHeaderValue = readHeaderValue(req.headers['x-service-token']);
-    if (reflectServiceToken && serviceHeaderValue === reflectServiceToken) {
-        return {
-            isTrustedService: true,
-            authSource: 'x-service-token',
-            rateLimitKey: 'service-token',
-        };
-    }
-
-    return {
-        isTrustedService: false,
-        authSource: null,
-        rateLimitKey: null,
-    };
-};
-
 const createReflectHandler = ({
     openaiService,
     ipRateLimiter,
@@ -154,14 +135,22 @@ const createReflectHandler = ({
     buildResponseMetadata,
     maxReflectBodyBytes,
 }: ReflectHandlerDeps) => {
-    // Cache fallback limiters so fail-open fallback behavior still preserves state across requests.
-    // We keep three buckets:
-    // - public IP requests
-    // - public session requests
-    // - trusted service requests
-    const fallbackIpLimiter: LimiterRef = { current: null };
-    const fallbackSessionLimiter: LimiterRef = { current: null };
-    const fallbackServiceLimiter: LimiterRef = { current: null };
+    const reflectService = openaiService
+        ? createReflectService({
+              openaiService,
+              storeTrace,
+              buildResponseMetadata,
+              defaultModel: runtimeConfig.openai.defaultModel,
+          })
+        : null;
+
+    // If OpenAI is unavailable, we keep the handler alive and return 503 later instead of failing startup.
+    // The controller keeps public and trusted-service limiter buckets separate.
+    const rateLimitController = createReflectRateLimitController({
+        ipRateLimiter,
+        sessionRateLimiter,
+        serviceRateLimiter,
+    });
 
     /**
      * @api.operationId: postReflect
@@ -171,16 +160,11 @@ const createReflectHandler = ({
      */
     return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
         try {
-            // High-level flow:
-            // 1. Handle CORS/method/body validation
-            // 2. Choose auth path (trusted service token or public Turnstile)
-            // 3. Apply the matching rate limit bucket
-            // 4. Call OpenAI, build response metadata, and store the trace
-
-            // --- CORS and preflight handling ---
+            // Apply CORS before any early return so browsers get consistent headers on failures too.
             setCorsHeaders(res, req);
 
             if (req.method === 'OPTIONS') {
+                // Only answer preflight when the browser supplied the fields a real preflight should have.
                 const hasOrigin =
                     typeof req.headers.origin === 'string' &&
                     req.headers.origin.trim().length > 0;
@@ -191,15 +175,7 @@ const createReflectHandler = ({
                     requestedMethod.trim().length > 0;
 
                 if (!hasOrigin || !hasRequestedMethod) {
-                    res.statusCode = 400;
-                    res.setHeader(
-                        'Content-Type',
-                        'application/json; charset=utf-8'
-                    );
-                    res.setHeader('Cache-Control', 'no-store');
-                    res.end(
-                        JSON.stringify({ error: 'Invalid CORS preflight' })
-                    );
+                    sendJson(res, 400, { error: 'Invalid CORS preflight' });
                     logRequest(req, res, 'reflect preflight-invalid');
                     return;
                 }
@@ -210,843 +186,131 @@ const createReflectHandler = ({
                 return;
             }
 
-            // --- Method validation ---
             if (req.method !== 'POST') {
-                res.statusCode = 405;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.setHeader('Cache-Control', 'no-store');
-                res.end(JSON.stringify({ error: 'Method not allowed' }));
+                sendJson(res, 405, { error: 'Method not allowed' });
                 logRequest(req, res, 'reflect method-not-allowed');
                 return;
             }
 
-            // --- Input parsing (JSON body only) ---
-            // Tokens are headers-only; the body is reserved for the question payload.
-            let question = '';
-            let parsedBody: unknown = {};
-
-            if (req.method === 'POST') {
-                try {
-                    let body = '';
-                    let bodyBytes = 0;
-                    let bodyTooLarge = false;
-
-                    // Enforce request size limits early to avoid buffering oversized payloads.
-                    const contentLengthHeader = req.headers['content-length'];
-                    if (contentLengthHeader) {
-                        const contentLength = Number(contentLengthHeader);
-                        if (
-                            Number.isFinite(contentLength) &&
-                            contentLength > maxReflectBodyBytes
-                        ) {
-                            res.statusCode = 413;
-                            res.setHeader(
-                                'Content-Type',
-                                'application/json; charset=utf-8'
-                            );
-                            res.setHeader('Cache-Control', 'no-store');
-                            res.end(
-                                JSON.stringify({
-                                    error: 'Request payload too large',
-                                })
-                            );
-                            logRequest(
-                                req,
-                                res,
-                                `reflect payload-too-large contentLength=${contentLength}`
-                            );
-                            return;
-                        }
-                    }
-
-                    req.on('data', (chunk) => {
-                        if (bodyTooLarge) {
-                            return;
-                        }
-
-                        bodyBytes += chunk.length;
-                        if (bodyBytes > maxReflectBodyBytes) {
-                            bodyTooLarge = true;
-                            res.statusCode = 413;
-                            res.setHeader(
-                                'Content-Type',
-                                'application/json; charset=utf-8'
-                            );
-                            res.setHeader('Cache-Control', 'no-store');
-                            res.end(
-                                JSON.stringify({
-                                    error: 'Request payload too large',
-                                })
-                            );
-                            logRequest(req, res, 'reflect payload-too-large');
-                            req.destroy();
-                            return;
-                        }
-
-                        body += chunk.toString();
-                    });
-
-                    await new Promise<void>((resolve, reject) => {
-                        req.on('end', () => resolve());
-                        req.on('error', reject);
-                    });
-
-                    if (bodyTooLarge) {
-                        return;
-                    }
-
-                    // Parse JSON when a body is present; empty bodies are validated below.
-                    if (body) {
-                        parsedBody = JSON.parse(body) as unknown;
-                    }
-                } catch (error) {
-                    logger.warn(
-                        `Reflect handler received invalid JSON body: ${error instanceof Error ? error.message : String(error)}`
-                    );
-                    res.statusCode = 400;
-                    res.setHeader(
-                        'Content-Type',
-                        'application/json; charset=utf-8'
-                    );
-                    res.setHeader('Cache-Control', 'no-store');
-                    res.end(JSON.stringify({ error: 'Invalid JSON body' }));
-                    logRequest(req, res, 'reflect invalid-json');
-                    return;
-                }
-            }
-
-            // --- Request validation ---
-            const parsedRequest =
-                PostReflectRequestSchema.safeParse(parsedBody);
-            if (!parsedRequest.success) {
-                const isQuestionTooLong = parsedRequest.error.issues.some(
-                    (issue) =>
-                        issue.code === 'too_big' &&
-                        issue.path.length === 1 &&
-                        issue.path[0] === 'question'
-                );
-
-                const firstIssue = parsedRequest.error.issues[0];
-                const issuePath =
-                    firstIssue && firstIssue.path.length > 0
-                        ? firstIssue.path.join('.')
-                        : 'body';
-                const issueMessage =
-                    firstIssue?.message ?? 'Invalid request payload.';
-
-                res.statusCode = isQuestionTooLong ? 413 : 400;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.setHeader('Cache-Control', 'no-store');
-                res.end(
-                    JSON.stringify({
-                        error: isQuestionTooLong
-                            ? 'Question parameter too long'
-                            : 'Question parameter is required',
-                        details: `${issuePath}: ${issueMessage}`,
-                    })
-                );
-                logRequest(
-                    req,
-                    res,
-                    isQuestionTooLong
-                        ? 'reflect question-too-long'
-                        : 'reflect missing-question'
-                );
-                return;
-            }
-
-            question = parsedRequest.data.question.trim();
-            if (question.length === 0) {
-                res.statusCode = 400;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.setHeader('Cache-Control', 'no-store');
-                res.end(
-                    JSON.stringify({ error: 'Question parameter is required' })
-                );
-                logRequest(req, res, 'reflect missing-question');
-                return;
-            }
-
-            const serviceAuth = getServiceAuth(req);
-
-            // --- CAPTCHA token extraction ---
-            // Public callers must satisfy Turnstile when it is configured.
-            // Trusted service callers skip that check and use header-based auth instead.
-            const hasTurnstileSecret = Boolean(
-                process.env.TURNSTILE_SECRET_KEY
+            // Parse and validate the body before we do any expensive auth or model work.
+            const parsedRequestResult = await parseReflectRequest(
+                req,
+                maxReflectBodyBytes
             );
-            const hasTurnstileSite = Boolean(process.env.TURNSTILE_SITE_KEY);
-            if (
-                hasTurnstileSecret !== hasTurnstileSite &&
-                !serviceAuth.isTrustedService
-            ) {
-                res.statusCode = 503;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
+            if (!parsedRequestResult.success) {
+                if (parsedRequestResult.error.logLabel === 'reflect invalid-json') {
+                    logger.warn('Reflect handler received invalid JSON body.');
+                }
+
+                sendJson(
+                    res,
+                    parsedRequestResult.error.statusCode,
+                    parsedRequestResult.error.payload,
+                    parsedRequestResult.error.extraHeaders
                 );
-                res.setHeader('Cache-Control', 'no-store');
-                res.end(
-                    JSON.stringify({
-                        error: 'CAPTCHA verification not configured',
-                        details:
-                            'TURNSTILE_SECRET_KEY and TURNSTILE_SITE_KEY must both be set',
-                    })
-                );
-                logRequest(req, res, 'reflect captcha-misconfigured');
+                logRequest(req, res, parsedRequestResult.error.logLabel);
                 return;
             }
 
-            const skipCaptcha =
-                serviceAuth.isTrustedService ||
-                !(hasTurnstileSecret && hasTurnstileSite);
+            // Identity is only for abuse controls. It does not grant access by itself.
+            const identity = getRequestIdentity(
+                req,
+                process.env.WEB_TRUST_PROXY === 'true'
+            );
 
-            let turnstileToken: string | null = null;
-            let tokenSource = 'none';
-
-            // Turnstile tokens are headers-only to avoid URL leakage or conflicts.
-            if (req.headers['x-turnstile-token']) {
-                const headerToken = req.headers['x-turnstile-token'];
-                if (Array.isArray(headerToken)) {
-                    turnstileToken = headerToken[0];
-                } else {
-                    turnstileToken = String(headerToken);
-                }
-                tokenSource = 'header';
+            // Auth decides whether this caller is a trusted service or a public browser/API caller.
+            const authResult = resolveReflectAuth(req);
+            if (!authResult.success) {
+                sendJson(
+                    res,
+                    authResult.error.statusCode,
+                    authResult.error.payload,
+                    authResult.error.extraHeaders
+                );
+                logRequest(req, res, authResult.error.logLabel);
+                return;
             }
 
-            if (!skipCaptcha) {
+            // Rate limiting happens after auth so trusted services and public users land in different buckets.
+            const rateLimitResult = rateLimitController.checkRateLimit(
+                authResult.data.serviceAuth,
+                identity
+            );
+            if (!rateLimitResult.success) {
+                sendJson(
+                    res,
+                    rateLimitResult.error.statusCode,
+                    rateLimitResult.error.payload,
+                    rateLimitResult.error.extraHeaders
+                );
+                logRequest(req, res, rateLimitResult.error.logLabel);
+                return;
+            }
+
+            if (!authResult.data.skipCaptcha) {
+                // Trusted services skip this block. Public callers must satisfy Turnstile.
                 logger.debug(
-                    `Turnstile token extraction: source=${tokenSource}, length=${turnstileToken?.length || 0}`
-                );
-            }
-
-            // Enforce CAPTCHA token presence when enabled.
-            if (!turnstileToken && !skipCaptcha) {
-                res.statusCode = 403;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.setHeader('Cache-Control', 'no-store');
-                res.end(
-                    JSON.stringify({
-                        error: 'CAPTCHA verification failed',
-                        details: 'Missing turnstile token',
-                    })
-                );
-                logRequest(req, res, 'reflect missing-captcha-token');
-                return;
-            }
-
-            // --- Client identity (IP/session) ---
-            let clientIp = req.socket.remoteAddress || 'unknown';
-
-            const trustProxy = process.env.WEB_TRUST_PROXY === 'true';
-            if (trustProxy) {
-                const forwardedFor = req.headers['x-forwarded-for'];
-                if (forwardedFor) {
-                    if (typeof forwardedFor === 'string') {
-                        clientIp = forwardedFor.split(',')[0].trim();
-                    } else if (Array.isArray(forwardedFor)) {
-                        clientIp = forwardedFor[0].trim();
-                    }
-                }
-            }
-
-            if (clientIp.startsWith('::ffff:')) {
-                clientIp = clientIp.substring(7);
-            }
-
-            // Session identifiers are client-supplied headers to scope rate limits; fall back to IP when absent.
-            let sessionId: string | null = null;
-            const rawSessionId = req.headers['x-session-id'];
-            if (rawSessionId) {
-                let sessionIdStr = Array.isArray(rawSessionId)
-                    ? rawSessionId[0]
-                    : String(rawSessionId);
-                sessionIdStr = sessionIdStr.trim().substring(0, 128);
-                sessionIdStr = sessionIdStr.replace(/[^a-zA-Z0-9\-_]/g, '');
-                if (sessionIdStr.length > 0) {
-                    sessionId = sessionIdStr;
-                }
-            }
-
-            // Default session to IP when no session header is supplied.
-            if (!sessionId) {
-                sessionId = `ip-${clientIp}`;
-            }
-
-            try {
-                // --- CAPTCHA verification ---
-                if (skipCaptcha) {
-                    // Skip reasons are intentionally logged because they change the abuse-control path.
-                    const reason = serviceAuth.isTrustedService
-                        ? `trusted-service-${serviceAuth.authSource}`
-                        : !process.env.TURNSTILE_SECRET_KEY
-                          ? 'not-configured'
-                          : 'dev-mode';
-                    logger.info(`Skipping CAPTCHA verification (${reason})`);
-                    logRequest(req, res, `reflect captcha-skipped-${reason}`);
-                } else {
-                    logger.debug('CAPTCHA verification debug:');
-                    logger.debug(`  Token source: ${tokenSource}`);
-                    logger.debug(
-                        `  Token length: ${turnstileToken?.length || 0}`
-                    );
-                    logger.debug(
-                        `  Secret key is set: ${!!process.env.TURNSTILE_SECRET_KEY}`
-                    );
-
-                    // Fail fast on missing token.
-                    if (!turnstileToken || turnstileToken.trim().length === 0) {
-                        logger.error(
-                            'CAPTCHA verification attempted without a token'
-                        );
-                        res.statusCode = 400;
-                        res.setHeader(
-                            'Content-Type',
-                            'application/json; charset=utf-8'
-                        );
-                        res.setHeader('Cache-Control', 'no-store');
-                        res.end(
-                            JSON.stringify({
-                                error: 'CAPTCHA token is required',
-                                details: 'Missing turnstile token',
-                            })
-                        );
-                        logRequest(req, res, 'reflect missing-captcha-token');
-                        return;
-                    }
-
-                    // Do not attempt verification without a secret key.
-                    if (!process.env.TURNSTILE_SECRET_KEY) {
-                        logger.error(
-                            'CAPTCHA verification attempted without secret key'
-                        );
-                        res.statusCode = 503;
-                        res.setHeader(
-                            'Content-Type',
-                            'application/json; charset=utf-8'
-                        );
-                        res.setHeader('Cache-Control', 'no-store');
-                        res.end(
-                            JSON.stringify({
-                                error: 'CAPTCHA verification not configured',
-                                details: 'TURNSTILE_SECRET_KEY is not set',
-                            })
-                        );
-                        logRequest(req, res, 'reflect captcha-not-configured');
-                        return;
-                    }
-
-                    // Build the Turnstile verification request.
-                    const formData = new URLSearchParams();
-                    formData.append('secret', process.env.TURNSTILE_SECRET_KEY);
-                    formData.append('response', turnstileToken);
-                    formData.append('remoteip', clientIp);
-
-                    // Abort the request if it hangs.
-                    let abortSignal: AbortSignal;
-                    try {
-                        abortSignal = AbortSignal.timeout(10000);
-                    } catch {
-                        const controller = new AbortController();
-                        setTimeout(() => controller.abort(), 10000);
-                        abortSignal = controller.signal;
-                    }
-
-                    // --- Verification request ---
-                    const verificationResponse = await fetch(
-                        'https://challenges.cloudflare.com/turnstile/v0/siteverify',
-                        {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type':
-                                    'application/x-www-form-urlencoded',
-                            },
-                            body: formData.toString(),
-                            signal: abortSignal,
-                        }
-                    );
-
-                    // --- Upstream error handling ---
-                    // Handle errors returned by Turnstile.
-                    if (!verificationResponse.ok) {
-                        const errorText = await verificationResponse
-                            .text()
-                            .catch(() => 'Unable to read error response');
-                        logger.error(
-                            `Turnstile verification service error: ${verificationResponse.status} ${verificationResponse.statusText}`
-                        );
-                        logger.error(`Error response body: ${errorText}`);
-
-                        let errorDetails: { 'error-codes'?: string[] };
-                        try {
-                            errorDetails = JSON.parse(errorText) as {
-                                'error-codes'?: string[];
-                            };
-                        } catch {
-                            errorDetails = { 'error-codes': ['unknown-error'] };
-                        }
-
-                        const errorCodes = errorDetails['error-codes'] || [];
-
-                        if (
-                            errorCodes.includes('invalid-input-secret') ||
-                            errorCodes.includes('missing-input-secret')
-                        ) {
-                            logger.error(
-                                'CAPTCHA configuration error: Secret key is invalid or does not match site key'
-                            );
-                            res.statusCode = 403;
-                            res.setHeader(
-                                'Content-Type',
-                                'application/json; charset=utf-8'
-                            );
-                            res.setHeader('Cache-Control', 'no-store');
-                            res.end(
-                                JSON.stringify({
-                                    error: 'CAPTCHA verification failed',
-                                    details:
-                                        'Invalid CAPTCHA configuration. Secret key does not match site key.',
-                                })
-                            );
-                            logRequest(
-                                req,
-                                res,
-                                `reflect captcha-config-error codes=${errorCodes.join(',')}`
-                            );
-                            return;
-                        }
-
-                        throw new Error(
-                            `Verification service returned ${verificationResponse.status}: ${errorText}`
-                        );
-                    }
-
-                    // --- Response parsing ---
-                    const verificationData =
-                        (await verificationResponse.json()) as {
-                            success?: boolean;
-                            hostname?: string;
-                            'error-codes'?: string[];
-                            'challenge-ts'?: string;
-                        };
-
-                    logger.debug(
-                        `Turnstile verification response: ${JSON.stringify(verificationData, null, 2)}`
-                    );
-
-                    // --- Validation ---
-                    // Reject invalid CAPTCHA responses.
-                    if (!verificationData.success) {
-                        const errorCodes =
-                            verificationData['error-codes'] || [];
-                        const errorCodesStr =
-                            errorCodes.join(', ') ||
-                            'Unknown verification error';
-
-                        logger.error('CAPTCHA verification FAILED:');
-                        logger.error(`  Error codes: ${errorCodesStr}`);
-                        logger.error(`  Token source: ${tokenSource}`);
-                        logger.error(
-                            `  Token length: ${turnstileToken?.length || 0}`
-                        );
-                        logger.error(
-                            `  Challenge timestamp: ${verificationData['challenge-ts'] || 'N/A'}`
-                        );
-                        logger.error(
-                            `  Hostname from response: ${verificationData.hostname || 'N/A'}`
-                        );
-                        logger.error(
-                            `  Request hostname: ${req.headers.host || 'N/A'}`
-                        );
-                        logger.error(
-                            `  Request origin: ${req.headers.origin || 'N/A'}`
-                        );
-
-                        res.statusCode = 403;
-                        res.setHeader(
-                            'Content-Type',
-                            'application/json; charset=utf-8'
-                        );
-                        res.setHeader('Cache-Control', 'no-store');
-                        res.end(
-                            JSON.stringify({
-                                error: 'CAPTCHA verification failed',
-                                details: errorCodesStr,
-                            })
-                        );
-                        logRequest(
-                            req,
-                            res,
-                            `reflect captcha-failed source=${tokenSource} errors=${errorCodesStr}`
-                        );
-                        return;
-                    }
-
-                    logger.info(
-                        `CAPTCHA verification SUCCESS for token from ${tokenSource}`
-                    );
-                    logger.info(
-                        `  Hostname verified: ${verificationData.hostname || 'N/A'}`
-                    );
-                    logger.info(
-                        `  Expected hostname: ${req.headers.host || 'N/A'}`
-                    );
-                    logger.info(
-                        `  Challenge timestamp: ${verificationData['challenge-ts'] || 'N/A'}`
-                    );
-                    logRequest(
-                        req,
-                        res,
-                        `reflect captcha-verified source=${tokenSource}`
-                    );
-                }
-            } catch (error) {
-                // Return a 502 for upstream verification failures.
-                logger.error('=== CAPTCHA Verification Error ===');
-                logger.error(
-                    `Error type: ${(error as Error)?.constructor?.name ?? 'unknown'}`
-                );
-                logger.error(
-                    `Error message: ${error instanceof Error ? error.message : String(error)}`
-                );
-                logger.error(
-                    `Error stack: ${error instanceof Error ? error.stack : 'N/A'}`
-                );
-                logger.error(`Token was present: ${!!turnstileToken}`);
-                logger.error(`Token length: ${turnstileToken?.length || 0}`);
-                logger.error(
-                    `Secret key configured: ${!!process.env.TURNSTILE_SECRET_KEY}`
+                    `Turnstile token extraction: source=${authResult.data.tokenSource}, length=${authResult.data.turnstileToken?.length || 0}`
                 );
 
-                res.statusCode = 502;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.setHeader('Cache-Control', 'no-store');
-                res.end(
-                    JSON.stringify({
-                        error: 'CAPTCHA verification service unavailable',
-                        details: 'Please try again later.',
-                    })
-                );
-                logRequest(req, res, 'reflect captcha-service-error');
-                return;
-            }
-
-            // --- Rate limiting ---
-            // Fail open when a limiter is missing so a bad config does not take the endpoint down.
-            // Public traffic and trusted service traffic use different buckets on purpose.
-            const getLimiter = (
-                limiter: SimpleRateLimiter | null,
-                label: string,
-                limitKey: string,
-                windowKey: string,
-                defaultLimit: number,
-                defaultWindowMs: number,
-                fallbackRef: LimiterRef
-            ): SimpleRateLimiter => {
-                if (limiter) {
-                    return limiter;
-                }
-
-                if (fallbackRef.current) {
-                    return fallbackRef.current;
-                }
-
-                logger.warn(
-                    `Rate limiter "${label}" missing; creating a fallback limiter.`
-                );
-                const limitRaw = process.env[limitKey];
-                const windowRaw = process.env[windowKey];
-                const limit = limitRaw
-                    ? Number.parseInt(limitRaw, 10)
-                    : defaultLimit;
-                const windowMs = windowRaw
-                    ? Number.parseInt(windowRaw, 10)
-                    : defaultWindowMs;
-                fallbackRef.current = new SimpleRateLimiter({
-                    limit:
-                        Number.isFinite(limit) && limit > 0
-                            ? limit
-                            : defaultLimit,
-                    window:
-                        Number.isFinite(windowMs) && windowMs > 0
-                            ? windowMs
-                            : defaultWindowMs,
+                const captchaResult = await verifyTurnstileCaptcha({
+                    clientIp: identity.clientIp,
+                    requestHost:
+                        typeof req.headers.host === 'string'
+                            ? req.headers.host
+                            : undefined,
+                    requestOrigin:
+                        typeof req.headers.origin === 'string'
+                            ? req.headers.origin
+                            : undefined,
+                    turnstileToken: authResult.data.turnstileToken,
+                    tokenSource: authResult.data.tokenSource,
                 });
-                return fallbackRef.current;
-            };
-
-            const activeIpRateLimiter = getLimiter(
-                ipRateLimiter,
-                'ip',
-                'WEB_API_RATE_LIMIT_IP',
-                'WEB_API_RATE_LIMIT_IP_WINDOW_MS',
-                3,
-                60000,
-                fallbackIpLimiter
-            );
-            const activeSessionRateLimiter = getLimiter(
-                sessionRateLimiter,
-                'session',
-                'WEB_API_RATE_LIMIT_SESSION',
-                'WEB_API_RATE_LIMIT_SESSION_WINDOW_MS',
-                5,
-                60000,
-                fallbackSessionLimiter
-            );
-            const activeServiceRateLimiter = getLimiter(
-                serviceRateLimiter,
-                'service',
-                'REFLECT_SERVICE_RATE_LIMIT',
-                'REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS',
-                30,
-                60000,
-                fallbackServiceLimiter
-            );
-
-            if (serviceAuth.isTrustedService) {
-                // Service callers are bucketed separately so bot traffic does not consume browser limits.
-                const serviceRateLimitKey = serviceAuth.rateLimitKey!;
-                const serviceRateLimitResult = activeServiceRateLimiter.check(
-                    serviceRateLimitKey
-                );
-                if (!serviceRateLimitResult.allowed) {
-                    res.statusCode = 429;
-                    res.setHeader(
-                        'Content-Type',
-                        'application/json; charset=utf-8'
-                    );
-                    res.setHeader('Cache-Control', 'no-store');
-                    res.setHeader(
-                        'Retry-After',
-                        serviceRateLimitResult.retryAfter.toString()
-                    );
-                    res.end(
-                        JSON.stringify({
-                            error: 'Too many requests from this service',
-                            retryAfter: serviceRateLimitResult.retryAfter,
-                        })
-                    );
-                    logRequest(
-                        req,
+                if (!captchaResult.success) {
+                    sendJson(
                         res,
-                        `reflect service-rate-limited source=${serviceAuth.authSource} retryAfter=${serviceRateLimitResult.retryAfter}`
+                        captchaResult.error.statusCode,
+                        captchaResult.error.payload,
+                        captchaResult.error.extraHeaders
                     );
-                    return;
-                }
-            } else {
-                // Public traffic keeps the existing two-layer limiter: IP first, then session.
-                const ipRateLimitResult = activeIpRateLimiter.check(clientIp);
-                if (!ipRateLimitResult.allowed) {
-                    res.statusCode = 429;
-                    res.setHeader(
-                        'Content-Type',
-                        'application/json; charset=utf-8'
-                    );
-                    res.setHeader('Cache-Control', 'no-store');
-                    res.setHeader(
-                        'Retry-After',
-                        ipRateLimitResult.retryAfter.toString()
-                    );
-                    res.end(
-                        JSON.stringify({
-                            error: 'Too many requests from this IP',
-                            retryAfter: ipRateLimitResult.retryAfter,
-                        })
-                    );
-                    logRequest(
-                        req,
-                        res,
-                        `reflect ip-rate-limited retryAfter=${ipRateLimitResult.retryAfter}`
-                    );
-                    return;
-                }
-
-                const sessionRateLimitResult =
-                    activeSessionRateLimiter.check(sessionId);
-                if (!sessionRateLimitResult.allowed) {
-                    res.statusCode = 429;
-                    res.setHeader(
-                        'Content-Type',
-                        'application/json; charset=utf-8'
-                    );
-                    res.setHeader('Cache-Control', 'no-store');
-                    res.setHeader(
-                        'Retry-After',
-                        sessionRateLimitResult.retryAfter.toString()
-                    );
-                    res.end(
-                        JSON.stringify({
-                            error: 'Too many requests for this session',
-                            retryAfter: sessionRateLimitResult.retryAfter,
-                        })
-                    );
-                    logRequest(
-                        req,
-                        res,
-                        `reflect session-rate-limited retryAfter=${sessionRateLimitResult.retryAfter}`
-                    );
+                    logRequest(req, res, captchaResult.error.logLabel);
                     return;
                 }
             }
 
-            // --- AI request + response handling ---
-            try {
-                if (!openaiService) {
-                    res.statusCode = 503;
-                    res.setHeader(
-                        'Content-Type',
-                        'application/json; charset=utf-8'
-                    );
-                    res.end(
-                        JSON.stringify({
-                            error: 'Service temporarily unavailable. Please try again later.',
-                        })
-                    );
-                    logRequest(req, res, 'reflect service-unavailable');
-                    return;
-                }
+            logSuccessfulAuthStep(req, res, logRequest, authResult.data);
 
-                const systemPrompt = `You are Ari, an AI assistant from the Footnote project. You help people think through tough questions while staying honest and fair. You explore multiple ethical perspectives, trace your sources, and show how you reach your conclusions. Be helpful, thoughtful, and transparent in your responses.
-
-RESPONSE METADATA PAYLOAD
-After your conversational reply, leave a blank line and append a single JSON object on its own line prefixed with <RESPONSE_METADATA>.
-This metadata records provenance and confidence for downstream systems.
-
-Required fields:
-  - provenance: one of "Retrieved", "Inferred", or "Speculative"
-  - confidence: floating-point certainty between 0.0 and 1.0 (e.g., 0.85)
-  - tradeoffCount: integer >= 0 capturing how many value tradeoffs you surfaced (use 0 if none)
-  - citations: array of {"title": string, "url": fully-qualified URL, "snippet"?: string} objects (use [] if none)
-
-Example:
-<RESPONSE_METADATA>{"provenance":"Retrieved","confidence":0.78,"tradeoffCount":1,"citations":[{"title":"Example","url":"https://example.com"}]}
-
-Guidelines:
-  - Emit valid, minified JSON (no comments, no code fences, no trailing text)
-  - Always include the <RESPONSE_METADATA> block after every response
-  - Use "Inferred" for reasoning-based answers, "Retrieved" for fact-based, "Speculative" for uncertain answers`;
-
-                // Assemble OpenAI messages with a system prompt + user question.
-                const messages = [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: question.trim() },
-                ];
-
-                // Dispatch the request to OpenAI.
-                const aiResponse = await openaiService.generateResponse(
-                    runtimeConfig.openai.defaultModel,
-                    messages
-                );
-
-                const { normalizedText, metadata: assistantMetadata } =
-                    aiResponse;
-
-                // Build the compact metadata record that powers trace lookup and provenance display.
-                const runtimeContext: ResponseMetadataRuntimeContext = {
-                    modelVersion: runtimeConfig.openai.defaultModel,
-                    conversationSnapshot: `${question}\n\n${normalizedText}`,
-                };
-
-                const responseMetadata = buildResponseMetadata(
-                    assistantMetadata,
-                    runtimeContext
-                );
-
-                logger.debug('=== Server Metadata Debug ===');
-                logger.debug(
-                    `Assistant metadata: ${JSON.stringify(assistantMetadata, null, 2)}`
-                );
-                logger.debug(
-                    `Assistant metadata confidence: ${(assistantMetadata as { confidence?: number })?.confidence}`
-                );
-                logger.debug(
-                    `Built response metadata: ${JSON.stringify(responseMetadata, null, 2)}`
-                );
-                logger.debug(
-                    `Response metadata confidence: ${(responseMetadata as { confidence?: number }).confidence}`
-                );
-                logger.debug('================================');
-
-                // Persist trace in the background to avoid blocking responses.
-                storeTrace(responseMetadata).catch((err) => {
-                    logger.error(
-                        `Background trace storage error: ${err instanceof Error ? err.message : String(err)}`
-                    );
+            if (!reflectService) {
+                sendJson(res, 503, {
+                    error: 'Service temporarily unavailable. Please try again later.',
                 });
-
-                res.statusCode = 200;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.setHeader('Cache-Control', 'no-store');
-                // Return the response to the client.
-                res.end(
-                    JSON.stringify({
-                        message: normalizedText,
-                        metadata: responseMetadata,
-                    })
-                );
-                logRequest(
-                    req,
-                    res,
-                    `reflect success questionLength=${question.length}`
-                );
-            } catch (openaiError) {
-                res.statusCode = 502;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.setHeader('Cache-Control', 'no-store');
-
-                const errorResponse = {
-                    error: 'AI generation failed',
-                    details:
-                        openaiError instanceof Error
-                            ? openaiError.message
-                            : 'Unknown OpenAI error',
-                };
-
-                res.end(JSON.stringify(errorResponse));
-                logRequest(
-                    req,
-                    res,
-                    `reflect openai-error ${openaiError instanceof Error ? openaiError.message : 'unknown error'}`
-                );
+                logRequest(req, res, 'reflect service-unavailable');
+                return;
             }
-        } catch (error) {
-            res.statusCode = 500;
-            res.setHeader('Content-Type', 'application/json; charset=utf-8');
-            res.setHeader('Cache-Control', 'no-store');
 
-            const errorResponse = {
-                error: 'Internal server error',
-                details:
-                    error instanceof Error ? error.message : 'Unknown error',
-            };
-
-            res.end(JSON.stringify(errorResponse));
+            // From here on, the request is fully normalized and can delegate to the shared workflow.
+            const reflectResponse = await reflectService.runReflect({
+                question: parsedRequestResult.data.question,
+            });
+            sendJson(res, 200, reflectResponse);
             logRequest(
                 req,
                 res,
-                `reflect error ${error instanceof Error ? error.message : 'unknown error'}`
+                `reflect success questionLength=${parsedRequestResult.data.question.length}`
+            );
+        } catch (openaiError) {
+            const errorMessage =
+                openaiError instanceof Error
+                    ? openaiError.message
+                    : String(openaiError);
+
+            sendJson(res, 502, {
+                error: 'AI generation failed',
+            });
+            logRequest(
+                req,
+                res,
+                `reflect openai-error ${errorMessage}`
             );
         }
     };

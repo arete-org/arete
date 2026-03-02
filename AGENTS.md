@@ -66,6 +66,9 @@ Example:
 
 ## Testing & Validation
 
+- Run ESLint by default after any file edit.
+- Prefer linting only the touched files when the repo tooling supports it cleanly.
+- If the repo only exposes a broader lint command, run that broader command and note the wider validation scope.
 - Review: `pnpm review`
 - `@footnote-*` tags: `pnpm validate-footnote-tags`
 - OpenAPI linking: `pnpm validate-openapi-links`
