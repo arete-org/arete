@@ -248,7 +248,7 @@ export class CatchupFilter {
         // Remove spaces so a message like "😀 😀" still counts as emoji-only.
         const squashed = trimmed.replace(/\s+/g, '');
         const emojiRegex =
-            /^(?:\p{Extended_Pictographic}(?:\u{200D}|\u{FE0F})*)+$/u;
+            /^(?:\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\u{FE0F})*(?:\u{200D}\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\u{FE0F})*)*)+$/u;
         if (emojiRegex.test(squashed)) {
             return true;
         }
