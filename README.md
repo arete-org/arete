@@ -4,15 +4,6 @@
 [![Hippocratic License HL3-CORE](https://img.shields.io/static/v1?label=Hippocratic%20License&message=HL3-CORE&labelColor=5e2751&color=bc8c3d)](https://firstdonoharm.dev/version/3/0/core.html)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/footnote-ai/footnote)
 
-**Mindful and honest AI.**  
-Transparent, private, easy to run yourself — under your rules.
-
-**Try the demo:** [https://ai.jordanmakes.dev](https://ai.jordanmakes.dev)
-
----
-
-## What is Footnote?
-
 Footnote is an AI assistant that tries to show its work — its responses carry trace metadata you can easily inspect.  
 
 Every response includes:
@@ -24,7 +15,9 @@ Every response includes:
 
 ![footnote_chat](https://github.com/user-attachments/assets/963e6144-7d83-4d90-a580-7fc5a01d3566)
 
-Footnote is built for human oversight, rather than “just believe me.”
+Built for human oversight, rather than “just believe me.”
+
+**Try the demo:** [https://ai.jordanmakes.dev](https://ai.jordanmakes.dev)
 
 ---
 
@@ -50,13 +43,7 @@ pnpm install
 
 2. Set environment variables
 
-```bash
-cp .env.example .env
-```
-
-> This is the minimum config—See [.env.example](.env.example) for the full list.
-
-> OpenAI is currently the only LLM provider—Broader model/provider support is planned.
+Copy `.env.example` to a new `.env`, edit:
 
 ```
 DISCORD_TOKEN=...
@@ -68,13 +55,17 @@ TRACE_API_TOKEN=...
 INCIDENT_PSEUDONYMIZATION_SECRET=...
 ```
 
-3. Start the backend and web app:
+> This is the minimum config—See [.env.example](.env.example) for the full list.
+
+> OpenAI is currently the only LLM provider—Broader model/provider support is planned.
+
+3. Start the backend and web app
 
 ```bash
 pnpm dev
 ```
 
-4. Optionally start the Discord bot in another terminal:
+4. Optionally, in another terminal, start the Discord bot
 
 ```bash
 pnpm dev:bot
