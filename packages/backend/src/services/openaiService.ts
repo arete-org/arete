@@ -44,8 +44,15 @@ type GenerateResponseResult = {
     metadata: OpenAIResponseMetadata;
 };
 
+interface OpenAIService {
+    generateResponse(
+        model: string,
+        messages: Array<{ role: string; content: string }>
+    ): Promise<GenerateResponseResult>;
+}
+
 // --- OpenAI client wrapper ---
-class SimpleOpenAIService {
+class SimpleOpenAIService implements OpenAIService {
     private readonly apiKey: string;
     private readonly requestTimeoutMs: number;
     private readonly retryAttempts: number;
@@ -242,5 +249,9 @@ const buildResponseMetadata = (
     };
 };
 
-export type { OpenAIResponseMetadata, ResponseMetadataRuntimeContext };
+export type {
+    OpenAIService,
+    OpenAIResponseMetadata,
+    ResponseMetadataRuntimeContext,
+};
 export { SimpleOpenAIService, buildResponseMetadata };

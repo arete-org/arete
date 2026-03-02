@@ -1,6 +1,6 @@
 /**
- * @description: Handles /api/reflect requests as the trimmed-down web chat
- * surface and dispatches AI responses with metadata.
+ * @description: Handles /api/reflect requests for the public web UI and trusted
+ * internal callers, then returns an AI response plus provenance metadata.
  * @footnote-scope: interface
  * @footnote-module: ReflectHandler
  * @footnote-risk: high - Failures block AI responses and provenance capture.
@@ -11,7 +11,7 @@ import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { PostReflectRequestSchema } from '@footnote/contracts/web/schemas';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import type {
-    SimpleOpenAIService,
+    OpenAIService,
     OpenAIResponseMetadata,
     ResponseMetadataRuntimeContext,
 } from '../services/openaiService.js';
@@ -29,9 +29,10 @@ type BuildResponseMetadata = (
 ) => ResponseMetadata;
 
 type ReflectHandlerDeps = {
-    openaiService: SimpleOpenAIService | null;
+    openaiService: OpenAIService | null;
     ipRateLimiter: SimpleRateLimiter | null;
     sessionRateLimiter: SimpleRateLimiter | null;
+    serviceRateLimiter: SimpleRateLimiter | null;
     storeTrace: (metadata: ResponseMetadata) => Promise<void>;
     logRequest: LogRequest;
     buildResponseMetadata: BuildResponseMetadata;
@@ -42,6 +43,16 @@ type LimiterRef = {
     current: SimpleRateLimiter | null;
 };
 
+type ServiceAuth = {
+    isTrustedService: boolean;
+    authSource: 'x-trace-token' | 'x-service-token' | null;
+    rateLimitKey: string | null;
+};
+
+/**
+ * Applies credentialed CORS headers only for explicitly allowed browser origins.
+ * Trusted service callers do not rely on CORS, but browsers do.
+ */
 const setCorsHeaders = (res: ServerResponse, req: IncomingMessage): void => {
     const allowedOrigins = runtimeConfig.cors.allowedOrigins;
     const origin = req.headers.origin;
@@ -78,24 +89,79 @@ const setCorsHeaders = (res: ServerResponse, req: IncomingMessage): void => {
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader(
         'Access-Control-Allow-Headers',
-        'Content-Type, X-Turnstile-Token, X-Session-Id'
+        'Content-Type, X-Turnstile-Token, X-Session-Id, X-Trace-Token, X-Service-Token'
     );
     res.setHeader('Access-Control-Allow-Credentials', 'true');
 };
 
-const createReflectHandler =
-    ({
-        openaiService,
-        ipRateLimiter,
-        sessionRateLimiter,
-        storeTrace,
-        logRequest,
-        buildResponseMetadata,
-        maxReflectBodyBytes,
-    }: ReflectHandlerDeps) => {
+// Normalize Node's string-or-string[] header shape into one trimmed value.
+const readHeaderValue = (
+    headerValue: string | string[] | undefined
+): string | null => {
+    if (!headerValue) {
+        return null;
+    }
+
+    if (Array.isArray(headerValue)) {
+        return null;
+    }
+
+    const trimmedValue = headerValue.trim();
+    return trimmedValue.length > 0 ? trimmedValue : null;
+};
+
+/**
+ * Trusted internal callers can authenticate with either the trace token or a
+ * dedicated reflect service token. This lets server-side clients skip CAPTCHA
+ * while still staying on a separate rate-limit path from the public web flow.
+ */
+const getServiceAuth = (req: IncomingMessage): ServiceAuth => {
+    const traceToken = process.env.TRACE_API_TOKEN?.trim() || null;
+    const reflectServiceToken =
+        process.env.REFLECT_SERVICE_TOKEN?.trim() || null;
+    const traceHeaderValue = readHeaderValue(req.headers['x-trace-token']);
+    if (traceToken && traceHeaderValue === traceToken) {
+        return {
+            isTrustedService: true,
+            authSource: 'x-trace-token',
+            rateLimitKey: 'trace-token',
+        };
+    }
+
+    const serviceHeaderValue = readHeaderValue(req.headers['x-service-token']);
+    if (reflectServiceToken && serviceHeaderValue === reflectServiceToken) {
+        return {
+            isTrustedService: true,
+            authSource: 'x-service-token',
+            rateLimitKey: 'service-token',
+        };
+    }
+
+    return {
+        isTrustedService: false,
+        authSource: null,
+        rateLimitKey: null,
+    };
+};
+
+const createReflectHandler = ({
+    openaiService,
+    ipRateLimiter,
+    sessionRateLimiter,
+    serviceRateLimiter,
+    storeTrace,
+    logRequest,
+    buildResponseMetadata,
+    maxReflectBodyBytes,
+}: ReflectHandlerDeps) => {
     // Cache fallback limiters so fail-open fallback behavior still preserves state across requests.
+    // We keep three buckets:
+    // - public IP requests
+    // - public session requests
+    // - trusted service requests
     const fallbackIpLimiter: LimiterRef = { current: null };
     const fallbackSessionLimiter: LimiterRef = { current: null };
+    const fallbackServiceLimiter: LimiterRef = { current: null };
 
     /**
      * @api.operationId: postReflect
@@ -103,11 +169,14 @@ const createReflectHandler =
      * @api.operationId: optionsReflect
      * @api.path: OPTIONS /api/reflect
      */
-    return async (
-        req: IncomingMessage,
-        res: ServerResponse
-    ): Promise<void> => {
+    return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
         try {
+            // High-level flow:
+            // 1. Handle CORS/method/body validation
+            // 2. Choose auth path (trusted service token or public Turnstile)
+            // 3. Apply the matching rate limit bucket
+            // 4. Call OpenAI, build response metadata, and store the trace
+
             // --- CORS and preflight handling ---
             setCorsHeaders(res, req);
 
@@ -250,7 +319,8 @@ const createReflectHandler =
             }
 
             // --- Request validation ---
-            const parsedRequest = PostReflectRequestSchema.safeParse(parsedBody);
+            const parsedRequest =
+                PostReflectRequestSchema.safeParse(parsedBody);
             if (!parsedRequest.success) {
                 const isQuestionTooLong = parsedRequest.error.issues.some(
                     (issue) =>
@@ -306,12 +376,19 @@ const createReflectHandler =
                 return;
             }
 
+            const serviceAuth = getServiceAuth(req);
+
             // --- CAPTCHA token extraction ---
+            // Public callers must satisfy Turnstile when it is configured.
+            // Trusted service callers skip that check and use header-based auth instead.
             const hasTurnstileSecret = Boolean(
                 process.env.TURNSTILE_SECRET_KEY
             );
             const hasTurnstileSite = Boolean(process.env.TURNSTILE_SITE_KEY);
-            if (hasTurnstileSecret !== hasTurnstileSite) {
+            if (
+                hasTurnstileSecret !== hasTurnstileSite &&
+                !serviceAuth.isTrustedService
+            ) {
                 res.statusCode = 503;
                 res.setHeader(
                     'Content-Type',
@@ -329,7 +406,9 @@ const createReflectHandler =
                 return;
             }
 
-            const skipCaptcha = !(hasTurnstileSecret && hasTurnstileSite);
+            const skipCaptcha =
+                serviceAuth.isTrustedService ||
+                !(hasTurnstileSecret && hasTurnstileSite);
 
             let turnstileToken: string | null = null;
             let tokenSource = 'none';
@@ -353,7 +432,7 @@ const createReflectHandler =
 
             // Enforce CAPTCHA token presence when enabled.
             if (!turnstileToken && !skipCaptcha) {
-                res.statusCode = 400;
+                res.statusCode = 403;
                 res.setHeader(
                     'Content-Type',
                     'application/json; charset=utf-8'
@@ -361,7 +440,7 @@ const createReflectHandler =
                 res.setHeader('Cache-Control', 'no-store');
                 res.end(
                     JSON.stringify({
-                        error: 'CAPTCHA token is required',
+                        error: 'CAPTCHA verification failed',
                         details: 'Missing turnstile token',
                     })
                 );
@@ -410,9 +489,12 @@ const createReflectHandler =
             try {
                 // --- CAPTCHA verification ---
                 if (skipCaptcha) {
-                    const reason = !process.env.TURNSTILE_SECRET_KEY
-                        ? 'not-configured'
-                        : 'dev-mode';
+                    // Skip reasons are intentionally logged because they change the abuse-control path.
+                    const reason = serviceAuth.isTrustedService
+                        ? `trusted-service-${serviceAuth.authSource}`
+                        : !process.env.TURNSTILE_SECRET_KEY
+                          ? 'not-configured'
+                          : 'dev-mode';
                     logger.info(`Skipping CAPTCHA verification (${reason})`);
                     logRequest(req, res, `reflect captcha-skipped-${reason}`);
                 } else {
@@ -666,7 +748,8 @@ const createReflectHandler =
             }
 
             // --- Rate limiting ---
-            // Fail open when rate limiters are unavailable so we do not block traffic.
+            // Fail open when a limiter is missing so a bad config does not take the endpoint down.
+            // Public traffic and trusted service traffic use different buckets on purpose.
             const getLimiter = (
                 limiter: SimpleRateLimiter | null,
                 label: string,
@@ -726,58 +809,100 @@ const createReflectHandler =
                 60000,
                 fallbackSessionLimiter
             );
+            const activeServiceRateLimiter = getLimiter(
+                serviceRateLimiter,
+                'service',
+                'REFLECT_SERVICE_RATE_LIMIT',
+                'REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS',
+                30,
+                60000,
+                fallbackServiceLimiter
+            );
 
-            const ipRateLimitResult = activeIpRateLimiter.check(clientIp);
-            if (!ipRateLimitResult.allowed) {
-                res.statusCode = 429;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
+            if (serviceAuth.isTrustedService) {
+                // Service callers are bucketed separately so bot traffic does not consume browser limits.
+                const serviceRateLimitKey = serviceAuth.rateLimitKey!;
+                const serviceRateLimitResult = activeServiceRateLimiter.check(
+                    serviceRateLimitKey
                 );
-                res.setHeader('Cache-Control', 'no-store');
-                res.setHeader(
-                    'Retry-After',
-                    ipRateLimitResult.retryAfter.toString()
-                );
-                res.end(
-                    JSON.stringify({
-                        error: 'Too many requests from this IP',
-                        retryAfter: ipRateLimitResult.retryAfter,
-                    })
-                );
-                logRequest(
-                    req,
-                    res,
-                    `reflect ip-rate-limited retryAfter=${ipRateLimitResult.retryAfter}`
-                );
-                return;
-            }
+                if (!serviceRateLimitResult.allowed) {
+                    res.statusCode = 429;
+                    res.setHeader(
+                        'Content-Type',
+                        'application/json; charset=utf-8'
+                    );
+                    res.setHeader('Cache-Control', 'no-store');
+                    res.setHeader(
+                        'Retry-After',
+                        serviceRateLimitResult.retryAfter.toString()
+                    );
+                    res.end(
+                        JSON.stringify({
+                            error: 'Too many requests from this service',
+                            retryAfter: serviceRateLimitResult.retryAfter,
+                        })
+                    );
+                    logRequest(
+                        req,
+                        res,
+                        `reflect service-rate-limited source=${serviceAuth.authSource} retryAfter=${serviceRateLimitResult.retryAfter}`
+                    );
+                    return;
+                }
+            } else {
+                // Public traffic keeps the existing two-layer limiter: IP first, then session.
+                const ipRateLimitResult = activeIpRateLimiter.check(clientIp);
+                if (!ipRateLimitResult.allowed) {
+                    res.statusCode = 429;
+                    res.setHeader(
+                        'Content-Type',
+                        'application/json; charset=utf-8'
+                    );
+                    res.setHeader('Cache-Control', 'no-store');
+                    res.setHeader(
+                        'Retry-After',
+                        ipRateLimitResult.retryAfter.toString()
+                    );
+                    res.end(
+                        JSON.stringify({
+                            error: 'Too many requests from this IP',
+                            retryAfter: ipRateLimitResult.retryAfter,
+                        })
+                    );
+                    logRequest(
+                        req,
+                        res,
+                        `reflect ip-rate-limited retryAfter=${ipRateLimitResult.retryAfter}`
+                    );
+                    return;
+                }
 
-            const sessionRateLimitResult =
-                activeSessionRateLimiter.check(sessionId);
-            if (!sessionRateLimitResult.allowed) {
-                res.statusCode = 429;
-                res.setHeader(
-                    'Content-Type',
-                    'application/json; charset=utf-8'
-                );
-                res.setHeader('Cache-Control', 'no-store');
-                res.setHeader(
-                    'Retry-After',
-                    sessionRateLimitResult.retryAfter.toString()
-                );
-                res.end(
-                    JSON.stringify({
-                        error: 'Too many requests for this session',
-                        retryAfter: sessionRateLimitResult.retryAfter,
-                    })
-                );
-                logRequest(
-                    req,
-                    res,
-                    `reflect session-rate-limited retryAfter=${sessionRateLimitResult.retryAfter}`
-                );
-                return;
+                const sessionRateLimitResult =
+                    activeSessionRateLimiter.check(sessionId);
+                if (!sessionRateLimitResult.allowed) {
+                    res.statusCode = 429;
+                    res.setHeader(
+                        'Content-Type',
+                        'application/json; charset=utf-8'
+                    );
+                    res.setHeader('Cache-Control', 'no-store');
+                    res.setHeader(
+                        'Retry-After',
+                        sessionRateLimitResult.retryAfter.toString()
+                    );
+                    res.end(
+                        JSON.stringify({
+                            error: 'Too many requests for this session',
+                            retryAfter: sessionRateLimitResult.retryAfter,
+                        })
+                    );
+                    logRequest(
+                        req,
+                        res,
+                        `reflect session-rate-limited retryAfter=${sessionRateLimitResult.retryAfter}`
+                    );
+                    return;
+                }
             }
 
             // --- AI request + response handling ---
@@ -832,7 +957,7 @@ Guidelines:
                 const { normalizedText, metadata: assistantMetadata } =
                     aiResponse;
 
-                // Build the response metadata that will be persisted as a trace.
+                // Build the compact metadata record that powers trace lookup and provenance display.
                 const runtimeContext: ResponseMetadataRuntimeContext = {
                     modelVersion: runtimeConfig.openai.defaultModel,
                     conversationSnapshot: `${question}\n\n${normalizedText}`,
@@ -928,4 +1053,3 @@ Guidelines:
 };
 
 export { createReflectHandler };
-
