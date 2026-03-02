@@ -157,14 +157,10 @@ Every module must include:
 ```typescript
 /**
  * @description: <1-3 lines summarizing what this module does.>
- * @footnote-scope: <core|utility|interface|test>
+ * @footnote-scope: <core|utility|interface|web|test>
  * @footnote-module: <ModuleName>
- * @footnote-risk: <high|moderate|low>
- * @footnote-ethics: <high|moderate|low>
- *
- * @impact
- * Risk: <What could break or be compromised if mishandled.>
- * Ethics: <What human or governance impacts errors could cause.>
+ * @footnote-risk: <low|medium|high> - <What could break or be compromised if mishandled.>
+ * @footnote-ethics: <low|medium|high> - <What human or governance impacts errors could cause.>
  */
 ```
 

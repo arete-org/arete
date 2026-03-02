@@ -19,7 +19,7 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 
 - **Structured logging**: All AI edits must preserve existing logging patterns
 - **Cost tracking**: Never remove `ChannelContextManager.recordLLMUsage()` calls
-- **Risk annotations**: Preserve all current module annotations (`@footnote-module`, `@footnote-risk`, `@footnote-ethics`, `@footnote-scope`, `@description`, `@impact`)
+- **Risk annotations**: Preserve the required module annotations (`@description`, `@footnote-scope`, `@footnote-module`, `@footnote-risk`, `@footnote-ethics`)
 - **Licensing**: Maintain all license headers and provenance comments
 
 ## Process
@@ -63,33 +63,35 @@ For API boundary changes, keep OpenAPI and code links aligned:
 
 ### Current `@footnote-*` Module Tagging
 
-- `@footnote-risk`: Technical fragility (low, moderate, high)
-- `@footnote-ethics`: Human impact sensitivity (low, moderate, high)
-- `@footnote-scope`: Logical role (core, utility, interface, test)
+- `@footnote-risk`: Technical blast radius (low, medium, high)
+- `@footnote-ethics`: User-facing or governance harm (low, medium, high)
+- `@footnote-scope`: Logical role (`core`, `utility`, `interface`, `web`, `test`)
 - `@description`: 1-3 line summary of module purpose
-- `@impact`: Separate Risk and Ethics impact statements
 
 **Formatting Standards:**
 
 ```typescript
 /**
  * @description: <1-3 lines summarizing what this module does.>
- * @footnote-scope: <core|utility|interface|test>
+ * @footnote-scope: <core|utility|interface|web|test>
  * @footnote-module: <ModuleName>
- * @footnote-risk: <low|moderate|high>
- * @footnote-ethics: <low|moderate|high>
- *
- * @impact
- * Risk: <What could break or be compromised if mishandled.>
- * Ethics: <What human or governance effect errors could cause.>
+ * @footnote-risk: <low|medium|high> - <What could break or be compromised if mishandled.>
+ * @footnote-ethics: <low|medium|high> - <What human or governance effect errors could cause.>
  */
 ```
+
+**Rubric reminders:**
+
+- Use `@footnote-risk` for technical blast radius if the module fails or is misused.
+- Use `@footnote-ethics` for user-facing or governance harm if the module behaves incorrectly.
+- `low`: localized helper or presentation issues
+- `medium`: feature-level disruption, hidden metadata, or misleading UI
+- `high`: core flow failure, provenance loss, privacy harm, or major trust damage
 
 ### Current `@footnote-*` Scoped Logger Tagging
 
 - `@footnote-logger`: Logger module identifier (matches the child logger name)
 - `@logs`: What specific operations, events, or data this logger logs
-- `@impact`: Separate Risk and Ethics impact statements for logging concerns
 
 **Formatting Standards:**
 
@@ -100,7 +102,7 @@ For API boundary changes, keep OpenAPI and code links aligned:
  * @logs
  * <What this scoped logger tracks and logs>
  *
- * @impact
+ * Logging notes:
  * Risk: <Logging-specific risks if any>
  * Ethics: <Logging-specific ethical impacts if any>
  */

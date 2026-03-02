@@ -108,15 +108,15 @@ export interface SimpleConfig {
 ```typescript
 /**
  * @description: <1-3 lines summarizing what this module does.>
- * @footnote-scope: <core|utility|interface|test>
+ * @footnote-scope: <core|utility|interface|web|test>
  * @footnote-module: <ModuleName>
- * @footnote-risk: <low|moderate|high> - <What could break or be compromised if mishandled.>
- * @footnote-ethics: <low|moderate|high> - <What human or governance impacts errors could cause.>
+ * @footnote-risk: <low|medium|high> - <What could break or be compromised if mishandled.>
+ * @footnote-ethics: <low|medium|high> - <What human or governance impacts errors could cause.>
  */
 ```
 
-- **@footnote-risk**: Technical fragility (stability, security, data integrity)
-- **@footnote-ethics**: Human/governance impact (privacy, fairness, transparency, social harm)
+- **@footnote-risk**: Technical blast radius if the module fails, is misconfigured, or is misused
+- **@footnote-ethics**: User-facing or governance harm if the module behaves incorrectly
 - **@footnote-scope**: Logical role in the system (helps auto-group modules)
 - Run `pnpm validate-footnote-tags` before committing; CI enforces this to guarantee standardized risk/ethics levels.
 - Keep annotations under 10 lines for readability
@@ -134,7 +134,7 @@ export interface SimpleConfig {
  * @logs
  * <What this scoped logger tracks and logs>
  * 
- * @impact
+ * Logging notes:
  * Risk: <Logging-specific risks if any>
  * Ethics: <Logging-specific ethical impacts if any>
  */
