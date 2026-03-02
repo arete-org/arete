@@ -72,6 +72,28 @@ test('validatePlan falls back to current_facts when searchIntent is invalid', ()
     assert.deepEqual(plan.openaiOptions.webSearch?.repoHints, []);
 });
 
+test('validatePlan disables web_search when the normalized query is blank', () => {
+    const plan = normalizePlan({
+        action: 'message',
+        modality: 'text',
+        riskTier: 'Low',
+        openaiOptions: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            tool_choice: { type: 'web_search' },
+            webSearch: {
+                query: '   ',
+                searchIntent: 'repo_explainer',
+                repoHints: ['discord', 'provenance'],
+                searchContextSize: 'medium',
+            },
+        },
+    });
+
+    assert.equal(plan.openaiOptions.tool_choice, 'none');
+    assert.equal(plan.openaiOptions.webSearch, undefined);
+});
+
 test('validatePlan clears web search state for image actions', () => {
     const plan = normalizePlan({
         action: 'image',

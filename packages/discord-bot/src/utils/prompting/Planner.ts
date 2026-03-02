@@ -499,10 +499,18 @@ export class Planner {
             const webSearch = this.normalizeWebSearchOptions(
                 mergedPlan.openaiOptions.webSearch
             );
-            mergedPlan.openaiOptions = {
-                ...mergedPlan.openaiOptions,
-                webSearch,
-            };
+            if (!webSearch.query) {
+                mergedPlan.openaiOptions = {
+                    ...mergedPlan.openaiOptions,
+                    tool_choice: 'none',
+                    webSearch: undefined,
+                };
+            } else {
+                mergedPlan.openaiOptions = {
+                    ...mergedPlan.openaiOptions,
+                    webSearch,
+                };
+            }
         }
 
         // Clear ttsOptions when modality isn't tts
@@ -547,7 +555,10 @@ export class Planner {
                 : this.normalizeSearchContextSize(webSearch?.searchContextSize);
 
         return {
-            query: typeof webSearch?.query === 'string' ? webSearch.query : '',
+            query:
+                typeof webSearch?.query === 'string'
+                    ? webSearch.query.trim()
+                    : '',
             allowedDomains: Array.isArray(webSearch?.allowedDomains)
                 ? webSearch.allowedDomains
                 : [],
