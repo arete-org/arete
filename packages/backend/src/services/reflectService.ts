@@ -102,15 +102,23 @@ export const createReflectService = ({
             promptTokens,
             completionTokens
         );
-        recordUsage({
-            feature: 'reflect',
-            model: usageModel,
-            promptTokens,
-            completionTokens,
-            totalTokens,
-            ...estimatedCost,
-            timestamp: Date.now(),
-        });
+        if (recordUsage) {
+            try {
+                recordUsage({
+                    feature: 'reflect',
+                    model: usageModel,
+                    promptTokens,
+                    completionTokens,
+                    totalTokens,
+                    ...estimatedCost,
+                    timestamp: Date.now(),
+                });
+            } catch (error) {
+                logger.warn(
+                    `Reflect usage recording failed: ${error instanceof Error ? error.message : String(error)}`
+                );
+            }
+        }
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,

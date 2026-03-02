@@ -113,3 +113,42 @@ test('createReflectService passes the effective model to response metadata build
 
     assert.equal(capturedRuntimeContextModelVersion, 'gpt-5.1');
 });
+
+test('createReflectService swallows usage recording failures', async () => {
+    const openaiService: OpenAIService = {
+        async generateResponse() {
+            return {
+                normalizedText: 'reflect response',
+                metadata: {
+                    model: 'gpt-5-mini',
+                    usage: {
+                        prompt_tokens: 20,
+                        completion_tokens: 10,
+                        total_tokens: 30,
+                    },
+                    confidence: 0.5,
+                    provenance: 'Inferred',
+                    tradeoffCount: 0,
+                    citations: [],
+                },
+            };
+        },
+    };
+
+    const reflectService = createReflectService({
+        openaiService,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => {
+            throw new Error('telemetry backend unavailable');
+        },
+    });
+
+    const response = await reflectService.runReflect({
+        question: 'What changed?',
+    });
+
+    assert.equal(response.message, 'reflect response');
+    assert.equal(response.metadata.responseId, 'reflect_test_response');
+});
