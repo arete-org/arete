@@ -37,6 +37,29 @@ const DIST_DIR = path.join(currentDirectory, '../../web/dist');
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const BLOG_POSTS_DIR = path.join(DATA_DIR, 'blog-posts');
 
+// --- Runtime configuration ---
+const trustProxy = process.env.WEB_TRUST_PROXY === 'true';
+const traceToken = process.env.TRACE_API_TOKEN?.trim() || null;
+const DEFAULT_TRACE_API_MAX_BODY_BYTES = 256 * 1024; // 256 KB
+const DEFAULT_REFLECT_API_MAX_BODY_BYTES = 256 * 1024; // 256 KB
+
+const parsePositiveIntEnv = (
+    value: string | undefined,
+    fallback: number
+): number => {
+    const parsed = Number.parseInt(value ?? '', 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const maxTraceBodyBytes = parsePositiveIntEnv(
+    process.env.TRACE_API_MAX_BODY_BYTES,
+    DEFAULT_TRACE_API_MAX_BODY_BYTES
+);
+const maxReflectBodyBytes = parsePositiveIntEnv(
+    process.env.REFLECT_API_MAX_BODY_BYTES,
+    DEFAULT_REFLECT_API_MAX_BODY_BYTES
+);
+
 // --- Storage and asset helpers ---
 const blogStore = createBlogStore(BLOG_POSTS_DIR);
 const { resolveAsset, mimeMap } = createAssetResolver(DIST_DIR);
@@ -167,26 +190,6 @@ const storeTraceWithStore = (metadata: ResponseMetadata) => {
 };
 
 // --- Handler wiring ---
-const trustProxy = process.env.WEB_TRUST_PROXY === 'true';
-// Guard the max body bytes to a sane numeric value.
-const maxTraceBodyBytesEnv = parseInt(
-    process.env.TRACE_API_MAX_BODY_BYTES || '200000',
-    10
-);
-const maxTraceBodyBytes =
-    Number.isFinite(maxTraceBodyBytesEnv) && maxTraceBodyBytesEnv > 0
-        ? maxTraceBodyBytesEnv
-        : 200000;
-const maxReflectBodyBytesEnv = parseInt(
-    process.env.REFLECT_API_MAX_BODY_BYTES || '20000',
-    10
-);
-const maxReflectBodyBytes =
-    Number.isFinite(maxReflectBodyBytesEnv) && maxReflectBodyBytesEnv > 0
-        ? maxReflectBodyBytesEnv
-        : 20000;
-const traceToken = process.env.TRACE_API_TOKEN?.trim() || null;
-
 const { handleTraceRequest, handleTraceUpsertRequest } = createTraceHandlers({
     traceStore,
     logRequest,
@@ -218,8 +221,7 @@ const wantsJsonResponse = (req: http.IncomingMessage): boolean => {
         normalized.includes('text/html') ||
         normalized.includes('application/xhtml+xml');
     const wantsJson =
-        normalized.includes('application/json') ||
-        normalized.includes('+json');
+        normalized.includes('application/json') || normalized.includes('+json');
 
     if (wantsHtml && !wantsJson) {
         return false;
@@ -395,4 +397,3 @@ const host = process.env.HOST || '::';
 server.listen(port, host, () => {
     logger.info(`Simple server available on ${host}:${port}`);
 });
-
