@@ -503,35 +503,38 @@ export class MessageProcessor {
         }
 
         if (ttsPath) {
-            const fileBuffer = await fs.promises.readFile(ttsPath);
-            const cleanResponseText = finalResponseText
-                .replace(/\n/g, ' ')
-                .replace(/`/g, '');
-            const sentMessages = await responseHandler.sendMessage(
-                `\`\`\`${cleanResponseText}\`\`\``,
-                [
-                    {
-                        filename: path.basename(ttsPath),
-                        data: fileBuffer,
-                    },
-                ],
-                directReply
-            );
-            const responseMessages = Array.isArray(sentMessages)
-                ? sentMessages
-                : [sentMessages];
-            const footerReplyAnchor =
-                responseMessages[responseMessages.length - 1];
+            try {
+                const fileBuffer = await fs.promises.readFile(ttsPath);
+                const cleanResponseText = finalResponseText
+                    .replace(/\n/g, ' ')
+                    .replace(/`/g, '');
+                const sentMessages = await responseHandler.sendMessage(
+                    `\`\`\`${cleanResponseText}\`\`\``,
+                    [
+                        {
+                            filename: path.basename(ttsPath),
+                            data: fileBuffer,
+                        },
+                    ],
+                    directReply
+                );
+                const responseMessages = Array.isArray(sentMessages)
+                    ? sentMessages
+                    : [sentMessages];
+                const footerReplyAnchor =
+                    responseMessages[responseMessages.length - 1];
 
-            // Intentional: backend reflect already persisted the canonical trace.
-            // Skipping postTraces here prevents duplicate trace rows for one reply.
-            await this.sendProvenanceFooter(
-                footerReplyAnchor,
-                message,
-                footerPayload
-            );
-            await cleanupTTSFile(ttsPath);
-            return;
+                // Intentional: backend reflect already persisted the canonical trace.
+                // Skipping postTraces here prevents duplicate trace rows for one reply.
+                await this.sendProvenanceFooter(
+                    footerReplyAnchor,
+                    message,
+                    footerPayload
+                );
+                return;
+            } finally {
+                await cleanupTTSFile(ttsPath);
+            }
         }
 
         const sentMessages = await responseHandler.sendMessage(
