@@ -197,6 +197,40 @@ const getAllowedTurnstileHostnames = (): string[] => {
     return configuredHostnames;
 };
 
+type TurnstileHostnameValidation = {
+    validationMode: 'configured-allowlist' | 'request-derived';
+    configuredHostnames: string[];
+    derivedHostnames: string[];
+    effectiveHostnames: string[];
+};
+
+const resolveTurnstileHostnameValidation = (
+    requestHost: string | undefined,
+    requestOrigin: string | undefined
+): TurnstileHostnameValidation => {
+    const configuredHostnames = getAllowedTurnstileHostnames();
+    const derivedHostnames = [
+        normalizeHostname(requestHost),
+        normalizeHostname(requestOrigin),
+    ].filter((hostname): hostname is string => Boolean(hostname));
+
+    if (configuredHostnames.length > 0) {
+        return {
+            validationMode: 'configured-allowlist',
+            configuredHostnames,
+            derivedHostnames,
+            effectiveHostnames: configuredHostnames,
+        };
+    }
+
+    return {
+        validationMode: 'request-derived',
+        configuredHostnames,
+        derivedHostnames,
+        effectiveHostnames: [...new Set(derivedHostnames)],
+    };
+};
+
 export const verifyTurnstileCaptcha = async ({
     clientIp,
     requestHost,
@@ -331,9 +365,22 @@ export const verifyTurnstileCaptcha = async ({
         );
         const normalizedRequestHost = normalizeHostname(requestHost);
         const normalizedRequestOrigin = normalizeHostname(requestOrigin);
+        const hostnameValidation = resolveTurnstileHostnameValidation(
+            requestHost,
+            requestOrigin
+        );
 
         logger.debug(
             `Turnstile verification response: ${JSON.stringify(verificationData, null, 2)}`
+        );
+        logger.debug(
+            `Turnstile hostname validation: ${JSON.stringify({
+                validationMode: hostnameValidation.validationMode,
+                configuredHostnames: hostnameValidation.configuredHostnames,
+                derivedHostnames: hostnameValidation.derivedHostnames,
+                effectiveHostnames: hostnameValidation.effectiveHostnames,
+                verifiedHostname: normalizedResponseHostname,
+            })}`
         );
 
         // A non-success response means the caller failed verification, even though the upstream call worked.
@@ -366,10 +413,11 @@ export const verifyTurnstileCaptcha = async ({
             };
         }
 
-        const allowedHostnames = getAllowedTurnstileHostnames();
         const hostnameMatches = Boolean(
             normalizedResponseHostname &&
-                allowedHostnames.includes(normalizedResponseHostname)
+                hostnameValidation.effectiveHostnames.includes(
+                    normalizedResponseHostname
+                )
         );
         if (!hostnameMatches) {
             logger.error('CAPTCHA verification FAILED:');
@@ -383,7 +431,16 @@ export const verifyTurnstileCaptcha = async ({
             logger.error(`  Request hostname: ${normalizedRequestHost || 'N/A'}`);
             logger.error(`  Request origin: ${normalizedRequestOrigin || 'N/A'}`);
             logger.error(
-                `  Allowed hostnames: ${allowedHostnames.join(', ') || 'N/A'}`
+                `  Validation mode: ${hostnameValidation.validationMode}`
+            );
+            logger.error(
+                `  Configured hostnames: ${hostnameValidation.configuredHostnames.join(', ') || 'N/A'}`
+            );
+            logger.error(
+                `  Derived hostnames: ${hostnameValidation.derivedHostnames.join(', ') || 'N/A'}`
+            );
+            logger.error(
+                `  Effective hostnames: ${hostnameValidation.effectiveHostnames.join(', ') || 'N/A'}`
             );
 
             return {

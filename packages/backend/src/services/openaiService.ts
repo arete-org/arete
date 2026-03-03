@@ -154,7 +154,7 @@ class SimpleOpenAIService implements OpenAIService {
 
     constructor(apiKey: string) {
         this.apiKey = apiKey;
-        this.requestTimeoutMs = 30000;
+        this.requestTimeoutMs = runtimeConfig.openai.requestTimeoutMs;
         this.retryAttempts = 1;
     }
 

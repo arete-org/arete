@@ -237,6 +237,8 @@ If you see scrollbars in the iframe:
 
 4. **CAPTCHA**: The interactive component requires Cloudflare Turnstile CAPTCHA verification. This must be configured on the Footnote instance.
 
+5. **Focus behavior**: CAPTCHA verification/reset should not auto-focus the ask input. This avoids scroll jumps in embedded iframes after the widget refreshes.
+
 5. **Responsive Behavior**: The embed is designed to work well on desktop and tablet devices. Mobile responsiveness is optimized but may require additional styling considerations.
 
 ## Embed-Specific Considerations

@@ -11,6 +11,7 @@ type RuntimeConfig = {
         defaultReasoningEffort: string;
         defaultVerbosity: string;
         defaultChannelContext: { channelId: string };
+        requestTimeoutMs: number;
     };
     cors: {
         allowedOrigins: string[];
@@ -35,6 +36,18 @@ const parseCsvEnv = (
         .filter((entry) => entry.length > 0);
 
     return entries.length > 0 ? entries : [...fallback];
+};
+
+const parseNumberEnv = (
+    value: string | undefined,
+    fallback: number
+): number => {
+    if (value === undefined) {
+        return fallback;
+    }
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 };
 
 // --- Defaults ---
@@ -69,6 +82,10 @@ const runtimeConfig: RuntimeConfig = {
         defaultChannelContext: {
             channelId: 'default',
         },
+        requestTimeoutMs: parseNumberEnv(
+            process.env.OPENAI_REQUEST_TIMEOUT_MS,
+            180_000
+        ),
     },
     cors: {
         allowedOrigins,

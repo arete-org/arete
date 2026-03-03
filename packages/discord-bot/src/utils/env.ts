@@ -203,6 +203,14 @@ const DEFAULT_REALTIME_FILTER_CONFIG = {
 } as const;
 
 /**
+ * Default HTTP timeout for bot -> backend API calls.
+ * Some reflect flows intentionally spend extra time reasoning or generating.
+ */
+const DEFAULT_API_TIMEOUTS = {
+    BACKEND_REQUEST_TIMEOUT_MS: 180_000,
+} as const;
+
+/**
  * Validates that all required environment variables are set.
  * @throws {Error} If any required environment variable is missing
  */
@@ -416,6 +424,12 @@ export const config = {
     webBaseUrl,
     backendBaseUrl,
     traceApiToken,
+    api: {
+        backendRequestTimeoutMs: getNumberEnv(
+            'BACKEND_REQUEST_TIMEOUT_MS',
+            DEFAULT_API_TIMEOUTS.BACKEND_REQUEST_TIMEOUT_MS
+        ),
+    },
 
     // Bot mention names for engagement detection
     botMentionNames: getStringArrayEnv(

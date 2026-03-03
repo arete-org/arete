@@ -477,6 +477,85 @@ test('reflect does not expose raw upstream error details to clients', async () =
     }
 });
 
+test('reflect accepts public calls when allowlist is unset and Turnstile hostname matches the request host', async () => {
+    const env = process.env as MutableEnv;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+    const previousAllowedHostnames = env.TURNSTILE_ALLOWED_HOSTNAMES;
+    const originalFetch = globalThis.fetch;
+
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+    delete env.TURNSTILE_ALLOWED_HOSTNAMES;
+
+    globalThis.fetch = (async (input, init) => {
+        const url =
+            typeof input === 'string'
+                ? input
+                : input instanceof URL
+                  ? input.toString()
+                  : input.url;
+        if (url === 'https://challenges.cloudflare.com/turnstile/v0/siteverify') {
+            return new Response(
+                JSON.stringify({
+                    success: true,
+                    hostname: '127.0.0.1',
+                    'challenge-ts': new Date().toISOString(),
+                }),
+                {
+                    status: 200,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                }
+            );
+        }
+
+        return originalFetch(input, init);
+    }) as typeof fetch;
+
+    const server = await createTestServer();
+
+    try {
+        const response = await fetch(`${server.url}/api/reflect`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Turnstile-Token': 'captcha-token',
+            },
+            body: JSON.stringify(
+                createReflectRequest({
+                    surface: 'web',
+                    trigger: { kind: 'submit' },
+                    latestUserInput: 'public request',
+                    conversation: [
+                        { role: 'user', content: 'public request' },
+                    ],
+                    capabilities: {
+                        canReact: false,
+                        canGenerateImages: false,
+                        canUseTts: false,
+                    },
+                })
+            ),
+        });
+
+        assert.equal(response.status, 200);
+        const payload = (await response.json()) as {
+            action: string;
+            message: string;
+        };
+        assert.equal(payload.action, 'message');
+        assert.equal(payload.message, 'service response');
+    } finally {
+        globalThis.fetch = originalFetch;
+        await server.close();
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+        env.TURNSTILE_ALLOWED_HOSTNAMES = previousAllowedHostnames;
+    }
+});
+
 test('reflect rate limits public callers before calling Turnstile', async () => {
     const env = process.env as MutableEnv;
     const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;

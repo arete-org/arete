@@ -13,6 +13,10 @@ import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import examplePrompts from '../data/examplePrompts.json';
 import { loadRuntimeConfig } from '../utils/runtimeConfig';
 import { api, isApiClientError } from '../utils/api';
+import {
+    shouldAutoFocusAskInput,
+    shouldExecuteTurnstileChallenge,
+} from '../utils/turnstile';
 
 // Module augmentation for Vite environment variables
 declare global {
@@ -46,6 +50,7 @@ const AskPanel = (): JSX.Element => {
     const abortRef = useRef<AbortController | null>(null);
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
     const turnstileRef = useRef<TurnstileInstance | null>(null);
+    const isTurnstileExecutingRef = useRef(false);
     const hasInteractedRef = useRef(false); // Track if user has interacted to prevent initial status flash
 
     // Random prompt selection
@@ -81,7 +86,9 @@ const AskPanel = (): JSX.Element => {
                 return prev + '. ' + currentPrompt;
             }
         });
-        inputRef.current?.focus();
+        if (shouldAutoFocusAskInput('prompt-button')) {
+            inputRef.current?.focus();
+        }
     };
 
     useEffect(() => {
@@ -197,17 +204,21 @@ const AskPanel = (): JSX.Element => {
             // Clear non-error status messages
             return '';
         });
-        // Auto-focus the input field when CAPTCHA is completed
-        inputRef.current?.focus();
+        isTurnstileExecutingRef.current = false;
+        if (shouldAutoFocusAskInput('turnstile-verify')) {
+            inputRef.current?.focus();
+        }
     };
 
     const onTurnstileError = () => {
+        isTurnstileExecutingRef.current = false;
         setTurnstileError('CAPTCHA verification failed. Please try again.');
         setIsTurnstileReady(false);
         setTurnstileToken(null);
     };
 
     const onTurnstileExpire = () => {
+        isTurnstileExecutingRef.current = false;
         setTurnstileToken(null);
         setIsTurnstileReady(false);
         setTurnstileError('CAPTCHA expired. Please verify again.');
@@ -217,25 +228,41 @@ const AskPanel = (): JSX.Element => {
     // Guard execution to when widget is mounted and ready
     useEffect(() => {
         if (
-            !skipCaptcha &&
-            isTurnstileMounted &&
-            turnstileRef.current &&
-            !turnstileError
+            shouldExecuteTurnstileChallenge('mount', {
+                isCaptchaDisabled: skipCaptcha,
+                hasToken: Boolean(turnstileToken),
+                hasError: Boolean(turnstileError),
+                hasWidget: Boolean(turnstileRef.current),
+                isExecuting: isTurnstileExecutingRef.current,
+                isMounted: isTurnstileMounted,
+            })
         ) {
             // Execute challenge when widget is ready (after mount or reset)
             const timer = setTimeout(() => {
                 if (turnstileRef.current) {
+                    isTurnstileExecutingRef.current = true;
                     turnstileRef.current.execute();
                     // Optionally await token preparation (non-blocking)
-                    turnstileRef.current.getResponsePromise?.().catch(() => {
-                        // Silently handle promise rejection if widget isn't ready
-                    });
+                    turnstileRef.current
+                        .getResponsePromise?.()
+                        .catch(() => {
+                            // Silently handle promise rejection if widget isn't ready
+                        })
+                        .finally(() => {
+                            isTurnstileExecutingRef.current = false;
+                        });
                 }
             }, 100);
             return () => clearTimeout(timer);
         }
         return undefined;
-    }, [turnstileKey, skipCaptcha, turnstileError, isTurnstileMounted]);
+    }, [
+        turnstileKey,
+        skipCaptcha,
+        turnstileError,
+        isTurnstileMounted,
+        turnstileToken,
+    ]);
 
     // Auto-resize textarea based on content
     useEffect(() => {
@@ -303,8 +330,19 @@ const AskPanel = (): JSX.Element => {
 
         // Fallback: trigger execution if token isn't pre-fetched to avoid deadlock
         if (!skipCaptcha && !turnstileToken) {
-            if (turnstileRef.current) {
+            if (
+                shouldExecuteTurnstileChallenge('submit', {
+                    isCaptchaDisabled: skipCaptcha,
+                    hasToken: Boolean(turnstileToken),
+                    hasError: Boolean(turnstileError),
+                    hasWidget: Boolean(turnstileRef.current),
+                    isExecuting: isTurnstileExecutingRef.current,
+                    isMounted: isTurnstileMounted,
+                }) &&
+                turnstileRef.current
+            ) {
                 // Execute challenge and wait for token
+                isTurnstileExecutingRef.current = true;
                 turnstileRef.current.execute();
                 try {
                     // Wait for token with timeout
@@ -319,6 +357,8 @@ const AskPanel = (): JSX.Element => {
                     });
                 } catch {
                     // Continue - validation will handle empty token
+                } finally {
+                    isTurnstileExecutingRef.current = false;
                 }
             }
             // Re-check token after execution attempt
@@ -392,6 +432,7 @@ const AskPanel = (): JSX.Element => {
 
             // Reset Turnstile for next question by forcing re-render
             // The useEffect hook will automatically re-execute after turnstileKey increments
+            isTurnstileExecutingRef.current = false;
             setTurnstileToken(null);
             setIsTurnstileReady(false);
             setIsTurnstileMounted(false); // Reset mount state to trigger re-mount
@@ -410,6 +451,7 @@ const AskPanel = (): JSX.Element => {
 
                     setIsLoading(false);
                     setStatus(errorMessage);
+                    isTurnstileExecutingRef.current = false;
                     setTurnstileToken(null);
                     setIsTurnstileReady(false);
                     setTurnstileError(null); // Clear any widget errors, we're showing API error in status instead
@@ -432,6 +474,7 @@ const AskPanel = (): JSX.Element => {
                     setStatus(
                         'CAPTCHA service is unavailable. Please try again shortly.'
                     );
+                    isTurnstileExecutingRef.current = false;
                     setTurnstileToken(null);
                     setIsTurnstileReady(false);
                     setTurnstileError(null);
@@ -457,6 +500,7 @@ const AskPanel = (): JSX.Element => {
                     setStatus(
                         'CAPTCHA verification failed. Please refresh and try again.'
                     );
+                    isTurnstileExecutingRef.current = false;
                     setTurnstileToken(null);
                     setIsTurnstileReady(false);
                     setTurnstileError(null);
@@ -471,8 +515,9 @@ const AskPanel = (): JSX.Element => {
             setIsTypingComplete(false);
         } finally {
             setIsLoading(false);
-            inputRef.current?.focus();
-            inputRef.current?.select();
+            if (shouldAutoFocusAskInput('submit-cleanup')) {
+                inputRef.current?.focus();
+            }
         }
     };
 

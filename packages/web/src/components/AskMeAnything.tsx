@@ -13,6 +13,10 @@ import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import examplePrompts from '../data/examplePrompts.json';
 import { loadRuntimeConfig } from '../utils/runtimeConfig';
 import { api, isApiClientError } from '../utils/api';
+import {
+    shouldAutoFocusAskInput,
+    shouldExecuteTurnstileChallenge,
+} from '../utils/turnstile';
 
 // Module augmentation for Vite environment variables
 declare global {
@@ -46,6 +50,7 @@ const AskMeAnything = (): JSX.Element => {
     const abortRef = useRef<AbortController | null>(null);
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
     const turnstileRef = useRef<TurnstileInstance | null>(null);
+    const isTurnstileExecutingRef = useRef(false);
     const hasInteractedRef = useRef(false); // Track if user has interacted to prevent initial status flash
 
     // Random prompt selection
@@ -81,7 +86,9 @@ const AskMeAnything = (): JSX.Element => {
                 return prev + '. ' + currentPrompt;
             }
         });
-        inputRef.current?.focus();
+        if (shouldAutoFocusAskInput('prompt-button')) {
+            inputRef.current?.focus();
+        }
     };
 
     useEffect(() => {
@@ -185,17 +192,21 @@ const AskMeAnything = (): JSX.Element => {
             // Clear non-error status messages
             return '';
         });
-        // Auto-focus the input field when CAPTCHA is completed
-        inputRef.current?.focus();
+        isTurnstileExecutingRef.current = false;
+        if (shouldAutoFocusAskInput('turnstile-verify')) {
+            inputRef.current?.focus();
+        }
     };
 
     const onTurnstileError = () => {
+        isTurnstileExecutingRef.current = false;
         setTurnstileError('CAPTCHA verification failed. Please try again.');
         setIsTurnstileReady(false);
         setTurnstileToken(null);
     };
 
     const onTurnstileExpire = () => {
+        isTurnstileExecutingRef.current = false;
         setTurnstileToken(null);
         setIsTurnstileReady(false);
         setTurnstileError('CAPTCHA expired. Please verify again.');
@@ -205,14 +216,29 @@ const AskMeAnything = (): JSX.Element => {
     // Guard execution to when widget is mounted and ready
     // Fallback: if onLoad doesn't fire (can happen with test keys + invisible mode), try executing after delay
     useEffect(() => {
-        if (!isCaptchaDisabled && turnstileRef.current && !turnstileError) {
+        if (
+            !isCaptchaDisabled &&
+            turnstileRef.current &&
+            !turnstileError &&
+            !turnstileToken
+        ) {
             // If widget is mounted, execute immediately
-            if (isTurnstileMounted) {
+            if (
+                shouldExecuteTurnstileChallenge('mount', {
+                    isCaptchaDisabled,
+                    hasToken: Boolean(turnstileToken),
+                    hasError: Boolean(turnstileError),
+                    hasWidget: Boolean(turnstileRef.current),
+                    isExecuting: isTurnstileExecutingRef.current,
+                    isMounted: isTurnstileMounted,
+                })
+            ) {
                 const timer = setTimeout(() => {
                     if (turnstileRef.current) {
                         console.log(
                             '[Turnstile] Executing invisible widget (mounted)...'
                         );
+                        isTurnstileExecutingRef.current = true;
                         turnstileRef.current.execute();
                         turnstileRef.current
                             .getResponsePromise?.()
@@ -229,27 +255,45 @@ const AskMeAnything = (): JSX.Element => {
                                     '[Turnstile] Promise rejection:',
                                     err
                                 );
+                            })
+                            .finally(() => {
+                                isTurnstileExecutingRef.current = false;
                             });
                     }
                 }, 100);
                 return () => clearTimeout(timer);
-            } else {
+            } else if (
+                shouldExecuteTurnstileChallenge('fallback', {
+                    isCaptchaDisabled,
+                    hasToken: Boolean(turnstileToken),
+                    hasError: Boolean(turnstileError),
+                    hasWidget: Boolean(turnstileRef.current),
+                    isExecuting: isTurnstileExecutingRef.current,
+                    isMounted: isTurnstileMounted,
+                })
+            ) {
                 // Fallback: if onLoad doesn't fire, try executing after 2 seconds anyway
                 // This handles cases where onLoad callback doesn't fire (test keys + invisible mode)
                 const fallbackTimer = setTimeout(() => {
                     if (
                         turnstileRef.current &&
-                        !isTurnstileMounted &&
-                        !turnstileError
+                        shouldExecuteTurnstileChallenge('fallback', {
+                            isCaptchaDisabled,
+                            hasToken: Boolean(turnstileToken),
+                            hasError: Boolean(turnstileError),
+                            hasWidget: Boolean(turnstileRef.current),
+                            isExecuting: isTurnstileExecutingRef.current,
+                            isMounted: isTurnstileMounted,
+                        })
                     ) {
                         console.log(
                             "[Turnstile] Fallback: Executing widget even though onLoad hasn't fired"
                         );
                         try {
+                            isTurnstileExecutingRef.current = true;
                             turnstileRef.current.execute();
-                            // Mark as mounted after successful execution attempt
-                            setIsTurnstileMounted(true);
                         } catch (err) {
+                            isTurnstileExecutingRef.current = false;
                             console.error(
                                 '[Turnstile] Fallback execution failed:',
                                 err
@@ -267,6 +311,7 @@ const AskMeAnything = (): JSX.Element => {
         hasValidSiteKey,
         turnstileError,
         isTurnstileMounted,
+        turnstileToken,
     ]);
 
     // Auto-resize textarea based on content
@@ -336,8 +381,19 @@ const AskMeAnything = (): JSX.Element => {
         // Fallback: trigger execution if token isn't pre-fetched to avoid deadlock
         let resolvedToken = turnstileToken;
         if (!isCaptchaDisabled && !resolvedToken) {
-            if (turnstileRef.current) {
+            if (
+                shouldExecuteTurnstileChallenge('submit', {
+                    isCaptchaDisabled,
+                    hasToken: Boolean(resolvedToken),
+                    hasError: Boolean(turnstileError),
+                    hasWidget: Boolean(turnstileRef.current),
+                    isExecuting: isTurnstileExecutingRef.current,
+                    isMounted: isTurnstileMounted,
+                }) &&
+                turnstileRef.current
+            ) {
                 // Execute challenge and wait for token
+                isTurnstileExecutingRef.current = true;
                 turnstileRef.current.execute();
                 try {
                     // Wait for token with timeout and capture the resolved token
@@ -356,6 +412,8 @@ const AskMeAnything = (): JSX.Element => {
                     }
                 } catch {
                     // Continue - validation will handle empty token
+                } finally {
+                    isTurnstileExecutingRef.current = false;
                 }
             }
             // Re-check token after execution attempt
@@ -438,6 +496,7 @@ const AskMeAnything = (): JSX.Element => {
 
             // Reset Turnstile for next question by forcing re-render
             // The useEffect hook will automatically re-execute after turnstileKey increments
+            isTurnstileExecutingRef.current = false;
             setTurnstileToken(null);
             setIsTurnstileReady(false);
             setIsTurnstileMounted(false); // Reset mount state to trigger re-mount
@@ -456,6 +515,7 @@ const AskMeAnything = (): JSX.Element => {
 
                     setIsLoading(false);
                     setStatus(errorMessage);
+                    isTurnstileExecutingRef.current = false;
                     setTurnstileToken(null);
                     setIsTurnstileReady(false);
                     setTurnstileError(null); // Clear any widget errors, we're showing API error in status instead
@@ -478,6 +538,7 @@ const AskMeAnything = (): JSX.Element => {
                     setStatus(
                         'CAPTCHA service is unavailable. Please try again shortly.'
                     );
+                    isTurnstileExecutingRef.current = false;
                     setTurnstileToken(null);
                     setIsTurnstileReady(false);
                     setTurnstileError(null);
@@ -503,6 +564,7 @@ const AskMeAnything = (): JSX.Element => {
                     setStatus(
                         'CAPTCHA verification failed. Please refresh and try again.'
                     );
+                    isTurnstileExecutingRef.current = false;
                     setTurnstileToken(null);
                     setIsTurnstileReady(false);
                     setTurnstileError(null);
@@ -519,8 +581,9 @@ const AskMeAnything = (): JSX.Element => {
         } finally {
             clearTimeout(timeoutId); // Ensure timeout is cleared in all cases
             setIsLoading(false);
-            inputRef.current?.focus();
-            inputRef.current?.select();
+            if (shouldAutoFocusAskInput('submit-cleanup')) {
+                inputRef.current?.focus();
+            }
         }
     };
 

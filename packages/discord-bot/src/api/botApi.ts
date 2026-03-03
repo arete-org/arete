@@ -15,6 +15,7 @@ import {
 export const botApi = createDiscordApiClient({
     baseUrl: config.backendBaseUrl,
     traceApiToken: config.traceApiToken,
+    defaultTimeoutMs: config.api.backendRequestTimeoutMs,
 });
 
 export { isDiscordApiClientError };
