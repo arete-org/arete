@@ -24,7 +24,7 @@ info:
         url: docs/LICENSE_STRATEGY.md
     description: |
         Backend wire contract and integration boundary for other packages.
-        Reflection is the trimmed-down, web-facing slice of the AI chat system for embeddable UIs.
+        Reflection is the shared backend action-routing boundary for web and Discord surfaces.
         Non-2xx responses use ErrorResponse unless an operation states otherwise.
         info.version is manually maintained (see docs/api/README.md).
 
@@ -75,8 +75,9 @@ paths:
                 - packages/contracts/src/web/types.ts#PostReflectResponse
             summary: Generate a reflective response
             description: |
-                Generate a reflective response from a question in the JSON body.
-                Turnstile required when enabled; rate limited per IP/session; send X-Session-Id / X-Turnstile-Token headers.
+                Submit a transport-neutral reflect request and receive the backend-selected action.
+                Public web callers use Turnstile when enabled; trusted internal callers may authenticate with service headers.
+                Send X-Session-Id / X-Turnstile-Token headers when needed for browser traffic.
             tags:
                 - Chat
             parameters:
@@ -344,24 +345,241 @@ components:
         ReflectRequest:
             type: object
             properties:
-                question:
+                surface:
                     type: string
+                    enum: [web, discord]
+                trigger:
+                    type: object
+                    properties:
+                        kind:
+                            type: string
+                            enum: [submit, direct, invoked, catchup]
+                        messageId:
+                            type: string
+                            minLength: 1
+                    required:
+                        - kind
+                    additionalProperties: false
+                latestUserInput:
+                    type: string
+                    minLength: 0
                     maxLength: 3072
+                    description: May be an empty string for passive catchup requests; reflectPlanner will typically default these to ignore.
+                conversation:
+                    type: array
+                    minItems: 1
+                    maxItems: 64
+                    items:
+                        $ref: '#/components/schemas/ReflectConversationMessage'
+                attachments:
+                    type: array
+                    maxItems: 8
+                    items:
+                        $ref: '#/components/schemas/ReflectAttachment'
+                capabilities:
+                    $ref: '#/components/schemas/ReflectCapabilities'
+                sessionId:
+                    type: string
+                    minLength: 1
+                    maxLength: 128
+                surfaceContext:
+                    type: object
+                    properties:
+                        channelId:
+                            type: string
+                            minLength: 1
+                        guildId:
+                            type: string
+                            minLength: 1
+                        userId:
+                            type: string
+                            minLength: 1
+                        requestHost:
+                            type: string
+                            minLength: 1
+                    additionalProperties: false
             required:
-                - question
-            additionalProperties: true
+                - surface
+                - trigger
+                - latestUserInput
+                - conversation
+            additionalProperties: false
 
         ReflectResponse:
+            discriminator:
+                propertyName: action
+                mapping:
+                    message: '#/components/schemas/ReflectMessageAction'
+                    react: '#/components/schemas/ReflectReactAction'
+                    ignore: '#/components/schemas/ReflectIgnoreAction'
+                    image: '#/components/schemas/ReflectImageAction'
+            oneOf:
+                - $ref: '#/components/schemas/ReflectMessageAction'
+                - $ref: '#/components/schemas/ReflectReactAction'
+                - $ref: '#/components/schemas/ReflectIgnoreAction'
+                - $ref: '#/components/schemas/ReflectImageAction'
+
+        ReflectConversationMessage:
             type: object
             properties:
+                role:
+                    type: string
+                    enum: [system, user, assistant]
+                content:
+                    type: string
+                    minLength: 1
+                authorName:
+                    type: string
+                    minLength: 1
+                authorId:
+                    type: string
+                    minLength: 1
+                messageId:
+                    type: string
+                    minLength: 1
+                createdAt:
+                    type: string
+                    minLength: 1
+                    format: date-time
+            required:
+                - role
+                - content
+            additionalProperties: false
+
+        ReflectAttachment:
+            type: object
+            properties:
+                kind:
+                    type: string
+                    enum: [image]
+                url:
+                    type: string
+                    minLength: 1
+                    format: uri
+                    pattern: ^https?://
+                contentType:
+                    type: string
+                    minLength: 1
+            required:
+                - kind
+                - url
+            additionalProperties: false
+
+        ReflectCapabilities:
+            type: object
+            properties:
+                canReact:
+                    type: boolean
+                canGenerateImages:
+                    type: boolean
+                canUseTts:
+                    type: boolean
+            required:
+                - canReact
+                - canGenerateImages
+                - canUseTts
+            additionalProperties: false
+
+        ReflectImageRequest:
+            type: object
+            properties:
+                prompt:
+                    type: string
+                    minLength: 1
+                aspectRatio:
+                    type: string
+                    enum: [auto, square, portrait, landscape]
+                background:
+                    type: string
+                    minLength: 1
+                quality:
+                    type: string
+                    enum: [low, medium, high, auto]
+                style:
+                    type: string
+                    minLength: 1
+                allowPromptAdjustment:
+                    type: boolean
+                followUpResponseId:
+                    type: string
+                    minLength: 1
+                outputFormat:
+                    type: string
+                    enum: [png, webp, jpeg]
+                outputCompression:
+                    type: integer
+                    minimum: 1
+                    maximum: 100
+            required:
+                - prompt
+            additionalProperties: false
+
+        ReflectMessageAction:
+            type: object
+            properties:
+                action:
+                    type: string
+                    enum: [message]
                 message:
                     type: string
+                    minLength: 1
+                modality:
+                    type: string
+                    enum: [text, tts]
                 metadata:
                     $ref: '#/components/schemas/ResponseMetadata'
             required:
+                - action
                 - message
+                - modality
                 - metadata
-            additionalProperties: false
+            additionalProperties: true
+
+        ReflectReactAction:
+            type: object
+            properties:
+                action:
+                    type: string
+                    enum: [react]
+                reaction:
+                    type: string
+                    minLength: 1
+                metadata:
+                    type: 'null'
+            required:
+                - action
+                - reaction
+                - metadata
+            additionalProperties: true
+
+        ReflectIgnoreAction:
+            type: object
+            properties:
+                action:
+                    type: string
+                    enum: [ignore]
+                metadata:
+                    type: 'null'
+            required:
+                - action
+                - metadata
+            additionalProperties: true
+
+        ReflectImageAction:
+            type: object
+            properties:
+                action:
+                    type: string
+                    enum: [image]
+                imageRequest:
+                    $ref: '#/components/schemas/ReflectImageRequest'
+                metadata:
+                    type: 'null'
+            required:
+                - action
+                - imageRequest
+                - metadata
+            additionalProperties: true
 
         # Traces + provenance.
         # Trace metadata payloads.

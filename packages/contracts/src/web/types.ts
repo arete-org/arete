@@ -34,18 +34,133 @@ export type NormalizedApiError = {
  * @api.operationId: postReflect
  * @api.path: POST /api/reflect
  */
-export type PostReflectRequest = {
-    question: string;
+export type ReflectSurface = 'web' | 'discord';
+
+/**
+ * @api.operationId: postReflect
+ * @api.path: POST /api/reflect
+ */
+export type ReflectTriggerKind = 'submit' | 'direct' | 'invoked' | 'catchup';
+
+/**
+ * Transport-neutral conversation entry sent to the backend reflect workflow.
+ */
+export type ReflectConversationMessage = {
+    role: 'system' | 'user' | 'assistant';
+    content: string;
+    authorName?: string;
+    authorId?: string;
+    messageId?: string;
+    createdAt?: string;
+};
+
+/**
+ * Attachments provide lightweight modality hints without coupling the contract
+ * to one surface's event model.
+ */
+export type ReflectAttachment = {
+    kind: 'image';
+    url: string;
+    contentType?: string;
+};
+
+/**
+ * Surface capabilities tell the backend which action types are actually usable
+ * for this caller.
+ */
+export type ReflectCapabilities = {
+    canReact: boolean;
+    canGenerateImages: boolean;
+    canUseTts: boolean;
+};
+
+/**
+ * Shared image-generation instructions returned by reflect planning.
+ */
+export type ReflectImageRequest = {
+    prompt: string;
+    aspectRatio?: 'auto' | 'square' | 'portrait' | 'landscape';
+    background?: string;
+    quality?: 'low' | 'medium' | 'high' | 'auto';
+    style?: string;
+    allowPromptAdjustment?: boolean;
+    followUpResponseId?: string;
+    outputFormat?: 'png' | 'webp' | 'jpeg';
+    outputCompression?: number;
 };
 
 /**
  * @api.operationId: postReflect
  * @api.path: POST /api/reflect
  */
-export type PostReflectResponse = {
+export type PostReflectRequest = {
+    surface: ReflectSurface;
+    trigger: {
+        kind: ReflectTriggerKind;
+        messageId?: string;
+    };
+    latestUserInput: string;
+    conversation: ReflectConversationMessage[];
+    attachments?: ReflectAttachment[];
+    capabilities?: ReflectCapabilities;
+    sessionId?: string;
+    surfaceContext?: {
+        channelId?: string;
+        guildId?: string;
+        userId?: string;
+        requestHost?: string;
+    };
+};
+
+/**
+ * @api.operationId: postReflect
+ * @api.path: POST /api/reflect
+ */
+export type ReflectMessageActionResponse = {
+    action: 'message';
     message: string;
+    modality: 'text' | 'tts';
     metadata: ResponseMetadata;
 };
+
+/**
+ * @api.operationId: postReflect
+ * @api.path: POST /api/reflect
+ */
+export type ReflectReactActionResponse = {
+    action: 'react';
+    reaction: string;
+    metadata: null;
+};
+
+/**
+ * @api.operationId: postReflect
+ * @api.path: POST /api/reflect
+ */
+export type ReflectIgnoreActionResponse = {
+    action: 'ignore';
+    metadata: null;
+};
+
+/**
+ * @api.operationId: postReflect
+ * @api.path: POST /api/reflect
+ */
+export type ReflectImageActionResponse = {
+    action: 'image';
+    imageRequest: ReflectImageRequest;
+    metadata: null;
+};
+
+/**
+ * @api.operationId: postReflect
+ * @api.path: POST /api/reflect
+ */
+export type PostReflectResponse =
+    | ReflectMessageActionResponse
+    | ReflectReactActionResponse
+    | ReflectIgnoreActionResponse
+    | ReflectImageActionResponse;
 
 /**
  * @api.operationId: postTraces

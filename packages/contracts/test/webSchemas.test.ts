@@ -40,14 +40,31 @@ const baseMetadata = {
 
 test('PostReflectRequestSchema enforces strict request payload rules', () => {
     assert.equal(
-        PostReflectRequestSchema.safeParse({ question: 'What is Footnote?' })
-            .success,
+        PostReflectRequestSchema.safeParse({
+            surface: 'web',
+            trigger: { kind: 'submit' },
+            latestUserInput: 'What is Footnote?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'What is Footnote?',
+                },
+            ],
+        }).success,
         true
     );
 
     assert.equal(
         PostReflectRequestSchema.safeParse({
-            question: 'What is Footnote?',
+            surface: 'web',
+            trigger: { kind: 'submit' },
+            latestUserInput: 'What is Footnote?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'What is Footnote?',
+                },
+            ],
             extra: true,
         }).success,
         false
@@ -55,7 +72,15 @@ test('PostReflectRequestSchema enforces strict request payload rules', () => {
 
     assert.equal(
         PostReflectRequestSchema.safeParse({
-            question: 'x'.repeat(3073),
+            surface: 'web',
+            trigger: { kind: 'submit' },
+            latestUserInput: 'x'.repeat(3073),
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'What is Footnote?',
+                },
+            ],
         }).success,
         false
     );
@@ -81,7 +106,9 @@ test('PostTracesRequestSchema rejects unknown request keys', () => {
 
 test('PostReflectResponseSchema and GetTraceStaleResponseSchema accept extensible responses', () => {
     const reflectParsed = PostReflectResponseSchema.safeParse({
+        action: 'message',
         message: 'Hello',
+        modality: 'text',
         metadata: {
             ...baseMetadata,
             additionalMetadata: true,
@@ -89,6 +116,17 @@ test('PostReflectResponseSchema and GetTraceStaleResponseSchema accept extensibl
         extraTopLevel: 'new-field',
     });
     assert.equal(reflectParsed.success, true);
+
+    const imageParsed = PostReflectResponseSchema.safeParse({
+        action: 'image',
+        imageRequest: {
+            prompt: 'a thoughtful robot reading under a tree',
+            allowPromptAdjustment: false,
+        },
+        metadata: null,
+        extraTopLevel: 'future-field',
+    });
+    assert.equal(imageParsed.success, true);
 
     const staleParsed = GetTraceStaleResponseSchema.safeParse({
         message: 'Trace is stale',

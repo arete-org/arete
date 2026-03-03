@@ -61,6 +61,9 @@ export const createWebApiClient = ({
         if (options?.turnstileToken) {
             headers['x-turnstile-token'] = options.turnstileToken;
         }
+        if (request.sessionId) {
+            headers['x-session-id'] = request.sessionId;
+        }
 
         const response = await requestJson<PostReflectResponse>(
             '/api/reflect',

@@ -15,7 +15,7 @@ import type {
     ResponseMetadataRuntimeContext,
 } from '../services/openaiService.js';
 import { runtimeConfig } from '../config.js';
-import { createReflectService } from '../services/reflectService.js';
+import { createReflectOrchestrator } from '../services/reflectOrchestrator.js';
 import { logger } from '../utils/logger.js';
 import {
     type ReflectAuthContext,
@@ -135,8 +135,8 @@ const createReflectHandler = ({
     buildResponseMetadata,
     maxReflectBodyBytes,
 }: ReflectHandlerDeps) => {
-    const reflectService = openaiService
-        ? createReflectService({
+    const reflectOrchestrator = openaiService
+        ? createReflectOrchestrator({
               openaiService,
               storeTrace,
               buildResponseMetadata,
@@ -280,7 +280,7 @@ const createReflectHandler = ({
 
             logSuccessfulAuthStep(req, res, logRequest, authResult.data);
 
-            if (!reflectService) {
+            if (!reflectOrchestrator) {
                 sendJson(res, 503, {
                     error: 'Service temporarily unavailable. Please try again later.',
                 });
@@ -289,14 +289,14 @@ const createReflectHandler = ({
             }
 
             // From here on, the request is fully normalized and can delegate to the shared workflow.
-            const reflectResponse = await reflectService.runReflect({
-                question: parsedRequestResult.data.question,
-            });
+            const reflectResponse = await reflectOrchestrator.runReflect(
+                parsedRequestResult.data
+            );
             sendJson(res, 200, reflectResponse);
             logRequest(
                 req,
                 res,
-                `reflect success questionLength=${parsedRequestResult.data.question.length}`
+                `reflect success surface=${parsedRequestResult.data.surface} latestUserInputLength=${parsedRequestResult.data.latestUserInput.length}`
             );
         } catch (openaiError) {
             const errorMessage =

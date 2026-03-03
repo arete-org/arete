@@ -12,17 +12,24 @@ import {
     type CreateApiTransportOptions,
 } from './client.js';
 import {
+    createReflectApi,
+    type CreateReflectApiOptions,
+    type ReflectApi,
+} from './reflect.js';
+import {
     createTraceApi,
     type CreateTraceApiOptions,
     type TraceApi,
 } from './traces.js';
 
 export type CreateDiscordApiClientOptions = CreateApiTransportOptions &
-    CreateTraceApiOptions;
+    CreateTraceApiOptions &
+    CreateReflectApiOptions;
 
 export type DiscordApiClient = {
     requestJson: ApiRequester;
-} & TraceApi;
+} & TraceApi &
+    ReflectApi;
 
 export const createDiscordApiClient = ({
     baseUrl,
@@ -40,6 +47,7 @@ export const createDiscordApiClient = ({
 
     return {
         requestJson,
+        ...createReflectApi(requestJson, { traceApiToken }),
         ...createTraceApi(requestJson, { traceApiToken }),
     };
 };
@@ -51,6 +59,10 @@ export type {
     DiscordApiClientError,
 } from './client.js';
 export { isDiscordApiClientError } from './client.js';
+export type {
+    DiscordReflectApiResponse,
+    UnknownReflectActionResponse,
+} from './reflect.js';
 export type {
     PostTracesRequest,
     PostTracesResponse,

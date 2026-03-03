@@ -26,11 +26,14 @@ For routes with runtime validation, the current pattern is:
 
 ## Reflection Endpoint
 
-Reflection is the trimmed-down, web-facing slice of the full AI chat system, designed for
-embeddable UI flows. It returns a concise response plus provenance metadata, and is protected by
-Turnstile + configured rate limits. When needed, send `X-Session-Id` and `X-Turnstile-Token`
-headers. `X-Session-Id` is a client-generated session identifier that scopes rate limits; if you
-omit it, the server falls back to IP-based limits.
+Reflection is the shared backend action-routing endpoint for web and Discord surfaces.
+It accepts a transport-neutral conversation payload and returns an action union
+(`message`, `react`, `ignore`, or `image`). Web callers are constrained to
+`message` responses, while trusted internal callers can receive the broader action set.
 
-This endpoint is served at `POST /api/reflect` with a JSON body and is separate from the Discord
-bot pipeline, which uses its own context building and OpenAI orchestration.
+Public browser traffic is protected by Turnstile + configured rate limits. When needed,
+send `X-Session-Id` and `X-Turnstile-Token` headers. `X-Session-Id` is a client-generated
+session identifier that scopes rate limits; if you omit it, the server falls back to IP-based limits.
+
+This endpoint is served at `POST /api/reflect` and is now the canonical backend decision point
+for reflect behavior across packages.
