@@ -12,6 +12,7 @@ import type {
 } from '@footnote/contracts/ethics-core';
 import type { PostReflectResponse } from '@footnote/contracts/web';
 import type {
+    GenerateResponseOptions,
     OpenAIService,
     OpenAIResponseMetadata,
     ResponseMetadataRuntimeContext,
@@ -21,6 +22,8 @@ import {
     recordBackendLLMUsage,
     type BackendLLMCostRecord,
 } from './llmCostRecorder.js';
+import { buildRepoExplainerResponseHint } from './reflectGenerationHints.js';
+import type { ReflectGenerationPlan } from './reflectGenerationTypes.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -53,6 +56,7 @@ export type RunReflectMessagesInput = {
     conversationSnapshot: string;
     riskTier?: RiskTier;
     model?: string;
+    generation?: ReflectGenerationPlan;
 };
 
 // The reflect prompt stays in backend so every caller gets the same behavior and metadata rules.
@@ -93,14 +97,37 @@ export const createReflectService = ({
         conversationSnapshot,
         riskTier = 'Low',
         model,
+        generation,
     }: RunReflectMessagesInput): Promise<{
         message: string;
         metadata: ResponseMetadata;
     }> => {
+        const repoExplainerHint = generation
+            ? buildRepoExplainerResponseHint(generation)
+            : null;
+        const messagesWithHints = repoExplainerHint
+            ? [
+                  ...messages,
+                  {
+                      role: 'system',
+                      content: repoExplainerHint,
+                  },
+              ]
+            : messages;
+        const generationOptions: GenerateResponseOptions = generation
+            ? {
+                  reasoningEffort: generation.reasoningEffort,
+                  verbosity: generation.verbosity,
+                  toolChoice: generation.toolChoice,
+                  webSearch: generation.webSearch,
+              }
+            : {};
+
         // The OpenAI wrapper already handles provider-specific request/retry details.
         const aiResponse = await openaiService.generateResponse(
             model ?? defaultModel,
-            messages
+            messagesWithHints,
+            generationOptions
         );
 
         const { normalizedText, metadata: assistantMetadata } = aiResponse;
@@ -206,3 +233,5 @@ export const createReflectService = ({
         runReflectMessages,
     };
 };
+
+export { REFLECT_SYSTEM_PROMPT };

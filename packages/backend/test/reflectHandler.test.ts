@@ -99,7 +99,7 @@ const createTestServer = (
                 if (options?.expectMetadata === false) {
                     return {
                         normalizedText:
-                            '{"action":"message","modality":"text","riskTier":"Low","reasoning":"The request expects a reply."}',
+                            '{"action":"message","modality":"text","riskTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","toolChoice":"none"}}',
                         metadata: {
                             model: 'gpt-5-mini',
                         },

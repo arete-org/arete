@@ -24,7 +24,6 @@ import { logger } from './logger.js';
 import { ResponseHandler } from './response/ResponseHandler.js';
 import { RateLimiter } from './RateLimiter.js';
 import { config } from './env.js';
-import type { Plan } from './prompting/Planner.js';
 import { ContextBuilder } from './prompting/ContextBuilder.js';
 import {
     DEFAULT_IMAGE_MODEL,
@@ -82,31 +81,6 @@ type ReflectImageAction = {
     action: 'image';
     imageRequest: ReflectImageRequest;
 };
-
-export function buildRepoExplainerResponseHint(
-    plan: Pick<Plan, 'action' | 'openaiOptions'>
-): string | null {
-    if (plan.action !== 'message') {
-        return null;
-    }
-
-    const toolChoice = plan.openaiOptions?.tool_choice;
-    const isWebSearch =
-        typeof toolChoice === 'object' && toolChoice?.type === 'web_search';
-
-    if (
-        !isWebSearch ||
-        plan.openaiOptions?.webSearch?.searchIntent !== 'repo_explainer'
-    ) {
-        return null;
-    }
-
-    return [
-        'Planner note: this is a Footnote repo-explanation lookup.',
-        'Prefer DeepWiki-backed explanation when available.',
-        'Use broader web context if the wiki is thin.',
-    ].join(' ');
-}
 
 const RESPONSE_CONTEXT_SIZE = 24;
 const VALID_IMAGE_BACKGROUNDS: ImageBackgroundType[] = [

@@ -154,3 +154,116 @@ test('createReflectService swallows usage recording failures', async () => {
     assert.equal(response.message, 'reflect response');
     assert.equal(response.metadata.responseId, 'reflect_test_response');
 });
+
+test('runReflectMessages adds a backend repo-explainer response hint', async () => {
+    let seenMessages: Array<{ role: string; content: string }> = [];
+    const openaiService: OpenAIService = {
+        async generateResponse(_model, messages) {
+            seenMessages = messages;
+            return {
+                normalizedText: 'reflect response',
+                metadata: {
+                    model: 'gpt-5-mini',
+                    usage: {
+                        prompt_tokens: 20,
+                        completion_tokens: 10,
+                        total_tokens: 30,
+                    },
+                    confidence: 0.5,
+                    provenance: 'Retrieved',
+                    tradeoffCount: 0,
+                    citations: [],
+                },
+            };
+        },
+    };
+
+    const reflectService = createReflectService({
+        openaiService,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    await reflectService.runReflectMessages({
+        messages: [{ role: 'user', content: 'Explain Footnote architecture.' }],
+        conversationSnapshot: 'Explain Footnote architecture.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'medium',
+            toolChoice: 'web_search',
+            webSearch: {
+                query: 'Footnote architecture overview',
+                searchContextSize: 'medium',
+                searchIntent: 'repo_explainer',
+                repoHints: ['architecture'],
+            },
+        },
+    });
+
+    assert.equal(
+        seenMessages.some((message) =>
+            message.content.includes(
+                'Planner note: this is a Footnote repo-explanation lookup.'
+            )
+        ),
+        true
+    );
+});
+
+test('runReflectMessages forwards planner-selected web search options to openaiService', async () => {
+    let seenOptions:
+        | import('../src/services/openaiService.js').GenerateResponseOptions
+        | undefined;
+    const openaiService: OpenAIService = {
+        async generateResponse(_model, _messages, options) {
+            seenOptions = options;
+            return {
+                normalizedText: 'reflect response',
+                metadata: {
+                    model: 'gpt-5-mini',
+                    usage: {
+                        prompt_tokens: 20,
+                        completion_tokens: 10,
+                        total_tokens: 30,
+                    },
+                    confidence: 0.5,
+                    provenance: 'Retrieved',
+                    tradeoffCount: 0,
+                    citations: [],
+                },
+            };
+        },
+    };
+
+    const reflectService = createReflectService({
+        openaiService,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    await reflectService.runReflectMessages({
+        messages: [{ role: 'user', content: 'What changed today?' }],
+        conversationSnapshot: 'What changed today?',
+        generation: {
+            reasoningEffort: 'medium',
+            verbosity: 'medium',
+            toolChoice: 'web_search',
+            webSearch: {
+                query: 'latest OpenAI policy update',
+                searchContextSize: 'low',
+                searchIntent: 'current_facts',
+                repoHints: [],
+            },
+        },
+    });
+
+    assert.equal(seenOptions?.toolChoice, 'web_search');
+    assert.equal(seenOptions?.reasoningEffort, 'medium');
+    assert.equal(seenOptions?.verbosity, 'medium');
+    assert.equal(seenOptions?.webSearch?.query, 'latest OpenAI policy update');
+    assert.equal(seenOptions?.webSearch?.searchIntent, 'current_facts');
+});

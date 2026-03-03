@@ -12,14 +12,19 @@ import type {
 import { renderPrompt } from './prompts/promptRegistry.js';
 import {
     createReflectService,
+    REFLECT_SYSTEM_PROMPT,
     type CreateReflectServiceOptions,
 } from './reflectService.js';
 import { createReflectPlanner, type ReflectPlan } from './reflectPlanner.js';
 import { runtimeConfig } from '../config.js';
+import { logger } from '../utils/logger.js';
 
 type CreateReflectOrchestratorOptions = CreateReflectServiceOptions;
 
-const buildPlannerPayload = (plan: ReflectPlan): string =>
+const buildPlannerPayload = (
+    plan: ReflectPlan,
+    surfacePolicy?: { coercedFrom: ReflectPlan['action'] }
+): string =>
     JSON.stringify({
         action: plan.action,
         modality: plan.modality,
@@ -27,7 +32,47 @@ const buildPlannerPayload = (plan: ReflectPlan): string =>
         imageRequest: plan.imageRequest,
         riskTier: plan.riskTier,
         reasoning: plan.reasoning,
+        generation: plan.generation,
+        ...(surfacePolicy && { surfacePolicy }),
     });
+
+const coercePlanForSurface = (
+    request: PostReflectRequest,
+    plan: ReflectPlan
+): {
+    plan: ReflectPlan;
+    surfacePolicy?: { coercedFrom: ReflectPlan['action'] };
+} => {
+    if (request.surface !== 'web') {
+        return { plan };
+    }
+
+    if (plan.action === 'message') {
+        return { plan };
+    }
+
+    const coercedPlan: ReflectPlan = {
+        ...plan,
+        action: 'message',
+        modality: 'text',
+        reasoning:
+            `${plan.reasoning} Web surface requires a message response, so the planner was coerced to message.`.trim(),
+    };
+
+    logger.debug(
+        `Reflect surface policy coerced action ${plan.action} -> message for web request.`
+    );
+
+    return {
+        plan: coercedPlan,
+        surfacePolicy: { coercedFrom: plan.action },
+    };
+};
+
+const buildSurfaceSystemPrompt = (surface: PostReflectRequest['surface']): string =>
+    surface === 'discord'
+        ? renderPrompt('discord.chat.system').content
+        : REFLECT_SYSTEM_PROMPT;
 
 /**
  * The orchestrator keeps surface-specific policy in one place while reusing the
@@ -55,13 +100,9 @@ export const createReflectOrchestrator = ({
     const runReflect = async (
         request: PostReflectRequest
     ): Promise<PostReflectResponse> => {
-        if (request.surface === 'web') {
-            return reflectService.runReflect({
-                question: request.latestUserInput,
-            });
-        }
+        const planned = await reflectPlanner.planReflect(request);
+        const { plan, surfacePolicy } = coercePlanForSurface(request, planned);
 
-        const plan = await reflectPlanner.planReflect(request);
         if (plan.action === 'ignore') {
             return {
                 action: 'ignore',
@@ -95,7 +136,7 @@ export const createReflectOrchestrator = ({
         const conversationMessages = [
             {
                 role: 'system',
-                content: renderPrompt('discord.chat.system').content,
+                content: buildSurfaceSystemPrompt(request.surface),
             },
             ...request.conversation.map(
                 (message: PostReflectRequest['conversation'][number]) => ({
@@ -110,7 +151,7 @@ export const createReflectOrchestrator = ({
                     '// BEGIN Planner Output',
                     '// This planner decision was made by the backend and should be treated as authoritative for this response.',
                     '// ==========',
-                    buildPlannerPayload(plan),
+                    buildPlannerPayload(plan, surfacePolicy),
                     '// ==========',
                     '// END Planner Output',
                     '// ==========',
@@ -126,9 +167,12 @@ export const createReflectOrchestrator = ({
                     action: plan.action,
                     modality: plan.modality,
                     riskTier: plan.riskTier,
+                    generation: plan.generation,
+                    ...(surfacePolicy && { surfacePolicy }),
                 },
             }),
             riskTier: plan.riskTier,
+            generation: plan.generation,
         });
 
         return {

@@ -24,6 +24,7 @@ export type PromptKey =
     | 'discord.image.developer'
     | 'discord.realtime.system'
     | 'discord.planner.system'
+    | 'reflect.planner.system'
     | 'discord.summarizer.system'
     | 'discord.news.system';
 
@@ -86,6 +87,7 @@ const KNOWN_PROMPT_KEYS = new Set<PromptKey>([
     'discord.image.developer',
     'discord.realtime.system',
     'discord.planner.system',
+    'reflect.planner.system',
     'discord.summarizer.system',
     'discord.news.system',
 ]);
