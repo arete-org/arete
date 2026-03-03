@@ -406,6 +406,13 @@ components:
             additionalProperties: false
 
         ReflectResponse:
+            discriminator:
+                propertyName: action
+                mapping:
+                    message: '#/components/schemas/ReflectMessageAction'
+                    react: '#/components/schemas/ReflectReactAction'
+                    ignore: '#/components/schemas/ReflectIgnoreAction'
+                    image: '#/components/schemas/ReflectImageAction'
             oneOf:
                 - $ref: '#/components/schemas/ReflectMessageAction'
                 - $ref: '#/components/schemas/ReflectReactAction'
@@ -512,6 +519,7 @@ components:
                     enum: [message]
                 message:
                     type: string
+                    minLength: 1
                 modality:
                     type: string
                     enum: [text, tts]
@@ -532,6 +540,7 @@ components:
                     enum: [react]
                 reaction:
                     type: string
+                    minLength: 1
                 metadata:
                     type: 'null'
             required:
