@@ -373,7 +373,6 @@ components:
                         $ref: '#/components/schemas/ReflectConversationMessage'
                 attachments:
                     type: array
-                    minItems: 0
                     maxItems: 8
                     items:
                         $ref: '#/components/schemas/ReflectAttachment'
