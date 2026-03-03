@@ -26,7 +26,7 @@ const TEXT_MODEL_PRICING: Record<string, TextModelPricing> = {
 };
 
 export type BackendLLMCostRecord = {
-    feature: 'reflect';
+    feature: 'reflect' | 'reflect_planner';
     model: string;
     promptTokens: number;
     completionTokens: number;

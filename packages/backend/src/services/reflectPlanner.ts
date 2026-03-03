@@ -13,6 +13,11 @@ import type {
 import type { RiskTier } from '@footnote/contracts/ethics-core';
 import { renderPrompt } from './prompts/promptRegistry.js';
 import type { OpenAIService } from './openaiService.js';
+import {
+    estimateBackendTextCost,
+    recordBackendLLMUsage,
+    type BackendLLMCostRecord,
+} from './llmCostRecorder.js';
 import type {
     ReflectGenerationPlan,
     ReflectRepoSearchHint,
@@ -56,6 +61,7 @@ export type ReflectPlan = {
 type CreateReflectPlannerOptions = {
     openaiService: OpenAIService;
     defaultModel?: string;
+    recordUsage?: (record: BackendLLMCostRecord) => void;
 };
 
 type PlannerCandidate = Partial<ReflectPlan> & {
@@ -228,6 +234,15 @@ const normalizeImageRequest = (
             : undefined;
     const outputCompression = Number(candidate.outputCompression);
 
+    const allowPromptAdjustment =
+        candidate.allowPromptAdjustment === undefined
+            ? undefined
+            : typeof candidate.allowPromptAdjustment === 'boolean'
+              ? candidate.allowPromptAdjustment
+              : typeof candidate.allowPromptAdjustment === 'string'
+                ? candidate.allowPromptAdjustment.trim().toLowerCase() === 'true'
+                : undefined;
+
     return {
         prompt,
         aspectRatio,
@@ -237,10 +252,7 @@ const normalizeImageRequest = (
                 : undefined,
         quality,
         style: typeof candidate.style === 'string' ? candidate.style : undefined,
-        allowPromptAdjustment:
-            candidate.allowPromptAdjustment === undefined
-                ? undefined
-                : Boolean(candidate.allowPromptAdjustment),
+        allowPromptAdjustment,
         followUpResponseId:
             typeof candidate.followUpResponseId === 'string'
                 ? candidate.followUpResponseId
@@ -426,6 +438,7 @@ const normalizePlan = (
 export const createReflectPlanner = ({
     openaiService,
     defaultModel = runtimeConfig.openai.defaultModel,
+    recordUsage = recordBackendLLMUsage,
 }: CreateReflectPlannerOptions) => {
     const planReflect = async (
         request: PostReflectRequest
@@ -461,6 +474,34 @@ export const createReflectPlanner = ({
                     verbosity: 'low',
                 }
             );
+            const usageModel = plannerResponse.metadata.model || defaultModel;
+            const promptTokens = plannerResponse.metadata.usage?.prompt_tokens ?? 0;
+            const completionTokens =
+                plannerResponse.metadata.usage?.completion_tokens ?? 0;
+            const totalTokens =
+                plannerResponse.metadata.usage?.total_tokens ??
+                promptTokens + completionTokens;
+            if (recordUsage) {
+                try {
+                    recordUsage({
+                        feature: 'reflect_planner',
+                        model: usageModel,
+                        promptTokens,
+                        completionTokens,
+                        totalTokens,
+                        ...estimateBackendTextCost(
+                            usageModel,
+                            promptTokens,
+                            completionTokens
+                        ),
+                        timestamp: Date.now(),
+                    });
+                } catch (error) {
+                    logger.warn(
+                        `Reflect planner usage recording failed: ${error instanceof Error ? error.message : String(error)}`
+                    );
+                }
+            }
             const rawPlan = stripJsonFences(plannerResponse.normalizedText);
             const parsed = JSON.parse(rawPlan) as PlannerCandidate;
             const normalizedPlan = normalizePlan(request, parsed);

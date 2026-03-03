@@ -8,6 +8,7 @@
 import type {
     PostReflectRequest,
     PostReflectResponse,
+    ReflectConversationMessage,
 } from '@footnote/contracts/web';
 import { renderPrompt } from './prompts/promptRegistry.js';
 import {
@@ -95,6 +96,7 @@ export const createReflectOrchestrator = ({
     const reflectPlanner = createReflectPlanner({
         openaiService,
         defaultModel,
+        recordUsage,
     });
 
     const runReflect = async (
@@ -127,13 +129,18 @@ export const createReflectOrchestrator = ({
         }
 
         if (plan.action === 'image' && !plan.imageRequest) {
+            logger.warn(
+                `Reflect planner returned image without imageRequest; falling back to ignore. surface=${request.surface} trigger=${request.trigger.kind} latestUserInputLength=${request.latestUserInput.length}`
+            );
             return {
                 action: 'ignore',
                 metadata: null,
             };
         }
 
-        const conversationMessages = [
+        const conversationMessages: Array<
+            Pick<ReflectConversationMessage, 'role' | 'content'>
+        > = [
             {
                 role: 'system',
                 content: buildSurfaceSystemPrompt(request.surface),

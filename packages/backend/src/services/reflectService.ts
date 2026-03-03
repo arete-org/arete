@@ -11,6 +11,7 @@ import type {
     RiskTier,
 } from '@footnote/contracts/ethics-core';
 import type { PostReflectResponse } from '@footnote/contracts/web';
+import type { ReflectConversationMessage } from '@footnote/contracts/web';
 import type {
     GenerateResponseOptions,
     OpenAIService,
@@ -52,7 +53,7 @@ export type RunReflectInput = {
  * Shared message-generation input used by the Discord/backend unified path.
  */
 export type RunReflectMessagesInput = {
-    messages: Array<{ role: string; content: string }>;
+    messages: Array<Pick<ReflectConversationMessage, 'role' | 'content'>>;
     conversationSnapshot: string;
     riskTier?: RiskTier;
     model?: string;
@@ -211,7 +212,9 @@ export const createReflectService = ({
         question,
     }: RunReflectInput): Promise<PostReflectResponse> => {
         // Keep prompt assembly here so the public web reflect path stays stable.
-        const messages = [
+        const messages: Array<
+            Pick<ReflectConversationMessage, 'role' | 'content'>
+        > = [
             { role: 'system', content: REFLECT_SYSTEM_PROMPT },
             { role: 'user', content: question.trim() },
         ];
