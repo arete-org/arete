@@ -148,11 +148,15 @@ const isReflectReactAction = (
 
 const isReflectImageAction = (
     value: DiscordReflectApiResponse
-): value is ReflectImageAction =>
-    value.action === 'image' &&
-    Boolean(
-        (value as { imageRequest?: ReflectImageRequest }).imageRequest?.prompt
+): value is ReflectImageAction => {
+    const prompt = (value as { imageRequest?: ReflectImageRequest })
+        .imageRequest?.prompt;
+    return (
+        value.action === 'image' &&
+        typeof prompt === 'string' &&
+        prompt.trim().length > 0
     );
+};
 
 const hasImageAttachments = (message: Message): boolean =>
     message.attachments.some((attachment) =>
@@ -249,9 +253,28 @@ export class MessageProcessor {
 
         await responseHandler.startTyping();
         try {
-            const reflectResponse = await botApi.reflectViaApi(
-                reflectContext.request
-            );
+            let reflectResponse: DiscordReflectApiResponse = {
+                action: 'ignore',
+                metadata: null,
+            };
+            try {
+                reflectResponse = await botApi.reflectViaApi(
+                    reflectContext.request
+                );
+            } catch (error) {
+                logger.error(
+                    `Backend reflect request failed for message ${message.id}: ${
+                        error instanceof Error ? error.message : String(error)
+                    }`,
+                    {
+                        triggerKind: reflectContext.request.trigger.kind,
+                        contentLength:
+                            reflectContext.request.latestUserInput.length,
+                        conversationLength:
+                            reflectContext.request.conversation.length,
+                    }
+                );
+            }
             await this.executeReflectAction(
                 message,
                 responseHandler,
@@ -578,6 +601,15 @@ export class MessageProcessor {
                     footerPayload
                 );
                 return;
+            } catch (error) {
+                logger.error(
+                    `Reflect TTS delivery failed for message ${message.id}: ${
+                        error instanceof Error ? error.message : String(error)
+                    }`,
+                    {
+                        responseLength: finalResponseText.length,
+                    }
+                );
             } finally {
                 await cleanupTTSFile(ttsPath);
             }
