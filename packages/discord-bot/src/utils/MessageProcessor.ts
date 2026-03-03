@@ -154,6 +154,19 @@ const isReflectImageAction = (
         (value as { imageRequest?: ReflectImageRequest }).imageRequest?.prompt
     );
 
+const hasImageAttachments = (message: Message): boolean =>
+    message.attachments.some((attachment) =>
+        attachment.contentType?.startsWith('image/')
+    );
+
+const hasImageEmbeds = (message: Message): boolean =>
+    message.embeds.some(
+        (embed) =>
+            embed.data.type === 'image' ||
+            Boolean(embed.image?.url) ||
+            Boolean(embed.thumbnail?.url)
+    );
+
 export class MessageProcessor {
     private readonly openaiService: OpenAIService;
     private readonly contextBuilder: ContextBuilder;
@@ -208,7 +221,11 @@ export class MessageProcessor {
             message.author
         );
 
-        if (!message.content.trim()) {
+        if (
+            !message.content.trim() &&
+            !hasImageAttachments(message) &&
+            !hasImageEmbeds(message)
+        ) {
             return;
         }
 
@@ -269,7 +286,11 @@ export class MessageProcessor {
 
         if (imageAttachments.size > 0) {
             logger.debug(
-                `Processing image attachment from ${message.author.id}/${message.author.tag}`
+                `Processing image attachment(s) for reflect request on message ${message.id}.`,
+                {
+                    attachmentCount: imageAttachments.size,
+                    contentLength: message.content.length,
+                }
             );
 
             const imageDescriptions = await Promise.all(
@@ -287,13 +308,21 @@ export class MessageProcessor {
 
                         return (
                             response.message?.content ??
-                            `Error generating image description for ${message.author.id}/${message.author.tag} with image ${attachment.url}`
+                            `Error generating image description for message ${message.id} attachment ${attachment.id}`
                         );
                     } catch (error) {
                         logger.error(
-                            `Error generating image description for ${message.author.id}/${message.author.tag} with image ${attachment.url}: ${error}`
+                            `Error generating image description for reflect attachment on message ${message.id}: ${
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error)
+                            }`,
+                            {
+                                attachmentId: attachment.id,
+                                attachmentCount: imageAttachments.size,
+                            }
                         );
-                        return `Error generating image description for ${message.author.id}/${message.author.tag} with image ${attachment.url}`;
+                        return `Error generating image description for message ${message.id} attachment ${attachment.id}`;
                     }
                 })
             );
@@ -428,7 +457,11 @@ export class MessageProcessor {
                 }
                 await responseHandler.addReaction(reflectResponse.reaction);
                 logger.debug(
-                    `Reaction(s) sent (${reflectResponse.reaction}) for message: ${message.content.slice(0, 100)}...`
+                    `Backend reflect added reaction(s) for message ${message.id}.`,
+                    {
+                        reaction: reflectResponse.reaction,
+                        contentLength: message.content.length,
+                    }
                 );
                 return;
             case 'image':
@@ -494,12 +527,25 @@ export class MessageProcessor {
         let ttsPath: string | null = null;
         if (reflectResponse.modality === 'tts') {
             const ttsOptions: TTSOptions = TTS_DEFAULT_OPTIONS;
-            ttsPath = await this.openaiService.generateSpeech(
-                finalResponseText,
-                ttsOptions,
-                Date.now().toString(),
-                'mp3'
-            );
+            const ttsRequestId = Date.now().toString();
+            try {
+                ttsPath = await this.openaiService.generateSpeech(
+                    finalResponseText,
+                    ttsOptions,
+                    ttsRequestId,
+                    'mp3'
+                );
+            } catch (error) {
+                logger.error(
+                    `Reflect TTS generation failed for message ${message.id}: ${
+                        error instanceof Error ? error.message : String(error)
+                    }`,
+                    {
+                        ttsRequestId,
+                        responseLength: finalResponseText.length,
+                    }
+                );
+            }
         }
 
         if (ttsPath) {
@@ -556,7 +602,12 @@ export class MessageProcessor {
             footerPayload
         );
         logger.debug(
-            `Response sent (${finalResponseText}) for message: ${message.content.slice(0, 100)}...`
+            `Backend reflect sent message response for message ${message.id}.`,
+            {
+                responseLength: finalResponseText.length,
+                contentLength: message.content.length,
+                modality: reflectResponse.modality,
+            }
         );
     }
 
@@ -601,7 +652,11 @@ export class MessageProcessor {
         recoveredImageContext: RecoveredImageContext | null
     ): Promise<void> {
         logger.debug(
-            `Backend reflect requested automated image generation for message: ${message.content.slice(0, 100)}...`
+            `Backend reflect requested automated image generation for message ${message.id}.`,
+            {
+                contentLength: message.content.length,
+                hasRecoveredImageContext: Boolean(recoveredImageContext),
+            }
         );
 
         const trimmedPrompt = request.prompt.trim();
