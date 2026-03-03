@@ -96,7 +96,7 @@ export const createReflectService = ({
     const runReflectMessages = async ({
         messages,
         conversationSnapshot,
-        riskTier = 'Low',
+        riskTier,
         model,
         generation,
     }: RunReflectMessagesInput): Promise<{
@@ -171,13 +171,23 @@ export const createReflectService = ({
             assistantMetadata,
             runtimeContext
         );
+        const riskTierRank: Record<RiskTier, number> = {
+            Low: 1,
+            Medium: 2,
+            High: 3,
+        };
+        const shouldRaiseRiskTier =
+            riskTier &&
+            (!responseMetadata.riskTier ||
+                riskTierRank[riskTier] >
+                    riskTierRank[responseMetadata.riskTier]);
         const normalizedResponseMetadata: ResponseMetadata =
-            responseMetadata.riskTier === riskTier
-                ? responseMetadata
-                : {
+            shouldRaiseRiskTier
+                ? {
                       ...responseMetadata,
                       riskTier,
-                  };
+                  }
+                : responseMetadata;
 
         // These logs are intentionally verbose because metadata mismatches are hard to debug later.
         logger.debug('=== Server Metadata Debug ===');
