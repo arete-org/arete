@@ -17,6 +17,7 @@ import {
     shouldAutoFocusAskInput,
     shouldExecuteTurnstileChallenge,
 } from '../utils/turnstile';
+import { notifyEmbedLayoutChanged } from '../utils/embedHeight';
 
 // Module augmentation for Vite environment variables
 declare global {
@@ -335,6 +336,8 @@ const AskMeAnything = (): JSX.Element => {
                 textarea.style.overflowY = 'hidden';
             }
         }
+
+        notifyEmbedLayoutChanged('question-input-resize');
     }, [question]);
 
     // Animate the text reveal whenever the answer changes for a gentle typewriter feel.
@@ -364,6 +367,17 @@ const AskMeAnything = (): JSX.Element => {
 
         return () => window.clearInterval(interval);
     }, [answer]);
+
+    useEffect(() => {
+        notifyEmbedLayoutChanged('interaction-state-change');
+    }, [
+        displayedAnswer,
+        isLoading,
+        isTypingComplete,
+        metadata,
+        status,
+        turnstileError,
+    ]);
 
     const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();

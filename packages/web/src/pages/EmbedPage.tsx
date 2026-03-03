@@ -9,6 +9,10 @@
 import { useEffect, useRef } from 'react';
 import Header from '@components/Header';
 import AskMeAnything from '@components/AskMeAnything';
+import {
+    createEmbedHeightMessenger,
+    EMBED_LAYOUT_CHANGE_EVENT,
+} from '../utils/embedHeight';
 
 /**
  * EmbedPage component provides a minimal embeddable version of Footnote
@@ -21,11 +25,9 @@ const EmbedPage = (): JSX.Element => {
     const breadcrumbItems: never[] = [];
     const containerRef = useRef<HTMLElement | null>(null);
 
-    // Disable scrolling on embed page and send height to parent
+    // Disable scrolling on the embed page itself and keep the host iframe sized to the content.
     useEffect(() => {
-        // Disable scrolling on the embed page itself when in an iframe
         if (window.parent !== window) {
-            // Add CSS to disable scrolling
             const style = document.createElement('style');
             style.textContent = `
         html, body {
@@ -36,68 +38,60 @@ const EmbedPage = (): JSX.Element => {
             document.head.appendChild(style);
         }
 
-        const sendHeight = () => {
-            // Only send if we're in an iframe
-            if (window.parent === window) return;
-
-            // Get the full document height including margins and padding
-            const height = Math.max(
-                document.documentElement.scrollHeight,
-                document.documentElement.offsetHeight,
-                document.body.scrollHeight,
-                document.body.offsetHeight,
-                document.body.clientHeight
-            );
-
-            // Debug logging (can be removed in production)
-            if (process.env.NODE_ENV === 'development') {
-                console.log('[Footnote Embed] Sending height:', height);
-            }
-
-            window.parent.postMessage(
-                { type: 'footnote-embed-height', height },
-                '*' // Allow any origin - parent should validate origin for security
-            );
+        const messenger = createEmbedHeightMessenger({
+            root: containerRef.current,
+        });
+        const scheduleHeightPost = (): void => {
+            messenger.schedulePostHeight();
         };
 
-        // Send initial height after a short delay to ensure content is rendered
-        const initialTimeout = setTimeout(sendHeight, 100);
+        messenger.postHeight();
 
-        // Use ResizeObserver to detect content changes on body
         const resizeObserver = new ResizeObserver(() => {
-            sendHeight();
+            scheduleHeightPost();
         });
-
-        // Observe both body and documentElement to catch all changes
-        resizeObserver.observe(document.body);
-        if (document.documentElement) {
-            resizeObserver.observe(document.documentElement);
+        if (containerRef.current) {
+            resizeObserver.observe(containerRef.current);
         }
+        resizeObserver.observe(document.body);
+        resizeObserver.observe(document.documentElement);
 
-        // Also send height on window resize (for responsive changes)
-        window.addEventListener('resize', sendHeight);
+        window.addEventListener('resize', scheduleHeightPost);
+        window.addEventListener('load', scheduleHeightPost);
+        window.addEventListener(EMBED_LAYOUT_CHANGE_EVENT, scheduleHeightPost);
 
-        // Send height periodically as fallback (e.g., when animations complete)
-        const interval = setInterval(sendHeight, 500);
+        const fontSet = document.fonts;
+        const fontReadyPromise = fontSet?.ready;
+        fontReadyPromise
+            ?.then(() => {
+                scheduleHeightPost();
+            })
+            .catch(() => {
+                scheduleHeightPost();
+            });
 
-        // Also send height after mutations (e.g., when AskMeAnything updates)
-        const mutationObserver = new MutationObserver(() => {
-            sendHeight();
-        });
-
-        mutationObserver.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['style', 'class'],
-        });
+        const settleTimeouts = [
+            window.setTimeout(() => {
+                messenger.postHeight();
+            }, 0),
+            window.setTimeout(() => {
+                scheduleHeightPost();
+            }, 100),
+            window.setTimeout(() => {
+                scheduleHeightPost();
+            }, 300),
+        ];
 
         return () => {
-            clearTimeout(initialTimeout);
             resizeObserver.disconnect();
-            mutationObserver.disconnect();
-            window.removeEventListener('resize', sendHeight);
-            clearInterval(interval);
+            window.removeEventListener('resize', scheduleHeightPost);
+            window.removeEventListener('load', scheduleHeightPost);
+            window.removeEventListener(
+                EMBED_LAYOUT_CHANGE_EVENT,
+                scheduleHeightPost
+            );
+            settleTimeouts.forEach((timeoutId) => window.clearTimeout(timeoutId));
+            messenger.dispose();
         };
     }, []);
 
