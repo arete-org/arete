@@ -9,6 +9,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { PostReflectRequest } from '@footnote/contracts/web';
+import type {
+    ApiJsonResult,
+    ApiRequestOptions,
+    ApiRequester,
+} from '../src/api/client.js';
 import { createReflectApi } from '../src/api/reflect.js';
 
 const createReflectRequest = (
@@ -37,8 +42,10 @@ test('reflectViaApi posts to /api/reflect with X-Trace-Token and returns parsed 
     let capturedHeaders: Record<string, string> | undefined;
     let capturedBody: unknown;
 
-    const api = createReflectApi(
-        async (endpoint, options) => {
+    const requestJson: ApiRequester = async <T>(
+        endpoint: string,
+        options: ApiRequestOptions<T> = {}
+    ): Promise<ApiJsonResult<T>> => {
             capturedEndpoint = endpoint;
             capturedHeaders = options.headers as Record<string, string>;
             capturedBody = options.body;
@@ -60,11 +67,11 @@ test('reflectViaApi posts to /api/reflect with X-Trace-Token and returns parsed 
                         staleAfter: new Date(Date.now() + 60000).toISOString(),
                         citations: [],
                     },
-                },
+                } as T,
             };
-        },
-        { traceApiToken: 'trace-secret' }
-    );
+        };
+
+    const api = createReflectApi(requestJson, { traceApiToken: 'trace-secret' });
 
     const response = await api.reflectViaApi(request);
 
@@ -79,9 +86,10 @@ test('reflectViaApi posts to /api/reflect with X-Trace-Token and returns parsed 
 });
 
 test('reflectViaApi throws backend request errors so callers can handle them', async () => {
-    const api = createReflectApi(async () => {
+    const requestJson: ApiRequester = async () => {
         throw new Error('backend exploded');
-    });
+    };
+    const api = createReflectApi(requestJson);
 
     await assert.rejects(
         () => api.reflectViaApi(createReflectRequest()),
@@ -90,13 +98,14 @@ test('reflectViaApi throws backend request errors so callers can handle them', a
 });
 
 test('reflectViaApi tolerates unknown actions so the executor can fail safely', async () => {
-    const api = createReflectApi(async () => ({
+    const requestJson: ApiRequester = async <T>(): Promise<ApiJsonResult<T>> => ({
         status: 200,
         data: {
             action: 'video',
             clipRequest: { prompt: 'animate this' },
-        },
-    }));
+        } as T,
+    });
+    const api = createReflectApi(requestJson);
 
     const response = await api.reflectViaApi(createReflectRequest());
     assert.equal(response.action, 'video');

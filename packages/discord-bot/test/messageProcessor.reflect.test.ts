@@ -48,8 +48,37 @@ const createMessage = () =>
         },
     }) as never;
 
+type ProcessorPrivateAccess = {
+    sendProvenanceFooter: (
+        footerReplyAnchor: unknown,
+        originalMessage: unknown,
+        footerPayload: unknown
+    ) => Promise<void>;
+    executeReflectMessageAction: (
+        message: unknown,
+        responseHandler: unknown,
+        reflectResponse: unknown,
+        directReply: boolean
+    ) => Promise<void>;
+    executeReflectAction: (
+        message: unknown,
+        responseHandler: unknown,
+        reflectResponse: unknown,
+        directReply: boolean,
+        recoveredImageContext: unknown
+    ) => Promise<void>;
+    executeReflectImageAction: (
+        message: unknown,
+        responseHandler: unknown,
+        imageRequest: { prompt: string },
+        directReply: boolean,
+        recoveredImageContext: unknown
+    ) => Promise<void>;
+};
+
 test('executeReflectMessageAction sends text, builds a footer follow-up, and skips trace posting', async () => {
     const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const message = createMessage();
     const sentMessages: Array<{
         content: string;
@@ -62,26 +91,16 @@ test('executeReflectMessageAction sends text, builds a footer follow-up, and ski
     (botApi as { postTraces: unknown }).postTraces = async () => {
         throw new Error('postTraces should not run for backend reflect messages');
     };
-    (processor as { sendProvenanceFooter: unknown }).sendProvenanceFooter =
-        async (
-            _footerReplyAnchor: unknown,
-            _originalMessage: unknown,
-            footerPayload: unknown
-        ) => {
-            footerPayloadSeen = Boolean(footerPayload);
-        };
+    processorAccess.sendProvenanceFooter = async (
+        _footerReplyAnchor: unknown,
+        _originalMessage: unknown,
+        footerPayload: unknown
+    ) => {
+        footerPayloadSeen = Boolean(footerPayload);
+    };
 
     try {
-        await (
-            processor as {
-                executeReflectMessageAction: (
-                    message: unknown,
-                    responseHandler: unknown,
-                    reflectResponse: unknown,
-                    directReply: boolean
-                ) => Promise<void>;
-            }
-        ).executeReflectMessageAction(
+        await processorAccess.executeReflectMessageAction(
             message,
             {
                 async sendMessage(
@@ -120,25 +139,15 @@ test('executeReflectMessageAction sends text, builds a footer follow-up, and ski
 
 test('executeReflectAction routes react actions without falling back to message generation', async () => {
     const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
     let reactedWith = '';
     let messageActionCalls = 0;
 
-    (processor as { executeReflectMessageAction: unknown }).executeReflectMessageAction =
-        async () => {
-            messageActionCalls += 1;
-        };
+    processorAccess.executeReflectMessageAction = async () => {
+        messageActionCalls += 1;
+    };
 
-    await (
-        processor as {
-            executeReflectAction: (
-                message: unknown,
-                responseHandler: unknown,
-                reflectResponse: unknown,
-                directReply: boolean,
-                recoveredImageContext: unknown
-            ) => Promise<void>;
-        }
-    ).executeReflectAction(
+    await processorAccess.executeReflectAction(
         createMessage(),
         {
             async addReaction(reaction: string) {
@@ -160,28 +169,18 @@ test('executeReflectAction routes react actions without falling back to message 
 
 test('executeReflectAction routes image actions into the local image pipeline helper', async () => {
     const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
     let imagePrompt = '';
 
-    (processor as { executeReflectImageAction: unknown }).executeReflectImageAction =
-        async (
-            _message: unknown,
-            _responseHandler: unknown,
-            imageRequest: { prompt: string }
-        ) => {
-            imagePrompt = imageRequest.prompt;
-        };
+    processorAccess.executeReflectImageAction = async (
+        _message: unknown,
+        _responseHandler: unknown,
+        imageRequest: { prompt: string }
+    ) => {
+        imagePrompt = imageRequest.prompt;
+    };
 
-    await (
-        processor as {
-            executeReflectAction: (
-                message: unknown,
-                responseHandler: unknown,
-                reflectResponse: unknown,
-                directReply: boolean,
-                recoveredImageContext: unknown
-            ) => Promise<void>;
-        }
-    ).executeReflectAction(
+    await processorAccess.executeReflectAction(
         createMessage(),
         {},
         {
@@ -200,6 +199,7 @@ test('executeReflectAction routes image actions into the local image pipeline he
 
 test('executeReflectAction warns and no-ops for unknown actions', async () => {
     const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const originalWarn = logger.warn;
     const warnings: string[] = [];
 
@@ -208,17 +208,7 @@ test('executeReflectAction warns and no-ops for unknown actions', async () => {
     }) as typeof logger.warn;
 
     try {
-        await (
-            processor as {
-                executeReflectAction: (
-                    message: unknown,
-                    responseHandler: unknown,
-                    reflectResponse: unknown,
-                    directReply: boolean,
-                    recoveredImageContext: unknown
-                ) => Promise<void>;
-            }
-        ).executeReflectAction(
+        await processorAccess.executeReflectAction(
             createMessage(),
             {},
             {
