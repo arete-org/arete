@@ -478,14 +478,27 @@ export class MessageProcessor {
                     );
                     return;
                 }
-                await responseHandler.addReaction(reflectResponse.reaction);
-                logger.debug(
-                    `Backend reflect added reaction(s) for message ${message.id}.`,
-                    {
-                        reaction: reflectResponse.reaction,
-                        contentLength: message.content.length,
-                    }
-                );
+                try {
+                    await responseHandler.addReaction(reflectResponse.reaction);
+                    logger.debug(
+                        `Backend reflect added reaction(s) for message ${message.id}.`,
+                        {
+                            reaction: reflectResponse.reaction,
+                            contentLength: message.content.length,
+                        }
+                    );
+                } catch (error) {
+                    logger.warn(
+                        `Backend reflect reaction failed for message ${message.id}.`,
+                        {
+                            reaction: reflectResponse.reaction,
+                            error:
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                        }
+                    );
+                }
                 return;
             case 'image':
                 if (!isReflectImageAction(reflectResponse)) {
