@@ -36,6 +36,7 @@ export type EnvDefault =
 
 export type EnvSpecEntry<TDefault extends EnvDefault = EnvDefault> = {
     key: string;
+    isPattern?: true;
     owner: EnvOwner;
     stage: EnvStage;
     section: string;

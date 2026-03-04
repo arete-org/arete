@@ -1061,6 +1061,7 @@ export const envEntries = [
 
     defineEnv({
         key: "IMAGE_MODEL_MULTIPLIER_<MODEL_NAME>",
+        isPattern: true,
         owner: "discord-bot",
         stage: "runtime",
         section: "image",
@@ -1578,7 +1579,8 @@ export const envDefaultValues = Object.fromEntries(
     envEntries
         .filter(
             (entry): entry is LiteralEnvEntry =>
-                entry.defaultValue.kind === 'literal'
+                entry.defaultValue.kind === 'literal' &&
+                !('isPattern' in entry && entry.isPattern === true)
         )
         .map((entry) => [entry.key, entry.defaultValue.value])
 ) as EnvDefaultValues;
