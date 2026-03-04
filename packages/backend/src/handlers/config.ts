@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - Incorrect exposure of config could mislead users.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { runtimeConfig } from '../config.js';
 
 type LogRequest = (
     req: IncomingMessage,
@@ -36,14 +37,11 @@ const createRuntimeConfigHandler =
             }
 
             // --- Turnstile exposure rules ---
-            const hasTurnstileKeys = Boolean(
-                process.env.TURNSTILE_SECRET_KEY &&
-                process.env.TURNSTILE_SITE_KEY
-            );
+            const hasTurnstileKeys = runtimeConfig.turnstile.enabled;
             // Avoid exposing secrets; only surface the site key when both are configured.
             const payload = {
                 turnstileSiteKey: hasTurnstileKeys
-                    ? process.env.TURNSTILE_SITE_KEY
+                    ? runtimeConfig.turnstile.siteKey
                     : '',
             };
 

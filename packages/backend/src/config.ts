@@ -5,95 +5,10 @@
  * @footnote-risk: medium - Misconfiguration can break API behavior or security controls.
  * @footnote-ethics: medium - Incorrect defaults can weaken abuse protections.
  */
-type RuntimeConfig = {
-    openai: {
-        defaultModel: string;
-        defaultReasoningEffort: string;
-        defaultVerbosity: string;
-        defaultChannelContext: { channelId: string };
-        requestTimeoutMs: number;
-    };
-    cors: {
-        allowedOrigins: string[];
-    };
-    csp: {
-        frameAncestors: string[];
-    };
-};
+import './bootstrapEnv.js';
+import { buildRuntimeConfig } from './config/buildRuntimeConfig.js';
 
-// --- Helpers ---
-const parseCsvEnv = (
-    value: string | undefined,
-    fallback: string[]
-): string[] => {
-    if (!value) {
-        return [...fallback];
-    }
+export type { RuntimeConfig } from './config/types.js';
+export { buildRuntimeConfig } from './config/buildRuntimeConfig.js';
 
-    const entries = value
-        .split(',')
-        .map((entry) => entry.trim())
-        .filter((entry) => entry.length > 0);
-
-    return entries.length > 0 ? entries : [...fallback];
-};
-
-const parseNumberEnv = (
-    value: string | undefined,
-    fallback: number
-): number => {
-    if (value === undefined) {
-        return fallback;
-    }
-
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
-};
-
-// --- Defaults ---
-const defaultAllowedOrigins = [
-    'http://localhost:8080',
-    'http://localhost:3000',
-    'https://ai.jordanmakes.dev',
-];
-const defaultFrameAncestors = [
-    "'self'",
-    'https://ai.jordanmakes.dev',
-    ...defaultAllowedOrigins,
-];
-
-// --- Environment parsing ---
-const allowedOrigins = parseCsvEnv(
-    process.env.ALLOWED_ORIGINS,
-    defaultAllowedOrigins
-);
-const frameAncestors = parseCsvEnv(
-    process.env.FRAME_ANCESTORS,
-    defaultFrameAncestors
-);
-
-// --- Runtime config ---
-const runtimeConfig: RuntimeConfig = {
-    openai: {
-        defaultModel: process.env.DEFAULT_MODEL || 'gpt-5-mini',
-        defaultReasoningEffort:
-            process.env.DEFAULT_REASONING_EFFORT || 'low',
-        defaultVerbosity: process.env.DEFAULT_VERBOSITY || 'low',
-        defaultChannelContext: {
-            channelId: 'default',
-        },
-        requestTimeoutMs: parseNumberEnv(
-            process.env.OPENAI_REQUEST_TIMEOUT_MS,
-            180_000
-        ),
-    },
-    cors: {
-        allowedOrigins,
-    },
-    csp: {
-        frameAncestors,
-    },
-};
-
-export { runtimeConfig };
-
+export const runtimeConfig = buildRuntimeConfig(process.env);

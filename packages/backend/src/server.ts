@@ -34,31 +34,8 @@ import { createRuntimeConfigHandler } from './handlers/config.js';
 // --- Path configuration ---
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(currentDirectory, '../../web/dist');
-const DATA_DIR = process.env.DATA_DIR || '/data';
+const DATA_DIR = runtimeConfig.server.dataDir;
 const BLOG_POSTS_DIR = path.join(DATA_DIR, 'blog-posts');
-
-// --- Runtime configuration ---
-const trustProxy = process.env.WEB_TRUST_PROXY === 'true';
-const traceToken = process.env.TRACE_API_TOKEN?.trim() || null;
-const DEFAULT_TRACE_API_MAX_BODY_BYTES = 256 * 1024; // 256 KB
-const DEFAULT_REFLECT_API_MAX_BODY_BYTES = 256 * 1024; // 256 KB
-
-const parsePositiveIntEnv = (
-    value: string | undefined,
-    fallback: number
-): number => {
-    const parsed = Number.parseInt(value ?? '', 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
-
-const maxTraceBodyBytes = parsePositiveIntEnv(
-    process.env.TRACE_API_MAX_BODY_BYTES,
-    DEFAULT_TRACE_API_MAX_BODY_BYTES
-);
-const maxReflectBodyBytes = parsePositiveIntEnv(
-    process.env.REFLECT_API_MAX_BODY_BYTES,
-    DEFAULT_REFLECT_API_MAX_BODY_BYTES
-);
 
 // --- Storage and asset helpers ---
 const blogStore = createBlogStore(BLOG_POSTS_DIR);
@@ -77,15 +54,15 @@ const initializeServices = () => {
     // --- Environment visibility ---
     logger.info('Environment variables check:');
     logger.info(
-        `OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET'}`
+        `OPENAI_API_KEY: ${runtimeConfig.openai.apiKey ? 'SET' : 'NOT SET'}`
     );
     logger.info(
-        `TURNSTILE_SECRET_KEY: ${process.env.TURNSTILE_SECRET_KEY ? 'SET' : 'NOT SET'}`
+        `TURNSTILE_SECRET_KEY: ${runtimeConfig.turnstile.secretKey ? 'SET' : 'NOT SET'}`
     );
     logger.info(
-        `TURNSTILE_SITE_KEY: ${process.env.TURNSTILE_SITE_KEY ? 'SET' : 'NOT SET'}`
+        `TURNSTILE_SITE_KEY: ${runtimeConfig.turnstile.siteKey ? 'SET' : 'NOT SET'}`
     );
-    logger.info(`NODE_ENV: ${process.env.NODE_ENV || 'NOT SET'}`);
+    logger.info(`NODE_ENV: ${runtimeConfig.runtime.nodeEnv}`);
 
     // --- Trace store ---
     try {
@@ -99,9 +76,9 @@ const initializeServices = () => {
     }
 
     // --- OpenAI service ---
-    if (process.env.OPENAI_API_KEY) {
+    if (runtimeConfig.openai.apiKey) {
         // Only enable OpenAI when an API key is configured.
-        openaiService = new SimpleOpenAIService(process.env.OPENAI_API_KEY);
+        openaiService = new SimpleOpenAIService(runtimeConfig.openai.apiKey);
     } else {
         openaiService = null;
         logger.warn(
@@ -112,49 +89,26 @@ const initializeServices = () => {
     // --- Rate limiter configuration ---
     // Per-IP request limiter for /api/reflect.
     ipRateLimiter = new SimpleRateLimiter({
-        limit: parseInt(process.env.WEB_API_RATE_LIMIT_IP || '3', 10),
-        window: parseInt(
-            process.env.WEB_API_RATE_LIMIT_IP_WINDOW_MS || '60000',
-            10
-        ),
+        limit: runtimeConfig.rateLimits.web.ip.limit,
+        window: runtimeConfig.rateLimits.web.ip.windowMs,
     });
 
     // Per-session limiter to reduce abuse when multiple users share IPs.
     sessionRateLimiter = new SimpleRateLimiter({
-        limit: parseInt(process.env.WEB_API_RATE_LIMIT_SESSION || '5', 10),
-        window: parseInt(
-            process.env.WEB_API_RATE_LIMIT_SESSION_WINDOW_MS || '60000',
-            10
-        ),
+        limit: runtimeConfig.rateLimits.web.session.limit,
+        window: runtimeConfig.rateLimits.web.session.windowMs,
     });
 
     // Trusted service calls get their own limiter so internal callers do not consume browser quota.
-    const serviceRateLimit = Number(
-        process.env.REFLECT_SERVICE_RATE_LIMIT || '30'
-    );
-    const serviceRateLimitWindow = Number(
-        process.env.REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS || '60000'
-    );
-    const validatedLimit =
-        Number.isFinite(serviceRateLimit) && serviceRateLimit > 0
-            ? Math.floor(serviceRateLimit)
-            : 30;
-    const validatedWindow =
-        Number.isFinite(serviceRateLimitWindow) && serviceRateLimitWindow > 0
-            ? Math.floor(serviceRateLimitWindow)
-            : 60000;
     serviceRateLimiter = new SimpleRateLimiter({
-        limit: validatedLimit,
-        window: validatedWindow,
+        limit: runtimeConfig.rateLimits.reflectService.limit,
+        window: runtimeConfig.rateLimits.reflectService.windowMs,
     });
 
     // Separate limiter for trace ingestion to avoid coupling to reflect limits.
     traceWriteLimiter = new SimpleRateLimiter({
-        limit: parseInt(process.env.TRACE_API_RATE_LIMIT || '10', 10),
-        window: parseInt(
-            process.env.TRACE_API_RATE_LIMIT_WINDOW_MS || '60000',
-            10
-        ),
+        limit: runtimeConfig.rateLimits.traceApi.limit,
+        window: runtimeConfig.rateLimits.traceApi.windowMs,
     });
 
     // --- Cleanup loop ---
@@ -194,9 +148,9 @@ const { handleTraceRequest, handleTraceUpsertRequest } = createTraceHandlers({
     traceStore,
     logRequest,
     traceWriteLimiter,
-    traceToken,
-    maxTraceBodyBytes,
-    trustProxy,
+    traceToken: runtimeConfig.trace.apiToken,
+    maxTraceBodyBytes: runtimeConfig.trace.maxBodyBytes,
+    trustProxy: runtimeConfig.server.trustProxy,
 });
 const { handleBlogIndexRequest, handleBlogPostRequest } = createBlogHandlers({
     blogStore,
@@ -238,7 +192,7 @@ const handleReflectRequest = createReflectHandler({
     storeTrace: storeTraceWithStore,
     logRequest,
     buildResponseMetadata,
-    maxReflectBodyBytes,
+    maxReflectBodyBytes: runtimeConfig.reflect.maxBodyBytes,
 });
 
 // --- HTTP server ---
@@ -392,8 +346,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 // --- Server startup ---
-const port = Number(process.env.PORT || 3000);
-const host = process.env.HOST || '::';
+const port = runtimeConfig.server.port;
+const host = runtimeConfig.server.host;
 server.listen(port, host, () => {
     logger.info(`Simple server available on ${host}:${port}`);
 });

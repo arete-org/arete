@@ -5,6 +5,7 @@
  * @footnote-risk: high - Misconfiguration can block incident storage or create inconsistent data paths.
  * @footnote-ethics: high - Protects against storing raw Discord identifiers without hashing.
  */
+import { runtimeConfig } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 import { SqliteIncidentStore } from './sqliteIncidentStore.js';
 
@@ -25,23 +26,16 @@ export function getDefaultIncidentStore(): IncidentStore {
 }
 
 export function createIncidentStoreFromEnv(): IncidentStore {
-    const backend = process.env.INCIDENT_BACKEND?.trim().toLowerCase();
-    if (backend && backend !== 'sqlite') {
-        throw new Error(
-            `Unsupported INCIDENT_BACKEND "${backend}". Only "sqlite" is supported.`
-        );
-    }
-
     const pseudonymizationSecret =
-        process.env.INCIDENT_PSEUDONYMIZATION_SECRET?.trim();
+        runtimeConfig.storage.incidentPseudonymizationSecret;
     if (!pseudonymizationSecret) {
         throw new Error(
             'Missing required environment variable: INCIDENT_PSEUDONYMIZATION_SECRET'
         );
     }
 
-    const envPath = process.env.INCIDENT_SQLITE_PATH?.trim();
-    const flyDefaultPath = process.env.FLY_APP_NAME
+    const envPath = runtimeConfig.storage.incidentSqlitePath;
+    const flyDefaultPath = runtimeConfig.runtime.flyAppName
         ? '/data/incidents.db'
         : undefined;
     const defaultPath = envPath || flyDefaultPath || './data/incidents.db';

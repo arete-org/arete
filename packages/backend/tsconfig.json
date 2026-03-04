@@ -5,7 +5,10 @@
         "outDir": "dist",
         "module": "NodeNext",
         "moduleResolution": "NodeNext",
+        "baseUrl": ".",
         "paths": {
+            "@footnote/config-spec": ["../config-spec/dist/index.d.ts"],
+            "@footnote/config-spec/*": ["../config-spec/dist/*"],
             "@footnote/contracts": ["../contracts/src/index.ts"],
             "@footnote/contracts/*": ["../contracts/src/*"]
         },

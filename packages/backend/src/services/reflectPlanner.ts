@@ -73,7 +73,7 @@ type PlannerCandidate = Partial<ReflectPlan> & {
     };
 };
 
-const isDevelopment = (): boolean => process.env.NODE_ENV !== 'production';
+const isDevelopment = (): boolean => runtimeConfig.runtime.isDevelopment;
 
 const normalizeRiskTier = (value: unknown): RiskTier => {
     if (value === 'Low' || value === 'Medium' || value === 'High') {

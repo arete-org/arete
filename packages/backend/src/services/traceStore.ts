@@ -7,13 +7,13 @@
  */
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import {
-    createTraceStoreFromEnv,
+    createTraceStoreFromConfig,
     type TraceStore,
 } from '../storage/traces/traceStore.js';
 import { logger } from '../utils/logger.js';
 
 // --- Trace store initialization ---
-const createTraceStore = (): TraceStore => createTraceStoreFromEnv();
+const createTraceStore = (): TraceStore => createTraceStoreFromConfig();
 
 // --- Trace persistence wrapper ---
 const storeTrace = async (

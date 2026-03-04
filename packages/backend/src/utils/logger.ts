@@ -7,10 +7,20 @@
  */
 
 import fs from 'fs';
+import { envDefaultValues } from '@footnote/config-spec';
 import { createLogger, format, transports } from 'winston';
 
 const { combine, timestamp, printf, colorize } = format;
 const splatSymbol = Symbol.for('splat');
+const VALID_LOG_LEVELS = new Set([
+    'error',
+    'warn',
+    'info',
+    'http',
+    'verbose',
+    'debug',
+    'silly',
+]);
 
 // --- Redaction rules ---
 // Discord snowflakes are 17-19 digit numeric strings. We redact them to avoid
@@ -69,8 +79,19 @@ const logFormat = printf(({ level, message, timestamp }) => {
     return `${timestamp} [${level}]: ${message}`;
 });
 
+const parseLogLevel = (value: string | undefined): string => {
+    if (!value) {
+        return envDefaultValues.LOG_LEVEL;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    return VALID_LOG_LEVELS.has(normalized)
+        ? normalized
+        : envDefaultValues.LOG_LEVEL;
+};
+
 // --- Logger output configuration ---
-const logDirectory = process.env.LOG_DIR || 'logs';
+const logDirectory = process.env.LOG_DIR || envDefaultValues.LOG_DIR;
 let canWriteLogDirectory = true;
 try {
     fs.mkdirSync(logDirectory, { recursive: true });
@@ -114,7 +135,7 @@ try {
  * @type {import('winston').Logger}
  */
 export const logger = createLogger({
-    level: (process.env.LOG_LEVEL || 'debug').toLowerCase(),
+    level: parseLogLevel(process.env.LOG_LEVEL),
     format: combine(
         sanitizeFormat(),
         timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),

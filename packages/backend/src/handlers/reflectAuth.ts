@@ -6,6 +6,7 @@
  * @footnote-ethics: high - Abuse controls and trusted-service access affect fairness and reliability.
  */
 import type { IncomingMessage } from 'node:http';
+import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import type { ReflectFailureResponse } from './reflectResponses.js';
 
@@ -47,11 +48,11 @@ const readHeaderValue = (
  * a reflect-specific service token. Public browser traffic never uses this path.
  */
 export const getServiceAuth = (req: IncomingMessage): ServiceAuth => {
-    const traceToken = process.env.TRACE_API_TOKEN?.trim() || null;
-    const reflectServiceToken =
-        process.env.REFLECT_SERVICE_TOKEN?.trim() || null;
     const traceHeaderValue = readHeaderValue(req.headers['x-trace-token']);
-    if (traceToken && traceHeaderValue === traceToken) {
+    if (
+        runtimeConfig.trace.apiToken &&
+        traceHeaderValue === runtimeConfig.trace.apiToken
+    ) {
         return {
             isTrustedService: true,
             authSource: 'x-trace-token',
@@ -60,7 +61,10 @@ export const getServiceAuth = (req: IncomingMessage): ServiceAuth => {
     }
 
     const serviceHeaderValue = readHeaderValue(req.headers['x-service-token']);
-    if (reflectServiceToken && serviceHeaderValue === reflectServiceToken) {
+    if (
+        runtimeConfig.reflect.serviceToken &&
+        serviceHeaderValue === runtimeConfig.reflect.serviceToken
+    ) {
         return {
             isTrustedService: true,
             authSource: 'x-service-token',
@@ -83,12 +87,12 @@ export const getServiceAuth = (req: IncomingMessage): ServiceAuth => {
  */
 export const resolveReflectAuth = (
     req: IncomingMessage
-):
+): 
     | { success: true; data: ReflectAuthContext }
     | { success: false; error: ReflectFailureResponse } => {
     const serviceAuth = getServiceAuth(req);
-    const hasTurnstileSecret = Boolean(process.env.TURNSTILE_SECRET_KEY);
-    const hasTurnstileSite = Boolean(process.env.TURNSTILE_SITE_KEY);
+    const hasTurnstileSecret = Boolean(runtimeConfig.turnstile.secretKey);
+    const hasTurnstileSite = Boolean(runtimeConfig.turnstile.siteKey);
     // Public traffic needs both Turnstile keys. Trusted services can still use the endpoint
     // because they authenticate through headers instead of browser CAPTCHA.
     if (
@@ -143,7 +147,7 @@ export const resolveReflectAuth = (
     const skipReason = skipCaptcha
         ? serviceAuth.isTrustedService
             ? `trusted-service-${serviceAuth.authSource}`
-            : !process.env.TURNSTILE_SECRET_KEY
+            : !runtimeConfig.turnstile.secretKey
               ? 'not-configured'
               : 'dev-mode'
         : null;
@@ -187,16 +191,6 @@ const normalizeHostname = (value: string | undefined): string | null => {
     return hostname && hostname.length > 0 ? hostname : null;
 };
 
-const getAllowedTurnstileHostnames = (): string[] => {
-    const configuredHostnames =
-        process.env.TURNSTILE_ALLOWED_HOSTNAMES
-            ?.split(',')
-            .map((hostname) => normalizeHostname(hostname))
-            .filter((hostname): hostname is string => Boolean(hostname)) ?? [];
-
-    return configuredHostnames;
-};
-
 type TurnstileHostnameValidation = {
     validationMode: 'configured-allowlist' | 'request-derived';
     configuredHostnames: string[];
@@ -208,7 +202,7 @@ const resolveTurnstileHostnameValidation = (
     requestHost: string | undefined,
     requestOrigin: string | undefined
 ): TurnstileHostnameValidation => {
-    const configuredHostnames = getAllowedTurnstileHostnames();
+    const configuredHostnames = runtimeConfig.turnstile.allowedHostnames;
     const derivedHostnames = [
         normalizeHostname(requestHost),
         normalizeHostname(requestOrigin),
@@ -247,7 +241,7 @@ export const verifyTurnstileCaptcha = async ({
         logger.debug(`  Token source: ${tokenSource}`);
         logger.debug(`  Token length: ${turnstileToken?.length || 0}`);
         logger.debug(
-            `  Secret key is set: ${!!process.env.TURNSTILE_SECRET_KEY}`
+            `  Secret key is set: ${!!runtimeConfig.turnstile.secretKey}`
         );
 
         if (!turnstileToken || turnstileToken.trim().length === 0) {
@@ -265,7 +259,7 @@ export const verifyTurnstileCaptcha = async ({
             };
         }
 
-        if (!process.env.TURNSTILE_SECRET_KEY) {
+        if (!runtimeConfig.turnstile.secretKey) {
             logger.error('CAPTCHA verification attempted without secret key');
             return {
                 success: false,
@@ -281,7 +275,7 @@ export const verifyTurnstileCaptcha = async ({
         }
 
         const formData = new URLSearchParams();
-        formData.append('secret', process.env.TURNSTILE_SECRET_KEY);
+        formData.append('secret', runtimeConfig.turnstile.secretKey);
         formData.append('response', turnstileToken);
         formData.append('remoteip', clientIp);
 
@@ -480,7 +474,7 @@ export const verifyTurnstileCaptcha = async ({
         logger.error(`Token was present: ${!!turnstileToken}`);
         logger.error(`Token length: ${turnstileToken?.length || 0}`);
         logger.error(
-            `Secret key configured: ${!!process.env.TURNSTILE_SECRET_KEY}`
+            `Secret key configured: ${!!runtimeConfig.turnstile.secretKey}`
         );
 
         return {
