@@ -615,6 +615,42 @@ components:
                     type: array
                     items:
                         type: string
+                temperament:
+                    type: object
+                    description: Optional TRACE temperament profile with named 1-10 integer axes. TODO(TRACE-rollout): make required after full TRACE validation.
+                    properties:
+                        tightness:
+                            type: integer
+                            description: 1 to 10, where higher means tighter concision and structure.
+                            minimum: 1
+                            maximum: 10
+                        rationale:
+                            type: integer
+                            description: 1 to 10, where higher means more visible "why" and reasoning.
+                            minimum: 1
+                            maximum: 10
+                        attribution:
+                            type: integer
+                            description: 1 to 10, where higher means clearer sourced vs inferred boundaries.
+                            minimum: 1
+                            maximum: 10
+                        caution:
+                            type: integer
+                            description: 1 to 10, where higher means stronger safeguards and overclaim restraint.
+                            minimum: 1
+                            maximum: 10
+                        extent:
+                            type: integer
+                            description: 1 to 10, where higher means broader options/perspectives.
+                            minimum: 1
+                            maximum: 10
+                    required:
+                        - tightness
+                        - rationale
+                        - attribution
+                        - caution
+                        - extent
+                    additionalProperties: false
             required:
                 - provenance
                 - confidence

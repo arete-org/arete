@@ -69,6 +69,30 @@ export const CitationSchema = z
     })
     .strict();
 
+/**
+ * TRACE temperament profile captured as five named integer axes:
+ * T = tightness, R = rationale, A = attribution, C = caution, E = extent.
+ *
+ * Axis meanings:
+ * - tightness: concision and structural efficiency
+ * - rationale: amount of visible "why" and trade-off explanation
+ * - attribution: clarity of sourced vs inferred boundaries
+ * - caution: safeguard posture and overclaim restraint
+ * - extent: breadth of viable options/perspectives
+ *
+ * TODO(TRACE-rollout): Make this required once TRACE generation and rendering
+ * are fully validated across surfaces.
+ */
+const ResponseTemperamentSchema = z
+    .object({
+        tightness: z.number().int().min(1).max(10),
+        rationale: z.number().int().min(1).max(10),
+        attribution: z.number().int().min(1).max(10),
+        caution: z.number().int().min(1).max(10),
+        extent: z.number().int().min(1).max(10),
+    })
+    .strict();
+
 const responseMetadataShape = {
     responseId: z.string().min(1),
     provenance: ProvenanceSchema,
@@ -81,6 +105,7 @@ const responseMetadataShape = {
     staleAfter: z.string(),
     citations: z.array(CitationSchema),
     imageDescriptions: z.array(z.string()).optional(),
+    temperament: ResponseTemperamentSchema.optional(),
 } as const;
 
 /**

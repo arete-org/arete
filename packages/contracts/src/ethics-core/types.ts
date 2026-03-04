@@ -36,6 +36,21 @@ export type Citation = {
 };
 
 /**
+ * ResponseTemperament captures TRACE (response temperament) as five normalized
+ * integer axes:
+ * T = tightness, R = rationale, A = attribution, C = caution, E = extent.
+ *
+ * Scale: each axis is an integer from 1 to 10.
+ */
+export type ResponseTemperament = {
+    tightness: number; // 1 to 10: concision and structural efficiency.
+    rationale: number; // 1 to 10: amount of visible "why" and reasoning.
+    attribution: number; // 1 to 10: clarity of sourced vs inferred boundaries.
+    caution: number; // 1 to 10: safeguard posture and overclaim restraint.
+    extent: number; // 1 to 10: breadth of viable options/perspectives.
+};
+
+/**
  * ResponseMetadata is the compact record attached to a model response.
  */
 export type ResponseMetadata = {
@@ -50,5 +65,8 @@ export type ResponseMetadata = {
     staleAfter: string; // ISO timestamp after which the data is stale.
     citations: Citation[]; // Sources used for the answer.
     imageDescriptions?: string[]; // Optional captions for any images used.
+    // TODO(TRACE-rollout): Make required after TRACE ingestion and rendering
+    // paths are fully implemented and validated across surfaces.
+    temperament?: ResponseTemperament;
 };
 

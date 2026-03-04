@@ -14,6 +14,7 @@ export type {
     RiskTier,
     ConfidenceScore,
     Citation,
+    ResponseTemperament,
     ResponseMetadata,
 } from './types';
 

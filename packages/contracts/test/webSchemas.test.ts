@@ -95,6 +95,36 @@ test('ResponseMetadataSchema remains tolerant for forward-compatible responses',
     assert.equal(parsed.success, true);
 });
 
+test('ResponseMetadataSchema accepts valid TRACE temperament metadata', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        temperament: {
+            tightness: 9,
+            rationale: 6,
+            attribution: 8,
+            caution: 6,
+            extent: 7,
+        },
+    });
+
+    assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema rejects invalid TRACE temperament metadata', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        temperament: {
+            tightness: 11,
+            rationale: 6,
+            attribution: 8,
+            caution: 6,
+            extent: 7,
+        },
+    });
+
+    assert.equal(parsed.success, false);
+});
+
 test('PostTracesRequestSchema rejects unknown request keys', () => {
     const parsed = PostTracesRequestSchema.safeParse({
         ...baseMetadata,
