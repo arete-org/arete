@@ -12,6 +12,7 @@ import { envDefaultValues, envSpecByKey } from '@footnote/config-spec';
 import type {
     SupportedBotInteractionAction,
     SupportedEngagementIgnoreMode,
+    SupportedNodeEnv,
 } from '@footnote/contracts/providers';
 import { bootstrapLogger } from '../utils/logger.js';
 
@@ -34,6 +35,9 @@ const DEFAULT_LOG_LEVEL = envDefaultValues.LOG_LEVEL;
 const DEFAULT_LOCAL_WEB_BASE_URL = 'http://localhost:8080';
 const DEFAULT_LOCAL_BACKEND_BASE_URL = 'http://localhost:3000';
 const FLY_INTERNAL_BACKEND_BASE_URL = 'http://footnote-backend.internal:3000';
+const SUPPORTED_NODE_ENVS = new Set<SupportedNodeEnv>(
+    (envSpecByKey.NODE_ENV.allowedValues ?? []) as readonly SupportedNodeEnv[]
+);
 
 const BOT_INTERACTION_ACTIONS = new Set<SupportedBotInteractionAction>(
     (envSpecByKey.BOT_BACK_AND_FORTH_ACTION.allowedValues ??
@@ -95,7 +99,19 @@ const getBooleanEnv = (key: string, defaultValue: boolean): boolean => {
         return defaultValue;
     }
 
-    return value.toLowerCase() === 'true';
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+        return true;
+    }
+
+    if (normalized === 'false') {
+        return false;
+    }
+
+    bootstrapLogger.warn(
+        `Ignoring invalid boolean for ${key}: "${value}". Using default (${defaultValue}).`
+    );
+    return defaultValue;
 };
 
 const getStringArrayEnv = (
@@ -199,7 +215,18 @@ const backendBaseUrl =
 bootstrapLogger.info(`Using backend base URL: ${backendBaseUrl}`);
 
 const traceApiToken = process.env.TRACE_API_TOKEN?.trim();
-const nodeEnv = process.env.NODE_ENV || DEFAULT_RUNTIME_NODE_ENV;
+const rawNodeEnv = process.env.NODE_ENV?.trim();
+const nodeEnv =
+    rawNodeEnv && SUPPORTED_NODE_ENVS.has(rawNodeEnv as SupportedNodeEnv)
+        ? (rawNodeEnv as SupportedNodeEnv)
+        : (() => {
+              if (rawNodeEnv) {
+                  bootstrapLogger.warn(
+                      `Ignoring unsupported NODE_ENV "${rawNodeEnv}". Using default (${DEFAULT_RUNTIME_NODE_ENV}).`
+                  );
+              }
+              return DEFAULT_RUNTIME_NODE_ENV;
+          })();
 const isProduction = nodeEnv === 'production';
 
 export const runtimeConfig = {

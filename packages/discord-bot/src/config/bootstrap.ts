@@ -14,13 +14,27 @@ import { bootstrapLogger } from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const envPath = path.resolve(__dirname, '../../../../.env');
+const resolveEnvPath = (): string | null => {
+    const candidatePaths = [
+        path.resolve(__dirname, '../../../../.env'),
+        path.resolve(__dirname, '../../../../../.env'),
+    ];
 
-bootstrapLogger.debug(`Loading environment variables from: ${envPath}`);
+    for (const candidatePath of candidatePaths) {
+        if (fs.existsSync(candidatePath)) {
+            return candidatePath;
+        }
+    }
+
+    return null;
+};
+
+const envPath = resolveEnvPath();
 
 // Load the repo-level .env file when it is present. Production deploys usually
 // inject environment variables instead, so missing this file is expected there.
-if (fs.existsSync(envPath)) {
+if (envPath) {
+    bootstrapLogger.debug(`Loading environment variables from: ${envPath}`);
     const { error, parsed } = dotenv.config({ path: envPath });
 
     if (error) {
@@ -32,6 +46,6 @@ if (fs.existsSync(envPath)) {
     }
 } else {
     bootstrapLogger.debug(
-        'No .env file found; relying on injected environment variables.'
+        'No repo-level .env file found in the source or dist locations; relying on injected environment variables.'
     );
 }
