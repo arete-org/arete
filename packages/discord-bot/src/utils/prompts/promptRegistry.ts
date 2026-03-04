@@ -94,6 +94,26 @@ const resolveRelativePath = (target: string): string => {
 };
 
 /**
+ * Resolves the built-in defaults file from either the compiled `dist` layout
+ * or the source tree. This keeps container startup fail-open when a deploy
+ * image misses the copied YAML asset but still includes the package sources.
+ */
+const resolveBundledDefaultsPath = (): string => {
+    const candidates = [
+        resolveRelativePath('./defaults.yaml'),
+        resolveRelativePath('../../../src/utils/prompts/defaults.yaml'),
+    ];
+
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+    }
+
+    return candidates[0];
+};
+
+/**
  * Performs a simple `{{placeholder}}` substitution. The routine is intentionally
  * light-weight: it does not implement conditionals or loops, only flat
  * replacements so that prompts remain readable for non-engineers editing YAML.
@@ -123,10 +143,7 @@ export class PromptRegistry {
     private readonly prompts: PromptMap;
 
     constructor(options: PromptRegistryOptions = {}) {
-        const defaults = this.loadPromptFile(
-            resolveRelativePath('./defaults.yaml'),
-            false
-        );
+        const defaults = this.loadPromptFile(resolveBundledDefaultsPath(), false);
         const merged: PromptMap = { ...defaults };
 
         if (options.overridePath) {
