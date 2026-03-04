@@ -6,7 +6,7 @@
  * @footnote-ethics: medium - Model and reasoning defaults affect system behavior and transparency.
  */
 
-import { envDefaultValues } from '@footnote/config-spec';
+import { envDefaultValues, envSpecByKey } from '@footnote/config-spec';
 import type {
     SupportedReasoningEffort,
     SupportedVerbosity,
@@ -18,16 +18,14 @@ import {
 } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
-const VALID_REASONING_EFFORTS = new Set<SupportedReasoningEffort>([
-    'low',
-    'medium',
-    'high',
-]);
-const VALID_VERBOSITY_LEVELS = new Set<SupportedVerbosity>([
-    'low',
-    'medium',
-    'high',
-]);
+const VALID_REASONING_EFFORTS = new Set<SupportedReasoningEffort>(
+    (envSpecByKey.DEFAULT_REASONING_EFFORT.allowedValues ??
+        []) as readonly SupportedReasoningEffort[]
+);
+const VALID_VERBOSITY_LEVELS = new Set<SupportedVerbosity>(
+    (envSpecByKey.DEFAULT_VERBOSITY.allowedValues ??
+        []) as readonly SupportedVerbosity[]
+);
 
 export const buildOpenAISection = (
     env: NodeJS.ProcessEnv,

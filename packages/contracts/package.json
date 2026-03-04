@@ -32,7 +32,8 @@
         }
     },
     "scripts": {
-        "build": "tsc -p tsconfig.json"
+        "clean": "node -e \"const fs=require('node:fs'); fs.rmSync('dist',{recursive:true,force:true}); fs.rmSync('tsconfig.tsbuildinfo',{force:true});\"",
+        "build": "pnpm clean && tsc -p tsconfig.json"
     },
     "dependencies": {
         "zod": "catalog:"

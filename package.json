@@ -7,7 +7,7 @@
     ],
     "scripts": {
         "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:web\"",
-        "dev:backend": "pnpm --filter @footnote/contracts run build && pnpm --filter @footnote/config-spec run build && pnpm exec tsx packages/backend/src/server.ts",
+        "dev:backend": "pnpm --filter @footnote/config-spec run build && pnpm exec tsx packages/backend/src/server.ts",
         "dev:web": "pnpm --filter @footnote/web dev",
         "dev:bot": "pnpm --filter @footnote/discord-bot dev",
         "start:dev": "pnpm dev",

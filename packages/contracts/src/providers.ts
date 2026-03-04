@@ -41,8 +41,13 @@ export type SupportedProviderModel =
     | SupportedOpenAIImageModel;
 export type ConfiguredProviderModel = SupportedProviderModel | (string & {});
 
-export type SupportedReasoningEffort = 'low' | 'medium' | 'high';
-export type SupportedVerbosity = 'low' | 'medium' | 'high';
+export const supportedReasoningEfforts = ['low', 'medium', 'high'] as const;
+export type SupportedReasoningEffort =
+    (typeof supportedReasoningEfforts)[number];
+
+export const supportedVerbosityLevels = ['low', 'medium', 'high'] as const;
+export type SupportedVerbosity = (typeof supportedVerbosityLevels)[number];
+
 export const supportedLogLevels = [
     'error',
     'warn',
@@ -53,6 +58,15 @@ export const supportedLogLevels = [
     'silly',
 ] as const;
 export type SupportedLogLevel = (typeof supportedLogLevels)[number];
-export type SupportedBotInteractionAction = 'ignore' | 'react';
-export type SupportedEngagementIgnoreMode = 'silent' | 'react';
-export type SupportedImageOutputFormat = 'png' | 'webp' | 'jpeg';
+
+export const supportedBotInteractionActions = ['ignore', 'react'] as const;
+export type SupportedBotInteractionAction =
+    (typeof supportedBotInteractionActions)[number];
+
+export const supportedEngagementIgnoreModes = ['silent', 'react'] as const;
+export type SupportedEngagementIgnoreMode =
+    (typeof supportedEngagementIgnoreModes)[number];
+
+export const supportedImageOutputFormats = ['png', 'webp', 'jpeg'] as const;
+export type SupportedImageOutputFormat =
+    (typeof supportedImageOutputFormats)[number];

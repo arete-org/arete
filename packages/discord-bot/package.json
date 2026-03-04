@@ -13,11 +13,11 @@
     "scripts": {
         "prestart": "pnpm build",
         "start": "node --es-module-specifier-resolution=node dist/index.js",
-        "predev": "pnpm --dir ../.. --filter @footnote/contracts run build && pnpm --dir ../.. --filter @footnote/config-spec run build",
+        "predev": "pnpm --dir ../.. --filter @footnote/config-spec run build",
         "dev": "pnpm exec cross-env NODE_ENV=development pnpm exec tsx watch src/index.ts",
-        "build": "pnpm --dir ../.. --filter @footnote/contracts run build && pnpm --dir ../.. --filter @footnote/config-spec run build && pnpm clean && tsc && pnpm copy-files",
+        "build": "pnpm --dir ../.. --filter @footnote/config-spec run build && pnpm clean && tsc && pnpm copy-prompt-assets",
         "clean": "rimraf dist",
-        "copy-files": "xcopy /s /e /i /y src\\*.* dist\\src\\ 2>nul && xcopy /s /e /i /y src\\commands\\*.* dist\\commands\\ 2>nul && xcopy /s /e /i /y src\\events\\*.* dist\\events\\ 2>nul && xcopy /s /e /i /y src\\utils\\*.* dist\\utils\\ 2>nul || echo No files to copy",
+        "copy-prompt-assets": "node -e \"const fs=require('node:fs'); fs.mkdirSync('dist/utils/prompts',{recursive:true}); fs.copyFileSync('src/utils/prompts/defaults.yaml','dist/utils/prompts/defaults.yaml');\"",
         "watch": "tsc -w"
     },
     "dependencies": {
@@ -56,7 +56,6 @@
         "@types/mdast": "^4.0.4",
         "@types/node": "catalog:",
         "@types/unist": "^3.0.3",
-        "copyfiles": "catalog:",
         "cross-env": "catalog:",
         "rimraf": "catalog:",
         "tsx": "catalog:",

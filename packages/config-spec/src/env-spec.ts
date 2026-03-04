@@ -7,7 +7,14 @@
  */
 
 import { defineEnv, derived, literal, noDefault } from './env-factories.js';
-import { supportedNodeEnvs } from '@footnote/contracts/providers';
+import {
+    supportedBotInteractionActions,
+    supportedEngagementIgnoreModes,
+    supportedLogLevels,
+    supportedNodeEnvs,
+    supportedReasoningEfforts,
+    supportedVerbosityLevels,
+} from '@footnote/contracts/providers';
 import type { EnvSpecEntry } from './types.js';
 
 // This file is the single source of truth for environment metadata.
@@ -74,15 +81,7 @@ export const envEntries = [
         kind: "enum",
         description: "Logger verbosity level.",
         defaultValue: literal("info"),
-        allowedValues: [
-            "error",
-            "warn",
-            "info",
-            "http",
-            "verbose",
-            "debug",
-            "silly",
-        ],
+        allowedValues: supportedLogLevels,
         usedBy: [
             "packages/backend/src/config.ts",
             "packages/backend/src/utils/logger.ts",
@@ -535,10 +534,7 @@ export const envEntries = [
         kind: "enum",
         description: "Action to take when the bot interaction limit is reached.",
         defaultValue: literal("react"),
-        allowedValues: [
-            "ignore",
-            "react",
-        ],
+        allowedValues: supportedBotInteractionActions,
         usedBy: [
             "packages/discord-bot/src/config.ts",
         ],
@@ -824,10 +820,7 @@ export const envEntries = [
         kind: "enum",
         description: "How the bot acknowledges skipped engagement decisions.",
         defaultValue: literal("silent"),
-        allowedValues: [
-            "silent",
-            "react",
-        ],
+        allowedValues: supportedEngagementIgnoreModes,
         usedBy: [
             "packages/discord-bot/src/config.ts",
         ],
@@ -1204,9 +1197,10 @@ export const envEntries = [
         section: "openai",
         required: false,
         secret: false,
-        kind: "string",
+        kind: "enum",
         description: "Default reasoning effort for backend reflect flows.",
         defaultValue: literal("low"),
+        allowedValues: supportedReasoningEfforts,
         usedBy: [
             "packages/backend/src/config.ts",
         ],
@@ -1219,9 +1213,10 @@ export const envEntries = [
         section: "openai",
         required: false,
         secret: false,
-        kind: "string",
+        kind: "enum",
         description: "Default verbosity for backend reflect flows.",
         defaultValue: literal("low"),
+        allowedValues: supportedVerbosityLevels,
         usedBy: [
             "packages/backend/src/config.ts",
         ],
