@@ -10,9 +10,15 @@ import { OpenAIMessage, OpenAIService } from '../openaiService.js';
 import { logger } from '../logger.js';
 import { renderPrompt, runtimeConfig } from '../../config.js';
 
+/**
+ * Returns whether verbose prompt-context logging is enabled for debugging.
+ */
 export const isFullContextLoggingEnabled = (): boolean =>
     runtimeConfig.debug.verboseContextLoggingEnabled;
 
+/**
+ * Logs the full prompt context only when the explicit debug flag is enabled.
+ */
 export const logContextIfVerbose = (context: OpenAIMessage[]): void => {
     if (!isFullContextLoggingEnabled()) {
         return;
@@ -54,6 +60,10 @@ function buildEmbedSummary(message: Message): string | null {
     return lines.join('\n');
 }
 
+/**
+ * Builds the prompt context passed to the Discord bot's chat-generation
+ * pipeline.
+ */
 export class ContextBuilder {
     private readonly openaiService: OpenAIService;
     private readonly DEFAULT_CONTEXT_MESSAGES = 12;

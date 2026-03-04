@@ -17,6 +17,10 @@ import type { RuntimeConfig, WarningSink } from '../types.js';
 
 const SUPPORTED_NODE_ENVS = new Set(supportedNodeEnvs);
 
+/**
+ * Builds backend runtime flags and bind settings that other services read
+ * during startup.
+ */
 export const buildRuntimeSections = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink

@@ -48,6 +48,10 @@ const REPO_HINTS = [
 
 const REPO_HINT_SET = new Set<ReflectRepoSearchHint>(REPO_HINTS);
 
+/**
+ * Planner decision consumed by the reflect orchestrator after the raw LLM
+ * output has been normalized and safety-checked.
+ */
 export type ReflectPlan = {
     action: ReflectPlannerAction;
     modality: 'text' | 'tts';

@@ -10,6 +10,10 @@ import { envDefaultValues } from '@footnote/config-spec';
 import { parsePositiveIntEnv } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
+/**
+ * Groups public and trusted-service rate limits so abuse controls stay easy to
+ * inspect in one place.
+ */
 export const buildRateLimitsSection = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink

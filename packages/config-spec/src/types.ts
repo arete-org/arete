@@ -6,8 +6,17 @@
  * @footnote-ethics: medium - These types shape how defaults and operator-facing settings are represented.
  */
 
+/**
+ * Package or surface that owns a given env variable.
+ */
 export type EnvOwner = 'backend' | 'discord-bot' | 'web' | 'shared';
+/**
+ * Lifecycle stage when the env value is expected to exist.
+ */
 export type EnvStage = 'runtime' | 'bootstrap' | 'tooling';
+/**
+ * Normalized value kind used by docs and config tooling.
+ */
 export type EnvValueKind =
     | 'string'
     | 'boolean'
@@ -17,6 +26,9 @@ export type EnvValueKind =
     | 'enum'
     | 'json';
 
+/**
+ * Literal values that can be represented directly in the generated default map.
+ */
 export type EnvLiteralValue =
     | string
     | number
@@ -24,6 +36,9 @@ export type EnvLiteralValue =
     | readonly string[]
     | Readonly<Record<string, number>>;
 
+/**
+ * Supported ways of describing an env default in the shared spec.
+ */
 export type EnvDefault =
     | { kind: 'none' }
     | { kind: 'literal'; value: EnvLiteralValue }
@@ -34,6 +49,9 @@ export type EnvDefault =
       }
     | { kind: 'runtime'; description: string };
 
+/**
+ * One environment variable declaration in the shared config spec.
+ */
 export type EnvSpecEntry<TDefault extends EnvDefault = EnvDefault> = {
     key: string;
     isPattern?: true;

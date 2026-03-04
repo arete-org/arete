@@ -247,6 +247,10 @@ function parseOutputCompression(
     return null;
 }
 
+/**
+ * Public shape of the image command configuration consumed by generation,
+ * uploads, and token accounting.
+ */
 export interface ImageConfiguration {
     defaults: {
         textModel: ImageTextModel;

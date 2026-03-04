@@ -14,10 +14,18 @@ const incidentStoreLogger =
         ? logger.child({ module: 'incidentStore' })
         : logger;
 
+/**
+ * Public incident store contract. It currently matches the SQLite
+ * implementation exactly so callers can depend on one stable type.
+ */
 export type IncidentStore = SqliteIncidentStore;
 
 let cachedIncidentStore: IncidentStore | null = null;
 
+/**
+ * Lazily creates and caches the default incident store the first time code asks
+ * for it.
+ */
 export function getDefaultIncidentStore(): IncidentStore {
     if (!cachedIncidentStore) {
         cachedIncidentStore = createIncidentStoreFromEnv();
@@ -25,6 +33,10 @@ export function getDefaultIncidentStore(): IncidentStore {
     return cachedIncidentStore;
 }
 
+/**
+ * Builds the incident store from runtime config and falls back to a local path
+ * when the default data volume is unavailable.
+ */
 export function createIncidentStoreFromEnv(): IncidentStore {
     const pseudonymizationSecret =
         runtimeConfig.storage.incidentPseudonymizationSecret;
@@ -62,6 +74,10 @@ export function createIncidentStoreFromEnv(): IncidentStore {
 }
 
 // Expose a stable export without building the store until someone calls into it.
+/**
+ * Lazy proxy around the default incident store so imports do not touch the
+ * filesystem during module evaluation.
+ */
 export const defaultIncidentStore: IncidentStore = new Proxy(
     {} as IncidentStore,
     {

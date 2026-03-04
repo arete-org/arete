@@ -9,6 +9,10 @@
 import { parseOptionalTrimmedString } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
+/**
+ * Builds storage paths and warns when incident persistence is configured
+ * without the secret needed to pseudonymize identifiers.
+ */
 export const buildStorageSection = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink

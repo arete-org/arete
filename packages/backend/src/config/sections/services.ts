@@ -13,6 +13,10 @@ import {
 } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
+/**
+ * Resolves auth tokens and body-size limits for trusted backend-only service
+ * endpoints.
+ */
 export const buildServiceSections = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink

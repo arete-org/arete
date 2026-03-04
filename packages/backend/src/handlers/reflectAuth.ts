@@ -225,6 +225,10 @@ const resolveTurnstileHostnameValidation = (
     };
 };
 
+/**
+ * Verifies a public Turnstile token and converts provider/network failures into
+ * the structured reflect error shape used by the handler.
+ */
 export const verifyTurnstileCaptcha = async ({
     clientIp,
     requestHost,

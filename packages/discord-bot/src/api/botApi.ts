@@ -9,6 +9,9 @@
 import { runtimeConfig } from '../config.js';
 import { createDiscordApiClient, isDiscordApiClientError } from './index.js';
 
+/**
+ * Shared backend API client configured from Discord bot runtime settings.
+ */
 export const botApi = createDiscordApiClient({
     baseUrl: runtimeConfig.backendBaseUrl,
     traceApiToken: runtimeConfig.traceApiToken,

@@ -26,6 +26,9 @@ const cloudinaryConfig = {
     api_secret: imageConfig.cloudinary.apiSecret,
 };
 
+/**
+ * Indicates whether all required Cloudinary credentials are present.
+ */
 export const isCloudinaryConfigured = Boolean(
     cloudinaryConfig.cloud_name &&
     cloudinaryConfig.api_key &&
@@ -40,6 +43,10 @@ if (isCloudinaryConfigured) {
     );
 }
 
+/**
+ * Error raised when image uploads are attempted without a full Cloudinary
+ * configuration.
+ */
 export class CloudinaryConfigurationError extends Error {
     constructor(message = 'Cloudinary configuration is missing.') {
         super(message);
@@ -72,6 +79,10 @@ function addChunkedContext(
     });
 }
 
+/**
+ * Uploads a generated image to Cloudinary and stores generation metadata in the
+ * asset context fields.
+ */
 export async function uploadToCloudinary(
     imageBuffer: Buffer,
     metadata: UploadMetadata

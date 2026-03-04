@@ -167,6 +167,10 @@ export const logger = createLogger({
 
 // Use this logger during config/bootstrap work that happens before runtimeConfig
 // exists. It keeps the normal log formatting without creating a config cycle.
+/**
+ * Logger reserved for startup code that runs before runtime config is fully
+ * constructed.
+ */
 export const bootstrapLogger =
     typeof logger.child === 'function'
         ? logger.child({ module: 'configBootstrap' })
@@ -199,8 +203,14 @@ export interface LLMCostTotals {
     totalTokensOut: number;
 }
 
+/**
+ * Callback that returns the latest aggregated LLM usage totals when available.
+ */
 export type LLMCostSummaryProvider = () => LLMCostTotals | null | undefined;
 
+/**
+ * Logs one operator-friendly LLM cost summary line for the current session.
+ */
 export const logLLMCostSummary = (getTotals?: LLMCostSummaryProvider) => {
     try {
         const totals = getTotals?.();

@@ -14,13 +14,23 @@ import type {
     SupportedVerbosity,
 } from '@footnote/contracts/providers';
 
+/**
+ * Sink used by config builders to report ignored or risky env values without
+ * throwing immediately.
+ */
 export type WarningSink = (message: string) => void;
 
+/**
+ * Shared shape for "limit per window" settings used by rate-limited endpoints.
+ */
 export type RateLimitConfig = {
     limit: number;
     windowMs: number;
 };
 
+/**
+ * Canonical backend runtime config assembled from env parsing helpers.
+ */
 export type RuntimeConfig = {
     runtime: {
         nodeEnv: SupportedNodeEnv;

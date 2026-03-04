@@ -10,6 +10,10 @@ import { envDefaultValues } from '@footnote/config-spec';
 import { parseLogLevelEnv, parseOptionalTrimmedString } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
+/**
+ * Resolves backend logging destination and level without importing the runtime
+ * logger back into config code.
+ */
 export const buildLoggingSection = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink

@@ -116,6 +116,10 @@ if (runtimeConfig.costEstimator.enabled) {
 }
 
 // Initialize OpenAI service
+/**
+ * Shared OpenAI service instance used by commands, planners, and interaction
+ * handlers in the bot process.
+ */
 export const openaiService = new OpenAIService(
     runtimeConfig.openaiApiKey,
     costEstimator

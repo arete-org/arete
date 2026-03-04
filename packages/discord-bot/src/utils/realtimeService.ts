@@ -13,6 +13,9 @@ import { RealtimeAudioHandler } from '../realtime/RealtimeAudioHandler.js';
 import { RealtimeEventHandler } from '../realtime/RealtimeEventHandler.js';
 import { RealtimeSessionConfig } from '../realtime/RealtimeSessionConfig.js';
 
+/**
+ * Runtime options used when opening a new OpenAI realtime session.
+ */
 export interface RealtimeSessionOptions {
     model?:
         | 'gpt-realtime'
@@ -34,32 +37,50 @@ export interface RealtimeSessionOptions {
     maxResponseOutputTokens?: number;
 }
 
+/**
+ * Base event shape forwarded from the realtime event handler.
+ */
 export interface RealtimeEvent {
     type: string;
     [key: string]: unknown;
 }
 
+/**
+ * Audio payload tagged with the timestamp captured by the realtime pipeline.
+ */
 export interface AudioChunk {
     data: Buffer;
     timestamp: number;
 }
 
+/**
+ * Incremental text delta emitted while a realtime response is streaming.
+ */
 export interface RealtimeResponseTextDeltaEvent {
     type: 'response.text.delta';
     delta: string;
 }
 
+/**
+ * Incremental audio delta emitted while a realtime response is streaming.
+ */
 export interface RealtimeResponseAudioDeltaEvent {
     type: 'response.audio.delta';
     delta: string; // base64 encoded audio data
 }
 
+/**
+ * Event emitted when OpenAI marks the current realtime response as complete.
+ */
 export interface RealtimeResponseCompletedEvent {
     type: 'response.completed';
     response_id: string;
     [key: string]: unknown;
 }
 
+/**
+ * Structured error event forwarded from the realtime API.
+ */
 export interface RealtimeErrorEvent {
     type: 'error';
     error: {

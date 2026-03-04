@@ -26,6 +26,10 @@ interface DeveloperPromptOptions {
     remainingPromptRatio?: number;
 }
 
+/**
+ * Builds the developer prompt that constrains image-generation behavior and
+ * annotation style.
+ */
 export function buildDeveloperPrompt(options: DeveloperPromptOptions): string {
     const sanitize = (value: string | null | undefined): string | null => {
         if (!value) {

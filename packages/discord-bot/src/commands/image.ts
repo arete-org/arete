@@ -191,6 +191,10 @@ function buildInitialStatusFields(
     return fields;
 }
 
+/**
+ * Result returned by one image-generation session after Discord reply updates
+ * complete.
+ */
 export interface ImageGenerationSessionResult {
     success: boolean;
     responseId: string | null;
@@ -359,6 +363,9 @@ export async function runImageGenerationSession(
     }
 }
 
+/**
+ * Slash-command definition and execution flow for `/image`.
+ */
 const imageCommand: Command = {
     data: new SlashCommandBuilder()
         .setName('image')
@@ -645,5 +652,8 @@ const imageCommand: Command = {
     },
 };
 
+/**
+ * Default export for Discord command registration.
+ */
 export default imageCommand;
 

@@ -17,6 +17,10 @@ import { buildWebSection } from './sections/web.js';
 import { buildWebhookSection } from './sections/webhook.js';
 import type { RuntimeConfig, WarningSink } from './types.js';
 
+/**
+ * Builds the full backend config object from one environment snapshot so all
+ * sections agree on the same defaults and warnings.
+ */
 export const buildRuntimeConfig = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink

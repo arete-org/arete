@@ -37,6 +37,9 @@ import { renderPrompt } from '../../config.js';
 import { Planner } from '../prompting/Planner.js';
 import { botApi } from '../../api/botApi.js';
 
+/**
+ * Supported alternative-lens presets exposed in the provenance UI.
+ */
 export type AlternativeLensKey =
     | 'DANEEL'
     | 'UTILITARIAN'
@@ -45,6 +48,9 @@ export type AlternativeLensKey =
     | 'EASTERN'
     | 'CUSTOM';
 
+/**
+ * One selectable lens option shown to the user.
+ */
 export interface AlternativeLensDefinition {
     key: AlternativeLensKey;
     label: string;
@@ -52,6 +58,10 @@ export interface AlternativeLensDefinition {
     requiresCustomDescription?: boolean;
 }
 
+/**
+ * Snapshot of the original response and metadata needed to generate a
+ * follow-up lens rewrite.
+ */
 export interface AlternativeLensContext {
     /**
      * Raw text of the assistant message to reinterpret.
@@ -76,6 +86,9 @@ export interface AlternativeLensContext {
     responseId?: string;
 }
 
+/**
+ * Mutable session state for one user's in-progress alternative-lens flow.
+ */
 export interface AlternativeLensSession {
     context: AlternativeLensContext;
     selectedLensKey: AlternativeLensKey | null;
@@ -130,19 +143,37 @@ const LENS_DEFINITIONS: AlternativeLensDefinition[] = [
 
 const provenanceLogger = logger.child({ module: 'provenance' });
 
+/**
+ * Custom ID prefix for the alternative-lens select menu.
+ */
 export const ALTERNATIVE_LENS_SELECT_PREFIX = 'alt_lens_select:';
+/**
+ * Custom ID prefix for the alternative-lens submit button.
+ */
 export const ALTERNATIVE_LENS_SUBMIT_PREFIX = 'alt_lens_submit:';
+/**
+ * Custom ID prefix for the custom-lens modal dialog.
+ */
 export const ALTERNATIVE_LENS_MODAL_PREFIX = 'alt_lens_custom_modal:';
+/**
+ * Text input ID used inside the custom-lens modal.
+ */
 export const ALT_LENS_CUSTOM_DESCRIPTION_INPUT_ID =
     'alt_lens_custom_description';
 // Message body retrieval - keep bounded to reduce API calls and avoid stale context in busy channels.
 const MAX_PRECEDING_RESPONSE_MESSAGES = 16;
 const MAX_RESPONSE_CHAIN_WINDOW_MS = 2 * 60_000;
 
+/**
+ * Builds the cache key for one user's alternative-lens session on a message.
+ */
 export const buildAlternativeLensSessionKey = (
     userId: string,
     messageId: string
 ) => `${userId}:${messageId}`;
+/**
+ * Builds the cache key used to prevent duplicate "explain this answer" runs.
+ */
 export const buildExplainSessionKey = (messageId: string) =>
     `explain:${messageId}`;
 
@@ -195,6 +226,10 @@ function isAlreadyAcknowledgedInteraction(error: unknown): boolean {
     );
 }
 
+/**
+ * Replies to a provenance interaction and gracefully falls back to follow-up
+ * mode when Discord has already acknowledged the token elsewhere.
+ */
 export async function safeInteractionReply(
     interaction: ProvenanceInteraction,
     options: InteractionReplyOptions,
@@ -281,6 +316,10 @@ export async function safeInteractionReply(
     }
 }
 
+/**
+ * Resolves the best user-facing display name available from Discord member
+ * data.
+ */
 export function resolveMemberDisplayName(
     member: GuildMember | APIInteractionGuildMember | null | undefined,
     fallback: string
@@ -324,40 +363,69 @@ export function resolveMemberDisplayName(
     return fallback;
 }
 
+/**
+ * Returns whether an explanation request is already running for this message.
+ */
 export function isExplainInProgress(key: string): boolean {
     return explainInProgress.has(key);
 }
 
+/**
+ * Marks an explanation request as active so duplicate clicks can be rejected.
+ */
 export function markExplainInProgress(key: string): void {
     explainInProgress.add(key);
 }
 
+/**
+ * Clears the in-progress marker for an explanation request.
+ */
 export function clearExplainInProgress(key: string): void {
     explainInProgress.delete(key);
 }
 
+/**
+ * Returns whether an alternative-lens generation is already running for this
+ * message.
+ */
 export function isAlternativeLensInProgress(key: string): boolean {
     return alternativeLensInProgress.has(key);
 }
 
+/**
+ * Marks an alternative-lens generation as active.
+ */
 export function markAlternativeLensInProgress(key: string): void {
     alternativeLensInProgress.add(key);
 }
 
+/**
+ * Clears the in-progress marker for an alternative-lens generation.
+ */
 export function clearAlternativeLensInProgress(key: string): void {
     alternativeLensInProgress.delete(key);
 }
 
+/**
+ * Returns a copy of the lens catalogue so callers cannot mutate the shared
+ * definitions array.
+ */
 export function getAlternativeLensDefinitions(): AlternativeLensDefinition[] {
     return LENS_DEFINITIONS.slice();
 }
 
+/**
+ * Looks up one lens definition by key.
+ */
 export function getAlternativeLensDefinition(
     key: AlternativeLensKey
 ): AlternativeLensDefinition | undefined {
     return LENS_DEFINITIONS.find((lens) => lens.key === key);
 }
 
+/**
+ * Starts a fresh alternative-lens session for a message interaction.
+ */
 export function createAlternativeLensSession(
     sessionKey: string,
     context: AlternativeLensContext
@@ -371,12 +439,19 @@ export function createAlternativeLensSession(
     return session;
 }
 
+/**
+ * Retrieves a previously created alternative-lens session, if it still exists.
+ */
 export function getAlternativeLensSession(
     sessionKey: string
 ): AlternativeLensSession | undefined {
     return sessions.get(sessionKey);
 }
 
+/**
+ * Stores the currently selected lens and clears stale custom text when the
+ * user switches away from the custom option.
+ */
 export function setAlternativeLensSelection(
     sessionKey: string,
     lensKey: AlternativeLensKey
@@ -393,6 +468,9 @@ export function setAlternativeLensSelection(
     return session;
 }
 
+/**
+ * Stores the custom lens description for the current session.
+ */
 export function setAlternativeLensCustomDescription(
     sessionKey: string,
     description: string
@@ -406,6 +484,9 @@ export function setAlternativeLensCustomDescription(
     return session;
 }
 
+/**
+ * Deletes the cached alternative-lens session once the flow ends or expires.
+ */
 export function clearAlternativeLensSession(sessionKey: string): void {
     sessions.delete(sessionKey);
 }
@@ -435,6 +516,9 @@ function buildAlternativeLensLogContext(
     };
 }
 
+/**
+ * Converts the current session into the payload used for prompt construction.
+ */
 export function buildLensPayload(session: AlternativeLensSession): {
     key: AlternativeLensKey;
     label: string;
@@ -467,18 +551,27 @@ export function buildLensPayload(session: AlternativeLensSession): {
     };
 }
 
+/**
+ * Input needed to generate an alternative-lens rewrite.
+ */
 export interface AlternativeLensGenerationContext {
     messageText: string;
     metadata: ResponseMetadata | null;
     channelId?: string;
 }
 
+/**
+ * Finalized lens data passed to generation code after session validation.
+ */
 export interface AlternativeLensPayload {
     key: AlternativeLensKey;
     label: string;
     description: string;
 }
 
+/**
+ * Input needed to generate a short explanation of a prior assistant answer.
+ */
 export interface ExplanationContext {
     messageText: string;
     confidence?: number;
@@ -650,6 +743,10 @@ type PlannerRequest =
           reasoningTrace?: string;
       };
 
+/**
+ * Asks the planner for OpenAI generation options tuned to the provenance
+ * follow-up task.
+ */
 export async function requestProvenanceOpenAIOptions(
     openaiService: OpenAIService,
     request: PlannerRequest
@@ -741,6 +838,9 @@ function formatMetadataSummary(metadata: ResponseMetadata | null): string {
 // -----------------------------
 // Metadata and message recovery
 // -----------------------------
+/**
+ * Extracts the response ID encoded in a provenance footer line, when present.
+ */
 export function extractResponseIdFromFooterText(
     footerText?: string | null
 ): string | null {
@@ -752,6 +852,9 @@ export function extractResponseIdFromFooterText(
     return match?.[3] ?? null;
 }
 
+/**
+ * Scans a Discord message's embeds to recover the provenance response ID.
+ */
 export function deriveResponseIdFromMessage(
     message: Message | null
 ): string | null {
@@ -818,6 +921,10 @@ export async function resolveProvenanceMetadata(
 }
 
 // Resolve the response message for footer buttons.
+/**
+ * Finds the message chunk that should be treated as the response anchor for a
+ * provenance action.
+ */
 export async function resolveResponseAnchorMessage(
     message: Message
 ): Promise<Message | null> {
@@ -898,6 +1005,10 @@ export async function resolveResponseAnchorMessage(
     return null;
 }
 
+/**
+ * Rebuilds the full assistant response text by stitching together adjacent bot
+ * message chunks when the original reply was split.
+ */
 export async function recoverFullMessageText(
     message: Message,
     anchorMessage?: Message | null
@@ -984,6 +1095,10 @@ export async function recoverFullMessageText(
 // -----------------------------
 // Interaction handlers
 // -----------------------------
+/**
+ * Starts the alternative-lens flow by capturing the source response and
+ * showing the private lens picker UI.
+ */
 export async function handleAlternativeLensButton(
     interaction: ButtonInteraction
 ): Promise<void> {
@@ -1120,6 +1235,9 @@ export async function handleAlternativeLensButton(
     }
 }
 
+/**
+ * Stores the user's selected lens and opens the custom-lens modal when needed.
+ */
 export async function handleAlternativeLensSelect(
     interaction: StringSelectMenuInteraction
 ): Promise<void> {
@@ -1264,6 +1382,9 @@ export async function handleAlternativeLensSelect(
     }
 }
 
+/**
+ * Saves the free-form custom lens description submitted through the modal.
+ */
 export async function handleAlternativeLensModal(
     interaction: ModalSubmitInteraction
 ): Promise<void> {
@@ -1305,6 +1426,10 @@ export async function handleAlternativeLensModal(
     });
 }
 
+/**
+ * Validates the saved session, generates the alternative-lens response, and
+ * posts it back into the channel.
+ */
 export async function handleAlternativeLensSubmit(
     interaction: ButtonInteraction,
     openaiService: OpenAIService

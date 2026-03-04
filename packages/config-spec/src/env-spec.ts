@@ -20,6 +20,10 @@ import type { EnvSpecEntry } from './types.js';
 // This file is the single source of truth for environment metadata.
 // Each env variable is declared once below, and every exported view is derived
 // from that one declaration.
+/**
+ * Ordered environment spec entries used for docs, tooling, and runtime config
+ * generation.
+ */
 export const envEntries = [
     defineEnv({
         key: "OPENAI_API_KEY",
@@ -1544,6 +1548,10 @@ export const envEntries = [
 
 // Keep the ordered list export because it is the easiest form to browse in docs
 // and tooling when someone wants to scan the full environment surface.
+/**
+ * Alias kept for code that wants the full ordered spec without depending on the
+ * internal `envEntries` name.
+ */
 export const envSpec = envEntries;
 
 type EnvEntries = typeof envEntries;
@@ -1585,12 +1593,19 @@ if (duplicateEnvKeys.length > 0) {
 
 // Handy lookup for scripts, docs, and future tooling that want one env key at
 // a time without manually searching the full ordered list above.
+/**
+ * Fast lookup table keyed by env variable name.
+ */
 export const envSpecByKey = Object.fromEntries(
     envEntries.map((entry) => [entry.key, entry])
 ) as EnvSpecByKey;
 
 // Only literal env-backed defaults belong here. Derived defaults stay on the
 // env entry itself so operators can clearly tell which values come from env.
+/**
+ * Plain object of literal defaults only, for consumers that need concrete
+ * fallback values at runtime.
+ */
 export const envDefaultValues = Object.fromEntries(
     envEntries
         .filter(

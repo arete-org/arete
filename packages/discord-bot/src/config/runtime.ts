@@ -181,6 +181,10 @@ const getEngagementIgnoreModeEnv = (
 validateEnvironment();
 
 const rawPromptConfigPath = process.env.PROMPT_CONFIG_PATH;
+/**
+ * Resolved prompt config path, converted to an absolute path when operators use
+ * a relative override.
+ */
 export const promptConfigPath = rawPromptConfigPath
     ? path.isAbsolute(rawPromptConfigPath)
         ? rawPromptConfigPath
@@ -229,6 +233,10 @@ const nodeEnv =
           })();
 const isProduction = nodeEnv === 'production';
 
+/**
+ * Discord bot runtime config assembled from env defaults and validated
+ * overrides.
+ */
 export const runtimeConfig = {
     token: process.env.DISCORD_TOKEN!,
     clientId: process.env.DISCORD_CLIENT_ID!,

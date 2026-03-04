@@ -89,6 +89,9 @@ const newsFunction = {
     },
 };
 
+/**
+ * Slash-command definition for fetching and summarizing current news results.
+ */
 const newsCommand: Command = {
     data: new SlashCommandBuilder()
         .setName('news')
@@ -363,5 +366,8 @@ const newsCommand: Command = {
     },
 };
 
+/**
+ * Default export for Discord command registration.
+ */
 export default newsCommand;
 

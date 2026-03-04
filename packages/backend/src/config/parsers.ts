@@ -14,6 +14,10 @@ import type { WarningSink } from './types.js';
 
 const VALID_LOG_LEVELS = new Set(supportedLogLevels);
 
+/**
+ * Strips protocol, port, and path details so hostname comparisons stay
+ * consistent across request headers and env config.
+ */
 export const normalizeHostname = (value: string): string | null => {
     const trimmedValue = value.trim().toLowerCase();
     if (trimmedValue.length === 0) {
@@ -25,6 +29,10 @@ export const normalizeHostname = (value: string): string | null => {
     return hostname && hostname.length > 0 ? hostname : null;
 };
 
+/**
+ * Treats empty strings as missing values so blank env overrides do not win over
+ * real defaults.
+ */
 export const parseOptionalTrimmedString = (
     value: string | undefined
 ): string | null => {
@@ -32,6 +40,10 @@ export const parseOptionalTrimmedString = (
     return trimmedValue ? trimmedValue : null;
 };
 
+/**
+ * Parses a boolean env override and warns when the value is not clearly
+ * `true` or `false`.
+ */
 export const parseBooleanEnv = (
     value: string | undefined,
     fallback: boolean,
@@ -60,6 +72,10 @@ export const parseBooleanEnv = (
     return fallback;
 };
 
+/**
+ * Splits comma-separated env values into a clean list while preserving the
+ * fallback when the override is empty.
+ */
 export const parseCsvEnv = (
     value: string | undefined,
     fallback: string[]
@@ -76,6 +92,10 @@ export const parseCsvEnv = (
     return entries.length > 0 ? entries : [...fallback];
 };
 
+/**
+ * Parses a comma-separated hostname allowlist and normalizes each entry before
+ * de-duplicating it.
+ */
 export const parseHostnameListEnv = (
     value: string | undefined,
     fallback: string[]
@@ -92,6 +112,9 @@ export const parseHostnameListEnv = (
     return hostnames.length > 0 ? [...new Set(hostnames)] : [...fallback];
 };
 
+/**
+ * Parses positive integer env values used for limits, ports, and timeouts.
+ */
 export const parsePositiveIntEnv = (
     value: string | undefined,
     fallback: number,
@@ -113,6 +136,10 @@ export const parsePositiveIntEnv = (
     return fallback;
 };
 
+/**
+ * Validates string env values against an allowed set and falls back safely when
+ * operators provide an unsupported option.
+ */
 export const parseStringUnionEnv = <T extends string>(
     value: string | undefined,
     fallback: T,
@@ -133,6 +160,10 @@ export const parseStringUnionEnv = <T extends string>(
     return fallback;
 };
 
+/**
+ * Special-case parser for Winston log levels so logging config stays aligned
+ * with the shared provider vocabulary.
+ */
 export const parseLogLevelEnv = (
     value: string | undefined,
     fallback: SupportedLogLevel,

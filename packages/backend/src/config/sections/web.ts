@@ -10,6 +10,9 @@ import { envDefaultValues } from '@footnote/config-spec';
 import { parseCsvEnv } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
+/**
+ * Builds CORS and CSP allowlists used by the backend's web-facing responses.
+ */
 export const buildWebSection = (
     env: NodeJS.ProcessEnv,
     _warn: WarningSink

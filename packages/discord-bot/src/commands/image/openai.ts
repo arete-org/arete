@@ -71,6 +71,10 @@ interface GenerationOutcome {
     annotations: AnnotationFields;
 }
 
+/**
+ * Executes one image-generation request and returns the raw response plus the
+ * normalized image payload and annotations.
+ */
 export async function generateImageWithMetadata(
     options: GenerateImageOptions
 ): Promise<GenerationOutcome> {

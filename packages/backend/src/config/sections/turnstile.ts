@@ -12,6 +12,10 @@ import {
 } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
+/**
+ * Resolves Turnstile credentials and allowlist settings, while treating partial
+ * setup as disabled instead of half-enabled.
+ */
 export const buildTurnstileSection = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink

@@ -27,6 +27,10 @@ const VALID_VERBOSITY_LEVELS = new Set<SupportedVerbosity>(
         []) as readonly SupportedVerbosity[]
 );
 
+/**
+ * Builds backend OpenAI defaults, including planner-safe fallbacks for model
+ * settings and request timeout.
+ */
 export const buildOpenAISection = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink

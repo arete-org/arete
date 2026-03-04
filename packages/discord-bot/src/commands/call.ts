@@ -379,6 +379,10 @@ const callCommand: Command = {
     },
 };
 
+/**
+ * Replies or edits safely regardless of whether the interaction was already
+ * deferred.
+ */
 const safeReply = async (
     interaction: ChatInputCommandInteraction,
     content: string
@@ -394,5 +398,8 @@ const safeReply = async (
     }
 };
 
+/**
+ * Default export for Discord command registration.
+ */
 export default callCommand;
 

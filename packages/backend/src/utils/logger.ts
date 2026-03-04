@@ -186,8 +186,15 @@ export interface LLMCostTotals {
     totalTokensOut: number;
 }
 
+/**
+ * Callback that returns the latest aggregated LLM usage totals when available.
+ */
 export type LLMCostSummaryProvider = () => LLMCostTotals | null | undefined;
 
+/**
+ * Logs one operator-friendly cost summary line without forcing callers to know
+ * the logger formatting rules.
+ */
 export const logLLMCostSummary = (getTotals?: LLMCostSummaryProvider) => {
     try {
         const totals = getTotals?.();

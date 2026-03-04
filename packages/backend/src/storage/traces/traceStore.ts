@@ -14,6 +14,10 @@ import {
     traceStoreJsonReplacer,
 } from './traceStoreUtils.js';
 
+/**
+ * Public trace store contract. It currently aliases the SQLite implementation
+ * so callers stay decoupled from the factory details.
+ */
 export type TraceStore = SqliteTraceStore;
 
 const traceStoreLogger =
@@ -23,6 +27,10 @@ const traceStoreLogger =
 
 export { assertValidResponseMetadata, traceStoreJsonReplacer };
 
+/**
+ * Creates the trace store from runtime config and falls back to a local SQLite
+ * file when container-style paths are unavailable.
+ */
 export function createTraceStoreFromConfig(): TraceStore {
     const configuredPath = runtimeConfig.storage.provenanceSqlitePath;
     const flyDefaultPath = runtimeConfig.runtime.flyAppName
@@ -66,5 +74,8 @@ export function createTraceStoreFromConfig(): TraceStore {
     }
 }
 
+/**
+ * Eager default trace store used by the backend HTTP handlers.
+ */
 export const defaultTraceStore = createTraceStoreFromConfig();
 

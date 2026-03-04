@@ -17,6 +17,10 @@ const configLogger =
         ? logger.child({ module: 'backendRuntimeConfig' })
         : logger;
 
+/**
+ * Backend runtime config built once at startup with warning logs for any
+ * ignored env overrides.
+ */
 export const runtimeConfig = buildRuntimeConfig(process.env, (message) =>
     configLogger.warn(message)
 );

@@ -794,5 +794,11 @@ const AskMeAnything = (): JSX.Element => {
     );
 };
 
+/**
+ * Named export kept for callers that prefer explicit component imports.
+ */
 export { AskMeAnything };
+/**
+ * Default export for route and section imports.
+ */
 export default AskMeAnything;

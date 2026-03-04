@@ -13,6 +13,10 @@ import {
 } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
+/**
+ * Resolves GitHub webhook credentials and request-size limits for blog sync
+ * traffic.
+ */
 export const buildWebhookSection = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink

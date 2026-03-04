@@ -171,6 +171,9 @@ const hasImageEmbeds = (message: Message): boolean =>
             Boolean(embed.thumbnail?.url)
     );
 
+/**
+ * Discord-side executor for backend reflect decisions.
+ */
 export class MessageProcessor {
     private readonly openaiService: OpenAIService;
     private readonly contextBuilder: ContextBuilder;
@@ -945,6 +948,9 @@ export class MessageProcessor {
     }
 }
 
+/**
+ * Best-effort cleanup for temporary TTS files after a reply is delivered.
+ */
 export async function cleanupTTSFile(ttsPath: string): Promise<void> {
     if (!ttsPath) return;
 

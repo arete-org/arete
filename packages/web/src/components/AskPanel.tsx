@@ -33,6 +33,10 @@ declare global {
 const FALLBACK_REFLECTION =
     'I was unable to generate a response - please try again later.';
 
+/**
+ * Main website ask panel that manages prompt input, Turnstile, and reflective
+ * response rendering.
+ */
 const AskPanel = (): JSX.Element => {
     const [question, setQuestion] = useState('');
     const [status, setStatus] = useState('');
@@ -727,4 +731,7 @@ const AskPanel = (): JSX.Element => {
     );
 };
 
+/**
+ * Default export for the landing-page ask panel.
+ */
 export default AskPanel;
