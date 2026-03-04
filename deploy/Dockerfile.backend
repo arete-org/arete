@@ -31,9 +31,7 @@ COPY packages/config-spec/src/ packages/config-spec/src/
 COPY packages/contracts/src/ packages/contracts/src/
 
 # --- Build ---
-RUN pnpm --filter @footnote/contracts run build \
-  && pnpm --filter @footnote/config-spec run build \
-  && pnpm --filter @footnote/backend run build \
+RUN pnpm --filter @footnote/backend run build \
   && CI=true pnpm --filter @footnote/backend... install --prod
 
 # --- Runtime ---

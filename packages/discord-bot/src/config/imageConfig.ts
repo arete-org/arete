@@ -241,6 +241,16 @@ export const imageConfig: ImageConfiguration = {
     },
 };
 
+const cloudinaryValues = Object.values(imageConfig.cloudinary).filter(Boolean);
+if (
+    cloudinaryValues.length > 0 &&
+    cloudinaryValues.length < Object.keys(imageConfig.cloudinary).length
+) {
+    logger.warn(
+        'Cloudinary credentials are only partially configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET together or leave all three unset.'
+    );
+}
+
 /**
  * Helper that resolves the multiplier for the provided model while gracefully
  * falling back to a neutral multiplier when the model is unknown.

@@ -8,20 +8,16 @@
 
 import fs from 'fs';
 import { envDefaultValues } from '@footnote/config-spec';
+import {
+    supportedLogLevels,
+    type SupportedLogLevel,
+} from '@footnote/contracts/providers';
 import { createLogger, format, transports } from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
 
 const { combine, timestamp, printf, colorize } = format;
 const splatSymbol = Symbol.for('splat');
-const VALID_LOG_LEVELS = new Set([
-    'error',
-    'warn',
-    'info',
-    'http',
-    'verbose',
-    'debug',
-    'silly',
-]);
+const VALID_LOG_LEVELS = new Set(supportedLogLevels);
 
 // --- Redaction rules ---
 // Discord snowflakes are 17-19 digit numeric strings. We redact them to avoid
@@ -107,14 +103,14 @@ const logFormat = printf(({ level, message, timestamp }) => {
     return `${timestamp} [${level}]: ${message}`;
 });
 
-const parseLogLevel = (value: string | undefined): string => {
+const parseLogLevel = (value: string | undefined): SupportedLogLevel => {
     if (!value) {
         return envDefaultValues.LOG_LEVEL;
     }
 
     const normalized = value.trim().toLowerCase();
-    return VALID_LOG_LEVELS.has(normalized)
-        ? normalized
+    return VALID_LOG_LEVELS.has(normalized as SupportedLogLevel)
+        ? (normalized as SupportedLogLevel)
         : envDefaultValues.LOG_LEVEL;
 };
 
@@ -168,6 +164,13 @@ export const logger = createLogger({
     ],
     exitOnError: false,
 });
+
+// Use this logger during config/bootstrap work that happens before runtimeConfig
+// exists. It keeps the normal log formatting without creating a config cycle.
+export const bootstrapLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'configBootstrap' })
+        : logger;
 
 // --- LLM cost tracking utilities ---
 

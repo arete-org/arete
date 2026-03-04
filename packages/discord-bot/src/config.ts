@@ -19,6 +19,7 @@ import type {
     SupportedBotInteractionAction,
     SupportedEngagementIgnoreMode,
 } from '@footnote/contracts/providers';
+import { bootstrapLogger } from './utils/logger.js';
 import {
     PromptRegistry,
     renderPrompt as sharedRenderPrompt,
@@ -29,30 +30,24 @@ import {
 // Get the current directory
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-// Use console-backed logging here because the Winston logger depends on
-// runtimeConfig. Pulling the full logger into config startup would create a
-// circular init path.
-const logConfigBootstrapDebug = (message: string) => console.debug(message);
-const logConfigBootstrapInfo = (message: string) => console.info(message);
-const logConfigBootstrapWarn = (message: string) => console.warn(message);
 
 // Calculate .env file path
 const envPath = path.resolve(__dirname, '../../../.env');
-logConfigBootstrapDebug(`Loading environment variables from: ${envPath}`);
+bootstrapLogger.debug(`Loading environment variables from: ${envPath}`);
 
 // Load environment variables from .env file in the root directory (when present).
 if (fs.existsSync(envPath)) {
     const { error, parsed } = dotenv.config({ path: envPath });
 
     if (error) {
-        logConfigBootstrapWarn(`Failed to load .env file: ${error.message}`);
+        bootstrapLogger.warn(`Failed to load .env file: ${error.message}`);
     } else if (parsed) {
-        logConfigBootstrapDebug(
+        bootstrapLogger.debug(
             `Loaded environment variables: ${Object.keys(parsed).join(', ')}`
         );
     }
 } else {
-    logConfigBootstrapDebug(
+    bootstrapLogger.debug(
         'No .env file found; relying on injected environment variables.'
     );
 }
@@ -86,7 +81,7 @@ function validateEnvironment() {
     }
 
     // Log set rate limits
-    logConfigBootstrapDebug(
+    bootstrapLogger.debug(
         `Rate limits: ${JSON.stringify({
             user: {
                 enabled: envDefaultValues.RATE_LIMIT_USER,
@@ -120,7 +115,7 @@ const promptConfigPath = rawPromptConfigPath
     : undefined;
 
 if (promptConfigPath) {
-    logConfigBootstrapInfo(
+    bootstrapLogger.info(
         `Loading prompt overrides from: ${promptConfigPath}`
     );
 }
@@ -146,11 +141,12 @@ if (!webBaseUrl) {
         'Missing WEB_BASE_URL. Set WEB_BASE_URL explicitly or deploy via Fly.io so FLY_APP_NAME provides the default.'
     );
 }
-logConfigBootstrapInfo(`Using web base URL: ${webBaseUrl}`);
+bootstrapLogger.info(`Using web base URL: ${webBaseUrl}`);
 
 const rawBackendBaseUrl = process.env.BACKEND_BASE_URL?.trim();
 const fallbackBackendBaseUrl = flyAppName
-    ? runtimeFallbacks.discordBot.flyInternalBackendBaseUrl
+    ? runtimeFallbacks.discordBot.flyInternalBackendBaseUrl ??
+      'http://localhost:3000'
     : envSpecByKey.BACKEND_BASE_URL.defaultValue.kind === 'derived'
       ? typeof envSpecByKey.BACKEND_BASE_URL.defaultValue.fallbackValue ===
             'string'
@@ -162,7 +158,7 @@ const backendBaseUrl =
         ? rawBackendBaseUrl.replace(/\/+$/, '')
         : fallbackBackendBaseUrl;
 
-logConfigBootstrapInfo(`Using backend base URL: ${backendBaseUrl}`);
+bootstrapLogger.info(`Using backend base URL: ${backendBaseUrl}`);
 const traceApiToken = process.env.TRACE_API_TOKEN?.trim();
 const nodeEnv = process.env.NODE_ENV || DEFAULT_RUNTIME_NODE_ENV;
 const isProduction = nodeEnv === 'production';
@@ -200,7 +196,7 @@ function getNumberEnv(key: string, defaultValue: number): number {
 
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed < 0) {
-        logConfigBootstrapWarn(
+        bootstrapLogger.warn(
             `Ignoring invalid numeric value for ${key}: "${value}". Expected a non-negative number; using default (${defaultValue}).`
         );
         return defaultValue;
@@ -240,7 +236,7 @@ function getStringArrayEnv(
         .filter((entry) => entry.length > 0);
 
     if (entries.length === 0) {
-        logConfigBootstrapWarn(
+        bootstrapLogger.warn(
             `Ignoring ${key} because it did not contain any valid thread identifiers. Falling back to default (${defaultValue.join(', ') || 'none'}).`
         );
         return [...defaultValue];
@@ -264,7 +260,7 @@ function getBotInteractionActionEnv(
         return normalized;
     }
 
-    logConfigBootstrapWarn(
+    bootstrapLogger.warn(
         `Ignoring invalid bot interaction action for ${key}: "${value}". Expected "ignore" or "react"; using default (${defaultValue}).`
     );
 
@@ -286,7 +282,7 @@ function getEngagementIgnoreModeEnv(
         return normalized;
     }
 
-    logConfigBootstrapWarn(
+    bootstrapLogger.warn(
         `Ignoring invalid engagement ignore mode for ${key}: "${value}". Expected "silent" or "react"; using default (${defaultValue}).`
     );
 

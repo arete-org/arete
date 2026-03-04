@@ -9,9 +9,9 @@
 
 We currently read and parse environment variables in more than one style.
 
-On the `backend`, some values already flow through a central config module, while others are parsed directly inside startup code, handlers, auth helpers, rate-limit helpers, storage factories, and logging setup.  
-On the `discord-bot` side, there is already a strong central env module, but a smaller set of features still reaches into `process.env` directly.  
-On the `web` side, client runtime config is already fairly centralized, but build-time env and package naming are not yet aligned with the same monorepo pattern.
+For the `backend`, some values already flow through a central config module, while others are still parsed inside startup code, handlers, auth helpers, rate-limit helpers, storage factories, and logging setup.  
+The `discord-bot` already has a strong central env module, but a smaller set of features still reaches into `process.env` directly.  
+In the `web` package, client runtime config is already fairly centralized, but build-time env and package naming are not yet aligned with the same monorepo pattern.
 
 That split causes a few practical problems:
 
@@ -68,8 +68,8 @@ Defaults, warnings, and parsing rules stay consistent instead of drifting across
 
 - Each package should have one main config entrypoint called `runtimeConfig`.
 - `@footnote/config-spec` is the shared package for env names, defaults, and descriptions.
-- `env-spec.ts` is the main file inside that package.
-- `env-spec.source.ts` is the repo-level entrypoint for docs and tooling.
+- Inside that package, `env-spec.ts` is the main reference file.
+- At the repo level, `env-spec.source.ts` is the entrypoint used by docs and tooling.
 - Each package `config.ts` file is still the place that reads raw env values and turns them into the values the app uses.
 - Feature-specific config files are still fine when they make the code easier to understand. The image config is the main example.
 - Startup helpers such as dotenv loading can stay separate if that keeps startup behavior easier to follow.

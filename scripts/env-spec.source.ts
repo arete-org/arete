@@ -10,26 +10,6 @@
 // package builds fragile. The real shared copy lives in config-spec, and this
 // file exists as the repo-level entrypoint for docs and tooling.
 
-// --- Runtime imports ---
-import {
-    defineEnv,
-    defineEnvMap,
-    derived,
-    envDefaultValues,
-    envEntries,
-    envSpec,
-    envSpecByKey,
-    literal,
-    noDefault,
-    runtime,
-    runtimeFallbacks,
-} from '../packages/config-spec/src/index.js';
-import {
-    supportedOpenAIImageModels,
-    supportedOpenAITextModels,
-    supportedProviders,
-} from '../packages/contracts/src/providers.js';
-
 // --- Runtime exports ---
 export {
     defineEnv,
@@ -43,10 +23,12 @@ export {
     noDefault,
     runtime,
     runtimeFallbacks,
+} from '../packages/config-spec/src/index.js';
+export {
     supportedOpenAIImageModels,
     supportedOpenAITextModels,
     supportedProviders,
-};
+} from '../packages/contracts/src/providers.js';
 
 // --- Type exports ---
 export type {
