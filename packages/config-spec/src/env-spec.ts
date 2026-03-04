@@ -457,9 +457,7 @@ export const envEntries = [
         secret: false,
         kind: "csv",
         description: "Comma-separated thread IDs allowed when thread replies are restricted.",
-        defaultValue: literal([
-            "",
-        ]),
+        defaultValue: literal([]),
         usedBy: [
             "packages/discord-bot/src/config.ts",
         ],
