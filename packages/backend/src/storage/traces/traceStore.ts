@@ -41,6 +41,7 @@ export function createTraceStoreFromConfig(): TraceStore {
 
         if (
             !configuredPath &&
+            defaultPath !== './data/provenance.db' &&
             (isPermission || (isDockerPath && isMissing))
         ) {
             // Fallback to a local relative path when default path is not writable and no env override is set.
