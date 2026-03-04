@@ -9,11 +9,9 @@
 import { buildLoggingSection } from './sections/logging.js';
 import { buildOpenAISection } from './sections/openai.js';
 import { buildRateLimitsSection } from './sections/rateLimits.js';
-import { buildReflectSection } from './sections/reflect.js';
-import { buildRuntimeSection } from './sections/runtime.js';
-import { buildServerSection } from './sections/server.js';
+import { buildRuntimeSections } from './sections/runtime.js';
+import { buildServiceSections } from './sections/services.js';
 import { buildStorageSection } from './sections/storage.js';
-import { buildTraceSection } from './sections/trace.js';
 import { buildTurnstileSection } from './sections/turnstile.js';
 import { buildWebSection } from './sections/web.js';
 import { buildWebhookSection } from './sections/webhook.js';
@@ -23,12 +21,10 @@ export const buildRuntimeConfig = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink
 ): RuntimeConfig => {
-    const runtime = buildRuntimeSection(env, warn);
-    const server = buildServerSection(env, warn);
+    const { runtime, server } = buildRuntimeSections(env, warn);
     const openai = buildOpenAISection(env, warn);
     const web = buildWebSection(env, warn);
-    const reflect = buildReflectSection(env, warn);
-    const trace = buildTraceSection(env, warn);
+    const { reflect, trace } = buildServiceSections(env, warn);
     const turnstile = buildTurnstileSection(env, warn);
     const rateLimits = buildRateLimitsSection(env, warn);
     const webhook = buildWebhookSection(env, warn);

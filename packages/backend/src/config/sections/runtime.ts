@@ -1,22 +1,26 @@
 /**
- * @description: Builds backend runtime-mode config such as NODE_ENV and Fly runtime flags.
+ * @description: Builds backend runtime and server config that is resolved once during startup.
  * @footnote-scope: utility
  * @footnote-module: BackendRuntimeSection
- * @footnote-risk: low - Wrong runtime flags mainly affect environment-specific branching.
- * @footnote-ethics: low - These flags guide behavior but do not directly expose sensitive data.
+ * @footnote-risk: medium - Wrong runtime or bind settings can change startup behavior or request attribution.
+ * @footnote-ethics: medium - Proxy and environment flags affect how requests are interpreted and audited.
  */
 
 import { envDefaultValues } from '@footnote/config-spec';
 import { supportedNodeEnvs } from '@footnote/contracts/providers';
-import { parseOptionalTrimmedString } from '../parsers.js';
+import {
+    parseBooleanEnv,
+    parseOptionalTrimmedString,
+    parsePositiveIntEnv,
+} from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
 const SUPPORTED_NODE_ENVS = new Set(supportedNodeEnvs);
 
-export const buildRuntimeSection = (
+export const buildRuntimeSections = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink
-): RuntimeConfig['runtime'] => {
+): Pick<RuntimeConfig, 'runtime' | 'server'> => {
     const configuredNodeEnv = parseOptionalTrimmedString(env.NODE_ENV);
     const nodeEnv = configuredNodeEnv
         ? SUPPORTED_NODE_ENVS.has(
@@ -32,9 +36,29 @@ export const buildRuntimeSection = (
         : envDefaultValues.NODE_ENV;
 
     return {
-        nodeEnv,
-        isProduction: nodeEnv === 'production',
-        isDevelopment: nodeEnv === 'development',
-        flyAppName: parseOptionalTrimmedString(env.FLY_APP_NAME),
+        runtime: {
+            nodeEnv,
+            isProduction: nodeEnv === 'production',
+            isDevelopment: nodeEnv === 'development',
+            flyAppName: parseOptionalTrimmedString(env.FLY_APP_NAME),
+        },
+        server: {
+            dataDir:
+                parseOptionalTrimmedString(env.DATA_DIR) ||
+                envDefaultValues.DATA_DIR,
+            host: parseOptionalTrimmedString(env.HOST) || envDefaultValues.HOST,
+            port: parsePositiveIntEnv(
+                env.PORT,
+                envDefaultValues.PORT,
+                'PORT',
+                warn
+            ),
+            trustProxy: parseBooleanEnv(
+                env.WEB_TRUST_PROXY,
+                envDefaultValues.WEB_TRUST_PROXY,
+                'WEB_TRUST_PROXY',
+                warn
+            ),
+        },
     };
 };
