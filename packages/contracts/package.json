@@ -25,6 +25,10 @@
         "./web/schemas": {
             "types": "./dist/web/schemas.d.ts",
             "default": "./dist/web/schemas.js"
+        },
+        "./providers": {
+            "types": "./dist/providers.d.ts",
+            "default": "./dist/providers.js"
         }
     },
     "scripts": {
