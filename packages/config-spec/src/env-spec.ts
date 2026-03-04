@@ -7,7 +7,6 @@
  */
 
 import { defineEnv, derived, literal, noDefault } from './env-factories.js';
-import { runtimeFallbacks } from './runtime-fallbacks.js';
 import { supportedNodeEnvs } from '@footnote/contracts/providers';
 import type { EnvSpecEntry } from './types.js';
 
@@ -1595,8 +1594,8 @@ export const envSpecByKey = Object.fromEntries(
     envEntries.map((entry) => [entry.key, entry])
 ) as EnvSpecByKey;
 
-// Only literal env-backed defaults belong here. Derived/runtime fallbacks stay
-// in runtimeFallbacks so operators can clearly tell which values come from env.
+// Only literal env-backed defaults belong here. Derived defaults stay on the
+// env entry itself so operators can clearly tell which values come from env.
 export const envDefaultValues = Object.fromEntries(
     envEntries
         .filter(
@@ -1606,5 +1605,3 @@ export const envDefaultValues = Object.fromEntries(
         )
         .map((entry) => [entry.key, entry.defaultValue.value])
 ) as EnvDefaultValues;
-
-export { runtimeFallbacks };

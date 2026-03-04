@@ -20,7 +20,6 @@ export {
     envSpec,
     envSpecByKey,
 } from './env-spec.js';
-export { runtimeFallbacks } from './runtime-fallbacks.js';
 export type {
     EnvDefault,
     EnvLiteralValue,

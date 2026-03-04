@@ -13,7 +13,6 @@ import { fileURLToPath } from 'url';
 import {
     envDefaultValues,
     envSpecByKey,
-    runtimeFallbacks,
 } from '@footnote/config-spec';
 import type {
     SupportedBotInteractionAction,
@@ -121,6 +120,7 @@ if (promptConfigPath) {
 }
 
 const flyAppName = process.env.FLY_APP_NAME?.trim();
+const FLY_INTERNAL_BACKEND_BASE_URL = 'http://footnote-backend.internal:3000';
 // Default to the Fly-provisioned hostname when present so deployments work without extra config.
 const fallbackWebBaseUrl = flyAppName
     ? `https://${flyAppName}.fly.dev`
@@ -145,8 +145,7 @@ bootstrapLogger.info(`Using web base URL: ${webBaseUrl}`);
 
 const rawBackendBaseUrl = process.env.BACKEND_BASE_URL?.trim();
 const fallbackBackendBaseUrl = flyAppName
-    ? runtimeFallbacks.discordBot.flyInternalBackendBaseUrl ??
-      'http://localhost:3000'
+    ? FLY_INTERNAL_BACKEND_BASE_URL
     : envSpecByKey.BACKEND_BASE_URL.defaultValue.kind === 'derived'
       ? typeof envSpecByKey.BACKEND_BASE_URL.defaultValue.fallbackValue ===
             'string'

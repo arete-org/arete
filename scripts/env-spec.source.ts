@@ -22,7 +22,6 @@ export {
     literal,
     noDefault,
     runtime,
-    runtimeFallbacks,
 } from '../packages/config-spec/src/index.js';
 export {
     supportedOpenAIImageModels,
