@@ -28,24 +28,48 @@ const DISCORD_ID_REGEX = /\b\d{17,19}\b/g;
  * defense-in-depth layer; primary protection should still pseudonymize IDs
  * before logging or storing.
  */
-export function sanitizeLogData<T>(value: T): T {
+export function sanitizeLogData<T>(
+    value: T,
+    seen: WeakSet<object> = new WeakSet<object>()
+): T {
     if (typeof value === 'string') {
         // Swap raw snowflakes for a clear placeholder.
         return value.replace(DISCORD_ID_REGEX, '[REDACTED_ID]') as T;
     }
 
+    if (value === null) {
+        return value;
+    }
+
     if (Array.isArray(value)) {
-        // Walk arrays and sanitize each entry.
-        return value.map((entry) => sanitizeLogData(entry)) as T;
+        if (seen.has(value)) {
+            return '[Circular]' as T;
+        }
+        seen.add(value);
+        try {
+            // Track only the current traversal path so shared references are
+            // preserved while true cycles still collapse safely.
+            return value.map((entry) => sanitizeLogData(entry, seen)) as T;
+        } finally {
+            seen.delete(value);
+        }
     }
 
     if (value && typeof value === 'object') {
-        // Walk objects so nested IDs get scrubbed too.
-        const sanitized: Record<string, unknown> = {};
-        for (const [key, val] of Object.entries(value)) {
-            sanitized[key] = sanitizeLogData(val);
+        if (seen.has(value as object)) {
+            return '[Circular]' as T;
         }
-        return sanitized as T;
+        seen.add(value as object);
+        try {
+            // Walk objects so nested IDs get scrubbed too.
+            const sanitized: Record<string, unknown> = {};
+            for (const [key, val] of Object.entries(value)) {
+                sanitized[key] = sanitizeLogData(val, seen);
+            }
+            return sanitized as T;
+        } finally {
+            seen.delete(value as object);
+        }
     }
 
     return value;

@@ -78,13 +78,25 @@ export function createIncidentStoreFromEnv(): IncidentStore {
  * Lazy proxy around the default incident store so imports do not touch the
  * filesystem during module evaluation.
  */
+const boundMethodCache = new Map<PropertyKey, unknown>();
+
 export const defaultIncidentStore: IncidentStore = new Proxy(
     {} as IncidentStore,
     {
         get: (_target, prop) => {
             const store = getDefaultIncidentStore();
             const value = store[prop as keyof IncidentStore];
-            return typeof value === 'function' ? value.bind(store) : value;
+            if (typeof value !== 'function') {
+                return value;
+            }
+
+            if (boundMethodCache.has(prop)) {
+                return boundMethodCache.get(prop);
+            }
+
+            const boundValue = value.bind(store);
+            boundMethodCache.set(prop, boundValue);
+            return boundValue;
         },
     }
 );

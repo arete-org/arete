@@ -151,9 +151,9 @@ export const parseStringUnionEnv = <T extends string>(
         return fallback;
     }
 
-    const normalized = value.trim().toLowerCase() as T;
-    if (allowedValues.has(normalized)) {
-        return normalized;
+    const normalized = value.trim().toLowerCase();
+    if (allowedValues.has(normalized as T)) {
+        return normalized as T;
     }
 
     warn(`Ignoring invalid ${key} "${value}". Using default (${fallback}).`);
