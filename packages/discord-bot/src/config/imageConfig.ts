@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - Config affects output style and safety behavior.
  */
 import { logger } from '../utils/logger.js';
+import { envDefaultValues } from '@footnote/config-spec';
 import type {
     ImageOutputCompression,
     ImageOutputFormat,
@@ -16,26 +17,28 @@ import type {
 
 /**
  * Hard coded defaults ensure the bot keeps working even when no overrides are
- * supplied. Environment variables can override any of these values at runtime
- * without requiring a redeploy.
+ * supplied. Defaults are conservative to minimize costs and avoid surprises.
  */
-const FALLBACK_TEXT_MODEL: ImageTextModel = 'gpt-4.1-mini';
-const FALLBACK_IMAGE_MODEL: ImageRenderModel = 'gpt-image-1-mini';
-const FALLBACK_IMAGE_QUALITY: ImageQualityType = 'low';
-const FALLBACK_OUTPUT_FORMAT: ImageOutputFormat = 'webp';
-const FALLBACK_OUTPUT_COMPRESSION: ImageOutputCompression = 80;
-const FALLBACK_TOKENS_PER_REFRESH = 10;
-const FALLBACK_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const FALLBACK_TEXT_MODEL =
+    envDefaultValues.IMAGE_DEFAULT_TEXT_MODEL as ImageTextModel;
+const FALLBACK_IMAGE_MODEL =
+    envDefaultValues.IMAGE_DEFAULT_IMAGE_MODEL as ImageRenderModel;
+const FALLBACK_IMAGE_QUALITY =
+    envDefaultValues.IMAGE_DEFAULT_QUALITY as ImageQualityType;
+const FALLBACK_OUTPUT_FORMAT =
+    envDefaultValues.IMAGE_DEFAULT_OUTPUT_FORMAT as ImageOutputFormat;
+const FALLBACK_OUTPUT_COMPRESSION =
+    envDefaultValues.IMAGE_DEFAULT_OUTPUT_COMPRESSION as ImageOutputCompression;
+const FALLBACK_TOKENS_PER_REFRESH = envDefaultValues.IMAGE_TOKENS_PER_REFRESH;
+const FALLBACK_REFRESH_INTERVAL_MS =
+    envDefaultValues.IMAGE_TOKEN_REFRESH_INTERVAL_MS;
 
 /**
- * Default multipliers reflect the existing pricing balance between the mini and
- * full render models. Operators can override them through environment
- * variables when the balance needs tuning.
+ * Default multipliers reflect the pricing balance between models in easy-to-understand ratios for better user experience.
+ * Updated: 2026-03-03
  */
 const FALLBACK_MODEL_MULTIPLIERS: Record<ImageRenderModel, number> = {
-    'gpt-image-1-mini': 1,
-    'gpt-image-1.5': 2, // Latest model, 1.5, is cheaper than 1
-    'gpt-image-1': 3,
+    ...envDefaultValues.IMAGE_MODEL_MULTIPLIERS,
 };
 
 /**
@@ -180,6 +183,11 @@ export interface ImageConfiguration {
         outputFormat: ImageOutputFormat;
         outputCompression: ImageOutputCompression;
     };
+    cloudinary: {
+        cloudName: string | undefined;
+        apiKey: string | undefined;
+        apiSecret: string | undefined;
+    };
     tokens: {
         tokensPerRefresh: number;
         refreshIntervalMs: number;
@@ -215,6 +223,11 @@ export const imageConfig: ImageConfiguration = {
                 process.env.IMAGE_DEFAULT_OUTPUT_COMPRESSION
             ) ?? FALLBACK_OUTPUT_COMPRESSION,
     },
+    cloudinary: {
+        cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+        apiKey: process.env.CLOUDINARY_API_KEY,
+        apiSecret: process.env.CLOUDINARY_API_SECRET,
+    },
     tokens: {
         tokensPerRefresh: readNumberEnv(
             'IMAGE_TOKENS_PER_REFRESH',
@@ -235,4 +248,3 @@ export const imageConfig: ImageConfiguration = {
 export function getImageModelTokenMultiplier(model: ImageRenderModel): number {
     return imageConfig.tokens.modelTokenMultipliers[model] ?? 1;
 }
-

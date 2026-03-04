@@ -11,6 +11,7 @@ import { formatUsd } from '../../utils/pricing.js';
 import { clampForCloudinary, chunkString, sanitizeForEmbed } from './embed.js';
 import { CLOUDINARY_CONTEXT_VALUE_LIMIT } from './constants.js';
 import type { UploadMetadata } from './types.js';
+import { imageConfig } from '../../config/imageConfig.js';
 
 const formatToMime: Record<string, string> = {
     png: 'image/png',
@@ -20,9 +21,9 @@ const formatToMime: Record<string, string> = {
 };
 
 const cloudinaryConfig = {
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
+    cloud_name: imageConfig.cloudinary.cloudName,
+    api_key: imageConfig.cloudinary.apiKey,
+    api_secret: imageConfig.cloudinary.apiSecret,
 };
 
 export const isCloudinaryConfigured = Boolean(

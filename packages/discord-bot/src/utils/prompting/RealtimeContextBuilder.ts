@@ -5,7 +5,7 @@
  * @footnote-risk: high - Context errors can degrade realtime responses or routing.
  * @footnote-ethics: high - Realtime transcripts impact privacy and consent.
  */
-import { renderPrompt } from '../env.js';
+import { renderPrompt } from '../../config.js';
 
 export interface RealtimeContextParticipant {
     id: string;

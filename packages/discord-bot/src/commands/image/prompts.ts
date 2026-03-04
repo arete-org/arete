@@ -5,7 +5,7 @@
  * @footnote-risk: medium - Prompt errors can degrade outputs or raise costs.
  * @footnote-ethics: medium - Prompt framing shapes model behavior and safety.
  */
-import { renderPrompt } from '../../utils/env.js';
+import { renderPrompt } from '../../config.js';
 
 import type {
     ImageBackgroundType,

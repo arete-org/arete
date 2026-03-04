@@ -12,7 +12,7 @@ import { logger } from '../utils/logger.js';
 import { OpenAIService } from '../utils/openaiService.js';
 import { MessageProcessor } from '../utils/MessageProcessor.js';
 import { CatchupFilter } from '../utils/CatchupFilter.js';
-import { config } from '../utils/env.js';
+import { runtimeConfig } from '../config.js';
 import { ResponseHandler } from '../utils/response/ResponseHandler.js';
 import { ChannelContextManager } from '../state/ChannelContextManager.js';
 import { RealtimeEngagementFilter } from '../engagement/RealtimeEngagementFilter.js';
@@ -99,27 +99,29 @@ export class MessageCreate extends Event {
     public readonly once = false;
     private readonly messageProcessor: MessageProcessor;
     private readonly catchupFilter: CatchupFilter;
-    private readonly CATCHUP_AFTER_MESSAGES = config.catchUp.afterMessages;
+    private readonly CATCHUP_AFTER_MESSAGES =
+        runtimeConfig.catchUp.afterMessages;
     private readonly CATCHUP_IF_MENTIONED_AFTER_MESSAGES =
-        config.catchUp.ifMentionedAfterMessages;
+        runtimeConfig.catchUp.ifMentionedAfterMessages;
     private readonly channelMessageCounters = new Map<
         string,
         { count: number; lastUpdated: number }
     >();
-    private readonly STALE_COUNTER_TTL_MS = config.catchUp.staleCounterTtlMs;
+    private readonly STALE_COUNTER_TTL_MS =
+        runtimeConfig.catchUp.staleCounterTtlMs;
     private readonly ALLOW_THREAD_RESPONSES =
-        config.visibility.allowThreadResponses;
+        runtimeConfig.visibility.allowThreadResponses;
     private readonly allowedThreadIds = new Set(
-        config.visibility.allowedThreadIds
+        runtimeConfig.visibility.allowedThreadIds
     );
     private readonly botConversationStates = new Map<
         string,
         BotConversationState
     >();
     private readonly BOT_CONVERSATION_TTL_MS =
-        config.botInteraction.conversationTtlMs;
+        runtimeConfig.botInteraction.conversationTtlMs;
     private readonly BOT_INTERACTION_COOLDOWN_MS = Math.max(
-        config.botInteraction.cooldownMs,
+        runtimeConfig.botInteraction.cooldownMs,
         1000
     );
     private readonly contextManager: ChannelContextManager | null;
@@ -150,13 +152,13 @@ export class MessageCreate extends Event {
 
         const estimator = dependencies.costEstimator ?? null;
 
-        if (config.contextManager.enabled) {
+        if (runtimeConfig.contextManager.enabled) {
             this.contextManager = new ChannelContextManager({
                 enabled: true,
                 maxMessagesPerChannel:
-                    config.contextManager.maxMessagesPerChannel,
-                messageRetentionMs: config.contextManager.messageRetentionMs,
-                evictionIntervalMs: config.contextManager.evictionIntervalMs,
+                    runtimeConfig.contextManager.maxMessagesPerChannel,
+                messageRetentionMs: runtimeConfig.contextManager.messageRetentionMs,
+                evictionIntervalMs: runtimeConfig.contextManager.evictionIntervalMs,
             });
             messageLogger.info('ChannelContextManager enabled');
             if (estimator) {
@@ -177,10 +179,10 @@ export class MessageCreate extends Event {
         this.costEstimator = estimator;
 
         // Initialize realtime engagement filter if enabled
-        if (config.realtimeFilter.enabled) {
+        if (runtimeConfig.realtimeFilter.enabled) {
             this.realtimeFilter = new RealtimeEngagementFilter(
-                config.engagementWeights,
-                config.engagementPreferences,
+                runtimeConfig.engagementWeights,
+                runtimeConfig.engagementPreferences,
                 dependencies.openaiService
             );
             messageLogger.info('RealtimeEngagementFilter enabled');
@@ -396,11 +398,11 @@ export class MessageCreate extends Event {
                                     channelId: channelKey,
                                     score: decision.score,
                                     threshold:
-                                        config.engagementPreferences
+                                        runtimeConfig.engagementPreferences
                                             .minEngageThreshold,
                                     thresholdMet:
                                         decision.score >=
-                                        config.engagementPreferences
+                                        runtimeConfig.engagementPreferences
                                             .minEngageThreshold,
                                     shouldRespond: decision.engage,
                                     reasons: decision.reasons,
@@ -432,7 +434,7 @@ export class MessageCreate extends Event {
                             if (!decision.engage) {
                                 // If preferences indicate reaction mode, react with emoji
                                 if (
-                                    config.engagementPreferences.ignoreMode ===
+                                    runtimeConfig.engagementPreferences.ignoreMode ===
                                     'react'
                                 ) {
                                     try {
@@ -443,11 +445,11 @@ export class MessageCreate extends Event {
                                                 message.author
                                             );
                                         await responseHandler.addReaction(
-                                            config.engagementPreferences
+                                            runtimeConfig.engagementPreferences
                                                 .reactionEmoji
                                         );
                                         messageLogger.debug(
-                                            `Reacted with ${config.engagementPreferences.reactionEmoji} for ${channelKey}: ${decision.reason}`
+                                            `Reacted with ${runtimeConfig.engagementPreferences.reactionEmoji} for ${channelKey}: ${decision.reason}`
                                         );
                                     } catch (reactionError) {
                                         messageLogger.debug(
@@ -734,7 +736,7 @@ export class MessageCreate extends Event {
         state.lastDirection = 'other';
         state.lastUpdated = now;
 
-        if (state.exchanges >= config.botInteraction.maxBackAndForth) {
+        if (state.exchanges >= runtimeConfig.botInteraction.maxBackAndForth) {
             state.blockedUntil = now + this.BOT_INTERACTION_COOLDOWN_MS;
             await this.reactToSuppressedBotMessage(message);
             messageLogger.info(
@@ -752,7 +754,7 @@ export class MessageCreate extends Event {
      * the main message handling pipeline.
      */
     private async reactToSuppressedBotMessage(message: Message): Promise<void> {
-        if (config.botInteraction.afterLimitAction !== 'react') {
+        if (runtimeConfig.botInteraction.afterLimitAction !== 'react') {
             return;
         }
 
@@ -768,7 +770,7 @@ export class MessageCreate extends Event {
                 message.author
             );
             await responseHandler.addReaction(
-                config.botInteraction.reactionEmoji
+                runtimeConfig.botInteraction.reactionEmoji
             );
         } catch (error) {
             messageLogger.warn(

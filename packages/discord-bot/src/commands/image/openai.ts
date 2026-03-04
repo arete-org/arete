@@ -23,7 +23,7 @@ import {
     DEFAULT_IMAGE_OUTPUT_COMPRESSION,
 } from './constants.js';
 import { sanitizeForEmbed, truncateForEmbed } from './embed.js';
-import { renderPrompt } from '../../utils/env.js';
+import { renderPrompt } from '../../config.js';
 import { buildDeveloperPrompt } from './prompts.js';
 import type {
     ImageBackgroundType,

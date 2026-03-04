@@ -12,7 +12,7 @@ import { Command } from './BaseCommand.js';
 import { openaiService } from '../index.js';
 import { OpenAIOptions } from '../utils/openaiService.js';
 import { EmbedBuilder } from '../utils/response/EmbedBuilder.js';
-import { renderPrompt } from '../utils/env.js';
+import { renderPrompt } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 const DEFAULT_MAX_RESULTS = 3;

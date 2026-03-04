@@ -8,6 +8,8 @@
         "paths": {
             "@components/*": ["components/*"],
             "@pages/*": ["pages/*"],
+            "@footnote/config-spec": ["../../config-spec/src/index.ts"],
+            "@footnote/config-spec/*": ["../../config-spec/src/*"],
             "@footnote/contracts": ["../../contracts/src/index.ts"],
             "@footnote/contracts/ethics-core": [
                 "../../contracts/src/ethics-core/index.ts"

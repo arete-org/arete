@@ -5,7 +5,7 @@
  * @footnote-risk: high - Planning errors can trigger wrong modality or unsafe actions.
  * @footnote-ethics: high - Plan selection affects user trust and safety outcomes.
  */
-import { renderPrompt } from '../env.js';
+import { renderPrompt } from '../../config.js';
 import { logger } from '../logger.js';
 import {
     OpenAIService,

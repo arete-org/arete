@@ -33,7 +33,7 @@ import {
     type OpenAIOptions,
     type SupportedModel,
 } from '../openaiService.js';
-import { renderPrompt } from '../env.js';
+import { renderPrompt } from '../../config.js';
 import { Planner } from '../prompting/Planner.js';
 import { botApi } from '../../api/botApi.js';
 

@@ -12,7 +12,7 @@ import fs from 'fs';
 import OpenAI from 'openai';
 import type { ResponseCreateParamsNonStreaming } from 'openai/resources/responses/responses.js';
 import { logger } from './logger.js';
-import { renderPrompt } from './env.js';
+import { renderPrompt } from '../config.js';
 import { ActivityOptions } from 'discord.js';
 import {
     estimateTextCost,

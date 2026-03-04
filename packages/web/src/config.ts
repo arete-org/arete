@@ -6,7 +6,7 @@
  * @footnote-ethics: low - Exposes only non-sensitive configuration to the client.
  */
 import type { GetRuntimeConfigResponse } from '@footnote/contracts/web';
-import { api } from './api';
+import { api } from './utils/api';
 
 export type RuntimeConfig = GetRuntimeConfigResponse;
 
@@ -48,5 +48,9 @@ export const loadRuntimeConfig = async (): Promise<RuntimeConfig> => {
     }
 
     return inFlightConfig;
+};
+
+export const runtimeConfig = {
+    load: loadRuntimeConfig,
 };
 

@@ -11,6 +11,7 @@ import { Command } from '../commands/BaseCommand.js';
 import path from 'path';
 import { readdir } from 'fs/promises';
 import { logger } from './logger.js';
+import { runtimeConfig } from '../config.js';
 
 /**
  * Handles loading and managing Discord slash commands.
@@ -32,7 +33,7 @@ export class CommandHandler {
             logger.debug('Loading commands...');
 
             // In development, we need to look in the src directory for .ts files
-            const isDev = process.env.NODE_ENV !== 'production';
+            const isDev = runtimeConfig.isDevelopment;
             // In production, commands are in dist/commands
             const basePath = isDev
                 ? path.join(process.cwd(), 'src/commands')

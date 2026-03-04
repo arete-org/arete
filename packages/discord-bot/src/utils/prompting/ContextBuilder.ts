@@ -8,12 +8,10 @@
 import { Message } from 'discord.js';
 import { OpenAIMessage, OpenAIService } from '../openaiService.js';
 import { logger } from '../logger.js';
-import { renderPrompt } from '../env.js';
-
-const VERBOSE_CONTEXT_ENV_FLAG = 'DISCORD_BOT_LOG_FULL_CONTEXT';
+import { renderPrompt, runtimeConfig } from '../../config.js';
 
 export const isFullContextLoggingEnabled = (): boolean =>
-    (process.env[VERBOSE_CONTEXT_ENV_FLAG] || '').toLowerCase() === 'true';
+    runtimeConfig.debug.verboseContextLoggingEnabled;
 
 export const logContextIfVerbose = (context: OpenAIMessage[]): void => {
     if (!isFullContextLoggingEnabled()) {

@@ -11,6 +11,7 @@ import path from 'path';
 import { readdir } from 'fs/promises';
 import { logger } from './logger.js';
 import { Event } from '../events/Event.js';
+import { runtimeConfig } from '../config.js';
 
 /**
  * Manages Discord.js events for the bot.
@@ -47,7 +48,7 @@ export class EventManager {
         try {
             logger.debug(`Loading events from: ${eventsPath}`);
 
-            const isDev = process.env.NODE_ENV !== 'production';
+            const isDev = runtimeConfig.isDevelopment;
 
             // Get all files in the events directory
             const eventFiles = (await readdir(eventsPath)).filter((file) => {

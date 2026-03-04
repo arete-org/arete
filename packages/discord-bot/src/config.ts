@@ -10,35 +10,49 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { logger } from './logger.js';
+import {
+    envDefaultValues,
+    envSpecByKey,
+    runtimeFallbacks,
+} from '@footnote/config-spec';
+import type {
+    SupportedBotInteractionAction,
+    SupportedEngagementIgnoreMode,
+} from '@footnote/contracts/providers';
 import {
     PromptRegistry,
     renderPrompt as sharedRenderPrompt,
     setActivePromptRegistry,
     type PromptKey,
-} from './prompts/promptRegistry.js';
+} from './utils/prompts/promptRegistry.js';
 
 // Get the current directory
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+// Use console-backed logging here because the Winston logger depends on
+// runtimeConfig. Pulling the full logger into config startup would create a
+// circular init path.
+const logConfigBootstrapDebug = (message: string) => console.debug(message);
+const logConfigBootstrapInfo = (message: string) => console.info(message);
+const logConfigBootstrapWarn = (message: string) => console.warn(message);
 
 // Calculate .env file path
-const envPath = path.resolve(__dirname, '../../../../.env');
-logger.debug(`Loading environment variables from: ${envPath}`);
+const envPath = path.resolve(__dirname, '../../../.env');
+logConfigBootstrapDebug(`Loading environment variables from: ${envPath}`);
 
 // Load environment variables from .env file in the root directory (when present).
 if (fs.existsSync(envPath)) {
     const { error, parsed } = dotenv.config({ path: envPath });
 
     if (error) {
-        logger.warn(`Failed to load .env file: ${error.message}`);
+        logConfigBootstrapWarn(`Failed to load .env file: ${error.message}`);
     } else if (parsed) {
-        logger.debug(
+        logConfigBootstrapDebug(
             `Loaded environment variables: ${Object.keys(parsed).join(', ')}`
         );
     }
 } else {
-    logger.debug(
+    logConfigBootstrapDebug(
         'No .env file found; relying on injected environment variables.'
     );
 }
@@ -56,159 +70,9 @@ const REQUIRED_ENV_VARS: readonly string[] = [
     'INCIDENT_PSEUDONYMIZATION_SECRET', // Secret key for HMAC pseudonymization of Discord IDs
 ] as const;
 
-type RateLimitDefaults = {
-    USER_LIMIT: number;
-    USER_WINDOW_MS: number;
-    CHANNEL_LIMIT: number;
-    CHANNEL_WINDOW_MS: number;
-    GUILD_LIMIT: number;
-    GUILD_WINDOW_MS: number;
-    RATE_LIMIT_USER: 'true' | 'false';
-    RATE_LIMIT_CHANNEL: 'true' | 'false';
-    RATE_LIMIT_GUILD: 'true' | 'false';
-};
-
-/**
- * Default rate limit configurations
- */
-const DEFAULT_RATE_LIMITS: RateLimitDefaults = {
-    // Per-user: 5 messages per minute
-    USER_LIMIT: 5,
-    USER_WINDOW_MS: 60_000,
-    // Per-channel: 10 messages per minute
-    CHANNEL_LIMIT: 10,
-    CHANNEL_WINDOW_MS: 60_000,
-    // Per-guild: 20 messages per minute
-    GUILD_LIMIT: 20,
-    GUILD_WINDOW_MS: 60_000,
-    // Whether to enable each type of rate limiting
-    RATE_LIMIT_USER: 'true',
-    RATE_LIMIT_CHANNEL: 'true',
-    RATE_LIMIT_GUILD: 'true',
-};
-
-/**
- * Limits on channel/thread visibility
- */
-const DEFAULT_VISIBILITY_LIMITS = {
-    ALLOW_THREAD_RESPONSES: true,
-    ALLOWED_THREAD_IDS: [''], // Comma-separated list of thread IDs; takes priority over ALLOW_THREAD_RESPONSES
-} as const;
-
-/**
- * Default configuration for limiting back-and-forth conversations with other bots
- */
-const DEFAULT_BOT_INTERACTION_LIMITS = {
-    MAX_BACK_AND_FORTH: 2,
-    COOLDOWN_MS: 5 * 60_000,
-    CONVERSATION_TTL_MS: 10 * 60_000,
-    ACTION: 'react' as const,
-    REACTION: '👀',
-};
-
-/**
- * Default configuration for the channel catch-up logic
- * @type {Object}
- * @property {number} AFTER_MESSAGES - The number of messages to send after the last message
- * @property {number} IF_MENTIONED_AFTER_MESSAGES - The number of messages to send if the user is mentioned
- * @property {number} STALE_COUNTER_TTL_MS - The time to live for the stale counter
- */
-const DEFAULT_CATCH_UP_LIMITS = {
-    AFTER_MESSAGES: 10,
-    IF_MENTIONED_AFTER_MESSAGES: 5,
-    STALE_COUNTER_TTL_MS: 60 * 60_000,
-} as const;
-
-/**
- * Default configuration for the channel context manager
- * @type {Object}
- * @property {boolean} ENABLED - Whether the channel context manager is enabled
- * @property {number} MAX_MESSAGES_PER_CHANNEL - The maximum number of messages to keep per channel
- * @property {number} MESSAGE_RETENTION_MS - The time to keep messages per channel
- * @property {number} EVICTION_INTERVAL_MS - The interval to evict messages per channel
- */
-const DEFAULT_CONTEXT_MANAGER_CONFIG = {
-    ENABLED: true,
-    MAX_MESSAGES_PER_CHANNEL: 50,
-    MESSAGE_RETENTION_MS: 60 * 60_000,
-    EVICTION_INTERVAL_MS: 5 * 60_000,
-} as const;
-
-/**
- * Default configuration for the cost estimator
- * @type {Object}
- * @property {boolean} ENABLED - Whether the cost estimator is enabled
- */
-const DEFAULT_COST_ESTIMATOR_CONFIG = {
-    ENABLED: true,
-} as const;
-
-/**
- * Default bot mention names for engagement detection
- * @type {string[]}
- * @property {string[]} BOT_MENTION_NAMES - Comma-separated list of names the bot responds to (default: "footnote,ari")
- */
-const DEFAULT_BOT_MENTION_NAMES = ['footnote', 'ari'] as const;
-
-/**
- * Default engagement scoring weights (0-1 range, higher = more influence)
- * @type {Object}
- * @property {number} MENTION - Weight for direct mentions/questions (default 0.3)
- * @property {number} QUESTION - Weight for question marks and interrogatives (default 0.2)
- * @property {number} TECHNICAL - Weight for technical keywords (default 0.15)
- * @property {number} HUMAN_ACTIVITY - Weight for recent human message ratio (default 0.15)
- * @property {number} COST_SATURATION - Weight for cost velocity concerns (default 0.1, negative signal)
- * @property {number} BOT_NOISE - Weight for bot message ratio (default 0.05, negative signal)
- * @property {number} DM_BOOST - Multiplier for DM contexts (default 1.5)
- * @property {number} DECAY - Time decay factor for message recency (default 0.05)
- */
-const DEFAULT_ENGAGEMENT_WEIGHTS = {
-    MENTION: 0.3,
-    QUESTION: 0.2,
-    TECHNICAL: 0.15,
-    HUMAN_ACTIVITY: 0.15,
-    COST_SATURATION: 0.1,
-    BOT_NOISE: 0.05,
-    DM_BOOST: 1.5,
-    DECAY: 0.05,
-} as const;
-
-/**
- * Default engagement behavior preferences
- * @type {Object}
- * @property {string} IGNORE_MODE - How to acknowledge when skipping: 'silent' or 'react'
- * @property {string} REACTION_EMOJI - Emoji to use when ignoreMode=react
- * @property {number} MIN_ENGAGE_THRESHOLD - Minimum score to engage (0-1)
- * @property {number} PROBABILISTIC_BAND_LOW - Lower bound of grey zone for LLM refinement
- * @property {number} PROBABILISTIC_BAND_HIGH - Upper bound of grey zone for LLM refinement
- * @property {boolean} ENABLE_LLM_REFINEMENT - Whether to use LLM to refine scores in grey zone
- */
-const DEFAULT_ENGAGEMENT_PREFERENCES = {
-    IGNORE_MODE: 'silent' as const,
-    REACTION_EMOJI: '👍',
-    MIN_ENGAGE_THRESHOLD: 0.5,
-    PROBABILISTIC_BAND_LOW: 0.4,
-    PROBABILISTIC_BAND_HIGH: 0.6,
-    ENABLE_LLM_REFINEMENT: false,
-} as const;
-
-/**
- * Default realtime filter configuration
- * Enabled by default, but we provide a feature flag to disable it if desired.
- * @type {Object}
- * @property {boolean} ENABLED - Whether the realtime filter is enabled
- */
-const DEFAULT_REALTIME_FILTER_CONFIG = {
-    ENABLED: true,
-} as const;
-
-/**
- * Default HTTP timeout for bot -> backend API calls.
- * Some reflect flows intentionally spend extra time reasoning or generating.
- */
-const DEFAULT_API_TIMEOUTS = {
-    BACKEND_REQUEST_TIMEOUT_MS: 180_000,
-} as const;
+const DEFAULT_RUNTIME_NODE_ENV = envDefaultValues.NODE_ENV;
+const DEFAULT_LOG_DIRECTORY = envDefaultValues.LOG_DIR;
+const DEFAULT_LOG_LEVEL = envDefaultValues.LOG_LEVEL;
 
 /**
  * Validates that all required environment variables are set.
@@ -222,7 +86,25 @@ function validateEnvironment() {
     }
 
     // Log set rate limits
-    logger.debug(`Rate limits: ${JSON.stringify(DEFAULT_RATE_LIMITS)}`);
+    logConfigBootstrapDebug(
+        `Rate limits: ${JSON.stringify({
+            user: {
+                enabled: envDefaultValues.RATE_LIMIT_USER,
+                limit: envDefaultValues.USER_RATE_LIMIT,
+                windowMs: envDefaultValues.USER_RATE_WINDOW_MS,
+            },
+            channel: {
+                enabled: envDefaultValues.RATE_LIMIT_CHANNEL,
+                limit: envDefaultValues.CHANNEL_RATE_LIMIT,
+                windowMs: envDefaultValues.CHANNEL_RATE_WINDOW_MS,
+            },
+            guild: {
+                enabled: envDefaultValues.RATE_LIMIT_GUILD,
+                limit: envDefaultValues.GUILD_RATE_LIMIT,
+                windowMs: envDefaultValues.GUILD_RATE_WINDOW_MS,
+            },
+        })}`
+    );
 }
 
 // Validate environment variables on startup
@@ -234,11 +116,13 @@ const rawPromptConfigPath = process.env.PROMPT_CONFIG_PATH;
 const promptConfigPath = rawPromptConfigPath
     ? path.isAbsolute(rawPromptConfigPath)
         ? rawPromptConfigPath
-        : path.resolve(__dirname, '../../../../', rawPromptConfigPath)
+        : path.resolve(__dirname, '../../../', rawPromptConfigPath)
     : undefined;
 
 if (promptConfigPath) {
-    logger.info(`Loading prompt overrides from: ${promptConfigPath}`);
+    logConfigBootstrapInfo(
+        `Loading prompt overrides from: ${promptConfigPath}`
+    );
 }
 
 const flyAppName = process.env.FLY_APP_NAME?.trim();
@@ -247,7 +131,11 @@ const fallbackWebBaseUrl = flyAppName
     ? `https://${flyAppName}.fly.dev`
     : undefined;
 const rawWebBaseUrl = process.env.WEB_BASE_URL?.trim();
-const fallbackLocalBaseUrl = 'http://localhost:8080';
+const fallbackLocalBaseUrl =
+    envSpecByKey.WEB_BASE_URL.defaultValue.kind === 'derived' &&
+    typeof envSpecByKey.WEB_BASE_URL.defaultValue.fallbackValue === 'string'
+        ? envSpecByKey.WEB_BASE_URL.defaultValue.fallbackValue
+        : 'http://localhost:8080';
 const webBaseUrl =
     rawWebBaseUrl && rawWebBaseUrl.length > 0
         ? rawWebBaseUrl
@@ -258,19 +146,26 @@ if (!webBaseUrl) {
         'Missing WEB_BASE_URL. Set WEB_BASE_URL explicitly or deploy via Fly.io so FLY_APP_NAME provides the default.'
     );
 }
-logger.info(`Using web base URL: ${webBaseUrl}`);
+logConfigBootstrapInfo(`Using web base URL: ${webBaseUrl}`);
 
 const rawBackendBaseUrl = process.env.BACKEND_BASE_URL?.trim();
 const fallbackBackendBaseUrl = flyAppName
-    ? 'http://footnote-backend.internal:3000'
-    : 'http://localhost:3000';
+    ? runtimeFallbacks.discordBot.flyInternalBackendBaseUrl
+    : envSpecByKey.BACKEND_BASE_URL.defaultValue.kind === 'derived'
+      ? typeof envSpecByKey.BACKEND_BASE_URL.defaultValue.fallbackValue ===
+            'string'
+          ? envSpecByKey.BACKEND_BASE_URL.defaultValue.fallbackValue
+          : 'http://localhost:3000'
+      : 'http://localhost:3000';
 const backendBaseUrl =
     rawBackendBaseUrl && rawBackendBaseUrl.length > 0
         ? rawBackendBaseUrl.replace(/\/+$/, '')
         : fallbackBackendBaseUrl;
 
-logger.info(`Using backend base URL: ${backendBaseUrl}`);
+logConfigBootstrapInfo(`Using backend base URL: ${backendBaseUrl}`);
 const traceApiToken = process.env.TRACE_API_TOKEN?.trim();
+const nodeEnv = process.env.NODE_ENV || DEFAULT_RUNTIME_NODE_ENV;
+const isProduction = nodeEnv === 'production';
 
 // Instantiate the shared prompt registry and expose it to downstream modules.
 export const promptRegistry = new PromptRegistry({
@@ -305,7 +200,7 @@ function getNumberEnv(key: string, defaultValue: number): number {
 
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed < 0) {
-        logger.warn(
+        logConfigBootstrapWarn(
             `Ignoring invalid numeric value for ${key}: "${value}". Expected a non-negative number; using default (${defaultValue}).`
         );
         return defaultValue;
@@ -345,7 +240,7 @@ function getStringArrayEnv(
         .filter((entry) => entry.length > 0);
 
     if (entries.length === 0) {
-        logger.warn(
+        logConfigBootstrapWarn(
             `Ignoring ${key} because it did not contain any valid thread identifiers. Falling back to default (${defaultValue.join(', ') || 'none'}).`
         );
         return [...defaultValue];
@@ -354,16 +249,13 @@ function getStringArrayEnv(
     return entries;
 }
 
-type BotInteractionAction = 'ignore' | 'react';
-type EngagementIgnoreMode = 'silent' | 'react';
-
 /**
  * Reads the preferred action to take once the bot-to-bot conversation limit is reached
  */
 function getBotInteractionActionEnv(
     key: string,
-    defaultValue: BotInteractionAction
-): BotInteractionAction {
+    defaultValue: SupportedBotInteractionAction
+): SupportedBotInteractionAction {
     const value = process.env[key];
     if (!value) return defaultValue;
 
@@ -372,7 +264,7 @@ function getBotInteractionActionEnv(
         return normalized;
     }
 
-    logger.warn(
+    logConfigBootstrapWarn(
         `Ignoring invalid bot interaction action for ${key}: "${value}". Expected "ignore" or "react"; using default (${defaultValue}).`
     );
 
@@ -384,8 +276,8 @@ function getBotInteractionActionEnv(
  */
 function getEngagementIgnoreModeEnv(
     key: string,
-    defaultValue: EngagementIgnoreMode
-): EngagementIgnoreMode {
+    defaultValue: SupportedEngagementIgnoreMode
+): SupportedEngagementIgnoreMode {
     const value = process.env[key];
     if (!value) return defaultValue;
 
@@ -394,7 +286,7 @@ function getEngagementIgnoreModeEnv(
         return normalized;
     }
 
-    logger.warn(
+    logConfigBootstrapWarn(
         `Ignoring invalid engagement ignore mode for ${key}: "${value}". Expected "silent" or "react"; using default (${defaultValue}).`
     );
 
@@ -412,77 +304,80 @@ function getEngagementIgnoreModeEnv(
  * @property {boolean} isProduction - Whether the current environment is production
  * @property {Object} rateLimits - Rate limiting configuration
  */
-export const config = {
+export const runtimeConfig = {
     // Bot configuration
     token: process.env.DISCORD_TOKEN!,
     clientId: process.env.DISCORD_CLIENT_ID!,
     guildId: process.env.DISCORD_GUILD_ID!,
     openaiApiKey: process.env.OPENAI_API_KEY!,
+    developerUserId: process.env.DISCORD_USER_ID!,
     incidentPseudonymizationSecret:
         process.env.INCIDENT_PSEUDONYMIZATION_SECRET!,
     promptConfigPath,
     webBaseUrl,
     backendBaseUrl,
     traceApiToken,
+    webhookPort: getNumberEnv('WEBHOOK_PORT', envDefaultValues.WEBHOOK_PORT),
     api: {
         backendRequestTimeoutMs: getNumberEnv(
             'BACKEND_REQUEST_TIMEOUT_MS',
-            DEFAULT_API_TIMEOUTS.BACKEND_REQUEST_TIMEOUT_MS
+            envDefaultValues.BACKEND_REQUEST_TIMEOUT_MS
         ),
     },
 
     // Bot mention names for engagement detection
     botMentionNames: getStringArrayEnv(
         'BOT_MENTION_NAMES',
-        DEFAULT_BOT_MENTION_NAMES
+        envDefaultValues.BOT_MENTION_NAMES
     ),
 
     // Environment
-    env: process.env.NODE_ENV || 'development',
-    isProduction: (process.env.NODE_ENV || 'development') === 'production',
+    env: nodeEnv,
+    isProduction,
+    isDevelopment: !isProduction,
 
     // Rate limiting configuration
     rateLimits: {
         user: {
             enabled: getBooleanEnv(
                 'RATE_LIMIT_USER',
-                DEFAULT_RATE_LIMITS.RATE_LIMIT_USER === 'true'
+                envDefaultValues.RATE_LIMIT_USER
             ),
             limit: getNumberEnv(
                 'USER_RATE_LIMIT',
-                DEFAULT_RATE_LIMITS.USER_LIMIT
+                envDefaultValues.USER_RATE_LIMIT
             ),
             windowMs: getNumberEnv(
                 'USER_RATE_WINDOW_MS',
-                DEFAULT_RATE_LIMITS.USER_WINDOW_MS
+                envDefaultValues.USER_RATE_WINDOW_MS
             ),
         },
         channel: {
             enabled: getBooleanEnv(
                 'RATE_LIMIT_CHANNEL',
-                DEFAULT_RATE_LIMITS.RATE_LIMIT_CHANNEL === 'true'
+                envDefaultValues.RATE_LIMIT_CHANNEL
             ),
             limit: getNumberEnv(
                 'CHANNEL_RATE_LIMIT',
-                DEFAULT_RATE_LIMITS.CHANNEL_LIMIT
+                envDefaultValues.CHANNEL_RATE_LIMIT
             ),
             windowMs: getNumberEnv(
                 'CHANNEL_RATE_WINDOW_MS',
-                DEFAULT_RATE_LIMITS.CHANNEL_WINDOW_MS
+                envDefaultValues.CHANNEL_RATE_WINDOW_MS
             ),
         },
         guild: {
             enabled: getBooleanEnv(
                 'RATE_LIMIT_GUILD',
-                DEFAULT_RATE_LIMITS.RATE_LIMIT_GUILD === 'true'
+                envDefaultValues.RATE_LIMIT_GUILD
             ),
             limit: getNumberEnv(
                 'GUILD_RATE_LIMIT',
-                DEFAULT_RATE_LIMITS.GUILD_LIMIT
+                envDefaultValues.GUILD_RATE_LIMIT
             ),
             windowMs: getNumberEnv(
                 'GUILD_RATE_WINDOW_MS',
-                DEFAULT_RATE_LIMITS.GUILD_WINDOW_MS
+                envDefaultValues.GUILD_RATE_WINDOW_MS
             ),
         },
     },
@@ -491,38 +386,38 @@ export const config = {
     botInteraction: {
         maxBackAndForth: getNumberEnv(
             'BOT_BACK_AND_FORTH_LIMIT',
-            DEFAULT_BOT_INTERACTION_LIMITS.MAX_BACK_AND_FORTH
+            envDefaultValues.BOT_BACK_AND_FORTH_LIMIT
         ),
         cooldownMs: getNumberEnv(
             'BOT_BACK_AND_FORTH_COOLDOWN_MS',
-            DEFAULT_BOT_INTERACTION_LIMITS.COOLDOWN_MS
+            envDefaultValues.BOT_BACK_AND_FORTH_COOLDOWN_MS
         ),
         conversationTtlMs: getNumberEnv(
             'BOT_BACK_AND_FORTH_TTL_MS',
-            DEFAULT_BOT_INTERACTION_LIMITS.CONVERSATION_TTL_MS
+            envDefaultValues.BOT_BACK_AND_FORTH_TTL_MS
         ),
         afterLimitAction: getBotInteractionActionEnv(
             'BOT_BACK_AND_FORTH_ACTION',
-            DEFAULT_BOT_INTERACTION_LIMITS.ACTION
+            envDefaultValues.BOT_BACK_AND_FORTH_ACTION
         ),
         reactionEmoji:
             process.env.BOT_BACK_AND_FORTH_REACTION?.trim() ||
-            DEFAULT_BOT_INTERACTION_LIMITS.REACTION,
+            envDefaultValues.BOT_BACK_AND_FORTH_REACTION,
     },
 
     // Message catch-up tuning
     catchUp: {
         afterMessages: getNumberEnv(
             'CATCHUP_AFTER_MESSAGES',
-            DEFAULT_CATCH_UP_LIMITS.AFTER_MESSAGES
+            envDefaultValues.CATCHUP_AFTER_MESSAGES
         ),
         ifMentionedAfterMessages: getNumberEnv(
             'CATCHUP_IF_MENTIONED_AFTER_MESSAGES',
-            DEFAULT_CATCH_UP_LIMITS.IF_MENTIONED_AFTER_MESSAGES
+            envDefaultValues.CATCHUP_IF_MENTIONED_AFTER_MESSAGES
         ),
         staleCounterTtlMs: getNumberEnv(
             'STALE_COUNTER_TTL_MS',
-            DEFAULT_CATCH_UP_LIMITS.STALE_COUNTER_TTL_MS
+            envDefaultValues.STALE_COUNTER_TTL_MS
         ),
     },
 
@@ -530,11 +425,11 @@ export const config = {
     visibility: {
         allowThreadResponses: getBooleanEnv(
             'ALLOW_THREAD_RESPONSES',
-            DEFAULT_VISIBILITY_LIMITS.ALLOW_THREAD_RESPONSES
+            envDefaultValues.ALLOW_THREAD_RESPONSES
         ),
         allowedThreadIds: getStringArrayEnv(
             'ALLOWED_THREAD_IDS',
-            DEFAULT_VISIBILITY_LIMITS.ALLOWED_THREAD_IDS
+            envDefaultValues.ALLOWED_THREAD_IDS
         ),
     },
 
@@ -542,19 +437,19 @@ export const config = {
     contextManager: {
         enabled: getBooleanEnv(
             'CONTEXT_MANAGER_ENABLED',
-            DEFAULT_CONTEXT_MANAGER_CONFIG.ENABLED
+            envDefaultValues.CONTEXT_MANAGER_ENABLED
         ),
         maxMessagesPerChannel: getNumberEnv(
             'CONTEXT_MANAGER_MAX_MESSAGES',
-            DEFAULT_CONTEXT_MANAGER_CONFIG.MAX_MESSAGES_PER_CHANNEL
+            envDefaultValues.CONTEXT_MANAGER_MAX_MESSAGES
         ),
         messageRetentionMs: getNumberEnv(
             'CONTEXT_MANAGER_RETENTION_MS',
-            DEFAULT_CONTEXT_MANAGER_CONFIG.MESSAGE_RETENTION_MS
+            envDefaultValues.CONTEXT_MANAGER_RETENTION_MS
         ),
         evictionIntervalMs: getNumberEnv(
             'CONTEXT_MANAGER_EVICTION_INTERVAL_MS',
-            DEFAULT_CONTEXT_MANAGER_CONFIG.EVICTION_INTERVAL_MS
+            envDefaultValues.CONTEXT_MANAGER_EVICTION_INTERVAL_MS
         ),
     },
 
@@ -562,7 +457,7 @@ export const config = {
     costEstimator: {
         enabled: getBooleanEnv(
             'COST_ESTIMATOR_ENABLED',
-            DEFAULT_COST_ESTIMATOR_CONFIG.ENABLED
+            envDefaultValues.COST_ESTIMATOR_ENABLED
         ),
     },
 
@@ -570,7 +465,7 @@ export const config = {
     realtimeFilter: {
         enabled: getBooleanEnv(
             'REALTIME_FILTER_ENABLED',
-            DEFAULT_REALTIME_FILTER_CONFIG.ENABLED
+            envDefaultValues.REALTIME_FILTER_ENABLED
         ),
     },
 
@@ -578,35 +473,35 @@ export const config = {
     engagementWeights: {
         mention: getNumberEnv(
             'ENGAGEMENT_WEIGHT_MENTION',
-            DEFAULT_ENGAGEMENT_WEIGHTS.MENTION
+            envDefaultValues.ENGAGEMENT_WEIGHT_MENTION
         ),
         question: getNumberEnv(
             'ENGAGEMENT_WEIGHT_QUESTION',
-            DEFAULT_ENGAGEMENT_WEIGHTS.QUESTION
+            envDefaultValues.ENGAGEMENT_WEIGHT_QUESTION
         ),
         technical: getNumberEnv(
             'ENGAGEMENT_WEIGHT_TECHNICAL',
-            DEFAULT_ENGAGEMENT_WEIGHTS.TECHNICAL
+            envDefaultValues.ENGAGEMENT_WEIGHT_TECHNICAL
         ),
         humanActivity: getNumberEnv(
             'ENGAGEMENT_WEIGHT_HUMAN_ACTIVITY',
-            DEFAULT_ENGAGEMENT_WEIGHTS.HUMAN_ACTIVITY
+            envDefaultValues.ENGAGEMENT_WEIGHT_HUMAN_ACTIVITY
         ),
         costSaturation: getNumberEnv(
             'ENGAGEMENT_WEIGHT_COST_SATURATION',
-            DEFAULT_ENGAGEMENT_WEIGHTS.COST_SATURATION
+            envDefaultValues.ENGAGEMENT_WEIGHT_COST_SATURATION
         ),
         botNoise: getNumberEnv(
             'ENGAGEMENT_WEIGHT_BOT_NOISE',
-            DEFAULT_ENGAGEMENT_WEIGHTS.BOT_NOISE
+            envDefaultValues.ENGAGEMENT_WEIGHT_BOT_NOISE
         ),
         dmBoost: getNumberEnv(
             'ENGAGEMENT_WEIGHT_DM_BOOST',
-            DEFAULT_ENGAGEMENT_WEIGHTS.DM_BOOST
+            envDefaultValues.ENGAGEMENT_WEIGHT_DM_BOOST
         ),
         decay: getNumberEnv(
             'ENGAGEMENT_WEIGHT_DECAY',
-            DEFAULT_ENGAGEMENT_WEIGHTS.DECAY
+            envDefaultValues.ENGAGEMENT_WEIGHT_DECAY
         ),
     },
 
@@ -614,29 +509,38 @@ export const config = {
     engagementPreferences: {
         ignoreMode: getEngagementIgnoreModeEnv(
             'ENGAGEMENT_IGNORE_MODE',
-            DEFAULT_ENGAGEMENT_PREFERENCES.IGNORE_MODE
+            envDefaultValues.ENGAGEMENT_IGNORE_MODE
         ),
         reactionEmoji:
             process.env.ENGAGEMENT_REACTION_EMOJI?.trim() ||
-            DEFAULT_ENGAGEMENT_PREFERENCES.REACTION_EMOJI,
+            envDefaultValues.ENGAGEMENT_REACTION_EMOJI,
         minEngageThreshold: getNumberEnv(
             'ENGAGEMENT_MIN_THRESHOLD',
-            DEFAULT_ENGAGEMENT_PREFERENCES.MIN_ENGAGE_THRESHOLD
+            envDefaultValues.ENGAGEMENT_MIN_THRESHOLD
         ),
         probabilisticBand: [
             getNumberEnv(
                 'ENGAGEMENT_PROBABILISTIC_LOW',
-                DEFAULT_ENGAGEMENT_PREFERENCES.PROBABILISTIC_BAND_LOW
+                envDefaultValues.ENGAGEMENT_PROBABILISTIC_LOW
             ),
             getNumberEnv(
                 'ENGAGEMENT_PROBABILISTIC_HIGH',
-                DEFAULT_ENGAGEMENT_PREFERENCES.PROBABILISTIC_BAND_HIGH
+                envDefaultValues.ENGAGEMENT_PROBABILISTIC_HIGH
             ),
         ] as [number, number],
         enableLLMRefinement: getBooleanEnv(
             'ENGAGEMENT_ENABLE_LLM_REFINEMENT',
-            DEFAULT_ENGAGEMENT_PREFERENCES.ENABLE_LLM_REFINEMENT
+            envDefaultValues.ENGAGEMENT_ENABLE_LLM_REFINEMENT
+        ),
+    },
+    logging: {
+        directory: process.env.LOG_DIR || DEFAULT_LOG_DIRECTORY,
+        level: (process.env.LOG_LEVEL || DEFAULT_LOG_LEVEL).toLowerCase(),
+    },
+    debug: {
+        verboseContextLoggingEnabled: getBooleanEnv(
+            'DISCORD_BOT_LOG_FULL_CONTEXT',
+            envDefaultValues.DISCORD_BOT_LOG_FULL_CONTEXT
         ),
     },
 } as const;
-

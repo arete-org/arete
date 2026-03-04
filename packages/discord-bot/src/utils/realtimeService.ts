@@ -7,6 +7,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { runtimeConfig } from '../config.js';
 import { RealtimeWebSocketManager } from '../realtime/RealtimeWebSocketManager.js';
 import { RealtimeAudioHandler } from '../realtime/RealtimeAudioHandler.js';
 import { RealtimeEventHandler } from '../realtime/RealtimeEventHandler.js';
@@ -108,7 +109,7 @@ export class RealtimeSession extends EventEmitter {
     public async connect(): Promise<void> {
         const wsUrl = `wss://api.openai.com/v1/realtime?model=${this.sessionConfig.getModel()}`;
         const headers = {
-            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+            Authorization: `Bearer ${runtimeConfig.openaiApiKey}`,
         };
 
         await this.wsManager.connect(wsUrl, headers);
