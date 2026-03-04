@@ -1567,6 +1567,28 @@ type EnvDefaultValues = {
     [Entry in LiteralEnvEntry as Entry['key']]: Entry['defaultValue']['value'];
 };
 
+const duplicateEnvKeys = (() => {
+    const seenKeys = new Set<string>();
+    const duplicates = new Set<string>();
+
+    for (const entry of envEntries) {
+        if (seenKeys.has(entry.key)) {
+            duplicates.add(entry.key);
+            continue;
+        }
+
+        seenKeys.add(entry.key);
+    }
+
+    return [...duplicates];
+})();
+
+if (duplicateEnvKeys.length > 0) {
+    throw new Error(
+        `envEntries contains duplicate keys: ${duplicateEnvKeys.join(', ')}. Fix envEntries before building envSpecByKey or envDefaultValues.`
+    );
+}
+
 // Handy lookup for scripts, docs, and future tooling that want one env key at
 // a time without manually searching the full ordered list above.
 export const envSpecByKey = Object.fromEntries(
