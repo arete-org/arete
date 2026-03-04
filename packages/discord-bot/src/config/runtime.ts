@@ -12,8 +12,10 @@ import { envDefaultValues, envSpecByKey } from '@footnote/config-spec';
 import type {
     SupportedBotInteractionAction,
     SupportedEngagementIgnoreMode,
+    SupportedLogLevel,
     SupportedNodeEnv,
 } from '@footnote/contracts/providers';
+import { supportedLogLevels } from '@footnote/contracts/providers';
 import { bootstrapLogger } from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,6 +40,7 @@ const FLY_INTERNAL_BACKEND_BASE_URL = 'http://footnote-backend.internal:3000';
 const SUPPORTED_NODE_ENVS = new Set<SupportedNodeEnv>(
     (envSpecByKey.NODE_ENV.allowedValues ?? []) as readonly SupportedNodeEnv[]
 );
+const VALID_LOG_LEVELS = new Set<SupportedLogLevel>(supportedLogLevels);
 
 const BOT_INTERACTION_ACTIONS = new Set<SupportedBotInteractionAction>(
     (envSpecByKey.BOT_BACK_AND_FORTH_ACTION.allowedValues ??
@@ -84,6 +87,27 @@ const getNumberEnv = (key: string, defaultValue: number): number => {
 
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed < 0) {
+        bootstrapLogger.warn(
+            `Ignoring invalid numeric value for ${key}: "${value}". Expected a non-negative number; using default (${defaultValue}).`
+        );
+        return defaultValue;
+    }
+
+    return parsed;
+};
+
+const getIntegerEnv = (key: string, defaultValue: number): number => {
+    const value = process.env[key];
+    if (value === undefined) {
+        return defaultValue;
+    }
+
+    const parsed = Number(value);
+    if (
+        !Number.isFinite(parsed) ||
+        parsed < 0 ||
+        !Number.isInteger(parsed)
+    ) {
         bootstrapLogger.warn(
             `Ignoring invalid numeric value for ${key}: "${value}". Expected a non-negative number; using default (${defaultValue}).`
         );
@@ -178,6 +202,26 @@ const getEngagementIgnoreModeEnv = (
     return defaultValue;
 };
 
+const getLogLevelEnv = (
+    key: string,
+    defaultValue: SupportedLogLevel
+): SupportedLogLevel => {
+    const value = process.env[key];
+    if (!value) {
+        return defaultValue;
+    }
+
+    const normalizedValue = value.trim().toLowerCase();
+    if (VALID_LOG_LEVELS.has(normalizedValue as SupportedLogLevel)) {
+        return normalizedValue as SupportedLogLevel;
+    }
+
+    bootstrapLogger.warn(
+        `Ignoring invalid LOG_LEVEL "${value}". Using default (${defaultValue}).`
+    );
+    return defaultValue;
+};
+
 validateEnvironment();
 
 const rawPromptConfigPath = process.env.PROMPT_CONFIG_PATH;
@@ -249,9 +293,9 @@ export const runtimeConfig = {
     webBaseUrl,
     backendBaseUrl,
     traceApiToken,
-    webhookPort: getNumberEnv('WEBHOOK_PORT', envDefaultValues.WEBHOOK_PORT),
+    webhookPort: getIntegerEnv('WEBHOOK_PORT', envDefaultValues.WEBHOOK_PORT),
     api: {
-        backendRequestTimeoutMs: getNumberEnv(
+        backendRequestTimeoutMs: getIntegerEnv(
             'BACKEND_REQUEST_TIMEOUT_MS',
             envDefaultValues.BACKEND_REQUEST_TIMEOUT_MS
         ),
@@ -269,11 +313,11 @@ export const runtimeConfig = {
                 'RATE_LIMIT_USER',
                 envDefaultValues.RATE_LIMIT_USER
             ),
-            limit: getNumberEnv(
+            limit: getIntegerEnv(
                 'USER_RATE_LIMIT',
                 envDefaultValues.USER_RATE_LIMIT
             ),
-            windowMs: getNumberEnv(
+            windowMs: getIntegerEnv(
                 'USER_RATE_WINDOW_MS',
                 envDefaultValues.USER_RATE_WINDOW_MS
             ),
@@ -283,11 +327,11 @@ export const runtimeConfig = {
                 'RATE_LIMIT_CHANNEL',
                 envDefaultValues.RATE_LIMIT_CHANNEL
             ),
-            limit: getNumberEnv(
+            limit: getIntegerEnv(
                 'CHANNEL_RATE_LIMIT',
                 envDefaultValues.CHANNEL_RATE_LIMIT
             ),
-            windowMs: getNumberEnv(
+            windowMs: getIntegerEnv(
                 'CHANNEL_RATE_WINDOW_MS',
                 envDefaultValues.CHANNEL_RATE_WINDOW_MS
             ),
@@ -297,26 +341,26 @@ export const runtimeConfig = {
                 'RATE_LIMIT_GUILD',
                 envDefaultValues.RATE_LIMIT_GUILD
             ),
-            limit: getNumberEnv(
+            limit: getIntegerEnv(
                 'GUILD_RATE_LIMIT',
                 envDefaultValues.GUILD_RATE_LIMIT
             ),
-            windowMs: getNumberEnv(
+            windowMs: getIntegerEnv(
                 'GUILD_RATE_WINDOW_MS',
                 envDefaultValues.GUILD_RATE_WINDOW_MS
             ),
         },
     },
     botInteraction: {
-        maxBackAndForth: getNumberEnv(
+        maxBackAndForth: getIntegerEnv(
             'BOT_BACK_AND_FORTH_LIMIT',
             envDefaultValues.BOT_BACK_AND_FORTH_LIMIT
         ),
-        cooldownMs: getNumberEnv(
+        cooldownMs: getIntegerEnv(
             'BOT_BACK_AND_FORTH_COOLDOWN_MS',
             envDefaultValues.BOT_BACK_AND_FORTH_COOLDOWN_MS
         ),
-        conversationTtlMs: getNumberEnv(
+        conversationTtlMs: getIntegerEnv(
             'BOT_BACK_AND_FORTH_TTL_MS',
             envDefaultValues.BOT_BACK_AND_FORTH_TTL_MS
         ),
@@ -329,15 +373,15 @@ export const runtimeConfig = {
             envDefaultValues.BOT_BACK_AND_FORTH_REACTION,
     },
     catchUp: {
-        afterMessages: getNumberEnv(
+        afterMessages: getIntegerEnv(
             'CATCHUP_AFTER_MESSAGES',
             envDefaultValues.CATCHUP_AFTER_MESSAGES
         ),
-        ifMentionedAfterMessages: getNumberEnv(
+        ifMentionedAfterMessages: getIntegerEnv(
             'CATCHUP_IF_MENTIONED_AFTER_MESSAGES',
             envDefaultValues.CATCHUP_IF_MENTIONED_AFTER_MESSAGES
         ),
-        staleCounterTtlMs: getNumberEnv(
+        staleCounterTtlMs: getIntegerEnv(
             'STALE_COUNTER_TTL_MS',
             envDefaultValues.STALE_COUNTER_TTL_MS
         ),
@@ -357,15 +401,15 @@ export const runtimeConfig = {
             'CONTEXT_MANAGER_ENABLED',
             envDefaultValues.CONTEXT_MANAGER_ENABLED
         ),
-        maxMessagesPerChannel: getNumberEnv(
+        maxMessagesPerChannel: getIntegerEnv(
             'CONTEXT_MANAGER_MAX_MESSAGES',
             envDefaultValues.CONTEXT_MANAGER_MAX_MESSAGES
         ),
-        messageRetentionMs: getNumberEnv(
+        messageRetentionMs: getIntegerEnv(
             'CONTEXT_MANAGER_RETENTION_MS',
             envDefaultValues.CONTEXT_MANAGER_RETENTION_MS
         ),
-        evictionIntervalMs: getNumberEnv(
+        evictionIntervalMs: getIntegerEnv(
             'CONTEXT_MANAGER_EVICTION_INTERVAL_MS',
             envDefaultValues.CONTEXT_MANAGER_EVICTION_INTERVAL_MS
         ),
@@ -428,16 +472,17 @@ export const runtimeConfig = {
             'ENGAGEMENT_MIN_THRESHOLD',
             envDefaultValues.ENGAGEMENT_MIN_THRESHOLD
         ),
-        probabilisticBand: [
-            getNumberEnv(
+        probabilisticBand: (() => {
+            const low = getNumberEnv(
                 'ENGAGEMENT_PROBABILISTIC_LOW',
                 envDefaultValues.ENGAGEMENT_PROBABILISTIC_LOW
-            ),
-            getNumberEnv(
+            );
+            const high = getNumberEnv(
                 'ENGAGEMENT_PROBABILISTIC_HIGH',
                 envDefaultValues.ENGAGEMENT_PROBABILISTIC_HIGH
-            ),
-        ] as [number, number],
+            );
+            return [Math.min(low, high), Math.max(low, high)] as [number, number];
+        })(),
         enableLLMRefinement: getBooleanEnv(
             'ENGAGEMENT_ENABLE_LLM_REFINEMENT',
             envDefaultValues.ENGAGEMENT_ENABLE_LLM_REFINEMENT
@@ -445,7 +490,7 @@ export const runtimeConfig = {
     },
     logging: {
         directory: process.env.LOG_DIR || DEFAULT_LOG_DIRECTORY,
-        level: (process.env.LOG_LEVEL || DEFAULT_LOG_LEVEL).toLowerCase(),
+        level: getLogLevelEnv('LOG_LEVEL', DEFAULT_LOG_LEVEL),
     },
     debug: {
         verboseContextLoggingEnabled: getBooleanEnv(

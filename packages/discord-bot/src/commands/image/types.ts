@@ -29,6 +29,34 @@ export type ImageSizeType = ImageGenerationSize;
 export type ImageBackgroundType = 'auto' | 'transparent' | 'opaque';
 export type ImageOutputFormat = 'png' | 'webp' | 'jpeg';
 export type ImageOutputCompression = number;
+export const imageTextModels = [
+    'gpt-5.2',
+    'gpt-5.1',
+    'gpt-5',
+    'gpt-5-mini',
+    'gpt-5-nano',
+    'gpt-4o',
+    'gpt-4o-mini',
+    'gpt-4.1',
+    'gpt-4.1-mini',
+    'gpt-4.1-nano',
+] as const satisfies readonly ImageTextModel[];
+export const imageRenderModels = [
+    'gpt-image-1.5',
+    'gpt-image-1',
+    'gpt-image-1-mini',
+] as const satisfies readonly ImageRenderModel[];
+export const imageQualities = [
+    'low',
+    'medium',
+    'high',
+    'auto',
+] as const satisfies readonly ImageQualityType[];
+export const imageOutputFormats = [
+    'png',
+    'webp',
+    'jpeg',
+] as const satisfies readonly ImageOutputFormat[];
 export type ImageStylePreset =
     | 'natural'
     | 'vivid'

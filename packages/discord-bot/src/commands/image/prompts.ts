@@ -29,6 +29,10 @@ interface DeveloperPromptOptions {
 /**
  * Builds the developer prompt that constrains image-generation behavior and
  * annotation style.
+ * Trigger: Used whenever the image workflow prepares a request for model-side
+ * prompt adjustment and annotation generation.
+ * Consequence: Sets the rules that shape how the model may refine the prompt
+ * and how the returned annotation text will read.
  */
 export function buildDeveloperPrompt(options: DeveloperPromptOptions): string {
     const sanitize = (value: string | null | undefined): string | null => {

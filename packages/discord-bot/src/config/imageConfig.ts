@@ -14,35 +14,17 @@ import type {
     ImageRenderModel,
     ImageTextModel,
 } from '../commands/image/types.js';
+import {
+    imageOutputFormats,
+    imageQualities,
+    imageRenderModels,
+    imageTextModels,
+} from '../commands/image/types.js';
 
-const VALID_TEXT_MODELS = new Set<ImageTextModel>([
-    'gpt-5.2',
-    'gpt-5.1',
-    'gpt-5',
-    'gpt-5-mini',
-    'gpt-5-nano',
-    'gpt-4o',
-    'gpt-4o-mini',
-    'gpt-4.1',
-    'gpt-4.1-mini',
-    'gpt-4.1-nano',
-]);
-const VALID_IMAGE_MODELS = new Set<ImageRenderModel>([
-    'gpt-image-1.5',
-    'gpt-image-1',
-    'gpt-image-1-mini',
-]);
-const VALID_IMAGE_QUALITIES = new Set<ImageQualityType>([
-    'low',
-    'medium',
-    'high',
-    'auto',
-]);
-const VALID_OUTPUT_FORMATS = new Set<ImageOutputFormat>([
-    'png',
-    'webp',
-    'jpeg',
-]);
+const VALID_TEXT_MODELS = new Set<ImageTextModel>(imageTextModels);
+const VALID_IMAGE_MODELS = new Set<ImageRenderModel>(imageRenderModels);
+const VALID_IMAGE_QUALITIES = new Set<ImageQualityType>(imageQualities);
+const VALID_OUTPUT_FORMATS = new Set<ImageOutputFormat>(imageOutputFormats);
 const FALLBACK_TEXT_MODEL =
     envDefaultValues.IMAGE_DEFAULT_TEXT_MODEL as ImageTextModel;
 const FALLBACK_IMAGE_MODEL =
@@ -177,7 +159,7 @@ function parseOutputFormat(raw: string | undefined): ImageOutputFormat | null {
         return null;
     }
 
-    const normalized = raw.toLowerCase();
+    const normalized = raw.trim().toLowerCase();
     if (VALID_OUTPUT_FORMATS.has(normalized as ImageOutputFormat)) {
         return normalized as ImageOutputFormat;
     }
@@ -193,8 +175,9 @@ function parseTextModel(raw: string | undefined): ImageTextModel | null {
         return null;
     }
 
-    if (VALID_TEXT_MODELS.has(raw as ImageTextModel)) {
-        return raw as ImageTextModel;
+    const normalized = raw.trim().toLowerCase();
+    if (VALID_TEXT_MODELS.has(normalized as ImageTextModel)) {
+        return normalized as ImageTextModel;
     }
 
     logger.warn(`Ignoring invalid IMAGE_DEFAULT_TEXT_MODEL "${raw}".`);
@@ -206,8 +189,9 @@ function parseImageModel(raw: string | undefined): ImageRenderModel | null {
         return null;
     }
 
-    if (VALID_IMAGE_MODELS.has(raw as ImageRenderModel)) {
-        return raw as ImageRenderModel;
+    const normalized = raw.trim().toLowerCase();
+    if (VALID_IMAGE_MODELS.has(normalized as ImageRenderModel)) {
+        return normalized as ImageRenderModel;
     }
 
     logger.warn(`Ignoring invalid IMAGE_DEFAULT_IMAGE_MODEL "${raw}".`);
@@ -219,8 +203,9 @@ function parseImageQuality(raw: string | undefined): ImageQualityType | null {
         return null;
     }
 
-    if (VALID_IMAGE_QUALITIES.has(raw as ImageQualityType)) {
-        return raw as ImageQualityType;
+    const normalized = raw.trim().toLowerCase();
+    if (VALID_IMAGE_QUALITIES.has(normalized as ImageQualityType)) {
+        return normalized as ImageQualityType;
     }
 
     logger.warn(

@@ -293,22 +293,18 @@ const newsCommand: Command = {
                 throw new Error('Invalid news response format');
             }
 
-            // TODO: REMOVE
-            logger.info(`News response: ${JSON.stringify(newsResponse)}`);
-            logger.info(
-                `Image analysis for ${newsResponse.news.length} articles:`
-            );
-            newsResponse.news.forEach((item, index) => {
-                const hasThumbnail = !!item.thumbnail;
-                const hasImage = !!item.image;
-                logger.info(`Article ${index + 1}: "${item.title}"`);
-                logger.info(
-                    `  - Has thumbnail: ${hasThumbnail} ${hasThumbnail ? `(URL: ${item.thumbnail})` : ''}`
-                );
-                logger.info(
-                    `  - Has image: ${hasImage} ${hasImage ? `(URL: ${item.image})` : ''}`
-                );
-            });
+            if (logger.isLevelEnabled?.('debug')) {
+                logger.debug('News response received', {
+                    articleCount: newsResponse.news.length,
+                    articlesWithThumbnails: newsResponse.news.filter(
+                        (item) => Boolean(item.thumbnail)
+                    ).length,
+                    articlesWithImages: newsResponse.news.filter((item) =>
+                        Boolean(item.image)
+                    ).length,
+                    articleTitles: newsResponse.news.map((item) => item.title),
+                });
+            }
 
             // Create embeds for each news item
             const embeds = newsResponse.news

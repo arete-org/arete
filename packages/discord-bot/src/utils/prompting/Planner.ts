@@ -205,7 +205,7 @@ const planFunction = {
                                 type: 'string',
                                 enum: ['none', 'web_search'],
                                 description:
-                                    'hoose web_search when the answer depends on facts that may have changed since 2025 (versions/compatibility/support matrices, releases, pricing/availability, benchmarks, current office-holders, policies/laws/procedures, schedules, incidents/news), OR when you are not highly confident the fact is stable. Choose none for stable concepts, pure reasoning, coding/writing, or when the user has provided all needed facts. If stability is uncertain, prefer a small web_search rather than guessing. Always pair web_search with reasoningEffort >= low.',
+                                    'Choose web_search when the answer depends on facts that may have changed since 2025 (versions/compatibility/support matrices, releases, pricing/availability, benchmarks, current office-holders, policies/laws/procedures, schedules, incidents/news), OR when you are not highly confident the fact is stable. Choose none for stable concepts, pure reasoning, coding/writing, or when the user has provided all needed facts. If stability is uncertain, prefer a small web_search rather than guessing. Always pair web_search with reasoningEffort >= low.',
                             },
                         },
                         required: ['type'],
