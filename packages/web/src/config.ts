@@ -6,10 +6,16 @@
  * @footnote-ethics: low - Exposes only non-sensitive configuration to the client.
  */
 import type { GetRuntimeConfigResponse } from '@footnote/contracts/web';
-import { api } from './api';
+import { api } from './utils/api';
 
+/**
+ * Public runtime config shape the web app expects from the backend.
+ */
 export type RuntimeConfig = GetRuntimeConfigResponse;
 
+/**
+ * Safe fallback used when the backend config endpoint is unavailable.
+ */
 const DEFAULT_CONFIG: RuntimeConfig = {
     turnstileSiteKey: '',
 };
@@ -17,6 +23,10 @@ const DEFAULT_CONFIG: RuntimeConfig = {
 let cachedConfig: RuntimeConfig | null = null;
 let inFlightConfig: Promise<RuntimeConfig> | null = null;
 
+/**
+ * Narrows unknown API payloads into the small client-safe config surface the
+ * web app actually uses.
+ */
 const normalizeConfig = (payload: unknown): RuntimeConfig => {
     if (!payload || typeof payload !== 'object') {
         return DEFAULT_CONFIG;
@@ -31,6 +41,9 @@ const normalizeConfig = (payload: unknown): RuntimeConfig => {
     };
 };
 
+/**
+ * Loads runtime config once and reuses the same promise for concurrent callers.
+ */
 export const loadRuntimeConfig = async (): Promise<RuntimeConfig> => {
     if (cachedConfig) {
         return cachedConfig;
@@ -48,5 +61,12 @@ export const loadRuntimeConfig = async (): Promise<RuntimeConfig> => {
     }
 
     return inFlightConfig;
+};
+
+/**
+ * Small namespace-style export used by existing web code.
+ */
+export const runtimeConfig = {
+    load: loadRuntimeConfig,
 };
 

@@ -12,7 +12,7 @@ import fs from 'fs';
 import OpenAI from 'openai';
 import type { ResponseCreateParamsNonStreaming } from 'openai/resources/responses/responses.js';
 import { logger } from './logger.js';
-import { renderPrompt } from './env.js';
+import { renderPrompt } from '../config.js';
 import { ActivityOptions } from 'discord.js';
 import {
     estimateTextCost,
@@ -36,9 +36,21 @@ import {
 type ResponseCreateParams = ResponseCreateParamsNonStreaming;
 
 export type { GPT5ModelType } from './pricing.js';
+/**
+ * Text generation model identifiers accepted by the Discord bot service layer.
+ */
 export type SupportedModel = GPT5ModelType;
+/**
+ * Embedding model identifiers used by the bot for vector-style lookups.
+ */
 export type EmbeddingModelType = 'text-embedding-3-small'; // Dimensions: 1546
+/**
+ * Planner hint describing why a web search should run.
+ */
 export type WebSearchIntent = 'repo_explainer' | 'current_facts';
+/**
+ * Focus areas used to expand repository-explainer searches with domain terms.
+ */
 export type RepoSearchHint =
     | 'architecture'
     | 'backend'
@@ -56,12 +68,19 @@ export type RepoSearchHint =
     | 'voice';
 
 // Defines the structure of a message to be sent to the OpenAI API
+/**
+ * Minimal chat message format used by the bot before requests are translated to
+ * provider-specific payloads.
+ */
 export interface OpenAIMessage {
     role: 'user' | 'assistant' | 'system' | 'developer';
     content: string;
 }
 
 // Defines the options for text-to-speech
+/**
+ * Options that shape TTS voice, pacing, and expressive style.
+ */
 export type TTSOptions = {
     model: 'tts-1' | 'tts-1-hd' | 'gpt-4o-mini-tts';
     voice:
@@ -285,6 +304,10 @@ function dedupeSearchTerms(terms: string[]): string[] {
     return uniqueTerms;
 }
 
+/**
+ * Builds a search query tuned for explaining the Footnote repository, including
+ * repo identity terms and any planner-supplied focus hints.
+ */
 export function buildRepoExplainerQuery(
     webSearch: OpenAIOptions['webSearch']
 ): string {
@@ -304,6 +327,10 @@ export function buildRepoExplainerQuery(
     ]).join(' ');
 }
 
+/**
+ * Produces the system instruction that tells the model how to use web search
+ * for the current request.
+ */
 export function buildWebSearchInstruction(
     webSearch: OpenAIOptions['webSearch']
 ): string {
@@ -339,14 +366,23 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const OUTPUT_PATH = path.resolve(__dirname, '..', 'output');
 const TTS_OUTPUT_PATH = path.join(OUTPUT_PATH, 'tts');
+/**
+ * Model used for image-description fallback when attachments need text context.
+ */
 export const IMAGE_DESCRIPTION_MODEL: ImageDescriptionModelType =
     IMAGE_DESCRIPTION_CONFIG.model;
+/**
+ * Default embedding model used for text vectorization helpers.
+ */
 export const DEFAULT_EMBEDDING_MODEL: EmbeddingModelType =
     'text-embedding-3-small';
 const METADATA_MARKER = '<RESPONSE_METADATA>'; // Marker appended to chat completions so we can reliably split conversational text and metadata
 
 let isDirectoryInitialized = false; // Tracks if output directories have been initialized
 
+/**
+ * Default TTS settings used when callers do not provide voice overrides.
+ */
 export const TTS_DEFAULT_OPTIONS: TTSOptions = {
     model: 'gpt-4o-mini-tts',
     voice: 'echo',

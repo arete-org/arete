@@ -1,9 +1,10 @@
 #!/usr/bin/env node
+/* global __dirname, console, fetch, process */
 
 /**
  * @description: Syncs blog posts from GitHub Discussions using GitHub App auth.
- * @footnote-scope utility
- * @footnote-module BlogSyncScript
+ * @footnote-scope: utility
+ * @footnote-module: BlogSyncScript
  * @footnote-risk: low - Script misuse can overwrite blog data or exceed API limits.
  * @footnote-ethics: low - Operates on public repo content without user data.
  */

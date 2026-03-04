@@ -7,11 +7,17 @@
  */
 
 import fs from 'fs';
+import { envDefaultValues } from '@footnote/config-spec';
+import {
+    supportedLogLevels,
+    type SupportedLogLevel,
+} from '@footnote/contracts/providers';
 import { createLogger, format, transports } from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
 
 const { combine, timestamp, printf, colorize } = format;
 const splatSymbol = Symbol.for('splat');
+const VALID_LOG_LEVELS = new Set(supportedLogLevels);
 
 // --- Redaction rules ---
 // Discord snowflakes are 17-19 digit numeric strings. We redact them to avoid
@@ -97,8 +103,19 @@ const logFormat = printf(({ level, message, timestamp }) => {
     return `${timestamp} [${level}]: ${message}`;
 });
 
+const parseLogLevel = (value: string | undefined): SupportedLogLevel => {
+    if (!value) {
+        return envDefaultValues.LOG_LEVEL;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    return VALID_LOG_LEVELS.has(normalized as SupportedLogLevel)
+        ? (normalized as SupportedLogLevel)
+        : envDefaultValues.LOG_LEVEL;
+};
+
 // --- Logger output configuration ---
-const logDirectory = process.env.LOG_DIR || 'logs';
+const logDirectory = process.env.LOG_DIR || envDefaultValues.LOG_DIR;
 let canWriteLogDirectory = true;
 try {
     fs.mkdirSync(logDirectory, { recursive: true });
@@ -121,7 +138,7 @@ try {
  * @type {import('winston').Logger}
  */
 export const logger = createLogger({
-    level: (process.env.LOG_LEVEL || 'debug').toLowerCase(),
+    level: parseLogLevel(process.env.LOG_LEVEL),
     format: combine(
         sanitizeFormat(),
         timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -147,6 +164,17 @@ export const logger = createLogger({
     ],
     exitOnError: false,
 });
+
+// Use this logger during config/bootstrap work that happens before runtimeConfig
+// exists. It keeps the normal log formatting without creating a config cycle.
+/**
+ * Logger reserved for startup code that runs before runtime config is fully
+ * constructed.
+ */
+export const bootstrapLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'configBootstrap' })
+        : logger;
 
 // --- LLM cost tracking utilities ---
 
@@ -175,8 +203,14 @@ export interface LLMCostTotals {
     totalTokensOut: number;
 }
 
+/**
+ * Callback that returns the latest aggregated LLM usage totals when available.
+ */
 export type LLMCostSummaryProvider = () => LLMCostTotals | null | undefined;
 
+/**
+ * Logs one operator-friendly LLM cost summary line for the current session.
+ */
 export const logLLMCostSummary = (getTotals?: LLMCostSummaryProvider) => {
     try {
         const totals = getTotals?.();

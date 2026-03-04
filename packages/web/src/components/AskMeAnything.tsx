@@ -11,7 +11,7 @@ import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import ProvenanceFooter from './ProvenanceFooter';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import examplePrompts from '../data/examplePrompts.json';
-import { loadRuntimeConfig } from '../utils/runtimeConfig';
+import { loadRuntimeConfig } from '../config';
 import { api, isApiClientError } from '../utils/api';
 import {
     shouldAutoFocusAskInput,
@@ -794,5 +794,11 @@ const AskMeAnything = (): JSX.Element => {
     );
 };
 
+/**
+ * Named export kept for callers that prefer explicit component imports.
+ */
 export { AskMeAnything };
+/**
+ * Default export for route and section imports.
+ */
 export default AskMeAnything;

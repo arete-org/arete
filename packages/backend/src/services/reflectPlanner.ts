@@ -48,6 +48,10 @@ const REPO_HINTS = [
 
 const REPO_HINT_SET = new Set<ReflectRepoSearchHint>(REPO_HINTS);
 
+/**
+ * Planner decision consumed by the reflect orchestrator after the raw LLM
+ * output has been normalized and safety-checked.
+ */
 export type ReflectPlan = {
     action: ReflectPlannerAction;
     modality: 'text' | 'tts';
@@ -73,7 +77,7 @@ type PlannerCandidate = Partial<ReflectPlan> & {
     };
 };
 
-const isDevelopment = (): boolean => process.env.NODE_ENV !== 'production';
+const isDevelopment = (): boolean => runtimeConfig.runtime.isDevelopment;
 
 const normalizeRiskTier = (value: unknown): RiskTier => {
     if (value === 'Low' || value === 'Medium' || value === 'High') {

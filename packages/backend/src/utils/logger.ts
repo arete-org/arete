@@ -7,10 +7,16 @@
  */
 
 import fs from 'fs';
+import { envDefaultValues } from '@footnote/config-spec';
+import {
+    supportedLogLevels,
+    type SupportedLogLevel,
+} from '@footnote/contracts/providers';
 import { createLogger, format, transports } from 'winston';
 
 const { combine, timestamp, printf, colorize } = format;
 const splatSymbol = Symbol.for('splat');
+const VALID_LOG_LEVELS = new Set(supportedLogLevels);
 
 // --- Redaction rules ---
 // Discord snowflakes are 17-19 digit numeric strings. We redact them to avoid
@@ -22,24 +28,48 @@ const DISCORD_ID_REGEX = /\b\d{17,19}\b/g;
  * defense-in-depth layer; primary protection should still pseudonymize IDs
  * before logging or storing.
  */
-export function sanitizeLogData<T>(value: T): T {
+export function sanitizeLogData<T>(
+    value: T,
+    seen: WeakSet<object> = new WeakSet<object>()
+): T {
     if (typeof value === 'string') {
         // Swap raw snowflakes for a clear placeholder.
         return value.replace(DISCORD_ID_REGEX, '[REDACTED_ID]') as T;
     }
 
+    if (value === null) {
+        return value;
+    }
+
     if (Array.isArray(value)) {
-        // Walk arrays and sanitize each entry.
-        return value.map((entry) => sanitizeLogData(entry)) as T;
+        if (seen.has(value)) {
+            return '[Circular]' as T;
+        }
+        seen.add(value);
+        try {
+            // Track only the current traversal path so shared references are
+            // preserved while true cycles still collapse safely.
+            return value.map((entry) => sanitizeLogData(entry, seen)) as T;
+        } finally {
+            seen.delete(value);
+        }
     }
 
     if (value && typeof value === 'object') {
-        // Walk objects so nested IDs get scrubbed too.
-        const sanitized: Record<string, unknown> = {};
-        for (const [key, val] of Object.entries(value)) {
-            sanitized[key] = sanitizeLogData(val);
+        if (seen.has(value as object)) {
+            return '[Circular]' as T;
         }
-        return sanitized as T;
+        seen.add(value as object);
+        try {
+            // Walk objects so nested IDs get scrubbed too.
+            const sanitized: Record<string, unknown> = {};
+            for (const [key, val] of Object.entries(value)) {
+                sanitized[key] = sanitizeLogData(val, seen);
+            }
+            return sanitized as T;
+        } finally {
+            seen.delete(value as object);
+        }
     }
 
     return value;
@@ -69,8 +99,19 @@ const logFormat = printf(({ level, message, timestamp }) => {
     return `${timestamp} [${level}]: ${message}`;
 });
 
+const parseLogLevel = (value: string | undefined): SupportedLogLevel => {
+    if (!value) {
+        return envDefaultValues.LOG_LEVEL;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    return VALID_LOG_LEVELS.has(normalized as SupportedLogLevel)
+        ? (normalized as SupportedLogLevel)
+        : envDefaultValues.LOG_LEVEL;
+};
+
 // --- Logger output configuration ---
-const logDirectory = process.env.LOG_DIR || 'logs';
+const logDirectory = process.env.LOG_DIR || envDefaultValues.LOG_DIR;
 let canWriteLogDirectory = true;
 try {
     fs.mkdirSync(logDirectory, { recursive: true });
@@ -114,7 +155,7 @@ try {
  * @type {import('winston').Logger}
  */
 export const logger = createLogger({
-    level: (process.env.LOG_LEVEL || 'debug').toLowerCase(),
+    level: parseLogLevel(process.env.LOG_LEVEL),
     format: combine(
         sanitizeFormat(),
         timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -169,8 +210,15 @@ export interface LLMCostTotals {
     totalTokensOut: number;
 }
 
+/**
+ * Callback that returns the latest aggregated LLM usage totals when available.
+ */
 export type LLMCostSummaryProvider = () => LLMCostTotals | null | undefined;
 
+/**
+ * Logs one operator-friendly cost summary line without forcing callers to know
+ * the logger formatting rules.
+ */
 export const logLLMCostSummary = (getTotals?: LLMCostSummaryProvider) => {
     try {
         const totals = getTotals?.();

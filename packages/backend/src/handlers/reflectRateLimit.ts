@@ -6,7 +6,9 @@
  * @footnote-ethics: medium - Separate buckets support fair access across public and internal callers.
  */
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
+import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
+import type { RateLimitConfig } from '../config/types.js';
 import type { ServiceAuth } from './reflectAuth.js';
 import type { RequestIdentity } from './reflectRequest.js';
 import type { ReflectFailureResponse } from './reflectResponses.js';
@@ -43,10 +45,7 @@ export const createReflectRateLimitController = ({
     const getLimiter = (
         limiter: SimpleRateLimiter | null,
         label: string,
-        limitKey: string,
-        windowKey: string,
-        defaultLimit: number,
-        defaultWindowMs: number,
+        fallbackConfig: RateLimitConfig,
         fallbackRef: LimiterRef
     ): SimpleRateLimiter => {
         if (limiter) {
@@ -60,22 +59,9 @@ export const createReflectRateLimitController = ({
         logger.warn(
             `Rate limiter "${label}" missing; creating a fallback limiter.`
         );
-        const limitRaw = process.env[limitKey];
-        const windowRaw = process.env[windowKey];
-        const limit = limitRaw
-            ? Number.parseInt(limitRaw, 10)
-            : defaultLimit;
-        const windowMs = windowRaw
-            ? Number.parseInt(windowRaw, 10)
-            : defaultWindowMs;
-        // Fall back to safe defaults when env parsing fails so we stay fail-open but predictable.
         fallbackRef.current = new SimpleRateLimiter({
-            limit:
-                Number.isFinite(limit) && limit > 0 ? limit : defaultLimit,
-            window:
-                Number.isFinite(windowMs) && windowMs > 0
-                    ? windowMs
-                    : defaultWindowMs,
+            limit: fallbackConfig.limit,
+            window: fallbackConfig.windowMs,
         });
         return fallbackRef.current;
     };
@@ -83,28 +69,19 @@ export const createReflectRateLimitController = ({
     const activeIpRateLimiter = getLimiter(
         ipRateLimiter,
         'ip',
-        'WEB_API_RATE_LIMIT_IP',
-        'WEB_API_RATE_LIMIT_IP_WINDOW_MS',
-        3,
-        60000,
+        runtimeConfig.rateLimits.web.ip,
         fallbackIpLimiter
     );
     const activeSessionRateLimiter = getLimiter(
         sessionRateLimiter,
         'session',
-        'WEB_API_RATE_LIMIT_SESSION',
-        'WEB_API_RATE_LIMIT_SESSION_WINDOW_MS',
-        5,
-        60000,
+        runtimeConfig.rateLimits.web.session,
         fallbackSessionLimiter
     );
     const activeServiceRateLimiter = getLimiter(
         serviceRateLimiter,
         'service',
-        'REFLECT_SERVICE_RATE_LIMIT',
-        'REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS',
-        30,
-        60000,
+        runtimeConfig.rateLimits.reflectService,
         fallbackServiceLimiter
     );
 

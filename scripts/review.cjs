@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, process */
 // @ts-check
 
 /**
@@ -259,6 +260,7 @@ function parseFootnoteTagDiagnostics(
     result,
     fallbackFile = 'scripts/validate-footnote-tags.ts'
 ) {
+    /** @type {Diagnostic[]} */
     const diagnostics = [];
     const combinedOutput = `${result.stdout}\n${result.stderr}`;
 

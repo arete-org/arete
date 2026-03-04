@@ -11,7 +11,7 @@ import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import ProvenanceFooter from './ProvenanceFooter';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import examplePrompts from '../data/examplePrompts.json';
-import { loadRuntimeConfig } from '../utils/runtimeConfig';
+import { loadRuntimeConfig } from '../config';
 import { api, isApiClientError } from '../utils/api';
 import {
     shouldAutoFocusAskInput,
@@ -33,6 +33,10 @@ declare global {
 const FALLBACK_REFLECTION =
     'I was unable to generate a response - please try again later.';
 
+/**
+ * Main website ask panel that manages prompt input, Turnstile, and reflective
+ * response rendering.
+ */
 const AskPanel = (): JSX.Element => {
     const [question, setQuestion] = useState('');
     const [status, setStatus] = useState('');
@@ -727,4 +731,7 @@ const AskPanel = (): JSX.Element => {
     );
 };
 
+/**
+ * Default export for the landing-page ask panel.
+ */
 export default AskPanel;

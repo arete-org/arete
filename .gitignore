@@ -24,11 +24,11 @@ packages/discord-bot/src/output/
 # Contracts build artifacts
 packages/contracts/dist
 
+# Config-spec build artifacts
+packages/config-spec/dist/
+
 # Backend build artifacts
 packages/backend/dist/
-
-# Contracts build artifacts
-packages/contracts/dist/
 
 # Keys
 keys/

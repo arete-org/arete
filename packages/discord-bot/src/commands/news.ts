@@ -12,7 +12,7 @@ import { Command } from './BaseCommand.js';
 import { openaiService } from '../index.js';
 import { OpenAIOptions } from '../utils/openaiService.js';
 import { EmbedBuilder } from '../utils/response/EmbedBuilder.js';
-import { renderPrompt } from '../utils/env.js';
+import { renderPrompt } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 const DEFAULT_MAX_RESULTS = 3;
@@ -89,6 +89,9 @@ const newsFunction = {
     },
 };
 
+/**
+ * Slash-command definition for fetching and summarizing current news results.
+ */
 const newsCommand: Command = {
     data: new SlashCommandBuilder()
         .setName('news')
@@ -290,22 +293,18 @@ const newsCommand: Command = {
                 throw new Error('Invalid news response format');
             }
 
-            // TODO: REMOVE
-            logger.info(`News response: ${JSON.stringify(newsResponse)}`);
-            logger.info(
-                `Image analysis for ${newsResponse.news.length} articles:`
-            );
-            newsResponse.news.forEach((item, index) => {
-                const hasThumbnail = !!item.thumbnail;
-                const hasImage = !!item.image;
-                logger.info(`Article ${index + 1}: "${item.title}"`);
-                logger.info(
-                    `  - Has thumbnail: ${hasThumbnail} ${hasThumbnail ? `(URL: ${item.thumbnail})` : ''}`
-                );
-                logger.info(
-                    `  - Has image: ${hasImage} ${hasImage ? `(URL: ${item.image})` : ''}`
-                );
-            });
+            if (logger.isLevelEnabled?.('debug')) {
+                logger.debug('News response received', {
+                    articleCount: newsResponse.news.length,
+                    articlesWithThumbnails: newsResponse.news.filter(
+                        (item) => Boolean(item.thumbnail)
+                    ).length,
+                    articlesWithImages: newsResponse.news.filter((item) =>
+                        Boolean(item.image)
+                    ).length,
+                    articleTitles: newsResponse.news.map((item) => item.title),
+                });
+            }
 
             // Create embeds for each news item
             const embeds = newsResponse.news
@@ -363,5 +362,8 @@ const newsCommand: Command = {
     },
 };
 
+/**
+ * Default export for Discord command registration.
+ */
 export default newsCommand;
 

@@ -8,7 +8,7 @@
 
 import { Message } from 'discord.js';
 import { logger } from '../utils/logger.js';
-import { config } from '../utils/env.js';
+import { runtimeConfig } from '../config.js';
 import type { OpenAIService } from '../utils/openaiService.js';
 import type { ChannelMetrics } from '../state/ChannelContextManager.js';
 import type { CostStatistics } from '../utils/pricing.js';
@@ -303,7 +303,9 @@ export class RealtimeEngagementFilter {
         const messageContent = message.content.toLowerCase(); // Convert message content to lowercase for case-insensitive comparison
         const botNames = [
             botUsername.toLowerCase(),
-            ...config.botMentionNames.map((name) => name.toLowerCase()),
+            ...runtimeConfig.botMentionNames.map((name) =>
+                name.toLowerCase()
+            ),
         ]
             .filter((name) => name.length > 0)
             .filter((name, index, self) => self.indexOf(name) === index); // remove duplicates: users might enter varied casing of the same name, but we normalize to lowercase
@@ -316,7 +318,7 @@ export class RealtimeEngagementFilter {
                         channelId: context.channelKey,
                         detectedName: name,
                         botUsername,
-                        configuredNames: config.botMentionNames,
+                        configuredNames: runtimeConfig.botMentionNames,
                         messageContent: message.content,
                     }
                 );

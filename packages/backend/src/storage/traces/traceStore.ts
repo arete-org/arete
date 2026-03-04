@@ -6,6 +6,7 @@
  * @footnote-ethics: high - Controls trace storage ensuring AI responses are traceable and auditable.
  */
 
+import { runtimeConfig } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 import { SqliteTraceStore } from './sqliteTraceStore.js';
 import {
@@ -13,6 +14,10 @@ import {
     traceStoreJsonReplacer,
 } from './traceStoreUtils.js';
 
+/**
+ * Public trace store contract. It currently aliases the SQLite implementation
+ * so callers stay decoupled from the factory details.
+ */
 export type TraceStore = SqliteTraceStore;
 
 const traceStoreLogger =
@@ -22,12 +27,17 @@ const traceStoreLogger =
 
 export { assertValidResponseMetadata, traceStoreJsonReplacer };
 
-export function createTraceStoreFromEnv(): TraceStore {
-    const envPath = process.env.PROVENANCE_SQLITE_PATH?.trim();
-    const flyDefaultPath = process.env.FLY_APP_NAME
+/**
+ * Creates the trace store from runtime config and falls back to a local SQLite
+ * file when container-style paths are unavailable.
+ */
+export function createTraceStoreFromConfig(): TraceStore {
+    const configuredPath = runtimeConfig.storage.provenanceSqlitePath;
+    const flyDefaultPath = runtimeConfig.runtime.flyAppName
         ? '/data/provenance.db'
         : undefined;
-    const defaultPath = envPath || flyDefaultPath || './data/provenance.db';
+    const defaultPath =
+        configuredPath || flyDefaultPath || './data/provenance.db';
 
     try {
         return new SqliteTraceStore({ dbPath: defaultPath });
@@ -35,20 +45,27 @@ export function createTraceStoreFromEnv(): TraceStore {
         const code = (error as { code?: string }).code;
         const isPermission = code === 'EACCES' || code === 'EPERM';
         const isMissing = code === 'ENOENT';
-        const isDockerPath = envPath?.startsWith('/data/');
+        const isDockerPath = defaultPath.startsWith('/data/');
 
-        if (!envPath && isPermission) {
+        if (
+            !configuredPath &&
+            defaultPath !== './data/provenance.db' &&
+            (isPermission || (isDockerPath && isMissing))
+        ) {
             // Fallback to a local relative path when default path is not writable and no env override is set.
+            const availabilityMessage = isMissing
+                ? 'is not present'
+                : 'was not writable';
             traceStoreLogger.warn(
-                `Falling back to local SQLite path "./data/provenance.db" because default path "${defaultPath}" was not writable: ${String(error)}`
+                `Falling back to local SQLite path "./data/provenance.db" because default path "${defaultPath}" ${availabilityMessage}: ${String(error)}`
             );
             return new SqliteTraceStore({ dbPath: './data/provenance.db' });
         }
 
-        if (envPath && isDockerPath && (isPermission || isMissing)) {
+        if (configuredPath && isDockerPath && (isPermission || isMissing)) {
             // Allow the same /data path in local (non-container) runs by falling back to ./data.
             traceStoreLogger.warn(
-                `Falling back to local SQLite path "./data/provenance.db" because "${envPath}" is unavailable: ${String(error)}`
+                `Falling back to local SQLite path "./data/provenance.db" because "${configuredPath}" is unavailable: ${String(error)}`
             );
             return new SqliteTraceStore({ dbPath: './data/provenance.db' });
         }
@@ -57,5 +74,8 @@ export function createTraceStoreFromEnv(): TraceStore {
     }
 }
 
-export const defaultTraceStore = createTraceStoreFromEnv();
+/**
+ * Eager default trace store used by the backend HTTP handlers.
+ */
+export const defaultTraceStore = createTraceStoreFromConfig();
 

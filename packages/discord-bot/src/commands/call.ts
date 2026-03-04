@@ -27,6 +27,7 @@ import {
     VoiceStateHandler,
     cleanupVoiceConnection,
 } from '../events/VoiceStateHandler.js';
+import { runtimeConfig } from '../config.js';
 
 /**
  * @name call
@@ -75,7 +76,7 @@ const callCommand: Command = {
         // Check rate limit per user, channel, and guild
         // Bypass for developer user
         if (
-            interaction.user.id !== process.env.DISCORD_USER_ID &&
+            interaction.user.id !== runtimeConfig.developerUserId &&
             debugOption
         ) {
             // TODO - Implement rate limiter.
@@ -378,6 +379,10 @@ const callCommand: Command = {
     },
 };
 
+/**
+ * Replies or edits safely regardless of whether the interaction was already
+ * deferred.
+ */
 const safeReply = async (
     interaction: ChatInputCommandInteraction,
     content: string
@@ -393,5 +398,8 @@ const safeReply = async (
     }
 };
 
+/**
+ * Default export for Discord command registration.
+ */
 export default callCommand;
 

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { parseFootnoteTagDiagnostics } = require('./review.js') as {
+const { parseFootnoteTagDiagnostics } = require('./review.cjs') as {
     parseFootnoteTagDiagnostics: (
         result: { status: number; stdout: string; stderr: string }
     ) => Array<{ file: string; line: number; message: string }>;

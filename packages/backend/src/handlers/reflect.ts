@@ -215,7 +215,7 @@ const createReflectHandler = ({
             // Identity is only for abuse controls. It does not grant access by itself.
             const identity = getRequestIdentity(
                 req,
-                process.env.WEB_TRUST_PROXY === 'true'
+                runtimeConfig.server.trustProxy
             );
 
             // Auth decides whether this caller is a trusted service or a public browser/API caller.

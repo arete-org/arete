@@ -11,6 +11,7 @@ import { formatUsd } from '../../utils/pricing.js';
 import { clampForCloudinary, chunkString, sanitizeForEmbed } from './embed.js';
 import { CLOUDINARY_CONTEXT_VALUE_LIMIT } from './constants.js';
 import type { UploadMetadata } from './types.js';
+import { imageConfig } from '../../config/imageConfig.js';
 
 const formatToMime: Record<string, string> = {
     png: 'image/png',
@@ -20,11 +21,14 @@ const formatToMime: Record<string, string> = {
 };
 
 const cloudinaryConfig = {
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
+    cloud_name: imageConfig.cloudinary.cloudName,
+    api_key: imageConfig.cloudinary.apiKey,
+    api_secret: imageConfig.cloudinary.apiSecret,
 };
 
+/**
+ * Indicates whether all required Cloudinary credentials are present.
+ */
 export const isCloudinaryConfigured = Boolean(
     cloudinaryConfig.cloud_name &&
     cloudinaryConfig.api_key &&
@@ -39,6 +43,10 @@ if (isCloudinaryConfigured) {
     );
 }
 
+/**
+ * Error raised when image uploads are attempted without a full Cloudinary
+ * configuration.
+ */
 export class CloudinaryConfigurationError extends Error {
     constructor(message = 'Cloudinary configuration is missing.') {
         super(message);
@@ -71,6 +79,10 @@ function addChunkedContext(
     });
 }
 
+/**
+ * Uploads a generated image to Cloudinary and stores generation metadata in the
+ * asset context fields.
+ */
 export async function uploadToCloudinary(
     imageBuffer: Buffer,
     metadata: UploadMetadata

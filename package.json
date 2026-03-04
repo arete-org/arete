@@ -7,7 +7,7 @@
     ],
     "scripts": {
         "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:web\"",
-        "dev:backend": "pnpm --filter @footnote/contracts run build && pnpm exec tsx packages/backend/src/server.ts",
+        "dev:backend": "pnpm --filter @footnote/config-spec run build && pnpm exec tsx packages/backend/src/server.ts",
         "dev:web": "pnpm --filter @footnote/web dev",
         "dev:bot": "pnpm --filter @footnote/discord-bot dev",
         "start:dev": "pnpm dev",
@@ -20,8 +20,8 @@
         "check-annotation-schema": "pnpm exec tsx scripts/check-annotation-schema.ts",
         "validate-footnote-tags": "pnpm exec tsx scripts/validate-footnote-tags.ts",
         "validate-openapi-links": "pnpm exec tsx scripts/validate-openapi-links.ts",
-        "blog-sync": "node scripts/blog-sync.js",
-        "review": "node scripts/review.js",
+        "blog-sync": "node scripts/blog-sync.cjs",
+        "review": "node scripts/review.cjs",
         "test:annotation-governance": "pnpm exec tsx --test scripts/annotation-schema.test.ts scripts/validate-footnote-tags.test.ts scripts/review.test.ts",
         "type-check": "pnpm exec tsc --noEmit",
         "lint-check": "pnpm exec eslint packages/"

@@ -23,7 +23,7 @@ import {
     DEFAULT_IMAGE_OUTPUT_COMPRESSION,
 } from './constants.js';
 import { sanitizeForEmbed, truncateForEmbed } from './embed.js';
-import { renderPrompt } from '../../utils/env.js';
+import { renderPrompt } from '../../config.js';
 import { buildDeveloperPrompt } from './prompts.js';
 import type {
     ImageBackgroundType,
@@ -71,6 +71,10 @@ interface GenerationOutcome {
     annotations: AnnotationFields;
 }
 
+/**
+ * Executes one image-generation request and returns the raw response plus the
+ * normalized image payload and annotations.
+ */
 export async function generateImageWithMetadata(
     options: GenerateImageOptions
 ): Promise<GenerationOutcome> {

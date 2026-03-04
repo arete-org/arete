@@ -23,6 +23,8 @@
         "baseUrl": ".",
         "paths": {
             "@/*": ["./packages/*/src"],
+            "@footnote/config-spec": ["./packages/config-spec/src/index.ts"],
+            "@footnote/config-spec/*": ["./packages/config-spec/src/*"],
             "@footnote/contracts": ["./packages/contracts/src/index.ts"],
             "@footnote/contracts/*": ["./packages/contracts/src/*"],
             "@components/*": ["./packages/web/src/components/*"],

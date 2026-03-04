@@ -59,6 +59,7 @@ import {
     getImageTokenCost,
     refundImageTokens,
 } from '../utils/imageTokens.js';
+import { runtimeConfig } from '../config.js';
 
 /**
  * Ensures that the interaction has been deferred before we begin streaming
@@ -190,6 +191,10 @@ function buildInitialStatusFields(
     return fields;
 }
 
+/**
+ * Result returned by one image-generation session after Discord reply updates
+ * complete.
+ */
 export interface ImageGenerationSessionResult {
     success: boolean;
     responseId: string | null;
@@ -358,6 +363,9 @@ export async function runImageGenerationSession(
     }
 }
 
+/**
+ * Slash-command definition and execution flow for `/image`.
+ */
 const imageCommand: Command = {
     data: new SlashCommandBuilder()
         .setName('image')
@@ -595,7 +603,7 @@ const imageCommand: Command = {
         };
 
         const developerBypass =
-            interaction.user.id === process.env.DISCORD_USER_ID;
+            interaction.user.id === runtimeConfig.developerUserId;
 
         // Spend image tokens up-front so that the command provides immediate feedback
         // when a user exceeds their allowance. On failure we refund below.
@@ -644,5 +652,8 @@ const imageCommand: Command = {
     },
 };
 
+/**
+ * Default export for Discord command registration.
+ */
 export default imageCommand;
 

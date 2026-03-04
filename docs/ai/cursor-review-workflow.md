@@ -35,7 +35,7 @@ graph TD
 ```json
 {
     "scripts": {
-        "review": "node scripts/review.js"
+        "review": "node scripts/review.cjs"
     }
 }
 ```

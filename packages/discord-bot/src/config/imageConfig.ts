@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - Config affects output style and safety behavior.
  */
 import { logger } from '../utils/logger.js';
+import { envDefaultValues } from '@footnote/config-spec';
 import type {
     ImageOutputCompression,
     ImageOutputFormat,
@@ -13,30 +14,35 @@ import type {
     ImageRenderModel,
     ImageTextModel,
 } from '../commands/image/types.js';
+import {
+    imageOutputFormats,
+    imageQualities,
+    imageRenderModels,
+    imageTextModels,
+} from '../commands/image/types.js';
 
-/**
- * Hard coded defaults ensure the bot keeps working even when no overrides are
- * supplied. Environment variables can override any of these values at runtime
- * without requiring a redeploy.
- */
-const FALLBACK_TEXT_MODEL: ImageTextModel = 'gpt-4.1-mini';
-const FALLBACK_IMAGE_MODEL: ImageRenderModel = 'gpt-image-1-mini';
-const FALLBACK_IMAGE_QUALITY: ImageQualityType = 'low';
-const FALLBACK_OUTPUT_FORMAT: ImageOutputFormat = 'webp';
-const FALLBACK_OUTPUT_COMPRESSION: ImageOutputCompression = 80;
-const FALLBACK_TOKENS_PER_REFRESH = 10;
-const FALLBACK_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-/**
- * Default multipliers reflect the existing pricing balance between the mini and
- * full render models. Operators can override them through environment
- * variables when the balance needs tuning.
- */
-const FALLBACK_MODEL_MULTIPLIERS: Record<ImageRenderModel, number> = {
-    'gpt-image-1-mini': 1,
-    'gpt-image-1.5': 2, // Latest model, 1.5, is cheaper than 1
-    'gpt-image-1': 3,
-};
+const VALID_TEXT_MODELS = new Set<ImageTextModel>(imageTextModels);
+const VALID_IMAGE_MODELS = new Set<ImageRenderModel>(imageRenderModels);
+const VALID_IMAGE_QUALITIES = new Set<ImageQualityType>(imageQualities);
+const VALID_OUTPUT_FORMATS = new Set<ImageOutputFormat>(imageOutputFormats);
+const FALLBACK_TEXT_MODEL =
+    envDefaultValues.IMAGE_DEFAULT_TEXT_MODEL as ImageTextModel;
+const FALLBACK_IMAGE_MODEL =
+    envDefaultValues.IMAGE_DEFAULT_IMAGE_MODEL as ImageRenderModel;
+const FALLBACK_IMAGE_QUALITY =
+    envDefaultValues.IMAGE_DEFAULT_QUALITY as ImageQualityType;
+const FALLBACK_OUTPUT_FORMAT =
+    envDefaultValues.IMAGE_DEFAULT_OUTPUT_FORMAT as ImageOutputFormat;
+const FALLBACK_OUTPUT_COMPRESSION =
+    envDefaultValues.IMAGE_DEFAULT_OUTPUT_COMPRESSION as ImageOutputCompression;
+const FALLBACK_TOKENS_PER_REFRESH = envDefaultValues.IMAGE_TOKENS_PER_REFRESH;
+const FALLBACK_REFRESH_INTERVAL_MS =
+    envDefaultValues.IMAGE_TOKEN_REFRESH_INTERVAL_MS;
+const FALLBACK_MODEL_MULTIPLIERS =
+    envDefaultValues.IMAGE_MODEL_MULTIPLIERS as Record<
+        ImageRenderModel,
+        number
+    >;
 
 /**
  * Safely parses numeric environment variables while logging invalid values so
@@ -76,6 +82,13 @@ function parseMultiplierMapFromJson(): Partial<
         const overrides: Partial<Record<ImageRenderModel, number>> = {};
 
         for (const [model, value] of Object.entries(parsed)) {
+            if (!VALID_IMAGE_MODELS.has(model as ImageRenderModel)) {
+                logger.warn(
+                    `Skipping unsupported model key "${model}" in IMAGE_MODEL_MULTIPLIERS.`
+                );
+                continue;
+            }
+
             const numericValue =
                 typeof value === 'string' ? Number(value) : (value as number);
             if (!Number.isFinite(numericValue) || numericValue <= 0) {
@@ -128,6 +141,13 @@ function parseMultiplierOverrides(): Record<ImageRenderModel, number> {
             continue;
         }
 
+        if (!VALID_IMAGE_MODELS.has(modelName as ImageRenderModel)) {
+            logger.warn(
+                `Skipping unsupported image model multiplier override key ${envKey}; "${modelName}" is not a known image model.`
+            );
+            continue;
+        }
+
         overrides[modelName as ImageRenderModel] = parsedValue;
     }
 
@@ -139,17 +159,57 @@ function parseOutputFormat(raw: string | undefined): ImageOutputFormat | null {
         return null;
     }
 
-    const normalized = raw.toLowerCase();
-    if (
-        normalized === 'png' ||
-        normalized === 'webp' ||
-        normalized === 'jpeg'
-    ) {
-        return normalized;
+    const normalized = raw.trim().toLowerCase();
+    if (VALID_OUTPUT_FORMATS.has(normalized as ImageOutputFormat)) {
+        return normalized as ImageOutputFormat;
     }
 
     logger.warn(
         `Ignoring invalid IMAGE_DEFAULT_OUTPUT_FORMAT "${raw}". Expected png, webp, or jpeg.`
+    );
+    return null;
+}
+
+function parseTextModel(raw: string | undefined): ImageTextModel | null {
+    if (!raw) {
+        return null;
+    }
+
+    const normalized = raw.trim().toLowerCase();
+    if (VALID_TEXT_MODELS.has(normalized as ImageTextModel)) {
+        return normalized as ImageTextModel;
+    }
+
+    logger.warn(`Ignoring invalid IMAGE_DEFAULT_TEXT_MODEL "${raw}".`);
+    return null;
+}
+
+function parseImageModel(raw: string | undefined): ImageRenderModel | null {
+    if (!raw) {
+        return null;
+    }
+
+    const normalized = raw.trim().toLowerCase();
+    if (VALID_IMAGE_MODELS.has(normalized as ImageRenderModel)) {
+        return normalized as ImageRenderModel;
+    }
+
+    logger.warn(`Ignoring invalid IMAGE_DEFAULT_IMAGE_MODEL "${raw}".`);
+    return null;
+}
+
+function parseImageQuality(raw: string | undefined): ImageQualityType | null {
+    if (!raw) {
+        return null;
+    }
+
+    const normalized = raw.trim().toLowerCase();
+    if (VALID_IMAGE_QUALITIES.has(normalized as ImageQualityType)) {
+        return normalized as ImageQualityType;
+    }
+
+    logger.warn(
+        `Ignoring invalid IMAGE_DEFAULT_QUALITY "${raw}". Expected low, medium, high, or auto.`
     );
     return null;
 }
@@ -172,6 +232,10 @@ function parseOutputCompression(
     return null;
 }
 
+/**
+ * Public shape of the image command configuration consumed by generation,
+ * uploads, and token accounting.
+ */
 export interface ImageConfiguration {
     defaults: {
         textModel: ImageTextModel;
@@ -179,6 +243,11 @@ export interface ImageConfiguration {
         quality: ImageQualityType;
         outputFormat: ImageOutputFormat;
         outputCompression: ImageOutputCompression;
+    };
+    cloudinary: {
+        cloudName: string | undefined;
+        apiKey: string | undefined;
+        apiSecret: string | undefined;
     };
     tokens: {
         tokensPerRefresh: number;
@@ -196,17 +265,14 @@ export interface ImageConfiguration {
 export const imageConfig: ImageConfiguration = {
     defaults: {
         textModel:
-            (process.env.IMAGE_DEFAULT_TEXT_MODEL as
-                | ImageTextModel
-                | undefined) ?? FALLBACK_TEXT_MODEL,
+            parseTextModel(process.env.IMAGE_DEFAULT_TEXT_MODEL) ??
+            FALLBACK_TEXT_MODEL,
         imageModel:
-            (process.env.IMAGE_DEFAULT_IMAGE_MODEL as
-                | ImageRenderModel
-                | undefined) ?? FALLBACK_IMAGE_MODEL,
+            parseImageModel(process.env.IMAGE_DEFAULT_IMAGE_MODEL) ??
+            FALLBACK_IMAGE_MODEL,
         quality:
-            (process.env.IMAGE_DEFAULT_QUALITY as
-                | ImageQualityType
-                | undefined) ?? FALLBACK_IMAGE_QUALITY,
+            parseImageQuality(process.env.IMAGE_DEFAULT_QUALITY) ??
+            FALLBACK_IMAGE_QUALITY,
         outputFormat:
             parseOutputFormat(process.env.IMAGE_DEFAULT_OUTPUT_FORMAT) ??
             FALLBACK_OUTPUT_FORMAT,
@@ -214,6 +280,11 @@ export const imageConfig: ImageConfiguration = {
             parseOutputCompression(
                 process.env.IMAGE_DEFAULT_OUTPUT_COMPRESSION
             ) ?? FALLBACK_OUTPUT_COMPRESSION,
+    },
+    cloudinary: {
+        cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+        apiKey: process.env.CLOUDINARY_API_KEY,
+        apiSecret: process.env.CLOUDINARY_API_SECRET,
     },
     tokens: {
         tokensPerRefresh: readNumberEnv(
@@ -228,6 +299,16 @@ export const imageConfig: ImageConfiguration = {
     },
 };
 
+const cloudinaryValues = Object.values(imageConfig.cloudinary).filter(Boolean);
+if (
+    cloudinaryValues.length > 0 &&
+    cloudinaryValues.length < Object.keys(imageConfig.cloudinary).length
+) {
+    logger.warn(
+        'Cloudinary credentials are only partially configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET together or leave all three unset.'
+    );
+}
+
 /**
  * Helper that resolves the multiplier for the provided model while gracefully
  * falling back to a neutral multiplier when the model is unknown.
@@ -235,4 +316,3 @@ export const imageConfig: ImageConfiguration = {
 export function getImageModelTokenMultiplier(model: ImageRenderModel): number {
     return imageConfig.tokens.modelTokenMultipliers[model] ?? 1;
 }
-

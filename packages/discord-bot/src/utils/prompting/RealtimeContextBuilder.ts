@@ -5,14 +5,20 @@
  * @footnote-risk: high - Context errors can degrade realtime responses or routing.
  * @footnote-ethics: high - Realtime transcripts impact privacy and consent.
  */
-import { renderPrompt } from '../env.js';
+import { renderPrompt } from '../../config.js';
 
+/**
+ * Participant metadata included in realtime voice-session context.
+ */
 export interface RealtimeContextParticipant {
     id: string;
     displayName: string;
     isBot?: boolean;
 }
 
+/**
+ * Input used to build one realtime session prompt.
+ */
 export interface RealtimeContextInput {
     participants: RealtimeContextParticipant[];
     transcripts?: string[];
@@ -26,6 +32,10 @@ interface RealtimeContextOutput {
     };
 }
 
+/**
+ * Assembles realtime instructions from the active prompt plus participant and
+ * transcript context.
+ */
 export class RealtimeContextBuilder {
     public buildContext(input: RealtimeContextInput): RealtimeContextOutput {
         const transcripts = input.transcripts ?? [];

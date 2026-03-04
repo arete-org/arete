@@ -23,7 +23,7 @@ import {
 import { logger } from './logger.js';
 import { ResponseHandler } from './response/ResponseHandler.js';
 import { RateLimiter } from './RateLimiter.js';
-import { config } from './env.js';
+import { runtimeConfig } from '../config.js';
 import { ContextBuilder } from './prompting/ContextBuilder.js';
 import {
     DEFAULT_IMAGE_MODEL,
@@ -171,6 +171,9 @@ const hasImageEmbeds = (message: Message): boolean =>
             Boolean(embed.thumbnail?.url)
     );
 
+/**
+ * Discord-side executor for backend reflect decisions.
+ */
 export class MessageProcessor {
     private readonly openaiService: OpenAIService;
     private readonly contextBuilder: ContextBuilder;
@@ -185,24 +188,24 @@ export class MessageProcessor {
         this.contextBuilder = new ContextBuilder(this.openaiService);
 
         this.rateLimiters = {};
-        if (config.rateLimits.user.enabled) {
+        if (runtimeConfig.rateLimits.user.enabled) {
             this.rateLimiters.user = new RateLimiter({
-                limit: config.rateLimits.user.limit,
-                window: config.rateLimits.user.windowMs,
+                limit: runtimeConfig.rateLimits.user.limit,
+                window: runtimeConfig.rateLimits.user.windowMs,
                 scope: 'user',
             });
         }
-        if (config.rateLimits.channel.enabled) {
+        if (runtimeConfig.rateLimits.channel.enabled) {
             this.rateLimiters.channel = new RateLimiter({
-                limit: config.rateLimits.channel.limit,
-                window: config.rateLimits.channel.windowMs,
+                limit: runtimeConfig.rateLimits.channel.limit,
+                window: runtimeConfig.rateLimits.channel.windowMs,
                 scope: 'channel',
             });
         }
-        if (config.rateLimits.guild.enabled) {
+        if (runtimeConfig.rateLimits.guild.enabled) {
             this.rateLimiters.guild = new RateLimiter({
-                limit: config.rateLimits.guild.limit,
-                window: config.rateLimits.guild.windowMs,
+                limit: runtimeConfig.rateLimits.guild.limit,
+                window: runtimeConfig.rateLimits.guild.windowMs,
                 scope: 'guild',
             });
         }
@@ -550,7 +553,7 @@ export class MessageProcessor {
         try {
             footerPayload = buildFooterEmbed(
                 reflectResponse.metadata,
-                config.webBaseUrl
+                runtimeConfig.webBaseUrl
             );
         } catch (error) {
             logger.error(
@@ -945,6 +948,9 @@ export class MessageProcessor {
     }
 }
 
+/**
+ * Best-effort cleanup for temporary TTS files after a reply is delivered.
+ */
 export async function cleanupTTSFile(ttsPath: string): Promise<void> {
     if (!ttsPath) return;
 

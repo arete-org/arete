@@ -5,7 +5,7 @@
  * @footnote-risk: high - Planning errors can trigger wrong modality or unsafe actions.
  * @footnote-ethics: high - Plan selection affects user trust and safety outcomes.
  */
-import { renderPrompt } from '../env.js';
+import { renderPrompt } from '../../config.js';
 import { logger } from '../logger.js';
 import {
     OpenAIService,
@@ -25,6 +25,9 @@ const PLANNING_MODEL: SupportedModel = 'gpt-5-nano';
 const PLANNING_OPTIONS: OpenAIOptions = { reasoningEffort: 'low' };
 const DEFAULT_RISK_TIER: RiskTier = 'Low';
 
+/**
+ * Normalized planner output used by the Discord bot after validation.
+ */
 export interface Plan {
     action: 'message' | 'react' | 'ignore' | 'image';
     modality: 'text' | 'tts';
@@ -202,7 +205,7 @@ const planFunction = {
                                 type: 'string',
                                 enum: ['none', 'web_search'],
                                 description:
-                                    'hoose web_search when the answer depends on facts that may have changed since 2025 (versions/compatibility/support matrices, releases, pricing/availability, benchmarks, current office-holders, policies/laws/procedures, schedules, incidents/news), OR when you are not highly confident the fact is stable. Choose none for stable concepts, pure reasoning, coding/writing, or when the user has provided all needed facts. If stability is uncertain, prefer a small web_search rather than guessing. Always pair web_search with reasoningEffort >= low.',
+                                    'Choose web_search when the answer depends on facts that may have changed since 2025 (versions/compatibility/support matrices, releases, pricing/availability, benchmarks, current office-holders, policies/laws/procedures, schedules, incidents/news), OR when you are not highly confident the fact is stable. Choose none for stable concepts, pure reasoning, coding/writing, or when the user has provided all needed facts. If stability is uncertain, prefer a small web_search rather than guessing. Always pair web_search with reasoningEffort >= low.',
                             },
                         },
                         required: ['type'],
@@ -366,6 +369,10 @@ const planFunction = {
     },
 };
 
+/**
+ * Planner wrapper that asks the model for a structured action and then
+ * normalizes the result into a safe local shape.
+ */
 export class Planner {
     constructor(private readonly openaiService: OpenAIService) {}
 

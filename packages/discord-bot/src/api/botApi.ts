@@ -2,21 +2,20 @@
  * @description: Shared singleton backend API client for discord-bot runtime calls.
  * @footnote-scope: utility
  * @footnote-module: DiscordBotApiSingleton
- * @footnote-risk: medium - Misconfigured singleton can impact all backend API calls in the bot process.
+ * @footnote-risk: high - Misconfigured singleton can impact all backend API calls in the bot process.
  * @footnote-ethics: medium - Centralized client behavior supports consistent fail-open handling.
  */
 
-import { config } from '../utils/env.js';
-import {
-    createDiscordApiClient,
-    isDiscordApiClientError,
-} from './index.js';
+import { runtimeConfig } from '../config.js';
+import { createDiscordApiClient, isDiscordApiClientError } from './index.js';
 
+/**
+ * Shared backend API client configured from Discord bot runtime settings.
+ */
 export const botApi = createDiscordApiClient({
-    baseUrl: config.backendBaseUrl,
-    traceApiToken: config.traceApiToken,
-    defaultTimeoutMs: config.api.backendRequestTimeoutMs,
+    baseUrl: runtimeConfig.backendBaseUrl,
+    traceApiToken: runtimeConfig.traceApiToken,
+    defaultTimeoutMs: runtimeConfig.api.backendRequestTimeoutMs,
 });
 
 export { isDiscordApiClientError };
-

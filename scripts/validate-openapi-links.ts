@@ -15,6 +15,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 type SpecOperation = {
     method: string;
@@ -28,7 +29,8 @@ type AnnotationRef = {
     line: number;
 };
 
-const repoRoot = path.resolve(__dirname, '..');
+const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(scriptDirectory, '..');
 const openApiPath = path.join(repoRoot, 'docs', 'api', 'openapi.yaml');
 const packagesDir = path.join(repoRoot, 'packages');
 

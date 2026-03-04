@@ -46,3 +46,17 @@ export type {
     GetBlogPostResponse,
 } from './web';
 
+// Shared AI/provider vocabulary
+export type {
+    ConfiguredProviderModel,
+    SupportedBotInteractionAction,
+    SupportedEngagementIgnoreMode,
+    SupportedImageOutputFormat,
+    SupportedLogLevel,
+    SupportedOpenAIImageModel,
+    SupportedOpenAITextModel,
+    SupportedProvider,
+    SupportedProviderModel,
+    SupportedReasoningEffort,
+    SupportedVerbosity,
+} from './providers';

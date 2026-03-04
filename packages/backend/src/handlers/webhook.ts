@@ -7,6 +7,7 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { GitHubDiscussion } from '../storage/blogStore.js';
+import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 type LogRequest = (
@@ -24,9 +25,6 @@ type WebhookDeps = {
     ) => boolean;
     logRequest: LogRequest;
 };
-
-const DEFAULT_WEBHOOK_REPOSITORY = 'footnote-ai/footnote';
-
 const createWebhookHandler =
     ({ writeBlogPost, verifyGitHubSignature, logRequest }: WebhookDeps) =>
     /**
@@ -35,7 +33,7 @@ const createWebhookHandler =
      */
     async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
         try {
-            const maxBodyBytes = 256 * 1024;
+            const maxBodyBytes = runtimeConfig.webhook.maxBodyBytes;
 
             // --- Method validation ---
             if (req.method !== 'POST') {
@@ -50,7 +48,7 @@ const createWebhookHandler =
             }
 
             // --- Configuration gate ---
-            if (!process.env.GITHUB_WEBHOOK_SECRET) {
+            if (!runtimeConfig.webhook.secret) {
                 res.statusCode = 200;
                 res.setHeader(
                     'Content-Type',
@@ -138,7 +136,7 @@ const createWebhookHandler =
             // --- Signature verification ---
             if (
                 !verifyGitHubSignature(
-                    process.env.GITHUB_WEBHOOK_SECRET,
+                    runtimeConfig.webhook.secret,
                     body,
                     signature
                 )
@@ -189,9 +187,7 @@ const createWebhookHandler =
             }
 
             // --- Repo + category gating ---
-            const expectedRepository =
-                process.env.GITHUB_WEBHOOK_REPOSITORY?.trim() ||
-                DEFAULT_WEBHOOK_REPOSITORY;
+            const expectedRepository = runtimeConfig.webhook.repository;
             const repository = payload.repository as { full_name?: string };
             if (repository.full_name !== expectedRepository) {
                 res.statusCode = 200;

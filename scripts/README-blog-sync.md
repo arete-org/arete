@@ -31,7 +31,7 @@ pnpm blog-sync
 ### Option 2: Direct execution
 
 ```bash
-node scripts/blog-sync.js
+node scripts/blog-sync.cjs
 ```
 
 ## What it does

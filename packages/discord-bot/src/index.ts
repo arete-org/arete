@@ -13,7 +13,7 @@ import { fileURLToPath } from 'url';
 import { CommandHandler } from './utils/commandHandler.js';
 import { EventManager } from './utils/eventManager.js';
 import { logger } from './utils/logger.js';
-import { config } from './utils/env.js';
+import { runtimeConfig } from './config.js';
 import { OpenAIService } from './utils/openaiService.js';
 import { ResponseHandler } from './utils/response/ResponseHandler.js';
 import type { Command } from './commands/BaseCommand.js';
@@ -105,7 +105,7 @@ const __dirname = path.dirname(__filename);
 
 // Set up cost estimator if enabled, to track OpenAI API usage and costs
 let costEstimator: LLMCostEstimator | undefined = undefined;
-if (config.costEstimator.enabled) {
+if (runtimeConfig.costEstimator.enabled) {
     costEstimator = new LLMCostEstimator({
         enabled: true,
         contextManager: null as ChannelContextManager | null,
@@ -116,8 +116,12 @@ if (config.costEstimator.enabled) {
 }
 
 // Initialize OpenAI service
+/**
+ * Shared OpenAI service instance used by commands, planners, and interaction
+ * handlers in the bot process.
+ */
 export const openaiService = new OpenAIService(
-    config.openaiApiKey,
+    runtimeConfig.openaiApiKey,
     costEstimator
 ); // Exported for use in other files, like /news command
 
@@ -145,7 +149,7 @@ const client = new Client({
 // ====================
 const commandHandler = new CommandHandler();
 const eventManager = new EventManager(client, {
-    openai: { apiKey: config.openaiApiKey },
+    openai: { apiKey: runtimeConfig.openaiApiKey },
     openaiService,
     costEstimator,
 });
@@ -167,9 +171,9 @@ client.handlers = new Collection();
         // Deploy commands to Discord
         logger.debug('Deploying commands to Discord...');
         await commandHandler.deployCommands(
-            config.token,
-            config.clientId,
-            config.guildId
+            runtimeConfig.token,
+            runtimeConfig.clientId,
+            runtimeConfig.guildId
         );
 
         // Store commands in memory for execution
@@ -189,7 +193,7 @@ client.handlers = new Collection();
 
         // Login to Discord after everything is set up
         logger.debug('Logging in to Discord...');
-        await client.login(config.token);
+        await client.login(runtimeConfig.token);
         logger.info('Bot is now connected to Discord and ready!');
     } catch (error) {
         logger.error('Failed to initialize bot:' + error);
@@ -211,7 +215,7 @@ client.once(Events.ClientReady, () => {
  * immediately see how many high-quality attempts remain before the next refill.
  */
 function buildVariationStatusMessage(userId: string, base?: string): string {
-    const isDeveloper = userId === process.env.DISCORD_USER_ID;
+    const isDeveloper = userId === runtimeConfig.developerUserId;
     if (isDeveloper) {
         return base
             ? `${base}\n\nDeveloper bypass active—image tokens are not required.`
@@ -800,7 +804,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             }
 
             const developerBypass =
-                interaction.user.id === process.env.DISCORD_USER_ID;
+                interaction.user.id === runtimeConfig.developerUserId;
             let tokenSpend = null as ReturnType<
                 typeof consumeImageTokens
             > | null;
@@ -1105,7 +1109,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             }
 
             const isDeveloper =
-                interaction.user.id === process.env.DISCORD_USER_ID;
+                interaction.user.id === runtimeConfig.developerUserId;
             let retrySpend = null as ReturnType<
                 typeof consumeImageTokens
             > | null;
@@ -1248,7 +1252,7 @@ appServer.post("/github-webhook", async (req, res) => {
 });
 
 // Start Express server
-const WEBHOOK_PORT = process.env.WEBHOOK_PORT || 3000;
+const WEBHOOK_PORT = runtimeConfig.webhookPort;
 appServer.listen(WEBHOOK_PORT, () => {
   console.log(`GitHub webhook server listening on port ${WEBHOOK_PORT}`);
 });

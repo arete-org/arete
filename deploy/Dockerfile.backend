@@ -18,6 +18,7 @@ RUN apt-get update \
 COPY tsconfig.json ./tsconfig.json
 COPY package.json pnpm-workspace.yaml ./
 COPY packages/backend/package.json packages/backend/tsconfig.json packages/backend/
+COPY packages/config-spec/package.json packages/config-spec/tsconfig.json packages/config-spec/
 COPY packages/contracts/package.json packages/contracts/tsconfig.json packages/contracts/
 
 # --- Dependencies ---
@@ -26,11 +27,11 @@ RUN pnpm install --frozen-lockfile --prod=false
 
 # --- Sources ---
 COPY packages/backend/src/ packages/backend/src/
+COPY packages/config-spec/src/ packages/config-spec/src/
 COPY packages/contracts/src/ packages/contracts/src/
 
 # --- Build ---
-RUN pnpm --filter @footnote/contracts run build \
-  && pnpm --filter @footnote/backend run build \
+RUN pnpm --filter @footnote/backend run build \
   && CI=true pnpm --filter @footnote/backend... install --prod
 
 # --- Runtime ---
