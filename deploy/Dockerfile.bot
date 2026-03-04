@@ -16,6 +16,7 @@ RUN apt-get update \
 COPY tsconfig.json ./tsconfig.json
 COPY package.json pnpm-workspace.yaml ./
 COPY packages/discord-bot/package.json packages/discord-bot/package.json
+COPY packages/config-spec/package.json packages/config-spec/tsconfig.json packages/config-spec/
 COPY packages/contracts/package.json packages/contracts/tsconfig.json packages/contracts/
 
 # --- Dependencies ---
@@ -23,11 +24,13 @@ COPY pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile --prod=false
 
 # --- Sources ---
+COPY packages/config-spec/src/ packages/config-spec/src/
 COPY packages/contracts/src/ packages/contracts/src/
 COPY packages/discord-bot/ packages/discord-bot/
 
 # --- Build ---
 RUN pnpm --filter @footnote/contracts run build \
+  && pnpm --filter @footnote/config-spec run build \
   && pnpm exec tsc -p packages/discord-bot/tsconfig.json \
   && mkdir -p packages/discord-bot/dist/utils/prompts \
   && cp packages/discord-bot/src/utils/prompts/defaults.yaml packages/discord-bot/dist/utils/prompts/defaults.yaml \
