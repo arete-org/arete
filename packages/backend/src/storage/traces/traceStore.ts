@@ -45,8 +45,11 @@ export function createTraceStoreFromConfig(): TraceStore {
             (isPermission || (isDockerPath && isMissing))
         ) {
             // Fallback to a local relative path when default path is not writable and no env override is set.
+            const availabilityMessage = isMissing
+                ? 'is not present'
+                : 'was not writable';
             traceStoreLogger.warn(
-                `Falling back to local SQLite path "./data/provenance.db" because default path "${defaultPath}" was not writable: ${String(error)}`
+                `Falling back to local SQLite path "./data/provenance.db" because default path "${defaultPath}" ${availabilityMessage}: ${String(error)}`
             );
             return new SqliteTraceStore({ dbPath: './data/provenance.db' });
         }
