@@ -1,12 +1,12 @@
 /**
- * @description: Small helpers for declaring env metadata once and deriving multiple views from it.
+ * @description: Small helpers for declaring environment defaults in a readable way.
  * @footnote-scope: utility
  * @footnote-module: EnvFactories
  * @footnote-risk: medium - Mistakes here can affect every derived env-spec export.
  * @footnote-ethics: medium - These helpers shape how defaults and safety-relevant config are documented.
  */
 
-import type { EnvDefault, EnvLiteralValue, EnvSpecEntry } from './types.js';
+import type { EnvLiteralValue, EnvSpecEntry } from './types.js';
 
 // Use this when the env variable has a straightforward, fixed fallback.
 // Example: PORT -> literal(3000)
@@ -40,18 +40,8 @@ export const noDefault = () => ({ kind: 'none' }) as const;
 export const runtime = (description: string) =>
     ({ kind: 'runtime', description }) as const;
 
-// This helper keeps each env entry fully typed while staying easy to read in
-// the main env-spec file. It is intentionally a thin identity wrapper.
+// This thin wrapper keeps each env entry fully typed while staying easy to
+// scan in the main env-spec file.
 // Example: defineEnv({ key: 'PORT', ..., defaultValue: literal(3000) })
-export const defineEnv = <const TEntry extends EnvSpecEntry>(
-    entry: TEntry
-): TEntry => entry;
-
-// Some call sites are easier to express as a keyed object before deriving other
-// views. This preserves the exact entry types for that pattern too.
-// Example: defineEnvMap({ PORT: defineEnv(...), HOST: defineEnv(...) })
-export const defineEnvMap = <
-    const TEntries extends Record<string, EnvSpecEntry<EnvDefault>>,
->(
-    entries: TEntries
-): TEntries => entries;
+export const defineEnv = <const TEntry extends EnvSpecEntry>(entry: TEntry) =>
+    entry;

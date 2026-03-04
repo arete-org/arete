@@ -8,7 +8,6 @@
 
 export {
     defineEnv,
-    defineEnvMap,
     derived,
     literal,
     noDefault,
