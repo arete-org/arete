@@ -74,7 +74,7 @@ export const envEntries = [
         secret: false,
         kind: "enum",
         description: "Logger verbosity level.",
-        defaultValue: literal("debug"),
+        defaultValue: literal("info"),
         allowedValues: [
             "error",
             "warn",
