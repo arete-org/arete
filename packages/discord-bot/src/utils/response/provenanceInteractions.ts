@@ -188,6 +188,20 @@ export const buildAlternativeLensSessionKey = (
 export const buildExplainSessionKey = (messageId: string) =>
     `explain:${messageId}`;
 
+const isCitationPayload = (value: unknown): value is Citation => {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    const candidate = value as Partial<Citation>;
+    return (
+        typeof candidate.title === 'string' &&
+        typeof candidate.url === 'string' &&
+        (candidate.snippet === undefined ||
+            typeof candidate.snippet === 'string')
+    );
+};
+
 const isResponseMetadataPayload = (
     value: unknown
 ): value is ResponseMetadata => {
@@ -206,15 +220,7 @@ const isResponseMetadataPayload = (
         candidate.riskTier === 'High';
     const validCitations =
         Array.isArray(candidate.citations) &&
-        candidate.citations.every(
-            (citation) =>
-                citation &&
-                typeof citation === 'object' &&
-                typeof citation.title === 'string' &&
-                typeof citation.url === 'string' &&
-                (citation.snippet === undefined ||
-                    typeof citation.snippet === 'string')
-        );
+        candidate.citations.every(isCitationPayload);
 
     return (
         typeof candidate.responseId === 'string' &&
