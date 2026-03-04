@@ -8,6 +8,7 @@
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
+import type { RateLimitConfig } from '../config/types.js';
 import type { ServiceAuth } from './reflectAuth.js';
 import type { RequestIdentity } from './reflectRequest.js';
 import type { ReflectFailureResponse } from './reflectResponses.js';
@@ -15,11 +16,6 @@ import type { ReflectFailureResponse } from './reflectResponses.js';
 // Holds lazily-created fallback limiters so state survives across requests.
 type LimiterRef = {
     current: SimpleRateLimiter | null;
-};
-
-type RateLimitConfig = {
-    limit: number;
-    windowMs: number;
 };
 
 /**

@@ -24,6 +24,8 @@ export const buildServerSection = (
     port: parsePositiveIntEnv(env.PORT, envDefaultValues.PORT, 'PORT', warn),
     trustProxy: parseBooleanEnv(
         env.WEB_TRUST_PROXY,
-        envDefaultValues.WEB_TRUST_PROXY
+        envDefaultValues.WEB_TRUST_PROXY,
+        'WEB_TRUST_PROXY',
+        warn
     ),
 });

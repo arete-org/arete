@@ -9,6 +9,13 @@
 export const supportedProviders = ['openai'] as const;
 export type SupportedProvider = (typeof supportedProviders)[number];
 
+export const supportedNodeEnvs = [
+    'production',
+    'development',
+    'test',
+] as const;
+export type SupportedNodeEnv = (typeof supportedNodeEnvs)[number];
+
 export const supportedOpenAITextModels = [
     'gpt-5',
     'gpt-5-mini',
@@ -36,14 +43,16 @@ export type ConfiguredProviderModel = SupportedProviderModel | (string & {});
 
 export type SupportedReasoningEffort = 'low' | 'medium' | 'high';
 export type SupportedVerbosity = 'low' | 'medium' | 'high';
-export type SupportedLogLevel =
-    | 'error'
-    | 'warn'
-    | 'info'
-    | 'http'
-    | 'verbose'
-    | 'debug'
-    | 'silly';
+export const supportedLogLevels = [
+    'error',
+    'warn',
+    'info',
+    'http',
+    'verbose',
+    'debug',
+    'silly',
+] as const;
+export type SupportedLogLevel = (typeof supportedLogLevels)[number];
 export type SupportedBotInteractionAction = 'ignore' | 'react';
 export type SupportedEngagementIgnoreMode = 'silent' | 'react';
 export type SupportedImageOutputFormat = 'png' | 'webp' | 'jpeg';

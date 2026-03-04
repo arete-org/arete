@@ -11,11 +11,26 @@ import type { RuntimeConfig, WarningSink } from '../types.js';
 
 export const buildStorageSection = (
     env: NodeJS.ProcessEnv,
-    _warn: WarningSink
-): RuntimeConfig['storage'] => ({
-    provenanceSqlitePath: parseOptionalTrimmedString(env.PROVENANCE_SQLITE_PATH),
-    incidentPseudonymizationSecret: parseOptionalTrimmedString(
+    warn: WarningSink
+): RuntimeConfig['storage'] => {
+    const incidentPseudonymizationSecret = parseOptionalTrimmedString(
         env.INCIDENT_PSEUDONYMIZATION_SECRET
-    ),
-    incidentSqlitePath: parseOptionalTrimmedString(env.INCIDENT_SQLITE_PATH),
-});
+    );
+    const incidentSqlitePath = parseOptionalTrimmedString(
+        env.INCIDENT_SQLITE_PATH
+    );
+
+    if (incidentSqlitePath && !incidentPseudonymizationSecret) {
+        warn(
+            `INCIDENT_SQLITE_PATH is set to "${incidentSqlitePath}" but INCIDENT_PSEUDONYMIZATION_SECRET is missing. Incident records may be stored without pseudonymized identifiers.`
+        );
+    }
+
+    return {
+        provenanceSqlitePath: parseOptionalTrimmedString(
+            env.PROVENANCE_SQLITE_PATH
+        ),
+        incidentPseudonymizationSecret,
+        incidentSqlitePath,
+    };
+};

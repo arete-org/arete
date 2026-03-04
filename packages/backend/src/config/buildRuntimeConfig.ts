@@ -21,7 +21,7 @@ import type { RuntimeConfig, WarningSink } from './types.js';
 
 export const buildRuntimeConfig = (
     env: NodeJS.ProcessEnv,
-    warn: WarningSink = console.warn
+    warn: WarningSink
 ): RuntimeConfig => {
     const runtime = buildRuntimeSection(env, warn);
     const server = buildServerSection(env, warn);

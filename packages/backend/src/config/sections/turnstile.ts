@@ -14,10 +14,17 @@ import type { RuntimeConfig, WarningSink } from '../types.js';
 
 export const buildTurnstileSection = (
     env: NodeJS.ProcessEnv,
-    _warn: WarningSink
+    warn: WarningSink
 ): RuntimeConfig['turnstile'] => {
     const secretKey = parseOptionalTrimmedString(env.TURNSTILE_SECRET_KEY);
     const siteKey = parseOptionalTrimmedString(env.TURNSTILE_SITE_KEY);
+    const hasPartialCredentials = Boolean(secretKey) !== Boolean(siteKey);
+
+    if (hasPartialCredentials) {
+        warn(
+            'Turnstile is disabled because TURNSTILE_SECRET_KEY and TURNSTILE_SITE_KEY must both be set together.'
+        );
+    }
 
     return {
         secretKey,

@@ -3,6 +3,11 @@
     "compilerOptions": {
         "rootDir": "src",
         "outDir": "dist",
+        "baseUrl": ".",
+        "paths": {
+            "@footnote/contracts": ["../contracts/dist/index.d.ts"],
+            "@footnote/contracts/*": ["../contracts/dist/*"]
+        },
         "noEmitOnError": true
     },
     "include": ["src/**/*.ts"],

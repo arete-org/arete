@@ -6,18 +6,13 @@
  * @footnote-ethics: medium - Parsing defaults and warnings affect abuse controls and operator understanding.
  */
 
-import type { SupportedLogLevel } from '@footnote/contracts/providers';
+import {
+    supportedLogLevels,
+    type SupportedLogLevel,
+} from '@footnote/contracts/providers';
 import type { WarningSink } from './types.js';
 
-const VALID_LOG_LEVELS = new Set([
-    'error',
-    'warn',
-    'info',
-    'http',
-    'verbose',
-    'debug',
-    'silly',
-]);
+const VALID_LOG_LEVELS = new Set(supportedLogLevels);
 
 export const normalizeHostname = (value: string): string | null => {
     const trimmedValue = value.trim().toLowerCase();
@@ -39,7 +34,9 @@ export const parseOptionalTrimmedString = (
 
 export const parseBooleanEnv = (
     value: string | undefined,
-    fallback: boolean
+    fallback: boolean,
+    key?: string,
+    warn?: WarningSink
 ): boolean => {
     if (value === undefined) {
         return fallback;
@@ -52,6 +49,12 @@ export const parseBooleanEnv = (
 
     if (normalized === 'false') {
         return false;
+    }
+
+    if (key && warn) {
+        warn(
+            `Ignoring invalid boolean for ${key}: "${value}". Using default (${fallback}).`
+        );
     }
 
     return fallback;
@@ -140,7 +143,7 @@ export const parseLogLevelEnv = (
     }
 
     const normalized = value.trim().toLowerCase();
-    if (VALID_LOG_LEVELS.has(normalized)) {
+    if (VALID_LOG_LEVELS.has(normalized as SupportedLogLevel)) {
         return normalized as SupportedLogLevel;
     }
 

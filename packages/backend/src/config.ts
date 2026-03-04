@@ -7,8 +7,16 @@
  */
 import './bootstrapEnv.js';
 import { buildRuntimeConfig } from './config/buildRuntimeConfig.js';
+import { logger } from './utils/logger.js';
 
 export type { RuntimeConfig } from './config/types.js';
 export { buildRuntimeConfig } from './config/buildRuntimeConfig.js';
 
-export const runtimeConfig = buildRuntimeConfig(process.env);
+const configLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'backendRuntimeConfig' })
+        : logger;
+
+export const runtimeConfig = buildRuntimeConfig(process.env, (message) =>
+    configLogger.warn(message)
+);

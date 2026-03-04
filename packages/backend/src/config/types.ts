@@ -9,6 +9,7 @@
 import type {
     ConfiguredProviderModel,
     SupportedLogLevel,
+    SupportedNodeEnv,
     SupportedReasoningEffort,
     SupportedVerbosity,
 } from '@footnote/contracts/providers';
@@ -22,7 +23,7 @@ export type RateLimitConfig = {
 
 export type RuntimeConfig = {
     runtime: {
-        nodeEnv: string;
+        nodeEnv: SupportedNodeEnv;
         isProduction: boolean;
         isDevelopment: boolean;
         flyAppName: string | null;

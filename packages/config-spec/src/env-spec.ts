@@ -8,6 +8,7 @@
 
 import { defineEnv, derived, literal, noDefault } from './env-factories.js';
 import { runtimeFallbacks } from './runtime-fallbacks.js';
+import { supportedNodeEnvs } from '@footnote/contracts/providers';
 import type { EnvSpecEntry } from './types.js';
 
 // This file is the single source of truth for environment metadata.
@@ -98,9 +99,10 @@ export const envEntries = [
         section: "runtime",
         required: false,
         secret: false,
-        kind: "string",
+        kind: "enum",
         description: "Node runtime mode used for production/development branching.",
         defaultValue: literal("development"),
+        allowedValues: supportedNodeEnvs,
         usedBy: [
             "packages/backend/src/config.ts",
             "packages/discord-bot/src/config.ts",
@@ -964,6 +966,12 @@ export const envEntries = [
         kind: "enum",
         description: "Default image quality preset.",
         defaultValue: literal("low"),
+        allowedValues: [
+            "low",
+            "medium",
+            "high",
+            "auto",
+        ],
         usedBy: [
             "packages/discord-bot/src/config/imageConfig.ts",
         ],
@@ -1551,6 +1559,15 @@ type EnvSpecByKey = {
     [Entry in EnvEntries[number] as Entry['key']]: Entry;
 };
 
+type LiteralEnvEntry = Extract<
+    EnvEntries[number],
+    { defaultValue: { kind: 'literal' } }
+>;
+
+type EnvDefaultValues = {
+    [Entry in LiteralEnvEntry as Entry['key']]: Entry['defaultValue']['value'];
+};
+
 // Handy lookup for scripts, docs, and future tooling that want one env key at
 // a time without manually searching the full ordered list above.
 export const envSpecByKey = Object.fromEntries(
@@ -1559,84 +1576,13 @@ export const envSpecByKey = Object.fromEntries(
 
 // Only literal env-backed defaults belong here. Derived/runtime fallbacks stay
 // in runtimeFallbacks so operators can clearly tell which values come from env.
-export const envDefaultValues = {
-    LOG_DIR: envSpecByKey.LOG_DIR.defaultValue.value,
-    LOG_LEVEL: envSpecByKey.LOG_LEVEL.defaultValue.value,
-    NODE_ENV: envSpecByKey.NODE_ENV.defaultValue.value,
-    FRAME_ANCESTORS: envSpecByKey.FRAME_ANCESTORS.defaultValue.value,
-    BACKEND_REQUEST_TIMEOUT_MS: envSpecByKey.BACKEND_REQUEST_TIMEOUT_MS.defaultValue.value,
-    WEBHOOK_PORT: envSpecByKey.WEBHOOK_PORT.defaultValue.value,
-    RATE_LIMIT_USER: envSpecByKey.RATE_LIMIT_USER.defaultValue.value,
-    USER_RATE_LIMIT: envSpecByKey.USER_RATE_LIMIT.defaultValue.value,
-    USER_RATE_WINDOW_MS: envSpecByKey.USER_RATE_WINDOW_MS.defaultValue.value,
-    RATE_LIMIT_CHANNEL: envSpecByKey.RATE_LIMIT_CHANNEL.defaultValue.value,
-    CHANNEL_RATE_LIMIT: envSpecByKey.CHANNEL_RATE_LIMIT.defaultValue.value,
-    CHANNEL_RATE_WINDOW_MS: envSpecByKey.CHANNEL_RATE_WINDOW_MS.defaultValue.value,
-    RATE_LIMIT_GUILD: envSpecByKey.RATE_LIMIT_GUILD.defaultValue.value,
-    GUILD_RATE_LIMIT: envSpecByKey.GUILD_RATE_LIMIT.defaultValue.value,
-    GUILD_RATE_WINDOW_MS: envSpecByKey.GUILD_RATE_WINDOW_MS.defaultValue.value,
-    ALLOW_THREAD_RESPONSES: envSpecByKey.ALLOW_THREAD_RESPONSES.defaultValue.value,
-    ALLOWED_THREAD_IDS: envSpecByKey.ALLOWED_THREAD_IDS.defaultValue.value,
-    BOT_MENTION_NAMES: envSpecByKey.BOT_MENTION_NAMES.defaultValue.value,
-    BOT_BACK_AND_FORTH_LIMIT: envSpecByKey.BOT_BACK_AND_FORTH_LIMIT.defaultValue.value,
-    BOT_BACK_AND_FORTH_COOLDOWN_MS: envSpecByKey.BOT_BACK_AND_FORTH_COOLDOWN_MS.defaultValue.value,
-    BOT_BACK_AND_FORTH_TTL_MS: envSpecByKey.BOT_BACK_AND_FORTH_TTL_MS.defaultValue.value,
-    BOT_BACK_AND_FORTH_ACTION: envSpecByKey.BOT_BACK_AND_FORTH_ACTION.defaultValue.value,
-    BOT_BACK_AND_FORTH_REACTION: envSpecByKey.BOT_BACK_AND_FORTH_REACTION.defaultValue.value,
-    CATCHUP_AFTER_MESSAGES: envSpecByKey.CATCHUP_AFTER_MESSAGES.defaultValue.value,
-    CATCHUP_IF_MENTIONED_AFTER_MESSAGES: envSpecByKey.CATCHUP_IF_MENTIONED_AFTER_MESSAGES.defaultValue.value,
-    STALE_COUNTER_TTL_MS: envSpecByKey.STALE_COUNTER_TTL_MS.defaultValue.value,
-    CONTEXT_MANAGER_ENABLED: envSpecByKey.CONTEXT_MANAGER_ENABLED.defaultValue.value,
-    CONTEXT_MANAGER_MAX_MESSAGES: envSpecByKey.CONTEXT_MANAGER_MAX_MESSAGES.defaultValue.value,
-    CONTEXT_MANAGER_RETENTION_MS: envSpecByKey.CONTEXT_MANAGER_RETENTION_MS.defaultValue.value,
-    CONTEXT_MANAGER_EVICTION_INTERVAL_MS: envSpecByKey.CONTEXT_MANAGER_EVICTION_INTERVAL_MS.defaultValue.value,
-    COST_ESTIMATOR_ENABLED: envSpecByKey.COST_ESTIMATOR_ENABLED.defaultValue.value,
-    REALTIME_FILTER_ENABLED: envSpecByKey.REALTIME_FILTER_ENABLED.defaultValue.value,
-    ENGAGEMENT_WEIGHT_MENTION: envSpecByKey.ENGAGEMENT_WEIGHT_MENTION.defaultValue.value,
-    ENGAGEMENT_WEIGHT_QUESTION: envSpecByKey.ENGAGEMENT_WEIGHT_QUESTION.defaultValue.value,
-    ENGAGEMENT_WEIGHT_TECHNICAL: envSpecByKey.ENGAGEMENT_WEIGHT_TECHNICAL.defaultValue.value,
-    ENGAGEMENT_WEIGHT_HUMAN_ACTIVITY: envSpecByKey.ENGAGEMENT_WEIGHT_HUMAN_ACTIVITY.defaultValue.value,
-    ENGAGEMENT_WEIGHT_COST_SATURATION: envSpecByKey.ENGAGEMENT_WEIGHT_COST_SATURATION.defaultValue.value,
-    ENGAGEMENT_WEIGHT_BOT_NOISE: envSpecByKey.ENGAGEMENT_WEIGHT_BOT_NOISE.defaultValue.value,
-    ENGAGEMENT_WEIGHT_DM_BOOST: envSpecByKey.ENGAGEMENT_WEIGHT_DM_BOOST.defaultValue.value,
-    ENGAGEMENT_WEIGHT_DECAY: envSpecByKey.ENGAGEMENT_WEIGHT_DECAY.defaultValue.value,
-    ENGAGEMENT_IGNORE_MODE: envSpecByKey.ENGAGEMENT_IGNORE_MODE.defaultValue.value,
-    ENGAGEMENT_REACTION_EMOJI: envSpecByKey.ENGAGEMENT_REACTION_EMOJI.defaultValue.value,
-    ENGAGEMENT_MIN_THRESHOLD: envSpecByKey.ENGAGEMENT_MIN_THRESHOLD.defaultValue.value,
-    ENGAGEMENT_PROBABILISTIC_LOW: envSpecByKey.ENGAGEMENT_PROBABILISTIC_LOW.defaultValue.value,
-    ENGAGEMENT_PROBABILISTIC_HIGH: envSpecByKey.ENGAGEMENT_PROBABILISTIC_HIGH.defaultValue.value,
-    ENGAGEMENT_ENABLE_LLM_REFINEMENT: envSpecByKey.ENGAGEMENT_ENABLE_LLM_REFINEMENT.defaultValue.value,
-    DISCORD_BOT_LOG_FULL_CONTEXT: envSpecByKey.DISCORD_BOT_LOG_FULL_CONTEXT.defaultValue.value,
-    IMAGE_DEFAULT_TEXT_MODEL: envSpecByKey.IMAGE_DEFAULT_TEXT_MODEL.defaultValue.value,
-    IMAGE_DEFAULT_IMAGE_MODEL: envSpecByKey.IMAGE_DEFAULT_IMAGE_MODEL.defaultValue.value,
-    IMAGE_DEFAULT_QUALITY: envSpecByKey.IMAGE_DEFAULT_QUALITY.defaultValue.value,
-    IMAGE_DEFAULT_OUTPUT_FORMAT: envSpecByKey.IMAGE_DEFAULT_OUTPUT_FORMAT.defaultValue.value,
-    IMAGE_DEFAULT_OUTPUT_COMPRESSION: envSpecByKey.IMAGE_DEFAULT_OUTPUT_COMPRESSION.defaultValue.value,
-    IMAGE_TOKENS_PER_REFRESH: envSpecByKey.IMAGE_TOKENS_PER_REFRESH.defaultValue.value,
-    IMAGE_TOKEN_REFRESH_INTERVAL_MS: envSpecByKey.IMAGE_TOKEN_REFRESH_INTERVAL_MS.defaultValue.value,
-    IMAGE_MODEL_MULTIPLIERS: envSpecByKey.IMAGE_MODEL_MULTIPLIERS.defaultValue.value,
-    DATA_DIR: envSpecByKey.DATA_DIR.defaultValue.value,
-    HOST: envSpecByKey.HOST.defaultValue.value,
-    PORT: envSpecByKey.PORT.defaultValue.value,
-    WEB_TRUST_PROXY: envSpecByKey.WEB_TRUST_PROXY.defaultValue.value,
-    DEFAULT_MODEL: envSpecByKey.DEFAULT_MODEL.defaultValue.value,
-    DEFAULT_REASONING_EFFORT: envSpecByKey.DEFAULT_REASONING_EFFORT.defaultValue.value,
-    DEFAULT_VERBOSITY: envSpecByKey.DEFAULT_VERBOSITY.defaultValue.value,
-    OPENAI_REQUEST_TIMEOUT_MS: envSpecByKey.OPENAI_REQUEST_TIMEOUT_MS.defaultValue.value,
-    ALLOWED_ORIGINS: envSpecByKey.ALLOWED_ORIGINS.defaultValue.value,
-    REFLECT_API_MAX_BODY_BYTES: envSpecByKey.REFLECT_API_MAX_BODY_BYTES.defaultValue.value,
-    TRACE_API_MAX_BODY_BYTES: envSpecByKey.TRACE_API_MAX_BODY_BYTES.defaultValue.value,
-    WEB_API_RATE_LIMIT_IP: envSpecByKey.WEB_API_RATE_LIMIT_IP.defaultValue.value,
-    WEB_API_RATE_LIMIT_IP_WINDOW_MS: envSpecByKey.WEB_API_RATE_LIMIT_IP_WINDOW_MS.defaultValue.value,
-    WEB_API_RATE_LIMIT_SESSION: envSpecByKey.WEB_API_RATE_LIMIT_SESSION.defaultValue.value,
-    WEB_API_RATE_LIMIT_SESSION_WINDOW_MS: envSpecByKey.WEB_API_RATE_LIMIT_SESSION_WINDOW_MS.defaultValue.value,
-    REFLECT_SERVICE_RATE_LIMIT: envSpecByKey.REFLECT_SERVICE_RATE_LIMIT.defaultValue.value,
-    REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS: envSpecByKey.REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS.defaultValue.value,
-    TRACE_API_RATE_LIMIT: envSpecByKey.TRACE_API_RATE_LIMIT.defaultValue.value,
-    TRACE_API_RATE_LIMIT_WINDOW_MS: envSpecByKey.TRACE_API_RATE_LIMIT_WINDOW_MS.defaultValue.value,
-    TURNSTILE_ALLOWED_HOSTNAMES: envSpecByKey.TURNSTILE_ALLOWED_HOSTNAMES.defaultValue.value,
-    GITHUB_WEBHOOK_REPOSITORY: envSpecByKey.GITHUB_WEBHOOK_REPOSITORY.defaultValue.value,
-    GITHUB_WEBHOOK_MAX_BODY_BYTES: envSpecByKey.GITHUB_WEBHOOK_MAX_BODY_BYTES.defaultValue.value,
-} as const;
+export const envDefaultValues = Object.fromEntries(
+    envEntries
+        .filter(
+            (entry): entry is LiteralEnvEntry =>
+                entry.defaultValue.kind === 'literal'
+        )
+        .map((entry) => [entry.key, entry.defaultValue.value])
+) as EnvDefaultValues;
 
 export { runtimeFallbacks };
