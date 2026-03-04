@@ -69,7 +69,6 @@ Defaults, warnings, and parsing rules stay consistent instead of drifting across
 - Each package should have one main config entrypoint called `runtimeConfig`.
 - `@footnote/config-spec` is the shared package for env names, defaults, and descriptions.
 - Inside that package, `env-spec.ts` is the main reference file.
-- At the repo level, `env-spec.source.ts` is the entrypoint used by docs and tooling.
 - Each package `config.ts` file is still the place that reads raw env values and turns them into the values the app uses.
 - Feature-specific config files are still fine when they make the code easier to understand. The image config is the main example.
 - Startup helpers such as dotenv loading can stay separate if that keeps startup behavior easier to follow.
