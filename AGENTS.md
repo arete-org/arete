@@ -21,7 +21,7 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 ## Preferred Context (load first)
 
 - `cursor.rules` (authoritative development rules)
-- `packages/discord-bot/src/utils/env.ts`
+- `packages/discord-bot/src/config.ts`
 - `packages/discord-bot/src/utils/logger.ts`
 - `packages/discord-bot/src/state/ChannelContextManager.ts`
 - `packages/backend/src/storage/incidents/incidentStore.ts`

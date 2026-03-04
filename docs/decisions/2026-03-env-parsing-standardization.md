@@ -27,40 +27,30 @@ This is a maintenance and correctness problem. We want the configuration layer t
 
 ## 2. Decision
 
-Adopt a consistent rule:
+Use one consistent rule:
 
-**Environment variables are parsed once, near startup, inside package-owned configuration modules.**  
-Normal runtime code should consume typed config objects instead of reading `process.env` directly.
+**Read and parse environment variables once, near startup, inside package config modules.**  
+Normal runtime code should use typed config values instead of reading `process.env` directly.
 
-The final shape will be:
+Package-level config should use the same name (`runtimeConfig`) so contributors see the same pattern in each package.
 
-- **Backend:** one main runtime config module owns `backend` env parsing.
-- **Discord bot:** one main runtime config module owns `discord-bot`-wide env parsing.
-- **Web:** one main runtime config module owns `web` runtime configuration, while Vite/build-time env stays in bootstrap or build config.
-- **Domain-specific exceptions:** feature-local config modules are allowed when they keep a feature cohesive and avoid awkward imports. The image configuration module is the existing example of this pattern.
-- **Bootstrap remains separate:** dotenv loading and similar startup bootstrapping may still happen in dedicated bootstrap code.
-
-Package-level config should use the same naming pattern, such as `runtimeConfig`, so contributors do not have to relearn a different entrypoint in each package.
-
-The project will keep its current **fail-open** posture for operational tuning values.  
-If a non-critical env value is missing or invalid, the config layer should use a safe default and emit a clear warning once, rather than making every downstream caller rediscover the same problem.
+The project will keep its current **fail-open** posture; If a non-critical env value is missing or invalid, use a safe default and warn.
 
 ---
 
 ## 3. Rationale
 
-This change makes configuration easier to find, easier to explain, and easier to trust.
-
-- Each package gets one obvious place to define env-backed behavior.
-- Defaults, warnings, and parsing rules stay consistent instead of drifting across modules.
-- Runtime code can focus on application behavior rather than raw env handling.
+Each package gets one obvious place to define env-backed behavior.  
+This change makes configuration easier to find, explain, and trust.  
+Runtime code can focus on application behavior rather than raw env handling.  
+Defaults, warnings, and parsing rules stay consistent instead of drifting across modules.
 
 ---
 
 ## 4. Alternatives Considered
 
-- **Create one shared monorepo env module:** too centralized for packages with different lifecycles and needs.
-- **Fail fast on most invalid env values:** a possible future direction, but outside the scope of this standardization pass.
+- Create one shared monorepo env module: Too centralized for packages with different lifecycles and needs.
+- Fail fast on most invalid env values: A possible future direction, but outside the scope of this standardization pass.
 
 ---
 
@@ -76,9 +66,22 @@ This change makes configuration easier to find, easier to explain, and easier to
 
 ## 6. Implementation Notes
 
-- The `backend`, `discord-bot`, and `web` packages should each expose one main `runtimeConfig` entrypoint for package-level runtime settings.
-- The `web` package is already close to this shape. Client code should keep using typed runtime config, while Vite-specific env stays in build/bootstrap config.
-- Domain-local config modules are still allowed when they make a feature boundary cleaner.
-- Raw `process.env` reads should be limited to bootstrap and config modules.
-- Parsing should happen once during config construction, with clear defaults and one warning for invalid non-critical values.
-- This pass is about standardization first. A later pass may harden these config boundaries further with schema-based validation such as Zod, similar to patterns already used elsewhere in the project.
+- Each package should have one main config entrypoint called `runtimeConfig`.
+- `@footnote/config-spec` is the shared package for env names, defaults, and descriptions.
+- `env-spec.ts` is the main file inside that package.
+- `env-spec.source.ts` is the repo-level entrypoint for docs and tooling.
+- Each package `config.ts` file is still the place that reads raw env values and turns them into the values the app uses.
+- Feature-specific config files are still fine when they make the code easier to understand. The image config is the main example.
+- Startup helpers such as dotenv loading can stay separate if that keeps startup behavior easier to follow.
+- The backend should still look like it has one public `config.ts`, even if the real work is split into smaller files behind it.
+- The `web` package should keep browser runtime config separate from Vite/build-time env.
+- Normal runtime code should not read `process.env` directly.
+- Non-critical env values should be parsed once, fall back clearly, and warn once when invalid.
+- `.env.example` is still manual for now. We can add generation or validation later.
+- This pass is about consistency first. Stronger schema validation can come later if we want it.
+
+Examples:
+
+- Env spec entry: `{ key: 'PORT', kind: 'integer', defaultValue: literal(3000) }`
+- Parsed runtime value: `runtimeConfig.server.port: number`
+- Parsed list value: `runtimeConfig.cors.allowedOrigins: string[]`
