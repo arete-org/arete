@@ -12,7 +12,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
     envDefaultValues,
-    envSpecByKey,
 } from '@footnote/config-spec';
 import type {
     SupportedBotInteractionAction,
@@ -121,20 +120,17 @@ if (promptConfigPath) {
 
 const flyAppName = process.env.FLY_APP_NAME?.trim();
 const FLY_INTERNAL_BACKEND_BASE_URL = 'http://footnote-backend.internal:3000';
+const DEFAULT_LOCAL_WEB_BASE_URL = 'http://localhost:8080';
+const DEFAULT_LOCAL_BACKEND_BASE_URL = 'http://localhost:3000';
 // Default to the Fly-provisioned hostname when present so deployments work without extra config.
 const fallbackWebBaseUrl = flyAppName
     ? `https://${flyAppName}.fly.dev`
     : undefined;
 const rawWebBaseUrl = process.env.WEB_BASE_URL?.trim();
-const fallbackLocalBaseUrl =
-    envSpecByKey.WEB_BASE_URL.defaultValue.kind === 'derived' &&
-    typeof envSpecByKey.WEB_BASE_URL.defaultValue.fallbackValue === 'string'
-        ? envSpecByKey.WEB_BASE_URL.defaultValue.fallbackValue
-        : 'http://localhost:8080';
 const webBaseUrl =
     rawWebBaseUrl && rawWebBaseUrl.length > 0
         ? rawWebBaseUrl
-        : fallbackWebBaseUrl || fallbackLocalBaseUrl;
+        : fallbackWebBaseUrl || DEFAULT_LOCAL_WEB_BASE_URL;
 
 if (!webBaseUrl) {
     throw new Error(
@@ -146,12 +142,7 @@ bootstrapLogger.info(`Using web base URL: ${webBaseUrl}`);
 const rawBackendBaseUrl = process.env.BACKEND_BASE_URL?.trim();
 const fallbackBackendBaseUrl = flyAppName
     ? FLY_INTERNAL_BACKEND_BASE_URL
-    : envSpecByKey.BACKEND_BASE_URL.defaultValue.kind === 'derived'
-      ? typeof envSpecByKey.BACKEND_BASE_URL.defaultValue.fallbackValue ===
-            'string'
-          ? envSpecByKey.BACKEND_BASE_URL.defaultValue.fallbackValue
-          : 'http://localhost:3000'
-      : 'http://localhost:3000';
+    : DEFAULT_LOCAL_BACKEND_BASE_URL;
 const backendBaseUrl =
     rawBackendBaseUrl && rawBackendBaseUrl.length > 0
         ? rawBackendBaseUrl.replace(/\/+$/, '')
