@@ -24,7 +24,10 @@ import {
     TextInputBuilder,
     TextInputStyle,
 } from 'discord.js';
-import type { ResponseMetadata, Citation } from '@footnote/contracts/ethics-core';
+import type {
+    ResponseMetadata,
+    Citation,
+} from '@footnote/contracts/ethics-core';
 import { logger } from '../logger.js';
 import { ResponseHandler } from './ResponseHandler.js';
 import {
@@ -95,6 +98,11 @@ export interface AlternativeLensSession {
     customDescription: string | null;
 }
 
+type AlternativeLensSessionRecord = {
+    session: AlternativeLensSession;
+    expiresAt: number;
+};
+
 type LensTelemetryInteraction = ButtonInteraction | StringSelectMenuInteraction;
 type AlternativeLensAction =
     | 'alt_lens:init'
@@ -163,6 +171,9 @@ export const ALT_LENS_CUSTOM_DESCRIPTION_INPUT_ID =
 // Message body retrieval - keep bounded to reduce API calls and avoid stale context in busy channels.
 const MAX_PRECEDING_RESPONSE_MESSAGES = 16;
 const MAX_RESPONSE_CHAIN_WINDOW_MS = 2 * 60_000;
+// Keep interaction state bounded so abandoned flows do not accumulate forever.
+// We prune lazily during normal reads/writes instead of running a background timer.
+const ALTERNATIVE_LENS_SESSION_TTL_MS = 15 * 60_000;
 
 /**
  * Builds the cache key for one user's alternative-lens session on a message.
@@ -185,19 +196,99 @@ const isResponseMetadataPayload = (
     }
 
     const candidate = value as Partial<ResponseMetadata>;
+    const validProvenance =
+        candidate.provenance === 'Retrieved' ||
+        candidate.provenance === 'Inferred' ||
+        candidate.provenance === 'Speculative';
+    const validRiskTier =
+        candidate.riskTier === 'Low' ||
+        candidate.riskTier === 'Medium' ||
+        candidate.riskTier === 'High';
+    const validCitations =
+        Array.isArray(candidate.citations) &&
+        candidate.citations.every(
+            (citation) =>
+                citation &&
+                typeof citation === 'object' &&
+                typeof citation.title === 'string' &&
+                typeof citation.url === 'string' &&
+                (citation.snippet === undefined ||
+                    typeof citation.snippet === 'string')
+        );
+
     return (
         typeof candidate.responseId === 'string' &&
-        typeof candidate.provenance === 'string' &&
-        typeof candidate.riskTier === 'string'
+        validProvenance &&
+        typeof candidate.confidence === 'number' &&
+        Number.isFinite(candidate.confidence) &&
+        validRiskTier &&
+        typeof candidate.tradeoffCount === 'number' &&
+        Number.isFinite(candidate.tradeoffCount) &&
+        validCitations
     );
 };
 
 // -----------------------------
 // Session lifecycle helpers
 // -----------------------------
-const sessions = new Map<string, AlternativeLensSession>();
-const explainInProgress = new Set<string>();
-const alternativeLensInProgress = new Set<string>();
+const sessions = new Map<string, AlternativeLensSessionRecord>();
+const explainInProgress = new Map<string, number>();
+const alternativeLensInProgress = new Map<string, number>();
+
+const getSessionExpiry = (): number =>
+    Date.now() + ALTERNATIVE_LENS_SESSION_TTL_MS;
+
+const getMessageIdFromSessionKey = (sessionKey: string): string =>
+    sessionKey.split(':').slice(1).join(':');
+
+const pruneExpiredInProgressEntries = (entries: Map<string, number>): void => {
+    const now = Date.now();
+    for (const [key, expiresAt] of entries) {
+        if (expiresAt <= now) {
+            entries.delete(key);
+        }
+    }
+};
+
+const pruneExpiredSessions = (): void => {
+    const now = Date.now();
+    for (const [sessionKey, record] of sessions) {
+        if (record.expiresAt <= now) {
+            clearAlternativeLensSession(sessionKey);
+        }
+    }
+};
+
+const pruneExpiredProvenanceInteractionState = (): void => {
+    pruneExpiredSessions();
+    pruneExpiredInProgressEntries(explainInProgress);
+    pruneExpiredInProgressEntries(alternativeLensInProgress);
+};
+
+const getSessionRecord = (
+    sessionKey: string
+): AlternativeLensSessionRecord | undefined => {
+    const record = sessions.get(sessionKey);
+    if (!record) {
+        return undefined;
+    }
+
+    if (record.expiresAt <= Date.now()) {
+        clearAlternativeLensSession(sessionKey);
+        return undefined;
+    }
+
+    return record;
+};
+
+const refreshSessionExpiry = (sessionKey: string): void => {
+    const record = sessions.get(sessionKey);
+    if (!record) {
+        return;
+    }
+
+    record.expiresAt = getSessionExpiry();
+};
 
 type ProvenanceInteraction =
     | ButtonInteraction
@@ -367,14 +458,26 @@ export function resolveMemberDisplayName(
  * Returns whether an explanation request is already running for this message.
  */
 export function isExplainInProgress(key: string): boolean {
-    return explainInProgress.has(key);
+    pruneExpiredInProgressEntries(explainInProgress);
+    const expiresAt = explainInProgress.get(key);
+    if (!expiresAt) {
+        return false;
+    }
+
+    if (expiresAt <= Date.now()) {
+        explainInProgress.delete(key);
+        return false;
+    }
+
+    return true;
 }
 
 /**
  * Marks an explanation request as active so duplicate clicks can be rejected.
  */
 export function markExplainInProgress(key: string): void {
-    explainInProgress.add(key);
+    pruneExpiredProvenanceInteractionState();
+    explainInProgress.set(key, getSessionExpiry());
 }
 
 /**
@@ -389,14 +492,26 @@ export function clearExplainInProgress(key: string): void {
  * message.
  */
 export function isAlternativeLensInProgress(key: string): boolean {
-    return alternativeLensInProgress.has(key);
+    pruneExpiredInProgressEntries(alternativeLensInProgress);
+    const expiresAt = alternativeLensInProgress.get(key);
+    if (!expiresAt) {
+        return false;
+    }
+
+    if (expiresAt <= Date.now()) {
+        alternativeLensInProgress.delete(key);
+        return false;
+    }
+
+    return true;
 }
 
 /**
  * Marks an alternative-lens generation as active.
  */
 export function markAlternativeLensInProgress(key: string): void {
-    alternativeLensInProgress.add(key);
+    pruneExpiredProvenanceInteractionState();
+    alternativeLensInProgress.set(key, getSessionExpiry());
 }
 
 /**
@@ -411,7 +526,7 @@ export function clearAlternativeLensInProgress(key: string): void {
  * definitions array.
  */
 export function getAlternativeLensDefinitions(): AlternativeLensDefinition[] {
-    return LENS_DEFINITIONS.slice();
+    return LENS_DEFINITIONS.map((definition) => ({ ...definition }));
 }
 
 /**
@@ -430,12 +545,16 @@ export function createAlternativeLensSession(
     sessionKey: string,
     context: AlternativeLensContext
 ): AlternativeLensSession {
+    pruneExpiredProvenanceInteractionState();
     const session: AlternativeLensSession = {
         context,
         selectedLensKey: null,
         customDescription: null,
     };
-    sessions.set(sessionKey, session);
+    sessions.set(sessionKey, {
+        session,
+        expiresAt: getSessionExpiry(),
+    });
     return session;
 }
 
@@ -445,7 +564,8 @@ export function createAlternativeLensSession(
 export function getAlternativeLensSession(
     sessionKey: string
 ): AlternativeLensSession | undefined {
-    return sessions.get(sessionKey);
+    pruneExpiredSessions();
+    return getSessionRecord(sessionKey)?.session;
 }
 
 /**
@@ -456,15 +576,17 @@ export function setAlternativeLensSelection(
     sessionKey: string,
     lensKey: AlternativeLensKey
 ): AlternativeLensSession | undefined {
-    const session = sessions.get(sessionKey);
-    if (!session) {
+    const record = getSessionRecord(sessionKey);
+    if (!record) {
         return undefined;
     }
 
+    const { session } = record;
     session.selectedLensKey = lensKey;
     if (lensKey !== 'CUSTOM') {
         session.customDescription = null;
     }
+    refreshSessionExpiry(sessionKey);
     return session;
 }
 
@@ -475,12 +597,14 @@ export function setAlternativeLensCustomDescription(
     sessionKey: string,
     description: string
 ): AlternativeLensSession | undefined {
-    const session = sessions.get(sessionKey);
-    if (!session) {
+    const record = getSessionRecord(sessionKey);
+    if (!record) {
         return undefined;
     }
 
+    const { session } = record;
     session.customDescription = description.trim();
+    refreshSessionExpiry(sessionKey);
     return session;
 }
 
@@ -489,6 +613,7 @@ export function setAlternativeLensCustomDescription(
  */
 export function clearAlternativeLensSession(sessionKey: string): void {
     sessions.delete(sessionKey);
+    alternativeLensInProgress.delete(getMessageIdFromSessionKey(sessionKey));
 }
 
 /**
@@ -799,8 +924,11 @@ export async function requestProvenanceOpenAIOptions(
         return plan.openaiOptions;
     } catch (error) {
         provenanceLogger.warn(
-            'Failed to retrieve planner options for provenance interaction:',
-            error
+            'Failed to retrieve planner options for provenance interaction',
+            {
+                requestKind: request.kind,
+                error,
+            }
         );
         return undefined;
     }
@@ -1107,6 +1235,7 @@ export async function handleAlternativeLensButton(
         'alt_lens:init'
     );
     let telemetryContext = baseContext;
+    let sessionKey: string | null = null;
     provenanceLogger.info('Alternative lens init started', {
         ...telemetryContext,
         phase: 'start',
@@ -1153,7 +1282,7 @@ export async function handleAlternativeLensButton(
                 responseId
             );
         }
-        const sessionKey = buildAlternativeLensSessionKey(
+        sessionKey = buildAlternativeLensSessionKey(
             interaction.user.id,
             interaction.message.id
         );
@@ -1220,6 +1349,9 @@ export async function handleAlternativeLensButton(
             reason: 'initialisation_failed',
             error,
         });
+        if (sessionKey) {
+            clearAlternativeLensSession(sessionKey);
+        }
         const replyOptions: InteractionReplyOptions = {
             content:
                 'Something went wrong while starting the alternative lens flow. Please try again later.',
@@ -1547,6 +1679,7 @@ export async function handleAlternativeLensSubmit(
             allowedMentions: { parse: [] },
         });
     } catch (error) {
+        clearAlternativeLensSession(sessionKey);
         clearAlternativeLensInProgress(messageId);
         provenanceLogger.error(
             'Alternative lens submit failed (acknowledgement error)',
@@ -1670,4 +1803,3 @@ export async function handleAlternativeLensSubmit(
         clearAlternativeLensInProgress(messageId);
     }
 }
-
