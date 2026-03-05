@@ -103,11 +103,7 @@ const getIntegerEnv = (key: string, defaultValue: number): number => {
     }
 
     const parsed = Number(value);
-    if (
-        !Number.isFinite(parsed) ||
-        parsed < 0 ||
-        !Number.isInteger(parsed)
-    ) {
+    if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
         bootstrapLogger.warn(
             `Ignoring invalid numeric value for ${key}: "${value}". Expected a non-negative number; using default (${defaultValue}).`
         );
@@ -171,7 +167,9 @@ const getBotInteractionActionEnv = (
         return defaultValue;
     }
 
-    const normalized = value.trim().toLowerCase() as SupportedBotInteractionAction;
+    const normalized = value
+        .trim()
+        .toLowerCase() as SupportedBotInteractionAction;
     if (BOT_INTERACTION_ACTIONS.has(normalized)) {
         return normalized;
     }
@@ -191,7 +189,9 @@ const getEngagementIgnoreModeEnv = (
         return defaultValue;
     }
 
-    const normalized = value.trim().toLowerCase() as SupportedEngagementIgnoreMode;
+    const normalized = value
+        .trim()
+        .toLowerCase() as SupportedEngagementIgnoreMode;
     if (ENGAGEMENT_IGNORE_MODES.has(normalized)) {
         return normalized;
     }
@@ -252,9 +252,20 @@ const webBaseUrl =
 bootstrapLogger.info(`Using web base URL: ${webBaseUrl}`);
 
 const rawBackendBaseUrl = process.env.BACKEND_BASE_URL?.trim();
+const sharedBackendPortFromEnv = process.env.PORT?.trim();
+const backendPortFromEnv =
+    sharedBackendPortFromEnv && /^\d+$/.test(sharedBackendPortFromEnv)
+        ? Number(sharedBackendPortFromEnv)
+        : undefined;
+const localBackendBaseUrlFromEnvPort =
+    typeof backendPortFromEnv === 'number' &&
+    Number.isInteger(backendPortFromEnv) &&
+    backendPortFromEnv > 0
+        ? `http://localhost:${backendPortFromEnv}`
+        : DEFAULT_LOCAL_BACKEND_BASE_URL;
 const fallbackBackendBaseUrl = flyAppName
     ? FLY_INTERNAL_BACKEND_BASE_URL
-    : DEFAULT_LOCAL_BACKEND_BASE_URL;
+    : localBackendBaseUrlFromEnvPort;
 const backendBaseUrl =
     rawBackendBaseUrl && rawBackendBaseUrl.length > 0
         ? rawBackendBaseUrl.replace(/\/+$/, '')
@@ -481,7 +492,10 @@ export const runtimeConfig = {
                 'ENGAGEMENT_PROBABILISTIC_HIGH',
                 envDefaultValues.ENGAGEMENT_PROBABILISTIC_HIGH
             );
-            return [Math.min(low, high), Math.max(low, high)] as [number, number];
+            return [Math.min(low, high), Math.max(low, high)] as [
+                number,
+                number,
+            ];
         })(),
         enableLLMRefinement: getBooleanEnv(
             'ENGAGEMENT_ENABLE_LLM_REFINEMENT',

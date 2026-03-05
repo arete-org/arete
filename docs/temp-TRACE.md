@@ -37,35 +37,25 @@
 
 ## Work Log
 
-- Created `docs/temp-TRACE.md` (this doc).
-- Completed baseline inventory pass across contracts, backend reflect/trace flow, and Discord provenance flow.
-- Confirmed existing targeted test baseline passes for contracts/backend/discord provenance-related paths.
-- Step 2 contract/schema work started.
-- Added `ResponseTemperament` type and optional `temperament` field to shared ethics-core metadata contracts.
-- Added runtime schema validation for `temperament` axes (integers 1..10) in web contract schemas.
-- Updated OpenAPI `ResponseMetadataBase` schema to document optional `temperament`.
-- Added contract tests for valid/invalid `temperament` payloads.
-- Added explicit TRACE axis semantics + TODO rollout labels in contracts/OpenAPI.
-- Step 3 command/renderer implementation started.
-- Added isolated `/trace-preview` developer-only command for manual TRACE experiments.
-- Added SVG renderer utility for TRACE wheel + chip composition.
-- Added renderer unit tests and verified bot build compatibility.
-- Added JSDoc coverage pass across Step 3 preview command/renderer helpers (targeting >=80% documented symbols in new TRACE experiment code).
-- Added follow-up JSDoc on `TracePreviewChipData` to close remaining obvious doc gap in Step 3 renderer types.
-- Completed junior-friendliness/readability pass across TRACE contracts, schemas, OpenAPI docs, and Step 3 command/renderer code.
-- Added `TraceAxisScore` (`1..10`) type to enforce TRACE axis range for typed literals in TypeScript.
-- Added explicit notes where runtime schema validation is still required for dynamic payloads.
-- Standardized TRACE axis wording across contracts, schema comments, OpenAPI descriptions, and slash-command option text.
-- Added renderer section comments (wheel geometry, band fill math, chip layout) to reduce cognitive load for future edits.
-- Refined TRACE axis type docs so `TraceAxisScore` and `ResponseTemperament` are documented side-by-side in contracts for clearer readability.
-- Reordered imports in TRACE preview command/renderer so `ResponseTemperament` and `TraceAxisScore` appear together.
-- Replaced placeholder comment in `trace-preview.ts` with JSDoc on the command definition for clearer junior-facing intent.
-- Investigated dev startup failures reported during parallel `dev` + `dev:bot` runs.
-- Reproduced bot runtime error: `@footnote/contracts/web/schemas` missing `GetTraceApiResponseSchema` when launched via `tsx`.
-- Fixed Discord bot `tsconfig` aliasing by removing explicit `@footnote/contracts/web/schemas` `.d.ts` path so `tsx` resolves runtime JS exports correctly.
-- Added non-destructive dev build scripts (`build:dev`) for contracts/config-spec and switched dev prebuild flows to use them.
-- Updated root/backend and bot dev script paths to use `build:dev`, reducing startup race risk when multiple dev processes start in parallel.
-- Added root convenience scripts: `start:web` and `start:all` (backend + web + bot) for single-command local startup.
+- Created this temp tracker and completed a baseline inventory of contracts, backend trace/reflect flow, and Discord provenance flow.
+- Implemented Step 2 TRACE contract surface:
+    - Added optional `temperament` to shared metadata contracts.
+    - Added runtime schema validation for all five axes (`1..10` integers).
+    - Updated OpenAPI docs to include TRACE metadata and axis meaning.
+    - Added TODO rollout labeling that TRACE is optional now and intended to become required later.
+- Implemented Step 3 isolated CGI experiment surface:
+    - Added developer-only `/trace-preview` command.
+    - Added SVG renderer utility for the TRACE wheel/chip preview.
+    - Kept production provenance footer flow unchanged.
+- Strengthened type/docs/readability for TRACE:
+    - Added `TraceAxisScore` type and aligned axis wording across contracts/schema/OpenAPI/command text.
+    - Added junior-friendly comments/JSDoc coverage across new TRACE files.
+    - Kept runtime validation notes explicit where TypeScript alone cannot guarantee payload safety.
+- Stabilized local multi-service startup:
+    - Fixed bot-side contracts schema resolution under `tsx`.
+    - Added dev-safe prebuild paths and consolidated root startup commands (`start:web`, `start:all`).
+    - Added cross-platform preflight port cleanup (using `.env` ports), improved Ctrl+C teardown behavior, and reduced debugger/noise interference.
+    - Resolved duplicate bot handling by hardening stale bot process cleanup before launch.
 
 ## Open Questions
 
@@ -80,35 +70,20 @@
 
 ## Validation Results
 
-- Baseline tests executed before implementation planning:
-    - `packages/contracts/test/webSchemas.test.ts`
-    - `packages/backend/test/traceStoreUtilsValidation.test.ts`
-    - `packages/backend/test/traceStore.test.ts`
-    - `packages/backend/test/reflectService.test.ts`
-    - `packages/discord-bot/test/messageProcessor.reflect.test.ts`
-- Result: all passed at planning time.
-- Step 2 validations:
-    - `pnpm exec tsx --test packages/contracts/test/webSchemas.test.ts` (pass)
-    - `pnpm validate-openapi-links` (pass)
-    - `pnpm lint-check` (pass)
-- Step 3 validations:
-    - `pnpm exec tsx --test packages/discord-bot/test/tracePreviewSvg.test.ts packages/contracts/test/webSchemas.test.ts` (pass)
-    - `pnpm --filter @footnote/discord-bot build` (pass)
-    - `pnpm lint-check` (pass)
-    - Re-ran full Step 3 validation suite after JSDoc pass (all pass).
-    - Re-ran `pnpm lint-check` after final JSDoc follow-up (pass).
-    - Readability pass validations:
-        - `pnpm exec tsx --test packages/discord-bot/test/tracePreviewSvg.test.ts packages/contracts/test/webSchemas.test.ts` (pass)
-        - `pnpm --filter @footnote/discord-bot build` (pass)
-        - `pnpm lint-check` (pass)
-    - Startup investigation validations:
-        - `pnpm --filter @footnote/discord-bot exec tsx -e "import('@footnote/contracts/web/schemas')..."` now reports `GetTraceApiResponseSchema` export present under `tsx` (pass).
-        - `pnpm --filter @footnote/discord-bot exec tsx src/index.ts` no longer fails immediately with missing export (process stayed up until timeout cutoff).
-        - `pnpm --filter @footnote/config-spec run build:dev` (pass).
-        - `pnpm --filter @footnote/discord-bot run predev` (pass).
-        - `pnpm start:all` startup smoke test (processes launch; command runs until manual timeout cutoff).
-    - Known follow-up gap:
-        - `pnpm --filter @footnote/web exec tsc --noEmit -p tsconfig.json` currently fails on `ResponseTemperament` vs schema-output typing in `packages/web/src/utils/api.ts`.
+- Baseline inventory validation passed across existing contracts/backend/discord provenance tests before TRACE changes.
+- Step 2 validation passed:
+    - Contracts TRACE schema tests pass.
+    - OpenAPI link validation passes.
+    - Lint passes.
+- Step 3 validation passed:
+    - TRACE preview renderer tests pass.
+    - Discord bot build passes.
+    - Lint passes after JSDoc/readability updates.
+- Startup/dev validation passed at a high level:
+    - Bot contract schema export resolution works under `tsx`.
+    - `start:all` launches backend/web/bot with preflight cleanup and stable startup behavior.
+- Current known follow-up gap:
+    - `pnpm --filter @footnote/web exec tsc --noEmit -p tsconfig.json` still reports a `ResponseTemperament` vs schema-output typing mismatch in `packages/web/src/utils/api.ts`.
 
 ## Step 3 Status
 

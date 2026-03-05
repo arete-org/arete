@@ -14,7 +14,7 @@
         "prestart": "pnpm build",
         "start": "node --es-module-specifier-resolution=node dist/index.js",
         "predev": "pnpm --dir ../.. --filter @footnote/config-spec run build:dev",
-        "dev": "pnpm exec cross-env NODE_ENV=development pnpm exec tsx watch src/index.ts",
+        "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
         "build": "pnpm --dir ../.. --filter @footnote/config-spec run build && pnpm clean && tsc && pnpm copy-prompt-assets",
         "clean": "rimraf dist",
         "copy-prompt-assets": "node -e \"const fs=require('node:fs'); fs.mkdirSync('dist/src/utils/prompts',{recursive:true}); fs.copyFileSync('src/utils/prompts/defaults.yaml','dist/src/utils/prompts/defaults.yaml');\"",
