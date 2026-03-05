@@ -22,7 +22,7 @@ const readPngDimensions = (png: Buffer): { width: number; height: number } => {
     return { width, height };
 };
 
-test('renderTraceCardSvg includes wheel labels and fallback chip text', () => {
+test('renderTraceCardSvg omits wheel labels and chip text', () => {
     const svg = renderTraceCardSvg({
         temperament: {
             tightness: 9,
@@ -34,15 +34,18 @@ test('renderTraceCardSvg includes wheel labels and fallback chip text', () => {
     });
 
     assert.match(svg, /<svg[^>]*>/);
-    assert.match(svg, />T</);
-    assert.match(svg, />R</);
-    assert.match(svg, />A</);
-    assert.match(svg, />C</);
-    assert.match(svg, />E</);
-    assert.match(svg, /TRACE CARD/);
+    assert.doesNotMatch(svg, />T</);
+    assert.doesNotMatch(svg, />R</);
+    assert.doesNotMatch(svg, />A</);
+    assert.doesNotMatch(svg, />C</);
+    assert.doesNotMatch(svg, />E</);
+    assert.doesNotMatch(svg, /TRACE CARD/);
+    assert.doesNotMatch(svg, /TRADEOFFS/);
+    assert.doesNotMatch(svg, /RISK /);
+    assert.doesNotMatch(svg, /<text /);
 });
 
-test('renderTraceCardSvg normalizes out-of-range temperament values', () => {
+test('renderTraceCardSvg normalizes out-of-range values and preserves fractional fills', () => {
     const outOfRangeTemperament = {
         tightness: 22,
         rationale: -3,
@@ -51,11 +54,42 @@ test('renderTraceCardSvg normalizes out-of-range temperament values', () => {
         extent: Number.POSITIVE_INFINITY,
     } as unknown as ResponseTemperament;
 
-    const svg = renderTraceCardSvg({
+    const normalizedSvg = renderTraceCardSvg({
         temperament: outOfRangeTemperament,
     });
 
-    assert.match(svg, /T10 R1 A6 C5 E5/);
+    const expectedClampedSvg = renderTraceCardSvg({
+        temperament: {
+            tightness: 10,
+            rationale: 1,
+            attribution: 6.2,
+            caution: 5,
+            extent: 5,
+        },
+    });
+
+    assert.equal(normalizedSvg, expectedClampedSvg);
+
+    const fractionalSvg = renderTraceCardSvg({
+        temperament: {
+            tightness: 10,
+            rationale: 1,
+            attribution: 6.2,
+            caution: 5,
+            extent: 5,
+        },
+    });
+    const integerSvg = renderTraceCardSvg({
+        temperament: {
+            tightness: 10,
+            rationale: 1,
+            attribution: 6,
+            caution: 5,
+            extent: 5,
+        },
+    });
+
+    assert.notEqual(fractionalSvg, integerSvg);
 });
 
 test('renderTraceCardPng returns PNG bytes with expected signature and dimensions', () => {

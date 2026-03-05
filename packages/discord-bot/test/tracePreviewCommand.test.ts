@@ -16,7 +16,6 @@ type MockInteraction = {
     user: { id: string };
     options: {
         getInteger: (name: string, required?: boolean) => number | null;
-        getString: (name: string) => string | null;
     };
     reply: (payload: unknown) => Promise<void>;
     followUp: (payload: unknown) => Promise<void>;
@@ -24,7 +23,7 @@ type MockInteraction = {
     deferred: boolean;
 };
 
-test('trace-preview replies with backend PNG attachment and embed image', async () => {
+test('trace-preview replies with only backend PNG attachment', async () => {
     const originalPostTraceCard = botApi.postTraceCard;
     const replyPayloads: unknown[] = [];
 
@@ -39,9 +38,6 @@ test('trace-preview replies with backend PNG attachment and embed image', async 
         attribution: 8,
         caution: 6,
         extent: 7,
-        confidence_pct: 82,
-        tradeoff_count: 2,
-        risk_tier: 'Medium',
     };
 
     const interaction = {
@@ -49,8 +45,6 @@ test('trace-preview replies with backend PNG attachment and embed image', async 
         options: {
             getInteger: (name: string) =>
                 (optionValues[name] as number | null) ?? null,
-            getString: (name: string) =>
-                (optionValues[name] as string | null) ?? null,
         },
         reply: async (payload: unknown) => {
             replyPayloads.push(payload);
@@ -68,13 +62,10 @@ test('trace-preview replies with backend PNG attachment and embed image', async 
 
     assert.equal(replyPayloads.length, 1);
     const payload = replyPayloads[0] as {
-        embeds?: Array<{ data?: { image?: { url?: string } } }>;
+        embeds?: unknown[];
         files?: Array<{ name?: string }>;
     };
 
     assert.equal(payload.files?.[0]?.name, 'trace-card.png');
-    assert.equal(
-        payload.embeds?.[0]?.data?.image?.url,
-        'attachment://trace-card.png'
-    );
+    assert.equal(payload.embeds, undefined);
 });

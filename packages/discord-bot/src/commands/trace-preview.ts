@@ -8,13 +8,11 @@
 import {
     AttachmentBuilder,
     ChatInputCommandInteraction,
-    EmbedBuilder,
     SlashCommandBuilder,
 } from 'discord.js';
 import type {
     ResponseTemperament,
     TraceAxisScore,
-    RiskTier,
 } from '@footnote/contracts/ethics-core';
 import { botApi } from '../api/botApi.js';
 import { runtimeConfig } from '../config.js';
@@ -28,23 +26,6 @@ const tracePreviewLogger =
 
 const TRACE_PREVIEW_FILENAME = 'trace-card.png';
 const EPHEMERAL_FLAG = 1 << 6;
-
-/**
- * Converts a slash-command option value into a validated RiskTier literal.
- * Returns undefined for any unexpected input to keep command handling fail-open.
- */
-const parseRiskTier = (value: string | null): RiskTier | undefined => {
-    if (value === 'Low' || value === 'Medium' || value === 'High') {
-        return value;
-    }
-    return undefined;
-};
-
-/**
- * Produces a compact one-line axis summary used in embed descriptions.
- */
-const formatAxisSummary = (temperament: ResponseTemperament): string =>
-    `T${temperament.tightness} R${temperament.rationale} A${temperament.attribution} C${temperament.caution} E${temperament.extent}`;
 
 /**
  * Narrows a runtime number to the TRACE axis score type.
@@ -110,33 +91,6 @@ const command: Command = {
                 .setRequired(true)
                 .setMinValue(1)
                 .setMaxValue(10)
-        )
-        .addIntegerOption((option) =>
-            option
-                .setName('confidence_pct')
-                .setDescription('Optional confidence chip value (0-100).')
-                .setRequired(false)
-                .setMinValue(0)
-                .setMaxValue(100)
-        )
-        .addStringOption((option) =>
-            option
-                .setName('risk_tier')
-                .setDescription('Optional risk tier chip.')
-                .setRequired(false)
-                .addChoices(
-                    { name: 'Low', value: 'Low' },
-                    { name: 'Medium', value: 'Medium' },
-                    { name: 'High', value: 'High' }
-                )
-        )
-        .addIntegerOption((option) =>
-            option
-                .setName('tradeoff_count')
-                .setDescription('Optional trade-off count chip.')
-                .setRequired(false)
-                .setMinValue(0)
-                .setMaxValue(99)
         ),
 
     /**
@@ -171,27 +125,8 @@ const command: Command = {
                     interaction.options.getInteger('extent', true)
                 ),
             };
-            const confidencePercent =
-                interaction.options.getInteger('confidence_pct');
-            const tradeoffCount =
-                interaction.options.getInteger('tradeoff_count');
-            const riskTier = parseRiskTier(
-                interaction.options.getString('risk_tier')
-            );
-
             const traceCard = await botApi.postTraceCard({
                 temperament,
-                chips: {
-                    confidencePercent:
-                        typeof confidencePercent === 'number'
-                            ? confidencePercent
-                            : undefined,
-                    tradeoffCount:
-                        typeof tradeoffCount === 'number'
-                            ? tradeoffCount
-                            : undefined,
-                    riskTier,
-                },
             });
             const pngBuffer = Buffer.from(traceCard.pngBase64, 'base64');
 
@@ -199,22 +134,7 @@ const command: Command = {
                 name: TRACE_PREVIEW_FILENAME,
             });
 
-            const previewEmbed = new EmbedBuilder()
-                .setTitle('TRACE Card (Experimental)')
-                .setColor(0x334155)
-                .setDescription(
-                    [
-                        'This is an isolated trace-card experiment and is not wired into the production provenance footer.',
-                        `Axes: ${formatAxisSummary(temperament)}`,
-                    ].join('\n')
-                )
-                .setImage(`attachment://${TRACE_PREVIEW_FILENAME}`)
-                .setFooter({
-                    text: 'Developer-only experiment • TODO(TRACE-rollout): integrate after validation',
-                });
-
             await interaction.reply({
-                embeds: [previewEmbed],
                 files: [attachment],
                 flags: [EPHEMERAL_FLAG],
             });

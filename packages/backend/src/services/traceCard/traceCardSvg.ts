@@ -7,20 +7,20 @@
  */
 import type {
     ResponseTemperament,
-    TraceAxisScore,
     RiskTier,
 } from '@footnote/contracts/ethics-core';
 
 type TraceAxisKey = keyof ResponseTemperament;
+type NormalizedTemperament = Record<TraceAxisKey, number>;
 
 type TraceAxisSpec = {
     key: TraceAxisKey;
-    label: 'T' | 'R' | 'A' | 'C' | 'E';
     color: `#${string}`;
 };
 
 /**
- * Optional chip metadata rendered to the right of the TRACE wheel.
+ * Optional metadata accepted for trace-card compatibility.
+ * Currently unused by SVG rendering.
  */
 export type TraceCardChipData = {
     confidencePercent?: number;
@@ -40,34 +40,21 @@ export type TraceCardRenderInput = {
 };
 
 const AXIS_SPECS: TraceAxisSpec[] = [
-    { key: 'tightness', label: 'T', color: '#64748B' }, //
-    { key: 'rationale', label: 'R', color: '#6366F1' },
-    { key: 'attribution', label: 'A', color: '#14B8A6' },
-    { key: 'caution', label: 'C', color: '#F59E0B' },
-    { key: 'extent', label: 'E', color: '#84A98C' },
+    { key: 'tightness', color: '#64748B' },
+    { key: 'rationale', color: '#6366F1' },
+    { key: 'attribution', color: '#14B8A6' },
+    { key: 'caution', color: '#F59E0B' },
+    { key: 'extent', color: '#84A98C' },
 ];
 
-const DEFAULT_WIDTH = 400;
-const DEFAULT_HEIGHT = 80;
-const CARD_FILL = '#0B1220';
-const CARD_STROKE = '#1F2937';
-const DIVIDER_STROKE = '#D1D5DB';
-const LABEL_TEXT = '#F9FAFB';
-const CHIP_FILL = '#111827';
-const CHIP_STROKE = '#374151';
-const CHIP_TEXT = '#E5E7EB';
-const META_TEXT = '#93A4BC';
-
-const RISK_TIER_COLORS: Record<RiskTier, `#${string}`> = {
-    Low: '#7FDCA4',
-    Medium: '#F8E37C',
-    High: '#E27C7C',
-};
+const DEFAULT_WIDTH = 40;
+const DEFAULT_HEIGHT = 40;
+const OUTER_RING_STROKE = '#D1D5DB';
 
 const clamp = (value: number, min: number, max: number): number =>
     Math.min(max, Math.max(min, value));
 
-const clampInt = (
+const normalizeAxisValue = (
     value: number,
     min: number,
     max: number,
@@ -76,58 +63,13 @@ const clampInt = (
     if (!Number.isFinite(value)) {
         return fallback;
     }
-    return clamp(Math.round(value), min, max);
+    return clamp(value, min, max);
 };
 
 const toSvgNumber = (value: number): string => {
     const fixed = value.toFixed(2);
     return fixed.replace(/\.00$/, '');
 };
-
-const escapeXml = (value: string): string =>
-    value
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&apos;');
-
-const parseHexChannel = (value: string): number => parseInt(value, 16);
-
-const parseHexColor = (hex: `#${string}`): [number, number, number] => {
-    const normalized =
-        hex.length === 4
-            ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
-            : hex;
-    const r = parseHexChannel(normalized.slice(1, 3));
-    const g = parseHexChannel(normalized.slice(3, 5));
-    const b = parseHexChannel(normalized.slice(5, 7));
-    return [r, g, b];
-};
-
-const toHexColor = (r: number, g: number, b: number): `#${string}` => {
-    const channelToHex = (value: number): string =>
-        clamp(Math.round(value), 0, 255).toString(16).padStart(2, '0');
-    return `#${channelToHex(r)}${channelToHex(g)}${channelToHex(b)}`;
-};
-
-const mixHexColors = (
-    foreground: `#${string}`,
-    background: `#${string}`,
-    foregroundRatio: number
-): `#${string}` => {
-    const ratio = clamp(foregroundRatio, 0, 1);
-    const [fr, fg, fb] = parseHexColor(foreground);
-    const [br, bg, bb] = parseHexColor(background);
-    return toHexColor(
-        fr * ratio + br * (1 - ratio),
-        fg * ratio + bg * (1 - ratio),
-        fb * ratio + bb * (1 - ratio)
-    );
-};
-
-const mutedAxisColor = (color: `#${string}`): `#${string}` =>
-    mixHexColors(color, CARD_FILL, 0.38);
 
 const polarPoint = (
     cx: number,
@@ -163,13 +105,13 @@ const ringSectorPath = (
 };
 
 /**
- * Normalizes axis values to integer 1..10 and fails open to midpoint 5.
+ * Normalizes axis values to continuous 1..10 and fails open to midpoint 5.
  */
 const normalizeTemperament = (
     temperament: ResponseTemperament
-): ResponseTemperament => {
-    const normalizeAxis = (value: number): TraceAxisScore =>
-        clampInt(value, 1, 10, 5) as TraceAxisScore;
+): NormalizedTemperament => {
+    const normalizeAxis = (value: number): number =>
+        normalizeAxisValue(value, 1, 10, 5);
 
     return {
         tightness: normalizeAxis(temperament.tightness),
@@ -181,72 +123,49 @@ const normalizeTemperament = (
 };
 
 /**
- * Normalizes optional chip values and limits output to three rows.
- */
-const normalizeChips = (chips: TraceCardChipData | undefined): string[] => {
-    const normalized: string[] = [];
-    const confidence = chips?.confidencePercent;
-    const riskTier = chips?.riskTier;
-    const tradeoffs = chips?.tradeoffCount;
-
-    if (typeof confidence === 'number' && Number.isFinite(confidence)) {
-        normalized.push(`CONF ${Math.round(clamp(confidence, 0, 100))}%`);
-    }
-    if (riskTier) {
-        normalized.push(`RISK ${riskTier}`);
-    }
-    if (typeof tradeoffs === 'number' && Number.isFinite(tradeoffs)) {
-        normalized.push(`TRADEOFFS ${Math.max(0, Math.round(tradeoffs))}`);
-    }
-
-    if (normalized.length === 0) {
-        normalized.push('TRACE CARD');
-    }
-
-    return normalized.slice(0, 3);
-};
-
-/**
  * Renders canonical trace-card SVG for storage and downstream conversion.
  */
 export const renderTraceCardSvg = (input: TraceCardRenderInput): string => {
-    const width = Math.max(320, Math.round(input.width ?? DEFAULT_WIDTH));
-    const height = Math.max(72, Math.round(input.height ?? DEFAULT_HEIGHT));
+    const width = Math.max(36, Math.round(input.width ?? DEFAULT_WIDTH));
+    const height = Math.max(36, Math.round(input.height ?? DEFAULT_HEIGHT));
     const normalizedTemperament = normalizeTemperament(input.temperament);
-    const chips = normalizeChips(input.chips);
-
-    // Wheel
-    const wheelCenterX = 40;
+    const wheelPadding = 1;
+    const wheelCenterX = width / 2;
     const wheelCenterY = height / 2;
-    const innerRadius = 8;
-    const outerRadius = Math.min(30, height / 2 - 8);
+    const outerRadius = Math.min(width, height) / 2 - wheelPadding;
+    const innerRadius = 6;
     const bandCount = 5;
     const bandThickness = (outerRadius - innerRadius) / bandCount;
+    const bandGap = 0.8;
     const sliceAngle = (Math.PI * 2) / AXIS_SPECS.length;
-    const baseStartAngle = -Math.PI / 2;
-    const epsilon = 0.001;
-
+    const baseStartAngle = (-3 * Math.PI) / 4;
+    const sliceGapAngle = 1.2 / outerRadius;
+    const epsilon = 0.0001;
     const wheelLayers: string[] = [];
-    const dividerLines: string[] = [];
-    const axisLabels: string[] = [];
 
     for (let index = 0; index < AXIS_SPECS.length; index += 1) {
         const axis = AXIS_SPECS[index];
-        const startAngle = baseStartAngle + index * sliceAngle;
-        const endAngle = startAngle + sliceAngle;
+        const startAngle =
+            baseStartAngle + index * sliceAngle + sliceGapAngle / 2;
+        const endAngle =
+            baseStartAngle + (index + 1) * sliceAngle - sliceGapAngle / 2;
+        if (endAngle <= startAngle + epsilon) {
+            continue;
+        }
+
         const score = normalizedTemperament[axis.key];
         const scoreProgress = score / 10;
-        const mutedColor = mutedAxisColor(axis.color);
 
         for (let bandIndex = 0; bandIndex < bandCount; bandIndex += 1) {
             const bandStart = bandIndex / bandCount;
             const bandEnd = (bandIndex + 1) / bandCount;
-            const bandInner = innerRadius + bandIndex * bandThickness;
-            const bandOuter = bandInner + bandThickness;
-
-            wheelLayers.push(
-                `<path d="${ringSectorPath(wheelCenterX, wheelCenterY, bandInner, bandOuter, startAngle, endAngle)}" fill="${mutedColor}" />`
-            );
+            const rawBandInner = innerRadius + bandIndex * bandThickness;
+            const rawBandOuter = rawBandInner + bandThickness;
+            const bandInner = rawBandInner + bandGap / 2;
+            const bandOuter = rawBandOuter - bandGap / 2;
+            if (bandOuter <= bandInner + epsilon) {
+                continue;
+            }
 
             if (scoreProgress <= bandStart + epsilon) {
                 continue;
@@ -257,7 +176,8 @@ export const renderTraceCardSvg = (input: TraceCardRenderInput): string => {
                 0,
                 1
             );
-            const filledOuter = bandInner + bandThickness * bandFillFraction;
+            const filledOuter =
+                bandInner + (bandOuter - bandInner) * bandFillFraction;
             if (filledOuter <= bandInner + epsilon) {
                 continue;
             }
@@ -266,83 +186,16 @@ export const renderTraceCardSvg = (input: TraceCardRenderInput): string => {
                 `<path d="${ringSectorPath(wheelCenterX, wheelCenterY, bandInner, filledOuter, startAngle, endAngle)}" fill="${axis.color}" />`
             );
         }
-
-        const dividerStart = polarPoint(
-            wheelCenterX,
-            wheelCenterY,
-            innerRadius,
-            startAngle
-        );
-        const dividerEnd = polarPoint(
-            wheelCenterX,
-            wheelCenterY,
-            outerRadius,
-            startAngle
-        );
-        dividerLines.push(
-            `<line x1="${toSvgNumber(dividerStart.x)}" y1="${toSvgNumber(dividerStart.y)}" x2="${toSvgNumber(dividerEnd.x)}" y2="${toSvgNumber(dividerEnd.y)}" stroke="${DIVIDER_STROKE}" stroke-width="0.8" stroke-opacity="0.9" />`
-        );
-
-        const labelAngle = startAngle + sliceAngle / 2;
-        const labelPoint = polarPoint(
-            wheelCenterX,
-            wheelCenterY,
-            outerRadius + 8,
-            labelAngle
-        );
-        axisLabels.push(
-            `<text x="${toSvgNumber(labelPoint.x)}" y="${toSvgNumber(labelPoint.y)}" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif, system-ui, sans-serif" font-size="8.5" font-weight="700" fill="${LABEL_TEXT}">${axis.label}</text>`
-        );
     }
 
-    dividerLines.push(
-        `<circle cx="${toSvgNumber(wheelCenterX)}" cy="${toSvgNumber(wheelCenterY)}" r="${toSvgNumber(innerRadius)}" fill="none" stroke="${DIVIDER_STROKE}" stroke-width="0.8" stroke-opacity="0.9" />`
-    );
-    dividerLines.push(
-        `<circle cx="${toSvgNumber(wheelCenterX)}" cy="${toSvgNumber(wheelCenterY)}" r="${toSvgNumber(outerRadius)}" fill="none" stroke="${DIVIDER_STROKE}" stroke-width="0.8" stroke-opacity="0.65" />`
-    );
-
-    // Right-side chip rows (compact by design to keep the card height stable)
-    const chipStartX = 86;
-    const chipWidth = Math.max(140, width - chipStartX - 10);
-    const chipHeight = 16;
-    const chipGap = 6;
-    const totalChipHeight =
-        chips.length * chipHeight + (chips.length - 1) * chipGap;
-    const firstChipY = Math.round((height - totalChipHeight) / 2);
-    const chipRows: string[] = [];
-
-    for (let index = 0; index < chips.length; index += 1) {
-        const text = chips[index];
-        const y = firstChipY + index * (chipHeight + chipGap);
-        const riskColor =
-            text.startsWith('RISK ') && input.chips?.riskTier
-                ? RISK_TIER_COLORS[input.chips.riskTier]
-                : '#60A5FA';
-
-        chipRows.push(
-            `<rect x="${chipStartX}" y="${y}" width="${chipWidth}" height="${chipHeight}" rx="7" fill="${CHIP_FILL}" stroke="${CHIP_STROKE}" stroke-width="1" />`
-        );
-        chipRows.push(
-            `<circle cx="${chipStartX + 8}" cy="${y + chipHeight / 2}" r="2.6" fill="${riskColor}" />`
-        );
-        chipRows.push(
-            `<text x="${chipStartX + 15}" y="${toSvgNumber(y + chipHeight / 2)}" text-anchor="start" dominant-baseline="central" font-family="ui-sans-serif, system-ui, sans-serif" font-size="9" font-weight="600" fill="${CHIP_TEXT}">${escapeXml(text)}</text>`
-        );
-    }
-
-    const axisSummary = `T${normalizedTemperament.tightness} R${normalizedTemperament.rationale} A${normalizedTemperament.attribution} C${normalizedTemperament.caution} E${normalizedTemperament.extent}`;
+    const outerRing = `<circle cx="${toSvgNumber(wheelCenterX)}" cy="${toSvgNumber(wheelCenterY)}" r="${toSvgNumber(outerRadius)}" fill="none" stroke="${OUTER_RING_STROKE}" stroke-width="0.6" stroke-opacity="0.7" />`;
 
     return [
         `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="TRACE card">`,
         '<title>TRACE card</title>',
-        '<desc>TRACE wheel with compact chip metadata for provenance display.</desc>',
-        `<rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="11" fill="${CARD_FILL}" fill-opacity="0.92" stroke="${CARD_STROKE}" stroke-width="1" />`,
+        '<desc>TRACE wheel with transparent background.</desc>',
         ...wheelLayers,
-        ...dividerLines,
-        ...axisLabels,
-        ...chipRows,
-        `<text x="${chipStartX}" y="${height - 8}" text-anchor="start" dominant-baseline="central" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8" fill="${META_TEXT}">${escapeXml(axisSummary)}</text>`,
+        outerRing,
         '</svg>',
     ].join('\n');
 };
