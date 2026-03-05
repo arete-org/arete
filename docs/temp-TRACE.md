@@ -60,11 +60,18 @@
 - Refined TRACE axis type docs so `TraceAxisScore` and `ResponseTemperament` are documented side-by-side in contracts for clearer readability.
 - Reordered imports in TRACE preview command/renderer so `ResponseTemperament` and `TraceAxisScore` appear together.
 - Replaced placeholder comment in `trace-preview.ts` with JSDoc on the command definition for clearer junior-facing intent.
+- Investigated dev startup failures reported during parallel `dev` + `dev:bot` runs.
+- Reproduced bot runtime error: `@footnote/contracts/web/schemas` missing `GetTraceApiResponseSchema` when launched via `tsx`.
+- Fixed Discord bot `tsconfig` aliasing by removing explicit `@footnote/contracts/web/schemas` `.d.ts` path so `tsx` resolves runtime JS exports correctly.
+- Added non-destructive dev build scripts (`build:dev`) for contracts/config-spec and switched dev prebuild flows to use them.
+- Updated root/backend and bot dev script paths to use `build:dev`, reducing startup race risk when multiple dev processes start in parallel.
+- Added root convenience scripts: `start:web` and `start:all` (backend + web + bot) for single-command local startup.
 
 ## Open Questions
 
 - No blocking open questions for Step 1.
 - Pending later implementation detail: exact default temperament object used when model metadata is missing/invalid (proposed neutral default is `5` per axis).
+- TODO(TRACE-types): `packages/web/src/utils/api.ts` currently has type mismatch against `ResponseTemperament` after introducing `TraceAxisScore` literal union; needs follow-up typing alignment between Zod schema output and shared contract types.
 
 ## Experiment Notes
 
@@ -94,6 +101,14 @@
         - `pnpm exec tsx --test packages/discord-bot/test/tracePreviewSvg.test.ts packages/contracts/test/webSchemas.test.ts` (pass)
         - `pnpm --filter @footnote/discord-bot build` (pass)
         - `pnpm lint-check` (pass)
+    - Startup investigation validations:
+        - `pnpm --filter @footnote/discord-bot exec tsx -e "import('@footnote/contracts/web/schemas')..."` now reports `GetTraceApiResponseSchema` export present under `tsx` (pass).
+        - `pnpm --filter @footnote/discord-bot exec tsx src/index.ts` no longer fails immediately with missing export (process stayed up until timeout cutoff).
+        - `pnpm --filter @footnote/config-spec run build:dev` (pass).
+        - `pnpm --filter @footnote/discord-bot run predev` (pass).
+        - `pnpm start:all` startup smoke test (processes launch; command runs until manual timeout cutoff).
+    - Known follow-up gap:
+        - `pnpm --filter @footnote/web exec tsc --noEmit -p tsconfig.json` currently fails on `ResponseTemperament` vs schema-output typing in `packages/web/src/utils/api.ts`.
 
 ## Step 3 Status
 

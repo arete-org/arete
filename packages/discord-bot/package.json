@@ -13,7 +13,7 @@
     "scripts": {
         "prestart": "pnpm build",
         "start": "node --es-module-specifier-resolution=node dist/index.js",
-        "predev": "pnpm --dir ../.. --filter @footnote/config-spec run build",
+        "predev": "pnpm --dir ../.. --filter @footnote/config-spec run build:dev",
         "dev": "pnpm exec cross-env NODE_ENV=development pnpm exec tsx watch src/index.ts",
         "build": "pnpm --dir ../.. --filter @footnote/config-spec run build && pnpm clean && tsc && pnpm copy-prompt-assets",
         "clean": "rimraf dist",
