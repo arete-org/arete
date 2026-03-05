@@ -36,18 +36,25 @@ export type Citation = {
 };
 
 /**
+ * TraceAxisScore is a single TRACE axis value on a 1..10 scale.
+ * TypeScript enforces this range for typed literals.
+ */
+export type TraceAxisScore = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+
+/**
  * ResponseTemperament captures TRACE (response temperament) as five normalized
  * integer axes:
  * T = tightness, R = rationale, A = attribution, C = caution, E = extent.
  *
  * Scale: each axis is an integer from 1 to 10.
+ * Runtime payloads still require schema validation.
  */
 export type ResponseTemperament = {
-    tightness: number; // 1 to 10: concision and structural efficiency.
-    rationale: number; // 1 to 10: amount of visible "why" and reasoning.
-    attribution: number; // 1 to 10: clarity of sourced vs inferred boundaries.
-    caution: number; // 1 to 10: safeguard posture and overclaim restraint.
-    extent: number; // 1 to 10: breadth of viable options/perspectives.
+    tightness: TraceAxisScore; // 1 to 10: concision and structural efficiency.
+    rationale: TraceAxisScore; // 1 to 10: amount of visible rationale and trade-off explanation.
+    attribution: TraceAxisScore; // 1 to 10: clarity of sourced vs inferred boundaries.
+    caution: TraceAxisScore; // 1 to 10: safeguard posture and overclaim restraint.
+    extent: TraceAxisScore; // 1 to 10: breadth of viable options and perspectives.
 };
 
 /**

@@ -75,10 +75,12 @@ export const CitationSchema = z
  *
  * Axis meanings:
  * - tightness: concision and structural efficiency
- * - rationale: amount of visible "why" and trade-off explanation
+ * - rationale: amount of visible rationale and trade-off explanation
  * - attribution: clarity of sourced vs inferred boundaries
  * - caution: safeguard posture and overclaim restraint
- * - extent: breadth of viable options/perspectives
+ * - extent: breadth of viable options and perspectives
+ *
+ * Note: runtime schema validation is still required for dynamic payloads.
  *
  * TODO(TRACE-rollout): Make this required once TRACE generation and rendering
  * are fully validated across surfaces.

@@ -15,6 +15,7 @@ export type {
     RiskTier,
     ConfidenceScore,
     Citation,
+    TraceAxisScore,
     ResponseTemperament,
     ResponseMetadata,
 } from './ethics-core';

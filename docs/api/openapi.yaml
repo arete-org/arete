@@ -617,16 +617,16 @@ components:
                         type: string
                 temperament:
                     type: object
-                    description: Optional TRACE temperament profile with named 1-10 integer axes. TODO(TRACE-rollout): make required after full TRACE validation.
+                    description: Optional TRACE temperament profile with named 1-10 integer axes. This field is optional for now and is expected to become required after full TRACE validation.
                     properties:
                         tightness:
                             type: integer
-                            description: 1 to 10, where higher means tighter concision and structure.
+                            description: 1 to 10, where higher means stronger concision and structural efficiency.
                             minimum: 1
                             maximum: 10
                         rationale:
                             type: integer
-                            description: 1 to 10, where higher means more visible "why" and reasoning.
+                            description: 1 to 10, where higher means more visible rationale and trade-off explanation.
                             minimum: 1
                             maximum: 10
                         attribution:
@@ -641,7 +641,7 @@ components:
                             maximum: 10
                         extent:
                             type: integer
-                            description: 1 to 10, where higher means broader options/perspectives.
+                            description: 1 to 10, where higher means broader options and perspectives.
                             minimum: 1
                             maximum: 10
                     required:
