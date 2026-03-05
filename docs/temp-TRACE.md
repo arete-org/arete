@@ -16,8 +16,9 @@
     - `packages/backend/src/services/reflectService.ts`
     - `packages/backend/src/handlers/trace.ts`
     - `packages/backend/src/storage/traces/sqliteTraceStore.ts`
-- Discord provenance footer is currently text/embed based in:
-    - `packages/discord-bot/src/utils/response/provenanceFooter.ts`
+- Discord provenance CGI path now lives in:
+    - `packages/discord-bot/src/utils/response/provenanceCgi.ts`
+    - `packages/discord-bot/src/utils/MessageProcessor.ts`
     - `packages/discord-bot/src/utils/response/provenanceInteractions.ts`
 - Trace-card rendering now uses backend-owned SVG generation plus PNG conversion via `@resvg/resvg-js`.
 
@@ -30,7 +31,7 @@
 - TODO(TRACE-rollout): make `temperament` required after cross-surface implementation and validation.
 - Source of values: model-emitted metadata + backend validation/defaulting (fail-open).
 - API scope for this branch: update contracts + schemas + OpenAPI now.
-- CGI experiment path: isolated Discord command (`/trace-preview`) and not integrated into production provenance footer yet.
+- CGI path is now integrated into Discord production provenance follow-ups.
 - Experiment access: developer-only.
 - Render flow: backend stores canonical SVG and returns PNG payloads where Discord-style delivery is needed.
 - Preview input modes: manual payload (`POST /api/trace-cards`) and from-stored-trace (`POST /api/trace-cards/from-trace`).
@@ -46,7 +47,7 @@
 - Implemented Step 3 isolated CGI experiment surface:
     - Added developer-only `/trace-preview` command.
     - Added SVG renderer utility for the TRACE wheel/chip preview.
-    - Kept production provenance footer flow unchanged.
+    - This isolated path has since been superseded by production Discord CGI cutover.
 - Strengthened type/docs/readability for TRACE:
     - Added `TraceAxisScore` type and aligned axis wording across contracts/schema/OpenAPI/command text.
     - Added junior-friendly comments/JSDoc coverage across new TRACE files.
@@ -80,8 +81,8 @@
 
 ## Experiment Notes
 
-- Experiment is intentionally isolated from `buildFooterEmbed` production path.
-- `responseId` parsing in provenance actions currently depends on embed footer text and should remain unchanged during isolated CGI experimentation.
+- Discord now uses a direct CGI provenance cutover (no embed footer path retained).
+- `responseId` parsing in provenance actions now uses response-bound button custom IDs.
 
 ## Validation Results
 
@@ -107,8 +108,8 @@
 
 ## Step 3 Status
 
-- Goal: experiment with TRACE CGI in Discord without touching production provenance footer flow.
+- Goal: experiment with TRACE CGI in Discord without touching production provenance flow.
 - Implemented:
     - Added developer-only slash command: `packages/discord-bot/src/commands/trace-preview.ts`
-    - Kept production provenance footer path unchanged.
+    - Step 3 isolated behavior is superseded by production Discord CGI provenance cutover.
     - Step 3 local SVG renderer path has now been superseded by Step 4 backend-owned trace-card rendering.

@@ -16,6 +16,7 @@ import { runtimeConfig } from './config.js';
 import { OpenAIService } from './utils/openaiService.js';
 import type { Command } from './commands/BaseCommand.js';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import { botApi } from './api/botApi.js';
 import {
     evictFollowUpContext,
     readFollowUpContext,
@@ -68,11 +69,8 @@ import {
 } from './utils/imageTokens.js';
 import { LLMCostEstimator } from './utils/LLMCostEstimator.js';
 import type { ChannelContextManager } from './state/ChannelContextManager.js';
-// Shared provenance utilities for footer interactions and display names.
-import {
-    resolveMemberDisplayName,
-    resolveProvenanceMetadata,
-} from './utils/response/provenanceInteractions.js';
+import { resolveMemberDisplayName } from './utils/response/provenanceInteractions.js';
+import { parseProvenanceActionCustomId } from './utils/response/provenanceCgi.js';
 //import express from 'express'; // For webhook
 //import bodyParser from "body-parser"; // For webhook
 
@@ -255,6 +253,32 @@ function formatDetailsPayloadForDiscord(
     );
     const truncatedPayload = `${serialized.slice(0, truncatedPayloadLength)}${DETAILS_TRUNCATION_SUFFIX}`;
     return `${DETAILS_CODE_FENCE_PREFIX}${truncatedPayload}${DETAILS_CODE_FENCE_SUFFIX}`;
+}
+
+function extractMetadataFromTraceResponse(
+    payload: unknown
+): ResponseMetadata | null {
+    if (
+        payload &&
+        typeof payload === 'object' &&
+        'responseId' in payload &&
+        typeof (payload as { responseId?: unknown }).responseId === 'string'
+    ) {
+        return payload as ResponseMetadata;
+    }
+
+    if (
+        payload &&
+        typeof payload === 'object' &&
+        'metadata' in payload &&
+        (payload as { metadata?: unknown }).metadata &&
+        typeof (payload as { metadata?: { responseId?: unknown } }).metadata
+            ?.responseId === 'string'
+    ) {
+        return (payload as { metadata: ResponseMetadata }).metadata;
+    }
+
+    return null;
 }
 
 // Slash commands handler
@@ -503,13 +527,53 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isButton()) {
         const { customId } = interaction;
 
-        if (customId === 'details') {
-            const { responseId, metadata } = await resolveProvenanceMetadata(
-                interaction.message
+        const provenanceAction = parseProvenanceActionCustomId(customId);
+        if (provenanceAction) {
+            if (provenanceAction.action === 'details') {
+                let metadata: ResponseMetadata | null = null;
+                try {
+                    const traceResponse = await botApi.getTrace(
+                        provenanceAction.responseId
+                    );
+                    metadata = extractMetadataFromTraceResponse(
+                        traceResponse.data
+                    );
+                } catch (error) {
+                    logger.warn(
+                        'Failed to load provenance metadata for details action',
+                        {
+                            responseId: provenanceAction.responseId,
+                            error:
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                        }
+                    );
+                }
+
+                const detailsPayload = buildDetailsPayload(
+                    provenanceAction.responseId,
+                    metadata
+                );
+                await interaction.reply({
+                    content: formatDetailsPayloadForDiscord(detailsPayload),
+                    flags: [1 << 6], // [1 << 6] = EPHEMERAL
+                });
+                return;
+            }
+
+            logger.info(
+                'Report Issue button clicked',
+                {
+                    userId: interaction.user.id,
+                    messageId: interaction.message.id,
+                    messageUrl: interaction.message.url,
+                    responseId: provenanceAction.responseId,
+                }
             );
-            const detailsPayload = buildDetailsPayload(responseId, metadata);
             await interaction.reply({
-                content: formatDetailsPayloadForDiscord(detailsPayload),
+                content:
+                    "This feature isn't active yet. To report ethical or security issues, please follow the instructions in [SECURITY.md](https://github.com/footnote-ai/footnote/blob/main/SECURITY.md).",
                 flags: [1 << 6], // [1 << 6] = EPHEMERAL
             });
             return;
@@ -816,41 +880,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 );
             }
 
-            return;
-        }
-
-        if (customId === 'report_issue') {
-            logger.info(
-                `Report Issue button clicked by user: ${interaction.user.id} on message: ${interaction.message.id} (${interaction.message.url})`
-            );
-            await interaction.reply({
-                content:
-                    "This feature isn't active yet. To report ethical or security issues, please follow the instructions in [SECURITY.md](https://github.com/footnote-ai/footnote/blob/main/SECURITY.md).",
-                flags: [1 << 6], // [1 << 6] = EPHEMERAL
-            });
-            return;
-        }
-        if (customId === 'full_trace') {
-            const { responseId } = await resolveProvenanceMetadata(
-                interaction.message
-            );
-            if (!responseId) {
-                await interaction.reply({
-                    content:
-                        '⚠️ I could not find a trace ID for that response.',
-                    flags: [1 << 6], // [1 << 6] = EPHEMERAL
-                });
-                return;
-            }
-
-            const normalizedBaseUrl = runtimeConfig.webBaseUrl
-                .trim()
-                .replace(/\/+$/, '');
-            const traceUrl = `${normalizedBaseUrl}/api/traces/${responseId}`;
-            await interaction.reply({
-                content: `📜 Full trace: ${traceUrl}`,
-                flags: [1 << 6], // [1 << 6] = EPHEMERAL
-            });
             return;
         }
 

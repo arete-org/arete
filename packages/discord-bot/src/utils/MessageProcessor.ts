@@ -49,7 +49,10 @@ import {
     recoverContextDetailsFromMessage,
     type RecoveredImageContext,
 } from '../commands/image/contextResolver.js';
-import { buildFooterEmbed } from './response/provenanceFooter.js';
+import {
+    buildProvenanceActionRow,
+    buildTraceCardRequest,
+} from './response/provenanceCgi.js';
 import { botApi } from '../api/botApi.js';
 import type { DiscordReflectApiResponse } from '../api/index.js';
 import type {
@@ -549,20 +552,6 @@ export class MessageProcessor {
         const finalResponseText =
             reflectResponse.message || 'No response generated.';
 
-        let footerPayload: ReturnType<typeof buildFooterEmbed> | null = null;
-        try {
-            footerPayload = buildFooterEmbed(
-                reflectResponse.metadata,
-                runtimeConfig.webBaseUrl
-            );
-        } catch (error) {
-            logger.error(
-                `Failed to build provenance footer for response ${reflectResponse.metadata.responseId}: ${
-                    (error as Error)?.message ?? error
-                }`
-            );
-        }
-
         let ttsPath: string | null = null;
         if (reflectResponse.modality === 'tts') {
             const ttsOptions: TTSOptions = TTS_DEFAULT_OPTIONS;
@@ -606,15 +595,15 @@ export class MessageProcessor {
                 const responseMessages = Array.isArray(sentMessages)
                     ? sentMessages
                     : [sentMessages];
-                const footerReplyAnchor =
+                const provenanceReplyAnchor =
                     responseMessages[responseMessages.length - 1];
 
                 // Intentional: backend reflect already persisted the canonical trace.
                 // Skipping postTraces here prevents duplicate trace rows for one reply.
-                await this.sendProvenanceFooter(
-                    footerReplyAnchor,
+                await this.sendProvenanceCgi(
+                    provenanceReplyAnchor,
                     message,
-                    footerPayload
+                    reflectResponse.metadata
                 );
                 return;
             } catch (error) {
@@ -640,14 +629,15 @@ export class MessageProcessor {
         const responseMessages = Array.isArray(sentMessages)
             ? sentMessages
             : [sentMessages];
-        const footerReplyAnchor = responseMessages[responseMessages.length - 1];
+        const provenanceReplyAnchor =
+            responseMessages[responseMessages.length - 1];
 
         // Intentional: backend reflect already persisted the canonical trace.
         // Skipping postTraces here prevents duplicate trace rows for one reply.
-        await this.sendProvenanceFooter(
-            footerReplyAnchor,
+        await this.sendProvenanceCgi(
+            provenanceReplyAnchor,
             message,
-            footerPayload
+            reflectResponse.metadata
         );
         logger.debug(
             `Backend reflect sent message response for message ${message.id}.`,
@@ -659,33 +649,46 @@ export class MessageProcessor {
         );
     }
 
-    private async sendProvenanceFooter(
-        footerReplyAnchor: Message,
+    private async sendProvenanceCgi(
+        provenanceReplyAnchor: Message,
         originalMessage: Message,
-        footerPayload: ReturnType<typeof buildFooterEmbed> | null
+        metadata: ResponseMetadata
     ): Promise<void> {
-        if (!footerPayload) {
-            return;
+        const actionRow = buildProvenanceActionRow(metadata.responseId);
+        const files: Array<{ filename: string; data: Buffer }> = [];
+
+        try {
+            const traceCard = await botApi.postTraceCard(
+                buildTraceCardRequest(metadata)
+            );
+            files.push({
+                filename: 'trace-card.png',
+                data: Buffer.from(traceCard.pngBase64, 'base64'),
+            });
+        } catch (error) {
+            logger.warn(
+                `Failed to generate provenance trace-card for response ${metadata.responseId}; sending controls only: ${
+                    (error as Error)?.message ?? error
+                }`
+            );
         }
 
         try {
-            const footerHandler = new ResponseHandler(
-                footerReplyAnchor,
-                footerReplyAnchor.channel,
+            const provenanceHandler = new ResponseHandler(
+                provenanceReplyAnchor,
+                provenanceReplyAnchor.channel,
                 originalMessage.author
             );
-            await footerHandler.sendMessage(
+            await provenanceHandler.sendMessage(
                 '',
-                [],
+                files,
                 false,
                 false,
-                [],
-                footerPayload.embeds.map((embed) => embed.build()),
-                footerPayload.components
+                [actionRow]
             );
         } catch (error) {
             logger.error(
-                `Failed to send provenance footer follow-up: ${
+                `Failed to send provenance CGI follow-up for response ${metadata.responseId}: ${
                     (error as Error)?.message ?? error
                 }`
             );
