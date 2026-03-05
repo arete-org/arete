@@ -110,6 +110,14 @@ const responseMetadataShape = {
     temperament: ResponseTemperamentSchema.optional(),
 } as const;
 
+const TraceCardChipDataSchema = z
+    .object({
+        confidencePercent: z.number().int().min(0).max(100).optional(),
+        riskTier: RiskTierSchema.optional(),
+        tradeoffCount: z.number().int().nonnegative().optional(),
+    })
+    .strict();
+
 /**
  * Response metadata is intentionally tolerant so new backend fields do not break clients.
  */
@@ -201,6 +209,45 @@ export const PostTracesResponseSchema = z
         responseId: z.string().min(1),
     })
     .passthrough();
+
+/**
+ * @api.operationId: postTraceCards
+ * @api.path: POST /api/trace-cards
+ */
+export const PostTraceCardRequestSchema = z
+    .object({
+        responseId: z.string().min(1).optional(),
+        temperament: ResponseTemperamentSchema,
+        chips: TraceCardChipDataSchema.optional(),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postTraceCards
+ * @api.path: POST /api/trace-cards
+ */
+export const PostTraceCardResponseSchema = z
+    .object({
+        responseId: z.string().min(1),
+        pngBase64: z.string().min(1),
+    })
+    .passthrough();
+
+/**
+ * @api.operationId: postTraceCardsFromTrace
+ * @api.path: POST /api/trace-cards/from-trace
+ */
+export const PostTraceCardFromTraceRequestSchema = z
+    .object({
+        responseId: z.string().min(1),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postTraceCardsFromTrace
+ * @api.path: POST /api/trace-cards/from-trace
+ */
+export const PostTraceCardFromTraceResponseSchema = PostTraceCardResponseSchema;
 
 /**
  * @api.operationId: getTrace

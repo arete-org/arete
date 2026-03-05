@@ -5,7 +5,7 @@
 - Branch: `feat/TRACE-UI`
 - Decision reference: `docs/decisions/2026-04-compact-provenance-TRACE.md`
 - Purpose of this temp doc: track implementation progress while TRACE is still being explored.
-- Current phase: Step 3 (isolated Discord `/trace-preview` SVG experiment).
+- Current phase: Step 4 (backend-owned `trace-card` generation/storage + Discord PNG delivery).
 
 ## Inventory
 
@@ -56,6 +56,19 @@
     - Added dev-safe prebuild paths and consolidated root startup commands (`start:web`, `start:all`).
     - Added cross-platform preflight port cleanup (using `.env` ports), improved Ctrl+C teardown behavior, and reduced debugger/noise interference.
     - Resolved duplicate bot handling by hardening stale bot process cleanup before launch.
+- Implemented Step 4 backend-owned trace-card flow:
+    - Added contracts/OpenAPI for `POST /api/trace-cards` and `GET /api/traces/{responseId}/assets/trace-card.svg`.
+    - Added backend canonical TRACE card renderer (SVG) and SVG-to-PNG conversion utility.
+    - Added SQLite `provenance_trace_cards` storage and trace-store read/write methods.
+    - Added backend trace-card create/read handlers and server route wiring.
+    - Added best-effort trace-card persistence during normal trace metadata writes when `temperament` is present.
+    - Updated Discord `/trace-preview` to call backend `POST /api/trace-cards` and attach `trace-card.png`.
+    - Removed bot-local duplicate TRACE SVG renderer/test path to keep backend as single rendering owner.
+    - Simplified trace-card generation intent split:
+        - `POST /api/trace-cards` remains manual-input preview flow.
+        - `POST /api/trace-cards/from-trace` now generates from stored trace metadata by `responseId`.
+    - Simplified server-side behavior for from-trace generation by deriving chips from stored metadata (no client chip overrides).
+    - Reduced backend handler complexity by extracting shared trace write access/body parsing helpers.
 
 ## Open Questions
 
@@ -76,12 +89,17 @@
     - OpenAPI link validation passes.
     - Lint passes.
 - Step 3 validation passed:
-    - TRACE preview renderer tests pass.
-    - Discord bot build passes.
-    - Lint passes after JSDoc/readability updates.
+    - Isolated preview command + renderer path passed during experimentation.
 - Startup/dev validation passed at a high level:
     - Bot contract schema export resolution works under `tsx`.
     - `start:all` launches backend/web/bot with preflight cleanup and stable startup behavior.
+- Step 4 validation passed:
+    - Contracts TRACE card schema tests pass.
+    - Backend trace-card renderer, storage, and handler tests pass.
+    - OpenAPI link validation passes with new trace-card operations.
+    - Discord bot trace API tests pass after backend trace-card integration.
+    - Backend from-trace route tests pass (success + missing temperament conflict).
+    - Discord bot build passes with `/trace-preview` backend render flow.
 - Current known follow-up gap:
     - `pnpm --filter @footnote/web exec tsc --noEmit -p tsconfig.json` still reports a `ResponseTemperament` vs schema-output typing mismatch in `packages/web/src/utils/api.ts`.
 
@@ -89,7 +107,6 @@
 
 - Goal: experiment with TRACE CGI in Discord without touching production provenance footer flow.
 - Implemented:
-    - Added SVG renderer utility: `packages/discord-bot/src/utils/tracePreview/tracePreviewSvg.ts`
     - Added developer-only slash command: `packages/discord-bot/src/commands/trace-preview.ts`
-    - Added renderer tests: `packages/discord-bot/test/tracePreviewSvg.test.ts`
     - Kept production provenance footer path unchanged.
+    - Step 3 local SVG renderer path has now been superseded by Step 4 backend-owned trace-card rendering.

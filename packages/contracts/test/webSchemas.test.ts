@@ -15,6 +15,10 @@ import {
     GetTraceStaleResponseSchema,
     PostReflectRequestSchema,
     PostReflectResponseSchema,
+    PostTraceCardFromTraceRequestSchema,
+    PostTraceCardFromTraceResponseSchema,
+    PostTraceCardRequestSchema,
+    PostTraceCardResponseSchema,
     PostTracesRequestSchema,
     ResponseMetadataSchema,
     createSchemaResponseValidator,
@@ -132,6 +136,81 @@ test('PostTracesRequestSchema rejects unknown request keys', () => {
     });
 
     assert.equal(parsed.success, false);
+});
+
+test('PostTraceCardRequestSchema accepts valid trace-card payloads', () => {
+    const parsed = PostTraceCardRequestSchema.safeParse({
+        temperament: {
+            tightness: 9,
+            rationale: 6,
+            attribution: 8,
+            caution: 6,
+            extent: 7,
+        },
+        chips: {
+            confidencePercent: 88,
+            riskTier: 'Medium',
+            tradeoffCount: 2,
+        },
+    });
+
+    assert.equal(parsed.success, true);
+});
+
+test('PostTraceCardRequestSchema rejects invalid chip values', () => {
+    const parsed = PostTraceCardRequestSchema.safeParse({
+        temperament: {
+            tightness: 9,
+            rationale: 6,
+            attribution: 8,
+            caution: 6,
+            extent: 7,
+        },
+        chips: {
+            confidencePercent: 101,
+        },
+    });
+
+    assert.equal(parsed.success, false);
+});
+
+test('PostTraceCardResponseSchema requires responseId and pngBase64', () => {
+    assert.equal(
+        PostTraceCardResponseSchema.safeParse({
+            responseId: 'trace-card-preview-1',
+            pngBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+        }).success,
+        true
+    );
+
+    assert.equal(
+        PostTraceCardResponseSchema.safeParse({
+            responseId: 'trace-card-preview-1',
+        }).success,
+        false
+    );
+});
+
+test('PostTraceCardFromTrace schemas require responseId and parse response envelope', () => {
+    assert.equal(
+        PostTraceCardFromTraceRequestSchema.safeParse({
+            responseId: 'resp_trace_1',
+        }).success,
+        true
+    );
+
+    assert.equal(
+        PostTraceCardFromTraceRequestSchema.safeParse({}).success,
+        false
+    );
+
+    assert.equal(
+        PostTraceCardFromTraceResponseSchema.safeParse({
+            responseId: 'resp_trace_1',
+            pngBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+        }).success,
+        true
+    );
 });
 
 test('PostReflectResponseSchema and GetTraceStaleResponseSchema accept extensible responses', () => {

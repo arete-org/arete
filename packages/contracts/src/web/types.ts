@@ -6,7 +6,11 @@
  * @footnote-ethics: medium - Contract clarity supports transparent behavior.
  */
 
-import type { ResponseMetadata } from '../ethics-core';
+import type {
+    ResponseMetadata,
+    ResponseTemperament,
+    RiskTier,
+} from '../ethics-core';
 
 // Standard API error envelope used by multiple endpoints.
 export type ApiErrorResponse = {
@@ -176,6 +180,54 @@ export type PostTracesResponse = {
     ok: true;
     responseId: string;
 };
+
+/**
+ * Compact chip metadata shown next to the TRACE wheel in a trace-card.
+ */
+export type TraceCardChipData = {
+    confidencePercent?: number;
+    riskTier?: RiskTier;
+    tradeoffCount?: number;
+};
+
+/**
+ * @api.operationId: postTraceCards
+ * @api.path: POST /api/trace-cards
+ */
+export type PostTraceCardRequest = {
+    responseId?: string;
+    temperament: ResponseTemperament;
+    chips?: TraceCardChipData;
+};
+
+/**
+ * @api.operationId: postTraceCards
+ * @api.path: POST /api/trace-cards
+ */
+export type PostTraceCardResponse = {
+    responseId: string;
+    pngBase64: string;
+};
+
+/**
+ * @api.operationId: postTraceCardsFromTrace
+ * @api.path: POST /api/trace-cards/from-trace
+ */
+export type PostTraceCardFromTraceRequest = {
+    responseId: string;
+};
+
+/**
+ * @api.operationId: postTraceCardsFromTrace
+ * @api.path: POST /api/trace-cards/from-trace
+ */
+export type PostTraceCardFromTraceResponse = PostTraceCardResponse;
+
+/**
+ * @api.operationId: getTraceCardSvg
+ * @api.path: GET /api/traces/{responseId}/assets/trace-card.svg
+ */
+export type GetTraceCardSvgResponse = string;
 
 /**
  * @api.operationId: getTrace

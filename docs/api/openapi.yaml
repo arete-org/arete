@@ -5,7 +5,10 @@ openapi: 3.1.0
 # - POST /api/reflect: Reflection (public; Turnstile + rate limits when configured)
 # - OPTIONS /api/reflect: CORS preflight
 # - POST /api/traces: Trace upsert (TraceToken required)
+# - POST /api/trace-cards: Generate/store trace-card and return PNG payload (TraceToken required)
+# - POST /api/trace-cards/from-trace: Generate/store trace-card from stored trace metadata (TraceToken required)
 # - GET /api/traces/{responseId}: Trace fetch (public)
+# - GET /api/traces/{responseId}/assets/trace-card.svg: Trace-card SVG fetch (public)
 # - GET /api/blog-posts: Blog index (public)
 # - GET /api/blog-posts/{postId}: Blog post (public)
 # - POST /api/webhook/github: GitHub discussion webhook (signature when configured)
@@ -165,6 +168,94 @@ paths:
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
 
+    # Trace-card create (TraceToken required).
+    /api/trace-cards:
+        post:
+            operationId: postTraceCards
+            x-codeRefs:
+                - packages/backend/src/handlers/trace.ts#handleTraceCardCreateRequest
+                - packages/discord-bot/src/api/traces.ts#postTraceCard
+                - packages/contracts/src/web/types.ts#PostTraceCardRequest
+                - packages/contracts/src/web/types.ts#PostTraceCardResponse
+            summary: Generate and store a trace-card
+            description: |
+                Generate a trace-card from TRACE temperament data, persist the canonical SVG asset,
+                and return a PNG payload for Discord-style inline display.
+                TraceToken required.
+            tags:
+                - Traces
+            security:
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TraceCardRequest'
+            responses:
+                '200':
+                    $ref: '#/components/responses/TraceCardCreateOk'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '429':
+                    $ref: '#/components/responses/TooManyRequests'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
+    # Trace-card create from stored trace metadata (TraceToken required).
+    /api/trace-cards/from-trace:
+        post:
+            operationId: postTraceCardsFromTrace
+            x-codeRefs:
+                - packages/backend/src/handlers/trace.ts#handleTraceCardFromTraceRequest
+                - packages/discord-bot/src/api/traces.ts#postTraceCardFromTrace
+                - packages/contracts/src/web/types.ts#PostTraceCardFromTraceRequest
+                - packages/contracts/src/web/types.ts#PostTraceCardFromTraceResponse
+            summary: Generate and store a trace-card from an existing trace
+            description: |
+                Load stored trace metadata by response id, derive trace-card chip values server-side,
+                regenerate/store the canonical SVG asset, and return a PNG payload for inline display.
+                TraceToken required.
+            tags:
+                - Traces
+            security:
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TraceCardFromTraceRequest'
+            responses:
+                '200':
+                    $ref: '#/components/responses/TraceCardCreateOk'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '409':
+                    $ref: '#/components/responses/Conflict'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '429':
+                    $ref: '#/components/responses/TooManyRequests'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
     # Trace fetch (public).
     /api/traces/{responseId}:
         get:
@@ -192,6 +283,33 @@ paths:
                     $ref: '#/components/responses/NotFound'
                 '410':
                     $ref: '#/components/responses/Gone'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
+    # Trace-card SVG fetch (public).
+    /api/traces/{responseId}/assets/trace-card.svg:
+        get:
+            operationId: getTraceCardSvg
+            x-codeRefs:
+                - packages/backend/src/handlers/trace.ts#handleTraceCardAssetRequest
+                - packages/contracts/src/web/types.ts#GetTraceCardSvgResponse
+            summary: Fetch trace-card SVG
+            description: |
+                Return the stored trace-card SVG asset by response id.
+                Public endpoint; no auth or rate limits.
+            tags:
+                - Traces
+            parameters:
+                - $ref: '#/components/parameters/TraceResponseId'
+            responses:
+                '200':
+                    $ref: '#/components/responses/TraceCardSvgOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '404':
+                    $ref: '#/components/responses/NotFound'
                 '500':
                     $ref: '#/components/responses/InternalServerError'
                 '503':
@@ -678,6 +796,87 @@ components:
             allOf:
                 - $ref: '#/components/schemas/ResponseMetadata'
 
+        TraceCardChips:
+            type: object
+            properties:
+                confidencePercent:
+                    type: integer
+                    minimum: 0
+                    maximum: 100
+                riskTier:
+                    type: string
+                    enum: [Low, Medium, High]
+                tradeoffCount:
+                    type: integer
+                    minimum: 0
+            additionalProperties: false
+
+        TraceCardRequest:
+            type: object
+            properties:
+                responseId:
+                    type: string
+                    minLength: 1
+                temperament:
+                    type: object
+                    properties:
+                        tightness:
+                            type: integer
+                            minimum: 1
+                            maximum: 10
+                        rationale:
+                            type: integer
+                            minimum: 1
+                            maximum: 10
+                        attribution:
+                            type: integer
+                            minimum: 1
+                            maximum: 10
+                        caution:
+                            type: integer
+                            minimum: 1
+                            maximum: 10
+                        extent:
+                            type: integer
+                            minimum: 1
+                            maximum: 10
+                    required:
+                        - tightness
+                        - rationale
+                        - attribution
+                        - caution
+                        - extent
+                    additionalProperties: false
+                chips:
+                    $ref: '#/components/schemas/TraceCardChips'
+            required:
+                - temperament
+            additionalProperties: false
+
+        TraceCardResponse:
+            type: object
+            properties:
+                responseId:
+                    type: string
+                    minLength: 1
+                pngBase64:
+                    type: string
+                    minLength: 1
+            required:
+                - responseId
+                - pngBase64
+            additionalProperties: true
+
+        TraceCardFromTraceRequest:
+            type: object
+            properties:
+                responseId:
+                    type: string
+                    minLength: 1
+            required:
+                - responseId
+            additionalProperties: false
+
         # Citations for provenance and attribution.
         Citation:
             type: object
@@ -967,6 +1166,18 @@ components:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/ResponseMetadata'
+        TraceCardCreateOk:
+            description: Trace-card generated and stored.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/TraceCardResponse'
+        TraceCardSvgOk:
+            description: Trace-card SVG asset.
+            content:
+                image/svg+xml:
+                    schema:
+                        type: string
         BlogIndexOk:
             description: Blog index entries.
             content:
@@ -1010,6 +1221,12 @@ components:
                         $ref: '#/components/schemas/ErrorResponse'
         Forbidden:
             description: Request was refused.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Conflict:
+            description: Request conflicts with current resource state.
             content:
                 application/json:
                     schema:

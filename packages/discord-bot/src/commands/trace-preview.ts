@@ -1,5 +1,5 @@
 /**
- * @description: Developer-only slash command that renders an isolated TRACE preview SVG for visual experiments.
+ * @description: Developer-only slash command that renders an isolated TRACE card image for visual experiments.
  * @footnote-scope: interface
  * @footnote-module: TracePreviewCommand
  * @footnote-risk: low - This command is isolated and does not modify production provenance paths.
@@ -16,9 +16,9 @@ import type {
     TraceAxisScore,
     RiskTier,
 } from '@footnote/contracts/ethics-core';
+import { botApi } from '../api/botApi.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
-import { renderTracePreviewSvg } from '../utils/tracePreview/tracePreviewSvg.js';
 import type { Command } from './BaseCommand.js';
 
 const tracePreviewLogger =
@@ -26,7 +26,7 @@ const tracePreviewLogger =
         ? logger.child({ module: 'tracePreviewCommand' })
         : logger;
 
-const TRACE_PREVIEW_FILENAME = 'trace-preview.svg';
+const TRACE_PREVIEW_FILENAME = 'trace-card.png';
 const EPHEMERAL_FLAG = 1 << 6;
 
 /**
@@ -61,7 +61,7 @@ const command: Command = {
     data: new SlashCommandBuilder()
         .setName('trace-preview')
         .setDescription(
-            'Render an experimental TRACE wheel/card SVG (developer only).'
+            'Render an experimental TRACE card image (developer only).'
         )
         .addIntegerOption((option) =>
             option
@@ -140,7 +140,7 @@ const command: Command = {
         ),
 
     /**
-     * Renders and returns one experimental TRACE preview card.
+     * Requests and returns one experimental TRACE card from backend rendering.
      * This command intentionally avoids touching production provenance flows.
      */
     async execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -179,7 +179,7 @@ const command: Command = {
                 interaction.options.getString('risk_tier')
             );
 
-            const svg = renderTracePreviewSvg({
+            const traceCard = await botApi.postTraceCard({
                 temperament,
                 chips: {
                     confidencePercent:
@@ -193,17 +193,18 @@ const command: Command = {
                     riskTier,
                 },
             });
+            const pngBuffer = Buffer.from(traceCard.pngBase64, 'base64');
 
-            const attachment = new AttachmentBuilder(Buffer.from(svg, 'utf8'), {
+            const attachment = new AttachmentBuilder(pngBuffer, {
                 name: TRACE_PREVIEW_FILENAME,
             });
 
             const previewEmbed = new EmbedBuilder()
-                .setTitle('TRACE Preview (Experimental)')
+                .setTitle('TRACE Card (Experimental)')
                 .setColor(0x334155)
                 .setDescription(
                     [
-                        'This is an isolated experiment and is not wired into the production provenance footer.',
+                        'This is an isolated trace-card experiment and is not wired into the production provenance footer.',
                         `Axes: ${formatAxisSummary(temperament)}`,
                     ].join('\n')
                 )
@@ -219,7 +220,7 @@ const command: Command = {
             });
         } catch (error) {
             tracePreviewLogger.error(
-                'Failed to generate TRACE preview SVG command response.',
+                'Failed to generate TRACE preview trace-card command response.',
                 {
                     userId: interaction.user.id,
                     error:

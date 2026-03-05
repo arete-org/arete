@@ -35,6 +35,26 @@ export type {
 export type { PostTracesRequest, PostTracesResponse } from './types';
 
 /**
+ * @api.operationId: postTraceCards
+ * @api.path: POST /api/trace-cards
+ */
+export type {
+    PostTraceCardRequest,
+    PostTraceCardResponse,
+    GetTraceCardSvgResponse,
+    TraceCardChipData,
+} from './types';
+
+/**
+ * @api.operationId: postTraceCardsFromTrace
+ * @api.path: POST /api/trace-cards/from-trace
+ */
+export type {
+    PostTraceCardFromTraceRequest,
+    PostTraceCardFromTraceResponse,
+} from './types';
+
+/**
  * @api.operationId: getTrace
  * @api.path: GET /api/traces/{responseId}
  */
@@ -71,6 +91,10 @@ export {
     GetTraceStaleResponseSchema,
     PostReflectRequestSchema,
     PostReflectResponseSchema,
+    PostTraceCardFromTraceRequestSchema,
+    PostTraceCardFromTraceResponseSchema,
+    PostTraceCardRequestSchema,
+    PostTraceCardResponseSchema,
     PostTracesRequestSchema,
     PostTracesResponseSchema,
     ResponseMetadataSchema,

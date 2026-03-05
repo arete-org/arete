@@ -1,0 +1,80 @@
+/**
+ * @description: Verifies /trace-preview command wiring to backend trace-card API and Discord attachment output.
+ * @footnote-scope: test
+ * @footnote-module: TracePreviewCommandTests
+ * @footnote-risk: low - Test-only checks for command payload wiring and fail-open behavior.
+ * @footnote-ethics: low - Uses synthetic TRACE values and no user-identifying data.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { botApi } from '../src/api/botApi.js';
+import { runtimeConfig } from '../src/config.js';
+import tracePreviewCommand from '../src/commands/trace-preview.js';
+
+type MockInteraction = {
+    user: { id: string };
+    options: {
+        getInteger: (name: string, required?: boolean) => number | null;
+        getString: (name: string) => string | null;
+    };
+    reply: (payload: unknown) => Promise<void>;
+    followUp: (payload: unknown) => Promise<void>;
+    replied: boolean;
+    deferred: boolean;
+};
+
+test('trace-preview replies with backend PNG attachment and embed image', async () => {
+    const originalPostTraceCard = botApi.postTraceCard;
+    const replyPayloads: unknown[] = [];
+
+    botApi.postTraceCard = (async () => ({
+        responseId: 'trace-card-preview-123',
+        pngBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+    })) as typeof botApi.postTraceCard;
+
+    const optionValues: Record<string, number | string | null> = {
+        tightness: 9,
+        rationale: 6,
+        attribution: 8,
+        caution: 6,
+        extent: 7,
+        confidence_pct: 82,
+        tradeoff_count: 2,
+        risk_tier: 'Medium',
+    };
+
+    const interaction = {
+        user: { id: runtimeConfig.developerUserId as unknown as string },
+        options: {
+            getInteger: (name: string) =>
+                (optionValues[name] as number | null) ?? null,
+            getString: (name: string) =>
+                (optionValues[name] as string | null) ?? null,
+        },
+        reply: async (payload: unknown) => {
+            replyPayloads.push(payload);
+        },
+        followUp: async () => undefined,
+        replied: false,
+        deferred: false,
+    } as unknown as MockInteraction;
+
+    try {
+        await tracePreviewCommand.execute(interaction as never);
+    } finally {
+        botApi.postTraceCard = originalPostTraceCard;
+    }
+
+    assert.equal(replyPayloads.length, 1);
+    const payload = replyPayloads[0] as {
+        embeds?: Array<{ data?: { image?: { url?: string } } }>;
+        files?: Array<{ name?: string }>;
+    };
+
+    assert.equal(payload.files?.[0]?.name, 'trace-card.png');
+    assert.equal(
+        payload.embeds?.[0]?.data?.image?.url,
+        'attachment://trace-card.png'
+    );
+});

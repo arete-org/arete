@@ -1,9 +1,9 @@
 /**
- * @description: Renders the experimental TRACE preview card as an SVG string for Discord attachments.
- * @footnote-scope: interface
- * @footnote-module: TracePreviewSvgRenderer
- * @footnote-risk: low - Rendering failures only affect the isolated experimental preview command.
- * @footnote-ethics: medium - TRACE visuals communicate reasoning posture, so misleading output can affect trust.
+ * @description: Renders canonical TRACE card SVG assets for storage and cross-surface reuse.
+ * @footnote-scope: core
+ * @footnote-module: TraceCardSvgRenderer
+ * @footnote-risk: medium - Rendering regressions can distort provenance visuals across Discord and web surfaces.
+ * @footnote-ethics: medium - TRACE visuals shape user trust in how model behavior is communicated.
  */
 import type {
     ResponseTemperament,
@@ -20,27 +20,27 @@ type TraceAxisSpec = {
 };
 
 /**
- * Optional chip metadata rendered on the right side of the preview card.
+ * Optional chip metadata rendered to the right of the TRACE wheel.
  */
-export interface TracePreviewChipData {
+export type TraceCardChipData = {
     confidencePercent?: number;
     riskTier?: RiskTier;
     tradeoffCount?: number;
-}
+};
 
 /**
- * Input contract for SVG preview rendering.
- * Width/height are optional so callers can use a stable default card size.
+ * Inputs for trace-card SVG rendering.
+ * Width and height are optional so callers can rely on stable defaults.
  */
-export interface TracePreviewRenderInput {
+export type TraceCardRenderInput = {
     temperament: ResponseTemperament;
-    chips?: TracePreviewChipData;
+    chips?: TraceCardChipData;
     width?: number;
     height?: number;
-}
+};
 
 const AXIS_SPECS: TraceAxisSpec[] = [
-    { key: 'tightness', label: 'T', color: '#2F80ED' },
+    { key: 'tightness', label: 'T', color: '#2F80ED' }, //
     { key: 'rationale', label: 'R', color: '#F2994A' },
     { key: 'attribution', label: 'A', color: '#27AE60' },
     { key: 'caution', label: 'C', color: '#EB5757' },
@@ -64,16 +64,9 @@ const RISK_TIER_COLORS: Record<RiskTier, `#${string}`> = {
     High: '#E27C7C',
 };
 
-/**
- * Bounds a numeric value to a closed interval.
- */
 const clamp = (value: number, min: number, max: number): number =>
     Math.min(max, Math.max(min, value));
 
-/**
- * Normalizes a numeric candidate into an integer inside a closed interval.
- * Falls back to a caller-provided default when the candidate is not finite.
- */
 const clampInt = (
     value: number,
     min: number,
@@ -86,17 +79,11 @@ const clampInt = (
     return clamp(Math.round(value), min, max);
 };
 
-/**
- * Formats numbers for SVG attributes with predictable compact output.
- */
 const toSvgNumber = (value: number): string => {
     const fixed = value.toFixed(2);
     return fixed.replace(/\.00$/, '');
 };
 
-/**
- * Escapes user-facing strings before inserting text into raw SVG XML.
- */
 const escapeXml = (value: string): string =>
     value
         .replaceAll('&', '&amp;')
@@ -105,15 +92,8 @@ const escapeXml = (value: string): string =>
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&apos;');
 
-/**
- * Parses a two-character hexadecimal channel value into a decimal channel.
- */
 const parseHexChannel = (value: string): number => parseInt(value, 16);
 
-/**
- * Parses a hex color string into RGB channels.
- * Supports short (`#abc`) and long (`#aabbcc`) forms.
- */
 const parseHexColor = (hex: `#${string}`): [number, number, number] => {
     const normalized =
         hex.length === 4
@@ -125,18 +105,12 @@ const parseHexColor = (hex: `#${string}`): [number, number, number] => {
     return [r, g, b];
 };
 
-/**
- * Converts RGB channel values back into a hex color string.
- */
 const toHexColor = (r: number, g: number, b: number): `#${string}` => {
     const channelToHex = (value: number): string =>
         clamp(Math.round(value), 0, 255).toString(16).padStart(2, '0');
     return `#${channelToHex(r)}${channelToHex(g)}${channelToHex(b)}`;
 };
 
-/**
- * Linearly blends two hex colors and returns the mixed color.
- */
 const mixHexColors = (
     foreground: `#${string}`,
     background: `#${string}`,
@@ -152,15 +126,9 @@ const mixHexColors = (
     );
 };
 
-/**
- * Builds a muted axis fill color for unfilled wheel regions.
- */
 const mutedAxisColor = (color: `#${string}`): `#${string}` =>
     mixHexColors(color, CARD_FILL, 0.38);
 
-/**
- * Converts polar coordinates to Cartesian coordinates for SVG path math.
- */
 const polarPoint = (
     cx: number,
     cy: number,
@@ -171,10 +139,6 @@ const polarPoint = (
     y: cy + Math.sin(angle) * radius,
 });
 
-/**
- * Creates an SVG path for a ring-sector slice.
- * Used for each wheel band in every TRACE axis slice.
- */
 const ringSectorPath = (
     cx: number,
     cy: number,
@@ -199,8 +163,7 @@ const ringSectorPath = (
 };
 
 /**
- * Normalizes temperament values to the expected 1..10 integer range.
- * Invalid values fail open to a neutral midpoint (5).
+ * Normalizes axis values to integer 1..10 and fails open to midpoint 5.
  */
 const normalizeTemperament = (
     temperament: ResponseTemperament
@@ -218,9 +181,9 @@ const normalizeTemperament = (
 };
 
 /**
- * Normalizes optional chip metadata and limits output to at most three chips.
+ * Normalizes optional chip values and limits output to three rows.
  */
-const normalizeChips = (chips: TracePreviewChipData | undefined): string[] => {
+const normalizeChips = (chips: TraceCardChipData | undefined): string[] => {
     const normalized: string[] = [];
     const confidence = chips?.confidencePercent;
     const riskTier = chips?.riskTier;
@@ -237,22 +200,22 @@ const normalizeChips = (chips: TracePreviewChipData | undefined): string[] => {
     }
 
     if (normalized.length === 0) {
-        normalized.push('TRACE PREVIEW');
+        normalized.push('TRACE CARD');
     }
 
     return normalized.slice(0, 3);
 };
 
 /**
- * Renders a compact TRACE preview SVG card from manual temperament and chip data.
+ * Renders canonical trace-card SVG for storage and downstream conversion.
  */
-export function renderTracePreviewSvg(input: TracePreviewRenderInput): string {
+export const renderTraceCardSvg = (input: TraceCardRenderInput): string => {
     const width = Math.max(320, Math.round(input.width ?? DEFAULT_WIDTH));
     const height = Math.max(72, Math.round(input.height ?? DEFAULT_HEIGHT));
     const normalizedTemperament = normalizeTemperament(input.temperament);
     const chips = normalizeChips(input.chips);
 
-    // Wheel geometry: center point, ring thickness, and slice math.
+    // Wheel
     const wheelCenterX = 40;
     const wheelCenterY = height / 2;
     const innerRadius = 8;
@@ -267,7 +230,6 @@ export function renderTracePreviewSvg(input: TracePreviewRenderInput): string {
     const dividerLines: string[] = [];
     const axisLabels: string[] = [];
 
-    // Band fill math: each axis slice paints muted bands, then overlays filled progress.
     for (let index = 0; index < AXIS_SPECS.length; index += 1) {
         const axis = AXIS_SPECS[index];
         const startAngle = baseStartAngle + index * sliceAngle;
@@ -340,12 +302,13 @@ export function renderTracePreviewSvg(input: TracePreviewRenderInput): string {
         `<circle cx="${toSvgNumber(wheelCenterX)}" cy="${toSvgNumber(wheelCenterY)}" r="${toSvgNumber(outerRadius)}" fill="none" stroke="${DIVIDER_STROKE}" stroke-width="0.8" stroke-opacity="0.65" />`
     );
 
-    // Chip layout: right-side metadata rows with risk-colored status dots.
+    // Right-side chip rows (compact by design to keep the card height stable)
     const chipStartX = 86;
     const chipWidth = Math.max(140, width - chipStartX - 10);
     const chipHeight = 16;
     const chipGap = 6;
-    const totalChipHeight = chips.length * chipHeight + (chips.length - 1) * chipGap;
+    const totalChipHeight =
+        chips.length * chipHeight + (chips.length - 1) * chipGap;
     const firstChipY = Math.round((height - totalChipHeight) / 2);
     const chipRows: string[] = [];
 
@@ -371,9 +334,9 @@ export function renderTracePreviewSvg(input: TracePreviewRenderInput): string {
     const axisSummary = `T${normalizedTemperament.tightness} R${normalizedTemperament.rationale} A${normalizedTemperament.attribution} C${normalizedTemperament.caution} E${normalizedTemperament.extent}`;
 
     return [
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="TRACE preview">`,
-        '<title>TRACE preview</title>',
-        '<desc>Experimental TRACE wheel with compact metadata chips. This asset is not yet part of production provenance footers.</desc>',
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="TRACE card">`,
+        '<title>TRACE card</title>',
+        '<desc>TRACE wheel with compact chip metadata for provenance display.</desc>',
         `<rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="11" fill="${CARD_FILL}" fill-opacity="0.92" stroke="${CARD_STROKE}" stroke-width="1" />`,
         ...wheelLayers,
         ...dividerLines,
@@ -382,4 +345,4 @@ export function renderTracePreviewSvg(input: TracePreviewRenderInput): string {
         `<text x="${chipStartX}" y="${height - 8}" text-anchor="start" dominant-baseline="central" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8" fill="${META_TEXT}">${escapeXml(axisSummary)}</text>`,
         '</svg>',
     ].join('\n');
-}
+};

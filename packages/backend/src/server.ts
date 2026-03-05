@@ -144,7 +144,13 @@ const storeTraceWithStore = (metadata: ResponseMetadata) => {
 };
 
 // --- Handler wiring ---
-const { handleTraceRequest, handleTraceUpsertRequest } = createTraceHandlers({
+const {
+    handleTraceRequest,
+    handleTraceUpsertRequest,
+    handleTraceCardCreateRequest,
+    handleTraceCardFromTraceRequest,
+    handleTraceCardAssetRequest,
+} = createTraceHandlers({
     traceStore,
     logRequest,
     traceWriteLimiter,
@@ -235,6 +241,25 @@ const server = http.createServer(async (req, res) => {
 
         if (parsedUrl.pathname === '/api/traces') {
             await handleTraceUpsertRequest(req, res);
+            return;
+        }
+
+        if (parsedUrl.pathname === '/api/trace-cards') {
+            await handleTraceCardCreateRequest(req, res);
+            return;
+        }
+
+        if (parsedUrl.pathname === '/api/trace-cards/from-trace') {
+            await handleTraceCardFromTraceRequest(req, res);
+            return;
+        }
+
+        if (
+            /^\/api\/traces\/[^/]+\/assets\/trace-card\.svg\/?$/.test(
+                parsedUrl.pathname
+            )
+        ) {
+            await handleTraceCardAssetRequest(req, res, parsedUrl);
             return;
         }
 
