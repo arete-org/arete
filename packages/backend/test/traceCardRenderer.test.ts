@@ -22,7 +22,10 @@ const readPngDimensions = (png: Buffer): { width: number; height: number } => {
     return { width, height };
 };
 
-test('renderTraceCardSvg omits wheel labels and chip text', () => {
+const countMatches = (value: string, regex: RegExp): number =>
+    (value.match(regex) ?? []).length;
+
+test('renderTraceCardSvg keeps wheel invariants and renders two metadata rows', () => {
     const svg = renderTraceCardSvg({
         temperament: {
             tightness: 9,
@@ -31,18 +34,18 @@ test('renderTraceCardSvg omits wheel labels and chip text', () => {
             caution: 6,
             extent: 7,
         },
+        chips: {
+            evidenceScore: 3.6,
+            freshnessScore: 4.2,
+        },
     });
 
-    assert.match(svg, /<svg[^>]*>/);
-    assert.doesNotMatch(svg, />T</);
-    assert.doesNotMatch(svg, />R</);
-    assert.doesNotMatch(svg, />A</);
-    assert.doesNotMatch(svg, />C</);
-    assert.doesNotMatch(svg, />E</);
-    assert.doesNotMatch(svg, /TRACE CARD/);
-    assert.doesNotMatch(svg, /TRADEOFFS/);
-    assert.doesNotMatch(svg, /RISK /);
-    assert.doesNotMatch(svg, /<text /);
+    assert.match(svg, /width="172"/);
+    assert.match(svg, /height="40"/);
+    assert.match(svg, /<circle cx="20" cy="20" r="19"/);
+    assert.match(svg, /🔗/);
+    assert.match(svg, /🕒/);
+    assert.equal(countMatches(svg, /stroke-opacity="0.3"/g), 10);
 });
 
 test('renderTraceCardSvg normalizes out-of-range values and preserves fractional fills', () => {
@@ -56,6 +59,10 @@ test('renderTraceCardSvg normalizes out-of-range values and preserves fractional
 
     const normalizedSvg = renderTraceCardSvg({
         temperament: outOfRangeTemperament,
+        chips: {
+            evidenceScore: 99,
+            freshnessScore: Number.NaN,
+        },
     });
 
     const expectedClampedSvg = renderTraceCardSvg({
@@ -65,6 +72,10 @@ test('renderTraceCardSvg normalizes out-of-range values and preserves fractional
             attribution: 6.2,
             caution: 5,
             extent: 5,
+        },
+        chips: {
+            evidenceScore: 5,
+            freshnessScore: 3,
         },
     });
 
@@ -78,6 +89,10 @@ test('renderTraceCardSvg normalizes out-of-range values and preserves fractional
             caution: 5,
             extent: 5,
         },
+        chips: {
+            evidenceScore: 3.6,
+            freshnessScore: 4.2,
+        },
     });
     const integerSvg = renderTraceCardSvg({
         temperament: {
@@ -87,9 +102,15 @@ test('renderTraceCardSvg normalizes out-of-range values and preserves fractional
             caution: 5,
             extent: 5,
         },
+        chips: {
+            evidenceScore: 3,
+            freshnessScore: 4,
+        },
     });
 
     assert.notEqual(fractionalSvg, integerSvg);
+    assert.match(fractionalSvg, /x="98" y="10" width="6" height="6"/);
+    assert.match(fractionalSvg, /x="110" y="28" width="2" height="6"/);
 });
 
 test('renderTraceCardPng returns PNG bytes with expected signature and dimensions', () => {
@@ -102,6 +123,10 @@ test('renderTraceCardPng returns PNG bytes with expected signature and dimension
             attribution: 9,
             caution: 6,
             extent: 8,
+        },
+        chips: {
+            evidenceScore: 3.7,
+            freshnessScore: 4.1,
         },
         width: requestedWidth,
         height: requestedHeight,

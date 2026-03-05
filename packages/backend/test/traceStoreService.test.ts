@@ -28,7 +28,7 @@ const createMetadata = (
     ...overrides,
 });
 
-test('storeTrace writes metadata and trace-card SVG when temperament exists', async () => {
+test('storeTrace writes metadata and skips trace-card SVG auto-generation', async () => {
     let upsertCalled = false;
     let traceCardCalled = false;
 
@@ -55,7 +55,7 @@ test('storeTrace writes metadata and trace-card SVG when temperament exists', as
     );
 
     assert.equal(upsertCalled, true);
-    assert.equal(traceCardCalled, true);
+    assert.equal(traceCardCalled, false);
 });
 
 test('storeTrace skips trace-card write when temperament is missing', async () => {
@@ -73,12 +73,13 @@ test('storeTrace skips trace-card write when temperament is missing', async () =
     assert.equal(traceCardCalled, false);
 });
 
-test('storeTrace stays fail-open when trace-card write throws', async () => {
+test('storeTrace stays fail-open when trace upsert throws', async () => {
     let upsertCalled = false;
 
     const traceStore = {
         upsert: async () => {
             upsertCalled = true;
+            throw new Error('trace upsert failed');
         },
         upsertTraceCardSvg: async () => {
             throw new Error('trace-card write failed');
@@ -101,4 +102,3 @@ test('storeTrace stays fail-open when trace-card write throws', async () => {
     );
     assert.equal(upsertCalled, true);
 });
-

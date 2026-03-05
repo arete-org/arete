@@ -91,6 +91,22 @@ const command: Command = {
                 .setRequired(true)
                 .setMinValue(1)
                 .setMaxValue(10)
+        )
+        .addNumberOption((option) =>
+            option
+                .setName('evidence_score')
+                .setDescription('Evidence score for the metadata bar (1-5).')
+                .setRequired(true)
+                .setMinValue(1)
+                .setMaxValue(5)
+        )
+        .addNumberOption((option) =>
+            option
+                .setName('freshness_score')
+                .setDescription('Freshness score for the metadata bar (1-5).')
+                .setRequired(true)
+                .setMinValue(1)
+                .setMaxValue(5)
         ),
 
     /**
@@ -127,6 +143,16 @@ const command: Command = {
             };
             const traceCard = await botApi.postTraceCard({
                 temperament,
+                chips: {
+                    evidenceScore: interaction.options.getNumber(
+                        'evidence_score',
+                        true
+                    ),
+                    freshnessScore: interaction.options.getNumber(
+                        'freshness_score',
+                        true
+                    ),
+                },
             });
             const pngBuffer = Buffer.from(traceCard.pngBase64, 'base64');
 

@@ -179,7 +179,7 @@ paths:
                 - packages/contracts/src/web/types.ts#PostTraceCardResponse
             summary: Generate and store a trace-card
             description: |
-                Generate a trace-card from TRACE temperament data, persist the canonical SVG asset,
+                Generate a trace-card from TRACE temperament data plus explicit evidence/freshness scores, persist the canonical SVG asset,
                 and return a PNG payload for Discord-style inline display.
                 TraceToken required.
             tags:
@@ -221,7 +221,7 @@ paths:
                 - packages/contracts/src/web/types.ts#PostTraceCardFromTraceResponse
             summary: Generate and store a trace-card from an existing trace
             description: |
-                Load stored trace metadata by response id, derive trace-card chip values server-side,
+                Load stored trace metadata by response id, require explicit metadata scores in the request,
                 regenerate/store the canonical SVG asset, and return a PNG payload for inline display.
                 TraceToken required.
             tags:
@@ -799,16 +799,17 @@ components:
         TraceCardChips:
             type: object
             properties:
-                confidencePercent:
-                    type: integer
-                    minimum: 0
-                    maximum: 100
-                riskTier:
-                    type: string
-                    enum: [Low, Medium, High]
-                tradeoffCount:
-                    type: integer
-                    minimum: 0
+                evidenceScore:
+                    type: number
+                    minimum: 1
+                    maximum: 5
+                freshnessScore:
+                    type: number
+                    minimum: 1
+                    maximum: 5
+            required:
+                - evidenceScore
+                - freshnessScore
             additionalProperties: false
 
         TraceCardRequest:
@@ -851,6 +852,7 @@ components:
                     $ref: '#/components/schemas/TraceCardChips'
             required:
                 - temperament
+                - chips
             additionalProperties: false
 
         TraceCardResponse:
@@ -873,8 +875,11 @@ components:
                 responseId:
                     type: string
                     minLength: 1
+                chips:
+                    $ref: '#/components/schemas/TraceCardChips'
             required:
                 - responseId
+                - chips
             additionalProperties: false
 
         # Citations for provenance and attribution.

@@ -654,12 +654,7 @@ const createTraceHandlers = ({
 
             const { svg, png } = renderTraceCardPng({
                 temperament: metadata.temperament,
-                // Chips are derived from stored metadata to keep canonical behavior.
-                chips: {
-                    confidencePercent: Math.round(metadata.confidence * 100),
-                    riskTier: metadata.riskTier,
-                    tradeoffCount: metadata.tradeoffCount,
-                },
+                chips: parsedPayload.data.chips,
             });
 
             await writeAccess.store.upsertTraceCardSvg(responseId, svg);

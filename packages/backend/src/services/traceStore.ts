@@ -10,7 +10,6 @@ import {
     createTraceStoreFromConfig,
     type TraceStore,
 } from '../storage/traces/traceStore.js';
-import { renderTraceCardSvg } from './traceCard/traceCardSvg.js';
 import { logger } from '../utils/logger.js';
 
 // --- Trace store initialization ---
@@ -34,26 +33,13 @@ const storeTrace = async (
         logger.debug(`Trace stored successfully: ${responseId}`);
 
         // --- Optional trace-card persistence ---
-        // TRACE temperament is optional for now, so we only render/store a card
-        // when the metadata actually includes temperament axes.
+        // The TRACE card now requires explicit evidence/freshness scores which
+        // are not present in ResponseMetadata, so automatic generation is
+        // intentionally skipped for now.
         if (metadata.temperament) {
-            try {
-                const traceCardSvg = renderTraceCardSvg({
-                    temperament: metadata.temperament,
-                    chips: {
-                        confidencePercent: Math.round(metadata.confidence * 100),
-                        riskTier: metadata.riskTier,
-                        tradeoffCount: metadata.tradeoffCount,
-                    },
-                });
-                await traceStore.upsertTraceCardSvg(responseId, traceCardSvg);
-                logger.debug(`Trace-card SVG stored successfully: ${responseId}`);
-            } catch (error) {
-                // Fail-open: trace metadata storage succeeded already.
-                logger.warn(
-                    `Trace-card SVG storage failed for response "${responseId}": ${error instanceof Error ? error.message : String(error)}`
-                );
-            }
+            logger.debug(
+                `Skipping trace-card SVG auto-generation for "${responseId}" because evidence/freshness scores are required.`
+            );
         }
     } catch (error) {
         // --- Error visibility ---

@@ -129,9 +129,8 @@ const responseMetadataShape = {
 
 const TraceCardChipDataSchema = z
     .object({
-        confidencePercent: z.number().int().min(0).max(100).optional(),
-        riskTier: RiskTierSchema.optional(),
-        tradeoffCount: z.number().int().nonnegative().optional(),
+        evidenceScore: z.number().min(1).max(5),
+        freshnessScore: z.number().min(1).max(5),
     })
     .strict();
 
@@ -235,7 +234,7 @@ export const PostTraceCardRequestSchema = z
     .object({
         responseId: z.string().min(1).optional(),
         temperament: ResponseTemperamentSchema,
-        chips: TraceCardChipDataSchema.optional(),
+        chips: TraceCardChipDataSchema,
     })
     .strict();
 
@@ -257,6 +256,7 @@ export const PostTraceCardResponseSchema = z
 export const PostTraceCardFromTraceRequestSchema = z
     .object({
         responseId: z.string().min(1),
+        chips: TraceCardChipDataSchema,
     })
     .strict();
 

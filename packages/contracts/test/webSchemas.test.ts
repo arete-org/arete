@@ -154,9 +154,8 @@ test('PostTraceCardRequestSchema accepts valid trace-card payloads', () => {
             extent: 7,
         },
         chips: {
-            confidencePercent: 88,
-            riskTier: 'Medium',
-            tradeoffCount: 2,
+            evidenceScore: 3.6,
+            freshnessScore: 4.2,
         },
     });
 
@@ -173,11 +172,54 @@ test('PostTraceCardRequestSchema rejects invalid chip values', () => {
             extent: 7,
         },
         chips: {
-            confidencePercent: 101,
+            evidenceScore: 6,
+            freshnessScore: 2,
         },
     });
 
     assert.equal(parsed.success, false);
+});
+
+test('PostTraceCardRequestSchema rejects missing chips and missing score fields', () => {
+    const missingChips = PostTraceCardRequestSchema.safeParse({
+        temperament: {
+            tightness: 9,
+            rationale: 6,
+            attribution: 8,
+            caution: 6,
+            extent: 7,
+        },
+    });
+    assert.equal(missingChips.success, false);
+
+    const missingFreshness = PostTraceCardRequestSchema.safeParse({
+        temperament: {
+            tightness: 9,
+            rationale: 6,
+            attribution: 8,
+            caution: 6,
+            extent: 7,
+        },
+        chips: {
+            evidenceScore: 3,
+        },
+    });
+    assert.equal(missingFreshness.success, false);
+
+    const scoreBelowRange = PostTraceCardRequestSchema.safeParse({
+        temperament: {
+            tightness: 9,
+            rationale: 6,
+            attribution: 8,
+            caution: 6,
+            extent: 7,
+        },
+        chips: {
+            evidenceScore: 0.8,
+            freshnessScore: 2.4,
+        },
+    });
+    assert.equal(scoreBelowRange.success, false);
 });
 
 test('PostTraceCardResponseSchema requires responseId and pngBase64', () => {
@@ -201,12 +243,23 @@ test('PostTraceCardFromTrace schemas require responseId and parse response envel
     assert.equal(
         PostTraceCardFromTraceRequestSchema.safeParse({
             responseId: 'resp_trace_1',
+            chips: {
+                evidenceScore: 2.8,
+                freshnessScore: 4.1,
+            },
         }).success,
         true
     );
 
     assert.equal(
         PostTraceCardFromTraceRequestSchema.safeParse({}).success,
+        false
+    );
+
+    assert.equal(
+        PostTraceCardFromTraceRequestSchema.safeParse({
+            responseId: 'resp_trace_1',
+        }).success,
         false
     );
 

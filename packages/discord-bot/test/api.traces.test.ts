@@ -27,9 +27,8 @@ const createTraceCardRequest = (
         extent: 7,
     },
     chips: {
-        confidencePercent: 84,
-        riskTier: 'Low',
-        tradeoffCount: 1,
+        evidenceScore: 3.6,
+        freshnessScore: 4.2,
     },
     ...overrides,
 });
@@ -105,10 +104,20 @@ test('postTraceCardFromTrace posts by responseId and returns parsed data', async
     const api = createTraceApi(requestJson, { traceApiToken: 'trace-secret' });
     const response = await api.postTraceCardFromTrace({
         responseId: 'stored_response_123',
+        chips: {
+            evidenceScore: 3.2,
+            freshnessScore: 4.4,
+        },
     });
 
     assert.equal(capturedEndpoint, '/api/trace-cards/from-trace');
     assert.equal(capturedHeaders?.['X-Trace-Token'], 'trace-secret');
-    assert.deepEqual(capturedBody, { responseId: 'stored_response_123' });
+    assert.deepEqual(capturedBody, {
+        responseId: 'stored_response_123',
+        chips: {
+            evidenceScore: 3.2,
+            freshnessScore: 4.4,
+        },
+    });
     assert.equal(response.responseId, 'stored_response_123');
 });

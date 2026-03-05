@@ -111,9 +111,8 @@ test('POST /api/trace-cards returns PNG payload and stores SVG asset', async () 
                     extent: 7,
                 },
                 chips: {
-                    confidencePercent: 82,
-                    riskTier: 'Medium',
-                    tradeoffCount: 1,
+                    evidenceScore: 3.6,
+                    freshnessScore: 4.2,
                 },
             }),
         });
@@ -189,11 +188,15 @@ test('POST /api/trace-cards rejects invalid payloads', async () => {
             },
             body: JSON.stringify({
                 temperament: {
-                    tightness: 11,
+                    tightness: 9,
                     rationale: 6,
                     attribution: 8,
                     caution: 6,
                     extent: 7,
+                },
+                chips: {
+                    evidenceScore: 6,
+                    freshnessScore: 4,
                 },
             }),
         });
@@ -219,7 +222,7 @@ test('GET trace-card SVG returns 404 when asset is missing', async () => {
     }
 });
 
-test('POST /api/trace-cards/from-trace derives chips from stored metadata', async () => {
+test('POST /api/trace-cards/from-trace requires caller-provided scores', async () => {
     const server = await createTestServer();
     const responseId = 'from_trace_response_123';
 
@@ -250,7 +253,13 @@ test('POST /api/trace-cards/from-trace derives chips from stored metadata', asyn
                 'Content-Type': 'application/json',
                 'X-Trace-Token': TRACE_TOKEN,
             },
-            body: JSON.stringify({ responseId }),
+            body: JSON.stringify({
+                responseId,
+                chips: {
+                    evidenceScore: 3.6,
+                    freshnessScore: 4.2,
+                },
+            }),
         });
 
         assert.equal(response.status, 200);
@@ -260,6 +269,47 @@ test('POST /api/trace-cards/from-trace derives chips from stored metadata', asyn
         };
         assert.equal(payload.responseId, responseId);
         assert.ok(payload.pngBase64.length > 32);
+    } finally {
+        await server.close();
+        await server.cleanup();
+    }
+});
+
+test('POST /api/trace-cards/from-trace rejects missing scores', async () => {
+    const server = await createTestServer();
+    const responseId = 'from_trace_missing_scores';
+
+    try {
+        await server.store.upsert({
+            responseId,
+            provenance: 'Retrieved',
+            confidence: 0.74,
+            riskTier: 'Medium',
+            tradeoffCount: 2,
+            chainHash: 'chain_hash',
+            licenseContext: 'MIT + HL3',
+            modelVersion: 'gpt-5-mini',
+            staleAfter: new Date(Date.now() + 60000).toISOString(),
+            citations: [],
+            temperament: {
+                tightness: 8,
+                rationale: 7,
+                attribution: 9,
+                caution: 6,
+                extent: 8,
+            },
+        });
+
+        const response = await fetch(`${server.url}/api/trace-cards/from-trace`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': TRACE_TOKEN,
+            },
+            body: JSON.stringify({ responseId }),
+        });
+
+        assert.equal(response.status, 400);
     } finally {
         await server.close();
         await server.cleanup();
@@ -290,7 +340,13 @@ test('POST /api/trace-cards/from-trace returns 409 when temperament is missing',
                 'Content-Type': 'application/json',
                 'X-Trace-Token': TRACE_TOKEN,
             },
-            body: JSON.stringify({ responseId }),
+            body: JSON.stringify({
+                responseId,
+                chips: {
+                    evidenceScore: 2.9,
+                    freshnessScore: 4.3,
+                },
+            }),
         });
 
         assert.equal(response.status, 409);

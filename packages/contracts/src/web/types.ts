@@ -9,7 +9,6 @@
 import type {
     ResponseMetadata,
     ResponseTemperament,
-    RiskTier,
 } from '../ethics-core';
 
 // Standard API error envelope used by multiple endpoints.
@@ -182,12 +181,11 @@ export type PostTracesResponse = {
 };
 
 /**
- * Compact chip metadata shown next to the TRACE wheel in a trace-card.
+ * Fixed metadata scores shown next to the TRACE wheel in a trace-card.
  */
 export type TraceCardChipData = {
-    confidencePercent?: number;
-    riskTier?: RiskTier;
-    tradeoffCount?: number;
+    evidenceScore: number;
+    freshnessScore: number;
 };
 
 /**
@@ -197,7 +195,7 @@ export type TraceCardChipData = {
 export type PostTraceCardRequest = {
     responseId?: string;
     temperament: ResponseTemperament;
-    chips?: TraceCardChipData;
+    chips: TraceCardChipData;
 };
 
 /**
@@ -215,6 +213,7 @@ export type PostTraceCardResponse = {
  */
 export type PostTraceCardFromTraceRequest = {
     responseId: string;
+    chips: TraceCardChipData;
 };
 
 /**

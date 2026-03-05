@@ -16,6 +16,7 @@ type MockInteraction = {
     user: { id: string };
     options: {
         getInteger: (name: string, required?: boolean) => number | null;
+        getNumber: (name: string, required?: boolean) => number | null;
     };
     reply: (payload: unknown) => Promise<void>;
     followUp: (payload: unknown) => Promise<void>;
@@ -26,11 +27,15 @@ type MockInteraction = {
 test('trace-preview replies with only backend PNG attachment', async () => {
     const originalPostTraceCard = botApi.postTraceCard;
     const replyPayloads: unknown[] = [];
+    let capturedRequest: unknown = null;
 
-    botApi.postTraceCard = (async () => ({
-        responseId: 'trace-card-preview-123',
-        pngBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
-    })) as typeof botApi.postTraceCard;
+    botApi.postTraceCard = (async (request) => {
+        capturedRequest = request;
+        return {
+            responseId: 'trace-card-preview-123',
+            pngBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+        };
+    }) as typeof botApi.postTraceCard;
 
     const optionValues: Record<string, number | string | null> = {
         tightness: 9,
@@ -38,12 +43,16 @@ test('trace-preview replies with only backend PNG attachment', async () => {
         attribution: 8,
         caution: 6,
         extent: 7,
+        evidence_score: 3.6,
+        freshness_score: 4.2,
     };
 
     const interaction = {
         user: { id: runtimeConfig.developerUserId as unknown as string },
         options: {
             getInteger: (name: string) =>
+                (optionValues[name] as number | null) ?? null,
+            getNumber: (name: string) =>
                 (optionValues[name] as number | null) ?? null,
         },
         reply: async (payload: unknown) => {
@@ -68,4 +77,17 @@ test('trace-preview replies with only backend PNG attachment', async () => {
 
     assert.equal(payload.files?.[0]?.name, 'trace-card.png');
     assert.equal(payload.embeds, undefined);
+    assert.deepEqual(capturedRequest, {
+        temperament: {
+            tightness: 9,
+            rationale: 6,
+            attribution: 8,
+            caution: 6,
+            extent: 7,
+        },
+        chips: {
+            evidenceScore: 3.6,
+            freshnessScore: 4.2,
+        },
+    });
 });
