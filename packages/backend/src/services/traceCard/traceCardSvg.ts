@@ -40,11 +40,11 @@ export type TraceCardRenderInput = {
 };
 
 const AXIS_SPECS: TraceAxisSpec[] = [
-    { key: 'tightness', label: 'T', color: '#2F80ED' }, //
-    { key: 'rationale', label: 'R', color: '#F2994A' },
-    { key: 'attribution', label: 'A', color: '#27AE60' },
-    { key: 'caution', label: 'C', color: '#EB5757' },
-    { key: 'extent', label: 'E', color: '#00A3A3' },
+    { key: 'tightness', label: 'T', color: '#64748B' }, //
+    { key: 'rationale', label: 'R', color: '#6366F1' },
+    { key: 'attribution', label: 'A', color: '#14B8A6' },
+    { key: 'caution', label: 'C', color: '#F59E0B' },
+    { key: 'extent', label: 'E', color: '#84A98C' },
 ];
 
 const DEFAULT_WIDTH = 400;

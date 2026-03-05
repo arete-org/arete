@@ -7,6 +7,7 @@
  */
 
 import { z } from 'zod';
+import type { TraceAxisScore } from '../ethics-core';
 import type { ApiResponseValidationResult } from './client-core';
 
 const ProvenanceSchema = z.enum(['Retrieved', 'Inferred', 'Speculative']);
@@ -85,13 +86,29 @@ export const CitationSchema = z
  * TODO(TRACE-rollout): Make this required once TRACE generation and rendering
  * are fully validated across surfaces.
  */
+const TraceAxisScoreSchema: z.ZodType<TraceAxisScore> = z.union([
+    z.literal(1),
+    z.literal(2),
+    z.literal(3),
+    z.literal(4),
+    z.literal(5),
+    z.literal(6),
+    z.literal(7),
+    z.literal(8),
+    z.literal(9),
+    z.literal(10),
+]);
+
+// We use literal values (1..10) instead of a broad number schema so Zod output
+// matches the TraceAxisScore contract type exactly. Runtime validation still
+// protects us from untrusted payloads.
 const ResponseTemperamentSchema = z
     .object({
-        tightness: z.number().int().min(1).max(10),
-        rationale: z.number().int().min(1).max(10),
-        attribution: z.number().int().min(1).max(10),
-        caution: z.number().int().min(1).max(10),
-        extent: z.number().int().min(1).max(10),
+        tightness: TraceAxisScoreSchema,
+        rationale: TraceAxisScoreSchema,
+        attribution: TraceAxisScoreSchema,
+        caution: TraceAxisScoreSchema,
+        extent: TraceAxisScoreSchema,
     })
     .strict();
 

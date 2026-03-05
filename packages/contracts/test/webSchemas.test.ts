@@ -23,6 +23,12 @@ import {
     ResponseMetadataSchema,
     createSchemaResponseValidator,
 } from '../src/web/schemas';
+import type {
+    GetTraceResponse,
+    GetTraceStaleResponse,
+    PostReflectResponse,
+} from '../src/web/types';
+import type { ApiResponseValidationResult } from '../src/web/client-core';
 
 const baseMetadata = {
     responseId: 'response_123',
@@ -258,6 +264,26 @@ test('GetTraceApiResponseSchema accepts both live and stale trace payloads', () 
         }).success,
         true
     );
+});
+
+test('schema validator outputs stay assignable to shared response contract types', () => {
+    const reflectValidator = createSchemaResponseValidator(
+        PostReflectResponseSchema
+    );
+    const traceValidator = createSchemaResponseValidator(
+        GetTraceApiResponseSchema
+    );
+
+    const typedReflectValidator: (
+        data: unknown
+    ) => ApiResponseValidationResult<PostReflectResponse> = reflectValidator;
+    const typedTraceValidator: (
+        data: unknown
+    ) => ApiResponseValidationResult<GetTraceResponse | GetTraceStaleResponse> =
+        traceValidator;
+
+    assert.equal(typeof typedReflectValidator, 'function');
+    assert.equal(typeof typedTraceValidator, 'function');
 });
 
 test('createSchemaResponseValidator returns normalized validation results', () => {

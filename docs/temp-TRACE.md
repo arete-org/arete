@@ -5,7 +5,7 @@
 - Branch: `feat/TRACE-UI`
 - Decision reference: `docs/decisions/2026-04-compact-provenance-TRACE.md`
 - Purpose of this temp doc: track implementation progress while TRACE is still being explored.
-- Current phase: Step 4 (backend-owned `trace-card` generation/storage + Discord PNG delivery).
+- Current phase: Step 4 closeout (TRACE schema/type alignment + documentation sync).
 
 ## Inventory
 
@@ -19,7 +19,7 @@
 - Discord provenance footer is currently text/embed based in:
     - `packages/discord-bot/src/utils/response/provenanceFooter.ts`
     - `packages/discord-bot/src/utils/response/provenanceInteractions.ts`
-- No existing image rendering dependency (canvas/sharp/skia) is currently wired for bot/backend provenance rendering.
+- Trace-card rendering now uses backend-owned SVG generation plus PNG conversion via `@resvg/resvg-js`.
 
 ## Decisions
 
@@ -32,8 +32,8 @@
 - API scope for this branch: update contracts + schemas + OpenAPI now.
 - CGI experiment path: isolated Discord command (`/trace-preview`) and not integrated into production provenance footer yet.
 - Experiment access: developer-only.
-- Render format for first experiment pass: SVG only (PNG deferred).
-- Preview input mode for first experiment pass: manual command args.
+- Render flow: backend stores canonical SVG and returns PNG payloads where Discord-style delivery is needed.
+- Preview input modes: manual payload (`POST /api/trace-cards`) and from-stored-trace (`POST /api/trace-cards/from-trace`).
 
 ## Work Log
 
@@ -69,12 +69,14 @@
         - `POST /api/trace-cards/from-trace` now generates from stored trace metadata by `responseId`.
     - Simplified server-side behavior for from-trace generation by deriving chips from stored metadata (no client chip overrides).
     - Reduced backend handler complexity by extracting shared trace write access/body parsing helpers.
+- Completed closeout schema/type alignment:
+    - Added literal TRACE axis schema (`1..10`) so Zod output aligns with `TraceAxisScore`/`ResponseTemperament`.
+    - Added compile-oriented contract compatibility checks for reflect and trace validator output types.
 
 ## Open Questions
 
-- No blocking open questions for Step 1.
+- No blocking open questions.
 - Pending later implementation detail: exact default temperament object used when model metadata is missing/invalid (proposed neutral default is `5` per axis).
-- TODO(TRACE-types): `packages/web/src/utils/api.ts` currently has type mismatch against `ResponseTemperament` after introducing `TraceAxisScore` literal union; needs follow-up typing alignment between Zod schema output and shared contract types.
 
 ## Experiment Notes
 
@@ -100,8 +102,8 @@
     - Discord bot trace API tests pass after backend trace-card integration.
     - Backend from-trace route tests pass (success + missing temperament conflict).
     - Discord bot build passes with `/trace-preview` backend render flow.
-- Current known follow-up gap:
-    - `pnpm --filter @footnote/web exec tsc --noEmit -p tsconfig.json` still reports a `ResponseTemperament` vs schema-output typing mismatch in `packages/web/src/utils/api.ts`.
+- Closeout validation status:
+    - TRACE schema output now aligns with shared `ResponseTemperament` typing, resolving the prior web typecheck mismatch.
 
 ## Step 3 Status
 
