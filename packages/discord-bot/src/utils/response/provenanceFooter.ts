@@ -133,38 +133,29 @@ ${citationLines}`); // Push citations to new line for readability
     //
     const actionRow = new ActionRowBuilder<ButtonBuilder>();
 
-    // Explain button
-    const explainButton = new ButtonBuilder()
-        .setCustomId('explain')
-        .setLabel('Explain')
-        .setStyle(ButtonStyle.Primary) // Primary style for emphasis
-        .setEmoji('\u{1F9E0}'); // Brain
-    actionRow.addComponents(explainButton);
-
-    // Alternative Lens button
-    const altLensButton = new ButtonBuilder()
-        .setCustomId('alternative_lens')
-        .setLabel('Alternative Lens')
+    // Details button
+    const detailsButton = new ButtonBuilder()
+        .setCustomId('details')
         .setStyle(ButtonStyle.Secondary) // Secondary style
         .setEmoji('\u{1F50D}'); // Magnifying glass
-    actionRow.addComponents(altLensButton);
+    actionRow.addComponents(detailsButton);
 
     // Full Trace button
     const fullTraceButton = new ButtonBuilder()
-        .setLabel('Full Trace')
-        .setStyle(ButtonStyle.Link) // Link style for external URL
+        .setCustomId('full_trace')
+        .setStyle(ButtonStyle.Secondary) // Secondary style to match other footer controls
         .setEmoji('\u{1F4DC}') // Scroll
-        .setURL(
-            `${normalizedBaseUrl}/api/traces/${responseMetadata.responseId}`
+        .setDisabled(
+            normalizedBaseUrl.length === 0 ||
+                responseMetadata.responseId.trim().length === 0
         );
     actionRow.addComponents(fullTraceButton);
 
     // Report Issue button
     const reportIssueButton = new ButtonBuilder()
         .setCustomId('report_issue')
-        .setLabel('Report Issue')
-        .setStyle(ButtonStyle.Danger) // Danger style for emphasis
-        .setEmoji('\u{1F6A7}'); // Construction sign
+        .setStyle(ButtonStyle.Secondary) // Secondary style for neutral emphasis
+        .setEmoji('\u{1F6A9}'); // Triangular flag
     actionRow.addComponents(reportIssueButton);
 
     // Return the ProvenanceFooterPayload - Embed plus interactive components (buttons)

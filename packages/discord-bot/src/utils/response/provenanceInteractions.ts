@@ -182,11 +182,6 @@ export const buildAlternativeLensSessionKey = (
     userId: string,
     messageId: string
 ) => `${userId}:${messageId}`;
-/**
- * Builds the cache key used to prevent duplicate "explain this answer" runs.
- */
-export const buildExplainSessionKey = (messageId: string) =>
-    `explain:${messageId}`;
 
 const isCitationPayload = (value: unknown): value is Citation => {
     if (!value || typeof value !== 'object') {
@@ -238,7 +233,6 @@ const isResponseMetadataPayload = (
 // Session lifecycle helpers
 // -----------------------------
 const sessions = new Map<string, AlternativeLensSessionRecord>();
-const explainInProgress = new Map<string, number>();
 const alternativeLensInProgress = new Map<string, number>();
 
 const getSessionExpiry = (): number =>
@@ -267,7 +261,6 @@ const pruneExpiredSessions = (): void => {
 
 const pruneExpiredProvenanceInteractionState = (): void => {
     pruneExpiredSessions();
-    pruneExpiredInProgressEntries(explainInProgress);
     pruneExpiredInProgressEntries(alternativeLensInProgress);
 };
 
@@ -458,39 +451,6 @@ export function resolveMemberDisplayName(
     }
 
     return fallback;
-}
-
-/**
- * Returns whether an explanation request is already running for this message.
- */
-export function isExplainInProgress(key: string): boolean {
-    pruneExpiredInProgressEntries(explainInProgress);
-    const expiresAt = explainInProgress.get(key);
-    if (!expiresAt) {
-        return false;
-    }
-
-    if (expiresAt <= Date.now()) {
-        explainInProgress.delete(key);
-        return false;
-    }
-
-    return true;
-}
-
-/**
- * Marks an explanation request as active so duplicate clicks can be rejected.
- */
-export function markExplainInProgress(key: string): void {
-    pruneExpiredProvenanceInteractionState();
-    explainInProgress.set(key, getSessionExpiry());
-}
-
-/**
- * Clears the in-progress marker for an explanation request.
- */
-export function clearExplainInProgress(key: string): void {
-    explainInProgress.delete(key);
 }
 
 /**
@@ -700,18 +660,6 @@ export interface AlternativeLensPayload {
     description: string;
 }
 
-/**
- * Input needed to generate a short explanation of a prior assistant answer.
- */
-export interface ExplanationContext {
-    messageText: string;
-    confidence?: number;
-    tradeoffCount?: number;
-    chainHash?: string;
-    reasoningTrace?: string;
-    channelId?: string;
-}
-
 const DEFAULT_ALT_LENS_MODEL: SupportedModel = 'gpt-5-mini';
 
 // -----------------------------
@@ -780,99 +728,13 @@ export async function generateAlternativeLensMessage(
     return text;
 }
 
-// -----------------------------
-// Explanation generation
-// -----------------------------
-/**
- * Summarises the reasoning behind the assistant's prior reply so users understand how the answer was produced.
- */
-export async function generateExplanationMessage(
-    openaiService: OpenAIService,
-    context: ExplanationContext,
-    openaiOptions?: OpenAIOptions
-): Promise<string> {
-    const baseSystemPrompt = renderPrompt('discord.chat.system').content;
-    const metadataLines: string[] = [];
-
-    if (typeof context.confidence === 'number') {
-        metadataLines.push(
-            `Reported confidence: ${(context.confidence * 100).toFixed(0)}%`
-        );
-    }
-    if (typeof context.tradeoffCount === 'number') {
-        metadataLines.push(`Trade-offs noted: ${context.tradeoffCount}`);
-    }
-    if (context.chainHash) {
-        metadataLines.push(`Chain hash: ${context.chainHash}`);
-    }
-
-    const systemPrompt = [
-        'You are an ethics-focused analyst who describes the reasoning behind an assistant reply.',
-        'Deliver a clear, factual explanation without inventing new commitments or policies.',
-        'Highlight risk, uncertainty, and trade-offs when relevant.',
-    ].join(' ');
-
-    const userSections = [
-        'Summarise the key reasoning steps that produced the assistant response shown below.',
-        'Do not repeat the entire answer; focus on rationale, evidence, and any safeguards or trade-offs.',
-        'Keep the explanation under eight sentences.',
-        metadataLines.length > 0
-            ? `Assistant metadata:\n- ${metadataLines.join('\n- ')}`
-            : null,
-        context.reasoningTrace
-            ? `Internal reasoning trace:\n${context.reasoningTrace}`
-            : null,
-        `Assistant reply:\n${context.messageText}`,
-    ].filter(Boolean);
-
-    const messages: OpenAIMessage[] = [
-        {
-            role: 'system',
-            content: `${baseSystemPrompt}\n\n${systemPrompt}`.trim(),
-        },
-        { role: 'user', content: userSections.join('\n\n') },
-    ];
-
-    const requestOptions: OpenAIOptions = {
-        reasoningEffort: 'low',
-        verbosity: 'medium',
-        ...(openaiOptions ?? {}),
-    };
-
-    const response = await openaiService.generateResponse(
-        DEFAULT_ALT_LENS_MODEL,
-        messages,
-        {
-            ...requestOptions,
-            channelContext:
-                requestOptions.channelContext ??
-                (context.channelId
-                    ? { channelId: context.channelId, guildId: undefined }
-                    : undefined),
-        }
-    );
-
-    const text = response.message?.content?.trim();
-    if (!text) {
-        throw new Error('The model returned an empty explanation response.');
-    }
-
-    return text;
-}
-
 type PlannerRequest =
-    | {
-          kind: 'alternative_lens';
-          messageText: string;
-          lens: AlternativeLensPayload;
-          metadata: ResponseMetadata | null;
-      }
-    | {
-          kind: 'explain';
-          messageText: string;
-          metadata: ResponseMetadata | null;
-          reasoningTrace?: string;
-      };
+    {
+        kind: 'alternative_lens';
+        messageText: string;
+        lens: AlternativeLensPayload;
+        metadata: ResponseMetadata | null;
+    };
 
 /**
  * Asks the planner for OpenAI generation options tuned to the provenance
@@ -895,30 +757,14 @@ export async function requestProvenanceOpenAIOptions(
             'A user clicked a provenance control. Recommend OpenAI options (reasoning effort, verbosity, etc.) for the follow-up response.',
         ];
 
-        if (request.kind === 'alternative_lens') {
+        instructions.push(
+            `Task: Reframe the assistant response using the "${request.lens.label}" perspective.`,
+            `Lens guidance: ${request.lens.description}`
+        );
+        if (request.metadata) {
             instructions.push(
-                `Task: Reframe the assistant response using the "${request.lens.label}" perspective.`,
-                `Lens guidance: ${request.lens.description}`
+                `Provenance metadata:\n${formatMetadataSummary(request.metadata)}`
             );
-            if (request.metadata) {
-                instructions.push(
-                    `Provenance metadata:\n${formatMetadataSummary(request.metadata)}`
-                );
-            }
-        } else {
-            instructions.push(
-                'Task: Provide a concise explanation of the reasoning behind the assistant’s previous response.'
-            );
-            if (request.metadata) {
-                instructions.push(
-                    `Provenance metadata:\n${formatMetadataSummary(request.metadata)}`
-                );
-            }
-            if (request.reasoningTrace) {
-                instructions.push(
-                    `Internal reasoning trace:\n${request.reasoningTrace}`
-                );
-            }
         }
 
         context.push({ role: 'user', content: instructions.join('\n\n') });

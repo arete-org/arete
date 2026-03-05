@@ -7,7 +7,6 @@
  */
 
 import { Client, GatewayIntentBits, Events, Collection } from 'discord.js';
-import type { Message, ButtonInteraction } from 'discord.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { CommandHandler } from './utils/commandHandler.js';
@@ -15,8 +14,8 @@ import { EventManager } from './utils/eventManager.js';
 import { logger } from './utils/logger.js';
 import { runtimeConfig } from './config.js';
 import { OpenAIService } from './utils/openaiService.js';
-import { ResponseHandler } from './utils/response/ResponseHandler.js';
 import type { Command } from './commands/BaseCommand.js';
+import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import {
     evictFollowUpContext,
     readFollowUpContext,
@@ -69,25 +68,9 @@ import {
 } from './utils/imageTokens.js';
 import { LLMCostEstimator } from './utils/LLMCostEstimator.js';
 import type { ChannelContextManager } from './state/ChannelContextManager.js';
-// Alternative lens workflow utilities (session state + interaction handlers)
+// Shared provenance utilities for footer interactions and display names.
 import {
-    ALTERNATIVE_LENS_MODAL_PREFIX,
-    ALTERNATIVE_LENS_SELECT_PREFIX,
-    ALTERNATIVE_LENS_SUBMIT_PREFIX,
-    handleAlternativeLensButton,
-    handleAlternativeLensModal,
-    handleAlternativeLensSelect,
-    handleAlternativeLensSubmit,
-    generateExplanationMessage,
-    requestProvenanceOpenAIOptions,
     resolveMemberDisplayName,
-    buildExplainSessionKey,
-    isExplainInProgress,
-    markExplainInProgress,
-    clearExplainInProgress,
-    recoverFullMessageText,
-    safeInteractionReply,
-    resolveResponseAnchorMessage,
     resolveProvenanceMetadata,
 } from './utils/response/provenanceInteractions.js';
 //import express from 'express'; // For webhook
@@ -226,25 +209,52 @@ function buildVariationStatusMessage(userId: string, base?: string): string {
     return base ? `${base}\n\n${summary}` : summary;
 }
 
-const provenanceLogger =
-    typeof logger.child === 'function'
-        ? logger.child({ module: 'provenance' })
-        : logger;
+const DISCORD_MESSAGE_MAX_LENGTH = 2000;
+const DETAILS_CODE_FENCE_PREFIX = '```json\n';
+const DETAILS_CODE_FENCE_SUFFIX = '\n```';
+const DETAILS_TRUNCATION_SUFFIX = '\n... (truncated)';
+const DETAILS_FALLBACK_REASON = 'metadata_unavailable';
 
-function buildExplainLogContext(
-    interaction: ButtonInteraction,
-    responseId?: string,
-    extra?: Record<string, unknown>
-): Record<string, unknown> {
+type DetailsFallbackPayload = {
+    responseId: string | null;
+    metadata: null;
+    reason: typeof DETAILS_FALLBACK_REASON;
+};
+
+function buildDetailsPayload(
+    responseId: string | undefined,
+    metadata: ResponseMetadata | null
+): ResponseMetadata | DetailsFallbackPayload {
+    if (metadata) {
+        return metadata;
+    }
+
     return {
-        action: 'explain',
-        userId: interaction.user.id,
-        guildId: interaction.guild?.id ?? null,
-        channelId: interaction.channelId ?? null,
-        messageId: interaction.message.id,
-        ...(responseId ? { responseId } : {}),
-        ...extra,
+        responseId: responseId ?? null,
+        metadata: null,
+        reason: DETAILS_FALLBACK_REASON,
     };
+}
+
+function formatDetailsPayloadForDiscord(
+    payload: ResponseMetadata | DetailsFallbackPayload
+): string {
+    const serialized = JSON.stringify(payload, null, 2);
+    const maxPayloadLength =
+        DISCORD_MESSAGE_MAX_LENGTH -
+        DETAILS_CODE_FENCE_PREFIX.length -
+        DETAILS_CODE_FENCE_SUFFIX.length;
+
+    if (serialized.length <= maxPayloadLength) {
+        return `${DETAILS_CODE_FENCE_PREFIX}${serialized}${DETAILS_CODE_FENCE_SUFFIX}`;
+    }
+
+    const truncatedPayloadLength = Math.max(
+        0,
+        maxPayloadLength - DETAILS_TRUNCATION_SUFFIX.length
+    );
+    const truncatedPayload = `${serialized.slice(0, truncatedPayloadLength)}${DETAILS_TRUNCATION_SUFFIX}`;
+    return `${DETAILS_CODE_FENCE_PREFIX}${truncatedPayload}${DETAILS_CODE_FENCE_SUFFIX}`;
 }
 
 // Slash commands handler
@@ -276,12 +286,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.isStringSelectMenu()) {
         const { customId, values } = interaction;
-
-        // Alternative lens select menu flow
-        if (customId.startsWith(ALTERNATIVE_LENS_SELECT_PREFIX)) {
-            await handleAlternativeLensSelect(interaction);
-            return;
-        }
 
         const selected = values?.[0];
 
@@ -428,12 +432,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isModalSubmit()) {
         const { customId } = interaction;
 
-        // Alternative lens custom modal submission
-        if (customId.startsWith(ALTERNATIVE_LENS_MODAL_PREFIX)) {
-            await handleAlternativeLensModal(interaction);
-            return;
-        }
-
         if (customId.startsWith(IMAGE_VARIATION_PROMPT_MODAL_ID_PREFIX)) {
             const responseId = customId.slice(
                 IMAGE_VARIATION_PROMPT_MODAL_ID_PREFIX.length
@@ -505,267 +503,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isButton()) {
         const { customId } = interaction;
 
-        // Provenance footer: share a reasoning explanation
-        if (customId === 'explain') {
-            const explainKey = buildExplainSessionKey(interaction.message.id);
-            if (isExplainInProgress(explainKey)) {
-                await safeInteractionReply(
-                    interaction,
-                    {
-                        content:
-                            '⚠️ An explanation is already in progress for this response. Please wait for it to finish.',
-                        flags: [1 << 6],
-                    },
-                    buildExplainLogContext(interaction),
-                    'explain_in_progress'
-                );
-                return;
-            }
-
-            markExplainInProgress(explainKey);
-
-            const baseExplainContext = buildExplainLogContext(interaction);
-            let explainLogContext = baseExplainContext;
-            let explainTimeout: NodeJS.Timeout | undefined;
-
-            try {
-                explainTimeout = setTimeout(() => {
-                    provenanceLogger.warn(
-                        'Explain flow auto-cleared after timeout',
-                        {
-                            ...explainLogContext,
-                            phase: 'timeout',
-                        }
-                    );
-                    clearExplainInProgress(explainKey);
-                }, 3 * 60_000);
-            } catch (timerError) {
-                provenanceLogger.warn(
-                    'Explain flow failed to schedule timeout',
-                    {
-                        ...explainLogContext,
-                        phase: 'timer_error',
-                        error: timerError,
-                    }
-                );
-            }
-
-            provenanceLogger.info('Explain flow started', {
-                ...explainLogContext,
-                phase: 'start',
-            });
-
-            const requester = resolveMemberDisplayName(
-                interaction.member,
-                interaction.user.username
+        if (customId === 'details') {
+            const { responseId, metadata } = await resolveProvenanceMetadata(
+                interaction.message
             );
-            const progressContent = `⏳ Explanation requested by **${requester}** — compiling reasoning…`;
-            let progressMessage: Message | null = null;
-            try {
-                // Acknowledge the interaction early so Discord doesn't time us out.
-                progressMessage = await safeInteractionReply(
-                    interaction,
-                    {
-                        content: progressContent,
-                        allowedMentions: { parse: [] },
-                    },
-                    explainLogContext,
-                    'explain_progress'
-                );
-            } catch (error) {
-                clearExplainInProgress(explainKey);
-                if (explainTimeout) {
-                    clearTimeout(explainTimeout);
-                }
-                provenanceLogger.error(
-                    'Explain flow failed (acknowledgement error)',
-                    {
-                        ...explainLogContext,
-                        phase: 'error',
-                        reason: 'ack_failed',
-                        error,
-                    }
-                );
-                await safeInteractionReply(
-                    interaction,
-                    {
-                        content:
-                            'I could not start the explanation flow. Please try again.',
-                        flags: [1 << 6],
-                    },
-                    explainLogContext,
-                    'explain_ack_failed'
-                ).catch(() => undefined);
-                return;
-            }
-
-            const updateExplainStatus = async (
-                content: string,
-                label: string
-            ): Promise<void> => {
-                // Prefer editing the progress message to keep the channel tidy.
-                if (progressMessage) {
-                    await progressMessage.edit({ content });
-                    return;
-                }
-
-                await safeInteractionReply(
-                    interaction,
-                    { content },
-                    explainLogContext,
-                    label
-                );
-            };
-
-            try {
-                // Anchor to the response message so we can recover full content if the footer was sent separately.
-                const anchorMessage = await resolveResponseAnchorMessage(
-                    interaction.message
-                );
-                // Rebuild the full response text across any split chunks for accurate explanations.
-                const messageText = await recoverFullMessageText(
-                    interaction.message,
-                    anchorMessage
-                );
-                if (!messageText) {
-                    provenanceLogger.error(
-                        'Explain flow failed (missing message text)',
-                        {
-                            ...explainLogContext,
-                            phase: 'error',
-                            reason: 'missing_message_text',
-                        }
-                    );
-                    await updateExplainStatus(
-                        'I could not locate the response to explain. Please try again from the original message.',
-                        'explain_missing_text'
-                    );
-                    return;
-                }
-
-                const { responseId, metadata } =
-                    await resolveProvenanceMetadata(interaction.message);
-                if (responseId) {
-                    explainLogContext = buildExplainLogContext(
-                        interaction,
-                        responseId
-                    );
-                }
-                const plannerOptions = await requestProvenanceOpenAIOptions(
-                    openaiService,
-                    {
-                        kind: 'explain',
-                        messageText,
-                        metadata,
-                    }
-                );
-                const explanation = await generateExplanationMessage(
-                    openaiService,
-                    {
-                        messageText,
-                        confidence: metadata?.confidence,
-                        tradeoffCount: metadata?.tradeoffCount,
-                        chainHash: metadata?.chainHash,
-                        channelId: interaction.channelId ?? undefined,
-                    },
-                    plannerOptions
-                );
-
-                const channel = interaction.channel;
-                if (!channel || !channel.isSendable()) {
-                    provenanceLogger.error(
-                        'Explain flow failed (unsendable channel)',
-                        {
-                            ...explainLogContext,
-                            phase: 'error',
-                            reason: 'unsendable_channel',
-                        }
-                    );
-                    await updateExplainStatus(
-                        'I could not post the explanation in this channel.',
-                        'explain_unsendable_channel'
-                    );
-                    return;
-                }
-
-                let targetMessage: Message | null = anchorMessage ?? null;
-                if (!targetMessage && channel.isTextBased()) {
-                    try {
-                        targetMessage = await channel.messages.fetch(
-                            interaction.message.id
-                        );
-                    } catch (fetchError) {
-                        logger.warn(
-                            `Failed to fetch original message ${interaction.message.id} for explanation reply: ${fetchError}`
-                        );
-                    }
-                }
-
-                const explanationContent = `**Explanation:**\n\n${explanation.trim()}`;
-                if (targetMessage) {
-                    const responseHandler = new ResponseHandler(
-                        targetMessage,
-                        channel,
-                        interaction.user
-                    );
-                    await responseHandler.sendMessage(
-                        explanationContent,
-                        [],
-                        true,
-                        true
-                    );
-                } else {
-                    const responseHandler = new ResponseHandler(
-                        interaction.message as Message,
-                        channel,
-                        interaction.user
-                    );
-                    await responseHandler.sendMessage(
-                        explanationContent,
-                        [],
-                        true,
-                        true
-                    );
-                }
-
-                await updateExplainStatus(
-                    '✅ Explanation posted.',
-                    'explain_complete'
-                );
-                provenanceLogger.info('Explain flow completed', {
-                    ...explainLogContext,
-                    phase: 'success',
-                });
-            } catch (error) {
-                provenanceLogger.error('Explain flow error', {
-                    ...explainLogContext,
-                    phase: 'error',
-                    reason: 'generation_failed',
-                    error,
-                });
-                await updateExplainStatus(
-                    '⚠️ I could not generate that explanation. Please try again later.',
-                    'explain_generation_failed'
-                );
-            } finally {
-                clearExplainInProgress(explainKey);
-                if (explainTimeout) {
-                    clearTimeout(explainTimeout);
-                }
-            }
-
-            return;
-        }
-
-        // Provenance footer: start alternative lens flow
-        if (customId === 'alternative_lens') {
-            await handleAlternativeLensButton(interaction);
-            return;
-        }
-
-        // Provenance footer: generate reframed response
-        if (customId.startsWith(ALTERNATIVE_LENS_SUBMIT_PREFIX)) {
-            await handleAlternativeLensSubmit(interaction, openaiService);
+            const detailsPayload = buildDetailsPayload(responseId, metadata);
+            await interaction.reply({
+                content: formatDetailsPayloadForDiscord(detailsPayload),
+                flags: [1 << 6], // [1 << 6] = EPHEMERAL
+            });
             return;
         }
 
@@ -1080,6 +826,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
             await interaction.reply({
                 content:
                     "This feature isn't active yet. To report ethical or security issues, please follow the instructions in [SECURITY.md](https://github.com/footnote-ai/footnote/blob/main/SECURITY.md).",
+                flags: [1 << 6], // [1 << 6] = EPHEMERAL
+            });
+            return;
+        }
+        if (customId === 'full_trace') {
+            const { responseId } = await resolveProvenanceMetadata(
+                interaction.message
+            );
+            if (!responseId) {
+                await interaction.reply({
+                    content:
+                        '⚠️ I could not find a trace ID for that response.',
+                    flags: [1 << 6], // [1 << 6] = EPHEMERAL
+                });
+                return;
+            }
+
+            const normalizedBaseUrl = runtimeConfig.webBaseUrl
+                .trim()
+                .replace(/\/+$/, '');
+            const traceUrl = `${normalizedBaseUrl}/api/traces/${responseId}`;
+            await interaction.reply({
+                content: `📜 Full trace: ${traceUrl}`,
                 flags: [1 << 6], // [1 << 6] = EPHEMERAL
             });
             return;
