@@ -13,8 +13,9 @@ import os from 'os';
 import path from 'path';
 
 import {
+    parseBotProfileConfig,
     readBotProfileConfig,
-    type BotProfileConfig
+    type BotProfileConfig,
 } from '../src/config/profile.js';
 
 test('readBotProfileConfig applies defaults when env values are missing', () => {
@@ -34,6 +35,27 @@ test('readBotProfileConfig applies defaults when env values are missing', () => 
     };
 
     assert.deepEqual(parsed, expected);
+});
+
+test('parseBotProfileConfig is pure and applies inline-overlay precedence', () => {
+    const parsed = parseBotProfileConfig({
+        profileId: 'ARI-vendor',
+        profileDisplayName: '  Ari  ',
+        inlineOverlayText: '  inline wins  ',
+        overlayPath: '/tmp/vendor.txt',
+        overlayFileText: 'file text',
+    });
+
+    assert.deepEqual(parsed, {
+        id: 'ari-vendor',
+        displayName: 'Ari',
+        promptOverlay: {
+            source: 'inline',
+            text: 'inline wins',
+            path: null,
+            length: 'inline wins'.length,
+        },
+    });
 });
 
 test('readBotProfileConfig normalizes id and display name with validation', () => {
@@ -174,6 +196,22 @@ test('readBotProfileConfig ignores over-limit overlays', () => {
         source: 'none',
         text: null,
         path: path.resolve('/tmp', './too-long.txt'),
+        length: 0,
+    });
+});
+
+test('parseBotProfileConfig falls back to none when file text is missing', () => {
+    const parsed = parseBotProfileConfig({
+        profileId: 'vendor',
+        profileDisplayName: 'Vendor',
+        overlayPath: '/tmp/missing.txt',
+        overlayFileText: null,
+    });
+
+    assert.deepEqual(parsed.promptOverlay, {
+        source: 'none',
+        text: null,
+        path: '/tmp/missing.txt',
         length: 0,
     });
 });

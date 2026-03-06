@@ -48,6 +48,18 @@ export interface ReadBotProfileConfigOptions {
     readFile?: (resolvedPath: string) => string;
 }
 
+/**
+ * Pure parse input that separates validation logic from filesystem/env reads.
+ */
+export interface ParseBotProfileConfigInput {
+    profileId?: string;
+    profileDisplayName?: string;
+    inlineOverlayText?: string | null;
+    overlayPath?: string | null;
+    overlayFileText?: string | null;
+    maxOverlayLength?: number;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_PROJECT_ROOT = path.resolve(__dirname, '../../../../');
@@ -128,42 +140,63 @@ const parseInlineOverlay = (
     };
 };
 
-const parseFileOverlay = (
-    rawOverlayPath: string,
-    projectRoot: string,
-    maxOverlayLength: number,
-    readFile: (resolvedPath: string) => string
+const parseFileOverlayText = (
+    overlayPath: string,
+    overlayFileText: string | null,
+    maxOverlayLength: number
 ): BotProfilePromptOverlay => {
-    const resolvedPath = path.isAbsolute(rawOverlayPath)
-        ? rawOverlayPath
-        : path.resolve(projectRoot, rawOverlayPath);
-
-    let fileContents = '';
-    try {
-        fileContents = readFile(resolvedPath);
-    } catch {
-        return emptyOverlay(resolvedPath);
-    }
-
-    const normalizedContents = fileContents.trim();
+    const normalizedContents =
+        normalizeOptionalEnvString(overlayFileText ?? undefined) ?? '';
     if (normalizedContents.length === 0) {
-        return emptyOverlay(resolvedPath);
+        return emptyOverlay(overlayPath);
     }
 
     if (normalizedContents.length > maxOverlayLength) {
-        return emptyOverlay(resolvedPath);
+        return emptyOverlay(overlayPath);
     }
 
     return {
         source: 'file',
         text: normalizedContents,
-        path: resolvedPath,
+        path: overlayPath,
         length: normalizedContents.length,
     };
 };
 
 /**
- * Reads bot profile values from env with validation and fail-open defaults.
+ * Pure parser for bot profile configuration.
+ */
+export const parseBotProfileConfig = (
+    input: ParseBotProfileConfigInput
+): BotProfileConfig => {
+    const maxOverlayLength =
+        input.maxOverlayLength ?? DEFAULT_BOT_PROFILE_OVERLAY_MAX_LENGTH;
+    const normalizedInlineOverlay = normalizeOptionalEnvString(
+        input.inlineOverlayText ?? undefined
+    );
+    const normalizedOverlayPath = normalizeOptionalEnvString(
+        input.overlayPath ?? undefined
+    );
+
+    const promptOverlay = normalizedInlineOverlay
+        ? parseInlineOverlay(normalizedInlineOverlay, maxOverlayLength)
+        : normalizedOverlayPath
+          ? parseFileOverlayText(
+                normalizedOverlayPath,
+                input.overlayFileText ?? null,
+                maxOverlayLength
+            )
+          : emptyOverlay();
+
+    return {
+        id: parseProfileId(input.profileId),
+        displayName: parseProfileDisplayName(input.profileDisplayName),
+        promptOverlay,
+    };
+};
+
+/**
+ * Reads env/path/file inputs then delegates validation to parseBotProfileConfig.
  */
 export const readBotProfileConfig = (
     options: ReadBotProfileConfigOptions = {}
@@ -175,28 +208,34 @@ export const readBotProfileConfig = (
     const readFile =
         options.readFile ??
         ((resolvedPath: string) => fs.readFileSync(resolvedPath, 'utf-8'));
-
-    const inlineOverlay = normalizeOptionalEnvString(
+    const inlineOverlayText = normalizeOptionalEnvString(
         env.BOT_PROFILE_PROMPT_OVERLAY
     );
-    const fileOverlayPath = normalizeOptionalEnvString(
+
+    const rawFileOverlayPath = normalizeOptionalEnvString(
         env.BOT_PROFILE_PROMPT_OVERLAY_PATH
     );
+    const resolvedOverlayPath = rawFileOverlayPath
+        ? path.isAbsolute(rawFileOverlayPath)
+            ? rawFileOverlayPath
+            : path.resolve(projectRoot, rawFileOverlayPath)
+        : null;
 
-    const promptOverlay = inlineOverlay
-        ? parseInlineOverlay(inlineOverlay, maxOverlayLength)
-        : fileOverlayPath
-          ? parseFileOverlay(
-                fileOverlayPath,
-                projectRoot,
-                maxOverlayLength,
-                readFile
-            )
-          : emptyOverlay();
+    let overlayFileText: string | null = null;
+    if (resolvedOverlayPath && !inlineOverlayText) {
+        try {
+            overlayFileText = readFile(resolvedOverlayPath);
+        } catch {
+            overlayFileText = null;
+        }
+    }
 
-    return {
-        id: parseProfileId(env.BOT_PROFILE_ID),
-        displayName: parseProfileDisplayName(env.BOT_PROFILE_DISPLAY_NAME),
-        promptOverlay,
-    };
+    return parseBotProfileConfig({
+        profileId: env.BOT_PROFILE_ID,
+        profileDisplayName: env.BOT_PROFILE_DISPLAY_NAME,
+        inlineOverlayText,
+        overlayPath: resolvedOverlayPath,
+        overlayFileText,
+        maxOverlayLength,
+    });
 };
