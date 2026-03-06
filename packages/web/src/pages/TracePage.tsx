@@ -47,6 +47,26 @@ const extractPayload = (data: unknown): ServerMetadata | null => {
     return null;
 };
 
+const toSafeExternalUrl = (value: unknown): string | null => {
+    const candidate =
+        typeof value === 'string' ? value : String(value ?? '').trim();
+    if (candidate.length === 0) {
+        return null;
+    }
+
+    try {
+        const parsed = new URL(candidate);
+        const protocol = parsed.protocol.toLowerCase();
+        if (protocol === 'http:' || protocol === 'https:') {
+            return parsed.toString();
+        }
+    } catch {
+        return null;
+    }
+
+    return null;
+};
+
 type LoadingState =
     | 'loading'
     | 'success'
@@ -400,19 +420,22 @@ const TracePage = (): JSX.Element => {
                                 },
                                 index: number
                             ) => {
-                                const urlString =
-                                    typeof citation.url === 'string'
-                                        ? citation.url
-                                        : String(citation.url || '');
+                                const safeUrl = toSafeExternalUrl(citation.url);
                                 return (
                                     <li key={index}>
-                                        <a
-                                            href={urlString}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            {citation.title || 'Untitled'}
-                                        </a>
+                                        {safeUrl ? (
+                                            <a
+                                                href={safeUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >
+                                                {citation.title || 'Untitled'}
+                                            </a>
+                                        ) : (
+                                            <span>
+                                                {citation.title || 'Untitled'}
+                                            </span>
+                                        )}
                                         {citation.snippet && (
                                             <p
                                                 style={{
