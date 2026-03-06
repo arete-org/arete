@@ -174,7 +174,12 @@ function parseToolPayload(
         const normalized = normalizeImageDescriptionPayload(parsed);
         if (!normalized) {
             logger.warn(
-                'Image description tool output is missing required fields after normalization.'
+                'Image description tool output is missing required fields after normalization.',
+                {
+                    toolName: toolCall.function.name ?? DESCRIPTION_TOOL_NAME,
+                    hasArguments: toolCall.function.arguments.length > 0,
+                    normalized,
+                }
             );
             return null;
         }
@@ -193,14 +198,20 @@ function normalizeImageDescriptionPayload(
     }
 
     const payloadRecord = payload as Record<string, unknown>;
+    const normalizeNonEmptyString = (value: unknown): string | undefined => {
+        if (typeof value !== 'string') {
+            return undefined;
+        }
+
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : undefined;
+    };
+
     const summary =
-        typeof payloadRecord.summary === 'string'
-            ? payloadRecord.summary
-            : 'Unable to reliably describe image.';
+        normalizeNonEmptyString(payloadRecord.summary) ??
+        'Unable to reliably describe image.';
     const detectedType =
-        typeof payloadRecord.detected_type === 'string'
-            ? payloadRecord.detected_type
-            : 'other';
+        normalizeNonEmptyString(payloadRecord.detected_type) ?? 'other';
     const extractedText = Array.isArray(payloadRecord.extracted_text)
         ? payloadRecord.extracted_text.filter(
               (item): item is string => typeof item === 'string'
@@ -234,6 +245,8 @@ function normalizeImageDescriptionPayload(
           )
         : undefined;
 
+    const notes = normalizeNonEmptyString(payloadRecord.notes);
+
     return {
         summary,
         detected_type: detectedType,
@@ -244,9 +257,7 @@ function normalizeImageDescriptionPayload(
             ...(tableMarkdown ? { table_markdown: tableMarkdown } : {}),
         },
         certainty,
-        ...(typeof payloadRecord.notes === 'string' && {
-            notes: payloadRecord.notes,
-        }),
+        ...(notes && { notes }),
     };
 }
 
