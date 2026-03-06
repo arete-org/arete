@@ -17,6 +17,7 @@ import type {
 } from '@footnote/contracts/providers';
 import { supportedLogLevels } from '@footnote/contracts/providers';
 import { bootstrapLogger } from '../utils/logger.js';
+import { readBotProfileConfig } from './profile.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -239,6 +240,15 @@ if (promptConfigPath) {
     bootstrapLogger.info(`Loading prompt overrides from: ${promptConfigPath}`);
 }
 
+const profileConfig = readBotProfileConfig();
+bootstrapLogger.info('Resolved bot profile configuration.', {
+    profileId: profileConfig.id,
+    displayName: profileConfig.displayName,
+    overlaySource: profileConfig.promptOverlay.source,
+    overlayLength: profileConfig.promptOverlay.length,
+    overlayPath: profileConfig.promptOverlay.path ?? undefined,
+});
+
 const flyAppName = process.env.FLY_APP_NAME?.trim();
 const fallbackWebBaseUrl = flyAppName
     ? `https://${flyAppName}.fly.dev`
@@ -319,6 +329,7 @@ export const runtimeConfig = {
     incidentPseudonymizationSecret:
         process.env.INCIDENT_PSEUDONYMIZATION_SECRET!,
     promptConfigPath,
+    profile: profileConfig,
     webBaseUrl,
     backendBaseUrl,
     traceApiToken,
