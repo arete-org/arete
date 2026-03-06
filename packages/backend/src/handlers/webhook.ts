@@ -129,7 +129,6 @@ const createWebhookHandler =
                     req.off('end', onEnd);
                     req.off('error', onError);
                     req.off('close', onClose);
-                    req.off('aborted', onAborted);
                 };
                 const onEnd = () => {
                     cleanup();
@@ -151,22 +150,9 @@ const createWebhookHandler =
                         )
                     );
                 };
-                const onAborted = () => {
-                    cleanup();
-                    if (bodyTooLarge) {
-                        resolve();
-                        return;
-                    }
-                    reject(
-                        new Error(
-                            'webhook request aborted before body completed'
-                        )
-                    );
-                };
                 req.on('end', onEnd);
                 req.on('error', onError);
                 req.on('close', onClose);
-                req.on('aborted', onAborted);
             });
             if (bodyTooLarge) {
                 return;
