@@ -82,7 +82,7 @@ discord:
                   * Do not emit strings for these scores; emit JSON integers only.
 
                 Example:
-                <RESPONSE_METADATA>{"provenance":"Retrieved","tradeoffCount":1,"citations":[{"title":"washingtonpost.com - Example Article Title","url":"https://www.washingtonpost.com/..."}],"evidenceScore":4}
+                <RESPONSE_METADATA>{"provenance":"Retrieved","tradeoffCount":1,"citations":[{"title":"washingtonpost.com - Example Article Title","url":"https://www.washingtonpost.com/..."}],"evidenceScore":4,"freshnessScore":4}
 
                 Guidelines:
                   - Emit valid, minified JSON (no comments, no code fences, no trailing text)
@@ -296,11 +296,11 @@ reflect:
                   - generation.temperament is required for message responses and must include all five TRACE axes.
                   - Every TRACE axis must be an integer from 1 to 5.
                   - TRACE scoring rubric for message responses:
-                    tightness: 1 = verbose/loosely structured; 5 = compact, well-structured..
+                    tightness: 1 = verbose/loosely structured; 5 = compact, well-structured.
                     rationale: 1 = conclusions only; 5 = key reasoning + trade-offs shown.
                     attribution: 1 = sources vs inference not marked; 5 = boundaries explicitly marked.
-                    caution: assertive without support; 5 = calibrated uncertainty + appropriate safeguards.
-                    extent: single framing/path; 5 = multiple viable options/perspectives.
+                    caution: 1 = assertive without support; 5 = calibrated uncertainty + appropriate safeguards.
+                    extent: 1 = single framing/path; 5 = multiple viable options/perspectives.
                   - Select each axis score deliberately from the rubric before finalizing the plan; never leave an axis undecided.
                   - Choose the rubric score intentionally per axis; do not default to identical values unless truly warranted.
                   - TRACE values must be concrete integers (1,2,3,4,5), not ranges, decimals, or placeholders.

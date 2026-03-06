@@ -25,7 +25,7 @@ TRACE is a 5-axis temperament profile:
 - **C — Caution:** how strongly the response applies safeguards and avoids overclaiming (behavioral stance, not risk classification).
 - **E — Extent:** breadth of viable options, perspectives, or frames presented to support user choice.
 
-Each axis is a scalar from **1–10**. Higher values mean “more of that thing” in the visible behavior of the answer.
+Each axis is a scalar from **1–5**. Higher values mean “more of that thing” in the visible behavior of the answer.
 
 ---
 
@@ -33,7 +33,7 @@ Each axis is a scalar from **1–10**. Higher values mean “more of that thing�
 
 ### 3.1 Canonical model (logging + internal contracts)
 
-TRACE is stored canonically as **1–10 per axis** in traces/logs and any internal APIs.
+TRACE is stored canonically as **1–5 per axis** in traces/logs and any internal APIs.
 
 ### 3.2 Discord UI representation (compact, always-on)
 
@@ -50,7 +50,7 @@ The CGI is attached to the message and referenced by an embed field (thumbnail o
 
 - TRACE must be visible by default to support inspectability, but it must not dominate the chat UI.
 - Discord’s layout penalizes tall footers. A compact image conveys the same information in less vertical space.
-- Keeping 1–10 canonical avoids churn across the system; the CGI becomes a presentation layer over stable stored values.
+- Keeping 1–5 canonical avoids churn across the system; the CGI becomes a presentation layer over stable stored values.
 
 ---
 
@@ -60,11 +60,11 @@ The CGI is attached to the message and referenced by an embed field (thumbnail o
 
 - Wheel has **5 slices** in fixed order: **T / R / A / C / E**.
 - Each slice is subdivided into **5 concentric radial bands**.
-- TRACE values remain **1–10**, rendered continuously across the 5 bands:
-    - Each band represents a 2-point range.
+- TRACE values remain **1–5**, rendered continuously across the 5 bands:
+    - Each band represents a 1-point range.
     - Values can land **between** bands via partial fill of the current band.
     - Example mapping for a value `v`:
-        - `t = clamp(v / 10, 0, 1)` (continuous fill proportion)
+        - `t = clamp((v - 1) / 4, 0, 1)` (continuous fill proportion)
         - Fill bands from inner outward, with the outermost filled fraction matching `t`.
 
 **Visual rule (per slice):**
@@ -102,10 +102,10 @@ Chip candidates (pick a small subset):
 
 ### 5.4 Trace/log shape (example)
 
-Canonical stored values remain 1–10; the renderer may store a wheel version for auditability:
+Canonical stored values remain 1–5; the renderer may store a wheel version for auditability:
 
 ```json
 {
-    "trace": { "T": 9, "R": 6, "A": 8, "C": 6, "E": 7 }
+    "trace": { "T": 5, "R": 3, "A": 4, "C": 3, "E": 4 }
 }
 ```
