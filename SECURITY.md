@@ -1,6 +1,6 @@
 # Security Policy
 
-Footnote is an open, ethics-first reasoning assistant built for transparency and auditability.  
+Footnote is an assistant built for transparency and auditability.  
 Security, in this context, means protecting **technical integrity**, ensuring **ethical safety**, and preserving **data provenance**.
 
 > “Honesty is the first chapter in the book of wisdom.” – Thomas Jefferson  
