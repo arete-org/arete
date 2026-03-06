@@ -1298,11 +1298,6 @@ div.interaction-status:not(.interaction-status-visible) *,
     font-weight: 300;
 }
 
-.provenance-confidence {
-    font-weight: 600;
-    color: var(--text);
-}
-
 .provenance-tradeoffs {
     color: var(--subtle-text);
 }

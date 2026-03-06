@@ -49,8 +49,11 @@ import {
     recoverContextDetailsFromMessage,
     type RecoveredImageContext,
 } from '../commands/image/contextResolver.js';
-import { buildFooterEmbed } from './response/provenanceFooter.js';
-import { botApi } from '../api/botApi.js';
+import {
+    buildProvenanceActionRow,
+    buildTraceCardRequest,
+} from './response/provenanceCgi.js';
+import { botApi, isDiscordApiClientError } from '../api/botApi.js';
 import type { DiscordReflectApiResponse } from '../api/index.js';
 import type {
     ImageBackgroundType,
@@ -83,6 +86,12 @@ type ReflectImageAction = {
 };
 
 const RESPONSE_CONTEXT_SIZE = 24;
+const DISCORD_MAX_MESSAGE_LENGTH = 2000;
+const REFLECT_ERROR_BLOCK_PREFIX = '```ansi\n';
+const REFLECT_ERROR_BLOCK_SUFFIX = '\n```';
+const REFLECT_ERROR_TRUNCATION_SUFFIX = '... (truncated)';
+const ANSI_RED = '\u001b[31m';
+const ANSI_RESET = '\u001b[0m';
 const VALID_IMAGE_BACKGROUNDS: ImageBackgroundType[] = [
     'auto',
     'transparent',
@@ -170,6 +179,51 @@ const hasImageEmbeds = (message: Message): boolean =>
             Boolean(embed.image?.url) ||
             Boolean(embed.thumbnail?.url)
     );
+
+const sanitizeForDiscordCodeBlock = (value: string): string =>
+    value.replace(/```/g, '` ` `').trim();
+
+const toReflectFailureReason = (error: unknown): string => {
+    const apiError = isDiscordApiClientError(error) ? error : null;
+    if (apiError) {
+        switch (apiError.code) {
+            case 'timeout_error':
+                return `Timed out while waiting for backend reflect response (${runtimeConfig.api.backendRequestTimeoutMs}ms budget).`;
+            case 'aborted_error':
+                return 'The reflect request was aborted before completion.';
+            case 'network_error':
+                return `Network error while calling backend reflect: ${apiError.message}`;
+            case 'server_error':
+                return `Backend reflect returned a server error${apiError.status ? ` (${apiError.status})` : ''}.`;
+            default:
+                return `Backend reflect request failed (${apiError.code}): ${apiError.message}`;
+        }
+    }
+
+    if (error instanceof Error && error.message.trim().length > 0) {
+        return error.message.trim();
+    }
+
+    return 'Unknown error while calling backend reflect.';
+};
+
+const formatReflectFailureForDiscord = (error: unknown): string => {
+    const baseMessage = sanitizeForDiscordCodeBlock(
+        `Reflect request failed: ${toReflectFailureReason(error)}`
+    );
+    const wrapped = `${ANSI_RED}${baseMessage}${ANSI_RESET}`;
+    const maxContentLength =
+        DISCORD_MAX_MESSAGE_LENGTH -
+        REFLECT_ERROR_BLOCK_PREFIX.length -
+        REFLECT_ERROR_BLOCK_SUFFIX.length;
+
+    const safeContent =
+        wrapped.length <= maxContentLength
+            ? wrapped
+            : `${wrapped.slice(0, Math.max(0, maxContentLength - REFLECT_ERROR_TRUNCATION_SUFFIX.length))}${REFLECT_ERROR_TRUNCATION_SUFFIX}`;
+
+    return `${REFLECT_ERROR_BLOCK_PREFIX}${safeContent}${REFLECT_ERROR_BLOCK_SUFFIX}`;
+};
 
 /**
  * Discord-side executor for backend reflect decisions.
@@ -277,6 +331,22 @@ export class MessageProcessor {
                             reflectContext.request.conversation.length,
                     }
                 );
+                try {
+                    await responseHandler.sendMessage(
+                        formatReflectFailureForDiscord(error),
+                        [],
+                        directReply
+                    );
+                } catch (replyError) {
+                    logger.error(
+                        `Failed to send reflect failure reply for message ${message.id}: ${
+                            replyError instanceof Error
+                                ? replyError.message
+                                : String(replyError)
+                        }`
+                    );
+                }
+                return;
             }
             await this.executeReflectAction(
                 message,
@@ -546,22 +616,31 @@ export class MessageProcessor {
         reflectResponse: ReflectMessageAction,
         directReply: boolean
     ): Promise<void> {
-        const finalResponseText =
-            reflectResponse.message || 'No response generated.';
-
-        let footerPayload: ReturnType<typeof buildFooterEmbed> | null = null;
-        try {
-            footerPayload = buildFooterEmbed(
-                reflectResponse.metadata,
-                runtimeConfig.webBaseUrl
-            );
-        } catch (error) {
+        if (!reflectResponse.message.trim()) {
             logger.error(
-                `Failed to build provenance footer for response ${reflectResponse.metadata.responseId}: ${
-                    (error as Error)?.message ?? error
-                }`
+                `Backend reflect returned an empty message payload for message ${message.id}.`
             );
+            try {
+                await responseHandler.sendMessage(
+                    formatReflectFailureForDiscord(
+                        new Error(
+                            'Backend reflect returned an empty message payload.'
+                        )
+                    ),
+                    [],
+                    directReply
+                );
+            } catch (error) {
+                logger.error(
+                    `Failed to send empty-reflect-payload reply for message ${message.id}: ${
+                        error instanceof Error ? error.message : String(error)
+                    }`
+                );
+            }
+            return;
         }
+
+        const finalResponseText = reflectResponse.message;
 
         let ttsPath: string | null = null;
         if (reflectResponse.modality === 'tts') {
@@ -606,15 +685,15 @@ export class MessageProcessor {
                 const responseMessages = Array.isArray(sentMessages)
                     ? sentMessages
                     : [sentMessages];
-                const footerReplyAnchor =
+                const provenanceReplyAnchor =
                     responseMessages[responseMessages.length - 1];
 
                 // Intentional: backend reflect already persisted the canonical trace.
                 // Skipping postTraces here prevents duplicate trace rows for one reply.
-                await this.sendProvenanceFooter(
-                    footerReplyAnchor,
+                await this.sendProvenanceCgi(
+                    provenanceReplyAnchor,
                     message,
-                    footerPayload
+                    reflectResponse.metadata
                 );
                 return;
             } catch (error) {
@@ -640,14 +719,15 @@ export class MessageProcessor {
         const responseMessages = Array.isArray(sentMessages)
             ? sentMessages
             : [sentMessages];
-        const footerReplyAnchor = responseMessages[responseMessages.length - 1];
+        const provenanceReplyAnchor =
+            responseMessages[responseMessages.length - 1];
 
         // Intentional: backend reflect already persisted the canonical trace.
         // Skipping postTraces here prevents duplicate trace rows for one reply.
-        await this.sendProvenanceFooter(
-            footerReplyAnchor,
+        await this.sendProvenanceCgi(
+            provenanceReplyAnchor,
             message,
-            footerPayload
+            reflectResponse.metadata
         );
         logger.debug(
             `Backend reflect sent message response for message ${message.id}.`,
@@ -659,33 +739,42 @@ export class MessageProcessor {
         );
     }
 
-    private async sendProvenanceFooter(
-        footerReplyAnchor: Message,
+    private async sendProvenanceCgi(
+        provenanceReplyAnchor: Message,
         originalMessage: Message,
-        footerPayload: ReturnType<typeof buildFooterEmbed> | null
+        metadata: ResponseMetadata
     ): Promise<void> {
-        if (!footerPayload) {
-            return;
+        const actionRow = buildProvenanceActionRow(metadata.responseId);
+        const files: Array<{ filename: string; data: Buffer }> = [];
+
+        try {
+            const traceCard = await botApi.postTraceCard(
+                buildTraceCardRequest(metadata)
+            );
+            files.push({
+                filename: 'trace-card.png',
+                data: Buffer.from(traceCard.pngBase64, 'base64'),
+            });
+        } catch (error) {
+            logger.warn(
+                `Failed to generate provenance trace-card for response ${metadata.responseId}; sending controls only: ${
+                    (error as Error)?.message ?? error
+                }`
+            );
         }
 
         try {
-            const footerHandler = new ResponseHandler(
-                footerReplyAnchor,
-                footerReplyAnchor.channel,
+            const provenanceHandler = new ResponseHandler(
+                provenanceReplyAnchor,
+                provenanceReplyAnchor.channel,
                 originalMessage.author
             );
-            await footerHandler.sendMessage(
-                '',
-                [],
-                false,
-                false,
-                [],
-                footerPayload.embeds.map((embed) => embed.build()),
-                footerPayload.components
-            );
+            await provenanceHandler.sendMessage('', files, false, false, [
+                actionRow,
+            ]);
         } catch (error) {
             logger.error(
-                `Failed to send provenance footer follow-up: ${
+                `Failed to send provenance CGI follow-up for response ${metadata.responseId}: ${
                     (error as Error)?.message ?? error
                 }`
             );

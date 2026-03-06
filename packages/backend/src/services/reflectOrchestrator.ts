@@ -70,7 +70,9 @@ const coercePlanForSurface = (
     };
 };
 
-const buildSurfaceSystemPrompt = (surface: PostReflectRequest['surface']): string =>
+const buildSurfaceSystemPrompt = (
+    surface: PostReflectRequest['surface']
+): string =>
     surface === 'discord'
         ? renderPrompt('discord.chat.system').content
         : REFLECT_SYSTEM_PROMPT;
@@ -178,6 +180,7 @@ export const createReflectOrchestrator = ({
                     ...(surfacePolicy && { surfacePolicy }),
                 },
             }),
+            plannerTemperament: plan.generation.temperament,
             riskTier: plan.riskTier,
             generation: plan.generation,
         });

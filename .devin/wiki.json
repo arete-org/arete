@@ -119,7 +119,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Include provenance, confidence, risk tier, tradeoff count, citations, chain hash, stale-after behavior, trace retrieval, and trace display.",
+                    "content": "Include provenance, evidence/freshness scores, risk tier, tradeoff count, citations, chain hash, stale-after behavior, trace retrieval, and trace display.",
                     "author": "Maintainer"
                 }
             ]

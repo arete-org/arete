@@ -19,7 +19,6 @@ import type {
 const createMetadata = (): ResponseMetadata => ({
     responseId: 'reflect_test_response',
     provenance: 'Inferred',
-    confidence: 0.5,
     riskTier: 'Low',
     tradeoffCount: 0,
     chainHash: 'abc123def456',
@@ -77,7 +76,6 @@ test('web requests go through planner and are coerced to message when planner pi
                 normalizedText: 'coerced web reply',
                 metadata: {
                     model: 'gpt-5-mini',
-                    confidence: 0.5,
                     provenance: 'Inferred',
                     tradeoffCount: 0,
                     citations: [],
@@ -118,7 +116,11 @@ test('web requests go through planner and are coerced to message when planner pi
 test('discord requests preserve non-message planner actions', async () => {
     let callCount = 0;
     const openaiService: OpenAIService = {
-        async generateResponse(_model, _messages, options?: GenerateResponseOptions) {
+        async generateResponse(
+            _model,
+            _messages,
+            options?: GenerateResponseOptions
+        ) {
             callCount += 1;
             if (options?.expectMetadata === false) {
                 return {
@@ -140,7 +142,9 @@ test('discord requests preserve non-message planner actions', async () => {
                 };
             }
 
-            throw new Error('message generation should not run for image actions');
+            throw new Error(
+                'message generation should not run for image actions'
+            );
         },
     };
 
@@ -178,6 +182,13 @@ test('message plans pass planner generation options into reflectService', async 
                             reasoningEffort: 'medium',
                             verbosity: 'medium',
                             toolChoice: 'web_search',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
                             webSearch: {
                                 query: 'latest OpenAI policy update',
                                 searchContextSize: 'low',
@@ -194,7 +205,6 @@ test('message plans pass planner generation options into reflectService', async 
                 normalizedText: 'message with retrieval',
                 metadata: {
                     model: 'gpt-5-mini',
-                    confidence: 0.5,
                     provenance: 'Retrieved',
                     tradeoffCount: 0,
                     citations: [],

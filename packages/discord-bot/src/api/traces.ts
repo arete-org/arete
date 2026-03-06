@@ -9,11 +9,17 @@
 import type {
     GetTraceResponse,
     GetTraceStaleResponse,
+    PostTraceCardFromTraceRequest,
+    PostTraceCardFromTraceResponse,
+    PostTraceCardRequest,
+    PostTraceCardResponse,
     PostTracesRequest,
     PostTracesResponse,
 } from '@footnote/contracts/web';
 import {
     GetTraceApiResponseSchema,
+    PostTraceCardFromTraceResponseSchema,
+    PostTraceCardResponseSchema,
     PostTracesResponseSchema,
     createSchemaResponseValidator,
 } from '@footnote/contracts/web/schemas';
@@ -32,6 +38,14 @@ export type TraceApi = {
         responseId: string,
         options?: { signal?: AbortSignal }
     ) => Promise<ApiJsonResult<GetTraceResponse | GetTraceStaleResponse>>;
+    postTraceCard: (
+        request: PostTraceCardRequest,
+        options?: { signal?: AbortSignal }
+    ) => Promise<PostTraceCardResponse>;
+    postTraceCardFromTrace: (
+        request: PostTraceCardFromTraceRequest,
+        options?: { signal?: AbortSignal }
+    ) => Promise<PostTraceCardFromTraceResponse>;
 };
 
 export const createTraceApi = (
@@ -87,9 +101,71 @@ export const createTraceApi = (
         );
     };
 
+    /**
+     * @api.operationId: postTraceCards
+     * @api.path: POST /api/trace-cards
+     */
+    const postTraceCard = async (
+        request: PostTraceCardRequest,
+        options?: { signal?: AbortSignal }
+    ): Promise<PostTraceCardResponse> => {
+        const headers: Record<string, string> = {};
+
+        if (traceApiToken) {
+            headers['X-Trace-Token'] = traceApiToken;
+        }
+
+        const response = await requestJson<PostTraceCardResponse>(
+            '/api/trace-cards',
+            {
+                method: 'POST',
+                headers,
+                body: request,
+                signal: options?.signal,
+                validateResponse: createSchemaResponseValidator(
+                    PostTraceCardResponseSchema
+                ),
+            }
+        );
+
+        return response.data;
+    };
+
+    /**
+     * @api.operationId: postTraceCardsFromTrace
+     * @api.path: POST /api/trace-cards/from-trace
+     */
+    const postTraceCardFromTrace = async (
+        request: PostTraceCardFromTraceRequest,
+        options?: { signal?: AbortSignal }
+    ): Promise<PostTraceCardFromTraceResponse> => {
+        const headers: Record<string, string> = {};
+
+        if (traceApiToken) {
+            headers['X-Trace-Token'] = traceApiToken;
+        }
+
+        const response = await requestJson<PostTraceCardFromTraceResponse>(
+            '/api/trace-cards/from-trace',
+            {
+                method: 'POST',
+                headers,
+                body: request,
+                signal: options?.signal,
+                validateResponse: createSchemaResponseValidator(
+                    PostTraceCardFromTraceResponseSchema
+                ),
+            }
+        );
+
+        return response.data;
+    };
+
     return {
         postTraces,
         getTrace,
+        postTraceCard,
+        postTraceCardFromTrace,
     };
 };
 

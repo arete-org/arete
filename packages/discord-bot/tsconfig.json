@@ -15,12 +15,6 @@
             "@footnote/config-spec": ["../config-spec/dist/index.d.ts"],
             "@footnote/config-spec/*": ["../config-spec/dist/*"],
             "@footnote/contracts": ["../contracts/dist/index.d.ts"],
-            "@footnote/contracts/ethics-core": [
-                "../contracts/dist/ethics-core/index.d.ts"
-            ],
-            "@footnote/contracts/web/schemas": [
-                "../contracts/dist/web/schemas.d.ts"
-            ],
             "@footnote/contracts/*": ["../contracts/dist/*"]
         },
         "typeRoots": ["./node_modules/@types", "./src/types"],

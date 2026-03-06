@@ -1,5 +1,5 @@
 /**
- * @description: Handles provenance footer interactions, lenses, and trace lookups.
+ * @description: Handles provenance control interactions, lenses, and trace lookups.
  * @footnote-scope: interface
  * @footnote-module: ProvenanceInteractions
  * @footnote-risk: medium - Interaction failures can block provenance navigation.
@@ -39,6 +39,7 @@ import {
 import { renderPrompt } from '../../config.js';
 import { Planner } from '../prompting/Planner.js';
 import { botApi } from '../../api/botApi.js';
+import { parseProvenanceActionCustomId } from './provenanceCgi.js';
 
 /**
  * Supported alternative-lens presets exposed in the provenance UI.
@@ -75,7 +76,7 @@ export interface AlternativeLensContext {
      */
     metadata: ResponseMetadata | null;
     /**
-     * Discord message identifier associated with the provenance footer.
+     * Discord message identifier associated with provenance controls.
      * Useful when posting follow-up replies.
      */
     messageId: string;
@@ -84,7 +85,7 @@ export interface AlternativeLensContext {
      */
     channelId: string;
     /**
-     * Stored response identifier, if it could be recovered from the footer.
+     * Stored response identifier, if it could be recovered from controls.
      */
     responseId?: string;
 }
@@ -182,11 +183,6 @@ export const buildAlternativeLensSessionKey = (
     userId: string,
     messageId: string
 ) => `${userId}:${messageId}`;
-/**
- * Builds the cache key used to prevent duplicate "explain this answer" runs.
- */
-export const buildExplainSessionKey = (messageId: string) =>
-    `explain:${messageId}`;
 
 const isCitationPayload = (value: unknown): value is Citation => {
     if (!value || typeof value !== 'object') {
@@ -225,8 +221,6 @@ const isResponseMetadataPayload = (
     return (
         typeof candidate.responseId === 'string' &&
         validProvenance &&
-        typeof candidate.confidence === 'number' &&
-        Number.isFinite(candidate.confidence) &&
         validRiskTier &&
         typeof candidate.tradeoffCount === 'number' &&
         Number.isFinite(candidate.tradeoffCount) &&
@@ -238,7 +232,6 @@ const isResponseMetadataPayload = (
 // Session lifecycle helpers
 // -----------------------------
 const sessions = new Map<string, AlternativeLensSessionRecord>();
-const explainInProgress = new Map<string, number>();
 const alternativeLensInProgress = new Map<string, number>();
 
 const getSessionExpiry = (): number =>
@@ -267,7 +260,6 @@ const pruneExpiredSessions = (): void => {
 
 const pruneExpiredProvenanceInteractionState = (): void => {
     pruneExpiredSessions();
-    pruneExpiredInProgressEntries(explainInProgress);
     pruneExpiredInProgressEntries(alternativeLensInProgress);
 };
 
@@ -458,39 +450,6 @@ export function resolveMemberDisplayName(
     }
 
     return fallback;
-}
-
-/**
- * Returns whether an explanation request is already running for this message.
- */
-export function isExplainInProgress(key: string): boolean {
-    pruneExpiredInProgressEntries(explainInProgress);
-    const expiresAt = explainInProgress.get(key);
-    if (!expiresAt) {
-        return false;
-    }
-
-    if (expiresAt <= Date.now()) {
-        explainInProgress.delete(key);
-        return false;
-    }
-
-    return true;
-}
-
-/**
- * Marks an explanation request as active so duplicate clicks can be rejected.
- */
-export function markExplainInProgress(key: string): void {
-    pruneExpiredProvenanceInteractionState();
-    explainInProgress.set(key, getSessionExpiry());
-}
-
-/**
- * Clears the in-progress marker for an explanation request.
- */
-export function clearExplainInProgress(key: string): void {
-    explainInProgress.delete(key);
 }
 
 /**
@@ -700,18 +659,6 @@ export interface AlternativeLensPayload {
     description: string;
 }
 
-/**
- * Input needed to generate a short explanation of a prior assistant answer.
- */
-export interface ExplanationContext {
-    messageText: string;
-    confidence?: number;
-    tradeoffCount?: number;
-    chainHash?: string;
-    reasoningTrace?: string;
-    channelId?: string;
-}
-
 const DEFAULT_ALT_LENS_MODEL: SupportedModel = 'gpt-5-mini';
 
 // -----------------------------
@@ -780,99 +727,12 @@ export async function generateAlternativeLensMessage(
     return text;
 }
 
-// -----------------------------
-// Explanation generation
-// -----------------------------
-/**
- * Summarises the reasoning behind the assistant's prior reply so users understand how the answer was produced.
- */
-export async function generateExplanationMessage(
-    openaiService: OpenAIService,
-    context: ExplanationContext,
-    openaiOptions?: OpenAIOptions
-): Promise<string> {
-    const baseSystemPrompt = renderPrompt('discord.chat.system').content;
-    const metadataLines: string[] = [];
-
-    if (typeof context.confidence === 'number') {
-        metadataLines.push(
-            `Reported confidence: ${(context.confidence * 100).toFixed(0)}%`
-        );
-    }
-    if (typeof context.tradeoffCount === 'number') {
-        metadataLines.push(`Trade-offs noted: ${context.tradeoffCount}`);
-    }
-    if (context.chainHash) {
-        metadataLines.push(`Chain hash: ${context.chainHash}`);
-    }
-
-    const systemPrompt = [
-        'You are an ethics-focused analyst who describes the reasoning behind an assistant reply.',
-        'Deliver a clear, factual explanation without inventing new commitments or policies.',
-        'Highlight risk, uncertainty, and trade-offs when relevant.',
-    ].join(' ');
-
-    const userSections = [
-        'Summarise the key reasoning steps that produced the assistant response shown below.',
-        'Do not repeat the entire answer; focus on rationale, evidence, and any safeguards or trade-offs.',
-        'Keep the explanation under eight sentences.',
-        metadataLines.length > 0
-            ? `Assistant metadata:\n- ${metadataLines.join('\n- ')}`
-            : null,
-        context.reasoningTrace
-            ? `Internal reasoning trace:\n${context.reasoningTrace}`
-            : null,
-        `Assistant reply:\n${context.messageText}`,
-    ].filter(Boolean);
-
-    const messages: OpenAIMessage[] = [
-        {
-            role: 'system',
-            content: `${baseSystemPrompt}\n\n${systemPrompt}`.trim(),
-        },
-        { role: 'user', content: userSections.join('\n\n') },
-    ];
-
-    const requestOptions: OpenAIOptions = {
-        reasoningEffort: 'low',
-        verbosity: 'medium',
-        ...(openaiOptions ?? {}),
-    };
-
-    const response = await openaiService.generateResponse(
-        DEFAULT_ALT_LENS_MODEL,
-        messages,
-        {
-            ...requestOptions,
-            channelContext:
-                requestOptions.channelContext ??
-                (context.channelId
-                    ? { channelId: context.channelId, guildId: undefined }
-                    : undefined),
-        }
-    );
-
-    const text = response.message?.content?.trim();
-    if (!text) {
-        throw new Error('The model returned an empty explanation response.');
-    }
-
-    return text;
-}
-
-type PlannerRequest =
-    | {
-          kind: 'alternative_lens';
-          messageText: string;
-          lens: AlternativeLensPayload;
-          metadata: ResponseMetadata | null;
-      }
-    | {
-          kind: 'explain';
-          messageText: string;
-          metadata: ResponseMetadata | null;
-          reasoningTrace?: string;
-      };
+type PlannerRequest = {
+    kind: 'alternative_lens';
+    messageText: string;
+    lens: AlternativeLensPayload;
+    metadata: ResponseMetadata | null;
+};
 
 /**
  * Asks the planner for OpenAI generation options tuned to the provenance
@@ -895,30 +755,14 @@ export async function requestProvenanceOpenAIOptions(
             'A user clicked a provenance control. Recommend OpenAI options (reasoning effort, verbosity, etc.) for the follow-up response.',
         ];
 
-        if (request.kind === 'alternative_lens') {
+        instructions.push(
+            `Task: Reframe the assistant response using the "${request.lens.label}" perspective.`,
+            `Lens guidance: ${request.lens.description}`
+        );
+        if (request.metadata) {
             instructions.push(
-                `Task: Reframe the assistant response using the "${request.lens.label}" perspective.`,
-                `Lens guidance: ${request.lens.description}`
+                `Provenance metadata:\n${formatMetadataSummary(request.metadata)}`
             );
-            if (request.metadata) {
-                instructions.push(
-                    `Provenance metadata:\n${formatMetadataSummary(request.metadata)}`
-                );
-            }
-        } else {
-            instructions.push(
-                'Task: Provide a concise explanation of the reasoning behind the assistant’s previous response.'
-            );
-            if (request.metadata) {
-                instructions.push(
-                    `Provenance metadata:\n${formatMetadataSummary(request.metadata)}`
-                );
-            }
-            if (request.reasoningTrace) {
-                instructions.push(
-                    `Internal reasoning trace:\n${request.reasoningTrace}`
-                );
-            }
         }
 
         context.push({ role: 'user', content: instructions.join('\n\n') });
@@ -945,14 +789,9 @@ function formatMetadataSummary(metadata: ResponseMetadata | null): string {
         return 'Metadata unavailable; focus on the lens reinterpretation using the supplied text.';
     }
 
-    const confidencePercent = Number.isFinite(metadata.confidence)
-        ? `${Math.round(metadata.confidence * 100)}%`
-        : 'Unknown';
-
     const baseLines = [
         `Response ID: ${metadata.responseId}`,
         `Provenance: ${metadata.provenance}`,
-        `Confidence: ${confidencePercent}`,
         `Risk tier: ${metadata.riskTier}`,
         `Trade-offs noted: ${metadata.tradeoffCount}`,
     ];
@@ -972,22 +811,40 @@ function formatMetadataSummary(metadata: ResponseMetadata | null): string {
 // -----------------------------
 // Metadata and message recovery
 // -----------------------------
-/**
- * Extracts the response ID encoded in a provenance footer line, when present.
- */
-export function extractResponseIdFromFooterText(
-    footerText?: string | null
-): string | null {
-    if (!footerText) {
+function getComponentCustomId(component: unknown): string | null {
+    if (!component || typeof component !== 'object') {
         return null;
     }
 
-    const match = footerText.match(/^([\w.-]+)\W+([\w.-]+)\W+([\w-]+)\W+/);
-    return match?.[3] ?? null;
+    if (typeof (component as { customId?: unknown }).customId === 'string') {
+        return (component as { customId: string }).customId;
+    }
+
+    if (typeof (component as { custom_id?: unknown }).custom_id === 'string') {
+        return (component as { custom_id: string }).custom_id;
+    }
+
+    const nestedData = (component as { data?: unknown }).data;
+    if (nestedData && typeof nestedData === 'object') {
+        if (
+            typeof (nestedData as { customId?: unknown }).customId === 'string'
+        ) {
+            return (nestedData as { customId: string }).customId;
+        }
+
+        if (
+            typeof (nestedData as { custom_id?: unknown }).custom_id ===
+            'string'
+        ) {
+            return (nestedData as { custom_id: string }).custom_id;
+        }
+    }
+
+    return null;
 }
 
 /**
- * Scans a Discord message's embeds to recover the provenance response ID.
+ * Scans provenance components to recover the responseId encoded in custom IDs.
  */
 export function deriveResponseIdFromMessage(
     message: Message | null
@@ -996,10 +853,22 @@ export function deriveResponseIdFromMessage(
         return null;
     }
 
-    for (const embed of message.embeds ?? []) {
-        const responseId = extractResponseIdFromFooterText(embed.footer?.text);
-        if (responseId) {
-            return responseId;
+    for (const row of message.components ?? []) {
+        const components = (row as { components?: unknown }).components;
+        if (!Array.isArray(components)) {
+            continue;
+        }
+
+        for (const component of components) {
+            const customId = getComponentCustomId(component);
+            if (!customId) {
+                continue;
+            }
+
+            const parsed = parseProvenanceActionCustomId(customId);
+            if (parsed) {
+                return parsed.responseId;
+            }
         }
     }
 
@@ -1007,9 +876,9 @@ export function deriveResponseIdFromMessage(
 }
 
 /**
- * Retrieve provenance metadata for a Discord message by extracting its response identifier and querying the trace service.
+ * Retrieve provenance metadata for a Discord message by extracting its response identifier from provenance controls and querying the trace service.
  *
- * @param message - The Discord message to inspect for an embedded provenance response identifier (e.g., in embed footers)
+ * @param message - The Discord message to inspect for provenance control custom IDs
  * @returns An object with `responseId` when a response identifier was found and `metadata` containing the provenance metadata, or `null` when no metadata is available (no response id found, the trace was removed (HTTP 410), or the lookup failed)
  */
 export async function resolveProvenanceMetadata(
@@ -1054,7 +923,7 @@ export async function resolveProvenanceMetadata(
     }
 }
 
-// Resolve the response message for footer buttons.
+// Resolve the response message for provenance buttons.
 /**
  * Finds the message chunk that should be treated as the response anchor for a
  * provenance action.
@@ -1062,13 +931,13 @@ export async function resolveProvenanceMetadata(
 export async function resolveResponseAnchorMessage(
     message: Message
 ): Promise<Message | null> {
-    // If the footer carries content, use it directly (single-message responses).
+    // If the button-bearing message carries content, use it directly.
     const directContent = message.content?.trim();
     if (directContent) {
         return message;
     }
 
-    // If the footer was sent as a reply, use the replied message as the anchor.
+    // If the controls were sent as a reply, use the replied message as anchor.
     const referencedId = message.reference?.messageId;
     if (referencedId && message.channel.isTextBased()) {
         try {
@@ -1112,12 +981,12 @@ export async function resolveResponseAnchorMessage(
         );
         // Iterate through the messages in descending order of creation timestamp
         for (const candidate of ordered) {
-            // Only stitch messages immediately above the footer to avoid grabbing older, unrelated bot outputs.
+            // Only stitch messages immediately above controls to avoid unrelated outputs.
             if (candidate.author.id !== botId) {
                 break;
             }
 
-            // Stop at embedded/components to avoid other footers or interactive prompts.
+            // Stop at embedded/components to avoid unrelated interactive prompts.
             if (
                 (candidate.embeds?.length ?? 0) > 0 ||
                 (candidate.components?.length ?? 0) > 0

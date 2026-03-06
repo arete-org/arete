@@ -5,6 +5,8 @@
  * @footnote-risk: medium - Type drift here can desynchronize planner output from message execution.
  * @footnote-ethics: medium - Retrieval settings influence grounding and provenance quality.
  */
+import type { ResponseTemperament } from '@footnote/contracts/ethics-core';
+
 export type ReflectSearchIntent = 'repo_explainer' | 'current_facts';
 
 export type ReflectRepoSearchHint =
@@ -35,4 +37,5 @@ export type ReflectGenerationPlan = {
     verbosity: 'low' | 'medium' | 'high';
     toolChoice: 'none' | 'web_search';
     webSearch?: ReflectWebSearchPlan;
+    temperament?: ResponseTemperament;
 };

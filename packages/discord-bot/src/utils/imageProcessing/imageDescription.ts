@@ -28,7 +28,7 @@ export interface ImageDescriptionPayload {
     detected_type: string;
     extracted_text: string[];
     structured: ImageDescriptionStructuredPayload;
-    confidence: string;
+    certainty: string;
     notes?: string;
 }
 
@@ -66,7 +66,7 @@ const IMAGE_DESCRIPTION_TOOL_SCHEMA: OpenAI.Chat.Completions.ChatCompletionTool 
                     'detected_type',
                     'extracted_text',
                     'structured',
-                    'confidence',
+                    'certainty',
                 ],
                 properties: {
                     summary: {
@@ -111,7 +111,7 @@ const IMAGE_DESCRIPTION_TOOL_SCHEMA: OpenAI.Chat.Completions.ChatCompletionTool 
                         description:
                             'Always include structured.key_elements. Use additional fields only when structure is obvious (grids/tables/forms/axes/sections).',
                     },
-                    confidence: {
+                    certainty: {
                         type: 'string',
                         description:
                             'Short qualifier (1-2 words). Examples: high, medium, low, marginal.',
@@ -170,10 +170,15 @@ function parseToolPayload(
     }
 
     try {
-        const parsed = JSON.parse(
-            toolCall.function.arguments
-        ) as ImageDescriptionPayload;
-        return normalizeImageDescriptionPayload(parsed);
+        const parsed = JSON.parse(toolCall.function.arguments) as unknown;
+        const normalized = normalizeImageDescriptionPayload(parsed);
+        if (!normalized) {
+            logger.warn(
+                'Image description tool output is missing required fields after normalization.'
+            );
+            return null;
+        }
+        return normalized;
     } catch (error) {
         logger.warn('Failed to parse image description tool output.', error);
         return null;
@@ -181,11 +186,41 @@ function parseToolPayload(
 }
 
 function normalizeImageDescriptionPayload(
-    payload: ImageDescriptionPayload
-): ImageDescriptionPayload {
-    const structuredValue = payload?.structured ?? {};
+    payload: unknown
+): ImageDescriptionPayload | null {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return null;
+    }
+
+    const payloadRecord = payload as Record<string, unknown>;
+    const summary =
+        typeof payloadRecord.summary === 'string'
+            ? payloadRecord.summary
+            : 'Unable to reliably describe image.';
+    const detectedType =
+        typeof payloadRecord.detected_type === 'string'
+            ? payloadRecord.detected_type
+            : 'other';
+    const extractedText = Array.isArray(payloadRecord.extracted_text)
+        ? payloadRecord.extracted_text.filter(
+              (item): item is string => typeof item === 'string'
+          )
+        : [];
+    const certaintyCandidate =
+        typeof payloadRecord.certainty === 'string' &&
+        payloadRecord.certainty.trim().length > 0
+            ? payloadRecord.certainty.trim()
+            : typeof payloadRecord.confidence === 'string' &&
+                payloadRecord.confidence.trim().length > 0
+              ? payloadRecord.confidence.trim()
+              : undefined;
+    const certainty = certaintyCandidate ?? 'low';
+
+    const structuredValue = payloadRecord.structured ?? {};
     const structuredRecord =
-        structuredValue && typeof structuredValue === 'object'
+        structuredValue &&
+        typeof structuredValue === 'object' &&
+        !Array.isArray(structuredValue)
             ? (structuredValue as Record<string, unknown>)
             : {};
     const keyElements = Array.isArray(structuredRecord.key_elements)
@@ -200,12 +235,18 @@ function normalizeImageDescriptionPayload(
         : undefined;
 
     return {
-        ...payload,
+        summary,
+        detected_type: detectedType,
+        extracted_text: extractedText,
         structured: {
             ...structuredRecord,
             key_elements: keyElements,
             ...(tableMarkdown ? { table_markdown: tableMarkdown } : {}),
         },
+        certainty,
+        ...(typeof payloadRecord.notes === 'string' && {
+            notes: payloadRecord.notes,
+        }),
     };
 }
 
@@ -333,4 +374,3 @@ export async function generateImageDescriptionRequest(
             : null,
     };
 }
-

@@ -36,6 +36,9 @@ export class SqliteTraceStore {
     private readonly upsertStatement: Database.Statement;
     private readonly retrieveStatement: Database.Statement;
     private readonly deleteStatement: Database.Statement;
+    private readonly deleteTraceCardStatement: Database.Statement;
+    private readonly upsertTraceCardStatement: Database.Statement;
+    private readonly retrieveTraceCardStatement: Database.Statement;
 
     constructor(config: SqliteTraceStoreConfig) {
         const resolvedPath = path.resolve(config.dbPath);
@@ -55,7 +58,12 @@ export class SqliteTraceStore {
         updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_provenance_traces_stale_after ON provenance_traces (stale_after);
+      CREATE TABLE IF NOT EXISTS provenance_trace_cards (
+        response_id TEXT PRIMARY KEY REFERENCES provenance_traces(response_id) ON DELETE CASCADE,
+        trace_card_svg TEXT NOT NULL
+      );
     `);
+        this.ensureTraceCardForeignKey();
 
         this.upsertStatement = this.db.prepare(`
       INSERT INTO provenance_traces (response_id, metadata_json, stale_after, created_at, updated_at)
@@ -71,8 +79,68 @@ export class SqliteTraceStore {
         this.deleteStatement = this.db.prepare(
             `DELETE FROM provenance_traces WHERE response_id = ?`
         );
+        this.deleteTraceCardStatement = this.db.prepare(
+            `DELETE FROM provenance_trace_cards WHERE response_id = ?`
+        );
+        this.upsertTraceCardStatement = this.db.prepare(`
+      INSERT INTO provenance_trace_cards (response_id, trace_card_svg)
+      VALUES (@response_id, @trace_card_svg)
+      ON CONFLICT(response_id) DO UPDATE SET
+        trace_card_svg = excluded.trace_card_svg
+    `);
+        this.retrieveTraceCardStatement = this.db.prepare(
+            `SELECT trace_card_svg FROM provenance_trace_cards WHERE response_id = ? LIMIT 1`
+        );
 
         traceLogger.info(`Initialized SQLite trace store at ${resolvedPath}`);
+    }
+
+    private ensureTraceCardForeignKey(): void {
+        type ForeignKeyRow = {
+            table: string;
+            from: string;
+            to: string;
+            on_delete: string;
+        };
+
+        const foreignKeys = this.db
+            .prepare(`PRAGMA foreign_key_list(provenance_trace_cards)`)
+            .all() as ForeignKeyRow[];
+        const hasExpectedForeignKey = foreignKeys.some(
+            (foreignKey) =>
+                foreignKey.table === 'provenance_traces' &&
+                foreignKey.from === 'response_id' &&
+                foreignKey.to === 'response_id' &&
+                foreignKey.on_delete.toUpperCase() === 'CASCADE'
+        );
+        if (hasExpectedForeignKey) {
+            return;
+        }
+
+        const migrateTraceCardsTable = this.db.transaction(() => {
+            this.db.exec(`
+                CREATE TABLE provenance_trace_cards_new (
+                    response_id TEXT PRIMARY KEY REFERENCES provenance_traces(response_id) ON DELETE CASCADE,
+                    trace_card_svg TEXT NOT NULL
+                );
+            `);
+            this.db.exec(`
+                INSERT INTO provenance_trace_cards_new (response_id, trace_card_svg)
+                SELECT cards.response_id, cards.trace_card_svg
+                FROM provenance_trace_cards AS cards
+                INNER JOIN provenance_traces AS traces
+                    ON traces.response_id = cards.response_id;
+            `);
+            this.db.exec(`DROP TABLE provenance_trace_cards;`);
+            this.db.exec(
+                `ALTER TABLE provenance_trace_cards_new RENAME TO provenance_trace_cards;`
+            );
+        });
+
+        migrateTraceCardsTable();
+        traceLogger.info(
+            'Migrated provenance_trace_cards to enforce ON DELETE CASCADE foreign key constraint.'
+        );
     }
 
     private normalizeMetadata(metadata: ResponseMetadata): ResponseMetadata {
@@ -206,7 +274,43 @@ export class SqliteTraceStore {
     }
 
     async delete(responseId: string): Promise<void> {
-        await this.withRetry(() => this.deleteStatement.run(responseId));
+        await this.withRetry(() => {
+            const deleteTrace = this.deleteStatement;
+            const deleteTraceCard = this.deleteTraceCardStatement;
+            const transaction = this.db.transaction((id: string) => {
+                deleteTrace.run(id);
+                deleteTraceCard.run(id);
+            });
+            transaction(responseId);
+        });
+    }
+
+    /**
+     * Stores the canonical trace-card SVG for a response id.
+     * Upserts so callers can refresh the card without deleting first.
+     */
+    async upsertTraceCardSvg(responseId: string, svg: string): Promise<void> {
+        await this.withRetry(() =>
+            this.upsertTraceCardStatement.run({
+                response_id: responseId,
+                trace_card_svg: svg,
+            })
+        );
+    }
+
+    /**
+     * Loads a trace-card SVG by response id.
+     * Returns null when no card is stored yet.
+     */
+    async getTraceCardSvg(responseId: string): Promise<string | null> {
+        const row = await this.withRetry(
+            () =>
+                this.retrieveTraceCardStatement.get(responseId) as
+                    | { trace_card_svg: string }
+                    | undefined
+        );
+
+        return row?.trace_card_svg ?? null;
     }
 
     close(): void {
@@ -214,4 +318,3 @@ export class SqliteTraceStore {
         this.db.close();
     }
 }
-

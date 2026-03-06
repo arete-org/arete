@@ -64,6 +64,10 @@ export type {
     UnknownReflectActionResponse,
 } from './reflect.js';
 export type {
+    PostTraceCardFromTraceRequest,
+    PostTraceCardFromTraceResponse,
+    PostTraceCardRequest,
+    PostTraceCardResponse,
     PostTracesRequest,
     PostTracesResponse,
 } from '@footnote/contracts/web';

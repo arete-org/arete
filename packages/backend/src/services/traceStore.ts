@@ -31,6 +31,16 @@ const storeTrace = async (
         // --- Write-through ---
         await traceStore.upsert(metadata);
         logger.debug(`Trace stored successfully: ${responseId}`);
+
+        // --- Optional trace-card persistence ---
+        // Trace-card generation stays out of this write path so trace storage
+        // remains lightweight and fail-open even when rendering dependencies
+        // or image generation are unavailable.
+        if (metadata.temperament) {
+            logger.debug(
+                `Deferring trace-card generation to trace-card handler path for "${responseId}".`
+            );
+        }
     } catch (error) {
         // --- Error visibility ---
         logger.error(
@@ -40,4 +50,3 @@ const storeTrace = async (
 };
 
 export { createTraceStore, storeTrace };
-

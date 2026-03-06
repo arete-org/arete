@@ -13,6 +13,7 @@ import type {
     Citation,
 } from '@footnote/contracts/ethics-core';
 import { AssistantMetadataPayload } from '../openaiService.js';
+import { isTraceAxisScore } from '../traceAxisScore.js';
 
 interface RuntimeContext {
     modelVersion: string;
@@ -40,7 +41,6 @@ export function buildResponseMetadata(
 
     // Enforce defaults
     const provenance: Provenance = assistantPayload?.provenance || 'Inferred';
-    const confidence: number = assistantPayload?.confidence ?? 0.0;
     const tradeoffCount: number = assistantPayload?.tradeoffCount ?? 0;
     const citations: Citation[] =
         assistantPayload?.citations?.map((c) => ({
@@ -48,6 +48,14 @@ export function buildResponseMetadata(
             url: c.url,
             snippet: c.snippet,
         })) || [];
+    const evidenceCandidate = assistantPayload?.evidenceScore;
+    const freshnessCandidate = assistantPayload?.freshnessScore;
+    const evidenceScore = isTraceAxisScore(evidenceCandidate)
+        ? evidenceCandidate
+        : undefined;
+    const freshnessScore = isTraceAxisScore(freshnessCandidate)
+        ? freshnessCandidate
+        : undefined;
 
     // Hardcoded licenseContext
     const licenseContext = 'MIT + HL3';
@@ -61,7 +69,6 @@ export function buildResponseMetadata(
     return {
         responseId,
         provenance,
-        confidence,
         riskTier,
         tradeoffCount,
         chainHash,
@@ -69,6 +76,7 @@ export function buildResponseMetadata(
         modelVersion,
         staleAfter,
         citations,
+        ...(evidenceScore !== undefined && { evidenceScore }),
+        ...(freshnessScore !== undefined && { freshnessScore }),
     };
 }
-

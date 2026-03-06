@@ -12,8 +12,9 @@
 export type {
     Provenance,
     RiskTier,
-    ConfidenceScore,
     Citation,
+    TraceAxisScore,
+    ResponseTemperament,
+    PartialResponseTemperament,
     ResponseMetadata,
 } from './types';
-

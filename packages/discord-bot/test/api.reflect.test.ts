@@ -46,32 +46,33 @@ test('reflectViaApi posts to /api/reflect with X-Trace-Token and returns parsed 
         endpoint: string,
         options: ApiRequestOptions<T> = {}
     ): Promise<ApiJsonResult<T>> => {
-            capturedEndpoint = endpoint;
-            capturedHeaders = options.headers as Record<string, string>;
-            capturedBody = options.body;
-            return {
-                status: 200,
-                data: {
-                    action: 'message',
-                    message: 'backend response',
-                    modality: 'text',
-                    metadata: {
-                        responseId: 'resp_123',
-                        provenance: 'Inferred',
-                        confidence: 0.8,
-                        riskTier: 'Low',
-                        tradeoffCount: 0,
-                        chainHash: 'hash_123',
-                        licenseContext: 'MIT + HL3',
-                        modelVersion: 'gpt-5-mini',
-                        staleAfter: new Date(Date.now() + 60000).toISOString(),
-                        citations: [],
-                    },
-                } as T,
-            };
+        capturedEndpoint = endpoint;
+        capturedHeaders = options.headers as Record<string, string>;
+        capturedBody = options.body;
+        return {
+            status: 200,
+            data: {
+                action: 'message',
+                message: 'backend response',
+                modality: 'text',
+                metadata: {
+                    responseId: 'resp_123',
+                    provenance: 'Inferred',
+                    riskTier: 'Low',
+                    tradeoffCount: 0,
+                    chainHash: 'hash_123',
+                    licenseContext: 'MIT + HL3',
+                    modelVersion: 'gpt-5-mini',
+                    staleAfter: new Date(Date.now() + 60000).toISOString(),
+                    citations: [],
+                },
+            } as T,
         };
+    };
 
-    const api = createReflectApi(requestJson, { traceApiToken: 'trace-secret' });
+    const api = createReflectApi(requestJson, {
+        traceApiToken: 'trace-secret',
+    });
 
     const response = await api.reflectViaApi(request);
 
@@ -98,7 +99,9 @@ test('reflectViaApi throws backend request errors so callers can handle them', a
 });
 
 test('reflectViaApi tolerates unknown actions so the executor can fail safely', async () => {
-    const requestJson: ApiRequester = async <T>(): Promise<ApiJsonResult<T>> => ({
+    const requestJson: ApiRequester = async <T>(): Promise<
+        ApiJsonResult<T>
+    > => ({
         status: 200,
         data: {
             action: 'video',

@@ -9,6 +9,7 @@
     "dependencies": {
         "@footnote/config-spec": "workspace:*",
         "@footnote/contracts": "workspace:*",
+        "@resvg/resvg-js": "catalog:",
         "better-sqlite3": "catalog:",
         "dotenv": "catalog:",
         "js-yaml": "catalog:",

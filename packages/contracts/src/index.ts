@@ -13,8 +13,10 @@
 export type {
     Provenance,
     RiskTier,
-    ConfidenceScore,
     Citation,
+    TraceAxisScore,
+    PartialResponseTemperament,
+    ResponseTemperament,
     ResponseMetadata,
 } from './ethics-core';
 

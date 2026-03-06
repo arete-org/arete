@@ -8,6 +8,7 @@ catalog:
     '@eslint/js': ^9.39.2
     '@marsidev/react-turnstile': ^1.4.1
     '@openai/agents': ^0.3.7
+    '@resvg/resvg-js': ^2.6.2
     '@sapphire/shapeshift': ^4.0.0
     '@swc/core': ^1.15.8
     '@swc/helpers': ^0.5.18

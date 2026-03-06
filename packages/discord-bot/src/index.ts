@@ -7,7 +7,6 @@
  */
 
 import { Client, GatewayIntentBits, Events, Collection } from 'discord.js';
-import type { Message, ButtonInteraction } from 'discord.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { CommandHandler } from './utils/commandHandler.js';
@@ -15,8 +14,9 @@ import { EventManager } from './utils/eventManager.js';
 import { logger } from './utils/logger.js';
 import { runtimeConfig } from './config.js';
 import { OpenAIService } from './utils/openaiService.js';
-import { ResponseHandler } from './utils/response/ResponseHandler.js';
 import type { Command } from './commands/BaseCommand.js';
+import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import { botApi } from './api/botApi.js';
 import {
     evictFollowUpContext,
     readFollowUpContext,
@@ -69,27 +69,8 @@ import {
 } from './utils/imageTokens.js';
 import { LLMCostEstimator } from './utils/LLMCostEstimator.js';
 import type { ChannelContextManager } from './state/ChannelContextManager.js';
-// Alternative lens workflow utilities (session state + interaction handlers)
-import {
-    ALTERNATIVE_LENS_MODAL_PREFIX,
-    ALTERNATIVE_LENS_SELECT_PREFIX,
-    ALTERNATIVE_LENS_SUBMIT_PREFIX,
-    handleAlternativeLensButton,
-    handleAlternativeLensModal,
-    handleAlternativeLensSelect,
-    handleAlternativeLensSubmit,
-    generateExplanationMessage,
-    requestProvenanceOpenAIOptions,
-    resolveMemberDisplayName,
-    buildExplainSessionKey,
-    isExplainInProgress,
-    markExplainInProgress,
-    clearExplainInProgress,
-    recoverFullMessageText,
-    safeInteractionReply,
-    resolveResponseAnchorMessage,
-    resolveProvenanceMetadata,
-} from './utils/response/provenanceInteractions.js';
+import { resolveMemberDisplayName } from './utils/response/provenanceInteractions.js';
+import { parseProvenanceActionCustomId } from './utils/response/provenanceCgi.js';
 //import express from 'express'; // For webhook
 //import bodyParser from "body-parser"; // For webhook
 
@@ -226,25 +207,201 @@ function buildVariationStatusMessage(userId: string, base?: string): string {
     return base ? `${base}\n\n${summary}` : summary;
 }
 
-const provenanceLogger =
-    typeof logger.child === 'function'
-        ? logger.child({ module: 'provenance' })
-        : logger;
+const DISCORD_MESSAGE_MAX_LENGTH = 2000;
+const DETAILS_CODE_FENCE_PREFIX = '```json\n';
+const DETAILS_CODE_FENCE_SUFFIX = '\n```';
+const DETAILS_TRUNCATION_SUFFIX = '\n... (truncated)';
+const DETAILS_FALLBACK_REASON = 'metadata_unavailable';
 
-function buildExplainLogContext(
-    interaction: ButtonInteraction,
-    responseId?: string,
-    extra?: Record<string, unknown>
-): Record<string, unknown> {
+type DetailsFallbackPayload = {
+    responseId: string | null;
+    metadata: null;
+    reason: typeof DETAILS_FALLBACK_REASON;
+};
+
+function buildDetailsPayload(
+    responseId: string | undefined,
+    metadata: ResponseMetadata | null
+): ResponseMetadata | DetailsFallbackPayload {
+    if (metadata) {
+        return metadata;
+    }
+
     return {
-        action: 'explain',
-        userId: interaction.user.id,
-        guildId: interaction.guild?.id ?? null,
-        channelId: interaction.channelId ?? null,
-        messageId: interaction.message.id,
-        ...(responseId ? { responseId } : {}),
-        ...extra,
+        responseId: responseId ?? null,
+        metadata: null,
+        reason: DETAILS_FALLBACK_REASON,
     };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return (
+        !!value &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        Object.getPrototypeOf(value) === Object.prototype
+    );
+}
+
+const PROVENANCE_VALUES = new Set(['Retrieved', 'Inferred', 'Speculative']);
+
+function isValidCitationList(value: unknown): boolean {
+    if (!Array.isArray(value)) {
+        return false;
+    }
+
+    return value.every((citation) => {
+        if (!isPlainObject(citation)) {
+            return false;
+        }
+
+        if (
+            typeof citation.title !== 'string' ||
+            typeof citation.url !== 'string'
+        ) {
+            return false;
+        }
+
+        if (
+            'snippet' in citation &&
+            citation.snippet !== undefined &&
+            typeof citation.snippet !== 'string'
+        ) {
+            return false;
+        }
+
+        return true;
+    });
+}
+
+function isValidResponseMetadataPayload(
+    payload: unknown
+): payload is ResponseMetadata {
+    if (!isPlainObject(payload)) {
+        return false;
+    }
+
+    if (typeof payload.responseId !== 'string') {
+        return false;
+    }
+
+    if (
+        typeof payload.provenance !== 'string' ||
+        !PROVENANCE_VALUES.has(payload.provenance)
+    ) {
+        return false;
+    }
+
+    return isValidCitationList(payload.citations);
+}
+
+function formatInlineJsonObject(value: Record<string, unknown>): string {
+    const entries = Object.entries(value).filter(
+        ([, entryValue]) => entryValue !== undefined
+    );
+    const serializedEntries = entries.map(
+        ([entryKey, entryValue]) =>
+            `${JSON.stringify(entryKey)}: ${JSON.stringify(entryValue)}`
+    );
+    return `{ ${serializedEntries.join(', ')} }`;
+}
+
+function serializeDetailsPayload(
+    payload: ResponseMetadata | DetailsFallbackPayload
+): string {
+    if (!('provenance' in payload)) {
+        return JSON.stringify(payload, null, 2);
+    }
+
+    const lines: string[] = ['{'];
+    const entries = Object.entries(payload).filter(
+        ([, value]) => value !== undefined
+    );
+
+    for (let index = 0; index < entries.length; index += 1) {
+        const [key, value] = entries[index];
+        const hasTrailingComma = index < entries.length - 1;
+        const trailingComma = hasTrailingComma ? ',' : '';
+
+        if (key === 'citations' && Array.isArray(value)) {
+            lines.push('  "citations": [');
+            for (
+                let citationIndex = 0;
+                citationIndex < value.length;
+                citationIndex += 1
+            ) {
+                const citation = value[citationIndex];
+                const citationComma =
+                    citationIndex < value.length - 1 ? ',' : '';
+                if (isPlainObject(citation)) {
+                    lines.push(
+                        `    ${formatInlineJsonObject(citation)}${citationComma}`
+                    );
+                } else {
+                    lines.push(
+                        `    ${JSON.stringify(citation)}${citationComma}`
+                    );
+                }
+            }
+            lines.push(`  ]${trailingComma}`);
+            continue;
+        }
+
+        if (key === 'temperament' && isPlainObject(value)) {
+            lines.push(
+                `  "temperament": ${formatInlineJsonObject(value)}${trailingComma}`
+            );
+            continue;
+        }
+
+        lines.push(
+            `  ${JSON.stringify(key)}: ${JSON.stringify(value)}${trailingComma}`
+        );
+    }
+
+    lines.push('}');
+    return lines.join('\n');
+}
+
+function formatDetailsPayloadForDiscord(
+    payload: ResponseMetadata | DetailsFallbackPayload
+): string {
+    const serialized = serializeDetailsPayload(payload);
+    const maxPayloadLength =
+        DISCORD_MESSAGE_MAX_LENGTH -
+        DETAILS_CODE_FENCE_PREFIX.length -
+        DETAILS_CODE_FENCE_SUFFIX.length;
+
+    if (serialized.length <= maxPayloadLength) {
+        return `${DETAILS_CODE_FENCE_PREFIX}${serialized}${DETAILS_CODE_FENCE_SUFFIX}`;
+    }
+
+    const truncatedPayloadLength = Math.max(
+        0,
+        maxPayloadLength - DETAILS_TRUNCATION_SUFFIX.length
+    );
+    const truncatedPayload = `${serialized.slice(0, truncatedPayloadLength)}${DETAILS_TRUNCATION_SUFFIX}`;
+    return `${DETAILS_CODE_FENCE_PREFIX}${truncatedPayload}${DETAILS_CODE_FENCE_SUFFIX}`;
+}
+
+function extractMetadataFromTraceResponse(
+    payload: unknown
+): ResponseMetadata | null {
+    if (isValidResponseMetadataPayload(payload)) {
+        return payload;
+    }
+
+    if (
+        isPlainObject(payload) &&
+        'metadata' in payload &&
+        isValidResponseMetadataPayload(
+            (payload as { metadata?: unknown }).metadata
+        )
+    ) {
+        return (payload as { metadata: ResponseMetadata }).metadata;
+    }
+
+    return null;
 }
 
 // Slash commands handler
@@ -276,12 +433,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.isStringSelectMenu()) {
         const { customId, values } = interaction;
-
-        // Alternative lens select menu flow
-        if (customId.startsWith(ALTERNATIVE_LENS_SELECT_PREFIX)) {
-            await handleAlternativeLensSelect(interaction);
-            return;
-        }
 
         const selected = values?.[0];
 
@@ -428,12 +579,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isModalSubmit()) {
         const { customId } = interaction;
 
-        // Alternative lens custom modal submission
-        if (customId.startsWith(ALTERNATIVE_LENS_MODAL_PREFIX)) {
-            await handleAlternativeLensModal(interaction);
-            return;
-        }
-
         if (customId.startsWith(IMAGE_VARIATION_PROMPT_MODAL_ID_PREFIX)) {
             const responseId = customId.slice(
                 IMAGE_VARIATION_PROMPT_MODAL_ID_PREFIX.length
@@ -505,267 +650,54 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isButton()) {
         const { customId } = interaction;
 
-        // Provenance footer: share a reasoning explanation
-        if (customId === 'explain') {
-            const explainKey = buildExplainSessionKey(interaction.message.id);
-            if (isExplainInProgress(explainKey)) {
-                await safeInteractionReply(
-                    interaction,
-                    {
-                        content:
-                            '⚠️ An explanation is already in progress for this response. Please wait for it to finish.',
-                        flags: [1 << 6],
-                    },
-                    buildExplainLogContext(interaction),
-                    'explain_in_progress'
+        const provenanceAction = parseProvenanceActionCustomId(customId);
+        if (provenanceAction) {
+            if (provenanceAction.action === 'details') {
+                await interaction.deferReply({
+                    flags: [1 << 6], // [1 << 6] = EPHEMERAL
+                });
+                let metadata: ResponseMetadata | null = null;
+                try {
+                    const traceResponse = await botApi.getTrace(
+                        provenanceAction.responseId
+                    );
+                    metadata = extractMetadataFromTraceResponse(
+                        traceResponse.data
+                    );
+                } catch (error) {
+                    logger.warn(
+                        'Failed to load provenance metadata for details action',
+                        {
+                            responseId: provenanceAction.responseId,
+                            error:
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                        }
+                    );
+                }
+
+                const detailsPayload = buildDetailsPayload(
+                    provenanceAction.responseId,
+                    metadata
                 );
+                await interaction.editReply({
+                    content: formatDetailsPayloadForDiscord(detailsPayload),
+                });
                 return;
             }
 
-            markExplainInProgress(explainKey);
-
-            const baseExplainContext = buildExplainLogContext(interaction);
-            let explainLogContext = baseExplainContext;
-            let explainTimeout: NodeJS.Timeout | undefined;
-
-            try {
-                explainTimeout = setTimeout(() => {
-                    provenanceLogger.warn(
-                        'Explain flow auto-cleared after timeout',
-                        {
-                            ...explainLogContext,
-                            phase: 'timeout',
-                        }
-                    );
-                    clearExplainInProgress(explainKey);
-                }, 3 * 60_000);
-            } catch (timerError) {
-                provenanceLogger.warn(
-                    'Explain flow failed to schedule timeout',
-                    {
-                        ...explainLogContext,
-                        phase: 'timer_error',
-                        error: timerError,
-                    }
-                );
-            }
-
-            provenanceLogger.info('Explain flow started', {
-                ...explainLogContext,
-                phase: 'start',
+            logger.info('Report Issue button clicked', {
+                userId: interaction.user.id,
+                messageId: interaction.message.id,
+                messageUrl: interaction.message.url,
+                responseId: provenanceAction.responseId,
             });
-
-            const requester = resolveMemberDisplayName(
-                interaction.member,
-                interaction.user.username
-            );
-            const progressContent = `⏳ Explanation requested by **${requester}** — compiling reasoning…`;
-            let progressMessage: Message | null = null;
-            try {
-                // Acknowledge the interaction early so Discord doesn't time us out.
-                progressMessage = await safeInteractionReply(
-                    interaction,
-                    {
-                        content: progressContent,
-                        allowedMentions: { parse: [] },
-                    },
-                    explainLogContext,
-                    'explain_progress'
-                );
-            } catch (error) {
-                clearExplainInProgress(explainKey);
-                if (explainTimeout) {
-                    clearTimeout(explainTimeout);
-                }
-                provenanceLogger.error(
-                    'Explain flow failed (acknowledgement error)',
-                    {
-                        ...explainLogContext,
-                        phase: 'error',
-                        reason: 'ack_failed',
-                        error,
-                    }
-                );
-                await safeInteractionReply(
-                    interaction,
-                    {
-                        content:
-                            'I could not start the explanation flow. Please try again.',
-                        flags: [1 << 6],
-                    },
-                    explainLogContext,
-                    'explain_ack_failed'
-                ).catch(() => undefined);
-                return;
-            }
-
-            const updateExplainStatus = async (
-                content: string,
-                label: string
-            ): Promise<void> => {
-                // Prefer editing the progress message to keep the channel tidy.
-                if (progressMessage) {
-                    await progressMessage.edit({ content });
-                    return;
-                }
-
-                await safeInteractionReply(
-                    interaction,
-                    { content },
-                    explainLogContext,
-                    label
-                );
-            };
-
-            try {
-                // Anchor to the response message so we can recover full content if the footer was sent separately.
-                const anchorMessage = await resolveResponseAnchorMessage(
-                    interaction.message
-                );
-                // Rebuild the full response text across any split chunks for accurate explanations.
-                const messageText = await recoverFullMessageText(
-                    interaction.message,
-                    anchorMessage
-                );
-                if (!messageText) {
-                    provenanceLogger.error(
-                        'Explain flow failed (missing message text)',
-                        {
-                            ...explainLogContext,
-                            phase: 'error',
-                            reason: 'missing_message_text',
-                        }
-                    );
-                    await updateExplainStatus(
-                        'I could not locate the response to explain. Please try again from the original message.',
-                        'explain_missing_text'
-                    );
-                    return;
-                }
-
-                const { responseId, metadata } =
-                    await resolveProvenanceMetadata(interaction.message);
-                if (responseId) {
-                    explainLogContext = buildExplainLogContext(
-                        interaction,
-                        responseId
-                    );
-                }
-                const plannerOptions = await requestProvenanceOpenAIOptions(
-                    openaiService,
-                    {
-                        kind: 'explain',
-                        messageText,
-                        metadata,
-                    }
-                );
-                const explanation = await generateExplanationMessage(
-                    openaiService,
-                    {
-                        messageText,
-                        confidence: metadata?.confidence,
-                        tradeoffCount: metadata?.tradeoffCount,
-                        chainHash: metadata?.chainHash,
-                        channelId: interaction.channelId ?? undefined,
-                    },
-                    plannerOptions
-                );
-
-                const channel = interaction.channel;
-                if (!channel || !channel.isSendable()) {
-                    provenanceLogger.error(
-                        'Explain flow failed (unsendable channel)',
-                        {
-                            ...explainLogContext,
-                            phase: 'error',
-                            reason: 'unsendable_channel',
-                        }
-                    );
-                    await updateExplainStatus(
-                        'I could not post the explanation in this channel.',
-                        'explain_unsendable_channel'
-                    );
-                    return;
-                }
-
-                let targetMessage: Message | null = anchorMessage ?? null;
-                if (!targetMessage && channel.isTextBased()) {
-                    try {
-                        targetMessage = await channel.messages.fetch(
-                            interaction.message.id
-                        );
-                    } catch (fetchError) {
-                        logger.warn(
-                            `Failed to fetch original message ${interaction.message.id} for explanation reply: ${fetchError}`
-                        );
-                    }
-                }
-
-                const explanationContent = `**Explanation:**\n\n${explanation.trim()}`;
-                if (targetMessage) {
-                    const responseHandler = new ResponseHandler(
-                        targetMessage,
-                        channel,
-                        interaction.user
-                    );
-                    await responseHandler.sendMessage(
-                        explanationContent,
-                        [],
-                        true,
-                        true
-                    );
-                } else {
-                    const responseHandler = new ResponseHandler(
-                        interaction.message as Message,
-                        channel,
-                        interaction.user
-                    );
-                    await responseHandler.sendMessage(
-                        explanationContent,
-                        [],
-                        true,
-                        true
-                    );
-                }
-
-                await updateExplainStatus(
-                    '✅ Explanation posted.',
-                    'explain_complete'
-                );
-                provenanceLogger.info('Explain flow completed', {
-                    ...explainLogContext,
-                    phase: 'success',
-                });
-            } catch (error) {
-                provenanceLogger.error('Explain flow error', {
-                    ...explainLogContext,
-                    phase: 'error',
-                    reason: 'generation_failed',
-                    error,
-                });
-                await updateExplainStatus(
-                    '⚠️ I could not generate that explanation. Please try again later.',
-                    'explain_generation_failed'
-                );
-            } finally {
-                clearExplainInProgress(explainKey);
-                if (explainTimeout) {
-                    clearTimeout(explainTimeout);
-                }
-            }
-
-            return;
-        }
-
-        // Provenance footer: start alternative lens flow
-        if (customId === 'alternative_lens') {
-            await handleAlternativeLensButton(interaction);
-            return;
-        }
-
-        // Provenance footer: generate reframed response
-        if (customId.startsWith(ALTERNATIVE_LENS_SUBMIT_PREFIX)) {
-            await handleAlternativeLensSubmit(interaction, openaiService);
+            await interaction.reply({
+                content:
+                    "This feature isn't active yet. To report ethical or security issues, please follow the instructions in [SECURITY.md](https://github.com/footnote-ai/footnote/blob/main/SECURITY.md).",
+                flags: [1 << 6], // [1 << 6] = EPHEMERAL
+            });
             return;
         }
 
@@ -1073,18 +1005,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
             return;
         }
 
-        if (customId === 'report_issue') {
-            logger.info(
-                `Report Issue button clicked by user: ${interaction.user.id} on message: ${interaction.message.id} (${interaction.message.url})`
-            );
-            await interaction.reply({
-                content:
-                    "This feature isn't active yet. To report ethical or security issues, please follow the instructions in [SECURITY.md](https://github.com/footnote-ai/footnote/blob/main/SECURITY.md).",
-                flags: [1 << 6], // [1 << 6] = EPHEMERAL
-            });
-            return;
-        }
-
         // Other button handlers fall through to the retry logic below.
         if (customId.startsWith(IMAGE_RETRY_CUSTOM_ID_PREFIX)) {
             const retryKey = interaction.customId.slice(
@@ -1224,37 +1144,3 @@ process.on('uncaughtException', (error: Error) => {
     logger.error(`Uncaught exception: ${error}`);
     process.exit(1);
 });
-
-// ====================
-// GitHub Webhook Server
-// ====================
-//TODO: Need to implement system of actually updating the vector database with the changes. Currently the system is just to delete/replace the entire database.
-/*
-const appServer = express();
-appServer.use(bodyParser.json());
-
-appServer.post("/github-webhook", async (req, res) => {
-  try {
-    const { ref, commits } = req.body;
-    console.log(`Push detected on ${ref}`);
-
-    const changedFiles = commits.flatMap((c: { added: string[]; modified: string[] }) => [...c.added, ...c.modified]);
-    console.log(`Changed files: ${changedFiles.join(', ')}`);
-
-    // Trigger reindexing asynchronously
-    // TODO
-
-    res.sendStatus(200);
-  } catch (err) {
-    console.error(`Webhook processing error: ${err}`);
-    res.sendStatus(500);
-  }
-});
-
-// Start Express server
-const WEBHOOK_PORT = runtimeConfig.webhookPort;
-appServer.listen(WEBHOOK_PORT, () => {
-  console.log(`GitHub webhook server listening on port ${WEBHOOK_PORT}`);
-});
-*/
-

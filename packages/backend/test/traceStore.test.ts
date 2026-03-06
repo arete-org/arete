@@ -22,7 +22,6 @@ test('TraceStore round trips metadata with citation URLs', async () => {
     const metadata: ResponseMetadata = {
         responseId: 'response_123',
         provenance: 'Retrieved',
-        confidence: 0.85,
         riskTier: 'Low',
         tradeoffCount: 2,
         chainHash: 'abc123',
@@ -69,3 +68,67 @@ test('TraceStore round trips metadata with citation URLs', async () => {
     }
 });
 
+test('TraceStore round trips trace-card SVG assets', async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-card-'));
+    const dbPath = path.join(tempRoot, 'provenance.db');
+    const store = new SqliteTraceStore({ dbPath });
+    const responseId = 'response_trace_card_123';
+    const initialSvg = '<svg><title>initial</title></svg>';
+    const updatedSvg = '<svg><title>updated</title></svg>';
+
+    try {
+        const beforeInsert = await store.getTraceCardSvg(responseId);
+        assert.equal(
+            beforeInsert,
+            null,
+            'missing trace-card should return null'
+        );
+
+        await store.upsertTraceCardSvg(responseId, initialSvg);
+        const storedInitial = await store.getTraceCardSvg(responseId);
+        assert.equal(storedInitial, initialSvg);
+
+        await store.upsertTraceCardSvg(responseId, updatedSvg);
+        const storedUpdated = await store.getTraceCardSvg(responseId);
+        assert.equal(
+            storedUpdated,
+            updatedSvg,
+            'upsert should replace existing SVG'
+        );
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});
+
+test('TraceStore delete removes both trace metadata and trace-card SVG', async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-delete-'));
+    const dbPath = path.join(tempRoot, 'provenance.db');
+    const store = new SqliteTraceStore({ dbPath });
+    const responseId = 'delete_trace_card_123';
+
+    try {
+        await store.upsert({
+            responseId,
+            provenance: 'Retrieved',
+            riskTier: 'Low',
+            tradeoffCount: 1,
+            chainHash: 'chain_hash',
+            licenseContext: 'MIT + HL3',
+            modelVersion: 'gpt-5-mini',
+            staleAfter: new Date(Date.now() + 60000).toISOString(),
+            citations: [],
+        });
+        await store.upsertTraceCardSvg(responseId, '<svg>trace-card</svg>');
+
+        await store.delete(responseId);
+
+        const trace = await store.retrieve(responseId);
+        const traceCardSvg = await store.getTraceCardSvg(responseId);
+        assert.equal(trace, null, 'trace metadata should be deleted');
+        assert.equal(traceCardSvg, null, 'trace-card SVG should be deleted');
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});

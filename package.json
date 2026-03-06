@@ -7,12 +7,14 @@
     ],
     "scripts": {
         "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:web\"",
-        "dev:backend": "pnpm --filter @footnote/config-spec run build && pnpm exec tsx packages/backend/src/server.ts",
+        "dev:backend": "pnpm --filter @footnote/config-spec run build:dev && pnpm exec tsx packages/backend/src/server.ts",
         "dev:web": "pnpm --filter @footnote/web dev",
         "dev:bot": "pnpm --filter @footnote/discord-bot dev",
         "start:dev": "pnpm dev",
-        "start:backend": "pnpm dev:backend",
-        "start:bot": "pnpm dev:bot",
+        "start:backend": "node scripts/preflight-dev-ports.cjs backend && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:backend",
+        "start:web": "node scripts/preflight-dev-ports.cjs web && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:web",
+        "start:bot": "node scripts/preflight-dev-ports.cjs bot && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:bot",
+        "start:all": "node scripts/start-all.cjs",
         "start:prod-test": "pnpm --filter @footnote/backend build && cross-env NODE_ENV=production node server.js",
         "dev:prod-test": "concurrently \"pnpm --filter @footnote/backend build && cross-env NODE_ENV=production node server.js\" \"pnpm --filter @footnote/web dev\"",
         "build": "pnpm -r build",
@@ -65,4 +67,3 @@
         "jsonwebtoken": "catalog:"
     }
 }
-

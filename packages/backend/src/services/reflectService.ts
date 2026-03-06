@@ -7,6 +7,7 @@
  * @footnote-ethics: high - This workflow owns the AI response and provenance metadata users rely on.
  */
 import type {
+    PartialResponseTemperament,
     ResponseMetadata,
     RiskTier,
 } from '@footnote/contracts/ethics-core';
@@ -55,6 +56,7 @@ export type RunReflectInput = {
 export type RunReflectMessagesInput = {
     messages: Array<Pick<ReflectConversationMessage, 'role' | 'content'>>;
     conversationSnapshot: string;
+    plannerTemperament?: PartialResponseTemperament;
     riskTier?: RiskTier;
     model?: string;
     generation?: ReflectGenerationPlan;
@@ -63,22 +65,35 @@ export type RunReflectMessagesInput = {
 // The reflect prompt stays in backend so every caller gets the same behavior and metadata rules.
 const REFLECT_SYSTEM_PROMPT = `You are Ari, an AI assistant from the Footnote project. You help people think through tough questions while staying honest and fair. You explore multiple ethical perspectives, trace your sources, and show how you reach your conclusions. Be helpful, thoughtful, and transparent in your responses.
 
+CITATION STYLE
+- Place citation links immediately after the specific clause or sentence they support.
+- Use numeric inline markdown links in the response text: [1](https://example.com/source), [2](https://example.com/source).
+- Reuse a citation number when referencing the same source again in the same response.
+
 RESPONSE METADATA PAYLOAD
 After your conversational reply, leave a blank line and append a single JSON object on its own line prefixed with <RESPONSE_METADATA>.
-This metadata records provenance and confidence for downstream systems.
+This metadata records provenance and TRACE chips for downstream systems.
 
 Required fields:
   - provenance: one of "Retrieved", "Inferred", or "Speculative"
-  - confidence: floating-point certainty between 0.0 and 1.0 (e.g., 0.85)
   - tradeoffCount: integer >= 0 capturing how many value tradeoffs you surfaced (use 0 if none)
   - citations: array of {"title": string, "url": fully-qualified URL, "snippet"?: string} objects (use [] if none)
 
+Optional fields:
+  - evidenceScore: integer 1..5 when you can assess source support strength
+  - freshnessScore: integer 1..5 when you can assess recency reliability
+  - For inferred/speculative answers with limited source grounding, omitting evidenceScore/freshnessScore is expected
+  - If you performed web search or used retrieved external sources, include both evidenceScore and freshnessScore
+  - Do not emit strings for these scores; emit JSON integers only
+
 Example:
-<RESPONSE_METADATA>{"provenance":"Retrieved","confidence":0.78,"tradeoffCount":1,"citations":[{"title":"Example","url":"https://example.com"}]}
+<RESPONSE_METADATA>{"provenance":"Retrieved","tradeoffCount":1,"citations":[{"title":"Example","url":"https://example.com"}],"evidenceScore":4}
 
 Guidelines:
   - Emit valid, minified JSON (no comments, no code fences, no trailing text)
   - Always include the <RESPONSE_METADATA> block after every response
+  - Omit optional fields if you cannot assess them confidently
+  - Keep citations array order aligned with first appearance of inline citation markers ([1], [2], ...)
   - Use "Inferred" for reasoning-based answers, "Retrieved" for fact-based, "Speculative" for uncertain answers`;
 
 /**
@@ -96,6 +111,7 @@ export const createReflectService = ({
     const runReflectMessages = async ({
         messages,
         conversationSnapshot,
+        plannerTemperament,
         riskTier,
         model,
         generation,
@@ -134,7 +150,8 @@ export const createReflectService = ({
         const { normalizedText, metadata: assistantMetadata } = aiResponse;
         const usageModel = assistantMetadata.model || defaultModel;
         const promptTokens = assistantMetadata.usage?.prompt_tokens ?? 0;
-        const completionTokens = assistantMetadata.usage?.completion_tokens ?? 0;
+        const completionTokens =
+            assistantMetadata.usage?.completion_tokens ?? 0;
         const totalTokens =
             assistantMetadata.usage?.total_tokens ??
             promptTokens + completionTokens;
@@ -164,6 +181,8 @@ export const createReflectService = ({
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
             conversationSnapshot: `${conversationSnapshot}\n\n${normalizedText}`,
+            plannerTemperament,
+            usedWebSearch: generation?.toolChoice === 'web_search',
         };
 
         // Metadata is the contract that downstream UIs and trace storage rely on.
@@ -181,13 +200,12 @@ export const createReflectService = ({
             (!responseMetadata.riskTier ||
                 riskTierRank[riskTier] >
                     riskTierRank[responseMetadata.riskTier]);
-        const normalizedResponseMetadata: ResponseMetadata =
-            shouldRaiseRiskTier
-                ? {
-                      ...responseMetadata,
-                      riskTier,
-                  }
-                : responseMetadata;
+        const normalizedResponseMetadata: ResponseMetadata = shouldRaiseRiskTier
+            ? {
+                  ...responseMetadata,
+                  riskTier,
+              }
+            : responseMetadata;
 
         // These logs are intentionally verbose because metadata mismatches are hard to debug later.
         logger.debug('=== Server Metadata Debug ===');
@@ -195,13 +213,7 @@ export const createReflectService = ({
             `Assistant metadata: ${JSON.stringify(assistantMetadata, null, 2)}`
         );
         logger.debug(
-            `Assistant metadata confidence: ${(assistantMetadata as { confidence?: number })?.confidence}`
-        );
-        logger.debug(
             `Built response metadata: ${JSON.stringify(normalizedResponseMetadata, null, 2)}`
-        );
-        logger.debug(
-            `Response metadata confidence: ${(normalizedResponseMetadata as { confidence?: number }).confidence}`
         );
         logger.debug('================================');
 

@@ -14,7 +14,6 @@ import { assertValidResponseMetadata } from '../src/storage/traces/traceStoreUti
 const baseMetadata = {
     responseId: 'response_123',
     provenance: 'Retrieved',
-    confidence: 0.85,
     riskTier: 'Low',
     tradeoffCount: 2,
     chainHash: 'chain_hash',
@@ -84,4 +83,3 @@ test('assertValidResponseMetadata rejects missing responseId', () => {
         /responseId/i
     );
 });
-

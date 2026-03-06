@@ -7,6 +7,7 @@
  */
 
 import { z } from 'zod';
+import type { TraceAxisScore } from '../ethics-core';
 import type { ApiResponseValidationResult } from './client-core';
 
 const ProvenanceSchema = z.enum(['Retrieved', 'Inferred', 'Speculative']);
@@ -69,10 +70,39 @@ export const CitationSchema = z
     })
     .strict();
 
+/**
+ * TRACE temperament profile:
+ * - [T]ightness: concision and structural efficiency
+ * - [R]ationale: amount of visible rationale and trade-off explanation
+ * - [A]ttribution: clarity of sourced vs inferred boundaries
+ * - [C]aution: safeguard posture and overclaim restraint
+ * - [E]xtent: breadth of viable options and perspectives
+ *
+ * We use literal values (1..5) instead of a broad number schema so Zod output
+ * matches the TraceAxisScore contract type exactly.
+ */
+const TraceAxisScoreSchema: z.ZodType<TraceAxisScore> = z.union([
+    z.literal(1),
+    z.literal(2),
+    z.literal(3),
+    z.literal(4),
+    z.literal(5),
+]);
+
+const ResponseTemperamentSchema = z
+    .object({
+        tightness: TraceAxisScoreSchema,
+        rationale: TraceAxisScoreSchema,
+        attribution: TraceAxisScoreSchema,
+        caution: TraceAxisScoreSchema,
+        extent: TraceAxisScoreSchema,
+    })
+    .strict();
+const PartialResponseTemperamentSchema = ResponseTemperamentSchema.partial();
+
 const responseMetadataShape = {
     responseId: z.string().min(1),
     provenance: ProvenanceSchema,
-    confidence: z.number().min(0).max(1),
     riskTier: RiskTierSchema,
     tradeoffCount: z.number().nonnegative(),
     chainHash: z.string(),
@@ -81,7 +111,17 @@ const responseMetadataShape = {
     staleAfter: z.string(),
     citations: z.array(CitationSchema),
     imageDescriptions: z.array(z.string()).optional(),
+    evidenceScore: TraceAxisScoreSchema.optional(),
+    freshnessScore: TraceAxisScoreSchema.optional(),
+    temperament: PartialResponseTemperamentSchema.optional(),
 } as const;
+
+const TraceCardChipDataSchema = z
+    .object({
+        evidenceScore: TraceAxisScoreSchema.optional(),
+        freshnessScore: TraceAxisScoreSchema.optional(),
+    })
+    .strict();
 
 /**
  * Response metadata is intentionally tolerant so new backend fields do not break clients.
@@ -104,10 +144,7 @@ export const PostReflectRequestSchema = z
             })
             .strict(),
         latestUserInput: z.string().min(1).max(3072),
-        conversation: z
-            .array(ReflectConversationMessageSchema)
-            .min(1)
-            .max(64),
+        conversation: z.array(ReflectConversationMessageSchema).min(1).max(64),
         attachments: z.array(ReflectAttachmentSchema).max(8).optional(),
         capabilities: ReflectCapabilitiesSchema.optional(),
         sessionId: z.string().min(1).max(128).optional(),
@@ -176,6 +213,45 @@ export const PostTracesResponseSchema = z
     .passthrough();
 
 /**
+ * @api.operationId: postTraceCards
+ * @api.path: POST /api/trace-cards
+ */
+export const PostTraceCardRequestSchema = z
+    .object({
+        responseId: z.string().min(1).optional(),
+        temperament: PartialResponseTemperamentSchema.optional(),
+        chips: TraceCardChipDataSchema.optional(),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postTraceCards
+ * @api.path: POST /api/trace-cards
+ */
+export const PostTraceCardResponseSchema = z
+    .object({
+        responseId: z.string().min(1),
+        pngBase64: z.string().min(1),
+    })
+    .passthrough();
+
+/**
+ * @api.operationId: postTraceCardsFromTrace
+ * @api.path: POST /api/trace-cards/from-trace
+ */
+export const PostTraceCardFromTraceRequestSchema = z
+    .object({
+        responseId: z.string().min(1),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postTraceCardsFromTrace
+ * @api.path: POST /api/trace-cards/from-trace
+ */
+export const PostTraceCardFromTraceResponseSchema = PostTraceCardResponseSchema;
+
+/**
  * @api.operationId: getTrace
  * @api.path: GET /api/traces/{responseId}
  */
@@ -224,9 +300,7 @@ const formatSchemaIssues = (error: z.ZodError): string => {
 
 export const createSchemaResponseValidator =
     <TSchema extends z.ZodTypeAny>(schema: TSchema) =>
-    (
-        data: unknown
-    ): ApiResponseValidationResult<z.output<TSchema>> => {
+    (data: unknown): ApiResponseValidationResult<z.output<TSchema>> => {
         const parsed = schema.safeParse(data);
         if (parsed.success) {
             return {
@@ -240,4 +314,3 @@ export const createSchemaResponseValidator =
             error: formatSchemaIssues(parsed.error),
         };
     };
-

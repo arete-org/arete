@@ -35,11 +35,19 @@ test('reflectPlanner parses plain JSON output from the backend-native planner pr
                     action: 'message',
                     modality: 'text',
                     riskTier: 'Low',
-                    reasoning: 'The user is asking a question that needs a reply.',
+                    reasoning:
+                        'The user is asking a question that needs a reply.',
                     generation: {
                         reasoningEffort: 'medium',
                         verbosity: 'medium',
                         toolChoice: 'web_search',
+                        temperament: {
+                            tightness: 4,
+                            rationale: 3,
+                            attribution: 4,
+                            caution: 3,
+                            extent: 4,
+                        },
                         webSearch: {
                             query: 'latest Footnote release notes',
                             searchContextSize: 'low',
@@ -59,9 +67,12 @@ test('reflectPlanner parses plain JSON output from the backend-native planner pr
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.generation.toolChoice, 'web_search');
-    assert.equal(plan.generation.webSearch?.query, 'latest Footnote release notes');
+    assert.equal(
+        plan.generation.webSearch?.query,
+        'latest Footnote release notes'
+    );
     assert.equal(plan.generation.webSearch?.searchIntent, 'current_facts');
-  });
+});
 
 test('reflectPlanner fails open to a valid fallback generation config when planner JSON is invalid', async () => {
     const openaiService: OpenAIService = {
@@ -97,11 +108,23 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
                         reasoningEffort: 'low',
                         verbosity: 'medium',
                         toolChoice: 'web_search',
+                        temperament: {
+                            tightness: 4,
+                            rationale: 3,
+                            attribution: 4,
+                            caution: 3,
+                            extent: 4,
+                        },
                         webSearch: {
                             query: 'How does Discord provenance work in Footnote?',
                             searchContextSize: 'low',
                             searchIntent: 'repo_explainer',
-                            repoHints: ['Discord', 'provenance', 'discord', 'wiki'],
+                            repoHints: [
+                                'Discord',
+                                'provenance',
+                                'discord',
+                                'wiki',
+                            ],
                         },
                     },
                 }),
@@ -137,6 +160,13 @@ test('invalid web_search query downgrades safely to none', async () => {
                         reasoningEffort: 'low',
                         verbosity: 'low',
                         toolChoice: 'web_search',
+                        temperament: {
+                            tightness: 4,
+                            rationale: 3,
+                            attribution: 4,
+                            caution: 3,
+                            extent: 4,
+                        },
                         webSearch: {
                             query: '   ',
                             searchContextSize: 'medium',
@@ -158,4 +188,92 @@ test('invalid web_search query downgrades safely to none', async () => {
     assert.equal(plan.generation.toolChoice, 'none');
     assert.equal(plan.generation.webSearch, undefined);
     assert.match(plan.reasoning, /search was disabled safely/i);
+});
+
+test('planner temperament is accepted when all TRACE axes are integer 1..5', async () => {
+    const openaiService: OpenAIService = {
+        async generateResponse() {
+            return {
+                normalizedText: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    riskTier: 'Low',
+                    reasoning:
+                        'This should include TRACE temperament guidance.',
+                    generation: {
+                        reasoningEffort: 'low',
+                        verbosity: 'low',
+                        toolChoice: 'none',
+                        temperament: {
+                            tightness: 5,
+                            rationale: 3,
+                            attribution: 4,
+                            caution: 2,
+                            extent: 1,
+                        },
+                    },
+                }),
+                metadata: {
+                    model: 'gpt-5-mini',
+                },
+            };
+        },
+    };
+
+    const planner = createReflectPlanner({ openaiService });
+    const plan = await planner.planReflect(createReflectRequest());
+
+    assert.deepEqual(plan.generation.temperament, {
+        tightness: 5,
+        rationale: 3,
+        attribution: 4,
+        caution: 2,
+        extent: 1,
+    });
+});
+
+test('message plans with missing or invalid TRACE axes fall back safely', async () => {
+    const openaiService: OpenAIService = {
+        async generateResponse() {
+            return {
+                normalizedText: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    riskTier: 'Low',
+                    reasoning:
+                        'This should include TRACE temperament guidance.',
+                    generation: {
+                        reasoningEffort: 'medium',
+                        verbosity: 'high',
+                        toolChoice: 'web_search',
+                        temperament: {
+                            tightness: 5,
+                            rationale: 3,
+                            attribution: 4,
+                            caution: 6,
+                            extent: 1,
+                        },
+                        webSearch: {
+                            query: 'latest release notes',
+                            searchContextSize: 'low',
+                            searchIntent: 'current_facts',
+                        },
+                    },
+                }),
+                metadata: {
+                    model: 'gpt-5-mini',
+                },
+            };
+        },
+    };
+
+    const planner = createReflectPlanner({ openaiService });
+    const plan = await planner.planReflect(createReflectRequest());
+
+    assert.equal(plan.action, 'message');
+    assert.equal(plan.generation.toolChoice, 'none');
+    assert.equal(plan.generation.reasoningEffort, 'low');
+    assert.equal(plan.generation.verbosity, 'low');
+    assert.equal(plan.generation.temperament, undefined);
+    assert.match(plan.reasoning, /missing|invalid|TRACE temperament/i);
 });

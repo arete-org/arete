@@ -38,12 +38,71 @@ type ServerMetadata = GetTraceResponse & {
 // React page can consume the JSON payload without re-defining the entire schema.
 type SerializableResponseMetadata = ServerMetadata;
 
+type TracePageLogLevel = 'debug' | 'info' | 'warn' | 'error';
+type TracePageLogFields = Record<string, unknown>;
+
+const tracePageLogger = {
+    log(level: TracePageLogLevel, message: string, fields: TracePageLogFields) {
+        const scopedMessage = `[TracePage] ${message}`;
+        const payload = { ...fields };
+
+        if (level === 'error') {
+            console.error(scopedMessage, payload);
+            return;
+        }
+
+        if (level === 'warn') {
+            console.warn(scopedMessage, payload);
+            return;
+        }
+
+        if (level === 'debug') {
+            console.debug(scopedMessage, payload);
+            return;
+        }
+
+        console.info(scopedMessage, payload);
+    },
+    debug(message: string, fields: TracePageLogFields) {
+        this.log('debug', message, fields);
+    },
+    info(message: string, fields: TracePageLogFields) {
+        this.log('info', message, fields);
+    },
+    warn(message: string, fields: TracePageLogFields) {
+        this.log('warn', message, fields);
+    },
+    error(message: string, fields: TracePageLogFields) {
+        this.log('error', message, fields);
+    },
+};
+
 // Helper to extract payload from 410 (stale) responses
 const extractPayload = (data: unknown): ServerMetadata | null => {
     if (data && typeof data === 'object' && 'metadata' in data) {
         const stalePayload = data as GetTraceStaleResponse;
         return (stalePayload.metadata as ServerMetadata) || null;
     }
+    return null;
+};
+
+const toSafeExternalUrl = (value: unknown): string | null => {
+    const candidate =
+        typeof value === 'string' ? value : String(value ?? '').trim();
+    if (candidate.length === 0) {
+        return null;
+    }
+
+    try {
+        const parsed = new URL(candidate);
+        const protocol = parsed.protocol.toLowerCase();
+        if (protocol === 'http:' || protocol === 'https:') {
+            return parsed.toString();
+        }
+    } catch {
+        return null;
+    }
+
     return null;
 };
 
@@ -86,44 +145,22 @@ const TracePage = (): JSX.Element => {
                 const traceResult = await api.getTrace(responseId);
 
                 if (traceResult.status === 200) {
-                    const payload = traceResult.data as SerializableResponseMetadata;
-
-                    // Debug logging
-                    console.log('=== Trace Page Debug ===');
-                    console.log('Response ID:', responseId);
-                    console.log(
-                        'Payload received:',
-                        JSON.stringify(payload, null, 2)
-                    );
-                    console.log('Payload confidence:', payload?.confidence);
-                    console.log(
-                        'Payload confidence type:',
-                        typeof payload?.confidence
-                    );
-                    console.log(
-                        'Has confidence property:',
-                        'confidence' in payload
-                    );
-                    console.log('Payload keys:', Object.keys(payload));
-                    console.log('========================');
+                    const payload =
+                        traceResult.data as SerializableResponseMetadata;
+                    const payloadKeys = Object.keys(payload);
+                    const payloadApproxBytes = JSON.stringify(payload).length;
+                    tracePageLogger.debug('Trace loaded successfully.', {
+                        responseId,
+                        status: traceResult.status,
+                        payloadKeyCount: payloadKeys.length,
+                        payloadKeys: payloadKeys.slice(0, 12),
+                        payloadApproxBytes,
+                    });
 
                     if (!isMounted) {
                         return;
                     }
-
-                    console.log(
-                        'About to set traceData with payload:',
-                        payload
-                    );
-                    console.log(
-                        'Payload confidence before setting:',
-                        payload?.confidence
-                    );
                     setTraceData(payload);
-                    console.log(
-                        'traceData state set, confidence should be:',
-                        payload?.confidence
-                    );
                     setLoadingState('success');
                     return;
                 }
@@ -143,19 +180,16 @@ const TracePage = (): JSX.Element => {
                     return;
                 }
             } catch (error) {
-                console.error('=== Trace Page - Error ===');
-                console.error('Error:', error);
-                console.error(
-                    'Error type:',
-                    error instanceof Error
-                        ? error.constructor.name
-                        : typeof error
-                );
-                console.error(
-                    'Error message:',
-                    error instanceof Error ? error.message : String(error)
-                );
-                console.error('===========================');
+                tracePageLogger.error('Trace load failed.', {
+                    responseId,
+                    errorType:
+                        error instanceof Error
+                            ? error.constructor.name
+                            : typeof error,
+                    errorMessage:
+                        error instanceof Error ? error.message : String(error),
+                    apiStatus: isApiClientError(error) ? error.status : null,
+                });
 
                 if (!isMounted) {
                     return;
@@ -173,7 +207,9 @@ const TracePage = (): JSX.Element => {
                     }
 
                     setErrorMessage(
-                        error.details || error.message || 'Failed to load trace.'
+                        error.details ||
+                            error.message ||
+                            'Failed to load trace.'
                     );
                     setLoadingState('error');
                     return;
@@ -198,25 +234,6 @@ const TracePage = (): JSX.Element => {
             isMounted = false;
         };
     }, [responseId]);
-
-    // Debug: log traceData whenever it changes
-    useEffect(() => {
-        console.log('=== traceData State Changed ===');
-        console.log('traceData:', traceData);
-        console.log('traceData?.confidence:', traceData?.confidence);
-        console.log(
-            'traceData?.confidence type:',
-            typeof traceData?.confidence
-        );
-        if (traceData) {
-            console.log('All traceData keys:', Object.keys(traceData));
-            console.log(
-                'Raw traceData JSON:',
-                JSON.stringify(traceData, null, 2)
-            );
-        }
-        console.log('================================');
-    }, [traceData]);
 
     if (loadingState === 'loading') {
         return (
@@ -353,39 +370,6 @@ const TracePage = (): JSX.Element => {
             ? traceData.chainHash
             : undefined;
 
-    // Format confidence as percentage if available
-    const formatConfidence = (confidence?: number): string => {
-        console.log('=== Formatting Confidence ===');
-        console.log('Input confidence value:', confidence);
-        console.log('Input type:', typeof confidence);
-        console.log('traceData object:', traceData);
-        console.log('traceData.confidence:', traceData?.confidence);
-
-        if (
-            typeof confidence === 'number' &&
-            !isNaN(confidence) &&
-            confidence >= 0 &&
-            confidence <= 1
-        ) {
-            const result = `${Math.round(confidence * 100)}%`;
-            console.log('Confidence formatted as:', result);
-            return result;
-        }
-        console.log('Confidence validation failed - returning unavailable');
-        console.log('Confidence value that failed:', confidence);
-        console.log('Is number?', typeof confidence === 'number');
-        console.log('Is NaN?', isNaN(confidence as number));
-        console.log(
-            'Range check:',
-            confidence !== undefined
-                ? `${confidence} >= 0 && ${confidence} <= 1 = ${(confidence as number) >= 0 && (confidence as number) <= 1}`
-                : 'undefined'
-        );
-        return 'Confidence data unavailable';
-    };
-    const confidence = formatConfidence(traceData?.confidence);
-    console.log('=== Final Confidence Result ===');
-    console.log('Final confidence string:', confidence);
     const tradeoffCount = traceData?.tradeoffCount ?? 0;
     const staleAfter = traceData?.staleAfter
         ? new Date(traceData.staleAfter).toLocaleString()
@@ -412,9 +396,6 @@ const TracePage = (): JSX.Element => {
                 <h2>Summary</h2>
                 <p>
                     <strong>Provenance:</strong> {provenance}
-                </p>
-                <p>
-                    <strong>Confidence:</strong> {confidence}
                 </p>
                 <p>
                     <strong>Risk Tier:</strong>{' '}
@@ -446,38 +427,46 @@ const TracePage = (): JSX.Element => {
                 <h2>Citations</h2>
                 {traceData?.citations && traceData.citations.length > 0 ? (
                     <ul>
-                        {traceData.citations.map((citation: {
-                            title: string;
-                            url: string;
-                            snippet?: string;
-                        }, index: number) => {
-                            const urlString =
-                                typeof citation.url === 'string'
-                                    ? citation.url
-                                    : String(citation.url || '');
-                            return (
-                                <li key={index}>
-                                    <a
-                                        href={urlString}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                    >
-                                        {citation.title || 'Untitled'}
-                                    </a>
-                                    {citation.snippet && (
-                                        <p
-                                            style={{
-                                                marginTop: '0.25rem',
-                                                fontSize: '0.875rem',
-                                                color: '#6b7280',
-                                            }}
-                                        >
-                                            {citation.snippet}
-                                        </p>
-                                    )}
-                                </li>
-                            );
-                        })}
+                        {traceData.citations.map(
+                            (
+                                citation: {
+                                    title: string;
+                                    url: string;
+                                    snippet?: string;
+                                },
+                                index: number
+                            ) => {
+                                const safeUrl = toSafeExternalUrl(citation.url);
+                                return (
+                                    <li key={index}>
+                                        {safeUrl ? (
+                                            <a
+                                                href={safeUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >
+                                                {citation.title || 'Untitled'}
+                                            </a>
+                                        ) : (
+                                            <span>
+                                                {citation.title || 'Untitled'}
+                                            </span>
+                                        )}
+                                        {citation.snippet && (
+                                            <p
+                                                style={{
+                                                    marginTop: '0.25rem',
+                                                    fontSize: '0.875rem',
+                                                    color: '#6b7280',
+                                                }}
+                                            >
+                                                {citation.snippet}
+                                            </p>
+                                        )}
+                                    </li>
+                                );
+                            }
+                        )}
                     </ul>
                 ) : (
                     <p>No citations available for this response.</p>
@@ -521,4 +510,3 @@ const TracePage = (): JSX.Element => {
 };
 
 export default TracePage;
-

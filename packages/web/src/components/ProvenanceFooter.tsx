@@ -1,5 +1,5 @@
 /**
- * @description: Displays confidence, citations, and provenance metadata for web responses.
+ * @description: Displays citations and provenance metadata for web responses.
  * @footnote-scope: web
  * @footnote-module: ProvenanceFooter
  * @footnote-risk: medium - Footer rendering bugs can hide provenance signals or show malformed metadata.
@@ -36,20 +36,6 @@ const ProvenanceFooter = ({
     const riskTierColor =
         RISK_TIER_COLORS[metadata.riskTier] || RISK_TIER_COLORS.Low;
     const riskStyle = { '--risk-color': riskTierColor } as CSSProperties;
-
-    // Format confidence as percentage if available
-    const formatConfidence = (confidence: number): string => {
-        if (
-            typeof confidence !== 'number' ||
-            confidence < 0 ||
-            confidence > 1
-        ) {
-            return 'Confidence data unavailable';
-        }
-        return `${Math.round(confidence * 100)}% confidence`;
-    };
-
-    const confidenceText = formatConfidence(metadata.confidence);
 
     // Format trade-offs text if any
     const tradeOffsText =
@@ -100,10 +86,8 @@ const ProvenanceFooter = ({
             </div>
 
             <div className="provenance-main">
-                <span className="provenance-confidence">{confidenceText}</span>
                 {metadata.riskTier && (
                     <>
-                        <span className="provenance-separator"> • </span>
                         <span className="provenance-risktier">
                             {metadata.riskTier} risk
                         </span>
