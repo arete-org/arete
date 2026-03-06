@@ -29,6 +29,7 @@ import {
     IMAGE_DESCRIPTION_CONFIG,
     type ImageDescriptionModelType,
 } from '../constants/imageProcessing.js';
+import { normalizeTraceAxisScoreWithStringParsing } from './traceAxisScore.js';
 
 // ====================
 // Type Declarations
@@ -218,36 +219,6 @@ export interface AssistantMetadataPayload {
     freshnessScore?: TraceAxisScore;
     rawPayload: unknown;
 }
-
-const isTraceAxisScore = (value: unknown): value is TraceAxisScore =>
-    typeof value === 'number' &&
-    Number.isInteger(value) &&
-    value >= 1 &&
-    value <= 5;
-
-const normalizeTraceAxisScore = (
-    value: unknown
-): TraceAxisScore | undefined => {
-    if (
-        typeof value === 'number' &&
-        Number.isInteger(value) &&
-        value >= 1 &&
-        value <= 5
-    ) {
-        return value as TraceAxisScore;
-    }
-
-    if (typeof value === 'string') {
-        const trimmed = value.trim();
-        if (!/^\d+$/.test(trimmed)) {
-            return undefined;
-        }
-        const parsed = Number.parseInt(trimmed, 10);
-        return isTraceAxisScore(parsed) ? parsed : undefined;
-    }
-
-    return undefined;
-};
 
 /**
  * Extended interface for OpenAI Responses output items.
@@ -921,8 +892,12 @@ export class OpenAIService {
             tradeoffCount = Number.isNaN(intVal) || intVal < 0 ? 0 : intVal;
         }
 
-        const evidenceScore = normalizeTraceAxisScore(record.evidenceScore);
-        const freshnessScore = normalizeTraceAxisScore(record.freshnessScore);
+        const evidenceScore = normalizeTraceAxisScoreWithStringParsing(
+            record.evidenceScore
+        );
+        const freshnessScore = normalizeTraceAxisScoreWithStringParsing(
+            record.freshnessScore
+        );
 
         const metadata: AssistantMetadataPayload = {
             provenance,

@@ -9,9 +9,9 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import type {
     PartialResponseTemperament,
     ResponseMetadata,
-    TraceAxisScore,
 } from '@footnote/contracts/ethics-core';
 import type { PostTraceCardRequest } from '@footnote/contracts/web';
+import { normalizeTraceAxisScoreWithStringParsing } from '../traceAxisScore.js';
 
 export type ProvenanceAction = 'details' | 'report_issue';
 
@@ -33,21 +33,6 @@ function normalizeResponseId(responseId: string): string {
     return trimmed.length > 0 ? trimmed : UNKNOWN_RESPONSE_ID_FALLBACK;
 }
 
-const normalizeTraceAxisScore = (
-    value: unknown
-): TraceAxisScore | undefined => {
-    if (
-        typeof value !== 'number' ||
-        !Number.isInteger(value) ||
-        value < 1 ||
-        value > 5
-    ) {
-        return undefined;
-    }
-
-    return value as TraceAxisScore;
-};
-
 const normalizeTemperament = (
     temperament: ResponseMetadata['temperament']
 ): PartialResponseTemperament | undefined => {
@@ -57,7 +42,9 @@ const normalizeTemperament = (
 
     const normalized: PartialResponseTemperament = {};
     for (const axis of TRACE_AXIS_KEYS) {
-        const score = normalizeTraceAxisScore(temperament[axis]);
+        const score = normalizeTraceAxisScoreWithStringParsing(
+            temperament[axis]
+        );
         if (score !== undefined) {
             normalized[axis] = score;
         }
@@ -69,8 +56,12 @@ const normalizeTemperament = (
 const normalizeTraceCardChips = (
     metadata: ResponseMetadata
 ): PostTraceCardRequest['chips'] | undefined => {
-    const evidenceScore = normalizeTraceAxisScore(metadata.evidenceScore);
-    const freshnessScore = normalizeTraceAxisScore(metadata.freshnessScore);
+    const evidenceScore = normalizeTraceAxisScoreWithStringParsing(
+        metadata.evidenceScore
+    );
+    const freshnessScore = normalizeTraceAxisScoreWithStringParsing(
+        metadata.freshnessScore
+    );
 
     const chips: NonNullable<PostTraceCardRequest['chips']> = {};
     if (evidenceScore !== undefined) {

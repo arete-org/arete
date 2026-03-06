@@ -11,20 +11,14 @@ import type {
     RiskTier,
     Provenance,
     Citation,
-    TraceAxisScore,
 } from '@footnote/contracts/ethics-core';
 import { AssistantMetadataPayload } from '../openaiService.js';
+import { isTraceAxisScore } from '../traceAxisScore.js';
 
 interface RuntimeContext {
     modelVersion: string;
     conversationSnapshot: string;
 }
-
-const isTraceAxisScore = (value: unknown): value is TraceAxisScore =>
-    typeof value === 'number' &&
-    Number.isInteger(value) &&
-    value >= 1 &&
-    value <= 5;
 
 export function buildResponseMetadata(
     assistantPayload: AssistantMetadataPayload | null,

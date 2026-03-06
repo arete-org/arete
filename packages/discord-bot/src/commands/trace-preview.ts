@@ -8,6 +8,7 @@
 import {
     AttachmentBuilder,
     ChatInputCommandInteraction,
+    MessageFlags,
     SlashCommandBuilder,
 } from 'discord.js';
 import type {
@@ -25,7 +26,7 @@ const tracePreviewLogger =
         : logger;
 
 const TRACE_PREVIEW_FILENAME = 'trace-card.png';
-const EPHEMERAL_FLAG = 1 << 6;
+const EPHEMERAL_FLAG = MessageFlags.Ephemeral;
 
 /**
  * Narrows a runtime number to the TRACE axis score type.
