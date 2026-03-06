@@ -25,7 +25,7 @@ const OpenPhilosophy = (): JSX.Element => (
             <div className="intro-card-logo">
                 <img
                     src="/assets/logo.jpg"
-                    alt="Footnote logo - a compass-like design with a capital A"
+                    alt="Footnote logo - A circle with 5 even-spaced solid color wedges. From top-left, clockwise: Teal, rose, amber, copper, emerald."
                     className="intro-card-logo-image"
                 />
             </div>
