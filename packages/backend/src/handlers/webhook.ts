@@ -125,8 +125,48 @@ const createWebhookHandler =
                 chunks.push(chunk);
             });
             await new Promise<void>((resolve, reject) => {
-                req.on('end', () => resolve());
-                req.on('error', reject);
+                const cleanup = () => {
+                    req.off('end', onEnd);
+                    req.off('error', onError);
+                    req.off('close', onClose);
+                    req.off('aborted', onAborted);
+                };
+                const onEnd = () => {
+                    cleanup();
+                    resolve();
+                };
+                const onError = (error: Error) => {
+                    cleanup();
+                    reject(error);
+                };
+                const onClose = () => {
+                    cleanup();
+                    if (bodyTooLarge) {
+                        resolve();
+                        return;
+                    }
+                    reject(
+                        new Error(
+                            'webhook request closed before body completed'
+                        )
+                    );
+                };
+                const onAborted = () => {
+                    cleanup();
+                    if (bodyTooLarge) {
+                        resolve();
+                        return;
+                    }
+                    reject(
+                        new Error(
+                            'webhook request aborted before body completed'
+                        )
+                    );
+                };
+                req.on('end', onEnd);
+                req.on('error', onError);
+                req.on('close', onClose);
+                req.on('aborted', onAborted);
             });
             if (bodyTooLarge) {
                 return;
@@ -258,4 +298,3 @@ const createWebhookHandler =
     };
 
 export { createWebhookHandler };
-

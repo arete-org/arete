@@ -317,8 +317,48 @@ const createTraceHandlers = ({
         });
 
         await new Promise<void>((resolve, reject) => {
-            req.on('end', () => resolve());
-            req.on('error', reject);
+            const cleanup = () => {
+                req.off('end', onEnd);
+                req.off('error', onError);
+                req.off('close', onClose);
+                req.off('aborted', onAborted);
+            };
+            const onEnd = () => {
+                cleanup();
+                resolve();
+            };
+            const onError = (error: Error) => {
+                cleanup();
+                reject(error);
+            };
+            const onClose = () => {
+                cleanup();
+                if (bodyTooLarge) {
+                    resolve();
+                    return;
+                }
+                reject(
+                    new Error(
+                        `${routeLabel} request closed before body completed`
+                    )
+                );
+            };
+            const onAborted = () => {
+                cleanup();
+                if (bodyTooLarge) {
+                    resolve();
+                    return;
+                }
+                reject(
+                    new Error(
+                        `${routeLabel} request aborted before body completed`
+                    )
+                );
+            };
+            req.on('end', onEnd);
+            req.on('error', onError);
+            req.on('close', onClose);
+            req.on('aborted', onAborted);
         });
 
         if (bodyTooLarge) {
@@ -334,9 +374,11 @@ const createTraceHandlers = ({
         try {
             return JSON.parse(body) as unknown;
         } catch (error) {
-            logger.warn(
-                `${routeLabel} received invalid JSON body: ${error instanceof Error ? error.message : String(error)}`
-            );
+            logger.warn('Trace handler received invalid JSON body.', {
+                routeLabel,
+                errorMessage:
+                    error instanceof Error ? error.message : String(error),
+            });
             sendJson(res, 400, { error: 'Invalid JSON body' });
             logRequest(req, res, `${routeLabel} invalid-json`);
             return null;
@@ -458,7 +500,7 @@ const createTraceHandlers = ({
             }
 
             const payload = await parseTraceJsonBody(req, res, 'trace upsert');
-            if (!payload) {
+            if (payload === null) {
                 return;
             }
 
@@ -530,7 +572,7 @@ const createTraceHandlers = ({
                 return;
             }
             const payload = await parseTraceJsonBody(req, res, 'trace card');
-            if (!payload) return;
+            if (payload === null) return;
 
             const parsedPayload = PostTraceCardRequestSchema.safeParse(payload);
             if (!parsedPayload.success) {
@@ -607,7 +649,7 @@ const createTraceHandlers = ({
                 res,
                 'trace card from-trace'
             );
-            if (!payload) {
+            if (payload === null) {
                 return;
             }
 
