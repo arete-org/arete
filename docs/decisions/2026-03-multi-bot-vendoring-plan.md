@@ -78,6 +78,7 @@ If no vendor overlay is configured, the system must behave as Footnote default w
 - Update this document with final results
 - Update root README.md to explain vendoring processes for new users
 - Update DeepWiki instruction to explain this system and user processes
+- Ensure repo-wide standardization to the default Footnote persona and removal of Ari
 
 ---
 
