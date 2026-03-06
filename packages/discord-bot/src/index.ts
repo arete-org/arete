@@ -243,6 +243,58 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
     );
 }
 
+const PROVENANCE_VALUES = new Set(['Retrieved', 'Inferred', 'Speculative']);
+
+function isValidCitationList(value: unknown): boolean {
+    if (!Array.isArray(value)) {
+        return false;
+    }
+
+    return value.every((citation) => {
+        if (!isPlainObject(citation)) {
+            return false;
+        }
+
+        if (
+            typeof citation.title !== 'string' ||
+            typeof citation.url !== 'string'
+        ) {
+            return false;
+        }
+
+        if (
+            'snippet' in citation &&
+            citation.snippet !== undefined &&
+            typeof citation.snippet !== 'string'
+        ) {
+            return false;
+        }
+
+        return true;
+    });
+}
+
+function isValidResponseMetadataPayload(
+    payload: unknown
+): payload is ResponseMetadata {
+    if (!isPlainObject(payload)) {
+        return false;
+    }
+
+    if (typeof payload.responseId !== 'string') {
+        return false;
+    }
+
+    if (
+        typeof payload.provenance !== 'string' ||
+        !PROVENANCE_VALUES.has(payload.provenance)
+    ) {
+        return false;
+    }
+
+    return isValidCitationList(payload.citations);
+}
+
 function formatInlineJsonObject(value: Record<string, unknown>): string {
     const entries = Object.entries(value).filter(
         ([, entryValue]) => entryValue !== undefined
@@ -335,22 +387,16 @@ function formatDetailsPayloadForDiscord(
 function extractMetadataFromTraceResponse(
     payload: unknown
 ): ResponseMetadata | null {
-    if (
-        payload &&
-        typeof payload === 'object' &&
-        'responseId' in payload &&
-        typeof (payload as { responseId?: unknown }).responseId === 'string'
-    ) {
-        return payload as ResponseMetadata;
+    if (isValidResponseMetadataPayload(payload)) {
+        return payload;
     }
 
     if (
-        payload &&
-        typeof payload === 'object' &&
+        isPlainObject(payload) &&
         'metadata' in payload &&
-        (payload as { metadata?: unknown }).metadata &&
-        typeof (payload as { metadata?: { responseId?: unknown } }).metadata
-            ?.responseId === 'string'
+        isValidResponseMetadataPayload(
+            (payload as { metadata?: unknown }).metadata
+        )
     ) {
         return (payload as { metadata: ResponseMetadata }).metadata;
     }
