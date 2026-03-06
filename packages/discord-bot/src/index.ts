@@ -244,6 +244,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 const PROVENANCE_VALUES = new Set(['Retrieved', 'Inferred', 'Speculative']);
+const RISK_TIER_VALUES = new Set(['Low', 'Medium', 'High']);
 
 function isValidCitationList(value: unknown): boolean {
     if (!Array.isArray(value)) {
@@ -281,7 +282,10 @@ function isValidResponseMetadataPayload(
         return false;
     }
 
-    if (typeof payload.responseId !== 'string') {
+    if (
+        typeof payload.responseId !== 'string' ||
+        payload.responseId.length < 1
+    ) {
         return false;
     }
 
@@ -289,6 +293,51 @@ function isValidResponseMetadataPayload(
         typeof payload.provenance !== 'string' ||
         !PROVENANCE_VALUES.has(payload.provenance)
     ) {
+        return false;
+    }
+
+    if (
+        typeof payload.riskTier !== 'string' ||
+        !RISK_TIER_VALUES.has(payload.riskTier)
+    ) {
+        return false;
+    }
+
+    if (
+        typeof payload.tradeoffCount !== 'number' ||
+        !Number.isFinite(payload.tradeoffCount) ||
+        payload.tradeoffCount < 0
+    ) {
+        return false;
+    }
+
+    if (
+        typeof payload.chainHash !== 'string' ||
+        payload.chainHash.trim().length === 0
+    ) {
+        return false;
+    }
+
+    if (
+        typeof payload.licenseContext !== 'string' ||
+        payload.licenseContext.trim().length === 0
+    ) {
+        return false;
+    }
+
+    if (
+        typeof payload.modelVersion !== 'string' ||
+        payload.modelVersion.trim().length === 0
+    ) {
+        return false;
+    }
+
+    if (typeof payload.staleAfter !== 'string') {
+        return false;
+    }
+
+    const staleAfterDate = new Date(payload.staleAfter);
+    if (Number.isNaN(staleAfterDate.getTime())) {
         return false;
     }
 
