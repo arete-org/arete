@@ -105,7 +105,7 @@ const getIntegerEnv = (key: string, defaultValue: number): number => {
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
         bootstrapLogger.warn(
-            `Ignoring invalid numeric value for ${key}: "${value}". Expected a non-negative number; using default (${defaultValue}).`
+            `Ignoring invalid numeric value for ${key}: "${value}". Expected a non-negative integer; using default (${defaultValue}).`
         );
         return defaultValue;
     }
@@ -274,7 +274,11 @@ if (
     backendPortFromEnv === undefined
 ) {
     bootstrapLogger.warn(
-        `Ignoring invalid PORT "${sharedBackendPortFromEnv}" for backend URL derivation; falling back to ${localBackendBaseUrlFromEnvPort}.`
+        'Invalid PORT for backend URL derivation; falling back to fallbackUrl.',
+        {
+            port: sharedBackendPortFromEnv,
+            fallbackUrl: localBackendBaseUrlFromEnvPort,
+        }
     );
 }
 const fallbackBackendBaseUrl = flyAppName
