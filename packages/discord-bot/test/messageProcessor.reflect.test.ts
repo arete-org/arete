@@ -9,6 +9,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type {
+    PostReflectRequest,
+    PostTraceCardRequest,
+} from '@footnote/contracts/web';
 import { botApi } from '../src/api/botApi.js';
 import { logger } from '../src/utils/logger.js';
 import { MessageProcessor } from '../src/utils/MessageProcessor.js';
@@ -82,7 +86,7 @@ type ProcessorPrivateAccess = {
         message: unknown,
         trigger: string
     ) => Promise<{
-        request: import('@footnote/contracts/web').PostReflectRequest;
+        request: PostReflectRequest;
         recoveredImageContext: null;
     } | null>;
 };
@@ -96,7 +100,9 @@ test('executeReflectMessageAction sends text, triggers CGI follow-up, and skips 
         directReply: boolean;
         suppressEmbeds: boolean;
     }> = [];
-    let metadataSeen: ResponseMetadata | null = null;
+    const capture = {
+        metadataSeen: null as ResponseMetadata | null,
+    };
     const originalPostTraces = botApi.postTraces;
 
     (botApi as { postTraces: unknown }).postTraces = async () => {
@@ -109,7 +115,7 @@ test('executeReflectMessageAction sends text, triggers CGI follow-up, and skips 
         _originalMessage: unknown,
         metadata: ResponseMetadata
     ) => {
-        metadataSeen = metadata;
+        capture.metadataSeen = metadata;
     };
 
     try {
@@ -147,7 +153,10 @@ test('executeReflectMessageAction sends text, triggers CGI follow-up, and skips 
     assert.equal(sentMessages.length, 1);
     assert.equal(sentMessages[0].content, 'Backend reflection');
     assert.equal(sentMessages[0].directReply, true);
-    assert.equal(metadataSeen?.responseId, 'resp_123');
+    if (!capture.metadataSeen) {
+        throw new Error('Expected metadata to be forwarded to sendProvenanceCgi');
+    }
+    assert.equal(capture.metadataSeen.responseId, 'resp_123');
 });
 
 test('sendProvenanceCgi posts trace-card and sends image plus response-bound buttons', async () => {
@@ -162,12 +171,13 @@ test('sendProvenanceCgi posts trace-card and sends image plus response-bound but
         suppressEmbeds: boolean;
         components: unknown[];
     }> = [];
-    let traceCardRequest: Parameters<typeof botApi.postTraceCard>[0] | null =
-        null;
+    const capture = {
+        traceCardRequest: null as PostTraceCardRequest | null,
+    };
 
     (botApi as { postTraceCard: typeof botApi.postTraceCard }).postTraceCard =
         (async (request) => {
-            traceCardRequest = request;
+            capture.traceCardRequest = request;
             return {
                 responseId: request.responseId ?? 'resp_123',
                 pngBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
@@ -218,7 +228,10 @@ test('sendProvenanceCgi posts trace-card and sends image plus response-bound but
         ResponseHandler.prototype.sendMessage = originalSendMessage;
     }
 
-    assert.ok(traceCardRequest);
+    if (!capture.traceCardRequest) {
+        throw new Error('Expected trace-card request to be captured');
+    }
+    const traceCardRequest = capture.traceCardRequest;
     assert.equal(traceCardRequest.responseId, 'resp_123');
     assert.deepEqual(traceCardRequest.temperament, {
         tightness: 5,

@@ -201,8 +201,9 @@ const renderScoreRow = (row: ScoreRow, layers: string[]): void => {
 
     for (let index = 0; index < TICK_COUNT; index += 1) {
         const tickX = BAR_START_X + index * (TICK_WIDTH + TICK_GAP);
-        const hasScore = row.score !== undefined;
-        const shouldFill = hasScore && index < row.score;
+        const score = row.score;
+        const hasScore = score !== undefined;
+        const shouldFill = score !== undefined && index < score;
         const neutralStroke = TICK_NEUTRAL;
         const neutralFill = TICK_NEUTRAL;
 
