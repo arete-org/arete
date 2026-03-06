@@ -207,16 +207,20 @@ function normalizeImageDescriptionPayload(
           )
         : [];
     const certaintyCandidate =
-        typeof payloadRecord.certainty === 'string'
-            ? payloadRecord.certainty
-            : typeof payloadRecord.confidence === 'string'
-              ? payloadRecord.confidence
+        typeof payloadRecord.certainty === 'string' &&
+        payloadRecord.certainty.trim().length > 0
+            ? payloadRecord.certainty.trim()
+            : typeof payloadRecord.confidence === 'string' &&
+                payloadRecord.confidence.trim().length > 0
+              ? payloadRecord.confidence.trim()
               : undefined;
     const certainty = certaintyCandidate ?? 'low';
 
     const structuredValue = payloadRecord.structured ?? {};
     const structuredRecord =
-        structuredValue && typeof structuredValue === 'object'
+        structuredValue &&
+        typeof structuredValue === 'object' &&
+        !Array.isArray(structuredValue)
             ? (structuredValue as Record<string, unknown>)
             : {};
     const keyElements = Array.isArray(structuredRecord.key_elements)
