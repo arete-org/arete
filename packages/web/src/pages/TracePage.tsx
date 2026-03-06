@@ -17,6 +17,7 @@ import type {
     GetTraceStaleResponse,
 } from '@footnote/contracts/web';
 import { api, isApiClientError } from '../utils/api';
+import { createScopedLogger } from '../utils/logger';
 // Define the actual server response metadata structure
 type ServerMetadata = GetTraceResponse & {
     timestamp?: string;
@@ -38,44 +39,7 @@ type ServerMetadata = GetTraceResponse & {
 // React page can consume the JSON payload without re-defining the entire schema.
 type SerializableResponseMetadata = ServerMetadata;
 
-type TracePageLogLevel = 'debug' | 'info' | 'warn' | 'error';
-type TracePageLogFields = Record<string, unknown>;
-
-const tracePageLogger = {
-    log(level: TracePageLogLevel, message: string, fields: TracePageLogFields) {
-        const scopedMessage = `[TracePage] ${message}`;
-        const payload = { ...fields };
-
-        if (level === 'error') {
-            console.error(scopedMessage, payload);
-            return;
-        }
-
-        if (level === 'warn') {
-            console.warn(scopedMessage, payload);
-            return;
-        }
-
-        if (level === 'debug') {
-            console.debug(scopedMessage, payload);
-            return;
-        }
-
-        console.info(scopedMessage, payload);
-    },
-    debug(message: string, fields: TracePageLogFields) {
-        this.log('debug', message, fields);
-    },
-    info(message: string, fields: TracePageLogFields) {
-        this.log('info', message, fields);
-    },
-    warn(message: string, fields: TracePageLogFields) {
-        this.log('warn', message, fields);
-    },
-    error(message: string, fields: TracePageLogFields) {
-        this.log('error', message, fields);
-    },
-};
+const tracePageLogger = createScopedLogger('TracePage');
 
 // Helper to extract payload from 410 (stale) responses
 const extractPayload = (data: unknown): ServerMetadata | null => {
