@@ -1213,12 +1213,6 @@ components:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/ErrorResponse'
-        Conflict:
-            description: Request conflicts with current resource state.
-            content:
-                application/json:
-                    schema:
-                        $ref: '#/components/schemas/ErrorResponse'
         MethodNotAllowed:
             description: Method not allowed.
             content:
