@@ -462,14 +462,15 @@ const buildResponseMetadata = (
     const freshnessScore = isTraceAxisScore(assistantMetadata.freshnessScore)
         ? assistantMetadata.freshnessScore
         : undefined;
-    const shouldBackfillTraceChips =
+    const isMissingRetrievedWebSearchChip =
         runtimeContext.usedWebSearch === true &&
         provenance === 'Retrieved' &&
         (evidenceScore === undefined || freshnessScore === undefined);
-    const normalizedEvidenceScore =
-        evidenceScore ?? (shouldBackfillTraceChips ? 3 : undefined);
-    const normalizedFreshnessScore =
-        freshnessScore ?? (shouldBackfillTraceChips ? 3 : undefined);
+    if (isMissingRetrievedWebSearchChip) {
+        logger.warn(
+            `Response metadata missing evidence/freshness for retrieved web-search response ${responseId}. Leaving chips omitted.`
+        );
+    }
 
     const riskTier: RiskTier = 'Low';
     const licenseContext = 'MIT + HL3';
@@ -486,11 +487,11 @@ const buildResponseMetadata = (
         staleAfter: new Date(Date.now() + ninetyDaysMs).toISOString(),
         citations,
         ...(temperament && { temperament }),
-        ...(normalizedEvidenceScore !== undefined && {
-            evidenceScore: normalizedEvidenceScore,
+        ...(evidenceScore !== undefined && {
+            evidenceScore,
         }),
-        ...(normalizedFreshnessScore !== undefined && {
-            freshnessScore: normalizedFreshnessScore,
+        ...(freshnessScore !== undefined && {
+            freshnessScore,
         }),
     };
 };

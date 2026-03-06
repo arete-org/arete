@@ -32,14 +32,14 @@ const baseRuntimeContext = (
     ...overrides,
 });
 
-test('buildResponseMetadata backfills missing chips to 3 for Retrieved web-search responses', () => {
+test('buildResponseMetadata leaves chips omitted when retrieved web-search chips are missing', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
         baseRuntimeContext({ usedWebSearch: true })
     );
 
-    assert.equal(metadata.evidenceScore, 3);
-    assert.equal(metadata.freshnessScore, 3);
+    assert.equal(metadata.evidenceScore, undefined);
+    assert.equal(metadata.freshnessScore, undefined);
 });
 
 test('buildResponseMetadata does not backfill chips when web search was not used', () => {
@@ -65,7 +65,7 @@ test('buildResponseMetadata preserves explicit chip values when present', () => 
     assert.equal(metadata.freshnessScore, 2);
 });
 
-test('buildResponseMetadata does not backfill chips for non-retrieved responses', () => {
+test('buildResponseMetadata does not add chips for non-retrieved responses', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata({ provenance: 'Speculative' }),
         baseRuntimeContext({ usedWebSearch: true })

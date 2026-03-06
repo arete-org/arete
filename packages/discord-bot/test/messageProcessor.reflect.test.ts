@@ -74,6 +74,17 @@ type ProcessorPrivateAccess = {
         directReply: boolean,
         recoveredImageContext: unknown
     ) => Promise<void>;
+    checkRateLimits: (message: unknown) => Promise<{
+        allowed: boolean;
+        error?: string;
+    }>;
+    buildReflectRequestFromMessage: (
+        message: unknown,
+        trigger: string
+    ) => Promise<{
+        request: import('@footnote/contracts/web').PostReflectRequest;
+        recoveredImageContext: null;
+    } | null>;
 };
 
 test('executeReflectMessageAction sends text, triggers CGI follow-up, and skips trace posting', async () => {
@@ -376,4 +387,141 @@ test('executeReflectAction warns and no-ops for unknown actions', async () => {
 
     assert.equal(warnings.length, 1);
     assert.match(warnings[0], /unsupported action "video"/i);
+});
+
+test('executeReflectMessageAction reports empty backend message payload as an error block', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const sentMessages: string[] = [];
+    let provenanceCalls = 0;
+
+    processorAccess.sendProvenanceCgi = async () => {
+        provenanceCalls += 1;
+    };
+
+    await processorAccess.executeReflectMessageAction(
+        createMessage(),
+        {
+            async sendMessage(content: string) {
+                sentMessages.push(content);
+                return { id: 'sent-empty-error' } as never;
+            },
+        },
+        {
+            action: 'message',
+            message: '   ',
+            modality: 'text',
+            metadata: createMetadata(),
+        },
+        true
+    );
+
+    assert.equal(provenanceCalls, 0);
+    assert.equal(sentMessages.length, 1);
+    assert.match(sentMessages[0], /^```ansi\n/);
+    assert.equal(
+        sentMessages[0].includes('\u001b[31mReflect request failed:'),
+        true
+    );
+    assert.match(sentMessages[0], /empty message payload/i);
+});
+
+test('processMessage replies with a red code-block error when backend reflect request fails', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const originalReflectViaApi = botApi.reflectViaApi;
+    const originalSendMessage = ResponseHandler.prototype.sendMessage;
+    const originalStartTyping = ResponseHandler.prototype.startTyping;
+    const originalStopTyping = ResponseHandler.prototype.stopTyping;
+    const sentMessages: string[] = [];
+    let executeReflectActionCalls = 0;
+
+    processorAccess.checkRateLimits = async () => ({ allowed: true });
+    processorAccess.buildReflectRequestFromMessage = async () => ({
+        request: {
+            surface: 'discord',
+            trigger: {
+                kind: 'direct',
+                messageId: 'message-1',
+            },
+            latestUserInput: 'Can you summarize this?',
+            conversation: [
+                { role: 'user', content: 'Can you summarize this?' },
+            ],
+            capabilities: {
+                canReact: true,
+                canGenerateImages: true,
+                canUseTts: true,
+            },
+        },
+        recoveredImageContext: null,
+    });
+    processorAccess.executeReflectAction = async () => {
+        executeReflectActionCalls += 1;
+    };
+
+    (botApi as { reflectViaApi: typeof botApi.reflectViaApi }).reflectViaApi =
+        (async () => {
+            const timeoutError = new Error(
+                'Request timed out after 180000ms'
+            ) as Error & {
+                name: string;
+                code: string;
+                endpoint: string;
+                status: null;
+            };
+            timeoutError.name = 'DiscordApiClientError';
+            timeoutError.code = 'timeout_error';
+            timeoutError.endpoint = '/api/reflect';
+            timeoutError.status = null;
+            throw timeoutError;
+        }) as typeof botApi.reflectViaApi;
+
+    ResponseHandler.prototype.sendMessage = (async (content: string) => {
+        sentMessages.push(content);
+        return { id: 'sent-error' } as never;
+    }) as typeof ResponseHandler.prototype.sendMessage;
+    ResponseHandler.prototype.startTyping = (async () => {
+        return;
+    }) as typeof ResponseHandler.prototype.startTyping;
+    ResponseHandler.prototype.stopTyping = (() => {
+        return;
+    }) as typeof ResponseHandler.prototype.stopTyping;
+
+    const message = {
+        id: 'message-1',
+        content: 'Can you summarize this?',
+        author: { id: 'user-1', username: 'Jordan' },
+        channel: { id: 'channel-1' },
+        attachments: {
+            some: () => false,
+            filter: () => ({ size: 0 }),
+        },
+        embeds: [],
+        channelId: 'channel-1',
+        guildId: 'guild-1',
+    } as never;
+
+    try {
+        await processor.processMessage(message, true, 'direct');
+    } finally {
+        (
+            botApi as { reflectViaApi: typeof botApi.reflectViaApi }
+        ).reflectViaApi = originalReflectViaApi;
+        ResponseHandler.prototype.sendMessage = originalSendMessage;
+        ResponseHandler.prototype.startTyping = originalStartTyping;
+        ResponseHandler.prototype.stopTyping = originalStopTyping;
+    }
+
+    assert.equal(executeReflectActionCalls, 0);
+    assert.equal(sentMessages.length, 1);
+    assert.match(sentMessages[0], /^```ansi\n/);
+    assert.equal(
+        sentMessages[0].includes('\u001b[31mReflect request failed:'),
+        true
+    );
+    assert.match(
+        sentMessages[0],
+        /Timed out while waiting for backend reflect response/i
+    );
 });
