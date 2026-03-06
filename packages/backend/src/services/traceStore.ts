@@ -38,7 +38,7 @@ const storeTrace = async (
         // or image generation are unavailable.
         if (metadata.temperament) {
             logger.debug(
-                `Skipping trace-card SVG auto-generation for "${responseId}".`
+                `Deferring trace-card generation to trace-card handler path for "${responseId}".`
             );
         }
     } catch (error) {
