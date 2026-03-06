@@ -38,6 +38,45 @@ type ServerMetadata = GetTraceResponse & {
 // React page can consume the JSON payload without re-defining the entire schema.
 type SerializableResponseMetadata = ServerMetadata;
 
+type TracePageLogLevel = 'debug' | 'info' | 'warn' | 'error';
+type TracePageLogFields = Record<string, unknown>;
+
+const tracePageLogger = {
+    log(level: TracePageLogLevel, message: string, fields: TracePageLogFields) {
+        const scopedMessage = `[TracePage] ${message}`;
+        const payload = { ...fields };
+
+        if (level === 'error') {
+            console.error(scopedMessage, payload);
+            return;
+        }
+
+        if (level === 'warn') {
+            console.warn(scopedMessage, payload);
+            return;
+        }
+
+        if (level === 'debug') {
+            console.debug(scopedMessage, payload);
+            return;
+        }
+
+        console.info(scopedMessage, payload);
+    },
+    debug(message: string, fields: TracePageLogFields) {
+        this.log('debug', message, fields);
+    },
+    info(message: string, fields: TracePageLogFields) {
+        this.log('info', message, fields);
+    },
+    warn(message: string, fields: TracePageLogFields) {
+        this.log('warn', message, fields);
+    },
+    error(message: string, fields: TracePageLogFields) {
+        this.log('error', message, fields);
+    },
+};
+
 // Helper to extract payload from 410 (stale) responses
 const extractPayload = (data: unknown): ServerMetadata | null => {
     if (data && typeof data === 'object' && 'metadata' in data) {
@@ -108,25 +147,19 @@ const TracePage = (): JSX.Element => {
                 if (traceResult.status === 200) {
                     const payload =
                         traceResult.data as SerializableResponseMetadata;
-
-                    // Debug logging
-                    console.log('=== Trace Page Debug ===');
-                    console.log('Response ID:', responseId);
-                    console.log(
-                        'Payload received:',
-                        JSON.stringify(payload, null, 2)
-                    );
-                    console.log('Payload keys:', Object.keys(payload));
-                    console.log('========================');
+                    const payloadKeys = Object.keys(payload);
+                    const payloadApproxBytes = JSON.stringify(payload).length;
+                    tracePageLogger.debug('Trace loaded successfully.', {
+                        responseId,
+                        status: traceResult.status,
+                        payloadKeyCount: payloadKeys.length,
+                        payloadKeys: payloadKeys.slice(0, 12),
+                        payloadApproxBytes,
+                    });
 
                     if (!isMounted) {
                         return;
                     }
-
-                    console.log(
-                        'About to set traceData with payload:',
-                        payload
-                    );
                     setTraceData(payload);
                     setLoadingState('success');
                     return;
@@ -147,19 +180,16 @@ const TracePage = (): JSX.Element => {
                     return;
                 }
             } catch (error) {
-                console.error('=== Trace Page - Error ===');
-                console.error('Error:', error);
-                console.error(
-                    'Error type:',
-                    error instanceof Error
-                        ? error.constructor.name
-                        : typeof error
-                );
-                console.error(
-                    'Error message:',
-                    error instanceof Error ? error.message : String(error)
-                );
-                console.error('===========================');
+                tracePageLogger.error('Trace load failed.', {
+                    responseId,
+                    errorType:
+                        error instanceof Error
+                            ? error.constructor.name
+                            : typeof error,
+                    errorMessage:
+                        error instanceof Error ? error.message : String(error),
+                    apiStatus: isApiClientError(error) ? error.status : null,
+                });
 
                 if (!isMounted) {
                     return;
@@ -204,20 +234,6 @@ const TracePage = (): JSX.Element => {
             isMounted = false;
         };
     }, [responseId]);
-
-    // Debug: log traceData whenever it changes
-    useEffect(() => {
-        console.log('=== traceData State Changed ===');
-        console.log('traceData:', traceData);
-        if (traceData) {
-            console.log('All traceData keys:', Object.keys(traceData));
-            console.log(
-                'Raw traceData JSON:',
-                JSON.stringify(traceData, null, 2)
-            );
-        }
-        console.log('================================');
-    }, [traceData]);
 
     if (loadingState === 'loading') {
         return (
