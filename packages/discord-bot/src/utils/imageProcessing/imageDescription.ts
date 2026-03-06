@@ -170,10 +170,15 @@ function parseToolPayload(
     }
 
     try {
-        const parsed = JSON.parse(
-            toolCall.function.arguments
-        ) as ImageDescriptionPayload;
-        return normalizeImageDescriptionPayload(parsed);
+        const parsed = JSON.parse(toolCall.function.arguments) as unknown;
+        const normalized = normalizeImageDescriptionPayload(parsed);
+        if (!normalized) {
+            logger.warn(
+                'Image description tool output is missing required fields after normalization.'
+            );
+            return null;
+        }
+        return normalized;
     } catch (error) {
         logger.warn('Failed to parse image description tool output.', error);
         return null;
@@ -181,9 +186,35 @@ function parseToolPayload(
 }
 
 function normalizeImageDescriptionPayload(
-    payload: ImageDescriptionPayload
-): ImageDescriptionPayload {
-    const structuredValue = payload?.structured ?? {};
+    payload: unknown
+): ImageDescriptionPayload | null {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return null;
+    }
+
+    const payloadRecord = payload as Record<string, unknown>;
+    const summary =
+        typeof payloadRecord.summary === 'string'
+            ? payloadRecord.summary
+            : 'Unable to reliably describe image.';
+    const detectedType =
+        typeof payloadRecord.detected_type === 'string'
+            ? payloadRecord.detected_type
+            : 'other';
+    const extractedText = Array.isArray(payloadRecord.extracted_text)
+        ? payloadRecord.extracted_text.filter(
+              (item): item is string => typeof item === 'string'
+          )
+        : [];
+    const certaintyCandidate =
+        typeof payloadRecord.certainty === 'string'
+            ? payloadRecord.certainty
+            : typeof payloadRecord.confidence === 'string'
+              ? payloadRecord.confidence
+              : undefined;
+    const certainty = certaintyCandidate ?? 'low';
+
+    const structuredValue = payloadRecord.structured ?? {};
     const structuredRecord =
         structuredValue && typeof structuredValue === 'object'
             ? (structuredValue as Record<string, unknown>)
@@ -200,12 +231,18 @@ function normalizeImageDescriptionPayload(
         : undefined;
 
     return {
-        ...payload,
+        summary,
+        detected_type: detectedType,
+        extracted_text: extractedText,
         structured: {
             ...structuredRecord,
             key_elements: keyElements,
             ...(tableMarkdown ? { table_markdown: tableMarkdown } : {}),
         },
+        certainty,
+        ...(typeof payloadRecord.notes === 'string' && {
+            notes: payloadRecord.notes,
+        }),
     };
 }
 
