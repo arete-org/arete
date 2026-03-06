@@ -42,8 +42,10 @@ test('renderTraceCardSvg uses 5 wheel bands and renders metadata rows for valid 
     assert.match(svg, /width="172"/);
     assert.match(svg, /height="40"/);
     assert.match(svg, /<circle cx="20" cy="20" r="19"/);
-    assert.match(svg, /📌/);
-    assert.match(svg, /🕒/);
+    assert.match(svg, /id="trace-icon-evidence"/);
+    assert.match(svg, /id="trace-icon-freshness"/);
+    assert.equal(countMatches(svg, /fill="#CBD5E1"/g), 2);
+    assert.equal(countMatches(svg, /stroke="#CBD5E1"/g), 2);
     assert.equal(countMatches(svg, /stroke-opacity="0.3"/g), 10);
     assert.equal(
         countMatches(svg, /fill="(#008080|#9A6373|#E6AC00|#B87333|#5E7C5B)"/g),
