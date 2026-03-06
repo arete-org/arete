@@ -72,7 +72,7 @@ A few constraints matter beyond the assistant’s output:
 
 ### Profiles as rulesets
 
-**Ari** is the current baseline configuration.
+**Footnote** is the current baseline configuration.
 
 If/when a multi-profile system is shipped, a profile would be a bundle of defaults:
 
