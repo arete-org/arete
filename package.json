@@ -14,7 +14,7 @@
         "start:backend": "node scripts/preflight-dev-ports.cjs backend && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:backend",
         "start:web": "node scripts/preflight-dev-ports.cjs web && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:web",
         "start:bot": "node scripts/preflight-dev-ports.cjs bot && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:bot",
-        "start:all": "node scripts/preflight-dev-ports.cjs all && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm --filter @footnote/config-spec run build:dev && concurrently --names backend,web,bot --prefix-colors cyan,magenta,green --kill-others --kill-others-on-fail \"cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm exec tsx packages/backend/src/server.ts\" \"cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm --filter @footnote/web dev\" \"cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= NODE_ENV=development pnpm --filter @footnote/discord-bot exec tsx src/index.ts\"",
+        "start:all": "node scripts/start-all.cjs",
         "start:prod-test": "pnpm --filter @footnote/backend build && cross-env NODE_ENV=production node server.js",
         "dev:prod-test": "concurrently \"pnpm --filter @footnote/backend build && cross-env NODE_ENV=production node server.js\" \"pnpm --filter @footnote/web dev\"",
         "build": "pnpm -r build",
@@ -67,4 +67,3 @@
         "jsonwebtoken": "catalog:"
     }
 }
-

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* eslint-env node */
+/* global __dirname, process, console, URL */
 
 /**
  * @description: Preflight cleanup for local startup that frees stale Footnote node listeners on configured dev ports.
@@ -235,7 +237,11 @@ const listNodeProcessesUnix = () => {
         if (!Number.isInteger(pid) || pid <= 0) {
             continue;
         }
-        processes.push({ ProcessId: pid, Name: name, CommandLine: commandLine });
+        processes.push({
+            ProcessId: pid,
+            Name: name,
+            CommandLine: commandLine,
+        });
     }
 
     return processes.filter((proc) =>
@@ -247,6 +253,37 @@ const listNodeProcessesUnix = () => {
 
 const isWindows = process.platform === 'win32';
 const repoPathLower = repoRoot.toLowerCase();
+const KILL_GRACE_PERIOD_MS = 1500;
+const KILL_POLL_INTERVAL_MS = 100;
+
+const sleepSync = (ms) => {
+    const waitBuffer = new SharedArrayBuffer(4);
+    const waitArray = new Int32Array(waitBuffer);
+    Atomics.wait(waitArray, 0, 0, ms);
+};
+
+const isMissingProcessError = (error) =>
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    error.code === 'ESRCH';
+
+const waitForProcessExit = (pid, timeoutMs) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() <= deadline) {
+        try {
+            process.kill(pid, 0);
+        } catch (error) {
+            if (isMissingProcessError(error)) {
+                return true;
+            }
+            throw error;
+        }
+        sleepSync(KILL_POLL_INTERVAL_MS);
+    }
+
+    return false;
+};
 
 // Platform adapter keeps the main flow linear and easy to scan.
 const platform = isWindows
@@ -264,8 +301,15 @@ const platform = isWindows
           kill: (pid) => {
               try {
                   process.kill(pid, 'SIGTERM');
-                  return true;
-              } catch {
+                  if (waitForProcessExit(pid, KILL_GRACE_PERIOD_MS)) {
+                      return true;
+                  }
+                  process.kill(pid, 'SIGKILL');
+                  return waitForProcessExit(pid, KILL_GRACE_PERIOD_MS);
+              } catch (error) {
+                  if (isMissingProcessError(error)) {
+                      return true;
+                  }
                   return false;
               }
           },
@@ -286,7 +330,8 @@ const shouldKillProcess = (info) => {
         ? String(info.CommandLine || '').toLowerCase()
         : String(info.commandLine || '').toLowerCase();
 
-    const isNode = name === 'node.exe' || name === 'node' || name.includes('node');
+    const isNode =
+        name === 'node.exe' || name === 'node' || name.includes('node');
     return isNode && commandLine.includes(repoPathLower);
 };
 
@@ -338,7 +383,9 @@ for (const port of uniquePorts) {
 // Step 2: dedupe PIDs so we handle each process once.
 const staleBotPids = listStaleBotPids();
 const staleBotPidSet = new Set(staleBotPids);
-const allPids = [...new Set([...pidsByPort.values()].flat().concat(staleBotPids))];
+const allPids = [
+    ...new Set([...pidsByPort.values()].flat().concat(staleBotPids)),
+];
 if (allPids.length === 0) {
     console.log(
         `[preflight] No listeners found on ${scope} port(s): ${uniquePorts.join(', ')}`
