@@ -42,7 +42,7 @@ test('renderTraceCardSvg uses 5 wheel bands and renders metadata rows for valid 
     assert.match(svg, /width="172"/);
     assert.match(svg, /height="40"/);
     assert.match(svg, /<circle cx="20" cy="20" r="19"/);
-    assert.match(svg, /🔗/);
+    assert.match(svg, /📌/);
     assert.match(svg, /🕒/);
     assert.equal(countMatches(svg, /stroke-opacity="0.3"/g), 10);
     assert.equal(
@@ -68,16 +68,17 @@ test('renderTraceCardSvg draws red fallback wedges for missing axes and gray chi
 });
 
 test('renderTraceCardSvg treats invalid input values as missing', () => {
-    const svg = renderTraceCardSvg({
+    const invalidInput = {
         temperament: {
             tightness: 7,
             rationale: 0,
-        } as never,
+        },
         chips: {
             evidenceScore: 2.4,
             freshnessScore: 6,
         },
-    });
+    } as unknown as Parameters<typeof renderTraceCardSvg>[0];
+    const svg = renderTraceCardSvg(invalidInput);
 
     assert.equal(countMatches(svg, /fill="#EF4444" fill-opacity="0.45"/g), 5);
     assert.equal(countMatches(svg, /fill="#EF4444" fill-opacity="0.2"/g), 0);

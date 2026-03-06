@@ -10,6 +10,7 @@ import type {
     ResponseTemperament,
     TraceAxisScore,
 } from '@footnote/contracts/ethics-core';
+import type { TraceCardChipData } from '@footnote/contracts/web';
 
 type TraceAxisKey = keyof ResponseTemperament;
 type NormalizedTemperament = Partial<Record<TraceAxisKey, TraceAxisScore>>;
@@ -17,11 +18,6 @@ type NormalizedTemperament = Partial<Record<TraceAxisKey, TraceAxisScore>>;
 type TraceAxisSpec = {
     key: TraceAxisKey;
     color: `#${string}`;
-};
-
-export type TraceCardChipData = {
-    evidenceScore?: number;
-    freshnessScore?: number;
 };
 
 /**
