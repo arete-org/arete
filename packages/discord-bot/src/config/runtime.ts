@@ -268,6 +268,15 @@ const localBackendBaseUrlFromEnvPort =
     typeof backendPortFromEnv === 'number'
         ? `http://localhost:${backendPortFromEnv}`
         : DEFAULT_LOCAL_BACKEND_BASE_URL;
+if (
+    sharedBackendPortFromEnv &&
+    sharedBackendPortFromEnv.length > 0 &&
+    backendPortFromEnv === undefined
+) {
+    bootstrapLogger.warn(
+        `Ignoring invalid PORT "${sharedBackendPortFromEnv}" for backend URL derivation; falling back to ${localBackendBaseUrlFromEnvPort}.`
+    );
+}
 const fallbackBackendBaseUrl = flyAppName
     ? FLY_INTERNAL_BACKEND_BASE_URL
     : localBackendBaseUrlFromEnvPort;
