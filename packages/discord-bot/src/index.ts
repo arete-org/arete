@@ -607,6 +607,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const provenanceAction = parseProvenanceActionCustomId(customId);
         if (provenanceAction) {
             if (provenanceAction.action === 'details') {
+                await interaction.deferReply({
+                    flags: [1 << 6], // [1 << 6] = EPHEMERAL
+                });
                 let metadata: ResponseMetadata | null = null;
                 try {
                     const traceResponse = await botApi.getTrace(
@@ -632,9 +635,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
                     provenanceAction.responseId,
                     metadata
                 );
-                await interaction.reply({
+                await interaction.editReply({
                     content: formatDetailsPayloadForDiscord(detailsPayload),
-                    flags: [1 << 6], // [1 << 6] = EPHEMERAL
                 });
                 return;
             }
