@@ -71,20 +71,15 @@ export const CitationSchema = z
     .strict();
 
 /**
- * TRACE temperament profile captured as five named integer axes:
- * T = tightness, R = rationale, A = attribution, C = caution, E = extent.
+ * TRACE temperament profile:
+ * - [T]ightness: concision and structural efficiency
+ * - [R]ationale: amount of visible rationale and trade-off explanation
+ * - [A]ttribution: clarity of sourced vs inferred boundaries
+ * - [C]aution: safeguard posture and overclaim restraint
+ * - [E]xtent: breadth of viable options and perspectives
  *
- * Axis meanings:
- * - tightness: concision and structural efficiency
- * - rationale: amount of visible rationale and trade-off explanation
- * - attribution: clarity of sourced vs inferred boundaries
- * - caution: safeguard posture and overclaim restraint
- * - extent: breadth of viable options and perspectives
- *
- * Note: runtime schema validation is still required for dynamic payloads.
- *
- * TODO(TRACE-rollout): Make this required once TRACE generation and rendering
- * are fully validated across surfaces.
+ * We use literal values (1..5) instead of a broad number schema so Zod output
+ * matches the TraceAxisScore contract type exactly.
  */
 const TraceAxisScoreSchema: z.ZodType<TraceAxisScore> = z.union([
     z.literal(1),
@@ -92,16 +87,8 @@ const TraceAxisScoreSchema: z.ZodType<TraceAxisScore> = z.union([
     z.literal(3),
     z.literal(4),
     z.literal(5),
-    z.literal(6),
-    z.literal(7),
-    z.literal(8),
-    z.literal(9),
-    z.literal(10),
 ]);
 
-// We use literal values (1..10) instead of a broad number schema so Zod output
-// matches the TraceAxisScore contract type exactly. Runtime validation still
-// protects us from untrusted payloads.
 const ResponseTemperamentSchema = z
     .object({
         tightness: TraceAxisScoreSchema,
@@ -111,11 +98,11 @@ const ResponseTemperamentSchema = z
         extent: TraceAxisScoreSchema,
     })
     .strict();
+const PartialResponseTemperamentSchema = ResponseTemperamentSchema.partial();
 
 const responseMetadataShape = {
     responseId: z.string().min(1),
     provenance: ProvenanceSchema,
-    confidence: z.number().min(0).max(1),
     riskTier: RiskTierSchema,
     tradeoffCount: z.number().nonnegative(),
     chainHash: z.string(),
@@ -124,13 +111,15 @@ const responseMetadataShape = {
     staleAfter: z.string(),
     citations: z.array(CitationSchema),
     imageDescriptions: z.array(z.string()).optional(),
-    temperament: ResponseTemperamentSchema.optional(),
+    evidenceScore: TraceAxisScoreSchema.optional(),
+    freshnessScore: TraceAxisScoreSchema.optional(),
+    temperament: PartialResponseTemperamentSchema.optional(),
 } as const;
 
 const TraceCardChipDataSchema = z
     .object({
-        evidenceScore: z.number().min(1).max(5),
-        freshnessScore: z.number().min(1).max(5),
+        evidenceScore: TraceAxisScoreSchema.optional(),
+        freshnessScore: TraceAxisScoreSchema.optional(),
     })
     .strict();
 
@@ -155,10 +144,7 @@ export const PostReflectRequestSchema = z
             })
             .strict(),
         latestUserInput: z.string().min(1).max(3072),
-        conversation: z
-            .array(ReflectConversationMessageSchema)
-            .min(1)
-            .max(64),
+        conversation: z.array(ReflectConversationMessageSchema).min(1).max(64),
         attachments: z.array(ReflectAttachmentSchema).max(8).optional(),
         capabilities: ReflectCapabilitiesSchema.optional(),
         sessionId: z.string().min(1).max(128).optional(),
@@ -233,8 +219,8 @@ export const PostTracesResponseSchema = z
 export const PostTraceCardRequestSchema = z
     .object({
         responseId: z.string().min(1).optional(),
-        temperament: ResponseTemperamentSchema,
-        chips: TraceCardChipDataSchema,
+        temperament: PartialResponseTemperamentSchema.optional(),
+        chips: TraceCardChipDataSchema.optional(),
     })
     .strict();
 
@@ -256,7 +242,6 @@ export const PostTraceCardResponseSchema = z
 export const PostTraceCardFromTraceRequestSchema = z
     .object({
         responseId: z.string().min(1),
-        chips: TraceCardChipDataSchema,
     })
     .strict();
 
@@ -315,9 +300,7 @@ const formatSchemaIssues = (error: z.ZodError): string => {
 
 export const createSchemaResponseValidator =
     <TSchema extends z.ZodTypeAny>(schema: TSchema) =>
-    (
-        data: unknown
-    ): ApiResponseValidationResult<z.output<TSchema>> => {
+    (data: unknown): ApiResponseValidationResult<z.output<TSchema>> => {
         const parsed = schema.safeParse(data);
         if (parsed.success) {
             return {
@@ -331,4 +314,3 @@ export const createSchemaResponseValidator =
             error: formatSchemaIssues(parsed.error),
         };
     };
-

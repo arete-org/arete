@@ -20,15 +20,15 @@ const createTraceCardRequest = (
     overrides: Partial<PostTraceCardRequest> = {}
 ): PostTraceCardRequest => ({
     temperament: {
-        tightness: 9,
-        rationale: 6,
-        attribution: 8,
-        caution: 6,
-        extent: 7,
+        tightness: 5,
+        rationale: 3,
+        attribution: 4,
+        caution: 3,
+        extent: 4,
     },
     chips: {
-        evidenceScore: 3.6,
-        freshnessScore: 4.2,
+        evidenceScore: 4,
+        freshnessScore: 5,
     },
     ...overrides,
 });
@@ -62,10 +62,7 @@ test('postTraceCard posts to /api/trace-cards with X-Trace-Token and returns par
     assert.equal(capturedHeaders?.['X-Trace-Token'], 'trace-secret');
     assert.deepEqual(capturedBody, request);
     assert.equal(response.responseId, 'trace-card-preview-123');
-    assert.equal(
-        response.pngBase64,
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB'
-    );
+    assert.equal(response.pngBase64, 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB');
 });
 
 test('postTraceCard throws backend request errors so callers can handle them', async () => {
@@ -104,20 +101,12 @@ test('postTraceCardFromTrace posts by responseId and returns parsed data', async
     const api = createTraceApi(requestJson, { traceApiToken: 'trace-secret' });
     const response = await api.postTraceCardFromTrace({
         responseId: 'stored_response_123',
-        chips: {
-            evidenceScore: 3.2,
-            freshnessScore: 4.4,
-        },
     });
 
     assert.equal(capturedEndpoint, '/api/trace-cards/from-trace');
     assert.equal(capturedHeaders?.['X-Trace-Token'], 'trace-secret');
     assert.deepEqual(capturedBody, {
         responseId: 'stored_response_123',
-        chips: {
-            evidenceScore: 3.2,
-            freshnessScore: 4.4,
-        },
     });
     assert.equal(response.responseId, 'stored_response_123');
 });

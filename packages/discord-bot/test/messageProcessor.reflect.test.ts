@@ -17,7 +17,6 @@ import { ResponseHandler } from '../src/utils/response/ResponseHandler.js';
 const createMetadata = (): ResponseMetadata => ({
     responseId: 'resp_123',
     provenance: 'Inferred',
-    confidence: 0.75,
     riskTier: 'Low',
     tradeoffCount: 1,
     chainHash: 'hash_123',
@@ -90,7 +89,9 @@ test('executeReflectMessageAction sends text, triggers CGI follow-up, and skips 
     const originalPostTraces = botApi.postTraces;
 
     (botApi as { postTraces: unknown }).postTraces = async () => {
-        throw new Error('postTraces should not run for backend reflect messages');
+        throw new Error(
+            'postTraces should not run for backend reflect messages'
+        );
     };
     processorAccess.sendProvenanceCgi = async (
         _provenanceReplyAnchor: unknown,
@@ -150,9 +151,8 @@ test('sendProvenanceCgi posts trace-card and sends image plus response-bound but
         suppressEmbeds: boolean;
         components: unknown[];
     }> = [];
-    let traceCardRequest:
-        | Parameters<typeof botApi.postTraceCard>[0]
-        | null = null;
+    let traceCardRequest: Parameters<typeof botApi.postTraceCard>[0] | null =
+        null;
 
     (botApi as { postTraceCard: typeof botApi.postTraceCard }).postTraceCard =
         (async (request) => {
@@ -192,15 +192,18 @@ test('sendProvenanceCgi posts trace-card and sends image plus response-bound but
             },
             {
                 ...createMetadata(),
-                staleAfter: new Date(
-                    Date.now() + 90 * 24 * 60 * 60 * 1000
-                ).toISOString(),
-                temperament: undefined,
+                temperament: {
+                    tightness: 5,
+                    rationale: 3,
+                },
+                evidenceScore: 4,
+                freshnessScore: 5,
             }
         );
     } finally {
-        (botApi as { postTraceCard: typeof botApi.postTraceCard }).postTraceCard =
-            originalPostTraceCard;
+        (
+            botApi as { postTraceCard: typeof botApi.postTraceCard }
+        ).postTraceCard = originalPostTraceCard;
         ResponseHandler.prototype.sendMessage = originalSendMessage;
     }
 
@@ -208,13 +211,12 @@ test('sendProvenanceCgi posts trace-card and sends image plus response-bound but
     assert.equal(traceCardRequest.responseId, 'resp_123');
     assert.deepEqual(traceCardRequest.temperament, {
         tightness: 5,
-        rationale: 5,
-        attribution: 5,
-        caution: 5,
-        extent: 5,
+        rationale: 3,
     });
-    assert.equal(traceCardRequest.chips.evidenceScore, 4);
-    assert.ok(traceCardRequest.chips.freshnessScore >= 4.99);
+    assert.deepEqual(traceCardRequest.chips, {
+        evidenceScore: 4,
+        freshnessScore: 5,
+    });
     assert.equal(sentCalls.length, 1);
     assert.equal(sentCalls[0].files.length, 1);
     assert.equal(sentCalls[0].files[0].filename, 'trace-card.png');
@@ -225,10 +227,7 @@ test('sendProvenanceCgi posts trace-card and sends image plus response-bound but
         .toJSON()
         .components.map((component) => component.custom_id)
         .filter((value): value is string => typeof value === 'string');
-    assert.deepEqual(customIds, [
-        'details:resp_123',
-        'report_issue:resp_123',
-    ]);
+    assert.deepEqual(customIds, ['details:resp_123', 'report_issue:resp_123']);
 });
 
 test('sendProvenanceCgi falls back to buttons-only when trace-card generation fails', async () => {
@@ -273,8 +272,9 @@ test('sendProvenanceCgi falls back to buttons-only when trace-card generation fa
             createMetadata()
         );
     } finally {
-        (botApi as { postTraceCard: typeof botApi.postTraceCard }).postTraceCard =
-            originalPostTraceCard;
+        (
+            botApi as { postTraceCard: typeof botApi.postTraceCard }
+        ).postTraceCard = originalPostTraceCard;
         ResponseHandler.prototype.sendMessage = originalSendMessage;
     }
 
@@ -287,10 +287,7 @@ test('sendProvenanceCgi falls back to buttons-only when trace-card generation fa
         .toJSON()
         .components.map((component) => component.custom_id)
         .filter((value): value is string => typeof value === 'string');
-    assert.deepEqual(customIds, [
-        'details:resp_123',
-        'report_issue:resp_123',
-    ]);
+    assert.deepEqual(customIds, ['details:resp_123', 'report_issue:resp_123']);
 });
 
 test('executeReflectAction routes react actions without falling back to message generation', async () => {

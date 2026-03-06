@@ -221,8 +221,6 @@ const isResponseMetadataPayload = (
     return (
         typeof candidate.responseId === 'string' &&
         validProvenance &&
-        typeof candidate.confidence === 'number' &&
-        Number.isFinite(candidate.confidence) &&
         validRiskTier &&
         typeof candidate.tradeoffCount === 'number' &&
         Number.isFinite(candidate.tradeoffCount) &&
@@ -729,13 +727,12 @@ export async function generateAlternativeLensMessage(
     return text;
 }
 
-type PlannerRequest =
-    {
-        kind: 'alternative_lens';
-        messageText: string;
-        lens: AlternativeLensPayload;
-        metadata: ResponseMetadata | null;
-    };
+type PlannerRequest = {
+    kind: 'alternative_lens';
+    messageText: string;
+    lens: AlternativeLensPayload;
+    metadata: ResponseMetadata | null;
+};
 
 /**
  * Asks the planner for OpenAI generation options tuned to the provenance
@@ -792,14 +789,9 @@ function formatMetadataSummary(metadata: ResponseMetadata | null): string {
         return 'Metadata unavailable; focus on the lens reinterpretation using the supplied text.';
     }
 
-    const confidencePercent = Number.isFinite(metadata.confidence)
-        ? `${Math.round(metadata.confidence * 100)}%`
-        : 'Unknown';
-
     const baseLines = [
         `Response ID: ${metadata.responseId}`,
         `Provenance: ${metadata.provenance}`,
-        `Confidence: ${confidencePercent}`,
         `Risk tier: ${metadata.riskTier}`,
         `Trade-offs noted: ${metadata.tradeoffCount}`,
     ];

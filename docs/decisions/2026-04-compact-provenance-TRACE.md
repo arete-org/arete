@@ -7,7 +7,7 @@
 
 ## 1. Context
 
-Footnote surfaces provenance and risk-tiering, but users also need a compact, consistent way to see *how* an answer is expressed: how demanding it is to read, how much “why” it shows, how clearly it separates sourced vs inferred content, how cautiously it behaves, and how many options/perspectives it offers.
+Footnote surfaces provenance and risk-tiering, but users also need a compact, consistent way to see _how_ an answer is expressed: how demanding it is to read, how much “why” it shows, how clearly it separates sourced vs inferred content, how cautiously it behaves, and how many options/perspectives it offers.
 
 TRACE exists to make those expression choices inspectable and auditable. It should be visually appealing, efficient at communicating temperament axes, and small enough to appear on every response without being distracting.
 
@@ -54,26 +54,28 @@ The CGI is attached to the message and referenced by an embed field (thumbnail o
 
 ---
 
-## 5. Implementation Notes 
+## 5. Implementation Notes
 
 ### 5.1 Wheel spec
 
 - Wheel has **5 slices** in fixed order: **T / R / A / C / E**.
 - Each slice is subdivided into **5 concentric radial bands**.
 - TRACE values remain **1–10**, rendered continuously across the 5 bands:
-  - Each band represents a 2-point range.
-  - Values can land **between** bands via partial fill of the current band.
-  - Example mapping for a value `v`:
-    - `t = clamp(v / 10, 0, 1)` (continuous fill proportion)
-    - Fill bands from inner outward, with the outermost filled fraction matching `t`.
+    - Each band represents a 2-point range.
+    - Values can land **between** bands via partial fill of the current band.
+    - Example mapping for a value `v`:
+        - `t = clamp(v / 10, 0, 1)` (continuous fill proportion)
+        - Fill bands from inner outward, with the outermost filled fraction matching `t`.
 
 **Visual rule (per slice):**
+
 - Filled region uses the slice’s axis color.
 - Unfilled region uses a muted version of the same hue (not grayscale).
 - Use thin neutral dividers between slices so boundaries read at small sizes.
 - Label slices with a single-letter glyph (**T R A C E**) at or near the rim.
 
 This yields a wheel that is:
+
 - compact,
 - legible at small sizes, and
 - “pleasant” because intermediate values visibly land between band boundaries.
@@ -86,12 +88,15 @@ This yields a wheel that is:
 ### 5.3 CGI layout
 
 Recommended starting size (adjust as needed):
+
 - **Canvas:** ~360×72 or 400×80, transparent PNG.
 - **Left:** wheel (e.g., 64×64 with padding).
 - **Right:** 1–3 compact chips max (no paragraphs).
 
 Chip candidates (pick a small subset):
-- confidence (numeric or small tick bar)
+
+- evidence score (numeric or small tick bar)
+- freshness score (numeric or small tick bar)
 - risk tier (single token: Low/Med/High)
 - a single “trade-offs” indicator (icon-only)
 
@@ -101,5 +106,6 @@ Canonical stored values remain 1–10; the renderer may store a wheel version fo
 
 ```json
 {
-  "trace": { "T": 9, "R": 6, "A": 8, "C": 6, "E": 7 },
+    "trace": { "T": 9, "R": 6, "A": 8, "C": 6, "E": 7 }
 }
+```

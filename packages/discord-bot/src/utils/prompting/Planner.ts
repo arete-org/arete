@@ -252,7 +252,11 @@ const planFunction = {
                 required: ["type"]
               }*/
                         },
-                        required: ['query', 'searchContextSize', 'searchIntent'],
+                        required: [
+                            'query',
+                            'searchContextSize',
+                            'searchIntent',
+                        ],
                     },
                     ttsOptions: {
                         type: 'object',
@@ -385,7 +389,7 @@ export class Planner {
 
             const plannerPrompt = renderPrompt('discord.planner.system', {
                 webSearchHint:
-                    'For substantive questions, lean toward web_search rather than skipping retrieval. Search whenever retrieved context would materially improve confidence, specificity, grounding, or source quality. Repo_explainer questions should usually search. Complex historical, policy, governance, or analytical questions should usually search too. If the user explicitly says to look it up, search the docs, refer to the docs, or do a search about Footnote itself, use repo_explainer and search. Use searchIntent repo_explainer for Footnote repo/package/feature/provenance questions, and current_facts for changing external facts. If you truly cannot form a useful query, fall back to tool_choice: none.',
+                    'For substantive questions, lean toward web_search rather than skipping retrieval. Search whenever retrieved context would materially improve reliability, specificity, grounding, or source quality. Repo_explainer questions should usually search. Complex historical, policy, governance, or analytical questions should usually search too. If the user explicitly says to look it up, search the docs, refer to the docs, or do a search about Footnote itself, use repo_explainer and search. Use searchIntent repo_explainer for Footnote repo/package/feature/provenance questions, and current_facts for changing external facts. If you truly cannot form a useful query, fall back to tool_choice: none.',
             }).content;
             const openaiResponse = await this.openaiService.generateResponse(
                 PLANNING_MODEL,
@@ -553,7 +557,9 @@ export class Planner {
     private normalizeWebSearchOptions(
         webSearch: OpenAIOptions['webSearch']
     ): NonNullable<OpenAIOptions['webSearch']> {
-        const searchIntent = this.normalizeSearchIntent(webSearch?.searchIntent);
+        const searchIntent = this.normalizeSearchIntent(
+            webSearch?.searchIntent
+        );
         const searchContextSize =
             searchIntent === 'repo_explainer'
                 ? webSearch?.searchContextSize === 'high'
@@ -583,10 +589,7 @@ export class Planner {
     }
 
     private normalizeSearchIntent(candidate: unknown): WebSearchIntent {
-        if (
-            candidate === 'repo_explainer' ||
-            candidate === 'current_facts'
-        ) {
+        if (candidate === 'repo_explainer' || candidate === 'current_facts') {
             return candidate;
         }
 
@@ -751,4 +754,3 @@ export class Planner {
         return Math.min(100, Math.max(1, Math.round(value)));
     }
 }
-

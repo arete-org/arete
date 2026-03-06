@@ -32,7 +32,7 @@ const EPHEMERAL_FLAG = 1 << 6;
  * Slash-command min/max guards already constrain this range.
  */
 const toTraceAxisScore = (value: number): TraceAxisScore =>
-    Math.max(1, Math.min(10, Math.round(value))) as TraceAxisScore;
+    Math.max(1, Math.min(5, Math.round(value))) as TraceAxisScore;
 
 /**
  * Slash-command definition and handler for the isolated TRACE preview experiment.
@@ -50,7 +50,7 @@ const command: Command = {
                 .setDescription('T axis: concision and structural efficiency.')
                 .setRequired(true)
                 .setMinValue(1)
-                .setMaxValue(10)
+                .setMaxValue(5)
         )
         .addIntegerOption((option) =>
             option
@@ -60,7 +60,7 @@ const command: Command = {
                 )
                 .setRequired(true)
                 .setMinValue(1)
-                .setMaxValue(10)
+                .setMaxValue(5)
         )
         .addIntegerOption((option) =>
             option
@@ -70,7 +70,7 @@ const command: Command = {
                 )
                 .setRequired(true)
                 .setMinValue(1)
-                .setMaxValue(10)
+                .setMaxValue(5)
         )
         .addIntegerOption((option) =>
             option
@@ -80,7 +80,7 @@ const command: Command = {
                 )
                 .setRequired(true)
                 .setMinValue(1)
-                .setMaxValue(10)
+                .setMaxValue(5)
         )
         .addIntegerOption((option) =>
             option
@@ -90,9 +90,9 @@ const command: Command = {
                 )
                 .setRequired(true)
                 .setMinValue(1)
-                .setMaxValue(10)
+                .setMaxValue(5)
         )
-        .addNumberOption((option) =>
+        .addIntegerOption((option) =>
             option
                 .setName('evidence_score')
                 .setDescription('Evidence score for the metadata bar (1-5).')
@@ -100,7 +100,7 @@ const command: Command = {
                 .setMinValue(1)
                 .setMaxValue(5)
         )
-        .addNumberOption((option) =>
+        .addIntegerOption((option) =>
             option
                 .setName('freshness_score')
                 .setDescription('Freshness score for the metadata bar (1-5).')
@@ -144,13 +144,11 @@ const command: Command = {
             const traceCard = await botApi.postTraceCard({
                 temperament,
                 chips: {
-                    evidenceScore: interaction.options.getNumber(
-                        'evidence_score',
-                        true
+                    evidenceScore: toTraceAxisScore(
+                        interaction.options.getInteger('evidence_score', true)
                     ),
-                    freshnessScore: interaction.options.getNumber(
-                        'freshness_score',
-                        true
+                    freshnessScore: toTraceAxisScore(
+                        interaction.options.getInteger('freshness_score', true)
                     ),
                 },
             });

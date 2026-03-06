@@ -5,10 +5,14 @@
  * @footnote-risk: medium - Rendering regressions can distort provenance visuals across Discord and web surfaces.
  * @footnote-ethics: medium - TRACE visuals shape user trust in how model behavior is communicated.
  */
-import type { ResponseTemperament } from '@footnote/contracts/ethics-core';
+import type {
+    PartialResponseTemperament,
+    ResponseTemperament,
+    TraceAxisScore,
+} from '@footnote/contracts/ethics-core';
 
 type TraceAxisKey = keyof ResponseTemperament;
-type NormalizedTemperament = Record<TraceAxisKey, number>;
+type NormalizedTemperament = Partial<Record<TraceAxisKey, TraceAxisScore>>;
 
 type TraceAxisSpec = {
     key: TraceAxisKey;
@@ -16,8 +20,8 @@ type TraceAxisSpec = {
 };
 
 export type TraceCardChipData = {
-    evidenceScore: number;
-    freshnessScore: number;
+    evidenceScore?: number;
+    freshnessScore?: number;
 };
 
 /**
@@ -25,8 +29,8 @@ export type TraceCardChipData = {
  * Width and height are optional so callers can rely on stable defaults.
  */
 export type TraceCardRenderInput = {
-    temperament: ResponseTemperament;
-    chips: TraceCardChipData;
+    temperament?: PartialResponseTemperament;
+    chips?: Partial<TraceCardChipData>;
     width?: number;
     height?: number;
 };
@@ -34,16 +38,16 @@ export type TraceCardRenderInput = {
 type ScoreRow = {
     key: 'evidence' | 'freshness';
     icon: string;
-    score: number;
+    score?: TraceAxisScore;
     y: number;
 };
 
 const AXIS_SPECS: TraceAxisSpec[] = [
-    { key: 'tightness', color: '#64748B' },
-    { key: 'rationale', color: '#6366F1' },
-    { key: 'attribution', color: '#14B8A6' },
-    { key: 'caution', color: '#F59E0B' },
-    { key: 'extent', color: '#84A98C' },
+    { key: 'tightness', color: '#008080' },
+    { key: 'rationale', color: '#9A6373' },
+    { key: 'attribution', color: '#E6AC00' },
+    { key: 'caution', color: '#B87333' },
+    { key: 'extent', color: '#5E7C5B' },
 ];
 
 const DEFAULT_WIDTH = 172;
@@ -52,6 +56,7 @@ const OUTER_RING_STROKE = '#D1D5DB';
 const TEXT_COLOR = '#CBD5E1';
 const TICK_NEUTRAL = '#D1D5DB';
 const TICK_FILLED = '#8FA3BE';
+const MISSING_FILL = '#EF4444';
 
 // Wheel geometry must stay pinned exactly to preserve the existing visual baseline.
 const WHEEL_LEFT = 1;
@@ -79,18 +84,11 @@ const REQUIRED_WIDTH = BAR_START_X + BAR_WIDTH + 1;
 
 const clamp = (value: number, min: number, max: number): number =>
     Math.min(max, Math.max(min, value));
-
-const normalizeAxisValue = (
-    value: number,
-    min: number,
-    max: number,
-    fallback: number
-): number => {
-    if (!Number.isFinite(value)) {
-        return fallback;
-    }
-    return clamp(value, min, max);
-};
+const isTraceAxisScore = (value: unknown): value is TraceAxisScore =>
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 5;
 
 const toSvgNumber = (value: number): string => {
     const fixed = value.toFixed(2);
@@ -131,46 +129,69 @@ const ringSectorPath = (
 };
 
 /**
- * Normalizes axis values to continuous 1..10 and fails open to midpoint 5.
+ * Builds a full sector from center to edge for missing TRACE values.
  */
-const normalizeTemperament = (
-    temperament: ResponseTemperament
-): NormalizedTemperament => {
-    const normalizeAxis = (value: number): number =>
-        normalizeAxisValue(value, 1, 10, 5);
+const sectorPath = (
+    cx: number,
+    cy: number,
+    outerRadius: number,
+    startAngle: number,
+    endAngle: number
+): string => {
+    const outerStart = polarPoint(cx, cy, outerRadius, startAngle);
+    const outerEnd = polarPoint(cx, cy, outerRadius, endAngle);
+    const largeArcFlag = endAngle - startAngle > Math.PI ? 1 : 0;
 
-    return {
-        tightness: normalizeAxis(temperament.tightness),
-        rationale: normalizeAxis(temperament.rationale),
-        attribution: normalizeAxis(temperament.attribution),
-        caution: normalizeAxis(temperament.caution),
-        extent: normalizeAxis(temperament.extent),
-    };
+    return [
+        `M ${toSvgNumber(cx)} ${toSvgNumber(cy)}`,
+        `L ${toSvgNumber(outerStart.x)} ${toSvgNumber(outerStart.y)}`,
+        `A ${toSvgNumber(outerRadius)} ${toSvgNumber(outerRadius)} 0 ${largeArcFlag} 1 ${toSvgNumber(outerEnd.x)} ${toSvgNumber(outerEnd.y)}`,
+        'Z',
+    ].join(' ');
 };
 
-const normalizeScore = (value: number): number =>
-    normalizeAxisValue(value, 1, 5, 3);
+/**
+ * Normalizes axis values to integer 1..5 and omits invalid/missing axes.
+ */
+const normalizeTemperament = (
+    temperament: PartialResponseTemperament | undefined
+): NormalizedTemperament => {
+    if (!temperament) {
+        return {};
+    }
 
-const buildScoreRows = (chips: TraceCardChipData): ScoreRow[] => [
+    const normalized: NormalizedTemperament = {};
+    for (const axis of AXIS_SPECS) {
+        const score = temperament[axis.key];
+        if (isTraceAxisScore(score)) {
+            normalized[axis.key] = score;
+        }
+    }
+    return normalized;
+};
+
+const normalizeScore = (
+    value: number | undefined
+): TraceAxisScore | undefined => (isTraceAxisScore(value) ? value : undefined);
+
+const buildScoreRows = (
+    chips: Partial<TraceCardChipData> | undefined
+): ScoreRow[] => [
     {
         key: 'evidence',
-        icon: '🔗',
-        score: normalizeScore(chips.evidenceScore),
+        icon: '📌',
+        score: normalizeScore(chips?.evidenceScore),
         y: BLOCK_TOP,
     },
     {
         key: 'freshness',
         icon: '🕒',
-        score: normalizeScore(chips.freshnessScore),
+        score: normalizeScore(chips?.freshnessScore),
         y: BLOCK_TOP + ROW_HEIGHT + ROW_GAP,
     },
 ];
 
-const renderScoreRow = (
-    row: ScoreRow,
-    defs: string[],
-    layers: string[]
-): void => {
+const renderScoreRow = (row: ScoreRow, layers: string[]): void => {
     const textY = row.y + ROW_HEIGHT / 2;
     const tickY = row.y + (ROW_HEIGHT - TICK_HEIGHT) / 2;
 
@@ -180,22 +201,21 @@ const renderScoreRow = (
 
     for (let index = 0; index < TICK_COUNT; index += 1) {
         const tickX = BAR_START_X + index * (TICK_WIDTH + TICK_GAP);
-        const clipId = `tick-clip-${row.key}-${index + 1}`;
-        const fillRatio = clamp(row.score - index, 0, 1);
-        const filledWidth = fillRatio * TICK_WIDTH;
+        const hasScore = row.score !== undefined;
+        const shouldFill = hasScore && index < row.score;
+        const neutralStroke = TICK_NEUTRAL;
+        const neutralFill = TICK_NEUTRAL;
 
         layers.push(
-            `<rect x="${toSvgNumber(tickX)}" y="${toSvgNumber(tickY)}" width="${TICK_WIDTH}" height="${TICK_HEIGHT}" rx="${TICK_RADIUS}" fill="${TICK_NEUTRAL}" fill-opacity="0.08" stroke="${TICK_NEUTRAL}" stroke-width="1" stroke-opacity="0.3" />`
+            `<rect x="${toSvgNumber(tickX)}" y="${toSvgNumber(tickY)}" width="${TICK_WIDTH}" height="${TICK_HEIGHT}" rx="${TICK_RADIUS}" fill="${neutralFill}" fill-opacity="${hasScore ? '0.08' : '0.06'}" stroke="${neutralStroke}" stroke-width="1" stroke-opacity="${hasScore ? '0.3' : '0.24'}" />`
         );
-        if (filledWidth <= 0) {
+
+        if (!shouldFill) {
             continue;
         }
 
-        defs.push(
-            `<clipPath id="${clipId}"><rect x="${toSvgNumber(tickX)}" y="${toSvgNumber(tickY)}" width="${TICK_WIDTH}" height="${TICK_HEIGHT}" rx="${TICK_RADIUS}" /></clipPath>`
-        );
         layers.push(
-            `<rect x="${toSvgNumber(tickX)}" y="${toSvgNumber(tickY)}" width="${toSvgNumber(filledWidth)}" height="${TICK_HEIGHT}" fill="${TICK_FILLED}" fill-opacity="0.62" clip-path="url(#${clipId})" />`
+            `<rect x="${toSvgNumber(tickX)}" y="${toSvgNumber(tickY)}" width="${TICK_WIDTH}" height="${TICK_HEIGHT}" rx="${TICK_RADIUS}" fill="${TICK_FILLED}" fill-opacity="0.62" />`
         );
     }
 };
@@ -213,7 +233,7 @@ export const renderTraceCardSvg = (input: TraceCardRenderInput): string => {
         Math.round(input.height ?? DEFAULT_HEIGHT)
     );
     const normalizedTemperament = normalizeTemperament(input.temperament);
-    const bandCount = 4;
+    const bandCount = 5;
     const bandThickness = (WHEEL_OUTER_RADIUS - WHEEL_INNER_RADIUS) / bandCount;
     const bandGap = 0.8;
     const sliceAngle = (Math.PI * 2) / AXIS_SPECS.length;
@@ -222,7 +242,6 @@ export const renderTraceCardSvg = (input: TraceCardRenderInput): string => {
     const epsilon = 0.0001;
     const wheelLayers: string[] = [];
     const metadataLayers: string[] = [];
-    const defs: string[] = [];
 
     for (let index = 0; index < AXIS_SPECS.length; index += 1) {
         const axis = AXIS_SPECS[index];
@@ -235,7 +254,14 @@ export const renderTraceCardSvg = (input: TraceCardRenderInput): string => {
         }
 
         const score = normalizedTemperament[axis.key];
-        const scoreProgress = score / 10;
+        if (score === undefined) {
+            wheelLayers.push(
+                `<path d="${sectorPath(WHEEL_CENTER_X, WHEEL_CENTER_Y, WHEEL_OUTER_RADIUS, startAngle, endAngle)}" fill="${MISSING_FILL}" fill-opacity="0.45" />`
+            );
+            continue;
+        }
+
+        const scoreProgress = score / bandCount;
 
         for (let bandIndex = 0; bandIndex < bandCount; bandIndex += 1) {
             const bandStart = bandIndex / bandCount;
@@ -270,17 +296,15 @@ export const renderTraceCardSvg = (input: TraceCardRenderInput): string => {
     }
 
     for (const row of buildScoreRows(input.chips)) {
-        renderScoreRow(row, defs, metadataLayers);
+        renderScoreRow(row, metadataLayers);
     }
 
     const outerRing = `<circle cx="${toSvgNumber(WHEEL_CENTER_X)}" cy="${toSvgNumber(WHEEL_CENTER_Y)}" r="${toSvgNumber(WHEEL_OUTER_RADIUS)}" fill="none" stroke="${OUTER_RING_STROKE}" stroke-width="0.6" stroke-opacity="0.7" />`;
-    const defsBlock = defs.length > 0 ? `<defs>${defs.join('')}</defs>` : '';
 
     return [
         `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="TRACE card">`,
         '<title>TRACE card</title>',
-        '<desc>TRACE wheel with fixed Evidence and Freshness metadata bars.</desc>',
-        defsBlock,
+        '<desc>TRACE wheel with Evidence and Freshness metadata bars. Missing TRACE axes render in red; missing chip values render gray.</desc>',
         ...wheelLayers,
         outerRing,
         ...metadataLayers,

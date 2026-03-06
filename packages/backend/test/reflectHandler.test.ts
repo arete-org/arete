@@ -48,7 +48,6 @@ type CreateTestServerOptions = {
 const createMetadata = (): ResponseMetadata => ({
     responseId: 'reflect_test_response',
     provenance: 'Inferred',
-    confidence: 0.5,
     riskTier: 'Low',
     tradeoffCount: 0,
     chainHash: 'abc123def456',
@@ -99,7 +98,7 @@ const createTestServer = (
                 if (options?.expectMetadata === false) {
                     return {
                         normalizedText:
-                            '{"action":"message","modality":"text","riskTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","toolChoice":"none"}}',
+                            '{"action":"message","modality":"text","riskTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","toolChoice":"none","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',
                         metadata: {
                             model: 'gpt-5-mini',
                         },
@@ -110,7 +109,6 @@ const createTestServer = (
                     normalizedText: 'service response',
                     metadata: {
                         model: 'gpt-5-mini',
-                        confidence: 0.5,
                         provenance: 'Inferred',
                         tradeoffCount: 0,
                         citations: [],
@@ -315,9 +313,7 @@ test('reflect service requests use a separate service rate limiter bucket', asyn
             body: JSON.stringify(
                 createReflectRequest({
                     latestUserInput: 'first request',
-                    conversation: [
-                        { role: 'user', content: 'first request' },
-                    ],
+                    conversation: [{ role: 'user', content: 'first request' }],
                 })
             ),
         });
@@ -332,9 +328,7 @@ test('reflect service requests use a separate service rate limiter bucket', asyn
             body: JSON.stringify(
                 createReflectRequest({
                     latestUserInput: 'second request',
-                    conversation: [
-                        { role: 'user', content: 'second request' },
-                    ],
+                    conversation: [{ role: 'user', content: 'second request' }],
                 })
             ),
         });
@@ -382,9 +376,7 @@ test('reflect trusted service requests stay in one bucket even if client IP chan
             body: JSON.stringify(
                 createReflectRequest({
                     latestUserInput: 'first request',
-                    conversation: [
-                        { role: 'user', content: 'first request' },
-                    ],
+                    conversation: [{ role: 'user', content: 'first request' }],
                 })
             ),
         });
@@ -400,9 +392,7 @@ test('reflect trusted service requests stay in one bucket even if client IP chan
             body: JSON.stringify(
                 createReflectRequest({
                     latestUserInput: 'second request',
-                    conversation: [
-                        { role: 'user', content: 'second request' },
-                    ],
+                    conversation: [{ role: 'user', content: 'second request' }],
                 })
             ),
         });
@@ -495,7 +485,9 @@ test('reflect accepts public calls when allowlist is unset and Turnstile hostnam
                 : input instanceof URL
                   ? input.toString()
                   : input.url;
-        if (url === 'https://challenges.cloudflare.com/turnstile/v0/siteverify') {
+        if (
+            url === 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
+        ) {
             return new Response(
                 JSON.stringify({
                     success: true,
@@ -528,9 +520,7 @@ test('reflect accepts public calls when allowlist is unset and Turnstile hostnam
                     surface: 'web',
                     trigger: { kind: 'submit' },
                     latestUserInput: 'public request',
-                    conversation: [
-                        { role: 'user', content: 'public request' },
-                    ],
+                    conversation: [{ role: 'user', content: 'public request' }],
                     capabilities: {
                         canReact: false,
                         canGenerateImages: false,
@@ -569,8 +559,15 @@ test('reflect rate limits public callers before calling Turnstile', async () => 
     env.TURNSTILE_ALLOWED_HOSTNAMES = '127.0.0.1';
 
     globalThis.fetch = (async (input, init) => {
-        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-        if (url === 'https://challenges.cloudflare.com/turnstile/v0/siteverify') {
+        const url =
+            typeof input === 'string'
+                ? input
+                : input instanceof URL
+                  ? input.toString()
+                  : input.url;
+        if (
+            url === 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
+        ) {
             turnstileCalls += 1;
             return new Response(
                 JSON.stringify({

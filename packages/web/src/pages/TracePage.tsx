@@ -86,7 +86,8 @@ const TracePage = (): JSX.Element => {
                 const traceResult = await api.getTrace(responseId);
 
                 if (traceResult.status === 200) {
-                    const payload = traceResult.data as SerializableResponseMetadata;
+                    const payload =
+                        traceResult.data as SerializableResponseMetadata;
 
                     // Debug logging
                     console.log('=== Trace Page Debug ===');
@@ -94,15 +95,6 @@ const TracePage = (): JSX.Element => {
                     console.log(
                         'Payload received:',
                         JSON.stringify(payload, null, 2)
-                    );
-                    console.log('Payload confidence:', payload?.confidence);
-                    console.log(
-                        'Payload confidence type:',
-                        typeof payload?.confidence
-                    );
-                    console.log(
-                        'Has confidence property:',
-                        'confidence' in payload
                     );
                     console.log('Payload keys:', Object.keys(payload));
                     console.log('========================');
@@ -115,15 +107,7 @@ const TracePage = (): JSX.Element => {
                         'About to set traceData with payload:',
                         payload
                     );
-                    console.log(
-                        'Payload confidence before setting:',
-                        payload?.confidence
-                    );
                     setTraceData(payload);
-                    console.log(
-                        'traceData state set, confidence should be:',
-                        payload?.confidence
-                    );
                     setLoadingState('success');
                     return;
                 }
@@ -173,7 +157,9 @@ const TracePage = (): JSX.Element => {
                     }
 
                     setErrorMessage(
-                        error.details || error.message || 'Failed to load trace.'
+                        error.details ||
+                            error.message ||
+                            'Failed to load trace.'
                     );
                     setLoadingState('error');
                     return;
@@ -203,11 +189,6 @@ const TracePage = (): JSX.Element => {
     useEffect(() => {
         console.log('=== traceData State Changed ===');
         console.log('traceData:', traceData);
-        console.log('traceData?.confidence:', traceData?.confidence);
-        console.log(
-            'traceData?.confidence type:',
-            typeof traceData?.confidence
-        );
         if (traceData) {
             console.log('All traceData keys:', Object.keys(traceData));
             console.log(
@@ -353,39 +334,6 @@ const TracePage = (): JSX.Element => {
             ? traceData.chainHash
             : undefined;
 
-    // Format confidence as percentage if available
-    const formatConfidence = (confidence?: number): string => {
-        console.log('=== Formatting Confidence ===');
-        console.log('Input confidence value:', confidence);
-        console.log('Input type:', typeof confidence);
-        console.log('traceData object:', traceData);
-        console.log('traceData.confidence:', traceData?.confidence);
-
-        if (
-            typeof confidence === 'number' &&
-            !isNaN(confidence) &&
-            confidence >= 0 &&
-            confidence <= 1
-        ) {
-            const result = `${Math.round(confidence * 100)}%`;
-            console.log('Confidence formatted as:', result);
-            return result;
-        }
-        console.log('Confidence validation failed - returning unavailable');
-        console.log('Confidence value that failed:', confidence);
-        console.log('Is number?', typeof confidence === 'number');
-        console.log('Is NaN?', isNaN(confidence as number));
-        console.log(
-            'Range check:',
-            confidence !== undefined
-                ? `${confidence} >= 0 && ${confidence} <= 1 = ${(confidence as number) >= 0 && (confidence as number) <= 1}`
-                : 'undefined'
-        );
-        return 'Confidence data unavailable';
-    };
-    const confidence = formatConfidence(traceData?.confidence);
-    console.log('=== Final Confidence Result ===');
-    console.log('Final confidence string:', confidence);
     const tradeoffCount = traceData?.tradeoffCount ?? 0;
     const staleAfter = traceData?.staleAfter
         ? new Date(traceData.staleAfter).toLocaleString()
@@ -412,9 +360,6 @@ const TracePage = (): JSX.Element => {
                 <h2>Summary</h2>
                 <p>
                     <strong>Provenance:</strong> {provenance}
-                </p>
-                <p>
-                    <strong>Confidence:</strong> {confidence}
                 </p>
                 <p>
                     <strong>Risk Tier:</strong>{' '}
@@ -446,38 +391,43 @@ const TracePage = (): JSX.Element => {
                 <h2>Citations</h2>
                 {traceData?.citations && traceData.citations.length > 0 ? (
                     <ul>
-                        {traceData.citations.map((citation: {
-                            title: string;
-                            url: string;
-                            snippet?: string;
-                        }, index: number) => {
-                            const urlString =
-                                typeof citation.url === 'string'
-                                    ? citation.url
-                                    : String(citation.url || '');
-                            return (
-                                <li key={index}>
-                                    <a
-                                        href={urlString}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                    >
-                                        {citation.title || 'Untitled'}
-                                    </a>
-                                    {citation.snippet && (
-                                        <p
-                                            style={{
-                                                marginTop: '0.25rem',
-                                                fontSize: '0.875rem',
-                                                color: '#6b7280',
-                                            }}
+                        {traceData.citations.map(
+                            (
+                                citation: {
+                                    title: string;
+                                    url: string;
+                                    snippet?: string;
+                                },
+                                index: number
+                            ) => {
+                                const urlString =
+                                    typeof citation.url === 'string'
+                                        ? citation.url
+                                        : String(citation.url || '');
+                                return (
+                                    <li key={index}>
+                                        <a
+                                            href={urlString}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
                                         >
-                                            {citation.snippet}
-                                        </p>
-                                    )}
-                                </li>
-                            );
-                        })}
+                                            {citation.title || 'Untitled'}
+                                        </a>
+                                        {citation.snippet && (
+                                            <p
+                                                style={{
+                                                    marginTop: '0.25rem',
+                                                    fontSize: '0.875rem',
+                                                    color: '#6b7280',
+                                                }}
+                                            >
+                                                {citation.snippet}
+                                            </p>
+                                        )}
+                                    </li>
+                                );
+                            }
+                        )}
                     </ul>
                 ) : (
                     <p>No citations available for this response.</p>
@@ -521,4 +471,3 @@ const TracePage = (): JSX.Element => {
 };
 
 export default TracePage;
-

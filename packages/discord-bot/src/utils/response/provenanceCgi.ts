@@ -5,14 +5,10 @@
  * @footnote-risk: medium - Broken control IDs or card payload mapping can block provenance actions.
  * @footnote-ethics: high - Provenance controls and scores affect transparency and user trust.
  */
-import {
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-} from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import type {
+    PartialResponseTemperament,
     ResponseMetadata,
-    ResponseTemperament,
     TraceAxisScore,
 } from '@footnote/contracts/ethics-core';
 import type { PostTraceCardRequest } from '@footnote/contracts/web';
@@ -24,95 +20,82 @@ const PROVENANCE_ACTIONS = new Set<ProvenanceAction>([
     'report_issue',
 ]);
 const UNKNOWN_RESPONSE_ID_FALLBACK = 'unknown_response_id';
-const TRACE_CARD_FRESHNESS_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
-const DEFAULT_CHIP_SCORE = 3;
-
-const NEUTRAL_TEMPERAMENT: ResponseTemperament = {
-    tightness: 5,
-    rationale: 5,
-    attribution: 5,
-    caution: 5,
-    extent: 5,
-};
-
-function clamp(value: number, min: number, max: number): number {
-    return Math.min(max, Math.max(min, value));
-}
+const TRACE_AXIS_KEYS = [
+    'tightness',
+    'rationale',
+    'attribution',
+    'caution',
+    'extent',
+] as const;
 
 function normalizeResponseId(responseId: string): string {
     const trimmed = responseId.trim();
     return trimmed.length > 0 ? trimmed : UNKNOWN_RESPONSE_ID_FALLBACK;
 }
 
-function toTraceAxisScore(value: number): TraceAxisScore {
-    return Math.round(clamp(value, 1, 10)) as TraceAxisScore;
-}
+const normalizeTraceAxisScore = (
+    value: unknown
+): TraceAxisScore | undefined => {
+    if (
+        typeof value !== 'number' ||
+        !Number.isInteger(value) ||
+        value < 1 ||
+        value > 5
+    ) {
+        return undefined;
+    }
 
-function normalizeTemperament(
-    temperament: ResponseTemperament | undefined
-): ResponseTemperament {
+    return value as TraceAxisScore;
+};
+
+const normalizeTemperament = (
+    temperament: ResponseMetadata['temperament']
+): PartialResponseTemperament | undefined => {
     if (!temperament) {
-        return NEUTRAL_TEMPERAMENT;
+        return undefined;
     }
 
-    return {
-        tightness: toTraceAxisScore(temperament.tightness),
-        rationale: toTraceAxisScore(temperament.rationale),
-        attribution: toTraceAxisScore(temperament.attribution),
-        caution: toTraceAxisScore(temperament.caution),
-        extent: toTraceAxisScore(temperament.extent),
-    };
-}
-
-/**
- * Maps response confidence (0..1) to TRACE evidence chip score (1..5).
- */
-export function mapConfidenceToEvidenceScore(confidence: number): number {
-    if (!Number.isFinite(confidence)) {
-        return DEFAULT_CHIP_SCORE;
+    const normalized: PartialResponseTemperament = {};
+    for (const axis of TRACE_AXIS_KEYS) {
+        const score = normalizeTraceAxisScore(temperament[axis]);
+        if (score !== undefined) {
+            normalized[axis] = score;
+        }
     }
 
-    const normalized = clamp(confidence, 0, 1);
-    return 1 + normalized * 4;
-}
+    return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
 
-/**
- * Maps freshness horizon to TRACE freshness chip score (1..5).
- */
-export function mapStaleAfterToFreshnessScore(
-    staleAfter: string,
-    nowMs: number = Date.now()
-): number {
-    const staleAfterMs = Date.parse(staleAfter);
-    if (!Number.isFinite(staleAfterMs)) {
-        return DEFAULT_CHIP_SCORE;
+const normalizeTraceCardChips = (
+    metadata: ResponseMetadata
+): PostTraceCardRequest['chips'] | undefined => {
+    const evidenceScore = normalizeTraceAxisScore(metadata.evidenceScore);
+    const freshnessScore = normalizeTraceAxisScore(metadata.freshnessScore);
+
+    const chips: NonNullable<PostTraceCardRequest['chips']> = {};
+    if (evidenceScore !== undefined) {
+        chips.evidenceScore = evidenceScore;
+    }
+    if (freshnessScore !== undefined) {
+        chips.freshnessScore = freshnessScore;
     }
 
-    const horizonRatio = clamp(
-        (staleAfterMs - nowMs) / TRACE_CARD_FRESHNESS_WINDOW_MS,
-        0,
-        1
-    );
-    return 1 + horizonRatio * 4;
-}
+    return Object.keys(chips).length > 0 ? chips : undefined;
+};
 
 /**
  * Builds the backend trace-card request from response metadata.
  */
 export function buildTraceCardRequest(
-    metadata: ResponseMetadata,
-    nowMs: number = Date.now()
+    metadata: ResponseMetadata
 ): PostTraceCardRequest {
+    const temperament = normalizeTemperament(metadata.temperament);
+    const chips = normalizeTraceCardChips(metadata);
+
     return {
         responseId: normalizeResponseId(metadata.responseId),
-        temperament: normalizeTemperament(metadata.temperament),
-        chips: {
-            evidenceScore: mapConfidenceToEvidenceScore(metadata.confidence),
-            freshnessScore: mapStaleAfterToFreshnessScore(
-                metadata.staleAfter,
-                nowMs
-            ),
-        },
+        ...(temperament && { temperament }),
+        ...(chips && { chips }),
     };
 }
 

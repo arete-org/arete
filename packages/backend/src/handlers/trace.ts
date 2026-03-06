@@ -66,7 +66,11 @@ const sendJson = (
 };
 
 // Sends SVG content with the correct media type so browsers/clients can render inline.
-const sendSvg = (res: ServerResponse, statusCode: number, svg: string): void => {
+const sendSvg = (
+    res: ServerResponse,
+    statusCode: number,
+    svg: string
+): void => {
     res.statusCode = statusCode;
     res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
     res.end(svg);
@@ -100,7 +104,8 @@ const readTraceMetadata = async (
     } catch (error) {
         return {
             status: 'error',
-            errorMessage: error instanceof Error ? error.message : String(error),
+            errorMessage:
+                error instanceof Error ? error.message : String(error),
         };
     }
 };
@@ -351,8 +356,9 @@ const createTraceHandlers = ({
         try {
             // Read flow: parse responseId -> check store -> load metadata -> enforce staleness -> respond.
             // Expect /api/traces/{responseId}
-            const pathMatch =
-                parsedUrl.pathname.match(/^\/api\/traces\/([^/]+)\/?$/);
+            const pathMatch = parsedUrl.pathname.match(
+                /^\/api\/traces\/([^/]+)\/?$/
+            );
             if (!pathMatch) {
                 sendJson(res, 400, { error: 'Invalid trace request format' });
                 logRequest(req, res, 'trace invalid-format');
@@ -377,10 +383,7 @@ const createTraceHandlers = ({
                 return;
             }
 
-            const readResult = await readTraceMetadata(
-                traceStore,
-                responseId
-            );
+            const readResult = await readTraceMetadata(traceStore, responseId);
             if (readResult.status === 'not-found') {
                 // Missing trace is not fatal but should return 404.
                 sendJson(res, 404, { error: 'Trace not found' });
@@ -454,11 +457,7 @@ const createTraceHandlers = ({
                 return;
             }
 
-            const payload = await parseTraceJsonBody(
-                req,
-                res,
-                'trace upsert'
-            );
+            const payload = await parseTraceJsonBody(req, res, 'trace upsert');
             if (!payload) {
                 return;
             }
@@ -526,11 +525,7 @@ const createTraceHandlers = ({
                 return;
             }
 
-            const writeAccess = requireTraceWriteAccess(
-                req,
-                res,
-                'trace card'
-            );
+            const writeAccess = requireTraceWriteAccess(req, res, 'trace card');
             if (!writeAccess) {
                 return;
             }
@@ -590,7 +585,11 @@ const createTraceHandlers = ({
         try {
             if (req.method !== 'POST') {
                 sendJson(res, 405, { error: 'Method not allowed' });
-                logRequest(req, res, 'trace card from-trace method-not-allowed');
+                logRequest(
+                    req,
+                    res,
+                    'trace card from-trace method-not-allowed'
+                );
                 return;
             }
 
@@ -640,21 +639,12 @@ const createTraceHandlers = ({
                 return;
             }
 
-            if (!metadata.temperament) {
-                sendJson(res, 409, {
-                    error: 'Trace is missing temperament metadata',
-                });
-                logRequest(
-                    req,
-                    res,
-                    'trace card from-trace missing-temperament'
-                );
-                return;
-            }
-
             const { svg, png } = renderTraceCardPng({
                 temperament: metadata.temperament,
-                chips: parsedPayload.data.chips,
+                chips: {
+                    evidenceScore: metadata.evidenceScore,
+                    freshnessScore: metadata.freshnessScore,
+                },
             });
 
             await writeAccess.store.upsertTraceCardSvg(responseId, svg);
@@ -738,4 +728,3 @@ const createTraceHandlers = ({
 };
 
 export { createTraceHandlers };
-

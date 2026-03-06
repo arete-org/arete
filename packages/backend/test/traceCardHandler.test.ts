@@ -26,7 +26,9 @@ type TestServer = {
 const TRACE_TOKEN = 'trace-card-test-token';
 
 const createTestServer = async (): Promise<TestServer> => {
-    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-card-api-'));
+    const tempRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'trace-card-api-')
+    );
     const store = new SqliteTraceStore({
         dbPath: path.join(tempRoot, 'provenance.db'),
     });
@@ -67,7 +69,9 @@ const createTestServer = async (): Promise<TestServer> => {
         res.end();
     });
 
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>((resolve) =>
+        server.listen(0, '127.0.0.1', resolve)
+    );
     const address = server.address();
     assert.ok(address && typeof address === 'object');
 
@@ -104,15 +108,15 @@ test('POST /api/trace-cards returns PNG payload and stores SVG asset', async () 
             body: JSON.stringify({
                 responseId: 'trace_card_response_123',
                 temperament: {
-                    tightness: 9,
-                    rationale: 6,
-                    attribution: 8,
-                    caution: 6,
-                    extent: 7,
+                    tightness: 5,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
                 },
                 chips: {
-                    evidenceScore: 3.6,
-                    freshnessScore: 4.2,
+                    evidenceScore: 4,
+                    freshnessScore: 5,
                 },
             }),
         });
@@ -160,16 +164,44 @@ test('POST /api/trace-cards rejects missing trace token', async () => {
             },
             body: JSON.stringify({
                 temperament: {
-                    tightness: 9,
-                    rationale: 6,
-                    attribution: 8,
-                    caution: 6,
-                    extent: 7,
+                    tightness: 5,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
                 },
             }),
         });
 
         assert.equal(response.status, 401);
+    } finally {
+        await server.close();
+        await server.cleanup();
+    }
+});
+
+test('POST /api/trace-cards accepts minimal payload and returns PNG', async () => {
+    const server = await createTestServer();
+
+    try {
+        const response = await fetch(`${server.url}/api/trace-cards`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': TRACE_TOKEN,
+            },
+            body: JSON.stringify({
+                responseId: 'trace_card_minimal_123',
+            }),
+        });
+
+        assert.equal(response.status, 200);
+        const payload = (await response.json()) as {
+            responseId: string;
+            pngBase64: string;
+        };
+        assert.equal(payload.responseId, 'trace_card_minimal_123');
+        assert.ok(payload.pngBase64.length > 32);
     } finally {
         await server.close();
         await server.cleanup();
@@ -188,11 +220,11 @@ test('POST /api/trace-cards rejects invalid payloads', async () => {
             },
             body: JSON.stringify({
                 temperament: {
-                    tightness: 9,
-                    rationale: 6,
-                    attribution: 8,
-                    caution: 6,
-                    extent: 7,
+                    tightness: 5,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
                 },
                 chips: {
                     evidenceScore: 6,
@@ -222,7 +254,7 @@ test('GET trace-card SVG returns 404 when asset is missing', async () => {
     }
 });
 
-test('POST /api/trace-cards/from-trace requires caller-provided scores', async () => {
+test('POST /api/trace-cards/from-trace uses stored metadata temperament and chip scores', async () => {
     const server = await createTestServer();
     const responseId = 'from_trace_response_123';
 
@@ -230,7 +262,6 @@ test('POST /api/trace-cards/from-trace requires caller-provided scores', async (
         await server.store.upsert({
             responseId,
             provenance: 'Retrieved',
-            confidence: 0.91,
             riskTier: 'High',
             tradeoffCount: 3,
             chainHash: 'chain_hash',
@@ -239,28 +270,29 @@ test('POST /api/trace-cards/from-trace requires caller-provided scores', async (
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
             temperament: {
-                tightness: 8,
-                rationale: 7,
-                attribution: 9,
-                caution: 6,
-                extent: 8,
+                tightness: 4,
+                rationale: 3,
+                attribution: 5,
+                caution: 2,
+                extent: 4,
             },
+            evidenceScore: 4,
+            freshnessScore: 3,
         });
 
-        const response = await fetch(`${server.url}/api/trace-cards/from-trace`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Trace-Token': TRACE_TOKEN,
-            },
-            body: JSON.stringify({
-                responseId,
-                chips: {
-                    evidenceScore: 3.6,
-                    freshnessScore: 4.2,
+        const response = await fetch(
+            `${server.url}/api/trace-cards/from-trace`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Trace-Token': TRACE_TOKEN,
                 },
-            }),
-        });
+                body: JSON.stringify({
+                    responseId,
+                }),
+            }
+        );
 
         assert.equal(response.status, 200);
         const payload = (await response.json()) as {
@@ -275,7 +307,7 @@ test('POST /api/trace-cards/from-trace requires caller-provided scores', async (
     }
 });
 
-test('POST /api/trace-cards/from-trace rejects missing scores', async () => {
+test('POST /api/trace-cards/from-trace renders successfully when stored chip scores are missing', async () => {
     const server = await createTestServer();
     const responseId = 'from_trace_missing_scores';
 
@@ -283,7 +315,6 @@ test('POST /api/trace-cards/from-trace rejects missing scores', async () => {
         await server.store.upsert({
             responseId,
             provenance: 'Retrieved',
-            confidence: 0.74,
             riskTier: 'Medium',
             tradeoffCount: 2,
             chainHash: 'chain_hash',
@@ -292,31 +323,40 @@ test('POST /api/trace-cards/from-trace rejects missing scores', async () => {
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
             temperament: {
-                tightness: 8,
-                rationale: 7,
-                attribution: 9,
-                caution: 6,
-                extent: 8,
+                tightness: 4,
+                rationale: 3,
+                attribution: 5,
+                caution: 2,
+                extent: 4,
             },
         });
 
-        const response = await fetch(`${server.url}/api/trace-cards/from-trace`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Trace-Token': TRACE_TOKEN,
-            },
-            body: JSON.stringify({ responseId }),
-        });
+        const response = await fetch(
+            `${server.url}/api/trace-cards/from-trace`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Trace-Token': TRACE_TOKEN,
+                },
+                body: JSON.stringify({ responseId }),
+            }
+        );
 
-        assert.equal(response.status, 400);
+        assert.equal(response.status, 200);
+        const payload = (await response.json()) as {
+            responseId: string;
+            pngBase64: string;
+        };
+        assert.equal(payload.responseId, responseId);
+        assert.ok(payload.pngBase64.length > 32);
     } finally {
         await server.close();
         await server.cleanup();
     }
 });
 
-test('POST /api/trace-cards/from-trace returns 409 when temperament is missing', async () => {
+test('POST /api/trace-cards/from-trace renders successfully when stored temperament is missing', async () => {
     const server = await createTestServer();
     const responseId = 'from_trace_missing_temperament';
 
@@ -324,7 +364,6 @@ test('POST /api/trace-cards/from-trace returns 409 when temperament is missing',
         await server.store.upsert({
             responseId,
             provenance: 'Retrieved',
-            confidence: 0.55,
             riskTier: 'Low',
             tradeoffCount: 0,
             chainHash: 'chain_hash',
@@ -334,22 +373,27 @@ test('POST /api/trace-cards/from-trace returns 409 when temperament is missing',
             citations: [],
         });
 
-        const response = await fetch(`${server.url}/api/trace-cards/from-trace`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Trace-Token': TRACE_TOKEN,
-            },
-            body: JSON.stringify({
-                responseId,
-                chips: {
-                    evidenceScore: 2.9,
-                    freshnessScore: 4.3,
+        const response = await fetch(
+            `${server.url}/api/trace-cards/from-trace`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Trace-Token': TRACE_TOKEN,
                 },
-            }),
-        });
+                body: JSON.stringify({
+                    responseId,
+                }),
+            }
+        );
 
-        assert.equal(response.status, 409);
+        assert.equal(response.status, 200);
+        const payload = (await response.json()) as {
+            responseId: string;
+            pngBase64: string;
+        };
+        assert.equal(payload.responseId, responseId);
+        assert.ok(payload.pngBase64.length > 32);
     } finally {
         await server.close();
         await server.cleanup();

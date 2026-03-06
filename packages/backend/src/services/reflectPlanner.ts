@@ -10,7 +10,11 @@ import type {
     ReflectCapabilities,
     ReflectImageRequest,
 } from '@footnote/contracts/web';
-import type { RiskTier } from '@footnote/contracts/ethics-core';
+import type {
+    RiskTier,
+    ResponseTemperament,
+    TraceAxisScore,
+} from '@footnote/contracts/ethics-core';
 import { renderPrompt } from './prompts/promptRegistry.js';
 import type { OpenAIService } from './openaiService.js';
 import {
@@ -74,6 +78,7 @@ type PlannerCandidate = Partial<ReflectPlan> & {
         webSearch?: Partial<ReflectWebSearchPlan> & {
             repoHints?: unknown;
         };
+        temperament?: unknown;
     };
 };
 
@@ -154,7 +159,9 @@ const normalizeRepoHints = (value: unknown): ReflectRepoSearchHint[] => {
             continue;
         }
 
-        const normalizedHint = rawHint.trim().toLowerCase() as ReflectRepoSearchHint;
+        const normalizedHint = rawHint
+            .trim()
+            .toLowerCase() as ReflectRepoSearchHint;
         if (!REPO_HINT_SET.has(normalizedHint) || seen.has(normalizedHint)) {
             continue;
         }
@@ -164,6 +171,53 @@ const normalizeRepoHints = (value: unknown): ReflectRepoSearchHint[] => {
     }
 
     return normalized;
+};
+
+const normalizeTraceAxisScore = (
+    value: unknown
+): TraceAxisScore | undefined => {
+    if (
+        typeof value !== 'number' ||
+        !Number.isInteger(value) ||
+        value < 1 ||
+        value > 5
+    ) {
+        return undefined;
+    }
+
+    return value as TraceAxisScore;
+};
+
+const normalizeTemperament = (
+    value: unknown
+): ResponseTemperament | undefined => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return undefined;
+    }
+
+    const candidate = value as Record<string, unknown>;
+    const tightness = normalizeTraceAxisScore(candidate.tightness);
+    const rationale = normalizeTraceAxisScore(candidate.rationale);
+    const attribution = normalizeTraceAxisScore(candidate.attribution);
+    const caution = normalizeTraceAxisScore(candidate.caution);
+    const extent = normalizeTraceAxisScore(candidate.extent);
+    if (
+        tightness === undefined ||
+        rationale === undefined ||
+        attribution === undefined ||
+        caution === undefined ||
+        extent === undefined
+    ) {
+        return undefined;
+    }
+
+    return {
+        tightness,
+        rationale,
+        attribution,
+        caution,
+        extent,
+    };
 };
 
 const stripJsonFences = (content: string): string =>
@@ -196,7 +250,9 @@ const summarizeRequest = (request: PostReflectRequest): string =>
         conversationMessages: request.conversation.length,
         attachmentKinds: request.attachments?.map(
             (
-                attachment: NonNullable<PostReflectRequest['attachments']>[number]
+                attachment: NonNullable<
+                    PostReflectRequest['attachments']
+                >[number]
             ) => attachment.kind
         ),
         capabilities: request.capabilities,
@@ -244,7 +300,8 @@ const normalizeImageRequest = (
             : typeof candidate.allowPromptAdjustment === 'boolean'
               ? candidate.allowPromptAdjustment
               : typeof candidate.allowPromptAdjustment === 'string'
-                ? candidate.allowPromptAdjustment.trim().toLowerCase() === 'true'
+                ? candidate.allowPromptAdjustment.trim().toLowerCase() ===
+                  'true'
                 : undefined;
 
     return {
@@ -255,7 +312,8 @@ const normalizeImageRequest = (
                 ? candidate.background
                 : undefined,
         quality,
-        style: typeof candidate.style === 'string' ? candidate.style : undefined,
+        style:
+            typeof candidate.style === 'string' ? candidate.style : undefined,
         allowPromptAdjustment,
         followUpResponseId:
             typeof candidate.followUpResponseId === 'string'
@@ -278,8 +336,13 @@ const normalizeGeneration = (
     const baseGeneration: ReflectGenerationPlan = {
         reasoningEffort: normalizeReasoningEffort(candidate?.reasoningEffort),
         verbosity: normalizeVerbosity(candidate?.verbosity),
-        toolChoice: candidate?.toolChoice === 'web_search' ? 'web_search' : 'none',
+        toolChoice:
+            candidate?.toolChoice === 'web_search' ? 'web_search' : 'none',
     };
+    const normalizedTemperament = normalizeTemperament(candidate?.temperament);
+    if (normalizedTemperament) {
+        baseGeneration.temperament = normalizedTemperament;
+    }
 
     if (baseGeneration.toolChoice !== 'web_search') {
         return { generation: baseGeneration };
@@ -301,7 +364,9 @@ const normalizeGeneration = (
         };
     }
 
-    const searchIntent = normalizeSearchIntent(candidate?.webSearch?.searchIntent);
+    const searchIntent = normalizeSearchIntent(
+        candidate?.webSearch?.searchIntent
+    );
     const repoHints =
         searchIntent === 'repo_explainer'
             ? normalizeRepoHints(candidate?.webSearch?.repoHints)
@@ -345,7 +410,8 @@ const normalizePlan = (
         modality: normalizeModality(candidate.modality, capabilities),
         riskTier: normalizeRiskTier(candidate.riskTier),
         reasoning:
-            typeof candidate.reasoning === 'string' && candidate.reasoning.trim()
+            typeof candidate.reasoning === 'string' &&
+            candidate.reasoning.trim()
                 ? candidate.reasoning.trim()
                 : fallbackPlan.reasoning,
         generation: fallbackPlan.generation,
@@ -370,7 +436,10 @@ const normalizePlan = (
             };
         }
 
-        if (typeof candidate.reaction !== 'string' || !candidate.reaction.trim()) {
+        if (
+            typeof candidate.reaction !== 'string' ||
+            !candidate.reaction.trim()
+        ) {
             return {
                 ...fallbackPlan,
                 reasoning:
@@ -431,6 +500,17 @@ const normalizePlan = (
         };
     }
 
+    if (!normalizedPlan.generation.temperament) {
+        return {
+            ...fallbackPlan,
+            action: 'message',
+            modality: normalizedPlan.modality,
+            riskTier: normalizedPlan.riskTier,
+            reasoning:
+                `${normalizedPlan.reasoning} Planner omitted required TRACE temperament, so the backend fell back safely.`.trim(),
+        };
+    }
+
     return normalizedPlan;
 };
 
@@ -479,7 +559,8 @@ export const createReflectPlanner = ({
                 }
             );
             const usageModel = plannerResponse.metadata.model || defaultModel;
-            const promptTokens = plannerResponse.metadata.usage?.prompt_tokens ?? 0;
+            const promptTokens =
+                plannerResponse.metadata.usage?.prompt_tokens ?? 0;
             const completionTokens =
                 plannerResponse.metadata.usage?.completion_tokens ?? 0;
             const totalTokens =

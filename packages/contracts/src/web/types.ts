@@ -7,8 +7,9 @@
  */
 
 import type {
+    PartialResponseTemperament,
     ResponseMetadata,
-    ResponseTemperament,
+    TraceAxisScore,
 } from '../ethics-core';
 
 // Standard API error envelope used by multiple endpoints.
@@ -181,11 +182,12 @@ export type PostTracesResponse = {
 };
 
 /**
- * Fixed metadata scores shown next to the TRACE wheel in a trace-card.
+ * Optional metadata scores shown next to the TRACE wheel in a trace-card.
+ * Omitted scores render as unavailable.
  */
 export type TraceCardChipData = {
-    evidenceScore: number;
-    freshnessScore: number;
+    evidenceScore?: TraceAxisScore;
+    freshnessScore?: TraceAxisScore;
 };
 
 /**
@@ -194,8 +196,8 @@ export type TraceCardChipData = {
  */
 export type PostTraceCardRequest = {
     responseId?: string;
-    temperament: ResponseTemperament;
-    chips: TraceCardChipData;
+    temperament?: PartialResponseTemperament;
+    chips?: TraceCardChipData;
 };
 
 /**
@@ -213,7 +215,6 @@ export type PostTraceCardResponse = {
  */
 export type PostTraceCardFromTraceRequest = {
     responseId: string;
-    chips: TraceCardChipData;
 };
 
 /**
@@ -291,4 +292,3 @@ export type ListBlogPostsResponse = BlogPostMetadata[];
  * @api.path: GET /api/blog-posts/{postId}
  */
 export type GetBlogPostResponse = BlogPost;
-

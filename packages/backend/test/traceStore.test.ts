@@ -22,7 +22,6 @@ test('TraceStore round trips metadata with citation URLs', async () => {
     const metadata: ResponseMetadata = {
         responseId: 'response_123',
         provenance: 'Retrieved',
-        confidence: 0.85,
         riskTier: 'Low',
         tradeoffCount: 2,
         chainHash: 'abc123',
@@ -79,7 +78,11 @@ test('TraceStore round trips trace-card SVG assets', async () => {
 
     try {
         const beforeInsert = await store.getTraceCardSvg(responseId);
-        assert.equal(beforeInsert, null, 'missing trace-card should return null');
+        assert.equal(
+            beforeInsert,
+            null,
+            'missing trace-card should return null'
+        );
 
         await store.upsertTraceCardSvg(responseId, initialSvg);
         const storedInitial = await store.getTraceCardSvg(responseId);
@@ -87,7 +90,11 @@ test('TraceStore round trips trace-card SVG assets', async () => {
 
         await store.upsertTraceCardSvg(responseId, updatedSvg);
         const storedUpdated = await store.getTraceCardSvg(responseId);
-        assert.equal(storedUpdated, updatedSvg, 'upsert should replace existing SVG');
+        assert.equal(
+            storedUpdated,
+            updatedSvg,
+            'upsert should replace existing SVG'
+        );
     } finally {
         store.close();
         await fs.rm(tempRoot, { recursive: true, force: true });
@@ -104,7 +111,6 @@ test('TraceStore delete removes both trace metadata and trace-card SVG', async (
         await store.upsert({
             responseId,
             provenance: 'Retrieved',
-            confidence: 0.9,
             riskTier: 'Low',
             tradeoffCount: 1,
             chainHash: 'chain_hash',
@@ -126,4 +132,3 @@ test('TraceStore delete removes both trace metadata and trace-card SVG', async (
         await fs.rm(tempRoot, { recursive: true, force: true });
     }
 });
-

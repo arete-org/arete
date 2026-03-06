@@ -10,11 +10,9 @@
 export type {
     Provenance,
     RiskTier,
-    ConfidenceScore,
     Citation,
     ResponseMetadata,
 } from '@footnote/contracts/ethics-core';
 
 // Export functions
 export { computeProvenance, computeRiskTier } from './evaluators.js';
-

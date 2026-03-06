@@ -28,7 +28,7 @@ export interface ImageDescriptionPayload {
     detected_type: string;
     extracted_text: string[];
     structured: ImageDescriptionStructuredPayload;
-    confidence: string;
+    certainty: string;
     notes?: string;
 }
 
@@ -66,7 +66,7 @@ const IMAGE_DESCRIPTION_TOOL_SCHEMA: OpenAI.Chat.Completions.ChatCompletionTool 
                     'detected_type',
                     'extracted_text',
                     'structured',
-                    'confidence',
+                    'certainty',
                 ],
                 properties: {
                     summary: {
@@ -111,7 +111,7 @@ const IMAGE_DESCRIPTION_TOOL_SCHEMA: OpenAI.Chat.Completions.ChatCompletionTool 
                         description:
                             'Always include structured.key_elements. Use additional fields only when structure is obvious (grids/tables/forms/axes/sections).',
                     },
-                    confidence: {
+                    certainty: {
                         type: 'string',
                         description:
                             'Short qualifier (1-2 words). Examples: high, medium, low, marginal.',
@@ -333,4 +333,3 @@ export async function generateImageDescriptionRequest(
             : null,
     };
 }
-

@@ -8,7 +8,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { ResponseTemperament } from '@footnote/contracts/ethics-core';
 import { renderTraceCardPng } from '../src/services/traceCard/traceCardRaster.js';
 import { renderTraceCardSvg } from '../src/services/traceCard/traceCardSvg.js';
 
@@ -25,18 +24,18 @@ const readPngDimensions = (png: Buffer): { width: number; height: number } => {
 const countMatches = (value: string, regex: RegExp): number =>
     (value.match(regex) ?? []).length;
 
-test('renderTraceCardSvg keeps wheel invariants and renders two metadata rows', () => {
+test('renderTraceCardSvg uses 5 wheel bands and renders metadata rows for valid scores', () => {
     const svg = renderTraceCardSvg({
         temperament: {
-            tightness: 9,
-            rationale: 6,
-            attribution: 8,
-            caution: 6,
-            extent: 7,
+            tightness: 5,
+            rationale: 5,
+            attribution: 5,
+            caution: 5,
+            extent: 5,
         },
         chips: {
-            evidenceScore: 3.6,
-            freshnessScore: 4.2,
+            evidenceScore: 5,
+            freshnessScore: 4,
         },
     });
 
@@ -46,71 +45,43 @@ test('renderTraceCardSvg keeps wheel invariants and renders two metadata rows', 
     assert.match(svg, /🔗/);
     assert.match(svg, /🕒/);
     assert.equal(countMatches(svg, /stroke-opacity="0.3"/g), 10);
+    assert.equal(
+        countMatches(svg, /fill="(#008080|#9A6373|#E6AC00|#B87333|#5E7C5B)"/g),
+        25
+    );
+    assert.equal(countMatches(svg, /fill="#8FA3BE"/g), 9);
+    assert.equal(countMatches(svg, /fill="#EF4444" fill-opacity="0.45"/g), 0);
 });
 
-test('renderTraceCardSvg normalizes out-of-range values and preserves fractional fills', () => {
-    const outOfRangeTemperament = {
-        tightness: 22,
-        rationale: -3,
-        attribution: 6.2,
-        caution: Number.NaN,
-        extent: Number.POSITIVE_INFINITY,
-    } as unknown as ResponseTemperament;
-
-    const normalizedSvg = renderTraceCardSvg({
-        temperament: outOfRangeTemperament,
-        chips: {
-            evidenceScore: 99,
-            freshnessScore: Number.NaN,
-        },
-    });
-
-    const expectedClampedSvg = renderTraceCardSvg({
+test('renderTraceCardSvg draws red fallback wedges for missing axes and gray chip rows for missing chip scores', () => {
+    const svg = renderTraceCardSvg({
         temperament: {
-            tightness: 10,
-            rationale: 1,
-            attribution: 6.2,
-            caution: 5,
-            extent: 5,
+            tightness: 3,
         },
-        chips: {
-            evidenceScore: 5,
-            freshnessScore: 3,
-        },
+        chips: {},
     });
 
-    assert.equal(normalizedSvg, expectedClampedSvg);
+    assert.equal(countMatches(svg, /fill="#EF4444" fill-opacity="0.45"/g), 4);
+    assert.equal(countMatches(svg, /fill="#EF4444" fill-opacity="0.2"/g), 0);
+    assert.equal(countMatches(svg, /fill="#D1D5DB" fill-opacity="0.06"/g), 10);
+    assert.equal(countMatches(svg, /fill="#8FA3BE"/g), 0);
+});
 
-    const fractionalSvg = renderTraceCardSvg({
+test('renderTraceCardSvg treats invalid input values as missing', () => {
+    const svg = renderTraceCardSvg({
         temperament: {
-            tightness: 10,
-            rationale: 1,
-            attribution: 6.2,
-            caution: 5,
-            extent: 5,
-        },
+            tightness: 7,
+            rationale: 0,
+        } as never,
         chips: {
-            evidenceScore: 3.6,
-            freshnessScore: 4.2,
-        },
-    });
-    const integerSvg = renderTraceCardSvg({
-        temperament: {
-            tightness: 10,
-            rationale: 1,
-            attribution: 6,
-            caution: 5,
-            extent: 5,
-        },
-        chips: {
-            evidenceScore: 3,
-            freshnessScore: 4,
+            evidenceScore: 2.4,
+            freshnessScore: 6,
         },
     });
 
-    assert.notEqual(fractionalSvg, integerSvg);
-    assert.match(fractionalSvg, /x="98" y="10" width="6" height="6"/);
-    assert.match(fractionalSvg, /x="110" y="28" width="2" height="6"/);
+    assert.equal(countMatches(svg, /fill="#EF4444" fill-opacity="0.45"/g), 5);
+    assert.equal(countMatches(svg, /fill="#EF4444" fill-opacity="0.2"/g), 0);
+    assert.equal(countMatches(svg, /fill="#D1D5DB" fill-opacity="0.06"/g), 10);
 });
 
 test('renderTraceCardPng returns PNG bytes with expected signature and dimensions', () => {
@@ -118,15 +89,15 @@ test('renderTraceCardPng returns PNG bytes with expected signature and dimension
     const requestedHeight = 96;
     const { png } = renderTraceCardPng({
         temperament: {
-            tightness: 8,
-            rationale: 7,
-            attribution: 9,
-            caution: 6,
-            extent: 8,
+            tightness: 4,
+            rationale: 3,
+            attribution: 5,
+            caution: 2,
+            extent: 4,
         },
         chips: {
-            evidenceScore: 3.7,
-            freshnessScore: 4.1,
+            evidenceScore: 4,
+            freshnessScore: 3,
         },
         width: requestedWidth,
         height: requestedHeight,

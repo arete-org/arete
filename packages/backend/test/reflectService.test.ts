@@ -16,7 +16,6 @@ import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
 const createMetadata = (): ResponseMetadata => ({
     responseId: 'reflect_test_response',
     provenance: 'Inferred',
-    confidence: 0.5,
     riskTier: 'Low',
     tradeoffCount: 0,
     chainHash: 'abc123def456',
@@ -39,7 +38,6 @@ test('createReflectService records backend token usage and estimated cost', asyn
                         completion_tokens: 80,
                         total_tokens: 200,
                     },
-                    confidence: 0.5,
                     provenance: 'Inferred',
                     tradeoffCount: 0,
                     citations: [],
@@ -88,7 +86,6 @@ test('createReflectService passes the effective model to response metadata build
                         completion_tokens: 8,
                         total_tokens: 20,
                     },
-                    confidence: 0.5,
                     provenance: 'Inferred',
                     tradeoffCount: 0,
                     citations: [],
@@ -115,6 +112,106 @@ test('createReflectService passes the effective model to response metadata build
     assert.equal(capturedRuntimeContextModelVersion, 'gpt-5.1');
 });
 
+test('runReflectMessages passes planner temperament into response metadata runtime context', async () => {
+    let capturedPlannerTemperament:
+        | import('@footnote/contracts/ethics-core').PartialResponseTemperament
+        | undefined;
+    const openaiService: OpenAIService = {
+        async generateResponse() {
+            return {
+                normalizedText: 'reflect response',
+                metadata: {
+                    model: 'gpt-5-mini',
+                    usage: {
+                        prompt_tokens: 12,
+                        completion_tokens: 8,
+                        total_tokens: 20,
+                    },
+                    provenance: 'Inferred',
+                    tradeoffCount: 0,
+                    citations: [],
+                },
+            };
+        },
+    };
+
+    const reflectService = createReflectService({
+        openaiService,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedPlannerTemperament = runtimeContext.plannerTemperament;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    await reflectService.runReflectMessages({
+        messages: [{ role: 'user', content: 'What changed?' }],
+        conversationSnapshot: 'What changed?',
+        plannerTemperament: {
+            tightness: 4,
+            attribution: 3,
+        },
+    });
+
+    assert.deepEqual(capturedPlannerTemperament, {
+        tightness: 4,
+        attribution: 3,
+    });
+});
+
+test('runReflectMessages passes usedWebSearch flag into response metadata runtime context', async () => {
+    let capturedUsedWebSearch: boolean | undefined;
+    const openaiService: OpenAIService = {
+        async generateResponse() {
+            return {
+                normalizedText: 'reflect response',
+                metadata: {
+                    model: 'gpt-5-mini',
+                    usage: {
+                        prompt_tokens: 12,
+                        completion_tokens: 8,
+                        total_tokens: 20,
+                    },
+                    provenance: 'Retrieved',
+                    tradeoffCount: 0,
+                    citations: [],
+                },
+            };
+        },
+    };
+
+    const reflectService = createReflectService({
+        openaiService,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedUsedWebSearch = runtimeContext.usedWebSearch;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    await reflectService.runReflectMessages({
+        messages: [{ role: 'user', content: 'What changed today?' }],
+        conversationSnapshot: 'What changed today?',
+        generation: {
+            reasoningEffort: 'medium',
+            verbosity: 'medium',
+            toolChoice: 'web_search',
+            webSearch: {
+                query: 'latest OpenAI policy update',
+                searchContextSize: 'low',
+                searchIntent: 'current_facts',
+                repoHints: [],
+            },
+        },
+    });
+
+    assert.equal(capturedUsedWebSearch, true);
+});
+
 test('createReflectService swallows usage recording failures', async () => {
     const openaiService: OpenAIService = {
         async generateResponse() {
@@ -127,7 +224,6 @@ test('createReflectService swallows usage recording failures', async () => {
                         completion_tokens: 10,
                         total_tokens: 30,
                     },
-                    confidence: 0.5,
                     provenance: 'Inferred',
                     tradeoffCount: 0,
                     citations: [],
@@ -169,7 +265,6 @@ test('runReflectMessages adds a backend repo-explainer response hint', async () 
                         completion_tokens: 10,
                         total_tokens: 30,
                     },
-                    confidence: 0.5,
                     provenance: 'Retrieved',
                     tradeoffCount: 0,
                     citations: [],
@@ -228,7 +323,6 @@ test('runReflectMessages forwards planner-selected web search options to openaiS
                         completion_tokens: 10,
                         total_tokens: 30,
                     },
-                    confidence: 0.5,
                     provenance: 'Retrieved',
                     tradeoffCount: 0,
                     citations: [],

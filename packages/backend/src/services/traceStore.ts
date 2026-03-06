@@ -33,12 +33,12 @@ const storeTrace = async (
         logger.debug(`Trace stored successfully: ${responseId}`);
 
         // --- Optional trace-card persistence ---
-        // The TRACE card now requires explicit evidence/freshness scores which
-        // are not present in ResponseMetadata, so automatic generation is
-        // intentionally skipped for now.
+        // Trace-card generation stays out of this write path so trace storage
+        // remains lightweight and fail-open even when rendering dependencies
+        // or image generation are unavailable.
         if (metadata.temperament) {
             logger.debug(
-                `Skipping trace-card SVG auto-generation for "${responseId}" because evidence/freshness scores are required.`
+                `Skipping trace-card SVG auto-generation for "${responseId}".`
             );
         }
     } catch (error) {
@@ -50,4 +50,3 @@ const storeTrace = async (
 };
 
 export { createTraceStore, storeTrace };
-

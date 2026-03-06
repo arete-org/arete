@@ -38,13 +38,13 @@ test('trace-preview replies with only backend PNG attachment', async () => {
     }) as typeof botApi.postTraceCard;
 
     const optionValues: Record<string, number | string | null> = {
-        tightness: 9,
-        rationale: 6,
-        attribution: 8,
-        caution: 6,
-        extent: 7,
-        evidence_score: 3.6,
-        freshness_score: 4.2,
+        tightness: 5,
+        rationale: 3,
+        attribution: 4,
+        caution: 3,
+        extent: 4,
+        evidence_score: 4,
+        freshness_score: 5,
     };
 
     const interaction = {
@@ -79,15 +79,15 @@ test('trace-preview replies with only backend PNG attachment', async () => {
     assert.equal(payload.embeds, undefined);
     assert.deepEqual(capturedRequest, {
         temperament: {
-            tightness: 9,
-            rationale: 6,
-            attribution: 8,
-            caution: 6,
-            extent: 7,
+            tightness: 5,
+            rationale: 3,
+            attribution: 4,
+            caution: 3,
+            extent: 4,
         },
         chips: {
-            evidenceScore: 3.6,
-            freshnessScore: 4.2,
+            evidenceScore: 4,
+            freshnessScore: 5,
         },
     });
 });

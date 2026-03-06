@@ -6,7 +6,7 @@ openapi: 3.1.0
 # - OPTIONS /api/reflect: CORS preflight
 # - POST /api/traces: Trace upsert (TraceToken required)
 # - POST /api/trace-cards: Generate/store trace-card and return PNG payload (TraceToken required)
-# - POST /api/trace-cards/from-trace: Generate/store trace-card from stored trace metadata (TraceToken required)
+# - POST /api/trace-cards/from-trace: Generate/store trace-card from stored trace metadata by responseId (TraceToken required)
 # - GET /api/traces/{responseId}: Trace fetch (public)
 # - GET /api/traces/{responseId}/assets/trace-card.svg: Trace-card SVG fetch (public)
 # - GET /api/blog-posts: Blog index (public)
@@ -179,7 +179,7 @@ paths:
                 - packages/contracts/src/web/types.ts#PostTraceCardResponse
             summary: Generate and store a trace-card
             description: |
-                Generate a trace-card from TRACE temperament data plus explicit evidence/freshness scores, persist the canonical SVG asset,
+                Generate a trace-card from TRACE temperament and score metadata, persist the canonical SVG asset,
                 and return a PNG payload for Discord-style inline display.
                 TraceToken required.
             tags:
@@ -221,7 +221,7 @@ paths:
                 - packages/contracts/src/web/types.ts#PostTraceCardFromTraceResponse
             summary: Generate and store a trace-card from an existing trace
             description: |
-                Load stored trace metadata by response id, require explicit metadata scores in the request,
+                Load stored trace metadata by response id, use stored TRACE temperament and optional chip scores,
                 regenerate/store the canonical SVG asset, and return a PNG payload for inline display.
                 TraceToken required.
             tags:
@@ -245,8 +245,6 @@ paths:
                     $ref: '#/components/responses/BadRequest'
                 '404':
                     $ref: '#/components/responses/NotFound'
-                '409':
-                    $ref: '#/components/responses/Conflict'
                 '413':
                     $ref: '#/components/responses/PayloadTooLarge'
                 '429':
@@ -707,9 +705,6 @@ components:
                 provenance:
                     type: string
                     description: Expected values are Retrieved, Inferred, or Speculative.
-                confidence:
-                    type: number
-                    description: Expected range is 0.0 to 1.0.
                 riskTier:
                     type: string
                     description: Expected values are Low, Medium, or High.
@@ -733,45 +728,48 @@ components:
                     type: array
                     items:
                         type: string
+                evidenceScore:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+                    description: Optional TRACE evidence chip score.
+                freshnessScore:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+                    description: Optional TRACE freshness chip score.
                 temperament:
                     type: object
-                    description: Optional TRACE temperament profile with named 1-10 integer axes. This field is optional for now and is expected to become required after full TRACE validation.
+                    description: Optional partial TRACE temperament profile with named 1-5 integer axes.
                     properties:
                         tightness:
                             type: integer
-                            description: 1 to 10, where higher means stronger concision and structural efficiency.
+                            description: 1 to 5, where higher means stronger concision and structural efficiency.
                             minimum: 1
-                            maximum: 10
+                            maximum: 5
                         rationale:
                             type: integer
-                            description: 1 to 10, where higher means more visible rationale and trade-off explanation.
+                            description: 1 to 5, where higher means more visible rationale and trade-off explanation.
                             minimum: 1
-                            maximum: 10
+                            maximum: 5
                         attribution:
                             type: integer
-                            description: 1 to 10, where higher means clearer sourced vs inferred boundaries.
+                            description: 1 to 5, where higher means clearer sourced vs inferred boundaries.
                             minimum: 1
-                            maximum: 10
+                            maximum: 5
                         caution:
                             type: integer
-                            description: 1 to 10, where higher means stronger safeguards and overclaim restraint.
+                            description: 1 to 5, where higher means stronger safeguards and overclaim restraint.
                             minimum: 1
-                            maximum: 10
+                            maximum: 5
                         extent:
                             type: integer
-                            description: 1 to 10, where higher means broader options and perspectives.
+                            description: 1 to 5, where higher means broader options and perspectives.
                             minimum: 1
-                            maximum: 10
-                    required:
-                        - tightness
-                        - rationale
-                        - attribution
-                        - caution
-                        - extent
+                            maximum: 5
                     additionalProperties: false
             required:
                 - provenance
-                - confidence
                 - riskTier
                 - tradeoffCount
                 - chainHash
@@ -800,16 +798,13 @@ components:
             type: object
             properties:
                 evidenceScore:
-                    type: number
+                    type: integer
                     minimum: 1
                     maximum: 5
                 freshnessScore:
-                    type: number
+                    type: integer
                     minimum: 1
                     maximum: 5
-            required:
-                - evidenceScore
-                - freshnessScore
             additionalProperties: false
 
         TraceCardRequest:
@@ -824,35 +819,26 @@ components:
                         tightness:
                             type: integer
                             minimum: 1
-                            maximum: 10
+                            maximum: 5
                         rationale:
                             type: integer
                             minimum: 1
-                            maximum: 10
+                            maximum: 5
                         attribution:
                             type: integer
                             minimum: 1
-                            maximum: 10
+                            maximum: 5
                         caution:
                             type: integer
                             minimum: 1
-                            maximum: 10
+                            maximum: 5
                         extent:
                             type: integer
                             minimum: 1
-                            maximum: 10
-                    required:
-                        - tightness
-                        - rationale
-                        - attribution
-                        - caution
-                        - extent
+                            maximum: 5
                     additionalProperties: false
                 chips:
                     $ref: '#/components/schemas/TraceCardChips'
-            required:
-                - temperament
-                - chips
             additionalProperties: false
 
         TraceCardResponse:
@@ -875,11 +861,8 @@ components:
                 responseId:
                     type: string
                     minLength: 1
-                chips:
-                    $ref: '#/components/schemas/TraceCardChips'
             required:
                 - responseId
-                - chips
             additionalProperties: false
 
         # Citations for provenance and attribution.

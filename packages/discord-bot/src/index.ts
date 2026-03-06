@@ -234,10 +234,87 @@ function buildDetailsPayload(
     };
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return (
+        !!value &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        Object.getPrototypeOf(value) === Object.prototype
+    );
+}
+
+function formatInlineJsonObject(value: Record<string, unknown>): string {
+    const entries = Object.entries(value).filter(
+        ([, entryValue]) => entryValue !== undefined
+    );
+    const serializedEntries = entries.map(
+        ([entryKey, entryValue]) =>
+            `${JSON.stringify(entryKey)}: ${JSON.stringify(entryValue)}`
+    );
+    return `{ ${serializedEntries.join(', ')} }`;
+}
+
+function serializeDetailsPayload(
+    payload: ResponseMetadata | DetailsFallbackPayload
+): string {
+    if (!('provenance' in payload)) {
+        return JSON.stringify(payload, null, 2);
+    }
+
+    const lines: string[] = ['{'];
+    const entries = Object.entries(payload).filter(
+        ([, value]) => value !== undefined
+    );
+
+    for (let index = 0; index < entries.length; index += 1) {
+        const [key, value] = entries[index];
+        const hasTrailingComma = index < entries.length - 1;
+        const trailingComma = hasTrailingComma ? ',' : '';
+
+        if (key === 'citations' && Array.isArray(value)) {
+            lines.push('  "citations": [');
+            for (
+                let citationIndex = 0;
+                citationIndex < value.length;
+                citationIndex += 1
+            ) {
+                const citation = value[citationIndex];
+                const citationComma =
+                    citationIndex < value.length - 1 ? ',' : '';
+                if (isPlainObject(citation)) {
+                    lines.push(
+                        `    ${formatInlineJsonObject(citation)}${citationComma}`
+                    );
+                } else {
+                    lines.push(
+                        `    ${JSON.stringify(citation)}${citationComma}`
+                    );
+                }
+            }
+            lines.push(`  ]${trailingComma}`);
+            continue;
+        }
+
+        if (key === 'temperament' && isPlainObject(value)) {
+            lines.push(
+                `  "temperament": ${formatInlineJsonObject(value)}${trailingComma}`
+            );
+            continue;
+        }
+
+        lines.push(
+            `  ${JSON.stringify(key)}: ${JSON.stringify(value)}${trailingComma}`
+        );
+    }
+
+    lines.push('}');
+    return lines.join('\n');
+}
+
 function formatDetailsPayloadForDiscord(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
-    const serialized = JSON.stringify(payload, null, 2);
+    const serialized = serializeDetailsPayload(payload);
     const maxPayloadLength =
         DISCORD_MESSAGE_MAX_LENGTH -
         DETAILS_CODE_FENCE_PREFIX.length -
@@ -562,15 +639,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 return;
             }
 
-            logger.info(
-                'Report Issue button clicked',
-                {
-                    userId: interaction.user.id,
-                    messageId: interaction.message.id,
-                    messageUrl: interaction.message.url,
-                    responseId: provenanceAction.responseId,
-                }
-            );
+            logger.info('Report Issue button clicked', {
+                userId: interaction.user.id,
+                messageId: interaction.message.id,
+                messageUrl: interaction.message.url,
+                responseId: provenanceAction.responseId,
+            });
             await interaction.reply({
                 content:
                     "This feature isn't active yet. To report ethical or security issues, please follow the instructions in [SECURITY.md](https://github.com/footnote-ai/footnote/blob/main/SECURITY.md).",
@@ -1022,37 +1096,3 @@ process.on('uncaughtException', (error: Error) => {
     logger.error(`Uncaught exception: ${error}`);
     process.exit(1);
 });
-
-// ====================
-// GitHub Webhook Server
-// ====================
-//TODO: Need to implement system of actually updating the vector database with the changes. Currently the system is just to delete/replace the entire database.
-/*
-const appServer = express();
-appServer.use(bodyParser.json());
-
-appServer.post("/github-webhook", async (req, res) => {
-  try {
-    const { ref, commits } = req.body;
-    console.log(`Push detected on ${ref}`);
-
-    const changedFiles = commits.flatMap((c: { added: string[]; modified: string[] }) => [...c.added, ...c.modified]);
-    console.log(`Changed files: ${changedFiles.join(', ')}`);
-
-    // Trigger reindexing asynchronously
-    // TODO
-
-    res.sendStatus(200);
-  } catch (err) {
-    console.error(`Webhook processing error: ${err}`);
-    res.sendStatus(500);
-  }
-});
-
-// Start Express server
-const WEBHOOK_PORT = runtimeConfig.webhookPort;
-appServer.listen(WEBHOOK_PORT, () => {
-  console.log(`GitHub webhook server listening on port ${WEBHOOK_PORT}`);
-});
-*/
-

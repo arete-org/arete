@@ -3,7 +3,7 @@
  * @footnote-scope: utility
  * @footnote-module: ResponseMetadataParser
  * @footnote-risk: medium - Parsing failures can drop provenance data but should not block responses.
- * @footnote-ethics: medium - Incorrect parsing could misreport provenance or confidence to users.
+ * @footnote-ethics: medium - Incorrect parsing could misreport provenance or TRACE chips to users.
  */
 import { logger } from './logger.js';
 
@@ -68,4 +68,3 @@ function extractTextAndMetadata(
 }
 
 export { METADATA_MARKER, extractTextAndMetadata };
-

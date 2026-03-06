@@ -17,7 +17,6 @@ const createMetadata = (
 ): ResponseMetadata => ({
     responseId: 'trace_service_response_123',
     provenance: 'Retrieved',
-    confidence: 0.8,
     riskTier: 'Low',
     tradeoffCount: 1,
     chainHash: 'chain_hash',
@@ -45,11 +44,11 @@ test('storeTrace writes metadata and skips trace-card SVG auto-generation', asyn
         traceStore,
         createMetadata({
             temperament: {
-                tightness: 9,
-                rationale: 6,
-                attribution: 8,
-                caution: 6,
-                extent: 7,
+                tightness: 5,
+                rationale: 3,
+                attribution: 4,
+                caution: 3,
+                extent: 4,
             },
         })
     );
@@ -91,11 +90,11 @@ test('storeTrace stays fail-open when trace upsert throws', async () => {
             traceStore,
             createMetadata({
                 temperament: {
-                    tightness: 9,
-                    rationale: 6,
-                    attribution: 8,
-                    caution: 6,
-                    extent: 7,
+                    tightness: 5,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
                 },
             })
         )

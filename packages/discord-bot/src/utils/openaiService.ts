@@ -14,6 +14,7 @@ import type { ResponseCreateParamsNonStreaming } from 'openai/resources/response
 import { logger } from './logger.js';
 import { renderPrompt } from '../config.js';
 import { ActivityOptions } from 'discord.js';
+import type { TraceAxisScore } from '@footnote/contracts/ethics-core';
 import {
     estimateTextCost,
     formatUsd,
@@ -203,18 +204,50 @@ export type ProvenanceValue = 'Retrieved' | 'Inferred' | 'Speculative';
  * Defines the structure of a payload from the OpenAI API.
  * @interface AssistantMetadataPayload
  * @property {ProvenanceValue} provenance - The provenance of the response
- * @property {number} confidence - The confidence of the response
  * @property {number} tradeoffCount - The number of value tradeoffs the model noted
  * @property {AssistantMetadataCitation[]} citations - The citations from the response
+ * @property {TraceAxisScore} evidenceScore - Optional TRACE evidence chip score
+ * @property {TraceAxisScore} freshnessScore - Optional TRACE freshness chip score
  * @property {unknown} rawPayload - The original JSON blob for diagnostics/fallback handling
  */
 export interface AssistantMetadataPayload {
     provenance?: ProvenanceValue;
-    confidence?: number;
     tradeoffCount?: number;
     citations: AssistantMetadataCitation[];
+    evidenceScore?: TraceAxisScore;
+    freshnessScore?: TraceAxisScore;
     rawPayload: unknown;
 }
+
+const isTraceAxisScore = (value: unknown): value is TraceAxisScore =>
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 5;
+
+const normalizeTraceAxisScore = (
+    value: unknown
+): TraceAxisScore | undefined => {
+    if (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        value >= 1 &&
+        value <= 5
+    ) {
+        return value as TraceAxisScore;
+    }
+
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!/^\d+$/.test(trimmed)) {
+            return undefined;
+        }
+        const parsed = Number.parseInt(trimmed, 10);
+        return isTraceAxisScore(parsed) ? parsed : undefined;
+    }
+
+    return undefined;
+};
 
 /**
  * Extended interface for OpenAI Responses output items.
@@ -870,16 +903,6 @@ export class OpenAIService {
                 ? (record.provenance as ProvenanceValue)
                 : undefined;
 
-        // Confidence: clamp numeric values to [0,1]
-        let confidence: number | undefined = undefined;
-        if (
-            typeof record.confidence === 'number' &&
-            !Number.isNaN(record.confidence) &&
-            isFinite(record.confidence)
-        ) {
-            confidence = Math.min(1, Math.max(0, record.confidence));
-        }
-
         // tradeoffCount: coerce to integer >= 0
         let tradeoffCount: number | undefined = undefined;
         if (
@@ -898,20 +921,25 @@ export class OpenAIService {
             tradeoffCount = Number.isNaN(intVal) || intVal < 0 ? 0 : intVal;
         }
 
+        const evidenceScore = normalizeTraceAxisScore(record.evidenceScore);
+        const freshnessScore = normalizeTraceAxisScore(record.freshnessScore);
+
         const metadata: AssistantMetadataPayload = {
             provenance,
-            confidence,
             tradeoffCount,
             citations,
+            evidenceScore,
+            freshnessScore,
             rawPayload: candidate,
         };
 
         // Drop empty payloads so downstream code can rely on `null` to signal "no metadata supplied"
         if (
             metadata.provenance === undefined &&
-            metadata.confidence === undefined &&
             metadata.tradeoffCount === undefined &&
-            metadata.citations.length === 0
+            metadata.citations.length === 0 &&
+            metadata.evidenceScore === undefined &&
+            metadata.freshnessScore === undefined
         ) {
             logger.warn(
                 'Assistant metadata payload is empty, ignoring: ',

@@ -8,9 +8,11 @@
 import crypto from 'node:crypto';
 import type {
     Citation,
+    PartialResponseTemperament,
     Provenance,
     ResponseMetadata,
     RiskTier,
+    TraceAxisScore,
 } from '@footnote/contracts/ethics-core';
 import { extractTextAndMetadata } from '../utils/metadata.js';
 import { runtimeConfig } from '../config.js';
@@ -28,10 +30,11 @@ type OpenAIUsage = {
 };
 
 type ParsedMetadata = {
-    confidence?: number;
     provenance?: string;
     tradeoffCount?: number;
     citations?: unknown[];
+    evidenceScore?: unknown;
+    freshnessScore?: unknown;
 };
 
 type OpenAIResponseMetadata = {
@@ -111,6 +114,62 @@ type ResponsesApiTool =
           parameters?: Record<string, unknown>;
       };
 
+const TRACE_AXIS_KEYS = [
+    'tightness',
+    'rationale',
+    'attribution',
+    'caution',
+    'extent',
+] as const;
+
+const isTraceAxisScore = (value: unknown): value is TraceAxisScore =>
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 5;
+
+const normalizeTraceAxisScore = (
+    value: unknown
+): TraceAxisScore | undefined => {
+    if (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        value >= 1 &&
+        value <= 5
+    ) {
+        return value as TraceAxisScore;
+    }
+
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!/^\d+$/.test(trimmed)) {
+            return undefined;
+        }
+        const parsed = Number.parseInt(trimmed, 10);
+        return isTraceAxisScore(parsed) ? parsed : undefined;
+    }
+
+    return undefined;
+};
+
+const normalizePlannerTemperament = (
+    temperament: PartialResponseTemperament | undefined
+): PartialResponseTemperament | undefined => {
+    if (!temperament) {
+        return undefined;
+    }
+
+    const normalized: PartialResponseTemperament = {};
+    for (const axis of TRACE_AXIS_KEYS) {
+        const score = temperament[axis];
+        if (isTraceAxisScore(score)) {
+            normalized[axis] = score;
+        }
+    }
+
+    return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
 const normalizeReasoningEffort = (
     value: GenerateResponseOptions['reasoningEffort']
 ): NonNullable<GenerateResponseOptions['reasoningEffort']> => {
@@ -141,10 +200,7 @@ const buildInputMessage = (
 ): ResponsesApiInputMessage => ({
     role,
     type: 'message',
-    content:
-        role === 'assistant'
-            ? text
-            : [{ type: 'input_text', text }],
+    content: role === 'assistant' ? text : [{ type: 'input_text', text }],
 });
 
 class SimpleOpenAIService implements OpenAIService {
@@ -329,6 +385,13 @@ class SimpleOpenAIService implements OpenAIService {
               };
         const parsedMetadata = extracted.metadata as ParsedMetadata | null;
 
+        const normalizedEvidenceScore = normalizeTraceAxisScore(
+            parsedMetadata?.evidenceScore
+        );
+        const normalizedFreshnessScore = normalizeTraceAxisScore(
+            parsedMetadata?.freshnessScore
+        );
+
         const assistantMetadata: OpenAIResponseMetadata = {
             model: data.model ?? model,
             usage: {
@@ -343,14 +406,15 @@ class SimpleOpenAIService implements OpenAIService {
             reasoningEffort: normalizedReasoningEffort,
             verbosity: normalizedVerbosity,
             ...(parsedMetadata && {
-                ...(typeof parsedMetadata.confidence === 'number' &&
-                    parsedMetadata.confidence >= 0 &&
-                    parsedMetadata.confidence <= 1 && {
-                        confidence: parsedMetadata.confidence,
-                    }),
                 provenance: parsedMetadata.provenance,
                 tradeoffCount: parsedMetadata.tradeoffCount,
                 citations: parsedMetadata.citations,
+                ...(normalizedEvidenceScore !== undefined && {
+                    evidenceScore: normalizedEvidenceScore,
+                }),
+                ...(normalizedFreshnessScore !== undefined && {
+                    freshnessScore: normalizedFreshnessScore,
+                }),
             }),
         };
 
@@ -364,6 +428,8 @@ class SimpleOpenAIService implements OpenAIService {
 type ResponseMetadataRuntimeContext = {
     modelVersion: string;
     conversationSnapshot: string;
+    plannerTemperament?: PartialResponseTemperament;
+    usedWebSearch?: boolean;
 };
 
 const buildResponseMetadata = (
@@ -380,10 +446,6 @@ const buildResponseMetadata = (
 
     const provenance =
         (assistantMetadata.provenance as Provenance) || 'Inferred';
-    const confidence =
-        typeof assistantMetadata.confidence === 'number'
-            ? assistantMetadata.confidence
-            : 0;
     const tradeoffCount =
         typeof assistantMetadata.tradeoffCount === 'number'
             ? assistantMetadata.tradeoffCount
@@ -391,6 +453,23 @@ const buildResponseMetadata = (
     const citations = Array.isArray(assistantMetadata.citations)
         ? (assistantMetadata.citations as Citation[])
         : [];
+    const temperament = normalizePlannerTemperament(
+        runtimeContext.plannerTemperament
+    );
+    const evidenceScore = isTraceAxisScore(assistantMetadata.evidenceScore)
+        ? assistantMetadata.evidenceScore
+        : undefined;
+    const freshnessScore = isTraceAxisScore(assistantMetadata.freshnessScore)
+        ? assistantMetadata.freshnessScore
+        : undefined;
+    const shouldBackfillTraceChips =
+        runtimeContext.usedWebSearch === true &&
+        provenance === 'Retrieved' &&
+        (evidenceScore === undefined || freshnessScore === undefined);
+    const normalizedEvidenceScore =
+        evidenceScore ?? (shouldBackfillTraceChips ? 3 : undefined);
+    const normalizedFreshnessScore =
+        freshnessScore ?? (shouldBackfillTraceChips ? 3 : undefined);
 
     const riskTier: RiskTier = 'Low';
     const licenseContext = 'MIT + HL3';
@@ -398,7 +477,6 @@ const buildResponseMetadata = (
     return {
         responseId,
         provenance,
-        confidence,
         riskTier,
         tradeoffCount,
         chainHash,
@@ -407,6 +485,13 @@ const buildResponseMetadata = (
             runtimeContext.modelVersion || runtimeConfig.openai.defaultModel,
         staleAfter: new Date(Date.now() + ninetyDaysMs).toISOString(),
         citations,
+        ...(temperament && { temperament }),
+        ...(normalizedEvidenceScore !== undefined && {
+            evidenceScore: normalizedEvidenceScore,
+        }),
+        ...(normalizedFreshnessScore !== undefined && {
+            freshnessScore: normalizedFreshnessScore,
+        }),
     };
 };
 
