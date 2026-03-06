@@ -253,14 +253,19 @@ bootstrapLogger.info(`Using web base URL: ${webBaseUrl}`);
 
 const rawBackendBaseUrl = process.env.BACKEND_BASE_URL?.trim();
 const sharedBackendPortFromEnv = process.env.PORT?.trim();
-const backendPortFromEnv =
+const isValidNetworkPort = (value: number): boolean =>
+    Number.isInteger(value) && value >= 1 && value <= 65535;
+const parsedBackendPortFromEnv =
     sharedBackendPortFromEnv && /^\d+$/.test(sharedBackendPortFromEnv)
         ? Number(sharedBackendPortFromEnv)
         : undefined;
+const backendPortFromEnv =
+    typeof parsedBackendPortFromEnv === 'number' &&
+    isValidNetworkPort(parsedBackendPortFromEnv)
+        ? parsedBackendPortFromEnv
+        : undefined;
 const localBackendBaseUrlFromEnvPort =
-    typeof backendPortFromEnv === 'number' &&
-    Number.isInteger(backendPortFromEnv) &&
-    backendPortFromEnv > 0
+    typeof backendPortFromEnv === 'number'
         ? `http://localhost:${backendPortFromEnv}`
         : DEFAULT_LOCAL_BACKEND_BASE_URL;
 const fallbackBackendBaseUrl = flyAppName
