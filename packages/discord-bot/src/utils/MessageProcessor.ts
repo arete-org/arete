@@ -3,7 +3,7 @@
  * @footnote-scope: core
  * @footnote-module: MessageProcessor
  * @footnote-risk: high - Processing failures can break user interactions or route the wrong action.
- * @footnote-ethics: high - This path controls how Ari responds, when it stays silent, and how provenance is shown.
+ * @footnote-ethics: high - This path controls how Footnote responds, when it stays silent, and how provenance is shown.
  */
 
 import fs from 'fs';
