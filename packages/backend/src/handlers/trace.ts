@@ -6,7 +6,7 @@
  * @footnote-ethics: high - Provenance access impacts user trust and auditability.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import {
     PostTraceCardFromTraceRequestSchema,
@@ -304,6 +304,9 @@ const createTraceHandlers = ({
         let bodyTooLarge = false;
         let bodyBytes = 0;
         req.on('data', (chunk) => {
+            if (bodyTooLarge) {
+                return;
+            }
             bodyBytes += chunk.length;
             if (bodyBytes > maxTraceBodyBytes) {
                 bodyTooLarge = true;
@@ -612,12 +615,16 @@ const createTraceHandlers = ({
             if (!existingTrace) {
                 const now = Date.now();
                 const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+                const syntheticChainHash = createHash('sha256')
+                    .update(`trace-card:${responseId}`)
+                    .digest('hex')
+                    .slice(0, 16);
                 const syntheticTrace: ResponseMetadata = {
                     responseId,
                     provenance: 'Speculative',
                     riskTier: 'Low',
                     tradeoffCount: 0,
-                    chainHash: `trace-card-${responseId}`.slice(0, 16),
+                    chainHash: syntheticChainHash,
                     licenseContext: 'Trace card preview placeholder',
                     modelVersion: 'trace-card-preview',
                     staleAfter: new Date(now + ninetyDaysMs).toISOString(),
