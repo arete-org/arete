@@ -329,6 +329,10 @@ const createTraceHandlers = ({
             };
             const onError = (error: Error) => {
                 cleanup();
+                if (bodyTooLarge) {
+                    resolve();
+                    return;
+                }
                 reject(error);
             };
             const onClose = () => {
@@ -592,21 +596,61 @@ const createTraceHandlers = ({
                 return;
             }
 
+            const providedResponseId =
+                typeof parsedPayload.data.responseId === 'string' &&
+                parsedPayload.data.responseId.trim().length > 0
+                    ? parsedPayload.data.responseId.trim()
+                    : null;
             const responseId =
-                parsedPayload.data.responseId ??
-                createPreviewTraceCardResponseId();
+                providedResponseId ?? createPreviewTraceCardResponseId();
             const { svg, png } = renderTraceCardPng({
                 temperament: parsedPayload.data.temperament,
                 chips: parsedPayload.data.chips,
             });
 
+            const existingTrace = await writeAccess.store.retrieve(responseId);
+            if (!existingTrace) {
+                const now = Date.now();
+                const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+                const syntheticTrace: ResponseMetadata = {
+                    responseId,
+                    provenance: 'Speculative',
+                    riskTier: 'Low',
+                    tradeoffCount: 0,
+                    chainHash: `trace-card-${responseId}`.slice(0, 16),
+                    licenseContext: 'Trace card preview placeholder',
+                    modelVersion: 'trace-card-preview',
+                    staleAfter: new Date(now + ninetyDaysMs).toISOString(),
+                    citations: [],
+                    ...(parsedPayload.data.temperament && {
+                        temperament: parsedPayload.data.temperament,
+                    }),
+                    ...(parsedPayload.data.chips?.evidenceScore && {
+                        evidenceScore: parsedPayload.data.chips.evidenceScore,
+                    }),
+                    ...(parsedPayload.data.chips?.freshnessScore && {
+                        freshnessScore: parsedPayload.data.chips.freshnessScore,
+                    }),
+                };
+
+                await writeAccess.store.upsert(syntheticTrace);
+                logger.warn(
+                    `Created placeholder provenance_traces row for "${responseId}" before upsertTraceCardSvg to satisfy foreign key constraints.`
+                );
+            }
             await writeAccess.store.upsertTraceCardSvg(responseId, svg);
 
             sendJson(res, 200, {
                 responseId,
                 pngBase64: png.toString('base64'),
             });
-            logRequest(req, res, `trace card success ${responseId}`);
+            logRequest(
+                req,
+                res,
+                providedResponseId
+                    ? `trace card success ${responseId}`
+                    : `trace card preview success ${responseId}`
+            );
         } catch (error) {
             const errorMessage =
                 error instanceof Error ? error.message : 'unknown error';
