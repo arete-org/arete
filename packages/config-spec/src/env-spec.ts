@@ -256,6 +256,66 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: "BOT_PROFILE_ID",
+        owner: "discord-bot",
+        stage: "bootstrap",
+        section: "prompts",
+        required: false,
+        secret: false,
+        kind: "string",
+        description: "Stable profile identifier for the bot runtime persona overlay.",
+        defaultValue: literal("footnote"),
+        usedBy: [
+            "packages/discord-bot/src/config/profile.ts",
+        ],
+    }),
+
+    defineEnv({
+        key: "BOT_PROFILE_DISPLAY_NAME",
+        owner: "discord-bot",
+        stage: "bootstrap",
+        section: "prompts",
+        required: false,
+        secret: false,
+        kind: "string",
+        description: "Human-readable profile name for bot runtime persona overlay.",
+        defaultValue: literal("Footnote"),
+        usedBy: [
+            "packages/discord-bot/src/config/profile.ts",
+        ],
+    }),
+
+    defineEnv({
+        key: "BOT_PROFILE_PROMPT_OVERLAY",
+        owner: "discord-bot",
+        stage: "bootstrap",
+        section: "prompts",
+        required: false,
+        secret: false,
+        kind: "string",
+        description: "Optional inline prompt overlay text for bot profile behavior.",
+        defaultValue: noDefault(),
+        usedBy: [
+            "packages/discord-bot/src/config/profile.ts",
+        ],
+    }),
+
+    defineEnv({
+        key: "BOT_PROFILE_PROMPT_OVERLAY_PATH",
+        owner: "discord-bot",
+        stage: "bootstrap",
+        section: "prompts",
+        required: false,
+        secret: false,
+        kind: "string",
+        description: "Optional path to a text file containing bot profile prompt overlay instructions.",
+        defaultValue: noDefault(),
+        usedBy: [
+            "packages/discord-bot/src/config/profile.ts",
+        ],
+    }),
+
+    defineEnv({
         key: "WEB_BASE_URL",
         owner: "discord-bot",
         stage: "runtime",
