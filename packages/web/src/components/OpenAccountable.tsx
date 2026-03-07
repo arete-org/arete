@@ -31,7 +31,7 @@ const PRINCIPLES: Principle[] = [
     {
         title: 'Self-hosted first',
         description:
-            'You own the keys and decide where Ari lives. Your server, your rules.',
+            'You own the keys and decide where Footnote runs. Your server, your rules.',
         link: {
             href: '/invite/',
             label: 'Setup instructions',

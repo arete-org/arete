@@ -71,6 +71,35 @@ pnpm dev
 pnpm dev:bot
 ```
 
+## Vendoring and Multiple Discord Bots
+
+Footnote now treats `Footnote` as the default Discord persona. If you do nothing beyond the base setup, the bot runs with the default Footnote identity and shared backend behavior.
+
+If you want a vendored bot identity on top of the same backend, configure the bot runtime with profile env vars:
+
+```env
+BOT_PROFILE_ID=footnote
+BOT_PROFILE_DISPLAY_NAME=Footnote
+BOT_PROFILE_PROMPT_OVERLAY=
+BOT_PROFILE_PROMPT_OVERLAY_PATH=
+BOT_PROFILE_MENTION_ALIASES=
+```
+
+Recommended vendoring workflow:
+
+1. Start from the default Footnote base persona.
+2. Set a unique `BOT_PROFILE_ID` for the bot machine.
+3. Set `BOT_PROFILE_DISPLAY_NAME` for the visible/runtime identity.
+4. Add either `BOT_PROFILE_PROMPT_OVERLAY` or `BOT_PROFILE_PROMPT_OVERLAY_PATH` for persona-specific instructions.
+5. Add `BOT_PROFILE_MENTION_ALIASES` when the bot should respond to vendor-specific plaintext names.
+6. Run each Discord bot machine with its own env file while pointing them at the same backend.
+
+Notes:
+
+- Overlay precedence is `BOT_PROFILE_PROMPT_OVERLAY` over `BOT_PROFILE_PROMPT_OVERLAY_PATH`.
+- Missing or invalid profile overrides fail open to the default Footnote persona.
+- Prompt overlays are instance-scoped to the Discord bot runtime; backend contracts stay shared.
+
 ---
 
 ## License

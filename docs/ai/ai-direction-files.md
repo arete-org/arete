@@ -15,6 +15,7 @@ _Coordinated guidance for AI assistants and developers._
 - **`.codexrules`** - Points to cursor.rules for Codex
 - **`.github/copilot-instructions.md`** - GitHub Copilot instructions
 - **`docs/ai/contributing_cursor.md`** - Detailed Cursor guide
+- **`docs/ai/deepwiki-vendoring.md`** - Vendoring/system note for DeepWiki and repo explainer tooling
 - **`cursor.dictionary`** - Project terminology
 - **`.cursor/README.md`** - Cursor IDE configuration
 

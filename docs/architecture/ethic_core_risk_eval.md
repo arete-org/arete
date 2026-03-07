@@ -6,7 +6,7 @@ Add **incident logging** and **deterministic circuit breakers**.
 
 This milestone establishes:
 
-- a user-facing way to **report Ari messages** (with consent),
+- a user-facing way to **report assistant messages** (with consent),
 - a private, durable **incident record** (SQLite on Fly volume),
 - and an ethics-core-owned **risk evaluation + breaker action** layer that gates responses.
 
@@ -84,9 +84,9 @@ This milestone establishes:
 
 ---
 
-## Phase 4 — Immediate remediation (edit reported Ari message)
+## Phase 4 — Immediate remediation (edit reported assistant message)
 
-**Goal:** When Ari is reported, edit the target message to add a warning and spoiler/obscure content.
+**Goal:** When an assistant message is reported, edit the target message to add a warning and spoiler/obscure content.
 
 **Key tasks**
 
@@ -96,7 +96,7 @@ This milestone establishes:
 
 - Record remediation applied + timestamp on the incident.
 
-**Deliverable:** A reported Ari message is reliably edited once, with remediation tracked.
+**Deliverable:** A reported assistant message is reliably edited once, with remediation tracked.
 
 ---
 
