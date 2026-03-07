@@ -20,6 +20,7 @@ COPY package.json pnpm-workspace.yaml ./
 COPY packages/backend/package.json packages/backend/tsconfig.json packages/backend/
 COPY packages/config-spec/package.json packages/config-spec/tsconfig.json packages/config-spec/
 COPY packages/contracts/package.json packages/contracts/tsconfig.json packages/contracts/
+COPY packages/prompts/package.json packages/prompts/tsconfig.json packages/prompts/
 
 # --- Dependencies ---
 COPY pnpm-lock.yaml* ./
@@ -29,6 +30,7 @@ RUN pnpm install --frozen-lockfile --prod=false
 COPY packages/backend/src/ packages/backend/src/
 COPY packages/config-spec/src/ packages/config-spec/src/
 COPY packages/contracts/src/ packages/contracts/src/
+COPY packages/prompts/src/ packages/prompts/src/
 
 # --- Build ---
 RUN pnpm --filter @footnote/backend run build \

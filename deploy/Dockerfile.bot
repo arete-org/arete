@@ -18,6 +18,7 @@ COPY package.json pnpm-workspace.yaml ./
 COPY packages/discord-bot/package.json packages/discord-bot/package.json
 COPY packages/config-spec/package.json packages/config-spec/tsconfig.json packages/config-spec/
 COPY packages/contracts/package.json packages/contracts/tsconfig.json packages/contracts/
+COPY packages/prompts/package.json packages/prompts/tsconfig.json packages/prompts/
 
 # --- Dependencies ---
 COPY pnpm-lock.yaml* ./
@@ -26,6 +27,7 @@ RUN pnpm install --frozen-lockfile --prod=false
 # --- Sources ---
 COPY packages/config-spec/src/ packages/config-spec/src/
 COPY packages/contracts/src/ packages/contracts/src/
+COPY packages/prompts/src/ packages/prompts/src/
 COPY packages/discord-bot/ packages/discord-bot/
 
 # --- Build ---
