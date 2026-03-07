@@ -99,7 +99,7 @@ Status as of 2026-03-06:
 - **Phase 0:** complete
 - **Phase 1:** complete
 - **Phase 2:** complete
-- **Phase 3:** partial
+- **Phase 3:** complete
 - **Phase 4:** complete
 
 ### Completed results
@@ -116,12 +116,12 @@ Status as of 2026-03-06:
   - realtime prompt paths
   - provenance interaction prompt paths
 - Overlay logging is metadata-only and tested to avoid leaking raw overlay text.
+- Plaintext mention alias resolution is centralized and shared across:
+  - `MessageCreate` catchup threshold routing
+  - `CatchupFilter` no-mention detection
+  - `RealtimeEngagementFilter` mention scoring
 - Root onboarding docs and DeepWiki-facing vendoring notes now describe the Footnote-default model.
 
 ### Remaining implementation work
 
-- Finish Phase 3 mention consistency by centralizing plaintext alias matching and wiring the shared logic into:
-  - `MessageCreate` catchup threshold routing
-  - `CatchupFilter` no-mention detection
-  - `RealtimeEngagementFilter` mention scoring
-- Add the remaining Phase 3 consistency tests for the shared alias helper and event/filter integration paths.
+- None for the vendoring phases defined in this document.
