@@ -10,6 +10,7 @@ import type { BotProfileConfig } from '../config/profile.js';
 
 const DEFAULT_FOOTNOTE_ALIAS = 'footnote';
 const MAX_PLAINTEXT_ALIAS_LENGTH = 100;
+const DEFAULT_FOOTNOTE_PROFILE_ID = 'footnote';
 
 const escapeRegExp = (value: string): string =>
     value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -42,7 +43,9 @@ export const resolveBotMentionAliases = (
     const candidates =
         profile.mentionAliases.length > 0
             ? [...profile.mentionAliases]
-            : [DEFAULT_FOOTNOTE_ALIAS, profile.displayName];
+            : profile.id === DEFAULT_FOOTNOTE_PROFILE_ID
+              ? [DEFAULT_FOOTNOTE_ALIAS, profile.displayName]
+              : [profile.displayName];
 
     if (botUsername) {
         candidates.push(botUsername);

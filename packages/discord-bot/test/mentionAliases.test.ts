@@ -43,7 +43,7 @@ test('resolveBotMentionAliases prefers explicit aliases and still keeps bot user
     assert.deepEqual(aliases, ['ari', 'support bot', 'ariruntime']);
 });
 
-test('resolveBotMentionAliases falls back to footnote and display name when explicit aliases are absent', () => {
+test('resolveBotMentionAliases keeps the footnote alias for the default profile when explicit aliases are absent', () => {
     const aliases = resolveBotMentionAliases(
         createProfile({
             displayName: 'Ari',
@@ -51,6 +51,17 @@ test('resolveBotMentionAliases falls back to footnote and display name when expl
     );
 
     assert.deepEqual(aliases, ['footnote', 'ari']);
+});
+
+test('resolveBotMentionAliases does not inject the footnote alias for vendored profiles without explicit aliases', () => {
+    const aliases = resolveBotMentionAliases(
+        createProfile({
+            id: 'ari-vendor',
+            displayName: 'Ari',
+        })
+    );
+
+    assert.deepEqual(aliases, ['ari']);
 });
 
 test('resolveBotMentionAliases dedupes normalized username and profile aliases', () => {
