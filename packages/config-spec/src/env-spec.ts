@@ -292,7 +292,7 @@ export const envEntries = [
         stage: "bootstrap",
         section: "prompts",
         required: false,
-        secret: false,
+        secret: true,
         kind: "string",
         description: "Optional inline prompt overlay text for bot profile behavior.",
         defaultValue: noDefault(),
