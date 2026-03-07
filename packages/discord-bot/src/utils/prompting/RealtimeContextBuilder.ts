@@ -5,7 +5,8 @@
  * @footnote-risk: high - Context errors can degrade realtime responses or routing.
  * @footnote-ethics: high - Realtime transcripts impact privacy and consent.
  */
-import { renderPrompt } from '../../config.js';
+import { renderPrompt, runtimeConfig } from '../../config.js';
+import { composePromptWithProfileOverlay } from '../../config/profilePromptOverlay.js';
 
 /**
  * Participant metadata included in realtime voice-session context.
@@ -54,7 +55,11 @@ export class RealtimeContextBuilder {
                 ? `\nRecent conversation summary:\n${transcripts.map((line) => `- ${line}`).join('\n')}`
                 : '';
 
-        const basePrompt = renderPrompt('discord.realtime.system').content;
+        const basePrompt = composePromptWithProfileOverlay(
+            renderPrompt('discord.realtime.system').content,
+            runtimeConfig.profile,
+            'realtime'
+        );
         const instructions = `${basePrompt}\n\nParticipants currently in the voice channel:\n${roster}${transcriptBlock}`;
 
         return {

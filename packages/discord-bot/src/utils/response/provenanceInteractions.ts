@@ -36,7 +36,8 @@ import {
     type OpenAIOptions,
     type SupportedModel,
 } from '../openaiService.js';
-import { renderPrompt } from '../../config.js';
+import { renderPrompt, runtimeConfig } from '../../config.js';
+import { composePromptWithProfileOverlay } from '../../config/profilePromptOverlay.js';
 import { Planner } from '../prompting/Planner.js';
 import { botApi } from '../../api/botApi.js';
 import { parseProvenanceActionCustomId } from './provenanceCgi.js';
@@ -674,7 +675,11 @@ export async function generateAlternativeLensMessage(
     lens: AlternativeLensPayload,
     openaiOptions?: OpenAIOptions
 ): Promise<string> {
-    const baseSystemPrompt = renderPrompt('discord.chat.system').content;
+    const baseSystemPrompt = composePromptWithProfileOverlay(
+        renderPrompt('discord.chat.system').content,
+        runtimeConfig.profile,
+        'provenance'
+    );
     const systemPromptLines = [
         'You are an ethics editor who rewrites assistant responses using a specified philosophical or cultural lens.',
         'Preserve factual accuracy and original intent while foregrounding the requested perspective.',
@@ -744,7 +749,11 @@ export async function requestProvenanceOpenAIOptions(
 ): Promise<OpenAIOptions | undefined> {
     try {
         const planner = new Planner(openaiService);
-        const baseSystemPrompt = renderPrompt('discord.chat.system').content;
+        const baseSystemPrompt = composePromptWithProfileOverlay(
+            renderPrompt('discord.chat.system').content,
+            runtimeConfig.profile,
+            'provenance'
+        );
 
         const context: OpenAIMessage[] = [
             { role: 'system', content: baseSystemPrompt },

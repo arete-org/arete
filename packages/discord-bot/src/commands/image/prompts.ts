@@ -5,7 +5,8 @@
  * @footnote-risk: medium - Prompt errors can degrade outputs or raise costs.
  * @footnote-ethics: medium - Prompt framing shapes model behavior and safety.
  */
-import { renderPrompt } from '../../config.js';
+import { renderPrompt, runtimeConfig } from '../../config.js';
+import { composePromptWithProfileOverlay } from '../../config/profilePromptOverlay.js';
 
 import type {
     ImageBackgroundType,
@@ -78,6 +79,10 @@ export function buildDeveloperPrompt(options: DeveloperPromptOptions): string {
         reflectionInstruction: annotationInstruction,
     });
 
-    return content;
+    return composePromptWithProfileOverlay(
+        content,
+        runtimeConfig.profile,
+        'image.developer'
+    );
 }
 

@@ -23,7 +23,8 @@ import {
     DEFAULT_IMAGE_OUTPUT_COMPRESSION,
 } from './constants.js';
 import { sanitizeForEmbed, truncateForEmbed } from './embed.js';
-import { renderPrompt } from '../../config.js';
+import { renderPrompt, runtimeConfig } from '../../config.js';
+import { composePromptWithProfileOverlay } from '../../config/profilePromptOverlay.js';
 import { buildDeveloperPrompt } from './prompts.js';
 import type {
     ImageBackgroundType,
@@ -98,7 +99,14 @@ export async function generateImageWithMetadata(
         stream,
     } = options;
 
-    const { content: imageSystemPrompt } = renderPrompt('discord.image.system');
+    const { content: imageSystemPromptBase } = renderPrompt(
+        'discord.image.system'
+    );
+    const imageSystemPrompt = composePromptWithProfileOverlay(
+        imageSystemPromptBase,
+        runtimeConfig.profile,
+        'image.system'
+    );
 
     const remainingPromptRatio = calculateRemainingRatio(prompt);
 
