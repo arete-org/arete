@@ -11,11 +11,22 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { createBackendPromptRegistry } from '../src/services/prompts/promptRegistry.js';
 
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
+const canonicalPromptCatalogPath = path.resolve(
+    testDirectory,
+    '../../prompts/src/defaults.yaml'
+);
+
 test('backend prompt registry exposes the canonical reflect chat prompt', () => {
-    const registry = createBackendPromptRegistry();
+    // Pass the shared canonical catalog directly so PROMPT_CONFIG_PATH and
+    // runtimeConfig.runtime.promptConfigPath cannot change this assertion.
+    const registry = createBackendPromptRegistry({
+        overridePath: canonicalPromptCatalogPath,
+    });
 
     assert.match(
         registry.renderPrompt('reflect.chat.system').content,
