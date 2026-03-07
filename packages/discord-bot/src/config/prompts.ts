@@ -10,7 +10,7 @@ import {
     type PromptKey,
     type PromptVariables,
 } from '@footnote/prompts';
-import { promptConfigPath } from './runtime.js';
+import { promptConfigPath, runtimeConfig } from './runtime.js';
 import { createDiscordPromptRegistry } from './promptRegistryFactory.js';
 
 /**
@@ -38,4 +38,8 @@ promptRegistry.assertKeys(REQUIRED_PROMPT_KEYS);
 export const renderPrompt = (
     key: PromptKey,
     variables: PromptVariables = {}
-) => promptRegistry.renderPrompt(key, variables);
+) =>
+    promptRegistry.renderPrompt(key, {
+        botProfileDisplayName: runtimeConfig.profile.displayName,
+        ...variables,
+    });

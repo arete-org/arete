@@ -27,6 +27,10 @@ const normalizeMentionAlias = (value: string): string | null => {
     return normalized;
 };
 
+// buildPlaintextAliasRegex is safe on user-controlled aliases because
+// escapeRegExp neutralizes regex metacharacters, normalizeMentionAlias collapses
+// whitespace before aliases reach this point, and MAX_PLAINTEXT_ALIAS_LENGTH
+// caps the input size to keep the generated pattern bounded.
 const buildPlaintextAliasRegex = (alias: string): RegExp => {
     const escapedAlias = escapeRegExp(alias).replace(/\s+/g, '\\s+');
     return new RegExp(`(^|[^a-z0-9])(?:${escapedAlias})(?=$|[^a-z0-9])`, 'i');

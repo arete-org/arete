@@ -82,6 +82,9 @@ catalogs:
     date-fns:
       specifier: ^4.1.0
       version: 4.1.0
+    dependency-cruiser:
+      specifier: ^17.3.6
+      version: 17.3.6
     discord.js:
       specifier: ^14.25.1
       version: 14.25.1
@@ -241,7 +244,7 @@ importers:
         specifier: 3.2.3
         version: 3.2.3
       dependency-cruiser:
-        specifier: ^17.3.6
+        specifier: 'catalog:'
         version: 17.3.6
       eslint:
         specifier: 'catalog:'

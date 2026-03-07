@@ -21,6 +21,9 @@ const promptLogger =
     typeof logger.child === 'function'
         ? logger.child({ module: 'backendPromptRegistry' })
         : logger;
+const DEFAULT_BACKEND_PROMPT_VARIABLES: PromptVariables = {
+    botProfileDisplayName: 'Footnote',
+};
 
 type PromptRegistryLogger = NonNullable<CreatePromptRegistryOptions['logger']>;
 type PromptRegistryLoggerMethod = NonNullable<PromptRegistryLogger['info']>;
@@ -40,14 +43,24 @@ const promptRegistryLogger: NonNullable<CreatePromptRegistryOptions['logger']> =
 
 export const createBackendPromptRegistry = (
     options: Partial<CreatePromptRegistryOptions> = {}
-): PromptRegistry =>
-    createPromptRegistry({
+): PromptRegistry => {
+    const registry = createPromptRegistry({
         overridePath:
             options.overridePath ??
             runtimeConfig.runtime.promptConfigPath ??
             undefined,
         logger: options.logger ?? promptRegistryLogger,
     });
+    return {
+        ...registry,
+        renderPrompt(key: PromptKey, variables: PromptVariables = {}) {
+            return registry.renderPrompt(key, {
+                ...DEFAULT_BACKEND_PROMPT_VARIABLES,
+                ...variables,
+            });
+        },
+    };
+};
 
 export const promptRegistry: PromptRegistry = createBackendPromptRegistry();
 

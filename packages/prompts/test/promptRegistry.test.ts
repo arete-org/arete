@@ -23,7 +23,9 @@ test('loads the canonical defaults including reflect.chat.system', () => {
 
     assert.equal(registry.hasPrompt('reflect.chat.system'), true);
     assert.match(
-        registry.renderPrompt('reflect.chat.system').content,
+        registry.renderPrompt('reflect.chat.system', {
+            botProfileDisplayName: 'Footnote',
+        }).content,
         /You are Footnote, an AI assistant from the Footnote project\./
     );
 });
@@ -31,29 +33,34 @@ test('loads the canonical defaults including reflect.chat.system', () => {
 test('merges override files over the canonical defaults', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'footnote-prompts-'));
     const overridePath = path.join(tempDir, 'override.yaml');
+    try {
+        fs.writeFileSync(
+            overridePath,
+            [
+                'discord:',
+                '  chat:',
+                '    system:',
+                '      template: |-',
+                '        Override chat prompt.',
+            ].join('\n'),
+            'utf8'
+        );
 
-    fs.writeFileSync(
-        overridePath,
-        [
-            'discord:',
-            '  chat:',
-            '    system:',
-            '      template: |-',
-            '        Override chat prompt.',
-        ].join('\n'),
-        'utf8'
-    );
+        const registry = createPromptRegistry({ overridePath });
 
-    const registry = createPromptRegistry({ overridePath });
-
-    assert.equal(
-        registry.renderPrompt('discord.chat.system').content,
-        'Override chat prompt.'
-    );
-    assert.match(
-        registry.renderPrompt('reflect.chat.system').content,
-        /You are Footnote/
-    );
+        assert.equal(
+            registry.renderPrompt('discord.chat.system').content,
+            'Override chat prompt.'
+        );
+        assert.match(
+            registry.renderPrompt('reflect.chat.system', {
+                botProfileDisplayName: 'Footnote',
+            }).content,
+            /You are Footnote/
+        );
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
 });
 
 test('missing override files fail open to defaults', () => {
@@ -71,7 +78,9 @@ test('missing override files fail open to defaults', () => {
         });
 
         assert.match(
-            registry.renderPrompt('discord.chat.system').content,
+            registry.renderPrompt('discord.chat.system', {
+                botProfileDisplayName: 'Footnote',
+            }).content,
             /You are Footnote/
         );
         assert.equal(warnings.length, 1);
