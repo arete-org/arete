@@ -257,7 +257,7 @@ reflect:
                   - Do not emit strings for these scores; emit JSON integers only
 
                 Example:
-                <RESPONSE_METADATA>{"provenance":"Retrieved","tradeoffCount":1,"citations":[{"title":"Example","url":"https://example.com"}],"evidenceScore":4}
+                <RESPONSE_METADATA>{"provenance":"Retrieved","tradeoffCount":1,"citations":[{"title":"Example","url":"https://example.com"}],"evidenceScore":4,"freshnessScore":4}
 
                 Guidelines:
                   - Emit valid, minified JSON (no comments, no code fences, no trailing text)
