@@ -29,6 +29,18 @@ type PromptRegistryLogger = NonNullable<CreatePromptRegistryOptions['logger']>;
 type PromptRegistryLoggerMethod = NonNullable<PromptRegistryLogger['info']>;
 type PromptRegistryLogMeta = Parameters<PromptRegistryLoggerMethod>[1];
 
+const removeUndefinedPromptVariables = (
+    variables: PromptVariables
+): PromptVariables => {
+    const cleanedVariables: PromptVariables = {};
+    for (const [key, value] of Object.entries(variables)) {
+        if (value !== undefined) {
+            cleanedVariables[key] = value;
+        }
+    }
+    return cleanedVariables;
+};
+
 const promptRegistryLogger: NonNullable<CreatePromptRegistryOptions['logger']> = {
     info(message: string, meta?: PromptRegistryLogMeta) {
         promptLogger.info(message, meta);
@@ -55,11 +67,13 @@ export const createBackendPromptRegistry = (
     wrappedRegistry.renderPrompt = (
         key: PromptKey,
         variables: PromptVariables = {}
-    ): RenderedPrompt =>
-        registry.renderPrompt(key, {
+    ): RenderedPrompt => {
+        const cleanedVariables = removeUndefinedPromptVariables(variables);
+        return registry.renderPrompt(key, {
             ...DEFAULT_BACKEND_PROMPT_VARIABLES,
-            ...variables,
+            ...cleanedVariables,
         });
+    };
     return wrappedRegistry;
 };
 
