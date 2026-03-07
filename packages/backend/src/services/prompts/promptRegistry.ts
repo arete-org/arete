@@ -22,14 +22,17 @@ const promptLogger =
         ? logger.child({ module: 'backendPromptRegistry' })
         : logger;
 
+type PromptRegistryLogger = NonNullable<CreatePromptRegistryOptions['logger']>;
+type PromptRegistryLogMeta = Parameters<PromptRegistryLogger['info']>[1];
+
 const promptRegistryLogger: NonNullable<CreatePromptRegistryOptions['logger']> = {
-    info(message, meta) {
+    info(message: string, meta?: PromptRegistryLogMeta) {
         promptLogger.info(message, meta);
     },
-    warn(message, meta) {
+    warn(message: string, meta?: PromptRegistryLogMeta) {
         promptLogger.warn(message, meta);
     },
-    error(message, meta) {
+    error(message: string, meta?: PromptRegistryLogMeta) {
         promptLogger.error(message, meta);
     },
 };
