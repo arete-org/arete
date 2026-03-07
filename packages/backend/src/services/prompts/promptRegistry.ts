@@ -23,7 +23,8 @@ const promptLogger =
         : logger;
 
 type PromptRegistryLogger = NonNullable<CreatePromptRegistryOptions['logger']>;
-type PromptRegistryLogMeta = Parameters<PromptRegistryLogger['info']>[1];
+type PromptRegistryLoggerMethod = NonNullable<PromptRegistryLogger['info']>;
+type PromptRegistryLogMeta = Parameters<PromptRegistryLoggerMethod>[1];
 
 const promptRegistryLogger: NonNullable<CreatePromptRegistryOptions['logger']> = {
     info(message: string, meta?: PromptRegistryLogMeta) {
