@@ -53,22 +53,31 @@ test('merges override files over the canonical defaults', () => {
 });
 
 test('missing override files fail open to defaults', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'footnote-prompts-'));
+    const overridePath = path.join(tempDir, 'missing-override.yaml');
     const warnings: Array<Record<string, unknown>> = [];
-    const registry = createPromptRegistry({
-        overridePath: path.join(os.tmpdir(), 'missing-footnote-prompt-file.yaml'),
-        logger: {
-            warn(message, meta) {
-                warnings.push({ message, ...(meta ?? {}) });
+    try {
+        const registry = createPromptRegistry({
+            overridePath,
+            logger: {
+                warn(message, meta) {
+                    warnings.push({ message, ...(meta ?? {}) });
+                },
             },
-        },
-    });
+        });
 
-    assert.match(
-        registry.renderPrompt('discord.chat.system').content,
-        /You are Footnote/
-    );
-    assert.equal(warnings.length, 1);
-    assert.match(String(warnings[0].message), /Ignoring prompt override file/);
+        assert.match(
+            registry.renderPrompt('discord.chat.system').content,
+            /You are Footnote/
+        );
+        assert.equal(warnings.length, 1);
+        assert.match(
+            String(warnings[0].message),
+            /Ignoring prompt override file/
+        );
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
 });
 
 test('unknown prompt keys throw a descriptive error', () => {
