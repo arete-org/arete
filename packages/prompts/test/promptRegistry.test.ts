@@ -11,8 +11,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { createPromptRegistry } from '../src/index.js';
+
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(testDirectory, '..', '..', '..');
 
 test('loads the canonical defaults including reflect.chat.system', () => {
     const registry = createPromptRegistry();
@@ -90,20 +94,31 @@ test('unknown prompt keys throw a descriptive error', () => {
 });
 
 test('legacy backend and discord default prompt files are gone', () => {
+    const legacyBackendDefaultsPath = path.resolve(
+        repoRoot,
+        'packages',
+        'backend',
+        'src',
+        'services',
+        'prompts',
+        'defaults.yaml'
+    );
+    const legacyDiscordDefaultsPath = path.resolve(
+        repoRoot,
+        'packages',
+        'discord-bot',
+        'src',
+        'utils',
+        'prompts',
+        'defaults.yaml'
+    );
+
     assert.equal(
-        fs.existsSync(
-            path.resolve(
-                'packages/backend/src/services/prompts/defaults.yaml'
-            )
-        ),
+        fs.existsSync(legacyBackendDefaultsPath),
         false
     );
     assert.equal(
-        fs.existsSync(
-            path.resolve(
-                'packages/discord-bot/src/utils/prompts/defaults.yaml'
-            )
-        ),
+        fs.existsSync(legacyDiscordDefaultsPath),
         false
     );
 });
