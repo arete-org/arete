@@ -3,7 +3,7 @@
  * @footnote-scope: core
  * @footnote-module: MessageProcessor
  * @footnote-risk: high - Processing failures can break user interactions or route the wrong action.
- * @footnote-ethics: high - This path controls how Ari responds, when it stays silent, and how provenance is shown.
+ * @footnote-ethics: high - This path controls how Footnote responds, when it stays silent, and how provenance is shown.
  */
 
 import fs from 'fs';
@@ -23,7 +23,10 @@ import {
 import { logger } from './logger.js';
 import { ResponseHandler } from './response/ResponseHandler.js';
 import { RateLimiter } from './RateLimiter.js';
-import { runtimeConfig } from '../config.js';
+import {
+    prependProfileOverlaySystemMessage,
+    runtimeConfig,
+} from '../config.js';
 import { ContextBuilder } from './prompting/ContextBuilder.js';
 import {
     DEFAULT_IMAGE_MODEL,
@@ -481,7 +484,21 @@ export class MessageProcessor {
             role: entry.role === 'developer' ? 'system' : entry.role,
             content: entry.content,
         }));
-        if (conversation.length === 0) {
+        const overlayResult = prependProfileOverlaySystemMessage(
+            conversation,
+            'reflect'
+        );
+        if (overlayResult.overlayAdded) {
+            logger.debug(
+                `Injected profile overlay into reflect request for message ${message.id}.`,
+                {
+                    profileId: runtimeConfig.profile.id,
+                    overlaySource: runtimeConfig.profile.promptOverlay.source,
+                    overlayLength: runtimeConfig.profile.promptOverlay.length,
+                }
+            );
+        }
+        if (overlayResult.conversation.length === 0) {
             return null;
         }
 
@@ -489,11 +506,11 @@ export class MessageProcessor {
             request: {
                 surface: 'discord',
                 trigger: {
-                    kind: this.getReflectTriggerKind(message),
+                    kind: this.getReflectTriggerKind(message, trigger),
                     messageId: message.id,
                 },
                 latestUserInput: message.content.trim(),
-                conversation,
+                conversation: overlayResult.conversation,
                 attachments: imageAttachments.map((attachment) => ({
                     kind: 'image' as const,
                     url: attachment.url,
@@ -514,13 +531,20 @@ export class MessageProcessor {
         };
     }
 
-    private getReflectTriggerKind(message: Message): ReflectTriggerKind {
+    private getReflectTriggerKind(
+        message: Message,
+        trigger?: string
+    ): ReflectTriggerKind {
         if (message.reference?.messageId) {
             return 'direct';
         }
 
         const botUserId = message.client.user?.id;
         if (botUserId && message.mentions.users.has(botUserId)) {
+            return 'invoked';
+        }
+
+        if (trigger?.startsWith('Mentioned by plaintext alias:')) {
             return 'invoked';
         }
 

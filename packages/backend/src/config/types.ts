@@ -37,6 +37,7 @@ export type RuntimeConfig = {
         isProduction: boolean;
         isDevelopment: boolean;
         flyAppName: string | null;
+        promptConfigPath: string | null;
     };
     server: {
         dataDir: string;

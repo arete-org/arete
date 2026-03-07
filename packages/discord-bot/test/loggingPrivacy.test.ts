@@ -15,7 +15,11 @@ import {
     OpenAIService,
     type OpenAIMessage,
 } from '../src/utils/openaiService.js';
+import { runtimeConfig } from '../src/config.js';
+import type { BotProfileConfig } from '../src/config/profile.js';
+import { generateImageWithMetadata } from '../src/commands/image/openai.js';
 import { logger, sanitizeLogData } from '../src/utils/logger.js';
+import { MessageProcessor } from '../src/utils/MessageProcessor.js';
 import { logContextIfVerbose } from '../src/utils/prompting/ContextBuilder.js';
 
 const createStubbedOpenAIService = () => {
@@ -200,7 +204,11 @@ test('logContextIfVerbose only emits when high verbosity flag is enabled', () =>
     ];
 
     const originalDebug = logger.debug;
-    const originalEnv = process.env.DISCORD_BOT_LOG_FULL_CONTEXT;
+    const originalVerboseLoggingEnabled =
+        runtimeConfig.debug.verboseContextLoggingEnabled;
+    const mutableRuntimeConfig = runtimeConfig as unknown as {
+        debug: { verboseContextLoggingEnabled: boolean };
+    };
     const debugCalls: unknown[][] = [];
 
     logger.debug = ((...args: unknown[]) => {
@@ -209,7 +217,7 @@ test('logContextIfVerbose only emits when high verbosity flag is enabled', () =>
     }) as typeof logger.debug;
 
     try {
-        delete process.env.DISCORD_BOT_LOG_FULL_CONTEXT;
+        mutableRuntimeConfig.debug.verboseContextLoggingEnabled = false;
         logContextIfVerbose(context);
         assert.equal(
             debugCalls.length,
@@ -217,7 +225,7 @@ test('logContextIfVerbose only emits when high verbosity flag is enabled', () =>
             'High verbosity should be disabled by default'
         );
 
-        process.env.DISCORD_BOT_LOG_FULL_CONTEXT = 'true';
+        mutableRuntimeConfig.debug.verboseContextLoggingEnabled = true;
         logContextIfVerbose(context);
         assert.equal(
             debugCalls.length,
@@ -237,12 +245,219 @@ test('logContextIfVerbose only emits when high verbosity flag is enabled', () =>
             'Verbose log should contain the context payload when explicitly enabled'
         );
     } finally {
-        if (originalEnv === undefined) {
-            delete process.env.DISCORD_BOT_LOG_FULL_CONTEXT;
-        } else {
-            process.env.DISCORD_BOT_LOG_FULL_CONTEXT = originalEnv;
-        }
+        mutableRuntimeConfig.debug.verboseContextLoggingEnabled =
+            originalVerboseLoggingEnabled;
         logger.debug = originalDebug;
     }
+});
+
+test('reflect overlay injection logs profile metadata without raw overlay body', async () => {
+    const processor = new MessageProcessor({
+        openaiService: {
+            async generateSpeech() {
+                return 'tts.mp3';
+            },
+        } as never,
+    });
+    const processorAccess = processor as unknown as {
+        buildReflectRequestFromMessage: (
+            message: unknown,
+            trigger: string
+        ) => Promise<unknown>;
+        contextBuilder: {
+            buildMessageContext: (
+                message: unknown,
+                maxMessages: number
+            ) => Promise<{
+                context: Array<{
+                    role: 'system' | 'user' | 'assistant';
+                    content: string;
+                }>;
+            }>;
+        };
+    };
+    const originalDebug = logger.debug;
+    const originalProfile = runtimeConfig.profile;
+    const mutableRuntimeConfig = runtimeConfig as unknown as {
+        profile: BotProfileConfig;
+    };
+    const debugCalls: unknown[][] = [];
+
+    mutableRuntimeConfig.profile = {
+        id: 'ari-vendor',
+        displayName: 'Ari',
+        mentionAliases: [],
+        promptOverlay: {
+            source: 'inline',
+            text: 'secret overlay body that must not appear in logs',
+            path: null,
+            length: 48,
+        },
+    };
+    processorAccess.contextBuilder = {
+        buildMessageContext: async () => ({
+            context: [
+                { role: 'system', content: 'Base prompt.' },
+                { role: 'user', content: 'Jordan said: "What changed?"' },
+            ],
+        }),
+    };
+    logger.debug = ((...args: unknown[]) => {
+        debugCalls.push(args);
+        return logger;
+    }) as typeof logger.debug;
+
+    try {
+        await processorAccess.buildReflectRequestFromMessage(
+            {
+                id: 'message-1',
+                content: 'What changed in the repo?',
+                author: {
+                    id: 'user-1',
+                    username: 'Jordan',
+                },
+                channelId: 'channel-1',
+                guildId: 'guild-1',
+                attachments: {
+                    filter: () => ({
+                        size: 0,
+                        map: () => [],
+                    }),
+                },
+                mentions: {
+                    users: {
+                        has: () => false,
+                    },
+                },
+                client: {
+                    user: {
+                        id: 'bot-1',
+                    },
+                },
+                channel: {},
+            } as never,
+            ''
+        );
+    } finally {
+        logger.debug = originalDebug;
+        mutableRuntimeConfig.profile = originalProfile;
+    }
+
+    const overlayLog = debugCalls.find(
+        ([firstArg]) =>
+            typeof firstArg === 'string' &&
+            firstArg.includes('Injected profile overlay into reflect request')
+    );
+
+    assert.ok(overlayLog, 'Expected overlay injection debug log');
+
+    const flattened = overlayLog
+        .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+        .join(' ');
+
+    assert.ok(
+        !flattened.includes('secret overlay body that must not appear in logs'),
+        'Overlay body should never appear in debug logs'
+    );
+    assert.ok(
+        flattened.includes('ari-vendor'),
+        'Profile metadata should still be present in debug logs'
+    );
+});
+
+test('image generation logging redacts prompt and overlay text from request payload logs', async () => {
+    const originalDebug = logger.debug;
+    const originalProfile = runtimeConfig.profile;
+    const mutableRuntimeConfig = runtimeConfig as unknown as {
+        profile: BotProfileConfig;
+    };
+    const debugCalls: unknown[][] = [];
+
+    mutableRuntimeConfig.profile = {
+        id: 'ari-vendor',
+        displayName: 'Ari',
+        mentionAliases: ['ari'],
+        promptOverlay: {
+            source: 'inline',
+            text: 'secret vendor overlay text',
+            path: null,
+            length: 26,
+        },
+    };
+    logger.debug = ((...args: unknown[]) => {
+        debugCalls.push(args);
+        return logger;
+    }) as typeof logger.debug;
+
+    try {
+        await generateImageWithMetadata({
+            openai: {
+                responses: {
+                    create: async (_payload: unknown) => ({
+                        error: null,
+                        output: [
+                            {
+                                type: 'image_generation_call',
+                                id: 'img_123',
+                                status: 'completed',
+                                result: 'base64-image',
+                            },
+                            {
+                                type: 'message',
+                                content: [
+                                    {
+                                        type: 'output_text',
+                                        text: '{"title":"t","description":"d","reflection":"n","adjusted_prompt":"p"}',
+                                    },
+                                ],
+                            },
+                        ],
+                    }),
+                },
+            } as never,
+            prompt: 'A quiet library at dusk',
+            textModel: 'gpt-4.1-mini',
+            imageModel: 'gpt-image-1-mini',
+            quality: 'low',
+            size: '1024x1024',
+            background: 'auto',
+            style: 'natural',
+            username: 'Jordan',
+            nickname: 'J',
+            guildName: 'Footnote Lab',
+            allowPromptAdjustment: false,
+            outputFormat: 'png',
+            outputCompression: 100,
+            stream: false,
+        });
+    } finally {
+        logger.debug = originalDebug;
+        mutableRuntimeConfig.profile = originalProfile;
+    }
+
+    const payloadLog = debugCalls.find(
+        ([firstArg]) =>
+            typeof firstArg === 'string' &&
+            firstArg.includes('Image generation request payload')
+    );
+
+    assert.ok(payloadLog, 'Expected redacted image payload debug log');
+
+    const flattened = payloadLog
+        .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+        .join(' ');
+
+    assert.ok(
+        !flattened.includes('secret vendor overlay text'),
+        'Overlay text should not appear in image payload logs'
+    );
+    assert.ok(
+        !flattened.includes('A quiet library at dusk'),
+        'User prompt text should not appear in image payload logs'
+    );
+    assert.ok(
+        flattened.includes('[REDACTED_PROMPT_TEXT]'),
+        'Prompt text should be replaced with a redaction token'
+    );
 });
 

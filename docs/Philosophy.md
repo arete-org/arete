@@ -72,14 +72,14 @@ A few constraints matter beyond the assistant’s output:
 
 ### Profiles as rulesets
 
-**Ari** is the current baseline configuration.
+**Footnote** is the current baseline configuration.
 
 If/when a multi-profile system is shipped, a profile would be a bundle of defaults:
 
 - enforceable constraints (policy rules)
 - style guidance for the model.
 
-Current baseline prompt reference: [defaults.yaml](../packages/discord-bot/src/utils/prompts/defaults.yaml)
+Current baseline prompt reference: [defaults.yaml](../packages/prompts/src/defaults.yaml)
 
 ## What’s planned
 

@@ -12,16 +12,19 @@
         "baseUrl": ".",
         "paths": {
             "@/*": ["./src/*"],
-            "@footnote/config-spec": ["../config-spec/dist/index.d.ts"],
-            "@footnote/config-spec/*": ["../config-spec/dist/*"],
-            "@footnote/contracts": ["../contracts/dist/index.d.ts"],
-            "@footnote/contracts/*": ["../contracts/dist/*"]
+            "@footnote/prompts": ["../prompts/dist/index.d.ts"],
+            "@footnote/prompts/*": ["../prompts/dist/*"]
         },
         "typeRoots": ["./node_modules/@types", "./src/types"],
         "sourceMap": true,
         "declaration": true,
         "resolveJsonModule": true
     },
+    "references": [
+        { "path": "../contracts" },
+        { "path": "../config-spec" },
+        { "path": "../prompts" }
+    ],
     "include": ["src/**/*.ts"],
     "exclude": ["node_modules", "dist"]
 }

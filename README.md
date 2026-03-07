@@ -4,7 +4,7 @@
 [![Hippocratic License HL3-CORE](https://img.shields.io/static/v1?label=Hippocratic%20License&message=HL3-CORE&labelColor=5e2751&color=bc8c3d)](https://firstdonoharm.dev/version/3/0/core.html)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/footnote-ai/footnote)
 
-Footnote is an AI assistant that tries to show its work — it returns trace metadata you can easily inspect.  
+Footnote is an AI assistant that tries to show its work — it returns trace metadata you can easily inspect.
 
 Every response includes:
 
@@ -59,17 +59,41 @@ INCIDENT_PSEUDONYMIZATION_SECRET=...
 
 > OpenAI is currently the only LLM provider—Broader model/provider support is planned.
 
-3. Start the backend and web app
+3. Start all services (backend/web/Discord bot)
 
 ```bash
-pnpm dev
+pnpm start:all
 ```
 
-4. Optionally, in another terminal, start the Discord bot
+## Vendoring and Multiple Discord Bots
 
-```bash
-pnpm dev:bot
+We treat `Footnote` as the default Discord persona. If you do nothing beyond the base setup, the bot runs with this identity.
+
+If you want a vendored bot identity on top of the same backend, configure the bot runtime with profile env vars:
+
+```env
+BOT_PROFILE_ID=acme-bot
+BOT_PROFILE_DISPLAY_NAME="Acme Assistant"
+BOT_PROFILE_PROMPT_OVERLAY=
+BOT_PROFILE_PROMPT_OVERLAY_PATH=
+BOT_PROFILE_MENTION_ALIASES=
 ```
+
+If you omit these values, the runtime falls back to the default Footnote identity.
+
+Recommended vendoring workflow:
+
+1. Set a unique `BOT_PROFILE_ID` for the bot machine.
+2. Set `BOT_PROFILE_DISPLAY_NAME` for the visible identity.
+3. Add either [1] `BOT_PROFILE_PROMPT_OVERLAY` or [2] `BOT_PROFILE_PROMPT_OVERLAY_PATH` for persona-specific instructions (1 takes priority over 2).
+4. Add `BOT_PROFILE_MENTION_ALIASES` when the bot should respond to vendor-specific plaintext names.
+
+Base prompt ownership is now shared:
+
+1. Canonical Footnote base prompts live in `packages/prompts/src/defaults.yaml`.
+2. `PROMPT_CONFIG_PATH` overrides those same base prompts for both the backend and Discord bot runtime.
+3. Vendored bot identity changes should go in `BOT_PROFILE_*` overlay settings, not a forked base prompt file.
+4. Canonical precedence rules are documented in [`docs/architecture/prompt-resolution.md`](docs/architecture/prompt-resolution.md).
 
 ---
 

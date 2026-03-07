@@ -27,6 +27,9 @@ packages/contracts/dist
 # Config-spec build artifacts
 packages/config-spec/dist/
 
+# Shared prompts build artifacts
+packages/prompts/dist/
+
 # Backend build artifacts
 packages/backend/dist/
 

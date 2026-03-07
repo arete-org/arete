@@ -39,7 +39,7 @@ I wanted a name that describes a behavior. “Footnote” points to the idea tha
 
 Long term, more than a single bot, I want Footnote to be a _reusable approach_—patterns and tools for assistants that are easier to audit and steer.
 
-Currently, Footnote is focused on provenance and reviewability, with Ari as the baseline configuration. Later, Footnote may support multiple profiles, with different rulesets and defaults.
+Currently, Footnote is focused on provenance and reviewability, with Footnote as the baseline configuration. Later, Footnote may support multiple profiles, with different rulesets and defaults.
 
 ## Where to go next
 

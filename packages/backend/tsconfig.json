@@ -10,7 +10,9 @@
             "@footnote/config-spec": ["../config-spec/dist/index.d.ts"],
             "@footnote/config-spec/*": ["../config-spec/dist/*"],
             "@footnote/contracts": ["../contracts/src/index.ts"],
-            "@footnote/contracts/*": ["../contracts/src/*"]
+            "@footnote/contracts/*": ["../contracts/src/*"],
+            "@footnote/prompts": ["../prompts/dist/index.d.ts"],
+            "@footnote/prompts/*": ["../prompts/dist/*"]
         },
         "types": ["node"],
         "noEmitOnError": true

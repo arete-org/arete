@@ -506,7 +506,7 @@ OPENAI_API_KEY=your_openai_api_key      # OpenAI API key (String, format: sk-...
                                         onClick={async () => {
                                             try {
                                                 const optionalEnv = `# Optional prompt configuration overrides
-PROMPT_CONFIG_PATH=path/to/prompts.yaml
+PROMPT_CONFIG_PATH=path/to/prompts.yaml    # Shared base prompt override file for backend + Discord bot
 
 # Optional rate limiting overrides
 RATE_LIMIT_USER=true
@@ -582,7 +582,7 @@ WEB_BASE_URL=https://your-domain.com`;
                                                         'textarea'
                                                     );
                                                 textArea.value = `# Optional prompt configuration overrides
-PROMPT_CONFIG_PATH=path/to/prompts.yaml
+PROMPT_CONFIG_PATH=path/to/prompts.yaml    # Shared base prompt override file for backend + Discord bot
 
 # Optional rate limiting overrides
 RATE_LIMIT_USER=true
@@ -733,7 +733,7 @@ WEB_BASE_URL=https://your-domain.com`;
                                 }}
                             >
                                 {`# Optional prompt configuration overrides
-PROMPT_CONFIG_PATH=path/to/prompts.yaml    # Custom prompt config file (String)
+PROMPT_CONFIG_PATH=path/to/prompts.yaml    # Shared base prompt override file for backend + Discord bot (String)
 
 # Optional rate limiting overrides
 RATE_LIMIT_USER=true                       # Enable user-level rate limiting (Boolean)

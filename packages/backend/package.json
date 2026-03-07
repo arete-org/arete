@@ -4,22 +4,21 @@
     "type": "module",
     "main": "dist/server.js",
     "scripts": {
-        "build": "pnpm --dir ../.. --filter @footnote/config-spec run build && tsc -p tsconfig.json && node -e \"const fs=require('node:fs'); fs.mkdirSync('dist/services/prompts',{recursive:true}); fs.copyFileSync('src/services/prompts/defaults.yaml','dist/services/prompts/defaults.yaml');\""
+        "build": "pnpm --dir ../.. --filter @footnote/config-spec run build && pnpm --dir ../.. --filter @footnote/prompts run build && tsc -p tsconfig.json"
     },
     "dependencies": {
         "@footnote/config-spec": "workspace:*",
         "@footnote/contracts": "workspace:*",
+        "@footnote/prompts": "workspace:*",
         "@resvg/resvg-js": "catalog:",
         "better-sqlite3": "catalog:",
         "dotenv": "catalog:",
-        "js-yaml": "catalog:",
         "winston-daily-rotate-file": "catalog:",
         "zod": "catalog:",
         "winston": "catalog:"
     },
     "devDependencies": {
         "@types/better-sqlite3": "catalog:",
-        "@types/js-yaml": "catalog:",
         "@types/node": "catalog:",
         "typescript": "catalog:"
     }

@@ -13,7 +13,6 @@ import type {
 import { renderPrompt } from './prompts/promptRegistry.js';
 import {
     createReflectService,
-    REFLECT_SYSTEM_PROMPT,
     type CreateReflectServiceOptions,
 } from './reflectService.js';
 import { createReflectPlanner, type ReflectPlan } from './reflectPlanner.js';
@@ -75,7 +74,7 @@ const buildSurfaceSystemPrompt = (
 ): string =>
     surface === 'discord'
         ? renderPrompt('discord.chat.system').content
-        : REFLECT_SYSTEM_PROMPT;
+        : renderPrompt('reflect.chat.system').content;
 
 /**
  * The orchestrator keeps surface-specific policy in one place while reusing the

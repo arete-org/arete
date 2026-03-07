@@ -242,16 +242,92 @@ export const envEntries = [
 
     defineEnv({
         key: "PROMPT_CONFIG_PATH",
+        owner: "shared",
+        stage: "bootstrap",
+        section: "prompts",
+        required: false,
+        secret: false,
+        kind: "string",
+        description: "Optional path to a YAML file with shared prompt overrides for backend and Discord runtimes.",
+        defaultValue: noDefault(),
+        usedBy: [
+            "packages/backend/src/config.ts",
+            "packages/discord-bot/src/config.ts",
+        ],
+    }),
+
+    defineEnv({
+        key: "BOT_PROFILE_ID",
         owner: "discord-bot",
         stage: "bootstrap",
         section: "prompts",
         required: false,
         secret: false,
         kind: "string",
-        description: "Optional path to a YAML file with prompt overrides.",
+        description: "Stable profile identifier for the bot runtime persona overlay.",
+        defaultValue: literal("footnote"),
+        usedBy: [
+            "packages/discord-bot/src/config/profile.ts",
+        ],
+    }),
+
+    defineEnv({
+        key: "BOT_PROFILE_DISPLAY_NAME",
+        owner: "discord-bot",
+        stage: "bootstrap",
+        section: "prompts",
+        required: false,
+        secret: false,
+        kind: "string",
+        description: "Human-readable profile name for bot runtime persona overlay.",
+        defaultValue: literal("Footnote"),
+        usedBy: [
+            "packages/discord-bot/src/config/profile.ts",
+        ],
+    }),
+
+    defineEnv({
+        key: "BOT_PROFILE_PROMPT_OVERLAY",
+        owner: "discord-bot",
+        stage: "bootstrap",
+        section: "prompts",
+        required: false,
+        secret: true,
+        kind: "string",
+        description: "Optional inline prompt overlay text for bot profile behavior.",
         defaultValue: noDefault(),
         usedBy: [
-            "packages/discord-bot/src/config.ts",
+            "packages/discord-bot/src/config/profile.ts",
+        ],
+    }),
+
+    defineEnv({
+        key: "BOT_PROFILE_PROMPT_OVERLAY_PATH",
+        owner: "discord-bot",
+        stage: "bootstrap",
+        section: "prompts",
+        required: false,
+        secret: false,
+        kind: "string",
+        description: "Optional path to a text file containing bot profile prompt overlay instructions.",
+        defaultValue: noDefault(),
+        usedBy: [
+            "packages/discord-bot/src/config/profile.ts",
+        ],
+    }),
+
+    defineEnv({
+        key: "BOT_PROFILE_MENTION_ALIASES",
+        owner: "discord-bot",
+        stage: "bootstrap",
+        section: "prompts",
+        required: false,
+        secret: false,
+        kind: "csv",
+        description: "Optional comma-separated plain-text aliases that count as mentions for this bot profile.",
+        defaultValue: noDefault(),
+        usedBy: [
+            "packages/discord-bot/src/config/profile.ts",
         ],
     }),
 
@@ -460,24 +536,6 @@ export const envEntries = [
         kind: "csv",
         description: "Comma-separated thread IDs allowed when thread replies are restricted.",
         defaultValue: literal([]),
-        usedBy: [
-            "packages/discord-bot/src/config.ts",
-        ],
-    }),
-
-    defineEnv({
-        key: "BOT_MENTION_NAMES",
-        owner: "discord-bot",
-        stage: "runtime",
-        section: "engagement",
-        required: false,
-        secret: false,
-        kind: "csv",
-        description: "Names that count as plain-text bot mentions.",
-        defaultValue: literal([
-            "footnote",
-            "ari",
-        ]),
         usedBy: [
             "packages/discord-bot/src/config.ts",
         ],

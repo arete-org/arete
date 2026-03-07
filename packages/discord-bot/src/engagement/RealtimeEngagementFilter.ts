@@ -9,6 +9,10 @@
 import { Message } from 'discord.js';
 import { logger } from '../utils/logger.js';
 import { runtimeConfig } from '../config.js';
+import {
+    containsPlaintextBotAlias,
+    resolveBotMentionAliases,
+} from '../utils/mentionAliases.js';
 import type { OpenAIService } from '../utils/openaiService.js';
 import type { ChannelMetrics } from '../state/ChannelContextManager.js';
 import type { CostStatistics } from '../utils/pricing.js';
@@ -246,7 +250,7 @@ export class RealtimeEngagementFilter {
      * How it works:
      * - If the message is a direct mention or reply to the bot, the score is 1.0.
      * - If the message is not a direct mention or reply to the bot, the score is 0.0.
-     * - If the message includes the bot's plaintext username or configured mention names, the score is 0.9.
+     * - If the message includes the bot's plaintext username or resolved profile aliases, the score is 0.9.
      * @param {EngagementContext} context - The context for the engagement decision
      * @returns {number} The score for the mention
      */
@@ -299,27 +303,19 @@ export class RealtimeEngagementFilter {
             }
         }
 
-        // Check for plaintext bot username and configurable mention names
-        const messageContent = message.content.toLowerCase(); // Convert message content to lowercase for case-insensitive comparison
-        const botNames = [
-            botUsername.toLowerCase(),
-            ...runtimeConfig.botMentionNames.map((name) =>
-                name.toLowerCase()
-            ),
-        ]
-            .filter((name) => name.length > 0)
-            .filter((name, index, self) => self.indexOf(name) === index); // remove duplicates: users might enter varied casing of the same name, but we normalize to lowercase
-
-        for (const name of botNames) {
-            if (messageContent.includes(name)) {
+        const aliases = resolveBotMentionAliases(
+            runtimeConfig.profile,
+            botUsername
+        );
+        for (const alias of aliases) {
+            if (containsPlaintextBotAlias(message.content ?? '', [alias])) {
                 engagementLogger.debug(
-                    'Plaintext username/nickname mention detected',
+                    'Plaintext mention alias detected',
                     {
                         channelId: context.channelKey,
-                        detectedName: name,
-                        botUsername,
-                        configuredNames: runtimeConfig.botMentionNames,
-                        messageContent: message.content,
+                        profileId: runtimeConfig.profile.id,
+                        matchedAlias: alias,
+                        aliasCount: aliases.length,
                     }
                 );
                 return 0.9;
