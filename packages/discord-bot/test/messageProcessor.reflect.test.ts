@@ -14,6 +14,8 @@ import type {
     PostTraceCardRequest,
 } from '@footnote/contracts/web';
 import { botApi } from '../src/api/botApi.js';
+import { runtimeConfig } from '../src/config.js';
+import type { BotProfileConfig } from '../src/config/profile.js';
 import { logger } from '../src/utils/logger.js';
 import { MessageProcessor } from '../src/utils/MessageProcessor.js';
 import { ResponseHandler } from '../src/utils/response/ResponseHandler.js';
@@ -50,6 +52,35 @@ const createMessage = () =>
         channel: {
             id: 'channel-1',
         },
+    }) as never;
+
+const createReflectBuildMessage = () =>
+    ({
+        id: 'message-1',
+        content: 'What changed in the repo?',
+        author: {
+            id: 'user-1',
+            username: 'Jordan',
+        },
+        channelId: 'channel-1',
+        guildId: 'guild-1',
+        attachments: {
+            filter: () => ({
+                size: 0,
+                map: () => [],
+            }),
+        },
+        mentions: {
+            users: {
+                has: () => false,
+            },
+        },
+        client: {
+            user: {
+                id: 'bot-1',
+            },
+        },
+        channel: {},
     }) as never;
 
 type ProcessorPrivateAccess = {
@@ -537,4 +568,120 @@ test('processMessage replies with a red code-block error when backend reflect re
         sentMessages[0],
         /Timed out while waiting for backend reflect response/i
     );
+});
+
+test('buildReflectRequestFromMessage prepends one profile overlay system message when configured', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const originalProfile = runtimeConfig.profile;
+    const profileMutable = runtimeConfig as unknown as {
+        profile: BotProfileConfig;
+    };
+    profileMutable.profile = {
+        id: 'ari-vendor',
+        displayName: 'Ari',
+        promptOverlay: {
+            source: 'inline',
+            text: 'Speak as Ari when this runtime is configured for that vendor.',
+            path: null,
+            length: 61,
+        },
+    };
+    (processor as unknown as {
+        contextBuilder: {
+            buildMessageContext: (
+                message: unknown,
+                maxMessages: number
+            ) => Promise<{
+                context: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+            }>;
+        };
+    }).contextBuilder = {
+        buildMessageContext: async () => ({
+            context: [
+                { role: 'system', content: 'Base prompt.' },
+                { role: 'user', content: 'Jordan said: "What changed?"' },
+            ],
+        }),
+    };
+
+    try {
+        const built = await processorAccess.buildReflectRequestFromMessage(
+            createReflectBuildMessage(),
+            ''
+        );
+
+        if (!built) {
+            throw new Error('Expected reflect request to be built');
+        }
+
+        assert.equal(built.request.conversation[0].role, 'system');
+        assert.match(
+            built.request.conversation[0].content,
+            /BEGIN Bot Profile Overlay/
+        );
+        assert.match(
+            built.request.conversation[0].content,
+            /Profile ID: ari-vendor/
+        );
+        assert.equal(built.request.conversation[1].role, 'user');
+    } finally {
+        profileMutable.profile = originalProfile;
+    }
+});
+
+test('buildReflectRequestFromMessage leaves conversation unchanged when no profile overlay exists', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const originalProfile = runtimeConfig.profile;
+    const profileMutable = runtimeConfig as unknown as {
+        profile: BotProfileConfig;
+    };
+    profileMutable.profile = {
+        id: 'footnote',
+        displayName: 'Footnote',
+        promptOverlay: {
+            source: 'none',
+            text: null,
+            path: null,
+            length: 0,
+        },
+    };
+    (processor as unknown as {
+        contextBuilder: {
+            buildMessageContext: (
+                message: unknown,
+                maxMessages: number
+            ) => Promise<{
+                context: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+            }>;
+        };
+    }).contextBuilder = {
+        buildMessageContext: async () => ({
+            context: [
+                { role: 'system', content: 'Base prompt.' },
+                { role: 'user', content: 'Jordan said: "What changed?"' },
+            ],
+        }),
+    };
+
+    try {
+        const built = await processorAccess.buildReflectRequestFromMessage(
+            createReflectBuildMessage(),
+            ''
+        );
+
+        if (!built) {
+            throw new Error('Expected reflect request to be built');
+        }
+
+        assert.equal(built.request.conversation.length, 1);
+        assert.equal(built.request.conversation[0].role, 'user');
+        assert.doesNotMatch(
+            built.request.conversation[0].content,
+            /BEGIN Bot Profile Overlay/
+        );
+    } finally {
+        profileMutable.profile = originalProfile;
+    }
 });

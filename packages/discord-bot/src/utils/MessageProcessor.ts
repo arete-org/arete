@@ -24,6 +24,7 @@ import { logger } from './logger.js';
 import { ResponseHandler } from './response/ResponseHandler.js';
 import { RateLimiter } from './RateLimiter.js';
 import { runtimeConfig } from '../config.js';
+import { buildProfileOverlaySystemMessage } from '../config/profilePromptOverlay.js';
 import { ContextBuilder } from './prompting/ContextBuilder.js';
 import {
     DEFAULT_IMAGE_MODEL,
@@ -481,6 +482,24 @@ export class MessageProcessor {
             role: entry.role === 'developer' ? 'system' : entry.role,
             content: entry.content,
         }));
+        const profileOverlayMessage = buildProfileOverlaySystemMessage(
+            runtimeConfig.profile,
+            'reflect'
+        );
+        if (profileOverlayMessage) {
+            conversation.unshift({
+                role: 'system',
+                content: profileOverlayMessage,
+            });
+            logger.debug(
+                `Injected profile overlay into reflect request for message ${message.id}.`,
+                {
+                    profileId: runtimeConfig.profile.id,
+                    overlaySource: runtimeConfig.profile.promptOverlay.source,
+                    overlayLength: runtimeConfig.profile.promptOverlay.length,
+                }
+            );
+        }
         if (conversation.length === 0) {
             return null;
         }
