@@ -4,7 +4,7 @@
 [![Hippocratic License HL3-CORE](https://img.shields.io/static/v1?label=Hippocratic%20License&message=HL3-CORE&labelColor=5e2751&color=bc8c3d)](https://firstdonoharm.dev/version/3/0/core.html)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/footnote-ai/footnote)
 
-Footnote is an AI assistant that tries to show its work — it returns trace metadata you can easily inspect.  
+Footnote is an AI assistant that tries to show its work — it returns trace metadata you can easily inspect.
 
 Every response includes:
 
@@ -59,21 +59,15 @@ INCIDENT_PSEUDONYMIZATION_SECRET=...
 
 > OpenAI is currently the only LLM provider—Broader model/provider support is planned.
 
-3. Start the backend and web app
+3. Start all services (backend/web/Discord bot)
 
 ```bash
-pnpm dev
-```
-
-4. Optionally, in another terminal, start the Discord bot
-
-```bash
-pnpm dev:bot
+pnpm start:all
 ```
 
 ## Vendoring and Multiple Discord Bots
 
-Footnote now treats `Footnote` as the default Discord persona. If you do nothing beyond the base setup, the bot runs with the default Footnote identity and shared backend behavior.
+We treat `Footnote` as the default Discord persona. If you do nothing beyond the base setup, the bot runs with this identity.
 
 If you want a vendored bot identity on top of the same backend, configure the bot runtime with profile env vars:
 
@@ -87,18 +81,10 @@ BOT_PROFILE_MENTION_ALIASES=
 
 Recommended vendoring workflow:
 
-1. Start from the default Footnote base persona.
-2. Set a unique `BOT_PROFILE_ID` for the bot machine.
-3. Set `BOT_PROFILE_DISPLAY_NAME` for the visible/runtime identity.
-4. Add either `BOT_PROFILE_PROMPT_OVERLAY` or `BOT_PROFILE_PROMPT_OVERLAY_PATH` for persona-specific instructions.
-5. Add `BOT_PROFILE_MENTION_ALIASES` when the bot should respond to vendor-specific plaintext names.
-6. Run each Discord bot machine with its own env file while pointing them at the same backend.
-
-Notes:
-
-- Overlay precedence is `BOT_PROFILE_PROMPT_OVERLAY` over `BOT_PROFILE_PROMPT_OVERLAY_PATH`.
-- Missing or invalid profile overrides fail open to the default Footnote persona.
-- Prompt overlays are instance-scoped to the Discord bot runtime; backend contracts stay shared.
+1. Set a unique `BOT_PROFILE_ID` for the bot machine.
+2. Set `BOT_PROFILE_DISPLAY_NAME` for the visible identity.
+3. Add either [1] `BOT_PROFILE_PROMPT_OVERLAY` or [2] `BOT_PROFILE_PROMPT_OVERLAY_PATH` for persona-specific instructions (1 takes priority over 2).
+4. Add `BOT_PROFILE_MENTION_ALIASES` when the bot should respond to vendor-specific plaintext names.
 
 ---
 
