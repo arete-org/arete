@@ -29,6 +29,10 @@ type PromptRegistryLogger = NonNullable<CreatePromptRegistryOptions['logger']>;
 type PromptRegistryLoggerMethod = NonNullable<PromptRegistryLogger['info']>;
 type PromptRegistryLogMeta = Parameters<PromptRegistryLoggerMethod>[1];
 
+/**
+ * Removes undefined-valued variables so backend defaults are not accidentally erased.
+ * If callers pass `undefined`, the default backend variables still apply.
+ */
 const removeUndefinedPromptVariables = (
     variables: PromptVariables
 ): PromptVariables => {
@@ -56,6 +60,10 @@ const promptRegistryLogger: NonNullable<CreatePromptRegistryOptions['logger']> =
 export const createBackendPromptRegistry = (
     options: Partial<CreatePromptRegistryOptions> = {}
 ): PromptRegistry => {
+    // Backend prompt resolution order:
+    // 1) shared defaults.yaml
+    // 2) optional PROMPT_CONFIG_PATH-style key overrides
+    // 3) variable interpolation (with backend defaults filled below)
     const registry = createPromptRegistry({
         overridePath:
             options.overridePath ??

@@ -8,5 +8,12 @@
 
 import './config/bootstrap.js';
 
-export { promptRegistry, renderPrompt } from './config/prompts.js';
+export {
+    promptRegistry,
+    renderPrompt,
+    renderPromptWithProfileOverlay,
+    prependProfileOverlaySystemMessage,
+    type PromptConversationMessage,
+    type PromptConversationOverlayResult,
+} from './config/prompts.js';
 export { runtimeConfig } from './config/runtime.js';

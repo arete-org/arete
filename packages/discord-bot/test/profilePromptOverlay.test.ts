@@ -8,12 +8,17 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createPromptRegistry } from '@footnote/prompts';
 
 import {
     buildProfileOverlaySystemMessage,
     composePromptWithProfileOverlay,
     type ProfilePromptOverlayUsage,
 } from '../src/config/profilePromptOverlay.js';
+import {
+    prependProfileOverlaySystemMessageToConversation,
+    renderPromptWithAppendedProfileOverlay,
+} from '../src/config/promptComposition.js';
 import type { BotProfileConfig } from '../src/config/profile.js';
 
 const createProfile = (
@@ -123,4 +128,34 @@ test('composePromptWithProfileOverlay is deterministic for file-based overlays',
     assert.equal(first, second);
     assert.match(first, /Overlay Source: file/);
     assert.match(first, /Usage Context: provenance/);
+});
+
+test('renderPromptWithAppendedProfileOverlay appends one overlay block to rendered text', () => {
+    const registry = createPromptRegistry();
+    const prompt = renderPromptWithAppendedProfileOverlay({
+        registry,
+        profile: createProfile(),
+        key: 'discord.image.system',
+        usage: 'image.system',
+        variables: {
+            botProfileDisplayName: 'Footnote',
+        },
+    });
+
+    assert.equal((prompt.match(/BEGIN Bot Profile Overlay/g) ?? []).length, 1);
+    assert.match(prompt, /You are Footnote/);
+    assert.match(prompt, /Usage Context: image\.system/);
+});
+
+test('prependProfileOverlaySystemMessageToConversation preserves reflect semantics', () => {
+    const result = prependProfileOverlaySystemMessageToConversation(
+        createProfile(),
+        'reflect',
+        [{ role: 'user', content: 'hello' }]
+    );
+
+    assert.equal(result.overlayAdded, true);
+    assert.equal(result.conversation[0].role, 'system');
+    assert.match(result.conversation[0].content, /BEGIN Bot Profile Overlay/);
+    assert.equal(result.conversation[1].content, 'hello');
 });

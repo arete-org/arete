@@ -59,3 +59,18 @@ test('backend prompt registry applies PROMPT_CONFIG_PATH-style overrides', () =>
         'Backend override prompt.'
     );
 });
+
+test('backend renderPrompt keeps default variables when explicit undefined values are passed', () => {
+    const registry = createBackendPromptRegistry({
+        overridePath: canonicalPromptCatalogPath,
+    });
+
+    const rendered = registry.renderPrompt('reflect.chat.system', {
+        botProfileDisplayName: undefined,
+    }).content;
+
+    assert.match(
+        rendered,
+        /You are Footnote, an AI assistant from the Footnote project\./
+    );
+});

@@ -23,8 +23,10 @@ import {
 import { logger } from './logger.js';
 import { ResponseHandler } from './response/ResponseHandler.js';
 import { RateLimiter } from './RateLimiter.js';
-import { runtimeConfig } from '../config.js';
-import { buildProfileOverlaySystemMessage } from '../config/profilePromptOverlay.js';
+import {
+    prependProfileOverlaySystemMessage,
+    runtimeConfig,
+} from '../config.js';
 import { ContextBuilder } from './prompting/ContextBuilder.js';
 import {
     DEFAULT_IMAGE_MODEL,
@@ -482,15 +484,11 @@ export class MessageProcessor {
             role: entry.role === 'developer' ? 'system' : entry.role,
             content: entry.content,
         }));
-        const profileOverlayMessage = buildProfileOverlaySystemMessage(
-            runtimeConfig.profile,
+        const overlayResult = prependProfileOverlaySystemMessage(
+            conversation,
             'reflect'
         );
-        if (profileOverlayMessage) {
-            conversation.unshift({
-                role: 'system',
-                content: profileOverlayMessage,
-            });
+        if (overlayResult.overlayAdded) {
             logger.debug(
                 `Injected profile overlay into reflect request for message ${message.id}.`,
                 {
@@ -500,7 +498,7 @@ export class MessageProcessor {
                 }
             );
         }
-        if (conversation.length === 0) {
+        if (overlayResult.conversation.length === 0) {
             return null;
         }
 
@@ -512,7 +510,7 @@ export class MessageProcessor {
                     messageId: message.id,
                 },
                 latestUserInput: message.content.trim(),
-                conversation,
+                conversation: overlayResult.conversation,
                 attachments: imageAttachments.map((attachment) => ({
                     kind: 'image' as const,
                     url: attachment.url,

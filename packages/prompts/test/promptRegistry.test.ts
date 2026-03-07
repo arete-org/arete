@@ -93,6 +93,83 @@ test('missing override files fail open to defaults', () => {
     }
 });
 
+test('invalid override entries are warned and skipped while valid entries still apply', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'footnote-prompts-'));
+    const overridePath = path.join(tempDir, 'override-invalid.yaml');
+    const warnings: Array<Record<string, unknown>> = [];
+    try {
+        fs.writeFileSync(
+            overridePath,
+            [
+                'discord:',
+                '  chat:',
+                '    system:',
+                '      template: 123',
+                '  image:',
+                '    system:',
+                '      template: |-',
+                '        Invalid cache override',
+                '      cache: not-an-object',
+                'reflect:',
+                '  chat:',
+                '    system:',
+                '      template: |-',
+                '        Reflect override prompt.',
+                'unknown:',
+                '  chat:',
+                '    system:',
+                '      template: |-',
+                '        Unknown key prompt.',
+            ].join('\n'),
+            'utf8'
+        );
+
+        const registry = createPromptRegistry({
+            overridePath,
+            logger: {
+                warn(message, meta) {
+                    warnings.push({ message, ...(meta ?? {}) });
+                },
+            },
+        });
+
+        assert.equal(
+            registry.renderPrompt('reflect.chat.system', {
+                botProfileDisplayName: 'Footnote',
+            }).content,
+            'Reflect override prompt.'
+        );
+        assert.match(
+            registry.renderPrompt('discord.chat.system', {
+                botProfileDisplayName: 'Footnote',
+            }).content,
+            /You are Footnote/
+        );
+        assert.match(
+            registry.renderPrompt('discord.image.system', {
+                botProfileDisplayName: 'Footnote',
+            }).content,
+            /You are Footnote/
+        );
+        assert.ok(
+            warnings.some(
+                (warning) =>
+                    String(warning.message) ===
+                    'Ignoring invalid prompt override entry.'
+            )
+        );
+        assert.ok(
+            warnings.some(
+                (warning) =>
+                    String(warning.message) ===
+                    'Ignoring unknown prompt override key.'
+            )
+        );
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
 test('unknown prompt keys throw a descriptive error', () => {
     const registry = createPromptRegistry();
 

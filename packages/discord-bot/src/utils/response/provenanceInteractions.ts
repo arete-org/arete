@@ -36,8 +36,7 @@ import {
     type OpenAIOptions,
     type SupportedModel,
 } from '../openaiService.js';
-import { renderPrompt, runtimeConfig } from '../../config.js';
-import { composePromptWithProfileOverlay } from '../../config/profilePromptOverlay.js';
+import { renderPromptWithProfileOverlay } from '../../config.js';
 import { Planner } from '../prompting/Planner.js';
 import { botApi } from '../../api/botApi.js';
 import { parseProvenanceActionCustomId } from './provenanceCgi.js';
@@ -675,9 +674,8 @@ export async function generateAlternativeLensMessage(
     lens: AlternativeLensPayload,
     openaiOptions?: OpenAIOptions
 ): Promise<string> {
-    const baseSystemPrompt = composePromptWithProfileOverlay(
-        renderPrompt('discord.chat.system').content,
-        runtimeConfig.profile,
+    const baseSystemPrompt = renderPromptWithProfileOverlay(
+        'discord.chat.system',
         'provenance'
     );
     const systemPromptLines = [
@@ -749,9 +747,8 @@ export async function requestProvenanceOpenAIOptions(
 ): Promise<OpenAIOptions | undefined> {
     try {
         const planner = new Planner(openaiService);
-        const baseSystemPrompt = composePromptWithProfileOverlay(
-            renderPrompt('discord.chat.system').content,
-            runtimeConfig.profile,
+        const baseSystemPrompt = renderPromptWithProfileOverlay(
+            'discord.chat.system',
             'provenance'
         );
 

@@ -26,6 +26,17 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const knownPromptKeys = new Set<PromptKey>(promptKeys);
 
 type PromptMap = Partial<Record<PromptKey, PromptDefinition>>;
+/**
+ * Validation mode used while loading prompt catalogs.
+ * - strict: throw on invalid prompt node shape (used for canonical defaults)
+ * - warn-and-skip: log and continue (used for operator override files)
+ */
+type PromptValidationMode = 'strict' | 'warn-and-skip';
+type PromptValidationContext = {
+    sourcePath: string;
+    mode: PromptValidationMode;
+    logger?: CreatePromptRegistryOptions['logger'];
+};
 
 const resolveRelativePath = (target: string): string =>
     path.resolve(currentDirectory, target);
@@ -63,12 +74,59 @@ const interpolateTemplate = (
 const isPromptKey = (value: string): value is PromptKey =>
     knownPromptKeys.has(value as PromptKey);
 
+/**
+ * Applies full-key replacement semantics for prompt definitions.
+ * Override keys replace entire prompt definitions, and keys not present in the
+ * override keep their default definitions.
+ */
+const mergePromptCatalog = (
+    baseCatalog: PromptMap,
+    overrideCatalog: PromptMap
+): PromptMap => {
+    const mergedCatalog: PromptMap = { ...baseCatalog };
+    for (const [key, definition] of Object.entries(
+        overrideCatalog
+    ) as Array<[PromptKey, PromptDefinition]>) {
+        mergedCatalog[key] = definition;
+    }
+    return mergedCatalog;
+};
+
+/**
+ * Emits validation issues according to the chosen mode.
+ * Strict mode throws for invalid data, while warn-and-skip mode logs and keeps
+ * loading so runtime behavior stays fail-open.
+ */
+const reportPromptValidationIssue = (
+    context: PromptValidationContext,
+    message: string,
+    meta: Record<string, unknown>
+): void => {
+    if (context.mode === 'strict') {
+        throw new Error(
+            `${message} (source: ${context.sourcePath}, key: ${String(meta.promptKey ?? 'unknown')}, reason: ${String(meta.reason ?? 'n/a')})`
+        );
+    }
+
+    context.logger?.warn?.(message, {
+        sourcePath: context.sourcePath,
+        ...meta,
+    });
+};
+
 class SharedPromptRegistry implements PromptRegistry {
     private readonly prompts: PromptMap;
 
     constructor(options: CreatePromptRegistryOptions = {}) {
-        const defaults = loadPromptFile(resolveBundledDefaultsPath(), false);
-        const merged: PromptMap = { ...defaults };
+        // Shared prompt resolution order:
+        // 1) bundled defaults
+        // 2) optional PROMPT_CONFIG_PATH-style overrides (full key replacement)
+        const defaults = loadPromptFile(resolveBundledDefaultsPath(), {
+            optional: false,
+            mode: 'strict',
+            logger: options.logger,
+        });
+        let merged = defaults;
 
         if (options.overridePath) {
             const resolvedOverridePath = resolveAbsolutePath(
@@ -85,8 +143,12 @@ class SharedPromptRegistry implements PromptRegistry {
                 return;
             }
             try {
-                const overrideData = loadPromptFile(resolvedOverridePath, true);
-                Object.assign(merged, overrideData);
+                const overrideData = loadPromptFile(resolvedOverridePath, {
+                    optional: true,
+                    mode: 'warn-and-skip',
+                    logger: options.logger,
+                });
+                merged = mergePromptCatalog(merged, overrideData);
             } catch (error) {
                 options.logger?.warn?.(
                     'Ignoring prompt override file due to load failure.',
@@ -138,13 +200,23 @@ class SharedPromptRegistry implements PromptRegistry {
     }
 }
 
-const loadPromptFile = (filePath: string, optional: boolean): PromptMap => {
+/**
+ * Loads one YAML prompt file and flattens it into PromptKey -> PromptDefinition entries.
+ */
+const loadPromptFile = (
+    filePath: string,
+    options: {
+        optional: boolean;
+        mode: PromptValidationMode;
+        logger?: CreatePromptRegistryOptions['logger'];
+    }
+): PromptMap => {
     const resolvedPath = path.isAbsolute(filePath)
         ? filePath
         : path.resolve(filePath);
 
     if (!fs.existsSync(resolvedPath)) {
-        if (optional) {
+        if (options.optional) {
             return {};
         }
         throw new Error(
@@ -160,39 +232,122 @@ const loadPromptFile = (filePath: string, optional: boolean): PromptMap => {
         );
     }
 
-    return flattenPromptTree(parsed as Record<string, unknown>);
+    return flattenPromptTree(
+        parsed as Record<string, unknown>,
+        {
+            sourcePath: resolvedPath,
+            mode: options.mode,
+            logger: options.logger,
+        }
+    );
 };
 
+/**
+ * Walks nested YAML prompt trees and extracts valid prompt definitions.
+ * Prompt-like nodes with invalid shape are rejected based on the active validation mode.
+ */
 const flattenPromptTree = (
     tree: Record<string, unknown>,
+    context: PromptValidationContext,
     prefix = ''
 ): PromptMap => {
-    const result: PromptMap = {};
+    let result: PromptMap = {};
 
     for (const [segment, value] of Object.entries(tree)) {
         const key = prefix ? `${prefix}.${segment}` : segment;
 
         if (value && typeof value === 'object' && !Array.isArray(value)) {
             const candidate = value as Record<string, unknown>;
-            const template = candidate.template ?? candidate.prompt;
+            // Nodes that declare template/prompt are treated as final prompt definitions.
+            // Everything else is traversed as a namespace subtree.
+            const hasPromptShape =
+                Object.prototype.hasOwnProperty.call(candidate, 'template') ||
+                Object.prototype.hasOwnProperty.call(candidate, 'prompt');
 
-            if (typeof template === 'string' && isPromptKey(key)) {
-                result[key] = {
-                    template,
-                    description:
-                        typeof candidate.description === 'string'
-                            ? candidate.description
-                            : undefined,
-                    cache:
-                        typeof candidate.cache === 'object' &&
-                        candidate.cache !== null
-                            ? (candidate.cache as PromptCachePolicy)
-                            : undefined,
-                };
+            if (hasPromptShape) {
+                const template = candidate.template ?? candidate.prompt;
+                if (typeof template !== 'string') {
+                    reportPromptValidationIssue(
+                        context,
+                        'Ignoring invalid prompt override entry.',
+                        {
+                            promptKey: key,
+                            reason: 'template or prompt must be a string',
+                            receivedType:
+                                template === null ? 'null' : typeof template,
+                        }
+                    );
+                    continue;
+                }
+
+                if (!isPromptKey(key)) {
+                    reportPromptValidationIssue(
+                        context,
+                        'Ignoring unknown prompt override key.',
+                        {
+                            promptKey: key,
+                            reason:
+                                'prompt key is not part of the canonical prompt catalog',
+                        }
+                    );
+                    continue;
+                }
+
+                const rawDescription = candidate.description;
+                if (
+                    rawDescription !== undefined &&
+                    typeof rawDescription !== 'string'
+                ) {
+                    reportPromptValidationIssue(
+                        context,
+                        'Ignoring invalid prompt override entry.',
+                        {
+                            promptKey: key,
+                            reason:
+                                'description must be a string when provided',
+                            receivedType:
+                                rawDescription === null
+                                    ? 'null'
+                                    : typeof rawDescription,
+                        }
+                    );
+                    continue;
+                }
+
+                const rawCache = candidate.cache;
+                if (
+                    rawCache !== undefined &&
+                    (typeof rawCache !== 'object' ||
+                        rawCache === null ||
+                        Array.isArray(rawCache))
+                ) {
+                    reportPromptValidationIssue(
+                        context,
+                        'Ignoring invalid prompt override entry.',
+                        {
+                            promptKey: key,
+                            reason: 'cache must be an object when provided',
+                            receivedType:
+                                rawCache === null ? 'null' : typeof rawCache,
+                        }
+                    );
+                    continue;
+                }
+
+                result = mergePromptCatalog(result, {
+                    [key]: {
+                        template,
+                        description: rawDescription,
+                        cache: rawCache as PromptCachePolicy | undefined,
+                    },
+                });
                 continue;
             }
 
-            Object.assign(result, flattenPromptTree(candidate, key));
+            result = mergePromptCatalog(
+                result,
+                flattenPromptTree(candidate, context, key)
+            );
         }
     }
 
