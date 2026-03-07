@@ -82,3 +82,14 @@ test('containsPlaintextBotAlias is case-insensitive and returns false for blank 
     assert.equal(containsPlaintextBotAlias('HEY FOOTNOTE', ['footnote']), true);
     assert.equal(containsPlaintextBotAlias('   ', ['footnote']), false);
 });
+
+test('resolveBotMentionAliases ignores overlong aliases for regex safety', () => {
+    const aliases = resolveBotMentionAliases(
+        createProfile({
+            displayName: 'Ari',
+            mentionAliases: ['a'.repeat(101), 'ari'],
+        })
+    );
+
+    assert.deepEqual(aliases, ['ari']);
+});

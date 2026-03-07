@@ -72,6 +72,47 @@ interface GenerationOutcome {
     annotations: AnnotationFields;
 }
 
+type RedactedResponseInputText = {
+    type: string;
+    text?: string;
+};
+
+const redactResponseInput = (
+    input: ResponseInput
+): Array<{
+    role?: string | null;
+    type?: string | null;
+    content?: RedactedResponseInputText[];
+}> =>
+    input.map((entry) => {
+        const candidate = entry as unknown as Record<string, unknown>;
+        const content = Array.isArray(candidate.content)
+            ? candidate.content.map((part) =>
+                      part && typeof part === 'object' && 'text' in part
+                          ? {
+                                ...part,
+                                text:
+                                    typeof part.text === 'string'
+                                        ? '[REDACTED_PROMPT_TEXT]'
+                                        : part.text,
+                            }
+                          : part
+                  )
+            : undefined;
+
+        return {
+            role:
+                typeof candidate.role === 'string' || candidate.role === null
+                    ? candidate.role
+                    : undefined,
+            type:
+                typeof candidate.type === 'string' || candidate.type === null
+                    ? candidate.type
+                    : undefined,
+            content,
+        };
+    });
+
 /**
  * Executes one image-generation request and returns the raw response plus the
  * normalized image payload and annotations.
@@ -100,7 +141,10 @@ export async function generateImageWithMetadata(
     } = options;
 
     const { content: imageSystemPromptBase } = renderPrompt(
-        'discord.image.system'
+        'discord.image.system',
+        {
+            botProfileDisplayName: runtimeConfig.profile.displayName,
+        }
     );
     const imageSystemPrompt = composePromptWithProfileOverlay(
         imageSystemPromptBase,
@@ -109,6 +153,18 @@ export async function generateImageWithMetadata(
     );
 
     const remainingPromptRatio = calculateRemainingRatio(prompt);
+
+    const developerPrompt = buildDeveloperPrompt({
+        allowPromptAdjustment,
+        size,
+        quality,
+        background,
+        style,
+        username,
+        nickname,
+        guildName,
+        remainingPromptRatio,
+    });
 
     const input: ResponseInput = [
         {
@@ -122,17 +178,7 @@ export async function generateImageWithMetadata(
             content: [
                 {
                     type: 'input_text',
-                    text: buildDeveloperPrompt({
-                        allowPromptAdjustment,
-                        size,
-                        quality,
-                        background,
-                        style,
-                        username,
-                        nickname,
-                        guildName,
-                        remainingPromptRatio,
-                    }),
+                    text: developerPrompt,
                 },
             ],
         },
@@ -163,7 +209,23 @@ export async function generateImageWithMetadata(
         previous_response_id: followUpResponseId ?? null,
     };
 
-    logger.debug(`Request payload: ${JSON.stringify(requestPayload, null, 2)}`);
+    logger.debug('Image generation request payload (redacted).', {
+        model: requestPayload.model,
+        previousResponseId: requestPayload.previous_response_id,
+        toolCount: requestPayload.tools?.length ?? 0,
+        inputMessageCount: input.length,
+        systemPromptLength: imageSystemPrompt.length,
+        developerPromptLength: developerPrompt.length,
+        userPromptLength: prompt.length,
+        size,
+        quality,
+        background,
+        style,
+        payload: {
+            ...requestPayload,
+            input: redactResponseInput(input),
+        },
+    });
 
     const shouldStream = Boolean(stream ?? onPartialImage);
     let response: Response;

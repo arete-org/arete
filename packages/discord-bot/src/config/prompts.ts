@@ -7,22 +7,17 @@
  */
 
 import {
-    PromptRegistry,
-    renderPrompt as sharedRenderPrompt,
-    setActivePromptRegistry,
     type PromptKey,
-} from '../utils/prompts/promptRegistry.js';
+    type PromptVariables,
+} from '@footnote/prompts';
 import { promptConfigPath } from './runtime.js';
+import { createDiscordPromptRegistry } from './promptRegistryFactory.js';
 
 /**
  * Active prompt registry for the Discord bot, including optional file-based
  * overrides.
  */
-export const promptRegistry = new PromptRegistry({
-    overridePath: promptConfigPath,
-});
-
-setActivePromptRegistry(promptRegistry);
+export const promptRegistry = createDiscordPromptRegistry(promptConfigPath);
 
 const REQUIRED_PROMPT_KEYS: PromptKey[] = [
     'discord.chat.system',
@@ -40,4 +35,7 @@ promptRegistry.assertKeys(REQUIRED_PROMPT_KEYS);
 /**
  * Shared prompt render helper bound to the active Discord prompt registry.
  */
-export const renderPrompt = sharedRenderPrompt;
+export const renderPrompt = (
+    key: PromptKey,
+    variables: PromptVariables = {}
+) => promptRegistry.renderPrompt(key, variables);

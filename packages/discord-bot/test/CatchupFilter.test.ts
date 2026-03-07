@@ -19,8 +19,6 @@ interface CatchupMessageLike {
     content: string;
 }
 
-const originalProfile = runtimeConfig.profile;
-
 const withProfile = async (
     profile: BotProfileConfig,
     fn: () => Promise<void> | void
@@ -28,12 +26,13 @@ const withProfile = async (
     const mutableRuntimeConfig = runtimeConfig as unknown as {
         profile: BotProfileConfig;
     };
+    const previousProfile = mutableRuntimeConfig.profile;
     mutableRuntimeConfig.profile = profile;
 
     try {
         await fn();
     } finally {
-        mutableRuntimeConfig.profile = originalProfile;
+        mutableRuntimeConfig.profile = previousProfile;
     }
 };
 

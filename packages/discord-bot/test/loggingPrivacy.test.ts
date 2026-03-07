@@ -17,6 +17,7 @@ import {
 } from '../src/utils/openaiService.js';
 import { runtimeConfig } from '../src/config.js';
 import type { BotProfileConfig } from '../src/config/profile.js';
+import { generateImageWithMetadata } from '../src/commands/image/openai.js';
 import { logger, sanitizeLogData } from '../src/utils/logger.js';
 import { MessageProcessor } from '../src/utils/MessageProcessor.js';
 import { logContextIfVerbose } from '../src/utils/prompting/ContextBuilder.js';
@@ -361,6 +362,102 @@ test('reflect overlay injection logs profile metadata without raw overlay body',
     assert.ok(
         flattened.includes('ari-vendor'),
         'Profile metadata should still be present in debug logs'
+    );
+});
+
+test('image generation logging redacts prompt and overlay text from request payload logs', async () => {
+    const originalDebug = logger.debug;
+    const originalProfile = runtimeConfig.profile;
+    const mutableRuntimeConfig = runtimeConfig as unknown as {
+        profile: BotProfileConfig;
+    };
+    const debugCalls: unknown[][] = [];
+
+    mutableRuntimeConfig.profile = {
+        id: 'ari-vendor',
+        displayName: 'Ari',
+        mentionAliases: ['ari'],
+        promptOverlay: {
+            source: 'inline',
+            text: 'secret vendor overlay text',
+            path: null,
+            length: 26,
+        },
+    };
+    logger.debug = ((...args: unknown[]) => {
+        debugCalls.push(args);
+        return logger;
+    }) as typeof logger.debug;
+
+    try {
+        await generateImageWithMetadata({
+            openai: {
+                responses: {
+                    create: async (_payload: unknown) => ({
+                        error: null,
+                        output: [
+                            {
+                                type: 'image_generation_call',
+                                id: 'img_123',
+                                status: 'completed',
+                                result: 'base64-image',
+                            },
+                            {
+                                type: 'message',
+                                content: [
+                                    {
+                                        type: 'output_text',
+                                        text: '{"title":"t","description":"d","reflection":"n","adjusted_prompt":"p"}',
+                                    },
+                                ],
+                            },
+                        ],
+                    }),
+                },
+            } as never,
+            prompt: 'A quiet library at dusk',
+            textModel: 'gpt-4.1-mini',
+            imageModel: 'gpt-image-1-mini',
+            quality: 'low',
+            size: '1024x1024',
+            background: 'auto',
+            style: 'natural',
+            username: 'Jordan',
+            nickname: 'J',
+            guildName: 'Footnote Lab',
+            allowPromptAdjustment: false,
+            outputFormat: 'png',
+            outputCompression: 100,
+            stream: false,
+        });
+    } finally {
+        logger.debug = originalDebug;
+        mutableRuntimeConfig.profile = originalProfile;
+    }
+
+    const payloadLog = debugCalls.find(
+        ([firstArg]) =>
+            typeof firstArg === 'string' &&
+            firstArg.includes('Image generation request payload')
+    );
+
+    assert.ok(payloadLog, 'Expected redacted image payload debug log');
+
+    const flattened = payloadLog
+        .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+        .join(' ');
+
+    assert.ok(
+        !flattened.includes('secret vendor overlay text'),
+        'Overlay text should not appear in image payload logs'
+    );
+    assert.ok(
+        !flattened.includes('A quiet library at dusk'),
+        'User prompt text should not appear in image payload logs'
+    );
+    assert.ok(
+        flattened.includes('[REDACTED_PROMPT_TEXT]'),
+        'Prompt text should be replaced with a redaction token'
     );
 });
 

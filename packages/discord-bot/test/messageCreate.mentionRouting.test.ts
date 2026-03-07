@@ -13,8 +13,6 @@ import { runtimeConfig } from '../src/config.js';
 import type { BotProfileConfig } from '../src/config/profile.js';
 import { MessageCreate } from '../src/events/MessageCreate.js';
 
-const originalProfile = runtimeConfig.profile;
-
 const withProfile = async (
     profile: BotProfileConfig,
     fn: () => Promise<void> | void
@@ -22,12 +20,13 @@ const withProfile = async (
     const mutableRuntimeConfig = runtimeConfig as unknown as {
         profile: BotProfileConfig;
     };
+    const previousProfile = mutableRuntimeConfig.profile;
     mutableRuntimeConfig.profile = profile;
 
     try {
         await fn();
     } finally {
-        mutableRuntimeConfig.profile = originalProfile;
+        mutableRuntimeConfig.profile = previousProfile;
     }
 };
 
@@ -98,7 +97,7 @@ const createMessage = (
         ...overrides,
     }) as never;
 
-test('execute routes vendored plaintext aliases through the lower catchup threshold', async () => {
+test('execute treats vendored plaintext aliases as direct invocations', async () => {
     await withProfile(
         createProfile({
             id: 'ari-vendor',
@@ -134,6 +133,7 @@ test('execute routes vendored plaintext aliases through the lower catchup thresh
                 directReply: boolean;
                 trigger: string;
             }> = [];
+            let catchupFilterCalls = 0;
 
             eventAccess.realtimeFilter = null;
             eventAccess.contextManager = null;
@@ -141,10 +141,13 @@ test('execute routes vendored plaintext aliases through the lower catchup thresh
                 count: runtimeConfig.catchUp.ifMentionedAfterMessages - 1,
                 lastUpdated: Date.now(),
             });
-            eventAccess.catchupFilter.shouldSkipPlanner = async () => ({
-                skip: false,
-                reason: 'allow',
-            });
+            eventAccess.catchupFilter.shouldSkipPlanner = async () => {
+                catchupFilterCalls += 1;
+                return {
+                    skip: false,
+                    reason: 'allow',
+                };
+            };
             eventAccess.messageProcessor.processMessage = async (
                 _message,
                 directReply,
@@ -156,8 +159,12 @@ test('execute routes vendored plaintext aliases through the lower catchup thresh
             await event.execute(createMessage('hey ari can you explain this?'));
 
             assert.equal(processCalls.length, 1);
-            assert.equal(processCalls[0]?.directReply, false);
-            assert.match(processCalls[0]?.trigger ?? '', /catching up/i);
+            assert.equal(processCalls[0]?.directReply, true);
+            assert.match(
+                processCalls[0]?.trigger ?? '',
+                /Mentioned by plaintext alias: ari/
+            );
+            assert.equal(catchupFilterCalls, 0);
         }
     );
 });

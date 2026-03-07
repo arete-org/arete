@@ -13,16 +13,16 @@
     "scripts": {
         "prestart": "pnpm build",
         "start": "node --es-module-specifier-resolution=node dist/index.js",
-        "predev": "pnpm --dir ../.. --filter @footnote/config-spec run build:dev",
+        "predev": "pnpm --dir ../.. --filter @footnote/config-spec run build:dev && pnpm --dir ../.. --filter @footnote/prompts run build:dev",
         "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
-        "build": "pnpm clean && tsc -b tsconfig.json && pnpm copy-prompt-assets",
+        "build": "pnpm clean && pnpm --dir ../.. --filter @footnote/config-spec run build && pnpm --dir ../.. --filter @footnote/prompts run build && tsc -b tsconfig.json",
         "clean": "rimraf dist",
-        "copy-prompt-assets": "node -e \"const fs=require('node:fs'); fs.mkdirSync('dist/src/utils/prompts',{recursive:true}); fs.copyFileSync('src/utils/prompts/defaults.yaml','dist/src/utils/prompts/defaults.yaml');\"",
         "watch": "tsc -b -w"
     },
     "dependencies": {
         "@footnote/config-spec": "workspace:*",
         "@footnote/contracts": "workspace:*",
+        "@footnote/prompts": "workspace:*",
         "@discordjs/voice": "catalog:",
         "@openai/agents": "catalog:",
         "@sapphire/shapeshift": "catalog:",
@@ -33,7 +33,6 @@
         "dotenv": "catalog:",
         "express": "catalog:",
         "flyio": "catalog:",
-        "js-yaml": "catalog:",
         "linkify-it": "^5.0.0",
         "mime-types": "catalog:",
         "node-fetch": "catalog:",

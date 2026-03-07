@@ -687,3 +687,36 @@ test('buildReflectRequestFromMessage leaves conversation unchanged when no profi
         profileMutable.profile = originalProfile;
     }
 });
+
+test('buildReflectRequestFromMessage marks plaintext alias triggers as invoked', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    (processor as unknown as {
+        contextBuilder: {
+            buildMessageContext: (
+                message: unknown,
+                maxMessages: number
+            ) => Promise<{
+                context: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+            }>;
+        };
+    }).contextBuilder = {
+        buildMessageContext: async () => ({
+            context: [
+                { role: 'system', content: 'Base prompt.' },
+                { role: 'user', content: 'Jordan said: "What changed?"' },
+            ],
+        }),
+    };
+
+    const built = await processorAccess.buildReflectRequestFromMessage(
+        createReflectBuildMessage(),
+        'Mentioned by plaintext alias: ari'
+    );
+
+    if (!built) {
+        throw new Error('Expected reflect request to be built');
+    }
+
+    assert.equal(built.request.trigger.kind, 'invoked');
+});

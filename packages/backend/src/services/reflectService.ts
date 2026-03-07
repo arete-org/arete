@@ -26,6 +26,7 @@ import {
 } from './llmCostRecorder.js';
 import { buildRepoExplainerResponseHint } from './reflectGenerationHints.js';
 import type { ReflectGenerationPlan } from './reflectGenerationTypes.js';
+import { renderPrompt } from './prompts/promptRegistry.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -61,40 +62,6 @@ export type RunReflectMessagesInput = {
     model?: string;
     generation?: ReflectGenerationPlan;
 };
-
-// The reflect prompt stays in backend so every caller gets the same behavior and metadata rules.
-const REFLECT_SYSTEM_PROMPT = `You are Footnote, an AI assistant from the Footnote project. You help people think through tough questions while staying honest and fair. You explore multiple ethical perspectives, trace your sources, and show how you reach your conclusions. Be helpful, thoughtful, and transparent in your responses.
-
-CITATION STYLE
-- Place citation links immediately after the specific clause or sentence they support.
-- Use numeric inline markdown links in the response text: [1](https://example.com/source), [2](https://example.com/source).
-- Reuse a citation number when referencing the same source again in the same response.
-
-RESPONSE METADATA PAYLOAD
-After your conversational reply, leave a blank line and append a single JSON object on its own line prefixed with <RESPONSE_METADATA>.
-This metadata records provenance and TRACE chips for downstream systems.
-
-Required fields:
-  - provenance: one of "Retrieved", "Inferred", or "Speculative"
-  - tradeoffCount: integer >= 0 capturing how many value tradeoffs you surfaced (use 0 if none)
-  - citations: array of {"title": string, "url": fully-qualified URL, "snippet"?: string} objects (use [] if none)
-
-Optional fields:
-  - evidenceScore: integer 1..5 when you can assess source support strength
-  - freshnessScore: integer 1..5 when you can assess recency reliability
-  - For inferred/speculative answers with limited source grounding, omitting evidenceScore/freshnessScore is expected
-  - If you performed web search or used retrieved external sources, include both evidenceScore and freshnessScore
-  - Do not emit strings for these scores; emit JSON integers only
-
-Example:
-<RESPONSE_METADATA>{"provenance":"Retrieved","tradeoffCount":1,"citations":[{"title":"Example","url":"https://example.com"}],"evidenceScore":4}
-
-Guidelines:
-  - Emit valid, minified JSON (no comments, no code fences, no trailing text)
-  - Always include the <RESPONSE_METADATA> block after every response
-  - Omit optional fields if you cannot assess them confidently
-  - Keep citations array order aligned with first appearance of inline citation markers ([1], [2], ...)
-  - Use "Inferred" for reasoning-based answers, "Retrieved" for fact-based, "Speculative" for uncertain answers`;
 
 /**
  * Builds the shared reflect workflow used by HTTP callers today and future
@@ -237,7 +204,10 @@ export const createReflectService = ({
         const messages: Array<
             Pick<ReflectConversationMessage, 'role' | 'content'>
         > = [
-            { role: 'system', content: REFLECT_SYSTEM_PROMPT },
+            {
+                role: 'system',
+                content: renderPrompt('reflect.chat.system').content,
+            },
             { role: 'user', content: question.trim() },
         ];
         const response = await runReflectMessages({
@@ -258,5 +228,3 @@ export const createReflectService = ({
         runReflectMessages,
     };
 };
-
-export { REFLECT_SYSTEM_PROMPT };

@@ -45,6 +45,9 @@ export const buildRuntimeSections = (
             isProduction: nodeEnv === 'production',
             isDevelopment: nodeEnv === 'development',
             flyAppName: parseOptionalTrimmedString(env.FLY_APP_NAME),
+            promptConfigPath: parseOptionalTrimmedString(
+                env.PROMPT_CONFIG_PATH
+            ),
         },
         server: {
             dataDir:

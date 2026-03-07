@@ -83,7 +83,6 @@ type BotConversationState = {
  * @property {MessageProcessor} messageProcessor - The message processor that handles the actual message processing logic
  * @property {CatchupFilter} catchupFilter - The heuristic filter to short-circuit unnecessary planner calls during catchup
  * @property {number} CATCHUP_AFTER_MESSAGES - The configurable catch-up threshold
- * @property {number} CATCHUP_IF_MENTIONED_AFTER_MESSAGES - The configurable catch-up threshold when mentioned in plaintext
  * @property {Map<string, { count: number; lastUpdated: number }>} channelMessageCounters - Tracks message counts per channel for catch-up logic
  * @property {number} STALE_COUNTER_TTL_MS - Configurable counter expiry
  * @property {boolean} ALLOW_THREAD_RESPONSES - Whether responding in threads is allowed
@@ -105,8 +104,6 @@ export class MessageCreate extends Event {
     private readonly catchupFilter: CatchupFilter;
     private readonly CATCHUP_AFTER_MESSAGES =
         runtimeConfig.catchUp.afterMessages;
-    private readonly CATCHUP_IF_MENTIONED_AFTER_MESSAGES =
-        runtimeConfig.catchUp.ifMentionedAfterMessages;
     private readonly channelMessageCounters = new Map<
         string,
         { count: number; lastUpdated: number }
@@ -297,9 +294,6 @@ export class MessageCreate extends Event {
                 this.getMatchedPlaintextMentionAlias(message);
             const reachedRegularCatchupThreshold =
                 messageCount >= this.CATCHUP_AFTER_MESSAGES;
-            const reachedPlaintextCatchupThreshold =
-                messageCount >= this.CATCHUP_IF_MENTIONED_AFTER_MESSAGES &&
-                matchedPlaintextAlias !== null;
 
             // Do not ignore if the message mentions the bot with @, or is a direct Discord reply
             // If the message is a direct mention of the bot, process it.
@@ -324,28 +318,27 @@ export class MessageCreate extends Event {
                     `Replied to with a direct reply`
                 );
             }
+            else if (matchedPlaintextAlias) {
+                messageLogger.debug(
+                    'Responding to plaintext alias invocation.',
+                    {
+                        channelId: channelKey,
+                        messageId: message.id,
+                        profileId: runtimeConfig.profile.id,
+                        matchedAlias: matchedPlaintextAlias,
+                    }
+                );
+                await this.messageProcessor.processMessage(
+                    message,
+                    true,
+                    `Mentioned by plaintext alias: ${matchedPlaintextAlias}`
+                );
+            }
             // Check engagement filter for all messages (if enabled), or use catchup threshold for legacy fallback
             else if (
                 this.realtimeFilter || // if realtime filter is enabled, check every message
-                reachedRegularCatchupThreshold || // if we are within the -regular- catchup threshold, catch up
-                reachedPlaintextCatchupThreshold // if we were mentioned by a plaintext alias, and are within the -mention- catchup threshold, catch up
+                reachedRegularCatchupThreshold // if we are within the -regular- catchup threshold, catch up
             ) {
-                if (reachedPlaintextCatchupThreshold && matchedPlaintextAlias) {
-                    messageLogger.debug(
-                        'Plaintext mention alias satisfied catchup threshold.',
-                        {
-                            channelId: channelKey,
-                            messageId: message.id,
-                            profileId: runtimeConfig.profile.id,
-                            matchedAlias: matchedPlaintextAlias,
-                            aliasCount: resolveBotMentionAliases(
-                                runtimeConfig.profile,
-                                message.client.user?.username
-                            ).length,
-                        }
-                    );
-                }
-
                 messageLogger.debug(
                     `Catching up in ${channelKey} to message ID ${message.id} from ${message.author.id} in channel ${message.channel.id} (${message.channel.type})`
                 );

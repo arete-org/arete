@@ -242,15 +242,16 @@ export const envEntries = [
 
     defineEnv({
         key: "PROMPT_CONFIG_PATH",
-        owner: "discord-bot",
+        owner: "shared",
         stage: "bootstrap",
         section: "prompts",
         required: false,
         secret: false,
         kind: "string",
-        description: "Optional path to a YAML file with prompt overrides.",
+        description: "Optional path to a YAML file with shared prompt overrides for backend and Discord runtimes.",
         defaultValue: noDefault(),
         usedBy: [
+            "packages/backend/src/config.ts",
             "packages/discord-bot/src/config.ts",
         ],
     }),

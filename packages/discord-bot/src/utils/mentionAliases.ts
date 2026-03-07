@@ -9,13 +9,21 @@
 import type { BotProfileConfig } from '../config/profile.js';
 
 const DEFAULT_FOOTNOTE_ALIAS = 'footnote';
+const MAX_PLAINTEXT_ALIAS_LENGTH = 100;
 
 const escapeRegExp = (value: string): string =>
     value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const normalizeMentionAlias = (value: string): string | null => {
     const normalized = value.trim().toLowerCase().replace(/\s+/g, ' ');
-    return normalized.length > 0 ? normalized : null;
+    if (
+        normalized.length === 0 ||
+        normalized.length > MAX_PLAINTEXT_ALIAS_LENGTH
+    ) {
+        return null;
+    }
+
+    return normalized;
 };
 
 const buildPlaintextAliasRegex = (alias: string): RegExp => {

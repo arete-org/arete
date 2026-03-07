@@ -508,7 +508,7 @@ export class MessageProcessor {
             request: {
                 surface: 'discord',
                 trigger: {
-                    kind: this.getReflectTriggerKind(message),
+                    kind: this.getReflectTriggerKind(message, trigger),
                     messageId: message.id,
                 },
                 latestUserInput: message.content.trim(),
@@ -533,13 +533,20 @@ export class MessageProcessor {
         };
     }
 
-    private getReflectTriggerKind(message: Message): ReflectTriggerKind {
+    private getReflectTriggerKind(
+        message: Message,
+        trigger?: string
+    ): ReflectTriggerKind {
         if (message.reference?.messageId) {
             return 'direct';
         }
 
         const botUserId = message.client.user?.id;
         if (botUserId && message.mentions.users.has(botUserId)) {
+            return 'invoked';
+        }
+
+        if (trigger?.startsWith('Mentioned by plaintext alias:')) {
             return 'invoked';
         }
 

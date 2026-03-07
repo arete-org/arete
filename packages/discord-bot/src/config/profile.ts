@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { envDefaultValues } from '@footnote/config-spec';
+import { bootstrapLogger } from '../utils/logger.js';
 
 /**
  * Overlay source selected for the active bot profile prompt behavior.
@@ -84,6 +85,10 @@ const DEFAULT_PROFILE_DISPLAY_NAME = readStringDefault(
     'BOT_PROFILE_DISPLAY_NAME',
     DEFAULT_PROFILE_DISPLAY_NAME_FALLBACK
 );
+const profileLogger =
+    typeof bootstrapLogger.child === 'function'
+        ? bootstrapLogger.child({ module: 'botProfileConfig' })
+        : bootstrapLogger;
 
 const normalizeOptionalEnvString = (
     value: string | undefined
@@ -252,7 +257,12 @@ export const readBotProfileConfig = (
     if (resolvedOverlayPath && !inlineOverlayText) {
         try {
             overlayFileText = readFile(resolvedOverlayPath);
-        } catch {
+        } catch (error) {
+            profileLogger.warn('Failed to load bot profile overlay file.', {
+                overlayPath: resolvedOverlayPath,
+                error:
+                    error instanceof Error ? error.message : String(error),
+            });
             overlayFileText = null;
         }
     }

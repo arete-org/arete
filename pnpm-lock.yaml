@@ -270,6 +270,9 @@ importers:
       '@footnote/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@footnote/prompts':
+        specifier: workspace:*
+        version: link:../prompts
       '@resvg/resvg-js':
         specifier: 'catalog:'
         version: 2.6.2
@@ -279,9 +282,6 @@ importers:
       dotenv:
         specifier: 'catalog:'
         version: 16.6.1
-      js-yaml:
-        specifier: 'catalog:'
-        version: 4.1.1
       winston:
         specifier: 'catalog:'
         version: 3.19.0
@@ -295,9 +295,6 @@ importers:
       '@types/better-sqlite3':
         specifier: 'catalog:'
         version: 7.6.13
-      '@types/js-yaml':
-        specifier: 'catalog:'
-        version: 4.0.9
       '@types/node':
         specifier: 'catalog:'
         version: 24.10.4
@@ -328,6 +325,9 @@ importers:
       '@footnote/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@footnote/prompts':
+        specifier: workspace:*
+        version: link:../prompts
       '@openai/agents':
         specifier: 'catalog:'
         version: 0.3.7(@cfworker/json-schema@4.1.1)(hono@4.11.3)(ws@8.18.3)(zod@4.0.17)
@@ -355,9 +355,6 @@ importers:
       flyio:
         specifier: 'catalog:'
         version: 0.6.14
-      js-yaml:
-        specifier: 'catalog:'
-        version: 4.1.1
       linkify-it:
         specifier: ^5.0.0
         version: 5.0.0
@@ -428,6 +425,22 @@ importers:
       tsx:
         specifier: 'catalog:'
         version: 4.21.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/prompts:
+    dependencies:
+      js-yaml:
+        specifier: 'catalog:'
+        version: 4.1.1
+    devDependencies:
+      '@types/js-yaml':
+        specifier: 'catalog:'
+        version: 4.0.9
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.10.4
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

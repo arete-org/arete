@@ -56,7 +56,9 @@ export class RealtimeContextBuilder {
                 : '';
 
         const basePrompt = composePromptWithProfileOverlay(
-            renderPrompt('discord.realtime.system').content,
+            renderPrompt('discord.realtime.system', {
+                botProfileDisplayName: runtimeConfig.profile.displayName,
+            }).content,
             runtimeConfig.profile,
             'realtime'
         );

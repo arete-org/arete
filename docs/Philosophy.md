@@ -79,7 +79,7 @@ If/when a multi-profile system is shipped, a profile would be a bundle of defaul
 - enforceable constraints (policy rules)
 - style guidance for the model.
 
-Current baseline prompt reference: [defaults.yaml](../packages/discord-bot/src/utils/prompts/defaults.yaml)
+Current baseline prompt reference: [defaults.yaml](../packages/prompts/src/defaults.yaml)
 
 ## What’s planned
 

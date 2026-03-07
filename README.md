@@ -72,12 +72,14 @@ We treat `Footnote` as the default Discord persona. If you do nothing beyond the
 If you want a vendored bot identity on top of the same backend, configure the bot runtime with profile env vars:
 
 ```env
-BOT_PROFILE_ID=footnote
-BOT_PROFILE_DISPLAY_NAME=Footnote
+BOT_PROFILE_ID=acme-bot
+BOT_PROFILE_DISPLAY_NAME="Acme Assistant"
 BOT_PROFILE_PROMPT_OVERLAY=
 BOT_PROFILE_PROMPT_OVERLAY_PATH=
 BOT_PROFILE_MENTION_ALIASES=
 ```
+
+If you omit these values, the runtime falls back to the default Footnote identity.
 
 Recommended vendoring workflow:
 
@@ -85,6 +87,12 @@ Recommended vendoring workflow:
 2. Set `BOT_PROFILE_DISPLAY_NAME` for the visible identity.
 3. Add either [1] `BOT_PROFILE_PROMPT_OVERLAY` or [2] `BOT_PROFILE_PROMPT_OVERLAY_PATH` for persona-specific instructions (1 takes priority over 2).
 4. Add `BOT_PROFILE_MENTION_ALIASES` when the bot should respond to vendor-specific plaintext names.
+
+Base prompt ownership is now shared:
+
+1. Canonical Footnote base prompts live in `packages/prompts/src/defaults.yaml`.
+2. `PROMPT_CONFIG_PATH` overrides those same base prompts for both the backend and Discord bot runtime.
+3. Vendored bot identity changes should go in `BOT_PROFILE_*` overlay settings, not a forked base prompt file.
 
 ---
 

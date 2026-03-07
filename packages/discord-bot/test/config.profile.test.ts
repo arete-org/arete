@@ -18,6 +18,23 @@ import {
     type BotProfileConfig,
 } from '../src/config/profile.js';
 
+const restoreProcessEnv = (originalEnv: NodeJS.ProcessEnv): void => {
+    for (const key of Object.keys(process.env)) {
+        if (!(key in originalEnv)) {
+            delete process.env[key];
+        }
+    }
+
+    for (const [key, value] of Object.entries(originalEnv)) {
+        if (value === undefined) {
+            delete process.env[key];
+            continue;
+        }
+
+        process.env[key] = value;
+    }
+};
+
 test('readBotProfileConfig applies defaults when env values are missing', () => {
     const parsed = readBotProfileConfig({
         env: {},
@@ -155,7 +172,7 @@ test('readBotProfileConfig resolves and reads file overlay when inline is absent
 });
 
 test('readBotProfileConfig fails open when file overlay cannot be read', () => {
-    const projectRoot = path.resolve('C:/repo');
+    const projectRoot = path.join(os.tmpdir(), 'footnote-profile-missing');
     const parsed = readBotProfileConfig({
         env: {
             BOT_PROFILE_PROMPT_OVERLAY_PATH: './missing.txt',
@@ -269,6 +286,6 @@ test('runtimeConfig no longer exposes botMentionNames', async () => {
         assert.equal('botMentionNames' in runtimeConfig, false);
         assert.ok(Array.isArray(runtimeConfig.profile.mentionAliases));
     } finally {
-        process.env = originalEnv;
+        restoreProcessEnv(originalEnv);
     }
 });

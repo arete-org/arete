@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type { PostReflectRequest } from '@footnote/contracts/web';
 import { createReflectOrchestrator } from '../src/services/reflectOrchestrator.js';
+import { renderPrompt } from '../src/services/prompts/promptRegistry.js';
 import type {
     GenerateResponseOptions,
     OpenAIService,
@@ -107,6 +108,10 @@ test('web requests go through planner and are coerced to message when planner pi
     assert.equal(callCount, 2);
     assert.equal(response.action, 'message');
     assert.equal(response.message, 'coerced web reply');
+    assert.equal(
+        finalMessages[0]?.content,
+        renderPrompt('reflect.chat.system').content
+    );
     assert.match(
         finalMessages[finalMessages.length - 1]?.content ?? '',
         /coercedFrom/
@@ -165,10 +170,11 @@ test('discord requests preserve non-message planner actions', async () => {
 
 test('message plans pass planner generation options into reflectService', async () => {
     let generationOptionsSeen: GenerateResponseOptions | undefined;
+    let finalMessages: Array<{ role: string; content: string }> = [];
     const openaiService: OpenAIService = {
         async generateResponse(
             _model,
-            _messages,
+            messages,
             options?: GenerateResponseOptions
         ) {
             if (options?.expectMetadata === false) {
@@ -200,6 +206,7 @@ test('message plans pass planner generation options into reflectService', async 
                 };
             }
 
+            finalMessages = messages;
             generationOptionsSeen = options;
             return {
                 normalizedText: 'message with retrieval',
@@ -231,4 +238,8 @@ test('message plans pass planner generation options into reflectService', async 
     );
     assert.equal(generationOptionsSeen?.reasoningEffort, 'medium');
     assert.equal(generationOptionsSeen?.verbosity, 'medium');
+    assert.equal(
+        finalMessages[0]?.content,
+        renderPrompt('discord.chat.system').content
+    );
 });

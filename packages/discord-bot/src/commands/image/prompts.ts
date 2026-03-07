@@ -70,6 +70,7 @@ export function buildDeveloperPrompt(options: DeveloperPromptOptions): string {
         : 'Provide a brief annotation that explores the creative intent in two or three sentences.';
 
     const { content } = renderPrompt('discord.image.developer', {
+        botProfileDisplayName: runtimeConfig.profile.displayName,
         userContext,
         size: options.size,
         quality: options.quality,

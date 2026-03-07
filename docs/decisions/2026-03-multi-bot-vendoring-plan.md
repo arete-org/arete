@@ -105,6 +105,7 @@ Status as of 2026-03-06:
 ### Completed results
 
 - Default prompt posture is Footnote-first instead of Ari-first.
+- Canonical base prompt ownership now lives in the shared `@footnote/prompts` package instead of separate backend/bot catalogs.
 - Bot runtime profile config exists for:
   - profile id
   - profile display name
