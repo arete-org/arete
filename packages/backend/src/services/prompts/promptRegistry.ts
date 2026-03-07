@@ -51,15 +51,16 @@ export const createBackendPromptRegistry = (
             undefined,
         logger: options.logger ?? promptRegistryLogger,
     });
-    return {
-        ...registry,
-        renderPrompt(key: PromptKey, variables: PromptVariables = {}) {
-            return registry.renderPrompt(key, {
-                ...DEFAULT_BACKEND_PROMPT_VARIABLES,
-                ...variables,
-            });
-        },
-    };
+    const wrappedRegistry = Object.create(registry) as PromptRegistry;
+    wrappedRegistry.renderPrompt = (
+        key: PromptKey,
+        variables: PromptVariables = {}
+    ): RenderedPrompt =>
+        registry.renderPrompt(key, {
+            ...DEFAULT_BACKEND_PROMPT_VARIABLES,
+            ...variables,
+        });
+    return wrappedRegistry;
 };
 
 export const promptRegistry: PromptRegistry = createBackendPromptRegistry();
