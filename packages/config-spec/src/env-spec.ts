@@ -316,6 +316,21 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: "BOT_PROFILE_MENTION_ALIASES",
+        owner: "discord-bot",
+        stage: "bootstrap",
+        section: "prompts",
+        required: false,
+        secret: false,
+        kind: "csv",
+        description: "Optional comma-separated plain-text aliases that count as mentions for this bot profile.",
+        defaultValue: noDefault(),
+        usedBy: [
+            "packages/discord-bot/src/config/profile.ts",
+        ],
+    }),
+
+    defineEnv({
         key: "WEB_BASE_URL",
         owner: "discord-bot",
         stage: "runtime",
@@ -520,24 +535,6 @@ export const envEntries = [
         kind: "csv",
         description: "Comma-separated thread IDs allowed when thread replies are restricted.",
         defaultValue: literal([]),
-        usedBy: [
-            "packages/discord-bot/src/config.ts",
-        ],
-    }),
-
-    defineEnv({
-        key: "BOT_MENTION_NAMES",
-        owner: "discord-bot",
-        stage: "runtime",
-        section: "engagement",
-        required: false,
-        secret: false,
-        kind: "csv",
-        description: "Names that count as plain-text bot mentions.",
-        defaultValue: literal([
-            "footnote",
-            "ari",
-        ]),
         usedBy: [
             "packages/discord-bot/src/config.ts",
         ],

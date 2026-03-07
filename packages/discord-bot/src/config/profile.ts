@@ -35,6 +35,7 @@ export interface BotProfilePromptOverlay {
 export interface BotProfileConfig {
     id: string;
     displayName: string;
+    mentionAliases: string[];
     promptOverlay: BotProfilePromptOverlay;
 }
 
@@ -54,6 +55,7 @@ export interface ReadBotProfileConfigOptions {
 export interface ParseBotProfileConfigInput {
     profileId?: string;
     profileDisplayName?: string;
+    mentionAliasesCsv?: string | null;
     inlineOverlayText?: string | null;
     overlayPath?: string | null;
     overlayFileText?: string | null;
@@ -92,6 +94,30 @@ const normalizeOptionalEnvString = (
 
     const normalized = value.trim();
     return normalized.length > 0 ? normalized : null;
+};
+
+const normalizeMentionAlias = (value: string): string | null => {
+    const normalized = value.trim().toLowerCase().replace(/\s+/g, ' ');
+    return normalized.length > 0 ? normalized : null;
+};
+
+const parseMentionAliases = (value: string | null | undefined): string[] => {
+    const normalizedCsv = normalizeOptionalEnvString(value ?? undefined);
+    if (!normalizedCsv) {
+        return [];
+    }
+
+    const aliases: string[] = [];
+    for (const rawAlias of normalizedCsv.split(',')) {
+        const alias = normalizeMentionAlias(rawAlias);
+        if (!alias || aliases.includes(alias)) {
+            continue;
+        }
+
+        aliases.push(alias);
+    }
+
+    return aliases;
 };
 
 const parseProfileId = (value: string | undefined): string => {
@@ -191,6 +217,7 @@ export const parseBotProfileConfig = (
     return {
         id: parseProfileId(input.profileId),
         displayName: parseProfileDisplayName(input.profileDisplayName),
+        mentionAliases: parseMentionAliases(input.mentionAliasesCsv),
         promptOverlay,
     };
 };
@@ -233,6 +260,7 @@ export const readBotProfileConfig = (
     return parseBotProfileConfig({
         profileId: env.BOT_PROFILE_ID,
         profileDisplayName: env.BOT_PROFILE_DISPLAY_NAME,
+        mentionAliasesCsv: env.BOT_PROFILE_MENTION_ALIASES,
         inlineOverlayText,
         overlayPath: resolvedOverlayPath,
         overlayFileText,

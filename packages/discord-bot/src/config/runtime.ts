@@ -244,6 +244,7 @@ const profileConfig = readBotProfileConfig();
 bootstrapLogger.info('Resolved bot profile configuration.', {
     profileId: profileConfig.id,
     displayName: profileConfig.displayName,
+    mentionAliasCount: profileConfig.mentionAliases.length,
     overlaySource: profileConfig.promptOverlay.source,
     overlayLength: profileConfig.promptOverlay.length,
     overlayPath: profileConfig.promptOverlay.path ?? undefined,
@@ -340,10 +341,6 @@ export const runtimeConfig = {
             envDefaultValues.BACKEND_REQUEST_TIMEOUT_MS
         ),
     },
-    botMentionNames: getStringArrayEnv(
-        'BOT_MENTION_NAMES',
-        envDefaultValues.BOT_MENTION_NAMES
-    ),
     env: nodeEnv,
     isProduction,
     isDevelopment: !isProduction,

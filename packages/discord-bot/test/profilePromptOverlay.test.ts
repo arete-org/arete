@@ -21,6 +21,7 @@ const createProfile = (
 ): BotProfileConfig => ({
     id: 'ari-vendor',
     displayName: 'Ari',
+    mentionAliases: [],
     promptOverlay: {
         source: 'inline',
         text: 'You may speak as Ari when that identity is explicitly configured.',

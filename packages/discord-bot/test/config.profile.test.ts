@@ -26,6 +26,7 @@ test('readBotProfileConfig applies defaults when env values are missing', () => 
     const expected: BotProfileConfig = {
         id: 'footnote',
         displayName: 'Footnote',
+        mentionAliases: [],
         promptOverlay: {
             source: 'none',
             text: null,
@@ -49,6 +50,7 @@ test('parseBotProfileConfig is pure and applies inline-overlay precedence', () =
     assert.deepEqual(parsed, {
         id: 'ari-vendor',
         displayName: 'Ari',
+        mentionAliases: [],
         promptOverlay: {
             source: 'inline',
             text: 'inline wins',
@@ -69,6 +71,7 @@ test('readBotProfileConfig normalizes id and display name with validation', () =
     const expected: BotProfileConfig = {
         id: 'ari-vendor',
         displayName: 'Ari',
+        mentionAliases: [],
         promptOverlay: {
             source: 'none',
             text: null,
@@ -91,6 +94,7 @@ test('readBotProfileConfig falls back for invalid id and long display name', () 
     const expected: BotProfileConfig = {
         id: 'footnote',
         displayName: 'Footnote',
+        mentionAliases: [],
         promptOverlay: {
             source: 'none',
             text: null,
@@ -122,6 +126,7 @@ test('readBotProfileConfig prefers inline overlay over file overlay', () => {
         path: null,
         length: 'inline instructions'.length,
     });
+    assert.deepEqual(parsed.mentionAliases, []);
 });
 
 test('readBotProfileConfig resolves and reads file overlay when inline is absent', () => {
@@ -144,6 +149,7 @@ test('readBotProfileConfig resolves and reads file overlay when inline is absent
         path: overlayPath,
         length: 'file overlay'.length,
     });
+    assert.deepEqual(parsed.mentionAliases, []);
 
     fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
@@ -166,6 +172,7 @@ test('readBotProfileConfig fails open when file overlay cannot be read', () => {
         path: path.resolve(projectRoot, './missing.txt'),
         length: 0,
     });
+    assert.deepEqual(parsed.mentionAliases, []);
 });
 
 test('readBotProfileConfig ignores over-limit overlays', () => {
@@ -182,6 +189,7 @@ test('readBotProfileConfig ignores over-limit overlays', () => {
         path: null,
         length: 0,
     });
+    assert.deepEqual(parsedFromInline.mentionAliases, []);
 
     const parsedFromFile = readBotProfileConfig({
         env: {
@@ -198,6 +206,7 @@ test('readBotProfileConfig ignores over-limit overlays', () => {
         path: path.resolve('/tmp', './too-long.txt'),
         length: 0,
     });
+    assert.deepEqual(parsedFromFile.mentionAliases, []);
 });
 
 test('parseBotProfileConfig falls back to none when file text is missing', () => {
@@ -214,4 +223,52 @@ test('parseBotProfileConfig falls back to none when file text is missing', () =>
         path: '/tmp/missing.txt',
         length: 0,
     });
+    assert.deepEqual(parsed.mentionAliases, []);
+});
+
+test('readBotProfileConfig normalizes and dedupes mention aliases', () => {
+    const parsed = readBotProfileConfig({
+        env: {
+            BOT_PROFILE_MENTION_ALIASES:
+                '  Ari , foot note, ARI,   Foot  Note  ,  ',
+        },
+    });
+
+    assert.deepEqual(parsed.mentionAliases, ['ari', 'foot note']);
+});
+
+test('readBotProfileConfig falls back to empty aliases for blank csv input', () => {
+    const parsed = readBotProfileConfig({
+        env: {
+            BOT_PROFILE_MENTION_ALIASES: ' ,   , ',
+        },
+    });
+
+    assert.deepEqual(parsed.mentionAliases, []);
+});
+
+test('runtimeConfig no longer exposes botMentionNames', async () => {
+    const originalEnv = { ...process.env };
+    process.env.DISCORD_TOKEN = 'token';
+    process.env.DISCORD_CLIENT_ID = 'client-id';
+    process.env.DISCORD_GUILD_ID = 'guild-id';
+    process.env.OPENAI_API_KEY = 'openai-key';
+    process.env.DISCORD_USER_ID = 'user-id';
+    process.env.INCIDENT_PSEUDONYMIZATION_SECRET = 'secret';
+
+    try {
+        const runtimeModuleUrl = new URL(
+            '../src/config/runtime.js',
+            import.meta.url
+        );
+        runtimeModuleUrl.searchParams.set('test', String(Date.now()));
+        const { runtimeConfig } = (await import(
+            runtimeModuleUrl.href
+        )) as typeof import('../src/config/runtime.js');
+
+        assert.equal('botMentionNames' in runtimeConfig, false);
+        assert.ok(Array.isArray(runtimeConfig.profile.mentionAliases));
+    } finally {
+        process.env = originalEnv;
+    }
 });

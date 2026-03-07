@@ -285,6 +285,7 @@ test('reflect overlay injection logs profile metadata without raw overlay body',
     mutableRuntimeConfig.profile = {
         id: 'ari-vendor',
         displayName: 'Ari',
+        mentionAliases: [],
         promptOverlay: {
             source: 'inline',
             text: 'secret overlay body that must not appear in logs',

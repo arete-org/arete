@@ -580,6 +580,7 @@ test('buildReflectRequestFromMessage prepends one profile overlay system message
     profileMutable.profile = {
         id: 'ari-vendor',
         displayName: 'Ari',
+        mentionAliases: [],
         promptOverlay: {
             source: 'inline',
             text: 'Speak as Ari when this runtime is configured for that vendor.',
@@ -640,6 +641,7 @@ test('buildReflectRequestFromMessage leaves conversation unchanged when no profi
     profileMutable.profile = {
         id: 'footnote',
         displayName: 'Footnote',
+        mentionAliases: [],
         promptOverlay: {
             source: 'none',
             text: null,

@@ -303,7 +303,7 @@ export class RealtimeEngagementFilter {
         const messageContent = message.content.toLowerCase(); // Convert message content to lowercase for case-insensitive comparison
         const botNames = [
             botUsername.toLowerCase(),
-            ...runtimeConfig.botMentionNames.map((name) =>
+            ...runtimeConfig.profile.mentionAliases.map((name) =>
                 name.toLowerCase()
             ),
         ]
@@ -318,7 +318,7 @@ export class RealtimeEngagementFilter {
                         channelId: context.channelKey,
                         detectedName: name,
                         botUsername,
-                        configuredNames: runtimeConfig.botMentionNames,
+                        configuredNames: runtimeConfig.profile.mentionAliases,
                         messageContent: message.content,
                     }
                 );

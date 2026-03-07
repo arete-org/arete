@@ -46,6 +46,7 @@ const withProfile = async (
 const createOverlayProfile = (): BotProfileConfig => ({
     id: 'ari-vendor',
     displayName: 'Ari',
+    mentionAliases: [],
     promptOverlay: {
         source: 'inline',
         text: 'You may speak as Ari when this runtime is explicitly configured for that vendor.',
@@ -57,6 +58,7 @@ const createOverlayProfile = (): BotProfileConfig => ({
 const createNoOverlayProfile = (): BotProfileConfig => ({
     id: 'footnote',
     displayName: 'Footnote',
+    mentionAliases: [],
     promptOverlay: {
         source: 'none',
         text: null,
