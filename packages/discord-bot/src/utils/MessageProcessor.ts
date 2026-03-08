@@ -480,6 +480,18 @@ export class MessageProcessor {
             });
         }
 
+        // Reinforce runtime identity so cross-bot channel history does not cause
+        // the model to self-identify as a different profile.
+        context.push({
+            role: 'system',
+            content: [
+                '// Runtime Bot Identity Guard',
+                `Profile ID: ${runtimeConfig.profile.id}`,
+                `Profile Display Name: ${runtimeConfig.profile.displayName}`,
+                `When speaking in first person, always identify yourself as "${runtimeConfig.profile.displayName}".`,
+            ].join('\n'),
+        });
+
         const conversation = context.slice(1).map((entry) => ({
             role: entry.role === 'developer' ? 'system' : entry.role,
             content: entry.content,
