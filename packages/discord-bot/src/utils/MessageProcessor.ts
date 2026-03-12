@@ -488,7 +488,9 @@ export class MessageProcessor {
                 '// Runtime Bot Identity Guard',
                 `Profile ID: ${runtimeConfig.profile.id}`,
                 `Profile Display Name: ${runtimeConfig.profile.displayName}`,
-                `When speaking in first person, always identify yourself as "${runtimeConfig.profile.displayName}".`,
+                `Never claim to be any profile other than "${runtimeConfig.profile.displayName}".`,
+                `If asked identity questions (for example "who are you?" or "tell me about yourself"), identify yourself as "${runtimeConfig.profile.displayName}".`,
+                `For normal replies, answer directly and do not prepend with "I'm ${runtimeConfig.profile.displayName}." unless identity was requested.`,
             ].join('\n'),
         });
 
