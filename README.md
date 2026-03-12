@@ -111,8 +111,9 @@ Base prompt ownership is now shared:
 
 1. Canonical Footnote base prompts live in `packages/prompts/src/defaults.yaml`.
 2. `PROMPT_CONFIG_PATH` overrides those same base prompts for both the backend and Discord bot runtime.
-3. Vendored bot identity changes should go in `BOT_PROFILE_*` overlay settings, not a forked base prompt file.
-4. Canonical precedence rules are documented in [`docs/architecture/prompt-resolution.md`](docs/architecture/prompt-resolution.md).
+3. Bot generation paths use `core + one active persona layer` (default Footnote persona unless `BOT_PROFILE_*` overlay is configured).
+4. Vendored bot identity changes should go in `BOT_PROFILE_*` overlay settings, not a forked base prompt file.
+5. Canonical precedence rules are documented in [`docs/architecture/prompt-resolution.md`](docs/architecture/prompt-resolution.md).
 
 ---
 

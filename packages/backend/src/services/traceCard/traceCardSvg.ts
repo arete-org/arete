@@ -266,6 +266,8 @@ export const renderTraceCardSvg = (input: TraceCardRenderInput): string => {
 
         const score = normalizedTemperament[axis.key];
         if (score === undefined) {
+            // Missing temperament stays visibly missing (red) instead of being
+            // backfilled with synthetic defaults.
             wheelLayers.push(
                 `<path d="${sectorPath(WHEEL_CENTER_X, WHEEL_CENTER_Y, WHEEL_OUTER_RADIUS, startAngle, endAngle)}" fill="${MISSING_FILL}" fill-opacity="0.45" />`
             );

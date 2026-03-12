@@ -18,12 +18,24 @@ import { createPromptRegistry } from '../src/index.js';
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(testDirectory, '..', '..', '..');
 
-test('loads the canonical defaults including reflect.chat.system', () => {
+test('loads canonical reflect core + default persona prompts', () => {
     const registry = createPromptRegistry();
 
     assert.equal(registry.hasPrompt('reflect.chat.system'), true);
+    assert.equal(registry.hasPrompt('reflect.chat.persona.footnote'), true);
+    assert.equal(registry.hasPrompt('discord.image.persona.footnote'), true);
+    assert.equal(
+        registry.hasPrompt('discord.realtime.persona.footnote'),
+        true
+    );
     assert.match(
         registry.renderPrompt('reflect.chat.system', {
+            botProfileDisplayName: 'Footnote',
+        }).content,
+        /You are the response engine for Footnote's reflect endpoint\./
+    );
+    assert.match(
+        registry.renderPrompt('reflect.chat.persona.footnote', {
             botProfileDisplayName: 'Footnote',
         }).content,
         /You are Footnote, an AI assistant from the Footnote project\./
@@ -53,7 +65,7 @@ test('merges override files over the canonical defaults', () => {
             'Override chat prompt.'
         );
         assert.match(
-            registry.renderPrompt('reflect.chat.system', {
+            registry.renderPrompt('reflect.chat.persona.footnote', {
                 botProfileDisplayName: 'Footnote',
             }).content,
             /You are Footnote/
@@ -81,7 +93,7 @@ test('missing override files fail open to defaults', () => {
             registry.renderPrompt('discord.chat.system', {
                 botProfileDisplayName: 'Footnote',
             }).content,
-            /You are Footnote/
+            /You are the response engine for a configured Discord bot profile\./
         );
         assert.equal(warnings.length, 1);
         assert.match(
@@ -143,13 +155,13 @@ test('invalid override entries are warned and skipped while valid entries still 
             registry.renderPrompt('discord.chat.system', {
                 botProfileDisplayName: 'Footnote',
             }).content,
-            /You are Footnote/
+            /You are the response engine for a configured Discord bot profile\./
         );
         assert.match(
             registry.renderPrompt('discord.image.system', {
                 botProfileDisplayName: 'Footnote',
             }).content,
-            /You are Footnote/
+            /You are the image-generation orchestration system for a configured Discord bot profile\./
         );
         assert.ok(
             warnings.some(

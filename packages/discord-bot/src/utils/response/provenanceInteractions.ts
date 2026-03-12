@@ -681,7 +681,7 @@ export async function generateAlternativeLensMessage(
     const systemPromptLines = [
         'You are an ethics editor who rewrites assistant responses using a specified philosophical or cultural lens.',
         'Preserve factual accuracy and original intent while foregrounding the requested perspective.',
-        'Respond in natural markdown with no JSON, tool calls, or metadata markers (like <RESPONSE_METADATA>).',
+        'Respond in natural markdown with no JSON payloads or tool calls.',
     ];
     const metadataSummary = formatMetadataSummary(context.metadata);
     const userPromptSections = [

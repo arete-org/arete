@@ -54,7 +54,7 @@ test('web requests go through planner and are coerced to message when planner pi
             options?: GenerateResponseOptions
         ) {
             callCount += 1;
-            if (options?.expectMetadata === false) {
+            if (options?.maxCompletionTokens === 700) {
                 return {
                     normalizedText: JSON.stringify({
                         action: 'react',
@@ -112,6 +112,10 @@ test('web requests go through planner and are coerced to message when planner pi
         finalMessages[0]?.content,
         renderPrompt('reflect.chat.system').content
     );
+    assert.equal(
+        finalMessages[1]?.content,
+        renderPrompt('reflect.chat.persona.footnote').content
+    );
     assert.match(
         finalMessages[finalMessages.length - 1]?.content ?? '',
         /coercedFrom/
@@ -127,7 +131,7 @@ test('discord requests preserve non-message planner actions', async () => {
             options?: GenerateResponseOptions
         ) {
             callCount += 1;
-            if (options?.expectMetadata === false) {
+            if (options?.maxCompletionTokens === 700) {
                 return {
                     normalizedText: JSON.stringify({
                         action: 'image',
@@ -177,7 +181,7 @@ test('message plans pass planner generation options into reflectService', async 
             messages,
             options?: GenerateResponseOptions
         ) {
-            if (options?.expectMetadata === false) {
+            if (options?.maxCompletionTokens === 700) {
                 return {
                     normalizedText: JSON.stringify({
                         action: 'message',
@@ -242,4 +246,87 @@ test('message plans pass planner generation options into reflectService', async 
         finalMessages[0]?.content,
         renderPrompt('discord.chat.system').content
     );
+    assert.equal(
+        finalMessages[1]?.content,
+        renderPrompt('discord.chat.persona.footnote').content
+    );
 });
+
+test('discord overlay replaces default persona layer in reflect generation', async () => {
+    let finalMessages: Array<{ role: string; content: string }> = [];
+    const openaiService: OpenAIService = {
+        async generateResponse(
+            _model,
+            messages,
+            options?: GenerateResponseOptions
+        ) {
+            if (options?.maxCompletionTokens === 700) {
+                return {
+                    normalizedText: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        riskTier: 'Low',
+                        reasoning: 'A normal text response is appropriate.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            toolChoice: 'none',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 3,
+                            },
+                        },
+                    }),
+                    metadata: { model: 'gpt-5-mini' },
+                };
+            }
+
+            finalMessages = messages;
+            return {
+                normalizedText: 'overlay persona reply',
+                metadata: {
+                    model: 'gpt-5-mini',
+                    provenance: 'Inferred',
+                    tradeoffCount: 0,
+                    citations: [],
+                },
+            };
+        },
+    };
+
+    const orchestrator = createReflectOrchestrator({
+        openaiService,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runReflect(
+        createReflectRequest({
+            conversation: [
+                {
+                    role: 'system',
+                    content: '// BEGIN Bot Profile Overlay\nYou are Myuri.\n// END Bot Profile Overlay',
+                },
+                { role: 'user', content: 'Tell me about yourself.' },
+            ],
+        })
+    );
+
+    assert.equal(response.action, 'message');
+    assert.equal(finalMessages[0]?.content, renderPrompt('discord.chat.system').content);
+    assert.match(finalMessages[1]?.content ?? '', /BEGIN Bot Profile Overlay/);
+    assert.equal(
+        finalMessages.some(
+            (message) =>
+                message.content ===
+                renderPrompt('discord.chat.persona.footnote').content
+        ),
+        false
+    );
+});
+

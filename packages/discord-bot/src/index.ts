@@ -108,7 +108,6 @@ export const openaiService = new OpenAIService(
 
 // Re-export modules needed by server.js
 export { OpenAIService } from './utils/openaiService.js';
-export { buildResponseMetadata } from './utils/response/metadata.js';
 export { RateLimiter } from './utils/RateLimiter.js';
 
 // ====================

@@ -84,6 +84,20 @@ test('TraceStore round trips trace-card SVG assets', async () => {
             'missing trace-card should return null'
         );
 
+        // A trace-card row references provenance_traces(response_id), so seed the
+        // parent trace first before inserting the card asset.
+        await store.upsert({
+            responseId,
+            provenance: 'Retrieved',
+            riskTier: 'Low',
+            tradeoffCount: 1,
+            chainHash: 'trace_card_chain_hash',
+            licenseContext: 'MIT + HL3',
+            modelVersion: 'gpt-5-mini',
+            staleAfter: new Date(Date.now() + 60000).toISOString(),
+            citations: [],
+        });
+
         await store.upsertTraceCardSvg(responseId, initialSvg);
         const storedInitial = await store.getTraceCardSvg(responseId);
         assert.equal(storedInitial, initialSvg);

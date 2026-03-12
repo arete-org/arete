@@ -277,3 +277,36 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
     assert.equal(plan.generation.temperament, undefined);
     assert.match(plan.reasoning, /missing|invalid|TRACE temperament/i);
 });
+
+test('react plans with non-emoji payload fall back safely', async () => {
+    const openaiService: OpenAIService = {
+        async generateResponse() {
+            return {
+                normalizedText: JSON.stringify({
+                    action: 'react',
+                    modality: 'text',
+                    riskTier: 'Low',
+                    reaction: 'sounds good',
+                    reasoning: 'A reaction is enough.',
+                    generation: {
+                        reasoningEffort: 'low',
+                        verbosity: 'low',
+                        toolChoice: 'none',
+                    },
+                }),
+                metadata: {
+                    model: 'gpt-5-mini',
+                },
+            };
+        },
+    };
+
+    const planner = createReflectPlanner({ openaiService });
+    const plan = await planner.planReflect(createReflectRequest());
+
+    assert.equal(plan.action, 'message');
+    assert.equal(plan.reaction, undefined);
+    assert.equal(plan.generation.toolChoice, 'none');
+    assert.equal(plan.generation.temperament, undefined);
+    assert.match(plan.reasoning, /not a valid emoji token/i);
+});

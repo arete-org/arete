@@ -21,6 +21,24 @@ import { logger } from '../utils/logger.js';
 
 type CreateReflectOrchestratorOptions = CreateReflectServiceOptions;
 
+const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
+
+/**
+ * Uses the shared profile display-name env so non-overlay persona templates
+ * resolve to the same name operators configured for the deployment.
+ */
+const resolveBotProfileDisplayName = (): string => {
+    const envValue = process.env.BOT_PROFILE_DISPLAY_NAME;
+    if (typeof envValue === 'string' && envValue.trim().length > 0) {
+        return envValue.trim();
+    }
+
+    return DEFAULT_BOT_PROFILE_DISPLAY_NAME;
+};
+
+/**
+ * Packs the normalized planner decision into one structured system payload.
+ */
 const buildPlannerPayload = (
     plan: ReflectPlan,
     surfacePolicy?: { coercedFrom: ReflectPlan['action'] }
@@ -36,6 +54,10 @@ const buildPlannerPayload = (
         ...(surfacePolicy && { surfacePolicy }),
     });
 
+/**
+ * Enforces surface policy constraints after planning.
+ * Web currently accepts message responses only.
+ */
 const coercePlanForSurface = (
     request: PostReflectRequest,
     plan: ReflectPlan
@@ -51,12 +73,20 @@ const coercePlanForSurface = (
         return { plan };
     }
 
+    const normalizedReasoning = plan.reasoning.trim();
     const coercedPlan: ReflectPlan = {
         ...plan,
         action: 'message',
         modality: 'text',
+        reaction: undefined,
+        imageRequest: undefined,
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            toolChoice: 'none',
+        },
         reasoning:
-            `${plan.reasoning} Web surface requires a message response, so the planner was coerced to message.`.trim(),
+            `${normalizedReasoning ? `${normalizedReasoning} ` : ''}Web surface requires a message response, so the planner output was coerced to a text message.`.trim(),
     };
 
     logger.debug(
@@ -69,12 +99,67 @@ const coercePlanForSurface = (
     };
 };
 
+/**
+ * Resolves the core system prompt key by surface.
+ */
 const buildSurfaceSystemPrompt = (
     surface: PostReflectRequest['surface']
 ): string =>
     surface === 'discord'
         ? renderPrompt('discord.chat.system').content
         : renderPrompt('reflect.chat.system').content;
+
+/**
+ * Resolves the default Footnote persona prompt key by surface.
+ */
+const buildSurfacePersonaPrompt = (
+    surface: PostReflectRequest['surface'],
+    botProfileDisplayName: string
+): string =>
+    surface === 'discord'
+        ? renderPrompt('discord.chat.persona.footnote', {
+              botProfileDisplayName,
+          }).content
+        : renderPrompt('reflect.chat.persona.footnote', {
+              botProfileDisplayName,
+          }).content;
+
+const DISCORD_PROFILE_OVERLAY_HEADER = 'BEGIN Bot Profile Overlay';
+
+/**
+ * Detects a Discord vendor overlay system message injected by the bot runtime.
+ */
+const isDiscordOverlaySystemMessage = (
+    message: Pick<ReflectConversationMessage, 'role' | 'content'>
+): boolean =>
+    message.role === 'system' &&
+    message.content.includes(DISCORD_PROFILE_OVERLAY_HEADER);
+
+/**
+ * Extracts one overlay message and returns the remaining conversation.
+ * The extracted overlay becomes the active persona layer for the request.
+ */
+const extractDiscordPersonaOverlay = (
+    conversation: Array<Pick<ReflectConversationMessage, 'role' | 'content'>>
+): {
+    personaPrompt: string | null;
+    conversation: Array<Pick<ReflectConversationMessage, 'role' | 'content'>>;
+} => {
+    const firstOverlay = conversation.find(isDiscordOverlaySystemMessage);
+    if (!firstOverlay) {
+        return {
+            personaPrompt: null,
+            conversation,
+        };
+    }
+
+    return {
+        personaPrompt: firstOverlay.content,
+        conversation: conversation.filter(
+            (message) => !isDiscordOverlaySystemMessage(message)
+        ),
+    };
+};
 
 /**
  * The orchestrator keeps surface-specific policy in one place while reusing the
@@ -103,6 +188,7 @@ export const createReflectOrchestrator = ({
     const runReflect = async (
         request: PostReflectRequest
     ): Promise<PostReflectResponse> => {
+        const botProfileDisplayName = resolveBotProfileDisplayName();
         const planned = await reflectPlanner.planReflect(request);
         const { plan, surfacePolicy } = coercePlanForSurface(request, planned);
 
@@ -139,6 +225,33 @@ export const createReflectOrchestrator = ({
             };
         }
 
+        const normalizedConversation: Array<
+            Pick<ReflectConversationMessage, 'role' | 'content'>
+        > = request.conversation.map(
+            (message: PostReflectRequest['conversation'][number]) => ({
+                role: message.role,
+                content: message.content,
+            })
+        );
+        const extractedPersona =
+            request.surface === 'discord'
+                ? extractDiscordPersonaOverlay(normalizedConversation)
+                : {
+                      personaPrompt: null,
+                      conversation: normalizedConversation,
+                  };
+        if (request.surface === 'discord' && extractedPersona.personaPrompt) {
+            logger.debug(
+                'Reflect orchestrator applied Discord profile overlay as the active persona layer.'
+            );
+        }
+        const personaPrompt =
+            extractedPersona.personaPrompt ??
+            buildSurfacePersonaPrompt(
+                request.surface,
+                botProfileDisplayName
+            );
+
         const conversationMessages: Array<
             Pick<ReflectConversationMessage, 'role' | 'content'>
         > = [
@@ -146,12 +259,11 @@ export const createReflectOrchestrator = ({
                 role: 'system',
                 content: buildSurfaceSystemPrompt(request.surface),
             },
-            ...request.conversation.map(
-                (message: PostReflectRequest['conversation'][number]) => ({
-                    role: message.role,
-                    content: message.content,
-                })
-            ),
+            {
+                role: 'system',
+                content: personaPrompt,
+            },
+            ...extractedPersona.conversation,
             {
                 role: 'system',
                 content: [

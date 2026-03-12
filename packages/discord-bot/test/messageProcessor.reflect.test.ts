@@ -677,11 +677,16 @@ test('buildReflectRequestFromMessage leaves conversation unchanged when no profi
             throw new Error('Expected reflect request to be built');
         }
 
-        assert.equal(built.request.conversation.length, 1);
+        assert.equal(built.request.conversation.length, 2);
         assert.equal(built.request.conversation[0].role, 'user');
         assert.doesNotMatch(
             built.request.conversation[0].content,
             /BEGIN Bot Profile Overlay/
+        );
+        assert.equal(built.request.conversation[1].role, 'system');
+        assert.match(
+            built.request.conversation[1].content,
+            /Runtime Bot Identity Guard/
         );
     } finally {
         profileMutable.profile = originalProfile;

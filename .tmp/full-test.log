@@ -1,0 +1,1280 @@
+TAP version 13
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32mInitialized SQLite incident store at C:\\Users\\Jordan\\AppData\\Local\\Temp\\incident-store-k8WgLJ\\incidents.db[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32mIncident created (id=1, pointers=guildId=8537eda0c78e, channelId=797820c323bd, messageId=322bae7a2418)[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32mAudit event appended (incident=1, actorHash=ef5d4fa4ddca)[39m
+# Subtest: SqliteIncidentStore pseudonymizes pointers and audit actors
+ok 1 - SqliteIncidentStore pseudonymizes pointers and audit actors
+  ---
+  duration_ms: 266.5097
+  ...
+# Subtest: sanitizeLogData preserves shared references that are not circular
+ok 2 - sanitizeLogData preserves shared references that are not circular
+  ---
+  duration_ms: 2.5956
+  ...
+# Subtest: sanitizeLogData collapses true circular references safely
+ok 3 - sanitizeLogData collapses true circular references safely
+  ---
+  duration_ms: 0.2626
+  ...
+# 2026-03-12 17:56:18 [[33mwarn[39m]: [33mResponse metadata missing evidence/freshness for retrieved web-search response WiKP9vTq. Leaving chips omitted.[39m
+# Subtest: buildResponseMetadata leaves chips omitted when retrieved web-search chips are missing
+ok 4 - buildResponseMetadata leaves chips omitted when retrieved web-search chips are missing
+  ---
+  duration_ms: 16.6629
+  ...
+# Subtest: buildResponseMetadata does not backfill chips when web search was not used
+ok 5 - buildResponseMetadata does not backfill chips when web search was not used
+  ---
+  duration_ms: 0.4597
+  ...
+# Subtest: buildResponseMetadata preserves explicit chip values when present
+ok 6 - buildResponseMetadata preserves explicit chip values when present
+  ---
+  duration_ms: 1.1807
+  ...
+# Subtest: buildResponseMetadata does not add chips for non-retrieved responses
+ok 7 - buildResponseMetadata does not add chips for non-retrieved responses
+  ---
+  duration_ms: 0.4118
+  ...
+# Subtest: buildResponseMetadata uses planner fallback tradeoffCount when assistant metadata omits count
+ok 8 - buildResponseMetadata uses planner fallback tradeoffCount when assistant metadata omits count
+  ---
+  duration_ms: 0.716
+  ...
+# Subtest: buildResponseMetadata keeps explicit assistant tradeoffCount over planner fallback
+ok 9 - buildResponseMetadata keeps explicit assistant tradeoffCount over planner fallback
+  ---
+  duration_ms: 0.9033
+  ...
+# Subtest: buildResponseMetadata defaults tradeoffCount to 0 when assistant and planner fallback are absent
+ok 10 - buildResponseMetadata defaults tradeoffCount to 0 when assistant and planner fallback are absent
+  ---
+  duration_ms: 0.7274
+  ...
+# Subtest: backend prompt registry exposes canonical reflect core + default persona prompts
+ok 11 - backend prompt registry exposes canonical reflect core + default persona prompts
+  ---
+  duration_ms: 9.5289
+  ...
+# Subtest: backend prompt registry applies PROMPT_CONFIG_PATH-style overrides
+ok 12 - backend prompt registry applies PROMPT_CONFIG_PATH-style overrides
+  ---
+  duration_ms: 26.319
+  ...
+# Subtest: backend renderPrompt keeps default variables when explicit undefined values are passed
+ok 13 - backend renderPrompt keeps default variables when explicit undefined values are passed
+  ---
+  duration_ms: 5.2294
+  ...
+# Subtest: hmacId hashes consistently per namespace and secret
+ok 14 - hmacId hashes consistently per namespace and secret
+  ---
+  duration_ms: 1.8062
+  ...
+# Subtest: shortHash truncates without emptying
+ok 15 - shortHash truncates without emptying
+  ---
+  duration_ms: 0.4562
+  ...
+# Subtest: pseudonymizeIncidentPointers hashes Discord IDs and preserves other fields
+ok 16 - pseudonymizeIncidentPointers hashes Discord IDs and preserves other fields
+  ---
+  duration_ms: 1.9467
+  ...
+# Subtest: pseudonymizeIncidentPointers handles missing or empty IDs gracefully
+ok 17 - pseudonymizeIncidentPointers handles missing or empty IDs gracefully
+  ---
+  duration_ms: 0.2152
+  ...
+# Subtest: pseudonymizeActorId is idempotent and null-safe
+ok 18 - pseudonymizeActorId is idempotent and null-safe
+  ---
+  duration_ms: 0.4419
+  ...
+# 2026-03-12 17:56:18 [[31merror[39m]: [31mCAPTCHA verification FAILED:[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Error codes: hostname mismatch[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Token source: header[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Token length: 13[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Challenge timestamp: 2026-03-12T21:56:18.552Z[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Hostname from response: evil.example.com[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Request hostname: app.example.com[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Request origin: app.example.com[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Validation mode: request-derived[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Configured hostnames: N/A[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Derived hostnames: app.example.com, app.example.com[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Effective hostnames: app.example.com[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32mCAPTCHA verification SUCCESS for token from header[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Hostname verified: localhost[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Expected hostname: localhost[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Challenge timestamp: 2026-03-12T21:56:18.576Z[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32mCAPTCHA verification SUCCESS for token from header[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Hostname verified: ai.jordanmakes.dev[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Expected hostname: ai.jordanmakes.dev[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Challenge timestamp: 2026-03-12T21:56:18.578Z[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32mCAPTCHA verification SUCCESS for token from header[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Hostname verified: ai.jordanmakes.dev[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Expected hostname: backend.internal[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Challenge timestamp: 2026-03-12T21:56:18.580Z[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31mCAPTCHA verification FAILED:[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Error codes: hostname mismatch[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Token source: header[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Token length: 13[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Challenge timestamp: 2026-03-12T21:56:18.583Z[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Hostname from response: evil.example.com[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Request hostname: ai.jordanmakes.dev[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Request origin: ai.jordanmakes.dev[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Validation mode: request-derived[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Configured hostnames: N/A[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Derived hostnames: ai.jordanmakes.dev, ai.jordanmakes.dev[39m
+# 2026-03-12 17:56:18 [[31merror[39m]: [31m  Effective hostnames: ai.jordanmakes.dev[39m
+# Subtest: verifyTurnstileCaptcha rejects successful responses with the wrong hostname
+ok 19 - verifyTurnstileCaptcha rejects successful responses with the wrong hostname
+  ---
+  duration_ms: 67.8389
+  ...
+# Subtest: verifyTurnstileCaptcha accepts successful responses only when the hostname is explicitly allowed
+ok 20 - verifyTurnstileCaptcha accepts successful responses only when the hostname is explicitly allowed
+  ---
+  duration_ms: 2.0789
+  ...
+# Subtest: verifyTurnstileCaptcha accepts successful responses when allowlist is unset and hostname matches request host
+ok 21 - verifyTurnstileCaptcha accepts successful responses when allowlist is unset and hostname matches request host
+  ---
+  duration_ms: 2.6632
+  ...
+# Subtest: verifyTurnstileCaptcha accepts successful responses when allowlist is unset and hostname matches request origin
+ok 22 - verifyTurnstileCaptcha accepts successful responses when allowlist is unset and hostname matches request origin
+  ---
+  duration_ms: 2.3081
+  ...
+# Subtest: verifyTurnstileCaptcha rejects successful responses when allowlist is unset and hostname matches neither request host nor origin
+ok 23 - verifyTurnstileCaptcha rejects successful responses when allowlist is unset and hostname matches neither request host nor origin
+  ---
+  duration_ms: 3.1907
+  ...
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32mSkipping CAPTCHA verification (trusted-service-x-trace-token)[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect_planner","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578714}[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578753}[39m
+# Subtest: reflect accepts trusted service calls with x-trace-token and no turnstile token
+ok 24 - reflect accepts trusted service calls with x-trace-token and no turnstile token
+  ---
+  duration_ms: 161.7275
+  ...
+# Subtest: reflect rejects public calls without service token or turnstile token
+ok 25 - reflect rejects public calls without service token or turnstile token
+  ---
+  duration_ms: 21.2617
+  ...
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32mSkipping CAPTCHA verification (trusted-service-x-trace-token)[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect_planner","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578803}[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578804}[39m
+# Subtest: reflect constrains web requests to message actions
+ok 26 - reflect constrains web requests to message actions
+  ---
+  duration_ms: 17.1295
+  ...
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32mSkipping CAPTCHA verification (trusted-service-x-service-token)[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect_planner","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578820}[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578821}[39m
+# Subtest: reflect service requests use a separate service rate limiter bucket
+ok 27 - reflect service requests use a separate service rate limiter bucket
+  ---
+  duration_ms: 25.383
+  ...
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32mSkipping CAPTCHA verification (trusted-service-x-service-token)[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect_planner","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578846}[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578846}[39m
+# Subtest: reflect trusted service requests stay in one bucket even if client IP changes
+ok 28 - reflect trusted service requests stay in one bucket even if client IP changes
+  ---
+  duration_ms: 16.9256
+  ...
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32mSkipping CAPTCHA verification (trusted-service-x-trace-token)[39m
+# 2026-03-12 17:56:18 [[33mwarn[39m]: [33mReflect planner failed; using fallback action=message. Error: OpenAI upstream leaked diagnostic details[39m
+# Subtest: reflect does not expose raw upstream error details to clients
+ok 29 - reflect does not expose raw upstream error details to clients
+  ---
+  duration_ms: 12.4444
+  ...
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32mCAPTCHA verification SUCCESS for token from header[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Hostname verified: 127.0.0.1[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Expected hostname: 127.0.0.1[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Challenge timestamp: 2026-03-12T21:56:18.877Z[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect_planner","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578888}[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578889}[39m
+# Subtest: reflect accepts public calls when allowlist is unset and Turnstile hostname matches the request host
+ok 30 - reflect accepts public calls when allowlist is unset and Turnstile hostname matches the request host
+  ---
+  duration_ms: 26.2674
+  ...
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32mCAPTCHA verification SUCCESS for token from header[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Hostname verified: 127.0.0.1[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Expected hostname: 127.0.0.1[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m  Challenge timestamp: 2026-03-12T21:56:18.905Z[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect_planner","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578909}[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578910}[39m
+# Subtest: reflect rate limits public callers before calling Turnstile
+ok 31 - reflect rate limits public callers before calling Turnstile
+  ---
+  duration_ms: 25.8605
+  ...
+# Subtest: web requests go through planner and are coerced to message when planner picks react
+ok 32 - web requests go through planner and are coerced to message when planner picks react
+  ---
+  duration_ms: 14.2491
+  ...
+# Subtest: discord requests preserve non-message planner actions
+ok 33 - discord requests preserve non-message planner actions
+  ---
+  duration_ms: 6.6082
+  ...
+# Subtest: message plans pass planner generation options into reflectService
+ok 34 - message plans pass planner generation options into reflectService
+  ---
+  duration_ms: 14.2369
+  ...
+# Subtest: discord overlay replaces default persona layer in reflect generation
+ok 35 - discord overlay replaces default persona layer in reflect generation
+  ---
+  duration_ms: 1.766
+  ...
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect_planner","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578659}[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect_planner","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578700}[39m
+# 2026-03-12 17:56:18 [[33mwarn[39m]: [33mReflect planner failed; using fallback action=message. Error: Expected property name or '}' in JSON at position 1 (line 1 column 2)[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect_planner","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578702}[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect_planner","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578705}[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect_planner","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578708}[39m
+# 2026-03-12 17:56:18 [[32minfo[39m]: [32m{"event":"backend_llm_cost","feature":"reflect_planner","model":"gpt-5-mini","promptTokens":0,"completionTokens":0,"totalTokens":0,"totalCostUsd":0,"totalCostFormatted":"$0.0000","cumulativeTotalCostUsd":0,"timestamp":1773352578710}[39m
+# Subtest: reflectPlanner parses plain JSON output from the backend-native planner prompt
+ok 36 - reflectPlanner parses plain JSON output from the backend-native planner prompt
+  ---
+  duration_ms: 40.9211
+  ...
+# Subtest: reflectPlanner fails open to a valid fallback generation config when planner JSON is invalid
+ok 37 - reflectPlanner fails open to a valid fallback generation config when planner JSON is invalid
+  ---
+  duration_ms: 1.5414
+  ...
+# Subtest: repo_explainer search plans normalize repo hints and medium context
+ok 38 - repo_explainer search plans normalize repo hints and medium context
+  ---
+  duration_ms: 3.0704
+  ...
+# Subtest: invalid web_search query downgrades safely to none
+ok 39 - invalid web_search query downgrades safely to none
+  ---
+  duration_ms: 2.6596
+  ...
+# Subtest: planner temperament is accepted when all TRACE axes are integer 1..5
+ok 40 - planner temperament is accepted when all TRACE axes are integer 1..5
+  ---
+  duration_ms: 2.2448
+  ...
+# Subtest: message plans with missing or invalid TRACE axes fall back safely
+ok 41 - message plans with missing or invalid TRACE axes fall back safely
+  ---
+  duration_ms: 1.7745
+  ...
+# Subtest: parseReflectRequest resumes oversized requests rejected by content-length
+ok 42 - parseReflectRequest resumes oversized requests rejected by content-length
+  ---
+  duration_ms: 1.7806
+  ...
+# Subtest: parseReflectRequest resolves cleanly when an oversized streamed body destroys the request
+ok 43 - parseReflectRequest resolves cleanly when an oversized streamed body destroys the request
+  ---
+  duration_ms: 3.9275
+  ...
+# 2026-03-12 17:56:18 [[33mwarn[39m]: [33mReflect usage recording failed: telemetry backend unavailable[39m
+# Subtest: createReflectService records backend token usage and estimated cost
+ok 44 - createReflectService records backend token usage and estimated cost
+  ---
+  duration_ms: 12.9316
+  ...
+# Subtest: createReflectService passes the effective model to response metadata building
+ok 45 - createReflectService passes the effective model to response metadata building
+  ---
+  duration_ms: 1.12
+  ...
+# Subtest: runReflectMessages passes planner temperament into response metadata runtime context
+ok 46 - runReflectMessages passes planner temperament into response metadata runtime context
+  ---
+  duration_ms: 2.5952
+  ...
+# Subtest: runReflectMessages passes usedWebSearch flag into response metadata runtime context
+ok 47 - runReflectMessages passes usedWebSearch flag into response metadata runtime context
+  ---
+  duration_ms: 1.24
+  ...
+# Subtest: createReflectService swallows usage recording failures
+ok 48 - createReflectService swallows usage recording failures
+  ---
+  duration_ms: 2.4406
+  ...
+# Subtest: runReflectMessages adds a backend repo-explainer response hint
+ok 49 - runReflectMessages adds a backend repo-explainer response hint
+  ---
+  duration_ms: 0.8278
+  ...
+# Subtest: runReflectMessages forwards planner-selected web search options to openaiService
+ok 50 - runReflectMessages forwards planner-selected web search options to openaiService
+  ---
+  duration_ms: 0.65
+  ...
+# 2026-03-12 17:56:19 [[32minfo[39m]: [32mInitialized SQLite trace store at C:\\Users\\Jordan\\AppData\\Local\\Temp\\trace-card-api-Csu1fk\\provenance.db[39m
+# 2026-03-12 17:56:20 [[32minfo[39m]: [32mTrace stored in SQLite: trace_card_response_123[39m
+# 2026-03-12 17:56:20 [[33mwarn[39m]: [33mCreated placeholder provenance_traces row for "trace_card_response_123" before upsertTraceCardSvg to satisfy foreign key constraints.[39m
+# Subtest: POST /api/trace-cards returns PNG payload and stores SVG asset
+ok 51 - POST /api/trace-cards returns PNG payload and stores SVG asset
+  ---
+  duration_ms: 571.9861
+  ...
+# 2026-03-12 17:56:20 [[32minfo[39m]: [32mInitialized SQLite trace store at C:\\Users\\Jordan\\AppData\\Local\\Temp\\trace-card-api-AkrRr9\\provenance.db[39m
+# Subtest: POST /api/trace-cards rejects missing trace token
+ok 52 - POST /api/trace-cards rejects missing trace token
+  ---
+  duration_ms: 240.2121
+  ...
+# 2026-03-12 17:56:20 [[32minfo[39m]: [32mInitialized SQLite trace store at C:\\Users\\Jordan\\AppData\\Local\\Temp\\trace-card-api-76ZWcf\\provenance.db[39m
+# 2026-03-12 17:56:21 [[32minfo[39m]: [32mTrace stored in SQLite: trace_card_minimal_123[39m
+# 2026-03-12 17:56:21 [[33mwarn[39m]: [33mCreated placeholder provenance_traces row for "trace_card_minimal_123" before upsertTraceCardSvg to satisfy foreign key constraints.[39m
+# Subtest: POST /api/trace-cards accepts minimal payload and returns PNG
+ok 53 - POST /api/trace-cards accepts minimal payload and returns PNG
+  ---
+  duration_ms: 919.9154
+  ...
+# 2026-03-12 17:56:21 [[32minfo[39m]: [32mInitialized SQLite trace store at C:\\Users\\Jordan\\AppData\\Local\\Temp\\trace-card-api-6uaxIo\\provenance.db[39m
+# Subtest: POST /api/trace-cards rejects invalid payloads
+ok 54 - POST /api/trace-cards rejects invalid payloads
+  ---
+  duration_ms: 125.0666
+  ...
+# 2026-03-12 17:56:21 [[32minfo[39m]: [32mInitialized SQLite trace store at C:\\Users\\Jordan\\AppData\\Local\\Temp\\trace-card-api-HBMw8l\\provenance.db[39m
+# Subtest: GET trace-card SVG returns 404 when asset is missing
+ok 55 - GET trace-card SVG returns 404 when asset is missing
+  ---
+  duration_ms: 78.619
+  ...
+# 2026-03-12 17:56:21 [[32minfo[39m]: [32mInitialized SQLite trace store at C:\\Users\\Jordan\\AppData\\Local\\Temp\\trace-card-api-cYz1jj\\provenance.db[39m
+# 2026-03-12 17:56:21 [[32minfo[39m]: [32mTrace stored in SQLite: from_trace_response_123[39m
+# Subtest: POST /api/trace-cards/from-trace uses stored metadata temperament and chip scores
+ok 56 - POST /api/trace-cards/from-trace uses stored metadata temperament and chip scores
+  ---
+  duration_ms: 634.8039
+  ...
+# 2026-03-12 17:56:22 [[32minfo[39m]: [32mInitialized SQLite trace store at C:\\Users\\Jordan\\AppData\\Local\\Temp\\trace-card-api-LANlOZ\\provenance.db[39m
+# 2026-03-12 17:56:22 [[32minfo[39m]: [32mTrace stored in SQLite: from_trace_missing_scores[39m
+# Subtest: POST /api/trace-cards/from-trace renders successfully when stored chip scores are missing
+ok 57 - POST /api/trace-cards/from-trace renders successfully when stored chip scores are missing
+  ---
+  duration_ms: 768.9408
+  ...
+# 2026-03-12 17:56:22 [[32minfo[39m]: [32mInitialized SQLite trace store at C:\\Users\\Jordan\\AppData\\Local\\Temp\\trace-card-api-Tg6KzY\\provenance.db[39m
+# 2026-03-12 17:56:22 [[32minfo[39m]: [32mTrace stored in SQLite: from_trace_missing_temperament[39m
+# Subtest: POST /api/trace-cards/from-trace renders successfully when stored temperament is missing
+ok 58 - POST /api/trace-cards/from-trace renders successfully when stored temperament is missing
+  ---
+  duration_ms: 496.1682
+  ...
+# Subtest: renderTraceCardSvg uses 5 wheel bands and renders metadata rows for valid scores
+ok 59 - renderTraceCardSvg uses 5 wheel bands and renders metadata rows for valid scores
+  ---
+  duration_ms: 3.2571
+  ...
+# Subtest: renderTraceCardSvg draws red fallback wedges for missing axes and gray chip rows for missing chip scores
+ok 60 - renderTraceCardSvg draws red fallback wedges for missing axes and gray chip rows for missing chip scores
+  ---
+  duration_ms: 1.6102
+  ...
+# Subtest: renderTraceCardSvg treats invalid input values as missing
+ok 61 - renderTraceCardSvg treats invalid input values as missing
+  ---
+  duration_ms: 0.5215
+  ...
+# Subtest: renderTraceCardPng returns PNG bytes with expected signature and dimensions
+ok 62 - renderTraceCardPng returns PNG bytes with expected signature and dimensions
+  ---
+  duration_ms: 432.5106
+  ...
+# 2026-03-12 17:56:20 [[32minfo[39m]: [32mInitialized SQLite trace store at C:\\Users\\Jordan\\AppData\\Local\\Temp\\trace-store-QeAAnP\\provenance.db[39m
+# 2026-03-12 17:56:20 [[32minfo[39m]: [32mTrace stored in SQLite: response_123[39m
+# Subtest: TraceStore round trips metadata with citation URLs
+ok 63 - TraceStore round trips metadata with citation URLs
+  ---
+  duration_ms: 175.2412
+  ...
+# 2026-03-12 17:56:20 [[32minfo[39m]: [32mInitialized SQLite trace store at C:\\Users\\Jordan\\AppData\\Local\\Temp\\trace-card-SbhoLH\\provenance.db[39m
+# Subtest: TraceStore round trips trace-card SVG assets
+not ok 64 - TraceStore round trips trace-card SVG assets
+  ---
+  duration_ms: 103.9493
+  location: 'C:\\Users\\Jordan\\Desktop\\footnote\\packages\\backend\\test\\traceStore.test.ts:1:1560'
+  failureType: 'testCodeFailure'
+  error: 'FOREIGN KEY constraint failed'
+  code: 'SQLITE_CONSTRAINT_FOREIGNKEY'
+  ...
+# 2026-03-12 17:56:20 [[32minfo[39m]: [32mInitialized SQLite trace store at C:\\Users\\Jordan\\AppData\\Local\\Temp\\trace-delete-Dbwo7u\\provenance.db[39m
+# 2026-03-12 17:56:20 [[32minfo[39m]: [32mTrace stored in SQLite: delete_trace_card_123[39m
+# Subtest: TraceStore delete removes both trace metadata and trace-card SVG
+ok 65 - TraceStore delete removes both trace metadata and trace-card SVG
+  ---
+  duration_ms: 56.1399
+  ...
+# 2026-03-12 17:56:20 [[32minfo[39m]: [32mInitialized SQLite trace store at C:\\data\\provenance.db[39m
+# 2026-03-12 17:56:20 [[31merror[39m]: [31mFailed to store trace for response "trace_service_response_123": trace upsert failed[39m
+# Subtest: storeTrace writes metadata and skips trace-card SVG auto-generation
+ok 66 - storeTrace writes metadata and skips trace-card SVG auto-generation
+  ---
+  duration_ms: 2.0313
+  ...
+# Subtest: storeTrace skips trace-card write when temperament is missing
+ok 67 - storeTrace skips trace-card write when temperament is missing
+  ---
+  duration_ms: 0.4669
+  ...
+# Subtest: storeTrace stays fail-open when trace upsert throws
+ok 68 - storeTrace stays fail-open when trace upsert throws
+  ---
+  duration_ms: 1.0783
+  ...
+# Subtest: assertValidResponseMetadata accepts valid metadata with forward-compatible fields
+ok 69 - assertValidResponseMetadata accepts valid metadata with forward-compatible fields
+  ---
+  duration_ms: 4.0814
+  ...
+# Subtest: assertValidResponseMetadata rejects invalid citation URLs
+ok 70 - assertValidResponseMetadata rejects invalid citation URLs
+  ---
+  duration_ms: 2.455
+  ...
+# Subtest: assertValidResponseMetadata rejects missing responseId
+ok 71 - assertValidResponseMetadata rejects missing responseId
+  ---
+  duration_ms: 1.0891
+  ...
+# Subtest: requestJson returns parsed payload when no response validator is provided
+ok 72 - requestJson returns parsed payload when no response validator is provided
+  ---
+  duration_ms: 39.0649
+  ...
+# Subtest: requestJson returns validated data when response validator succeeds
+ok 73 - requestJson returns validated data when response validator succeeds
+  ---
+  duration_ms: 1.2148
+  ...
+# Subtest: requestJson throws invalid_payload when response validator reports failure
+ok 74 - requestJson throws invalid_payload when response validator reports failure
+  ---
+  duration_ms: 1.5799
+  ...
+# Subtest: requestJson throws invalid_payload when response validator throws
+ok 75 - requestJson throws invalid_payload when response validator throws
+  ---
+  duration_ms: 1.5794
+  ...
+# Subtest: PostReflectRequestSchema enforces strict request payload rules
+ok 76 - PostReflectRequestSchema enforces strict request payload rules
+  ---
+  duration_ms: 7.3695
+  ...
+# Subtest: ResponseMetadataSchema remains tolerant for forward-compatible responses
+ok 77 - ResponseMetadataSchema remains tolerant for forward-compatible responses
+  ---
+  duration_ms: 3.1041
+  ...
+# Subtest: ResponseMetadataSchema accepts valid TRACE temperament metadata
+ok 78 - ResponseMetadataSchema accepts valid TRACE temperament metadata
+  ---
+  duration_ms: 2.0902
+  ...
+# Subtest: ResponseMetadataSchema accepts partial TRACE temperament metadata
+ok 79 - ResponseMetadataSchema accepts partial TRACE temperament metadata
+  ---
+  duration_ms: 0.446
+  ...
+# Subtest: ResponseMetadataSchema rejects invalid TRACE temperament metadata
+ok 80 - ResponseMetadataSchema rejects invalid TRACE temperament metadata
+  ---
+  duration_ms: 1.036
+  ...
+# Subtest: ResponseMetadataSchema accepts optional integer evidence/freshness scores
+ok 81 - ResponseMetadataSchema accepts optional integer evidence/freshness scores
+  ---
+  duration_ms: 0.4012
+  ...
+# Subtest: ResponseMetadataSchema rejects non-integer or out-of-range evidence/freshness scores
+ok 82 - ResponseMetadataSchema rejects non-integer or out-of-range evidence/freshness scores
+  ---
+  duration_ms: 3.4029
+  ...
+# Subtest: PostTracesRequestSchema rejects unknown request keys
+ok 83 - PostTracesRequestSchema rejects unknown request keys
+  ---
+  duration_ms: 1.4909
+  ...
+# Subtest: PostTraceCardRequestSchema accepts valid trace-card payloads
+ok 84 - PostTraceCardRequestSchema accepts valid trace-card payloads
+  ---
+  duration_ms: 1.3459
+  ...
+# Subtest: PostTraceCardRequestSchema rejects invalid chip values
+ok 85 - PostTraceCardRequestSchema rejects invalid chip values
+  ---
+  duration_ms: 0.9298
+  ...
+# Subtest: PostTraceCardRequestSchema accepts missing chips and partial chip payloads
+ok 86 - PostTraceCardRequestSchema accepts missing chips and partial chip payloads
+  ---
+  duration_ms: 1.4572
+  ...
+# Subtest: PostTraceCardResponseSchema requires responseId and pngBase64
+ok 87 - PostTraceCardResponseSchema requires responseId and pngBase64
+  ---
+  duration_ms: 2.5291
+  ...
+# Subtest: PostTraceCardFromTrace schemas require responseId and parse response envelope
+ok 88 - PostTraceCardFromTrace schemas require responseId and parse response envelope
+  ---
+  duration_ms: 0.7074
+  ...
+# Subtest: PostReflectResponseSchema and GetTraceStaleResponseSchema accept extensible responses
+ok 89 - PostReflectResponseSchema and GetTraceStaleResponseSchema accept extensible responses
+  ---
+  duration_ms: 3.0232
+  ...
+# Subtest: GetTraceApiResponseSchema accepts both live and stale trace payloads
+ok 90 - GetTraceApiResponseSchema accepts both live and stale trace payloads
+  ---
+  duration_ms: 0.711
+  ...
+# Subtest: schema validator outputs stay assignable to shared response contract types
+ok 91 - schema validator outputs stay assignable to shared response contract types
+  ---
+  duration_ms: 0.189
+  ...
+# Subtest: createSchemaResponseValidator returns normalized validation results
+ok 92 - createSchemaResponseValidator returns normalized validation results
+  ---
+  duration_ms: 2.9704
+  ...
+# Subtest: ApiErrorResponseSchema enforces strict known error envelope fields
+ok 93 - ApiErrorResponseSchema enforces strict known error envelope fields
+  ---
+  duration_ms: 0.5621
+  ...
+# 2026-03-12 17:56:20 [[32minfo[39m]: [32mResolved bot profile configuration.[39m
+# 2026-03-12 17:56:20 [[32minfo[39m]: [32mUsing web base URL: http://localhost:8080[39m
+# 2026-03-12 17:56:20 [[32minfo[39m]: [32mUsing backend base URL: http://localhost:6969[39m
+# Subtest: isEmojiOnly accepts emoji with skin-tone modifiers
+ok 94 - isEmojiOnly accepts emoji with skin-tone modifiers
+  ---
+  duration_ms: 3.0492
+  ...
+# Subtest: isEmojiOnly accepts emoji modifier and ZWJ chains
+ok 95 - isEmojiOnly accepts emoji modifier and ZWJ chains
+  ---
+  duration_ms: 0.4712
+  ...
+# Subtest: shouldSkipPlanner treats vendor aliases as valid mentions in shared channels
+ok 96 - shouldSkipPlanner treats vendor aliases as valid mentions in shared channels
+  ---
+  duration_ms: 3.9445
+  ...
+# Subtest: shouldSkipPlanner uses footnote fallback alias when no explicit aliases are configured
+ok 97 - shouldSkipPlanner uses footnote fallback alias when no explicit aliases are configured
+  ---
+  duration_ms: 1.6049
+  ...
+# Subtest: shouldSkipPlanner blocks substring false positives for plaintext aliases
+ok 98 - shouldSkipPlanner blocks substring false positives for plaintext aliases
+  ---
+  duration_ms: 1.1361
+  ...
+# Subtest: reflectViaApi posts to /api/reflect with X-Trace-Token and returns parsed data
+ok 99 - reflectViaApi posts to /api/reflect with X-Trace-Token and returns parsed data
+  ---
+  duration_ms: 3.0394
+  ...
+# Subtest: reflectViaApi throws backend request errors so callers can handle them
+ok 100 - reflectViaApi throws backend request errors so callers can handle them
+  ---
+  duration_ms: 0.8492
+  ...
+# Subtest: reflectViaApi tolerates unknown actions so the executor can fail safely
+ok 101 - reflectViaApi tolerates unknown actions so the executor can fail safely
+  ---
+  duration_ms: 0.5109
+  ...
+# Subtest: postTraceCard posts to /api/trace-cards with X-Trace-Token and returns parsed data
+ok 102 - postTraceCard posts to /api/trace-cards with X-Trace-Token and returns parsed data
+  ---
+  duration_ms: 3.0036
+  ...
+# Subtest: postTraceCard throws backend request errors so callers can handle them
+ok 103 - postTraceCard throws backend request errors so callers can handle them
+  ---
+  duration_ms: 0.903
+  ...
+# Subtest: postTraceCardFromTrace posts by responseId and returns parsed data
+ok 104 - postTraceCardFromTrace posts by responseId and returns parsed data
+  ---
+  duration_ms: 0.792
+  ...
+# Subtest: player errors do not allow overlapping processAudioQueue executions
+ok 105 - player errors do not allow overlapping processAudioQueue executions
+  ---
+  duration_ms: 3.3366
+  ...
+# Subtest: playback resampler flushes the full tail frame
+ok 106 - playback resampler flushes the full tail frame
+  ---
+  duration_ms: 8.5802
+  ...
+# Subtest: playback resampler combines partial frames across chunks
+ok 107 - playback resampler combines partial frames across chunks
+  ---
+  duration_ms: 4.1049
+  ...
+# 2026-03-12 17:56:21 [[33mwarn[39m]: [33mFailed to load bot profile overlay file.[39m
+# Subtest: readBotProfileConfig applies defaults when env values are missing
+ok 108 - readBotProfileConfig applies defaults when env values are missing
+  ---
+  duration_ms: 8.8984
+  ...
+# Subtest: parseBotProfileConfig is pure and applies inline-overlay precedence
+ok 109 - parseBotProfileConfig is pure and applies inline-overlay precedence
+  ---
+  duration_ms: 0.716
+  ...
+# Subtest: readBotProfileConfig normalizes id and display name with validation
+ok 110 - readBotProfileConfig normalizes id and display name with validation
+  ---
+  duration_ms: 0.4573
+  ...
+# Subtest: readBotProfileConfig falls back for invalid id and long display name
+ok 111 - readBotProfileConfig falls back for invalid id and long display name
+  ---
+  duration_ms: 0.3762
+  ...
+# Subtest: readBotProfileConfig prefers inline overlay over file overlay
+ok 112 - readBotProfileConfig prefers inline overlay over file overlay
+  ---
+  duration_ms: 0.3297
+  ...
+# Subtest: readBotProfileConfig resolves and reads file overlay when inline is absent
+ok 113 - readBotProfileConfig resolves and reads file overlay when inline is absent
+  ---
+  duration_ms: 20.5939
+  ...
+# Subtest: readBotProfileConfig fails open when file overlay cannot be read
+ok 114 - readBotProfileConfig fails open when file overlay cannot be read
+  ---
+  duration_ms: 5.6644
+  ...
+# Subtest: readBotProfileConfig ignores over-limit overlays
+ok 115 - readBotProfileConfig ignores over-limit overlays
+  ---
+  duration_ms: 0.4305
+  ...
+# Subtest: parseBotProfileConfig falls back to none when file text is missing
+ok 116 - parseBotProfileConfig falls back to none when file text is missing
+  ---
+  duration_ms: 0.4393
+  ...
+# Subtest: readBotProfileConfig normalizes and dedupes mention aliases
+ok 117 - readBotProfileConfig normalizes and dedupes mention aliases
+  ---
+  duration_ms: 0.707
+  ...
+# Subtest: readBotProfileConfig falls back to empty aliases for blank csv input
+ok 118 - readBotProfileConfig falls back to empty aliases for blank csv input
+  ---
+  duration_ms: 0.2265
+  ...
+# 2026-03-12 17:56:21 [[32minfo[39m]: [32mResolved bot profile configuration.[39m
+# 2026-03-12 17:56:21 [[32minfo[39m]: [32mUsing web base URL: http://localhost:8080[39m
+# 2026-03-12 17:56:21 [[32minfo[39m]: [32mUsing backend base URL: http://localhost:3000[39m
+# Subtest: runtimeConfig no longer exposes botMentionNames
+ok 119 - runtimeConfig no longer exposes botMentionNames
+  ---
+  duration_ms: 122.0052
+  ...
+# 2026-03-12 17:56:25 [[32minfo[39m]: [32mResolved bot profile configuration.[39m
+# 2026-03-12 17:56:25 [[32minfo[39m]: [32mUsing web base URL: http://localhost:8080[39m
+# 2026-03-12 17:56:25 [[32minfo[39m]: [32mUsing backend base URL: http://localhost:6969[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mAudit for guild [REDACTED_ID] channel [REDACTED_ID][39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mIncident created[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mIncident audit event appended[39m
+# Subtest: generateResponse logs sanitized metadata without raw message bodies
+ok 120 - generateResponse logs sanitized metadata without raw message bodies
+  ---
+  duration_ms: 5.3838
+  ...
+# Subtest: sanitizeLogData redacts Discord snowflake identifiers in strings and objects
+ok 121 - sanitizeLogData redacts Discord snowflake identifiers in strings and objects
+  ---
+  duration_ms: 0.2863
+  ...
+# Subtest: logger pipeline applies sanitizer before emitting logs
+ok 122 - logger pipeline applies sanitizer before emitting logs
+  ---
+  duration_ms: 5.7122
+  ...
+# Subtest: incident-style structured logs do not emit raw Discord IDs
+ok 123 - incident-style structured logs do not emit raw Discord IDs
+  ---
+  duration_ms: 12.8112
+  ...
+# Subtest: logContextIfVerbose only emits when high verbosity flag is enabled
+ok 124 - logContextIfVerbose only emits when high verbosity flag is enabled
+  ---
+  duration_ms: 0.5137
+  ...
+# Subtest: reflect overlay injection logs profile metadata without raw overlay body
+ok 125 - reflect overlay injection logs profile metadata without raw overlay body
+  ---
+  duration_ms: 3.5175
+  ...
+# Subtest: image generation logging redacts prompt and overlay text from request payload logs
+ok 126 - image generation logging redacts prompt and overlay text from request payload logs
+  ---
+  duration_ms: 3.6951
+  ...
+# Subtest: resolveBotMentionAliases prefers explicit aliases and still keeps bot username
+ok 127 - resolveBotMentionAliases prefers explicit aliases and still keeps bot username
+  ---
+  duration_ms: 4.7868
+  ...
+# Subtest: resolveBotMentionAliases keeps the footnote alias for the default profile when explicit aliases are absent
+ok 128 - resolveBotMentionAliases keeps the footnote alias for the default profile when explicit aliases are absent
+  ---
+  duration_ms: 0.3031
+  ...
+# Subtest: resolveBotMentionAliases does not inject the footnote alias for vendored profiles without explicit aliases
+ok 129 - resolveBotMentionAliases does not inject the footnote alias for vendored profiles without explicit aliases
+  ---
+  duration_ms: 0.1998
+  ...
+# Subtest: resolveBotMentionAliases dedupes normalized username and profile aliases
+ok 130 - resolveBotMentionAliases dedupes normalized username and profile aliases
+  ---
+  duration_ms: 0.3223
+  ...
+# Subtest: containsPlaintextBotAlias matches whole words and blocks substring false positives
+ok 131 - containsPlaintextBotAlias matches whole words and blocks substring false positives
+  ---
+  duration_ms: 0.7392
+  ...
+# Subtest: containsPlaintextBotAlias matches multi-word aliases with flexible whitespace
+ok 132 - containsPlaintextBotAlias matches multi-word aliases with flexible whitespace
+  ---
+  duration_ms: 0.3135
+  ...
+# Subtest: containsPlaintextBotAlias is case-insensitive and returns false for blank content
+ok 133 - containsPlaintextBotAlias is case-insensitive and returns false for blank content
+  ---
+  duration_ms: 0.3671
+  ...
+# Subtest: resolveBotMentionAliases ignores overlong aliases for regex safety
+ok 134 - resolveBotMentionAliases ignores overlong aliases for regex safety
+  ---
+  duration_ms: 0.3309
+  ...
+# 2026-03-12 17:56:26 [[32minfo[39m]: [32mResolved bot profile configuration.[39m
+# 2026-03-12 17:56:26 [[32minfo[39m]: [32mUsing web base URL: http://localhost:8080[39m
+# 2026-03-12 17:56:26 [[32minfo[39m]: [32mUsing backend base URL: http://localhost:6969[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mChannelContextManager enabled[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mRealtimeEngagementFilter enabled[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mMessageCreate initialized with context manager: enabled[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mChannelContextManager enabled[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mRealtimeEngagementFilter enabled[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mMessageCreate initialized with context manager: enabled[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mChannelContextManager enabled[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mRealtimeEngagementFilter enabled[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mMessageCreate initialized with context manager: enabled[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mChannelContextManager enabled[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mRealtimeEngagementFilter enabled[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mMessageCreate initialized with context manager: enabled[39m
+# Subtest: execute treats vendored plaintext aliases as direct invocations
+ok 135 - execute treats vendored plaintext aliases as direct invocations
+  ---
+  duration_ms: 9.1166
+  ...
+# Subtest: execute does not treat substring false positives as plaintext mention aliases
+ok 136 - execute does not treat substring false positives as plaintext mention aliases
+  ---
+  duration_ms: 2.4855
+  ...
+# Subtest: execute still responds immediately to direct mentions and replies
+ok 137 - execute still responds immediately to direct mentions and replies
+  ---
+  duration_ms: 4.3469
+  ...
+# 2026-03-12 17:56:22 [[32minfo[39m]: [32mResolved bot profile configuration.[39m
+# 2026-03-12 17:56:22 [[32minfo[39m]: [32mUsing web base URL: http://localhost:8080[39m
+# 2026-03-12 17:56:22 [[32minfo[39m]: [32mUsing backend base URL: http://localhost:6969[39m
+# 2026-03-12 17:56:24 [[33mwarn[39m]: [33mFailed to generate provenance trace-card for response resp_123; sending controls only: trace-card generation failed[39m
+# 2026-03-12 17:56:24 [[31merror[39m]: [31mBackend reflect returned an empty message payload for message message-1.[39m
+# 2026-03-12 17:56:24 [[31merror[39m]: [31mBackend reflect request failed for message message-1: Request timed out after 180000ms[39m
+# Subtest: executeReflectMessageAction sends text, triggers CGI follow-up, and skips trace posting
+ok 138 - executeReflectMessageAction sends text, triggers CGI follow-up, and skips trace posting
+  ---
+  duration_ms: 3.0019
+  ...
+# Subtest: sendProvenanceCgi posts trace-card and sends image plus response-bound buttons
+ok 139 - sendProvenanceCgi posts trace-card and sends image plus response-bound buttons
+  ---
+  duration_ms: 8.3825
+  ...
+# Subtest: sendProvenanceCgi falls back to buttons-only when trace-card generation fails
+ok 140 - sendProvenanceCgi falls back to buttons-only when trace-card generation fails
+  ---
+  duration_ms: 1.7739
+  ...
+# Subtest: executeReflectAction routes react actions without falling back to message generation
+ok 141 - executeReflectAction routes react actions without falling back to message generation
+  ---
+  duration_ms: 0.872
+  ...
+# Subtest: executeReflectAction routes image actions into the local image pipeline helper
+ok 142 - executeReflectAction routes image actions into the local image pipeline helper
+  ---
+  duration_ms: 0.3793
+  ...
+# Subtest: executeReflectAction warns and no-ops for unknown actions
+ok 143 - executeReflectAction warns and no-ops for unknown actions
+  ---
+  duration_ms: 0.4231
+  ...
+# Subtest: executeReflectMessageAction reports empty backend message payload as an error block
+ok 144 - executeReflectMessageAction reports empty backend message payload as an error block
+  ---
+  duration_ms: 1.2126
+  ...
+# Subtest: processMessage replies with a red code-block error when backend reflect request fails
+ok 145 - processMessage replies with a red code-block error when backend reflect request fails
+  ---
+  duration_ms: 2.4636
+  ...
+# Subtest: buildReflectRequestFromMessage prepends one profile overlay system message when configured
+ok 146 - buildReflectRequestFromMessage prepends one profile overlay system message when configured
+  ---
+  duration_ms: 12.3727
+  ...
+# Subtest: buildReflectRequestFromMessage leaves conversation unchanged when no profile overlay exists
+not ok 147 - buildReflectRequestFromMessage leaves conversation unchanged when no profile overlay exists
+  ---
+  duration_ms: 3.0602
+  location: 'C:\\Users\\Jordan\\Desktop\\footnote\\packages\\discord-bot\\test\\messageProcessor.reflect.test.ts:1:11100'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    2 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 2
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (C:\Users\Jordan\Desktop\footnote\packages\discord-bot\test\messageProcessor.reflect.test.ts:680:16)
+    async Test.run (node:internal/test_runner/test:980:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+# Subtest: buildReflectRequestFromMessage marks plaintext alias triggers as invoked
+ok 148 - buildReflectRequestFromMessage marks plaintext alias triggers as invoked
+  ---
+  duration_ms: 0.9299
+  ...
+# Subtest: normalizeOutboundLinks wraps bare URLs with markdown link text
+ok 149 - normalizeOutboundLinks wraps bare URLs with markdown link text
+  ---
+  duration_ms: 20.7114
+  ...
+# Subtest: normalizeOutboundLinks returns early when no http(s) URLs are present
+ok 150 - normalizeOutboundLinks returns early when no http(s) URLs are present
+  ---
+  duration_ms: 0.2095
+  ...
+# Subtest: normalizeOutboundLinks wraps multiple URLs and counts each change
+ok 151 - normalizeOutboundLinks wraps multiple URLs and counts each change
+  ---
+  duration_ms: 2.1279
+  ...
+# Subtest: normalizeOutboundLinks preserves existing markdown links while linkifying bare URLs
+ok 152 - normalizeOutboundLinks preserves existing markdown links while linkifying bare URLs
+  ---
+  duration_ms: 3.9167
+  ...
+# Subtest: normalizeOutboundLinks leaves existing markdown links untouched
+ok 153 - normalizeOutboundLinks leaves existing markdown links untouched
+  ---
+  duration_ms: 1.4103
+  ...
+# Subtest: normalizeOutboundLinks leaves existing autolinks untouched while wrapping bare URLs
+ok 154 - normalizeOutboundLinks leaves existing autolinks untouched while wrapping bare URLs
+  ---
+  duration_ms: 2.9177
+  ...
+# Subtest: normalizeOutboundLinks preserves list, quote, and emphasis formatting
+ok 155 - normalizeOutboundLinks preserves list, quote, and emphasis formatting
+  ---
+  duration_ms: 7.6011
+  ...
+# Subtest: normalizeOutboundLinks handles trailing punctuation and parentheses
+ok 156 - normalizeOutboundLinks handles trailing punctuation and parentheses
+  ---
+  duration_ms: 2.4993
+  ...
+# Subtest: normalizeOutboundLinks wraps URLs with query strings and parentheses
+ok 157 - normalizeOutboundLinks wraps URLs with query strings and parentheses
+  ---
+  duration_ms: 3.4921
+  ...
+# Subtest: normalizeOutboundLinks skips inline code spans
+ok 158 - normalizeOutboundLinks skips inline code spans
+  ---
+  duration_ms: 4.9882
+  ...
+# Subtest: normalizeOutboundLinks skips code blocks but normalizes surrounding text
+ok 159 - normalizeOutboundLinks skips code blocks but normalizes surrounding text
+  ---
+  duration_ms: 1.8656
+  ...
+# Subtest: normalizeOutboundLinks skips reference-style links and definitions
+ok 160 - normalizeOutboundLinks skips reference-style links and definitions
+  ---
+  duration_ms: 3.4821
+  ...
+# Subtest: normalizeOutboundLinks skips image URLs
+ok 161 - normalizeOutboundLinks skips image URLs
+  ---
+  duration_ms: 1.7047
+  ...
+# Subtest: normalizeOutboundLinks skips raw HTML blocks
+ok 162 - normalizeOutboundLinks skips raw HTML blocks
+  ---
+  duration_ms: 3.5755
+  ...
+# 2026-03-12 17:56:22 [[32minfo[39m]: [32mResolved bot profile configuration.[39m
+# 2026-03-12 17:56:22 [[32minfo[39m]: [32mUsing web base URL: http://localhost:8080[39m
+# 2026-03-12 17:56:22 [[32minfo[39m]: [32mUsing backend base URL: http://localhost:6969[39m
+# Subtest: buildDeveloperPrompt remains core workflow text and does not inject overlay persona blocks
+ok 163 - buildDeveloperPrompt remains core workflow text and does not inject overlay persona blocks
+  ---
+  duration_ms: 2.3757
+  ...
+# Subtest: generateImageWithMetadata uses overlay as active image persona and keeps developer prompt core-only
+ok 164 - generateImageWithMetadata uses overlay as active image persona and keeps developer prompt core-only
+  ---
+  duration_ms: 5.5259
+  ...
+# Subtest: RealtimeContextBuilder uses overlay as the active realtime persona layer
+ok 165 - RealtimeContextBuilder uses overlay as the active realtime persona layer
+  ---
+  duration_ms: 0.7609
+  ...
+# Subtest: generateAlternativeLensMessage uses the overlay-composed provenance system prompt
+ok 166 - generateAlternativeLensMessage uses the overlay-composed provenance system prompt
+  ---
+  duration_ms: 1.6801
+  ...
+# Subtest: requestProvenanceOpenAIOptions passes overlay-composed system prompt into planner context
+ok 167 - requestProvenanceOpenAIOptions passes overlay-composed system prompt into planner context
+  ---
+  duration_ms: 2.4542
+  ...
+# Subtest: buildProfileOverlaySystemMessage returns null when no overlay text exists
+ok 168 - buildProfileOverlaySystemMessage returns null when no overlay text exists
+  ---
+  duration_ms: 1.8422
+  ...
+# Subtest: buildProfileOverlaySystemMessage includes metadata, guardrail, and overlay body
+ok 169 - buildProfileOverlaySystemMessage includes metadata, guardrail, and overlay body
+  ---
+  duration_ms: 0.7577
+  ...
+# Subtest: buildProfileOverlaySystemMessage is deterministic for file-based overlays
+ok 170 - buildProfileOverlaySystemMessage is deterministic for file-based overlays
+  ---
+  duration_ms: 0.3652
+  ...
+# Subtest: renderPromptWithActivePersonaLayer uses overlay as the active persona layer
+ok 171 - renderPromptWithActivePersonaLayer uses overlay as the active persona layer
+  ---
+  duration_ms: 12.4041
+  ...
+# Subtest: renderPromptWithActivePersonaLayer falls back to default Footnote persona when no overlay exists
+ok 172 - renderPromptWithActivePersonaLayer falls back to default Footnote persona when no overlay exists
+  ---
+  duration_ms: 4.9135
+  ...
+# Subtest: prependProfileOverlaySystemMessageToConversation preserves reflect semantics
+ok 173 - prependProfileOverlaySystemMessageToConversation preserves reflect semantics
+  ---
+  duration_ms: 0.2408
+  ...
+# Subtest: shared override + active persona layer preserve expected precedence
+ok 174 - shared override + active persona layer preserve expected precedence
+  ---
+  duration_ms: 37.0567
+  ...
+# Subtest: malformed shared overrides fail open while active persona overlays still apply
+ok 175 - malformed shared overrides fail open while active persona overlays still apply
+  ---
+  duration_ms: 59.5577
+  ...
+# Subtest: discord prompt registry renders the same canonical base prompt as the shared package
+ok 176 - discord prompt registry renders the same canonical base prompt as the shared package
+  ---
+  duration_ms: 18.9559
+  ...
+# Subtest: discord prompt registry honors the same override format as the shared package
+ok 177 - discord prompt registry honors the same override format as the shared package
+  ---
+  duration_ms: 31.3393
+  ...
+# Subtest: buildProvenanceActionRow renders details/report_issue with response-bound custom IDs
+ok 178 - buildProvenanceActionRow renders details/report_issue with response-bound custom IDs
+  ---
+  duration_ms: 5.862
+  ...
+# Subtest: customId helpers round-trip valid provenance IDs
+ok 179 - customId helpers round-trip valid provenance IDs
+  ---
+  duration_ms: 0.2876
+  ...
+# Subtest: customId parser rejects invalid provenance IDs
+ok 180 - customId parser rejects invalid provenance IDs
+  ---
+  duration_ms: 0.1901
+  ...
+# Subtest: buildTraceCardRequest forwards metadata-provided TRACE values without defaults
+ok 181 - buildTraceCardRequest forwards metadata-provided TRACE values without defaults
+  ---
+  duration_ms: 2.6294
+  ...
+# Subtest: buildTraceCardRequest omits invalid or missing TRACE values
+ok 182 - buildTraceCardRequest omits invalid or missing TRACE values
+  ---
+  duration_ms: 0.959
+  ...
+# 2026-03-12 17:56:31 [[32minfo[39m]: [32mResolved bot profile configuration.[39m
+# 2026-03-12 17:56:31 [[32minfo[39m]: [32mUsing web base URL: http://localhost:8080[39m
+# 2026-03-12 17:56:31 [[32minfo[39m]: [32mUsing backend base URL: http://localhost:6969[39m
+# Subtest: deriveResponseIdFromMessage recovers responseId from provenance CGI controls
+ok 183 - deriveResponseIdFromMessage recovers responseId from provenance CGI controls
+  ---
+  duration_ms: 3.812
+  ...
+# Subtest: deriveResponseIdFromMessage returns null when no provenance controls are present
+ok 184 - deriveResponseIdFromMessage returns null when no provenance controls are present
+  ---
+  duration_ms: 0.213
+  ...
+# Subtest: deriveResponseIdFromMessage tolerates malformed custom IDs
+ok 185 - deriveResponseIdFromMessage tolerates malformed custom IDs
+  ---
+  duration_ms: 0.1831
+  ...
+# Subtest: deriveResponseIdFromMessage returns first valid responseId across mixed rows
+ok 186 - deriveResponseIdFromMessage returns first valid responseId across mixed rows
+  ---
+  duration_ms: 0.1603
+  ...
+# Subtest: deriveResponseIdFromMessage parses nested data.custom_id payloads
+ok 187 - deriveResponseIdFromMessage parses nested data.custom_id payloads
+  ---
+  duration_ms: 0.1634
+  ...
+# 2026-03-12 17:56:26 [[32minfo[39m]: [32mResolved bot profile configuration.[39m
+# 2026-03-12 17:56:26 [[32minfo[39m]: [32mUsing web base URL: http://localhost:8080[39m
+# 2026-03-12 17:56:26 [[32minfo[39m]: [32mUsing backend base URL: http://localhost:6969[39m
+# Subtest: scoreMention returns 0.9 for explicit vendor aliases
+ok 188 - scoreMention returns 0.9 for explicit vendor aliases
+  ---
+  duration_ms: 3.4259
+  ...
+# Subtest: scoreMention falls back to footnote display-name aliases when explicit aliases are absent
+ok 189 - scoreMention falls back to footnote display-name aliases when explicit aliases are absent
+  ---
+  duration_ms: 2.0264
+  ...
+# Subtest: scoreMention includes the live Discord username as a fallback alias
+ok 190 - scoreMention includes the live Discord username as a fallback alias
+  ---
+  duration_ms: 0.9322
+  ...
+# Subtest: scoreMention blocks substring false positives for vendor aliases
+ok 191 - scoreMention blocks substring false positives for vendor aliases
+  ---
+  duration_ms: 0.6723
+  ...
+# Subtest: scoreMention still treats direct mentions and replies as full-strength signals
+ok 192 - scoreMention still treats direct mentions and replies as full-strength signals
+  ---
+  duration_ms: 1.0397
+  ...
+# Subtest: RealtimeAudioHandler annotates speaker label before commit
+ok 193 - RealtimeAudioHandler annotates speaker label before commit
+  ---
+  duration_ms: 30.6744
+  ...
+# Subtest: VoiceSessionManager forwards multi-speaker audio with display names
+ok 194 - VoiceSessionManager forwards multi-speaker audio with display names
+  ---
+  duration_ms: 6.7718
+  ...
+# 2026-03-12 17:56:28 [[32minfo[39m]: [32mResolved bot profile configuration.[39m
+# 2026-03-12 17:56:28 [[32minfo[39m]: [32mUsing web base URL: http://localhost:8080[39m
+# 2026-03-12 17:56:28 [[32minfo[39m]: [32mUsing backend base URL: http://localhost:6969[39m
+# Subtest: trace-preview replies with only backend PNG attachment
+ok 195 - trace-preview replies with only backend PNG attachment
+  ---
+  duration_ms: 2.301
+  ...
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mResolved bot profile configuration.[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mUsing web base URL: http://localhost:8080[39m
+# 2026-03-12 17:56:29 [[32minfo[39m]: [32mUsing backend base URL: http://localhost:6969[39m
+# Subtest: cleanupTTSFile removes generated speech files without throwing on missing files
+ok 196 - cleanupTTSFile removes generated speech files without throwing on missing files
+  ---
+  duration_ms: 58.0052
+  ...
+# Subtest: loads canonical reflect core + default persona prompts
+ok 197 - loads canonical reflect core + default persona prompts
+  ---
+  duration_ms: 11.6628
+  ...
+# Subtest: merges override files over the canonical defaults
+ok 198 - merges override files over the canonical defaults
+  ---
+  duration_ms: 169.6983
+  ...
+# Subtest: missing override files fail open to defaults
+ok 199 - missing override files fail open to defaults
+  ---
+  duration_ms: 5.3655
+  ...
+# Subtest: invalid override entries are warned and skipped while valid entries still apply
+ok 200 - invalid override entries are warned and skipped while valid entries still apply
+  ---
+  duration_ms: 18.3303
+  ...
+# Subtest: unknown prompt keys throw a descriptive error
+ok 201 - unknown prompt keys throw a descriptive error
+  ---
+  duration_ms: 4.1515
+  ...
+# Subtest: legacy backend and discord default prompt files are gone
+ok 202 - legacy backend and discord default prompt files are gone
+  ---
+  duration_ms: 0.3258
+  ...
+# Subtest: measureEmbedHeight uses the tallest available source
+ok 203 - measureEmbedHeight uses the tallest available source
+  ---
+  duration_ms: 1.3207
+  ...
+# Subtest: createEmbedHeightMessenger posts the standardized message type once per frame
+ok 204 - createEmbedHeightMessenger posts the standardized message type once per frame
+  ---
+  duration_ms: 1.498
+  ...
+# Subtest: createEmbedHeightMessenger posts again when the height grows later
+ok 205 - createEmbedHeightMessenger posts again when the height grows later
+  ---
+  duration_ms: 0.4359
+  ...
+# Subtest: prompt button remains the only auto-focus path
+ok 206 - prompt button remains the only auto-focus path
+  ---
+  duration_ms: 1.1012
+  ...
+# Subtest: mounted auto-execution requires a ready mounted widget and no in-flight challenge
+ok 207 - mounted auto-execution requires a ready mounted widget and no in-flight challenge
+  ---
+  duration_ms: 0.2576
+  ...
+# Subtest: fallback execution only runs when onLoad has not marked the widget mounted yet
+ok 208 - fallback execution only runs when onLoad has not marked the widget mounted yet
+  ---
+  duration_ms: 0.2994
+  ...
+# Subtest: submit-time execution is blocked when widget state is already satisfied or unavailable
+ok 209 - submit-time execution is blocked when widget state is already satisfied or unavailable
+  ---
+  duration_ms: 0.3223
+  ...
+# Subtest: runtime annotation schema matches the source schema exactly
+ok 210 - runtime annotation schema matches the source schema exactly
+  ---
+  duration_ms: 1.9607
+  ...
+# Subtest: review parser keeps recognizing Footnote validator diagnostics
+ok 211 - review parser keeps recognizing Footnote validator diagnostics
+  ---
+  duration_ms: 2.5255
+  ...
+# Subtest: accepts a valid .ts file
+ok 212 - accepts a valid .ts file
+  ---
+  duration_ms: 76.8526
+  ...
+# Subtest: accepts a valid .tsx file with web scope
+ok 213 - accepts a valid .tsx file with web scope
+  ---
+  duration_ms: 64.1284
+  ...
+# Subtest: reports a missing @footnote-module tag in a .tsx file
+ok 214 - reports a missing @footnote-module tag in a .tsx file
+  ---
+  duration_ms: 61.8105
+  ...
+# Subtest: reports tags that are out of order
+ok 215 - reports tags that are out of order
+  ---
+  duration_ms: 39.2567
+  ...
+# Subtest: reports risk tags that omit rationale text
+ok 216 - reports risk tags that omit rationale text
+  ---
+  duration_ms: 84.384
+  ...
+# Subtest: rejects moderate as a legacy level
+ok 217 - rejects moderate as a legacy level
+  ---
+  duration_ms: 58.6087
+  ...
+# Subtest: rejects unknown tags in the module header
+ok 218 - rejects unknown tags in the module header
+  ---
+  duration_ms: 116.2234
+  ...
+# Subtest: scans scripts by default when no scan roots are provided
+ok 219 - scans scripts by default when no scan roots are provided
+  ---
+  duration_ms: 38.4537
+  ...
+# Subtest: rejects header tags that omit the required colon
+ok 220 - rejects header tags that omit the required colon
+  ---
+  duration_ms: 68.3561
+  ...
+# Subtest: uses the first matching JSDoc block as the module header
+ok 221 - uses the first matching JSDoc block as the module header
+  ---
+  duration_ms: 66.9848
+  ...
+1..221
+# tests 221
+# suites 0
+# pass 219
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 15394.7526

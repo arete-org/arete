@@ -1,5 +1,5 @@
 /**
- * @description: Composes instance-scoped profile overlay instructions onto bot prompt bodies.
+ * @description: Builds instance-scoped profile overlay persona instructions for bot prompt composition.
  * @footnote-scope: utility
  * @footnote-module: ProfilePromptOverlay
  * @footnote-risk: medium - Incorrect composition can duplicate or weaken prompt constraints across bot surfaces.
@@ -52,18 +52,3 @@ export const buildProfileOverlaySystemMessage = (
     ].join('\n');
 };
 
-/**
- * Appends the active profile overlay to an existing prompt body when present.
- */
-export const composePromptWithProfileOverlay = (
-    basePrompt: string,
-    profile: BotProfileConfig,
-    usage: ProfilePromptOverlayUsage
-): string => {
-    const overlayMessage = buildProfileOverlaySystemMessage(profile, usage);
-    if (!overlayMessage) {
-        return basePrompt;
-    }
-
-    return `${basePrompt.trimEnd()}\n\n${overlayMessage}`;
-};

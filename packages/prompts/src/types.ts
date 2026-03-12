@@ -12,12 +12,16 @@
  */
 export const promptKeys = [
     'discord.chat.system',
+    'discord.chat.persona.footnote',
     'discord.image.system',
+    'discord.image.persona.footnote',
     'discord.image.developer',
     'discord.realtime.system',
+    'discord.realtime.persona.footnote',
     'discord.planner.system',
     'reflect.planner.system',
     'reflect.chat.system',
+    'reflect.chat.persona.footnote',
     'discord.summarizer.system',
     'discord.news.system',
 ] as const;
