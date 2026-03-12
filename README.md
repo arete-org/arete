@@ -88,6 +88,25 @@ Recommended vendoring workflow:
 3. Add either [1] `BOT_PROFILE_PROMPT_OVERLAY` or [2] `BOT_PROFILE_PROMPT_OVERLAY_PATH` for persona-specific instructions (1 takes priority over 2).
 4. Add `BOT_PROFILE_MENTION_ALIASES` when the bot should respond to vendor-specific plaintext names.
 
+Persona overlay templates are available in `packages/prompts/src/profile-overlays/`:
+
+```env
+BOT_PROFILE_PROMPT_OVERLAY_PATH=packages/prompts/src/profile-overlays/danny.md
+BOT_PROFILE_PROMPT_OVERLAY_PATH=packages/prompts/src/profile-overlays/myuri.md
+```
+
+Suggested profile identity values when using those templates:
+
+```env
+# Danny
+BOT_PROFILE_ID=danny
+BOT_PROFILE_DISPLAY_NAME=Danny
+
+# Myuri
+BOT_PROFILE_ID=myuri
+BOT_PROFILE_DISPLAY_NAME=Myuri
+```
+
 Base prompt ownership is now shared:
 
 1. Canonical Footnote base prompts live in `packages/prompts/src/defaults.yaml`.

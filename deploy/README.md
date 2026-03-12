@@ -58,6 +58,7 @@ Services:
 - backend: `DEFAULT_MODEL`, `DEFAULT_REASONING_EFFORT`, `DEFAULT_VERBOSITY` (reflect defaults)
 - backend: `TRACE_API_RATE_LIMIT`, `TRACE_API_RATE_LIMIT_WINDOW_MS`, `TRACE_API_MAX_BODY_BYTES` (trace ingestion limits)
 - bot: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (optional image uploads)
+- bot: `BOT_PROFILE_ID`, `BOT_PROFILE_DISPLAY_NAME`, `BOT_PROFILE_PROMPT_OVERLAY_PATH` (optional persona overlays)
 
 ## Start
 
@@ -83,7 +84,12 @@ Services:
     - backend: `OPENAI_API_KEY`, `TRACE_API_TOKEN`
     - backend (optional): `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY`, `GITHUB_WEBHOOK_SECRET`, `LOG_LEVEL`
     - bot: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`
-    - bot (optional): `LOG_LEVEL`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
+    - bot (optional): `LOG_LEVEL`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `BOT_PROFILE_ID`, `BOT_PROFILE_DISPLAY_NAME`, `BOT_PROFILE_PROMPT_OVERLAY_PATH`
+
+Template overlay paths:
+
+- `packages/prompts/src/profile-overlays/danny.md`
+- `packages/prompts/src/profile-overlays/myuri.md`
 
 ## Notes
 
