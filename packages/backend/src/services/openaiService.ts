@@ -257,6 +257,15 @@ const extractCitationsFromOutputItems = (
 };
 
 /**
+ * Detects whether the model output includes an executed web search tool call.
+ * This is stronger evidence than planner intent alone.
+ */
+const hasWebSearchCallInOutputItems = (
+    outputItems: ResponsesApiOutputItem[]
+): boolean =>
+    outputItems.some((item) => item.type === 'web_search_call');
+
+/**
  * Converts internal role/content messages into Responses API input messages.
  */
 const buildInputMessage = (
@@ -445,7 +454,7 @@ class SimpleOpenAIService implements OpenAIService {
         const normalizedText = rawOutputText.trimEnd();
         const citations = extractCitationsFromOutputItems(outputItems);
         const provenance: Provenance =
-            hasValidWebSearch || citations.length > 0
+            citations.length > 0 || hasWebSearchCallInOutputItems(outputItems)
                 ? 'Retrieved'
                 : 'Inferred';
 
@@ -496,21 +505,21 @@ const buildResponseMetadata = (
         .substring(0, 16);
     const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
 
+    const citations = Array.isArray(assistantMetadata.citations)
+        ? assistantMetadata.citations
+        : [];
     const provenance: Provenance =
         assistantMetadata.provenance === 'Retrieved' ||
         assistantMetadata.provenance === 'Inferred' ||
         assistantMetadata.provenance === 'Speculative'
             ? assistantMetadata.provenance
-            : runtimeContext.usedWebSearch
+            : runtimeContext.usedWebSearch || citations.length > 0
               ? 'Retrieved'
               : 'Inferred';
     const tradeoffCount = resolveTradeoffCount(
         assistantMetadata.tradeoffCount,
         runtimeContext.plannerTemperament
     );
-    const citations = Array.isArray(assistantMetadata.citations)
-        ? assistantMetadata.citations
-        : [];
     const temperament = normalizePlannerTemperament(
         runtimeContext.plannerTemperament
     );
@@ -526,7 +535,11 @@ const buildResponseMetadata = (
         (evidenceScore === undefined || freshnessScore === undefined);
     if (isMissingRetrievedWebSearchChip) {
         logger.warn(
-            `Response metadata missing evidence/freshness for retrieved web-search response ${responseId}. Leaving chips omitted.`
+            'Response metadata missing evidence/freshness; leaving chips omitted.',
+            {
+                responseId,
+                missingChip: 'retrieved_web_search',
+            }
         );
     }
 

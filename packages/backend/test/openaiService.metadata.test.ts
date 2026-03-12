@@ -100,9 +100,7 @@ test('buildResponseMetadata keeps explicit assistant tradeoffCount over planner 
 test('buildResponseMetadata defaults tradeoffCount to 0 when assistant and planner fallback are absent', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata({ tradeoffCount: undefined }),
-        baseRuntimeContext({
-            plannerTemperament: { extent: 2 },
-        })
+        baseRuntimeContext()
     );
 
     assert.equal(metadata.tradeoffCount, 0);
