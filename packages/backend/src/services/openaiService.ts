@@ -14,10 +14,10 @@ import type {
     RiskTier,
     TraceAxisScore,
 } from '@footnote/contracts/ethics-core';
-import { extractTextAndMetadata } from '../utils/metadata.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { buildWebSearchInstruction } from './reflectGenerationHints.js';
+import { resolveTradeoffCount } from './responseMetadataHeuristics.js';
 import type {
     ReflectRepoSearchHint,
     ReflectSearchIntent,
@@ -29,21 +29,18 @@ type OpenAIUsage = {
     total_tokens?: number;
 };
 
-type ParsedMetadata = {
-    provenance?: string;
-    tradeoffCount?: number;
-    citations?: unknown[];
-    evidenceScore?: unknown;
-    freshnessScore?: unknown;
-};
-
 type OpenAIResponseMetadata = {
     model: string;
     usage?: OpenAIUsage;
     finishReason?: string;
     reasoningEffort?: string;
     verbosity?: string;
-} & ParsedMetadata;
+    provenance?: Provenance;
+    tradeoffCount?: number;
+    citations?: Citation[];
+    evidenceScore?: TraceAxisScore;
+    freshnessScore?: TraceAxisScore;
+};
 
 type GenerateResponseResult = {
     normalizedText: string;
@@ -51,7 +48,6 @@ type GenerateResponseResult = {
 };
 
 type GenerateResponseOptions = {
-    expectMetadata?: boolean;
     maxCompletionTokens?: number;
     reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
     verbosity?: 'low' | 'medium' | 'high';
@@ -122,36 +118,18 @@ const TRACE_AXIS_KEYS = [
     'extent',
 ] as const;
 
+/**
+ * Runtime guard for TRACE axis chip values.
+ */
 const isTraceAxisScore = (value: unknown): value is TraceAxisScore =>
     typeof value === 'number' &&
     Number.isInteger(value) &&
     value >= 1 &&
     value <= 5;
 
-const normalizeTraceAxisScore = (
-    value: unknown
-): TraceAxisScore | undefined => {
-    if (
-        typeof value === 'number' &&
-        Number.isInteger(value) &&
-        value >= 1 &&
-        value <= 5
-    ) {
-        return value as TraceAxisScore;
-    }
-
-    if (typeof value === 'string') {
-        const trimmed = value.trim();
-        if (!/^\d+$/.test(trimmed)) {
-            return undefined;
-        }
-        const parsed = Number.parseInt(trimmed, 10);
-        return isTraceAxisScore(parsed) ? parsed : undefined;
-    }
-
-    return undefined;
-};
-
+/**
+ * Keeps only valid TRACE planner axes so downstream metadata stays schema-safe.
+ */
 const normalizePlannerTemperament = (
     temperament: PartialResponseTemperament | undefined
 ): PartialResponseTemperament | undefined => {
@@ -170,6 +148,9 @@ const normalizePlannerTemperament = (
     return Object.keys(normalized).length > 0 ? normalized : undefined;
 };
 
+/**
+ * Maps planner reasoning effort to a valid Responses API setting.
+ */
 const normalizeReasoningEffort = (
     value: GenerateResponseOptions['reasoningEffort']
 ): NonNullable<GenerateResponseOptions['reasoningEffort']> => {
@@ -184,6 +165,9 @@ const normalizeReasoningEffort = (
     return 'low';
 };
 
+/**
+ * Maps planner verbosity to a valid Responses API setting.
+ */
 const normalizeVerbosity = (
     value: GenerateResponseOptions['verbosity']
 ): NonNullable<GenerateResponseOptions['verbosity']> => {
@@ -194,6 +178,96 @@ const normalizeVerbosity = (
     return 'low';
 };
 
+/**
+ * Extracts URL citations directly from OpenAI output annotations.
+ * This is the hard-cutover path for provenance citations (no footer parsing).
+ */
+const extractCitationsFromOutputItems = (
+    outputItems: ResponsesApiOutputItem[]
+): Citation[] => {
+    const citations: Citation[] = [];
+    const seenCitations = new Set<string>();
+
+    for (const item of outputItems) {
+        if (
+            item.type !== 'message' ||
+            item.role !== 'assistant' ||
+            !Array.isArray(item.content)
+        ) {
+            continue;
+        }
+
+        for (const contentItem of item.content) {
+            if (
+                contentItem.type !== 'output_text' ||
+                !contentItem.text ||
+                !Array.isArray(contentItem.annotations)
+            ) {
+                continue;
+            }
+
+            for (const annotation of contentItem.annotations) {
+                if (
+                    annotation.type !== 'url_citation' ||
+                    typeof annotation.url !== 'string'
+                ) {
+                    continue;
+                }
+
+                let normalizedUrl: string;
+                try {
+                    normalizedUrl = new URL(annotation.url).toString();
+                } catch {
+                    continue;
+                }
+
+                const normalizedTitle =
+                    typeof annotation.title === 'string' &&
+                    annotation.title.trim().length > 0
+                        ? annotation.title.trim()
+                        : 'Source';
+                const dedupeKey = `${normalizedUrl}::${normalizedTitle}`;
+                if (seenCitations.has(dedupeKey)) {
+                    continue;
+                }
+
+                seenCitations.add(dedupeKey);
+                const snippet =
+                    Number.isInteger(annotation.start_index) &&
+                    Number.isInteger(annotation.end_index) &&
+                    annotation.start_index >= 0 &&
+                    annotation.end_index > annotation.start_index
+                        ? contentItem.text.slice(
+                              annotation.start_index,
+                              annotation.end_index
+                          )
+                        : undefined;
+                citations.push({
+                    title: normalizedTitle,
+                    url: normalizedUrl,
+                    ...(snippet && snippet.trim().length > 0
+                        ? { snippet }
+                        : {}),
+                });
+            }
+        }
+    }
+
+    return citations;
+};
+
+/**
+ * Detects whether the model output includes an executed web search tool call.
+ * This is stronger evidence than planner intent alone.
+ */
+const hasWebSearchCallInOutputItems = (
+    outputItems: ResponsesApiOutputItem[]
+): boolean =>
+    outputItems.some((item) => item.type === 'web_search_call');
+
+/**
+ * Converts internal role/content messages into Responses API input messages.
+ */
 const buildInputMessage = (
     role: string,
     text: string
@@ -376,21 +450,13 @@ class SimpleOpenAIService implements OpenAIService {
             rawOutputText = data.output_text;
         }
 
-        const expectMetadata = options.expectMetadata !== false;
-        const extracted = expectMetadata
-            ? extractTextAndMetadata(rawOutputText)
-            : {
-                  normalizedText: rawOutputText.trimEnd(),
-                  metadata: null,
-              };
-        const parsedMetadata = extracted.metadata as ParsedMetadata | null;
-
-        const normalizedEvidenceScore = normalizeTraceAxisScore(
-            parsedMetadata?.evidenceScore
-        );
-        const normalizedFreshnessScore = normalizeTraceAxisScore(
-            parsedMetadata?.freshnessScore
-        );
+        // User-facing reply body is model text only; metadata is produced out-of-band.
+        const normalizedText = rawOutputText.trimEnd();
+        const citations = extractCitationsFromOutputItems(outputItems);
+        const provenance: Provenance =
+            citations.length > 0 || hasWebSearchCallInOutputItems(outputItems)
+                ? 'Retrieved'
+                : 'Inferred';
 
         const assistantMetadata: OpenAIResponseMetadata = {
             model: data.model ?? model,
@@ -405,21 +471,12 @@ class SimpleOpenAIService implements OpenAIService {
             finishReason,
             reasoningEffort: normalizedReasoningEffort,
             verbosity: normalizedVerbosity,
-            ...(parsedMetadata && {
-                provenance: parsedMetadata.provenance,
-                tradeoffCount: parsedMetadata.tradeoffCount,
-                citations: parsedMetadata.citations,
-                ...(normalizedEvidenceScore !== undefined && {
-                    evidenceScore: normalizedEvidenceScore,
-                }),
-                ...(normalizedFreshnessScore !== undefined && {
-                    freshnessScore: normalizedFreshnessScore,
-                }),
-            }),
+            provenance,
+            citations,
         };
 
         return {
-            normalizedText: extracted.normalizedText,
+            normalizedText,
             metadata: assistantMetadata,
         };
     }
@@ -432,6 +489,10 @@ type ResponseMetadataRuntimeContext = {
     usedWebSearch?: boolean;
 };
 
+/**
+ * Builds canonical ResponseMetadata for trace storage and UI rendering.
+ * All values are derived from control-plane context and API annotations.
+ */
 const buildResponseMetadata = (
     assistantMetadata: OpenAIResponseMetadata,
     runtimeContext: ResponseMetadataRuntimeContext
@@ -444,15 +505,21 @@ const buildResponseMetadata = (
         .substring(0, 16);
     const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
 
-    const provenance =
-        (assistantMetadata.provenance as Provenance) || 'Inferred';
-    const tradeoffCount =
-        typeof assistantMetadata.tradeoffCount === 'number'
-            ? assistantMetadata.tradeoffCount
-            : 0;
     const citations = Array.isArray(assistantMetadata.citations)
-        ? (assistantMetadata.citations as Citation[])
+        ? assistantMetadata.citations
         : [];
+    const provenance: Provenance =
+        assistantMetadata.provenance === 'Retrieved' ||
+        assistantMetadata.provenance === 'Inferred' ||
+        assistantMetadata.provenance === 'Speculative'
+            ? assistantMetadata.provenance
+            : runtimeContext.usedWebSearch || citations.length > 0
+              ? 'Retrieved'
+              : 'Inferred';
+    const tradeoffCount = resolveTradeoffCount(
+        assistantMetadata.tradeoffCount,
+        runtimeContext.plannerTemperament
+    );
     const temperament = normalizePlannerTemperament(
         runtimeContext.plannerTemperament
     );
@@ -468,7 +535,11 @@ const buildResponseMetadata = (
         (evidenceScore === undefined || freshnessScore === undefined);
     if (isMissingRetrievedWebSearchChip) {
         logger.warn(
-            `Response metadata missing evidence/freshness for retrieved web-search response ${responseId}. Leaving chips omitted.`
+            'Response metadata missing evidence/freshness; leaving chips omitted.',
+            {
+                responseId,
+                missingChip: 'retrieved_web_search',
+            }
         );
     }
 

@@ -29,6 +29,20 @@ import type { ReflectGenerationPlan } from './reflectGenerationTypes.js';
 import { renderPrompt } from './prompts/promptRegistry.js';
 import { logger } from '../utils/logger.js';
 
+const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
+
+/**
+ * Keeps backend-only reflect persona rendering aligned with deployment naming.
+ */
+const resolveBotProfileDisplayName = (): string => {
+    const envValue = process.env.BOT_PROFILE_DISPLAY_NAME;
+    if (typeof envValue === 'string' && envValue.trim().length > 0) {
+        return envValue.trim();
+    }
+
+    return DEFAULT_BOT_PROFILE_DISPLAY_NAME;
+};
+
 /**
  * Dependencies for the shared reflect workflow.
  * The HTTP handler injects these so the core logic stays transport-agnostic.
@@ -200,6 +214,7 @@ export const createReflectService = ({
     const runReflect = async ({
         question,
     }: RunReflectInput): Promise<PostReflectResponse> => {
+        const botProfileDisplayName = resolveBotProfileDisplayName();
         // Keep prompt assembly here so the public web reflect path stays stable.
         const messages: Array<
             Pick<ReflectConversationMessage, 'role' | 'content'>
@@ -207,6 +222,12 @@ export const createReflectService = ({
             {
                 role: 'system',
                 content: renderPrompt('reflect.chat.system').content,
+            },
+            {
+                role: 'system',
+                content: renderPrompt('reflect.chat.persona.footnote', {
+                    botProfileDisplayName,
+                }).content,
             },
             { role: 'user', content: question.trim() },
         ];

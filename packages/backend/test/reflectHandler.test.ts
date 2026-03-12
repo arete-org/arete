@@ -12,11 +12,15 @@ import http from 'node:http';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type { PostReflectRequest } from '@footnote/contracts/web';
 import { createReflectHandler } from '../src/handlers/reflect.js';
+import { runtimeConfig } from '../src/config.js';
+import { parseBooleanEnv } from '../src/config/parsers.js';
 import type {
     GenerateResponseOptions,
     OpenAIService,
 } from '../src/services/openaiService.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
+
+const TEST_PLANNER_MAX_COMPLETION_TOKENS = 700;
 
 type MutableEnv = NodeJS.ProcessEnv & {
     TURNSTILE_SECRET_KEY?: string;
@@ -81,6 +85,28 @@ const createTestServer = (
     options: CreateTestServerOptions = {}
 ): Promise<TestServer> =>
     new Promise((resolve) => {
+        // Keep tests deterministic when they mutate process.env after runtimeConfig
+        // has already been initialized at import time.
+        const mutableRuntimeConfig = runtimeConfig as typeof runtimeConfig;
+        mutableRuntimeConfig.trace.apiToken =
+            process.env.TRACE_API_TOKEN?.trim() || null;
+        mutableRuntimeConfig.reflect.serviceToken =
+            process.env.REFLECT_SERVICE_TOKEN?.trim() || null;
+        mutableRuntimeConfig.turnstile.secretKey =
+            process.env.TURNSTILE_SECRET_KEY?.trim() || null;
+        mutableRuntimeConfig.turnstile.siteKey =
+            process.env.TURNSTILE_SITE_KEY?.trim() || null;
+        mutableRuntimeConfig.turnstile.allowedHostnames = (
+            process.env.TURNSTILE_ALLOWED_HOSTNAMES || ''
+        )
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter((entry) => entry.length > 0);
+        mutableRuntimeConfig.server.trustProxy = parseBooleanEnv(
+            process.env.WEB_TRUST_PROXY,
+            false
+        );
+
         const serviceRateLimit = Number.parseInt(
             process.env.REFLECT_SERVICE_RATE_LIMIT || '30',
             10
@@ -95,7 +121,10 @@ const createTestServer = (
                 _messages,
                 options?: GenerateResponseOptions
             ) {
-                if (options?.expectMetadata === false) {
+                if (
+                    options?.maxCompletionTokens ===
+                    TEST_PLANNER_MAX_COMPLETION_TOKENS
+                ) {
                     return {
                         normalizedText:
                             '{"action":"message","modality":"text","riskTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","toolChoice":"none","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',
@@ -650,3 +679,4 @@ test('reflect rate limits public callers before calling Turnstile', async () => 
         env.TURNSTILE_ALLOWED_HOSTNAMES = previousAllowedHostnames;
     }
 });
+

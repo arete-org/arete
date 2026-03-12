@@ -74,3 +74,34 @@ test('buildResponseMetadata does not add chips for non-retrieved responses', () 
     assert.equal(metadata.evidenceScore, undefined);
     assert.equal(metadata.freshnessScore, undefined);
 });
+
+test('buildResponseMetadata uses planner fallback tradeoffCount when assistant metadata omits count', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata({ tradeoffCount: undefined }),
+        baseRuntimeContext({
+            plannerTemperament: { extent: 4 },
+        })
+    );
+
+    assert.equal(metadata.tradeoffCount, 1);
+});
+
+test('buildResponseMetadata keeps explicit assistant tradeoffCount over planner fallback', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata({ tradeoffCount: 3 }),
+        baseRuntimeContext({
+            plannerTemperament: { extent: 5 },
+        })
+    );
+
+    assert.equal(metadata.tradeoffCount, 3);
+});
+
+test('buildResponseMetadata defaults tradeoffCount to 0 when assistant and planner fallback are absent', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata({ tradeoffCount: undefined }),
+        baseRuntimeContext()
+    );
+
+    assert.equal(metadata.tradeoffCount, 0);
+});

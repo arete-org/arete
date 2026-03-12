@@ -14,7 +14,7 @@ import { promptConfigPath, runtimeConfig } from './runtime.js';
 import { createDiscordPromptRegistry } from './promptRegistryFactory.js';
 import {
     prependProfileOverlaySystemMessageToConversation,
-    renderPromptWithAppendedProfileOverlay,
+    renderPromptWithActivePersonaLayer,
     type PromptConversationMessage,
     type PromptConversationOverlayResult,
 } from './promptComposition.js';
@@ -28,11 +28,14 @@ export const promptRegistry = createDiscordPromptRegistry(promptConfigPath);
 
 const REQUIRED_PROMPT_KEYS: PromptKey[] = [
     'discord.chat.system',
+    'discord.chat.persona.footnote',
     'discord.image.system',
+    'discord.image.persona.footnote',
     'discord.image.developer',
     'discord.news.system',
     'discord.planner.system',
     'discord.realtime.system',
+    'discord.realtime.persona.footnote',
     'discord.summarizer.system',
 ];
 
@@ -52,21 +55,43 @@ export const renderPrompt = (
     });
 
 /**
+ * Resolves the default persona key for a given usage context when no runtime
+ * overlay is configured.
+ */
+const resolveDefaultPersonaPromptKey = (
+    usage: ProfilePromptOverlayUsage
+): PromptKey => {
+    switch (usage) {
+        case 'image.system':
+        case 'image.developer':
+            return 'discord.image.persona.footnote';
+        case 'realtime':
+            return 'discord.realtime.persona.footnote';
+        case 'reflect':
+        case 'provenance':
+            return 'discord.chat.persona.footnote';
+        default:
+            return 'discord.chat.persona.footnote';
+    }
+};
+
+/**
  * Prompt resolution order for Discord bot text generation:
  * 1) shared defaults.yaml
  * 2) optional PROMPT_CONFIG_PATH override for the same key
  * 3) variable interpolation
- * 4) profile overlay composition (append-style paths only)
+ * 4) one active persona layer (overlay when configured, otherwise default Footnote persona key)
  */
 export const renderPromptWithProfileOverlay = (
     key: PromptKey,
     usage: ProfilePromptOverlayUsage,
     variables: PromptVariables = {}
 ): string =>
-    renderPromptWithAppendedProfileOverlay({
+    renderPromptWithActivePersonaLayer({
         registry: promptRegistry,
         profile: runtimeConfig.profile,
-        key,
+        coreKey: key,
+        defaultPersonaKey: resolveDefaultPersonaPromptKey(usage),
         usage,
         variables: {
             botProfileDisplayName: runtimeConfig.profile.displayName,

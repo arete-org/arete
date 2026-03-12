@@ -67,7 +67,7 @@ const createNoOverlayProfile = (): BotProfileConfig => ({
     },
 });
 
-test('buildDeveloperPrompt appends the configured profile overlay and leaves no-overlay prompts unchanged', async () => {
+test('buildDeveloperPrompt remains core workflow text and does not inject overlay persona blocks', async () => {
     await withProfile(createOverlayProfile(), () => {
         const prompt = buildDeveloperPrompt({
             allowPromptAdjustment: false,
@@ -81,9 +81,11 @@ test('buildDeveloperPrompt appends the configured profile overlay and leaves no-
             remainingPromptRatio: 1,
         });
 
-        assert.match(prompt, /BEGIN Bot Profile Overlay/);
-        assert.match(prompt, /Usage Context: image\.developer/);
-        assert.match(prompt, /Profile Display Name: Ari/);
+        assert.match(
+            prompt,
+            /You are orchestrating a Discord `\/image` command for Ari\./
+        );
+        assert.doesNotMatch(prompt, /BEGIN Bot Profile Overlay/);
     });
 
     await withProfile(createNoOverlayProfile(), () => {
@@ -99,11 +101,15 @@ test('buildDeveloperPrompt appends the configured profile overlay and leaves no-
             remainingPromptRatio: 1,
         });
 
+        assert.match(
+            prompt,
+            /You are orchestrating a Discord `\/image` command for Footnote\./
+        );
         assert.doesNotMatch(prompt, /BEGIN Bot Profile Overlay/);
     });
 });
 
-test('generateImageWithMetadata injects the configured overlay into the image system prompt', async () => {
+test('generateImageWithMetadata uses overlay as active image persona and keeps developer prompt core-only', async () => {
     await withProfile(createOverlayProfile(), async () => {
         let capturedPayload: unknown = null;
         const openai = {
@@ -160,10 +166,18 @@ test('generateImageWithMetadata injects the configured overlay into the image sy
         };
         assert.match(payload.input[0].content[0].text, /BEGIN Bot Profile Overlay/);
         assert.match(payload.input[0].content[0].text, /Usage Context: image\.system/);
+        assert.doesNotMatch(
+            payload.input[0].content[0].text,
+            /You are Ari, the Discord voice of the Footnote project\./
+        );
+        assert.doesNotMatch(
+            payload.input[1].content[0].text,
+            /BEGIN Bot Profile Overlay/
+        );
     });
 });
 
-test('RealtimeContextBuilder appends the configured overlay to realtime instructions', async () => {
+test('RealtimeContextBuilder uses overlay as the active realtime persona layer', async () => {
     await withProfile(createOverlayProfile(), () => {
         const builder = new RealtimeContextBuilder();
         const result = builder.buildContext({
@@ -173,6 +187,10 @@ test('RealtimeContextBuilder appends the configured overlay to realtime instruct
 
         assert.match(result.instructions, /BEGIN Bot Profile Overlay/);
         assert.match(result.instructions, /Usage Context: realtime/);
+        assert.doesNotMatch(
+            result.instructions,
+            /You are Ari - the reasoning voice of the Footnote project\./
+        );
         assert.match(result.instructions, /Participants currently in the voice channel/);
     });
 });
@@ -211,6 +229,10 @@ test('generateAlternativeLensMessage uses the overlay-composed provenance system
         assert.equal(text, 'Reframed response');
         assert.match(capturedMessages[0].content, /BEGIN Bot Profile Overlay/);
         assert.match(capturedMessages[0].content, /Usage Context: provenance/);
+        assert.doesNotMatch(
+            capturedMessages[0].content,
+            /You are Ari, the Discord voice of the Footnote project\./
+        );
     });
 });
 
@@ -253,6 +275,10 @@ test('requestProvenanceOpenAIOptions passes overlay-composed system prompt into 
             });
             assert.match(capturedContext[0].content, /BEGIN Bot Profile Overlay/);
             assert.match(capturedContext[0].content, /Usage Context: provenance/);
+            assert.doesNotMatch(
+                capturedContext[0].content,
+                /You are Ari, the Discord voice of the Footnote project\./
+            );
         } finally {
             Planner.prototype.generatePlan = originalGeneratePlan;
         }
