@@ -51,6 +51,9 @@ const REPO_HINTS = [
 ] as const;
 
 const REPO_HINT_SET = new Set<ReflectRepoSearchHint>(REPO_HINTS);
+const DISCORD_CUSTOM_EMOJI_PATTERN = /^<a?:[a-zA-Z0-9_]+:[0-9]{2,}>$/;
+const UNICODE_SINGLE_EMOJI_PATTERN =
+    /^(?:\p{Regional_Indicator}{2}|[#*0-9]\uFE0F?\u20E3|\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?)*)$/u;
 
 /**
  * Planner decision consumed by the reflect orchestrator after the raw LLM
@@ -249,22 +252,38 @@ const stripJsonFences = (content: string): string =>
         .trim();
 
 /**
+ * Keeps react actions strict so downstream transport never receives plain text
+ * where an emoji token is expected.
+ */
+const isValidReactionEmoji = (value: string): boolean =>
+    DISCORD_CUSTOM_EMOJI_PATTERN.test(value) ||
+    UNICODE_SINGLE_EMOJI_PATTERN.test(value);
+
+/**
  * Builds a conservative fallback plan used when planner output is invalid.
  */
 const buildFallbackPlan = (
     request: PostReflectRequest,
     reason: string
-): ReflectPlan => ({
-    action: request.trigger.kind === 'catchup' ? 'ignore' : 'message',
-    modality: 'text',
-    riskTier: 'Low',
-    reasoning: reason,
-    generation: {
-        reasoningEffort: 'low',
-        verbosity: 'low',
-        toolChoice: 'none',
-    },
-});
+): ReflectPlan => {
+    const fallbackAction =
+        request.trigger.kind === 'catchup' ? 'ignore' : 'message';
+
+    return {
+        action: fallbackAction,
+        modality: 'text',
+        riskTier: 'Low',
+        reasoning: reason,
+        // Intentionally omit fallback TRACE temperament.
+        // Missing axes are rendered in red in the trace card to signal
+        // unavailable planner temperament, rather than synthetic values.
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            toolChoice: 'none',
+        },
+    };
+};
 
 /**
  * Produces a bounded request summary string for planner context/logging.
@@ -482,10 +501,18 @@ const normalizePlan = (
                     `${normalizedPlan.reasoning} React action was missing emoji, so the planner fell back safely.`.trim(),
             };
         }
+        const trimmedReaction = candidate.reaction.trim();
+        if (!isValidReactionEmoji(trimmedReaction)) {
+            return {
+                ...fallbackPlan,
+                reasoning:
+                    `${normalizedPlan.reasoning} React action was not a valid emoji token, so the planner fell back safely.`.trim(),
+            };
+        }
 
         return {
             ...normalizedPlan,
-            reaction: candidate.reaction.trim(),
+            reaction: trimmedReaction,
             generation: {
                 ...normalizedPlan.generation,
                 toolChoice: 'none',
