@@ -35,6 +35,14 @@
         {
             "content": "Use screenshots selectively on user-facing pages such as Discord and Web features. One or two tightly cropped images are enough when they make the feature easier to understand.",
             "author": "Maintainer"
+        },
+        {
+            "content": "Explain prompt setup in plain language: use shared core instructions plus one persona at a time. If multiple persona env settings are present, apply them in this order: `BOT_PROFILE_PROMPT_OVERLAY`, then `BOT_PROFILE_PROMPT_OVERLAY_PATH`, then the default persona.",
+            "author": "Maintainer"
+        },
+        {
+            "content": "Explain that TRACE metadata is built by backend code and API annotations, not by assistant-written message text.",
+            "author": "Maintainer"
         }
     ],
     "pages": [
@@ -95,11 +103,16 @@
                 "packages/web/src",
                 "packages/discord-bot/src",
                 "packages/contracts/src",
-                "docs/api/openapi.yaml"
+                "docs/api/openapi.yaml",
+                "docs/architecture/prompt-resolution.md"
             ],
             "page_notes": [
                 {
                     "content": "Use this as the system map. Make the package boundary obvious: contracts define shared shapes, backend owns execution and validation, and web and Discord are backend API clients.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Include prompt resolution order in the architecture page: start with shared prompts, apply optional `PROMPT_CONFIG_PATH` overrides, then choose one active persona from `BOT_PROFILE_*` settings.",
                     "author": "Maintainer"
                 }
             ]
@@ -232,12 +245,18 @@
             "parent": "Backend",
             "entrypoints": [
                 "packages/backend/src/handlers/reflect.ts",
+                "packages/backend/src/services/openaiService.ts",
+                "packages/backend/src/services/responseMetadataHeuristics.ts",
                 "packages/contracts/src/web/types.ts",
                 "packages/contracts/src/web/schemas.ts"
             ],
             "page_notes": [
                 {
                     "content": "Use one worked example to show how a reflect request becomes an answer plus provenance metadata.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Explain how reflect metadata is built from backend request context and API annotations.",
                     "author": "Maintainer"
                 }
             ]
@@ -338,11 +357,18 @@
                 "packages/discord-bot/src/events/MessageCreate.ts",
                 "packages/discord-bot/src/utils/MessageProcessor.ts",
                 "packages/discord-bot/src/utils/response/ResponseHandler.ts",
-                "packages/discord-bot/src/utils/openaiService.ts"
+                "packages/discord-bot/src/utils/openaiService.ts",
+                "packages/discord-bot/src/config/promptComposition.ts",
+                "packages/discord-bot/src/config/profilePromptOverlay.ts",
+                "docs/architecture/prompt-resolution.md"
             ],
             "page_notes": [
                 {
                     "content": "Focus on the user-facing response path: when the bot chooses to respond, how catchup heuristics limit noise, and where formatting and provenance are attached.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Document persona behavior as `core + one active persona layer` across bot paths (chat/image/realtime/provenance interactions). Overlay personas replace default Footnote persona when configured.",
                     "author": "Maintainer"
                 }
             ]
@@ -382,17 +408,21 @@
         },
         {
             "title": "Provenance",
-            "purpose": "Document how the Discord bot exposes transparency features such as provenance footers, interactions, and trace links to end users.",
+            "purpose": "Document how the Discord bot exposes transparency features such as TRACE cards, interactions, and trace links to end users.",
             "parent": "Discord",
             "entrypoints": [
                 "packages/discord-bot/src/api/traces.ts",
-                "packages/discord-bot/src/utils/response/provenanceFooter.ts",
+                "packages/discord-bot/src/utils/response/provenanceCgi.ts",
                 "packages/discord-bot/src/utils/response/provenanceInteractions.ts",
-                "packages/discord-bot/src/utils/response/metadata.ts"
+                "packages/backend/src/handlers/trace.ts"
             ],
             "page_notes": [
                 {
                     "content": "Include one screenshot of the provenance footer or interaction surface. Make the user-facing story clear before explaining the trace API calls behind it.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Explain that provenance metadata comes from backend trace APIs and backend metadata building, so user style prompts cannot rewrite TRACE payload fields.",
                     "author": "Maintainer"
                 }
             ]

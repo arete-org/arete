@@ -21,7 +21,7 @@ const canonicalPromptCatalogPath = path.resolve(
     '../../prompts/src/defaults.yaml'
 );
 
-test('backend prompt registry exposes the canonical reflect chat prompt', () => {
+test('backend prompt registry exposes canonical reflect core + default persona prompts', () => {
     // Pass the shared canonical catalog directly so PROMPT_CONFIG_PATH and
     // runtimeConfig.runtime.promptConfigPath cannot change this assertion.
     const registry = createBackendPromptRegistry({
@@ -30,6 +30,10 @@ test('backend prompt registry exposes the canonical reflect chat prompt', () => 
 
     assert.match(
         registry.renderPrompt('reflect.chat.system').content,
+        /You are the response engine for Footnote's reflect endpoint\./
+    );
+    assert.match(
+        registry.renderPrompt('reflect.chat.persona.footnote').content,
         /You are Footnote, an AI assistant from the Footnote project\./
     );
 });
@@ -65,7 +69,7 @@ test('backend renderPrompt keeps default variables when explicit undefined value
         overridePath: canonicalPromptCatalogPath,
     });
 
-    const rendered = registry.renderPrompt('reflect.chat.system', {
+    const rendered = registry.renderPrompt('reflect.chat.persona.footnote', {
         botProfileDisplayName: undefined,
     }).content;
 

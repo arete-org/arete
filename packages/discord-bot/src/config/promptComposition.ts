@@ -14,7 +14,6 @@ import type {
 
 import {
     buildProfileOverlaySystemMessage,
-    composePromptWithProfileOverlay,
     type ProfilePromptOverlayUsage,
 } from './profilePromptOverlay.js';
 import type { BotProfileConfig } from './profile.js';
@@ -35,27 +34,36 @@ export interface PromptConversationOverlayResult {
     overlayAdded: boolean;
 }
 
-type AppendedOverlayRenderInput = {
+type ActivePersonaRenderInput = {
     registry: PromptRegistry;
     profile: BotProfileConfig;
-    key: PromptKey;
+    coreKey: PromptKey;
+    defaultPersonaKey: PromptKey;
     usage: ProfilePromptOverlayUsage;
     variables?: PromptVariables;
 };
 
 /**
- * Renders a prompt and appends the profile overlay block when configured.
- * This is used by append-style paths such as image, realtime, and provenance.
+ * Renders one core prompt plus exactly one active persona layer.
+ * If a profile overlay exists, it replaces the default persona layer.
  */
-export const renderPromptWithAppendedProfileOverlay = (
-    input: AppendedOverlayRenderInput
+export const renderPromptWithActivePersonaLayer = (
+    input: ActivePersonaRenderInput
 ): string => {
-    const rendered = input.registry.renderPrompt(input.key, input.variables);
-    return composePromptWithProfileOverlay(
-        rendered.content,
+    const corePrompt = input.registry.renderPrompt(
+        input.coreKey,
+        input.variables
+    ).content;
+    const overlayPersonaPrompt = buildProfileOverlaySystemMessage(
         input.profile,
         input.usage
     );
+    const activePersonaPrompt =
+        overlayPersonaPrompt ??
+        input.registry.renderPrompt(input.defaultPersonaKey, input.variables)
+            .content;
+
+    return `${corePrompt.trimEnd()}\n\n${activePersonaPrompt}`.trim();
 };
 
 /**

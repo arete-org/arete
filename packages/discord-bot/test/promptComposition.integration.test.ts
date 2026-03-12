@@ -15,7 +15,7 @@ import path from 'node:path';
 import { createDiscordPromptRegistry } from '../src/config/promptRegistryFactory.js';
 import {
     prependProfileOverlaySystemMessageToConversation,
-    renderPromptWithAppendedProfileOverlay,
+    renderPromptWithActivePersonaLayer,
 } from '../src/config/promptComposition.js';
 import type { BotProfileConfig } from '../src/config/profile.js';
 
@@ -31,7 +31,7 @@ const createProfile = (): BotProfileConfig => ({
     },
 });
 
-test('shared override + variable interpolation + profile overlay preserve expected precedence', () => {
+test('shared override + active persona layer preserve expected precedence', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'footnote-prompts-'));
     const overridePath = path.join(tempDir, 'override.yaml');
 
@@ -51,10 +51,11 @@ test('shared override + variable interpolation + profile overlay preserve expect
         const registry = createDiscordPromptRegistry(overridePath);
         const profile = createProfile();
 
-        const appendedPrompt = renderPromptWithAppendedProfileOverlay({
+        const composedPrompt = renderPromptWithActivePersonaLayer({
             registry,
             profile,
-            key: 'discord.image.system',
+            coreKey: 'discord.image.system',
+            defaultPersonaKey: 'discord.image.persona.footnote',
             usage: 'image.system',
             variables: {
                 botProfileDisplayName: profile.displayName,
@@ -67,9 +68,13 @@ test('shared override + variable interpolation + profile overlay preserve expect
                 [{ role: 'user', content: 'hello' }]
             );
 
-        assert.match(appendedPrompt, /Override image prompt for Vendor Bot\./);
-        assert.match(appendedPrompt, /BEGIN Bot Profile Overlay/);
-        assert.match(appendedPrompt, /Usage Context: image\.system/);
+        assert.match(composedPrompt, /Override image prompt for Vendor Bot\./);
+        assert.match(composedPrompt, /BEGIN Bot Profile Overlay/);
+        assert.match(composedPrompt, /Usage Context: image\.system/);
+        assert.doesNotMatch(
+            composedPrompt,
+            /You are Vendor Bot, the Discord voice of the Footnote project\./
+        );
         assert.equal(reflectConversation.overlayAdded, true);
         assert.equal(reflectConversation.conversation[0].role, 'system');
         assert.match(
@@ -82,7 +87,7 @@ test('shared override + variable interpolation + profile overlay preserve expect
     }
 });
 
-test('malformed shared overrides fail open while append-path overlays still apply', () => {
+test('malformed shared overrides fail open while active persona overlays still apply', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'footnote-prompts-'));
     const overridePath = path.join(tempDir, 'invalid-override.yaml');
 
@@ -99,17 +104,21 @@ test('malformed shared overrides fail open while append-path overlays still appl
         );
 
         const registry = createDiscordPromptRegistry(overridePath);
-        const prompt = renderPromptWithAppendedProfileOverlay({
+        const prompt = renderPromptWithActivePersonaLayer({
             registry,
             profile: createProfile(),
-            key: 'discord.image.system',
+            coreKey: 'discord.image.system',
+            defaultPersonaKey: 'discord.image.persona.footnote',
             usage: 'image.system',
             variables: {
                 botProfileDisplayName: 'Footnote',
             },
         });
 
-        assert.match(prompt, /You are Footnote/);
+        assert.match(
+            prompt,
+            /You are the image-generation orchestration system for a configured Discord bot profile\./
+        );
         assert.match(prompt, /BEGIN Bot Profile Overlay/);
     } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });

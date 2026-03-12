@@ -27,6 +27,16 @@ test('discord prompt registry renders the same canonical base prompt as the shar
         discordRegistry.renderPrompt('discord.image.system').content,
         sharedRegistry.renderPrompt('discord.image.system').content
     );
+    assert.equal(
+        discordRegistry.renderPrompt('discord.image.persona.footnote').content,
+        sharedRegistry.renderPrompt('discord.image.persona.footnote').content
+    );
+    assert.equal(
+        discordRegistry.renderPrompt(
+            'discord.realtime.persona.footnote'
+        ).content,
+        sharedRegistry.renderPrompt('discord.realtime.persona.footnote').content
+    );
 });
 
 test('discord prompt registry honors the same override format as the shared package', () => {

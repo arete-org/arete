@@ -5,7 +5,7 @@
  * @footnote-risk: medium - Prompt errors can degrade outputs or raise costs.
  * @footnote-ethics: medium - Prompt framing shapes model behavior and safety.
  */
-import { renderPromptWithProfileOverlay } from '../../config.js';
+import { renderPrompt } from '../../config.js';
 
 import type {
     ImageBackgroundType,
@@ -68,10 +68,7 @@ export function buildDeveloperPrompt(options: DeveloperPromptOptions): string {
         ? `Provide a brief annotation that addresses "${requesterName}" by name and explores the creative intent in two or three sentences.`
         : 'Provide a brief annotation that explores the creative intent in two or three sentences.';
 
-    return renderPromptWithProfileOverlay(
-        'discord.image.developer',
-        'image.developer',
-        {
+    return renderPrompt('discord.image.developer', {
         userContext,
         size: options.size,
         quality: options.quality,
@@ -79,7 +76,6 @@ export function buildDeveloperPrompt(options: DeveloperPromptOptions): string {
         style: options.style,
         adjustmentClause,
         reflectionInstruction: annotationInstruction,
-        }
-    );
+    }).content;
 }
 

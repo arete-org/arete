@@ -208,6 +208,10 @@ export const createReflectService = ({
                 role: 'system',
                 content: renderPrompt('reflect.chat.system').content,
             },
+            {
+                role: 'system',
+                content: renderPrompt('reflect.chat.persona.footnote').content,
+            },
             { role: 'user', content: question.trim() },
         ];
         const response = await runReflectMessages({

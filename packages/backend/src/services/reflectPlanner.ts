@@ -84,6 +84,9 @@ type PlannerCandidate = Partial<ReflectPlan> & {
 
 const isDevelopment = (): boolean => runtimeConfig.runtime.isDevelopment;
 
+/**
+ * Coerces arbitrary planner output into the RiskTier contract.
+ */
 const normalizeRiskTier = (value: unknown): RiskTier => {
     if (value === 'Low' || value === 'Medium' || value === 'High') {
         return value;
@@ -92,6 +95,9 @@ const normalizeRiskTier = (value: unknown): RiskTier => {
     return 'Low';
 };
 
+/**
+ * Ensures TTS is only selected when the calling surface explicitly supports it.
+ */
 const normalizeModality = (
     value: unknown,
     capabilities: ReflectCapabilities | undefined
@@ -103,6 +109,9 @@ const normalizeModality = (
     return 'text';
 };
 
+/**
+ * Normalizes planner reasoning effort into accepted generation values.
+ */
 const normalizeReasoningEffort = (
     value: unknown
 ): ReflectGenerationPlan['reasoningEffort'] => {
@@ -118,6 +127,9 @@ const normalizeReasoningEffort = (
     return 'low';
 };
 
+/**
+ * Normalizes planner verbosity into accepted generation values.
+ */
 const normalizeVerbosity = (
     value: unknown
 ): ReflectGenerationPlan['verbosity'] => {
@@ -128,9 +140,15 @@ const normalizeVerbosity = (
     return 'low';
 };
 
+/**
+ * Falls back to current_facts to keep invalid planner outputs fail-open.
+ */
 const normalizeSearchIntent = (value: unknown): ReflectSearchIntent =>
     value === 'repo_explainer' ? 'repo_explainer' : 'current_facts';
 
+/**
+ * Chooses safe search context defaults by search intent.
+ */
 const normalizeSearchContextSize = (
     value: unknown,
     searchIntent: ReflectSearchIntent
@@ -146,6 +164,9 @@ const normalizeSearchContextSize = (
     return 'low';
 };
 
+/**
+ * Keeps only allowed repo hints and removes duplicates.
+ */
 const normalizeRepoHints = (value: unknown): ReflectRepoSearchHint[] => {
     if (!Array.isArray(value)) {
         return [];
@@ -227,6 +248,9 @@ const stripJsonFences = (content: string): string =>
         .replace(/```$/i, '')
         .trim();
 
+/**
+ * Builds a conservative fallback plan used when planner output is invalid.
+ */
 const buildFallbackPlan = (
     request: PostReflectRequest,
     reason: string
@@ -242,6 +266,9 @@ const buildFallbackPlan = (
     },
 });
 
+/**
+ * Produces a bounded request summary string for planner context/logging.
+ */
 const summarizeRequest = (request: PostReflectRequest): string =>
     JSON.stringify({
         surface: request.surface,
@@ -258,6 +285,9 @@ const summarizeRequest = (request: PostReflectRequest): string =>
         capabilities: request.capabilities,
     });
 
+/**
+ * Validates and normalizes image-generation settings from planner output.
+ */
 const normalizeImageRequest = (
     value: unknown
 ): ReflectImageRequest | undefined => {
@@ -326,6 +356,9 @@ const normalizeImageRequest = (
     };
 };
 
+/**
+ * Normalizes planner generation settings and safely disables invalid web search.
+ */
 const normalizeGeneration = (
     candidate: PlannerCandidate['generation'],
     reasoning: string
@@ -388,6 +421,9 @@ const normalizeGeneration = (
     };
 };
 
+/**
+ * Converts raw planner JSON into a fully validated internal ReflectPlan.
+ */
 const normalizePlan = (
     request: PostReflectRequest,
     candidate: PlannerCandidate
@@ -552,7 +588,6 @@ export const createReflectPlanner = ({
                 defaultModel,
                 plannerMessages,
                 {
-                    expectMetadata: false,
                     maxCompletionTokens: 700,
                     reasoningEffort: 'low',
                     verbosity: 'low',
