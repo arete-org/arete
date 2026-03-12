@@ -21,6 +21,21 @@ import { logger } from '../utils/logger.js';
 
 type CreateReflectOrchestratorOptions = CreateReflectServiceOptions;
 
+const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
+
+/**
+ * Uses the shared profile display-name env so non-overlay persona templates
+ * resolve to the same name operators configured for the deployment.
+ */
+const resolveBotProfileDisplayName = (): string => {
+    const envValue = process.env.BOT_PROFILE_DISPLAY_NAME;
+    if (typeof envValue === 'string' && envValue.trim().length > 0) {
+        return envValue.trim();
+    }
+
+    return DEFAULT_BOT_PROFILE_DISPLAY_NAME;
+};
+
 /**
  * Packs the normalized planner decision into one structured system payload.
  */
@@ -58,12 +73,20 @@ const coercePlanForSurface = (
         return { plan };
     }
 
+    const normalizedReasoning = plan.reasoning.trim();
     const coercedPlan: ReflectPlan = {
         ...plan,
         action: 'message',
         modality: 'text',
+        reaction: undefined,
+        imageRequest: undefined,
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            toolChoice: 'none',
+        },
         reasoning:
-            `${plan.reasoning} Web surface requires a message response, so the planner was coerced to message.`.trim(),
+            `${normalizedReasoning ? `${normalizedReasoning} ` : ''}Web surface requires a message response, so the planner output was coerced to a text message.`.trim(),
     };
 
     logger.debug(
@@ -90,11 +113,16 @@ const buildSurfaceSystemPrompt = (
  * Resolves the default Footnote persona prompt key by surface.
  */
 const buildSurfacePersonaPrompt = (
-    surface: PostReflectRequest['surface']
+    surface: PostReflectRequest['surface'],
+    botProfileDisplayName: string
 ): string =>
     surface === 'discord'
-        ? renderPrompt('discord.chat.persona.footnote').content
-        : renderPrompt('reflect.chat.persona.footnote').content;
+        ? renderPrompt('discord.chat.persona.footnote', {
+              botProfileDisplayName,
+          }).content
+        : renderPrompt('reflect.chat.persona.footnote', {
+              botProfileDisplayName,
+          }).content;
 
 const DISCORD_PROFILE_OVERLAY_HEADER = 'BEGIN Bot Profile Overlay';
 
@@ -117,8 +145,8 @@ const extractDiscordPersonaOverlay = (
     personaPrompt: string | null;
     conversation: Array<Pick<ReflectConversationMessage, 'role' | 'content'>>;
 } => {
-    const overlayIndex = conversation.findIndex(isDiscordOverlaySystemMessage);
-    if (overlayIndex < 0) {
+    const firstOverlay = conversation.find(isDiscordOverlaySystemMessage);
+    if (!firstOverlay) {
         return {
             personaPrompt: null,
             conversation,
@@ -126,8 +154,10 @@ const extractDiscordPersonaOverlay = (
     }
 
     return {
-        personaPrompt: conversation[overlayIndex].content,
-        conversation: conversation.filter((_, index) => index !== overlayIndex),
+        personaPrompt: firstOverlay.content,
+        conversation: conversation.filter(
+            (message) => !isDiscordOverlaySystemMessage(message)
+        ),
     };
 };
 
@@ -158,6 +188,7 @@ export const createReflectOrchestrator = ({
     const runReflect = async (
         request: PostReflectRequest
     ): Promise<PostReflectResponse> => {
+        const botProfileDisplayName = resolveBotProfileDisplayName();
         const planned = await reflectPlanner.planReflect(request);
         const { plan, surfacePolicy } = coercePlanForSurface(request, planned);
 
@@ -216,7 +247,10 @@ export const createReflectOrchestrator = ({
         }
         const personaPrompt =
             extractedPersona.personaPrompt ??
-            buildSurfacePersonaPrompt(request.surface);
+            buildSurfacePersonaPrompt(
+                request.surface,
+                botProfileDisplayName
+            );
 
         const conversationMessages: Array<
             Pick<ReflectConversationMessage, 'role' | 'content'>
