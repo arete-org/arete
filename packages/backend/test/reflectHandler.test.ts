@@ -13,11 +13,14 @@ import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type { PostReflectRequest } from '@footnote/contracts/web';
 import { createReflectHandler } from '../src/handlers/reflect.js';
 import { runtimeConfig } from '../src/config.js';
+import { parseBooleanEnv } from '../src/config/parsers.js';
 import type {
     GenerateResponseOptions,
     OpenAIService,
 } from '../src/services/openaiService.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
+
+const TEST_PLANNER_MAX_COMPLETION_TOKENS = 700;
 
 type MutableEnv = NodeJS.ProcessEnv & {
     TURNSTILE_SECRET_KEY?: string;
@@ -99,6 +102,10 @@ const createTestServer = (
             .split(',')
             .map((entry) => entry.trim())
             .filter((entry) => entry.length > 0);
+        mutableRuntimeConfig.server.trustProxy = parseBooleanEnv(
+            process.env.WEB_TRUST_PROXY,
+            false
+        );
 
         const serviceRateLimit = Number.parseInt(
             process.env.REFLECT_SERVICE_RATE_LIMIT || '30',
@@ -114,7 +121,10 @@ const createTestServer = (
                 _messages,
                 options?: GenerateResponseOptions
             ) {
-                if (options?.maxCompletionTokens === 700) {
+                if (
+                    options?.maxCompletionTokens ===
+                    TEST_PLANNER_MAX_COMPLETION_TOKENS
+                ) {
                     return {
                         normalizedText:
                             '{"action":"message","modality":"text","riskTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","toolChoice":"none","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',

@@ -28,6 +28,10 @@ test('discord prompt registry renders the same canonical base prompt as the shar
         sharedRegistry.renderPrompt('discord.image.system').content
     );
     assert.equal(
+        discordRegistry.renderPrompt('discord.chat.persona.footnote').content,
+        sharedRegistry.renderPrompt('discord.chat.persona.footnote').content
+    );
+    assert.equal(
         discordRegistry.renderPrompt('discord.image.persona.footnote').content,
         sharedRegistry.renderPrompt('discord.image.persona.footnote').content
     );
