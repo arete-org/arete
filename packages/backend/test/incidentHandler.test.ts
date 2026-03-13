@@ -186,8 +186,25 @@ test('incident report/list/detail flow stores pseudonymized pointers and omits j
             assert.equal(storedIncident?.description, 'Please review this reply');
             assert.equal(storedIncident?.contact, 'contact@example.com');
             assert.equal(storedIncident?.reporter_hash?.length, 64);
-            assert.ok(!storedIncident?.pointers_json.includes('234567890123456789'));
-            assert.ok(!storedIncident?.pointers_json.includes('https://discord.com/channels'));
+            const storedPointers = JSON.parse(storedIncident.pointers_json) as {
+                responseId?: string;
+                guildId?: string;
+                channelId?: string;
+                messageId?: string;
+                jumpUrl?: string;
+            };
+            assert.deepEqual(Object.keys(storedPointers).sort(), [
+                'chainHash',
+                'channelId',
+                'guildId',
+                'messageId',
+                'modelVersion',
+                'responseId',
+            ]);
+            assert.notEqual(storedPointers.guildId, '234567890123456789');
+            assert.notEqual(storedPointers.channelId, '345678901234567890');
+            assert.notEqual(storedPointers.messageId, '456789012345678901');
+            assert.equal('jumpUrl' in storedPointers, false);
         } finally {
             db.close();
         }
