@@ -38,6 +38,7 @@ test('SqliteIncidentStore pseudonymizes pointers and audit actors', async () => 
         const incident = await store.createIncident({
             pointers: rawPointers,
             tags: ['a', 'b'],
+            consentedAt: new Date().toISOString(),
         });
         assert.ok(
             incident.pointers.guildId && incident.pointers.guildId.length === 64
@@ -94,7 +95,7 @@ test('SqliteIncidentStore pseudonymizes pointers and audit actors', async () => 
 
         const audit = await store.appendAuditEvent(incident.id, {
             actorHash: '999999999999999999',
-            action: 'test-action',
+            action: 'incident.note_added',
             notes: 'actor id should be hashed',
         });
 

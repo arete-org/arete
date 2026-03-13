@@ -68,7 +68,6 @@ test('pseudonymizeIncidentPointers hashes Discord IDs and preserves other fields
         channelId: '456',
         messageId: '789',
         responseId: 'resp-001',
-        jumpUrl: 'https://discord.com/channels/123/456/789',
         modelVersion: 'gpt-4.1-mini',
     };
 
@@ -81,11 +80,6 @@ test('pseudonymizeIncidentPointers hashes Discord IDs and preserves other fields
         hashed.responseId,
         pointers.responseId,
         'responseId should remain unchanged'
-    );
-    assert.equal(
-        hashed.jumpUrl,
-        pointers.jumpUrl,
-        'jumpUrl should remain unchanged'
     );
     assert.equal(
         hashed.modelVersion,
