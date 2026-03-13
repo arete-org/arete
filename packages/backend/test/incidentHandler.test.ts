@@ -444,3 +444,32 @@ test('incident notes endpoint rejects whitespace-only notes with 400', async () 
         await fs.rm(tempRoot, { recursive: true, force: true });
     }
 });
+
+test('incident detail rejects malformed percent-encoding with 400', async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'incident-api-'));
+    const dbPath = path.join(tempRoot, 'incidents.db');
+    const store = new SqliteIncidentStore({
+        dbPath,
+        pseudonymizationSecret: SECRET,
+    });
+    const server = await createIncidentServer(store, {
+        traceApiToken: 'trace-secret',
+        serviceToken: null,
+    });
+
+    try {
+        const response = await fetch(`${server.url}/api/incidents/%E0%A4%A`, {
+            headers: {
+                'X-Trace-Token': 'trace-secret',
+            },
+        });
+
+        assert.equal(response.status, 400);
+        const payload = (await response.json()) as { error?: string };
+        assert.match(String(payload.error), /invalid incident request format/i);
+    } finally {
+        await server.close();
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});

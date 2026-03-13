@@ -415,16 +415,24 @@ export const createIncidentHandlers = ({
     const readIncidentIdFromPath = (
         pathname: string,
         suffix?: string
-    ): string | null => {
+    ):
+        | { ok: true; incidentId: string }
+        | { ok: false; reason: 'invalid-format' | 'invalid-encoding' } => {
         const pattern = suffix
             ? new RegExp(`^/api/incidents/([^/]+)/${suffix}/?$`)
             : /^\/api\/incidents\/([^/]+)\/?$/;
         const match = pathname.match(pattern);
         if (!match) {
-            return null;
+            return { ok: false, reason: 'invalid-format' };
         }
-        const incidentId = decodeURIComponent(match[1]).trim();
-        return incidentId.length > 0 ? incidentId : null;
+        try {
+            const incidentId = decodeURIComponent(match[1]).trim();
+            return incidentId.length > 0
+                ? { ok: true, incidentId }
+                : { ok: false, reason: 'invalid-format' };
+        } catch {
+            return { ok: false, reason: 'invalid-encoding' };
+        }
     };
 
     /**
@@ -446,12 +454,19 @@ export const createIncidentHandlers = ({
                 return;
             }
 
-            const incidentId = readIncidentIdFromPath(parsedUrl.pathname);
-            if (!incidentId) {
+            const incidentIdResult = readIncidentIdFromPath(parsedUrl.pathname);
+            if (!incidentIdResult.ok) {
                 sendJson(res, 400, { error: 'Invalid incident request format' });
-                logRequest(req, res, 'incident detail invalid-format');
+                logRequest(
+                    req,
+                    res,
+                    incidentIdResult.reason === 'invalid-encoding'
+                        ? 'incident detail invalid-encoding'
+                        : 'incident detail invalid-format'
+                );
                 return;
             }
+            const incidentId = incidentIdResult.incidentId;
 
             const response = await incidentService.getIncident(incidentId);
             sendJson(res, 200, response);
@@ -491,12 +506,22 @@ export const createIncidentHandlers = ({
                 return;
             }
 
-            const incidentId = readIncidentIdFromPath(parsedUrl.pathname, 'status');
-            if (!incidentId) {
+            const incidentIdResult = readIncidentIdFromPath(
+                parsedUrl.pathname,
+                'status'
+            );
+            if (!incidentIdResult.ok) {
                 sendJson(res, 400, { error: 'Invalid incident request format' });
-                logRequest(req, res, 'incident status invalid-format');
+                logRequest(
+                    req,
+                    res,
+                    incidentIdResult.reason === 'invalid-encoding'
+                        ? 'incident status invalid-encoding'
+                        : 'incident status invalid-format'
+                );
                 return;
             }
+            const incidentId = incidentIdResult.incidentId;
 
             const payload = await parseBodyWithSchema<PostIncidentStatusRequest>(
                 req,
@@ -549,12 +574,22 @@ export const createIncidentHandlers = ({
                 return;
             }
 
-            const incidentId = readIncidentIdFromPath(parsedUrl.pathname, 'notes');
-            if (!incidentId) {
+            const incidentIdResult = readIncidentIdFromPath(
+                parsedUrl.pathname,
+                'notes'
+            );
+            if (!incidentIdResult.ok) {
                 sendJson(res, 400, { error: 'Invalid incident request format' });
-                logRequest(req, res, 'incident notes invalid-format');
+                logRequest(
+                    req,
+                    res,
+                    incidentIdResult.reason === 'invalid-encoding'
+                        ? 'incident notes invalid-encoding'
+                        : 'incident notes invalid-format'
+                );
                 return;
             }
+            const incidentId = incidentIdResult.incidentId;
 
             const payload = await parseBodyWithSchema<PostIncidentNotesRequest>(
                 req,
@@ -607,15 +642,22 @@ export const createIncidentHandlers = ({
                 return;
             }
 
-            const incidentId = readIncidentIdFromPath(
+            const incidentIdResult = readIncidentIdFromPath(
                 parsedUrl.pathname,
                 'remediation'
             );
-            if (!incidentId) {
+            if (!incidentIdResult.ok) {
                 sendJson(res, 400, { error: 'Invalid incident request format' });
-                logRequest(req, res, 'incident remediation invalid-format');
+                logRequest(
+                    req,
+                    res,
+                    incidentIdResult.reason === 'invalid-encoding'
+                        ? 'incident remediation invalid-encoding'
+                        : 'incident remediation invalid-format'
+                );
                 return;
             }
+            const incidentId = incidentIdResult.incidentId;
 
             const payload =
                 await parseBodyWithSchema<PostIncidentRemediationRequest>(
