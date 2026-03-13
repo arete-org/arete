@@ -5,7 +5,7 @@
  * @footnote-risk: low - Test-only coverage for slash-command behavior.
  * @footnote-ethics: high - Confirms incident review stays limited to configured superusers.
  */
-import test from 'node:test';
+import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { botApi } from '../src/api/botApi.js';
@@ -15,9 +15,18 @@ import incidentCommand, {
     INCIDENT_VIEW_SELECT_PREFIX,
 } from '../src/commands/incident.js';
 
+const superuserIds = runtimeConfig.incidentReview.superuserIds as string[];
+let originalSuperuserIds: string[] = [];
+
+beforeEach(() => {
+    originalSuperuserIds = [...superuserIds];
+});
+
+afterEach(() => {
+    superuserIds.splice(0, superuserIds.length, ...originalSuperuserIds);
+});
+
 test('incident command denies non-superusers before calling backend', async () => {
-    const superuserIds = runtimeConfig.incidentReview.superuserIds as string[];
-    const originalIds = [...superuserIds];
     const originalListIncidents = botApi.listIncidents;
     const replyPayloads: unknown[] = [];
     let calledBackend = false;
@@ -45,14 +54,11 @@ test('incident command denies non-superusers before calling backend', async () =
             /do not have permission/i
         );
     } finally {
-        superuserIds.splice(0, superuserIds.length, ...originalIds);
         botApi.listIncidents = originalListIncidents;
     }
 });
 
 test('incident command view fetches a short-ID incident and replies with operator-safe detail', async () => {
-    const superuserIds = runtimeConfig.incidentReview.superuserIds as string[];
-    const originalIds = [...superuserIds];
     const originalGetIncident = botApi.getIncident;
     const replyPayloads: unknown[] = [];
     let capturedIncidentId = '';
@@ -115,14 +121,11 @@ test('incident command view fetches a short-ID incident and replies with operato
             /123456789012345678/
         );
     } finally {
-        superuserIds.splice(0, superuserIds.length, ...originalIds);
         botApi.getIncident = originalGetIncident;
     }
 });
 
 test('incident command view truncates overlong replies instead of exceeding Discord limits', async () => {
-    const superuserIds = runtimeConfig.incidentReview.superuserIds as string[];
-    const originalIds = [...superuserIds];
     const originalGetIncident = botApi.getIncident;
     const replyPayloads: unknown[] = [];
 
@@ -176,14 +179,11 @@ test('incident command view truncates overlong replies instead of exceeding Disc
         assert.ok(content.length <= 2000);
         assert.match(content, /\.\.\. \(truncated\)$/);
     } finally {
-        superuserIds.splice(0, superuserIds.length, ...originalIds);
         botApi.getIncident = originalGetIncident;
     }
 });
 
 test('incident command view without an ID shows a picker for unprocessed incidents', async () => {
-    const superuserIds = runtimeConfig.incidentReview.superuserIds as string[];
-    const originalIds = [...superuserIds];
     const originalListIncidents = botApi.listIncidents;
     const replyPayloads: unknown[] = [];
 
@@ -284,14 +284,11 @@ test('incident command view without an ID shows a picker for unprocessed inciden
             ['new12345', 'review001']
         );
     } finally {
-        superuserIds.splice(0, superuserIds.length, ...originalIds);
         botApi.listIncidents = originalListIncidents;
     }
 });
 
 test('incident picker selection updates the ephemeral view with incident detail', async () => {
-    const superuserIds = runtimeConfig.incidentReview.superuserIds as string[];
-    const originalIds = [...superuserIds];
     const originalGetIncident = botApi.getIncident;
     const updatePayloads: unknown[] = [];
 
@@ -335,7 +332,6 @@ test('incident picker selection updates the ephemeral view with incident detail'
         assert.match(String(payload.content), /Incident 1a2b3c4d/i);
         assert.deepEqual(payload.components, []);
     } finally {
-        superuserIds.splice(0, superuserIds.length, ...originalIds);
         botApi.getIncident = originalGetIncident;
     }
 });

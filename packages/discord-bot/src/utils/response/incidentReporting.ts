@@ -15,6 +15,7 @@ import {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
+    MessageFlags,
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
@@ -37,7 +38,9 @@ const incidentReportLogger =
         : logger;
 
 const INCIDENT_REPORT_SESSION_TTL_MS = 15 * 60_000;
-const EPHEMERAL_FLAG = 1 << 6;
+const INCIDENT_REPORT_SESSION_PRUNE_INTERVAL_MS = 5 * 60_000;
+const MAX_INCIDENT_REPORT_SESSIONS = 250;
+const EPHEMERAL_FLAG = MessageFlags.Ephemeral;
 
 export const INCIDENT_REPORT_CONSENT_PREFIX = 'incident_report_consent:';
 export const INCIDENT_REPORT_CANCEL_PREFIX = 'incident_report_cancel:';
@@ -87,6 +90,16 @@ const pruneExpiredSessions = (): void => {
     }
 };
 
+const evictOldestSessions = (): void => {
+    while (sessions.size > MAX_INCIDENT_REPORT_SESSIONS) {
+        const oldestSessionKey = sessions.keys().next().value;
+        if (!oldestSessionKey) {
+            return;
+        }
+        sessions.delete(oldestSessionKey);
+    }
+};
+
 const getIncidentReportSession = (
     sessionKey: string
 ): IncidentReportSession | undefined => {
@@ -107,11 +120,23 @@ const setIncidentReportSession = (
     session: IncidentReportSession
 ): void => {
     pruneExpiredSessions();
+    // Reinsert existing sessions so the Map keeps a simple least-recently-used
+    // ordering based on the latest consent flow activity.
+    if (sessions.has(sessionKey)) {
+        sessions.delete(sessionKey);
+    }
     sessions.set(sessionKey, {
         session,
         expiresAt: getSessionExpiry(),
     });
+    evictOldestSessions();
 };
+
+const incidentReportSessionPruner = setInterval(
+    pruneExpiredSessions,
+    INCIDENT_REPORT_SESSION_PRUNE_INTERVAL_MS
+);
+incidentReportSessionPruner.unref?.();
 
 /**
  * Parses free-form comma-separated tags from the modal into a clean unique list
@@ -133,6 +158,19 @@ const formatApiError = (error: unknown): string => {
         return error.details ? `${error.message} (${error.details})` : error.message;
     }
     return error instanceof Error ? error.message : String(error);
+};
+
+const isMessageLike = (value: unknown): value is Message => {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    return (
+        'author' in value &&
+        'client' in value &&
+        'content' in value &&
+        'edit' in value
+    );
 };
 
 /**
@@ -364,11 +402,23 @@ export const handleIncidentReportModal = async (
 
         if (session.targetMessageId && interaction.channel?.isTextBased()) {
             try {
-                const targetMessage = (await interaction.channel.messages.fetch(
-                    session.targetMessageId
-                )) as Message;
-                remediationOutcome =
-                    await remediateReportedAssistantMessage(targetMessage);
+                const fetchedTargetMessage =
+                    await interaction.channel.messages.fetch(
+                        session.targetMessageId
+                    );
+
+                if (!isMessageLike(fetchedTargetMessage)) {
+                    remediationOutcome = {
+                        state: 'failed',
+                        notes:
+                            'Could not remediate the target message because it was missing or was not a Discord message.',
+                    };
+                } else {
+                    remediationOutcome =
+                        await remediateReportedAssistantMessage(
+                            fetchedTargetMessage
+                        );
+                }
             } catch (error) {
                 remediationOutcome = {
                     state: 'failed',

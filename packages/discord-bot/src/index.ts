@@ -759,8 +759,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 return;
             }
 
-            await handleIncidentReportButton(interaction);
-            return;
+            if (provenanceAction.action === 'report_issue') {
+                await handleIncidentReportButton(interaction);
+                return;
+            }
         }
 
         if (customId.startsWith(INCIDENT_REPORT_CANCEL_PREFIX)) {
