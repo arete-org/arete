@@ -887,26 +887,81 @@ components:
                     updatedAt: '2026-03-13T17:01:00.000Z'
 
         IncidentDetail:
-            allOf:
-                - $ref: '#/components/schemas/IncidentSummary'
-                - type: object
-                  properties:
-                      auditEvents:
-                          type: array
-                          items:
-                              $ref: '#/components/schemas/IncidentAuditEvent'
-                  required:
-                      - auditEvents
-                  example:
-                      auditEvents:
-                          - action: incident.created
-                            actorHash: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-                            notes: 'description provided; contact provided; tags=safety, review'
-                            createdAt: '2026-03-13T17:00:00.000Z'
-                          - action: incident.status_changed
-                            actorHash: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-                            notes: 'Reviewing report context now.'
-                            createdAt: '2026-03-13T17:03:00.000Z'
+            type: object
+            properties:
+                incidentId:
+                    type: string
+                status:
+                    $ref: '#/components/schemas/IncidentStatus'
+                tags:
+                    type: array
+                    maxItems: 25
+                    items:
+                        type: string
+                description:
+                    type: string
+                    nullable: true
+                contact:
+                    type: string
+                    nullable: true
+                createdAt:
+                    type: string
+                    format: date-time
+                updatedAt:
+                    type: string
+                    format: date-time
+                consentedAt:
+                    type: string
+                    format: date-time
+                pointers:
+                    $ref: '#/components/schemas/IncidentPointers'
+                remediation:
+                    $ref: '#/components/schemas/IncidentRemediation'
+                auditEvents:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/IncidentAuditEvent'
+            required:
+                - incidentId
+                - status
+                - tags
+                - createdAt
+                - updatedAt
+                - consentedAt
+                - pointers
+                - remediation
+                - auditEvents
+            additionalProperties: false
+            example:
+                incidentId: '1a2b3c4d'
+                status: under_review
+                tags: [safety, review]
+                description: 'The assistant gave risky instructions.'
+                contact: 'moderator@example.com'
+                createdAt: '2026-03-13T17:00:00.000Z'
+                updatedAt: '2026-03-13T17:05:00.000Z'
+                consentedAt: '2026-03-13T17:00:00.000Z'
+                pointers:
+                    responseId: 'response_123'
+                    guildId: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                    channelId: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                    messageId: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+                    modelVersion: 'gpt-5-mini'
+                    chainHash: 'hash_abc'
+                remediation:
+                    state: applied
+                    applied: true
+                    notes: 'Warning banner applied with spoiler wrapping.'
+                    updatedAt: '2026-03-13T17:01:00.000Z'
+                auditEvents:
+                    - action: incident.created
+                      actorHash: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+                      notes: 'description provided; contact provided; tags=safety, review'
+                      createdAt: '2026-03-13T17:00:00.000Z'
+                    - action: incident.status_changed
+                      actorHash: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+                      notes: 'Reviewing report context now.'
+                      createdAt: '2026-03-13T17:03:00.000Z'
 
         IncidentReportRequest:
             type: object
