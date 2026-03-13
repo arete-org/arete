@@ -117,6 +117,25 @@ Base prompt ownership is now shared:
 
 ---
 
+## Documentation
+
+The docs are split by purpose:
+
+- architecture: stable system design
+- decisions: durable technical choices and rationale
+- status: implementation progress for active work
+
+Start here:
+
+- [Documentation Map](docs/README.md)
+- [Incident Reporting](docs/architecture/incident-reporting.md)
+- [Incident Storage And Audit](docs/architecture/incident-storage-and-audit.md)
+- [Risk Evaluation And Breakers](docs/architecture/risk-evaluation-and-breakers.md)
+- [Incident Identifier Pseudonymization](docs/decisions/2026-03-incident-pseudonymization.md)
+- [Incident And Breakers Status](docs/status/incident-breakers-status.md)
+
+---
+
 ## License
 
 Footnote is dual-licensed under MIT and the Hippocratic License v3 (HL3-CORE).
