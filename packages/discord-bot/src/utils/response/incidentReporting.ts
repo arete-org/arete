@@ -136,23 +136,6 @@ const formatApiError = (error: unknown): string => {
 };
 
 /**
- * Turns the remediation result into the short confirmation text shown to the
- * reporter after the incident is created.
- */
-const formatRemediationStatus = (outcome: IncidentRemediationOutcome): string => {
-    switch (outcome.state) {
-        case 'applied':
-            return 'The message was marked under review immediately.';
-        case 'already_marked':
-            return 'The message was already marked under review.';
-        case 'skipped_not_assistant':
-            return 'The report was stored, but no automatic edit was applied because the target was not an assistant-authored message.';
-        case 'failed':
-            return 'The report was stored, but the automatic under-review edit failed.';
-    }
-};
-
-/**
  * Builds a log payload without forcing every handler to repeat the same
  * interaction metadata.
  */
@@ -351,8 +334,14 @@ export const handleIncidentReportModal = async (
         targetMessageId: session.targetMessageId ?? null,
         responseId: session.responseId ?? null,
     });
+    let replyDeferred = false;
 
     try {
+        await interaction.deferReply({
+            flags: [EPHEMERAL_FLAG],
+        });
+        replyDeferred = true;
+
         const reportResponse = await botApi.reportIncident({
             reporterUserId: interaction.user.id,
             guildId: session.guildId,
@@ -415,17 +404,32 @@ export const handleIncidentReportModal = async (
         }
 
         clearIncidentReportSession(sessionKey);
-        await interaction.reply({
-            content:
-                `Incident **${reportResponse.incident.incidentId}** was created.\n${formatRemediationStatus(remediationOutcome)}`,
-            flags: [EPHEMERAL_FLAG],
-        });
+        try {
+            await interaction.deleteReply();
+        } catch (deleteError) {
+            incidentReportLogger.warn(
+                'Failed to remove success confirmation for incident report',
+                {
+                    ...logContext,
+                    incidentId: reportResponse.incident.incidentId,
+                    remediationState: remediationOutcome.state,
+                    error: formatApiError(deleteError),
+                }
+            );
+        }
     } catch (error) {
         incidentReportLogger.error('Failed to submit incident report', {
             ...logContext,
             error: formatApiError(error),
         });
         clearIncidentReportSession(sessionKey);
+        if (replyDeferred) {
+            await interaction.editReply({
+                content: `I could not create that incident report: ${formatApiError(error)}`,
+            });
+            return;
+        }
+
         await interaction.reply({
             content: `I could not create that incident report: ${formatApiError(error)}`,
             flags: [EPHEMERAL_FLAG],

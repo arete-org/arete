@@ -105,7 +105,8 @@ test('incident report modal stores the incident and remediation outcome', async 
     let capturedModal: unknown = null;
     let capturedReportRequest: unknown = null;
     let capturedRemediationRequest: unknown = null;
-    const replyPayloads: unknown[] = [];
+    const deferReplyPayloads: unknown[] = [];
+    let deletedReply = false;
 
     botApi.getTrace = (async () => ({
         status: 200,
@@ -231,8 +232,11 @@ test('incident report modal stores the incident and remediation outcome', async 
                     return '';
                 },
             },
-            reply: async (payload: unknown) => {
-                replyPayloads.push(payload);
+            deferReply: async (payload: unknown) => {
+                deferReplyPayloads.push(payload);
+            },
+            deleteReply: async () => {
+                deletedReply = true;
             },
         } as never);
 
@@ -254,10 +258,8 @@ test('incident report modal stores the incident and remediation outcome', async 
         assert.equal(remediationRequest.incidentId, '1a2b3c4d');
         assert.equal(remediationRequest.request.actorUserId, 'user-1');
         assert.equal(remediationRequest.request.state, 'applied');
-        assert.match(
-            String((replyPayloads[0] as { content?: string }).content),
-            /Incident \*\*1a2b3c4d\*\* was created/i
-        );
+        assert.equal(deferReplyPayloads.length, 1);
+        assert.equal(deletedReply, true);
     } finally {
         botApi.getTrace = originalGetTrace;
         botApi.reportIncident = originalReportIncident;
@@ -268,7 +270,8 @@ test('incident report modal stores the incident and remediation outcome', async 
 test('incident report modal replies explicitly on backend failure', async () => {
     const originalGetTrace = botApi.getTrace;
     const originalReportIncident = botApi.reportIncident;
-    const replyPayloads: unknown[] = [];
+    const deferReplyPayloads: unknown[] = [];
+    const editReplyPayloads: unknown[] = [];
 
     botApi.getTrace = (async () => ({
         status: 200,
@@ -322,13 +325,17 @@ test('incident report modal replies explicitly on backend failure', async () => 
             fields: {
                 getTextInputValue: () => '',
             },
-            reply: async (payload: unknown) => {
-                replyPayloads.push(payload);
+            deferReply: async (payload: unknown) => {
+                deferReplyPayloads.push(payload);
+            },
+            editReply: async (payload: unknown) => {
+                editReplyPayloads.push(payload);
             },
         } as never);
 
+        assert.equal(deferReplyPayloads.length, 1);
         assert.match(
-            String((replyPayloads[0] as { content?: string }).content),
+            String((editReplyPayloads[0] as { content?: string }).content),
             /could not create that incident report/i
         );
     } finally {
