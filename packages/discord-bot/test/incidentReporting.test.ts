@@ -444,8 +444,178 @@ test('incident report modal keeps the deferred reply open when remediation persi
         assert.equal(deletedReply, false);
         assert.match(
             String((modalEditReplyPayloads[0] as { content?: string }).content),
-            /remediation tracking could not be saved/i
+            /resume saving the existing incident/i
         );
+    } finally {
+        botApi.getTrace = originalGetTrace;
+        botApi.reportIncident = originalReportIncident;
+        botApi.recordIncidentRemediation = originalRecordRemediation;
+    }
+});
+
+test('incident report retry resumes remediation persistence without creating a duplicate incident', async () => {
+    const originalGetTrace = botApi.getTrace;
+    const originalReportIncident = botApi.reportIncident;
+    const originalRecordRemediation = botApi.recordIncidentRemediation;
+    let reportIncidentCalls = 0;
+    let remediationAttempts = 0;
+    let deletedReply = false;
+
+    botApi.getTrace = (async () => ({
+        status: 200,
+        data: {
+            responseId: 'response_123',
+            provenance: 'Inferred',
+            riskTier: 'Low',
+            tradeoffCount: 0,
+            chainHash: 'hash_abc',
+            licenseContext: 'MIT + HL3',
+            modelVersion: 'gpt-5-mini',
+            staleAfter: new Date(Date.now() + 60000).toISOString(),
+            citations: [],
+        },
+    })) as typeof botApi.getTrace;
+    botApi.reportIncident = (async () => {
+        reportIncidentCalls += 1;
+        return {
+            incident: {
+                incidentId: '1a2b3c4d',
+                status: 'new',
+                tags: ['safety'],
+                description: 'Please review',
+                contact: null,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                consentedAt: new Date().toISOString(),
+                pointers: {
+                    responseId: 'response_123',
+                },
+                remediation: {
+                    state: 'pending',
+                    applied: false,
+                    notes: null,
+                    updatedAt: null,
+                },
+                auditEvents: [],
+            },
+            remediation: { state: 'pending' },
+        };
+    }) as typeof botApi.reportIncident;
+    botApi.recordIncidentRemediation = (async () => {
+        remediationAttempts += 1;
+        if (remediationAttempts <= 3) {
+            throw new Error('sqlite busy');
+        }
+        return {
+            incident: {
+                incidentId: '1a2b3c4d',
+                status: 'new',
+                tags: ['safety'],
+                description: 'Please review',
+                contact: null,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                consentedAt: new Date().toISOString(),
+                pointers: {
+                    responseId: 'response_123',
+                },
+                remediation: {
+                    state: 'applied',
+                    applied: true,
+                    notes: 'warning banner applied',
+                    updatedAt: new Date().toISOString(),
+                },
+                auditEvents: [],
+            },
+        };
+    }) as typeof botApi.recordIncidentRemediation;
+
+    try {
+        const userId = 'user-2';
+        const sourceMessageId = 'source-message-2';
+
+        await handleIncidentReportButton({
+            user: { id: userId },
+            guildId: 'guild-1',
+            channelId: 'channel-1',
+            message: {
+                id: sourceMessageId,
+                content: 'assistant reply',
+                author: { id: 'bot-user' },
+                client: { user: { id: 'bot-user' } },
+                components: [buildProvenanceActionRow('response_123')],
+                url: 'https://discord.com/channels/1/2/3',
+            },
+            deferReply: async () => undefined,
+            editReply: async () => buildEphemeralMessage(),
+        } as never);
+
+        await handleIncidentReportModal({
+            user: { id: userId },
+            guildId: 'guild-1',
+            channelId: 'channel-1',
+            customId: `${INCIDENT_REPORT_MODAL_PREFIX}${sourceMessageId}`,
+            channel: {
+                isTextBased: () => true,
+                messages: {
+                    fetch: async () => ({
+                        author: { id: 'bot-user' },
+                        client: { user: { id: 'bot-user' } },
+                        content: 'assistant reply',
+                        edit: async () => undefined,
+                    }),
+                },
+            },
+            fields: {
+                getTextInputValue: () => '',
+            },
+            deferReply: async () => undefined,
+            editReply: async () => undefined,
+            deleteReply: async () => undefined,
+        } as never);
+
+        await handleIncidentReportButton({
+            user: { id: userId },
+            guildId: 'guild-1',
+            channelId: 'channel-1',
+            message: {
+                id: sourceMessageId,
+                content: 'assistant reply',
+                author: { id: 'bot-user' },
+                client: { user: { id: 'bot-user' } },
+                components: [buildProvenanceActionRow('response_123')],
+                url: 'https://discord.com/channels/1/2/3',
+            },
+            deferReply: async () => undefined,
+            editReply: async () => buildEphemeralMessage(),
+        } as never);
+
+        await handleIncidentReportModal({
+            user: { id: userId },
+            guildId: 'guild-1',
+            channelId: 'channel-1',
+            customId: `${INCIDENT_REPORT_MODAL_PREFIX}${sourceMessageId}`,
+            channel: {
+                isTextBased: () => true,
+                messages: {
+                    fetch: async () => {
+                        throw new Error('should not fetch on resume');
+                    },
+                },
+            },
+            fields: {
+                getTextInputValue: () => '',
+            },
+            deferReply: async () => undefined,
+            editReply: async () => undefined,
+            deleteReply: async () => {
+                deletedReply = true;
+            },
+        } as never);
+
+        assert.equal(reportIncidentCalls, 1);
+        assert.equal(remediationAttempts, 4);
+        assert.equal(deletedReply, true);
     } finally {
         botApi.getTrace = originalGetTrace;
         botApi.reportIncident = originalReportIncident;

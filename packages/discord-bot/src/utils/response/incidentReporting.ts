@@ -59,6 +59,12 @@ type IncidentReportSession = {
     chainHash?: string;
     modelVersion?: string;
     jumpUrl?: string;
+    stage: 'draft' | 'awaiting_remediation_persist';
+    incidentId?: string;
+    remediationOutcome?: {
+        state: IncidentRemediationOutcome['state'];
+        notes: string;
+    };
 };
 
 type IncidentReportSessionRecord = {
@@ -130,6 +136,20 @@ const setIncidentReportSession = (
         expiresAt: getSessionExpiry(),
     });
     evictOldestSessions();
+};
+
+const updateIncidentReportSession = (
+    sessionKey: string,
+    update: (session: IncidentReportSession) => IncidentReportSession
+): IncidentReportSession | undefined => {
+    const session = getIncidentReportSession(sessionKey);
+    if (!session) {
+        return undefined;
+    }
+
+    const nextSession = update(session);
+    setIncidentReportSession(sessionKey, nextSession);
+    return nextSession;
 };
 
 const incidentReportSessionPruner = setInterval(
@@ -246,7 +266,14 @@ export const handleIncidentReportButton = async (
             interaction.user.id,
             interaction.message.id
         );
+        const existingSession = getIncidentReportSession(sessionKey);
         setIncidentReportSession(sessionKey, {
+            stage:
+                existingSession?.stage === 'awaiting_remediation_persist' &&
+                existingSession.incidentId &&
+                existingSession.remediationOutcome
+                    ? 'awaiting_remediation_persist'
+                    : 'draft',
             sourceMessageId: interaction.message.id,
             targetMessageId: anchorMessage?.id,
             channelId: interaction.channelId,
@@ -255,15 +282,23 @@ export const handleIncidentReportButton = async (
             chainHash: metadata?.chainHash,
             modelVersion: metadata?.modelVersion,
             jumpUrl: anchorMessage?.url,
+            incidentId: existingSession?.incidentId,
+            remediationOutcome: existingSession?.remediationOutcome,
         });
 
         const warningSuffix = anchorMessage
             ? ''
             : '\n\nI may not be able to hide the target message automatically if I cannot recover the original assistant message.';
+        const isResumingRemediationPersist =
+            existingSession?.stage === 'awaiting_remediation_persist' &&
+            Boolean(existingSession.incidentId) &&
+            Boolean(existingSession.remediationOutcome);
 
         await interaction.editReply({
             content:
-                `Reporting this message will create a durable incident record for maintainers to review.${warningSuffix}`,
+                isResumingRemediationPersist
+                    ? `An incident record already exists for this message. Continue to retry saving its remediation outcome.${warningSuffix}`
+                    : `Reporting this message will create a durable incident record for maintainers to review.${warningSuffix}`,
             components: [
                 new ActionRowBuilder<ButtonBuilder>().addComponents(
                     new ButtonBuilder()
@@ -411,75 +446,88 @@ export const handleIncidentReportModal = async (
         });
         replyDeferred = true;
 
-        const reportResponse = await botApi.reportIncident({
-            reporterUserId: interaction.user.id,
-            guildId: session.guildId,
-            channelId: session.channelId,
-            messageId: session.targetMessageId,
-            jumpUrl: session.jumpUrl,
-            responseId: session.responseId,
-            chainHash: session.chainHash,
-            modelVersion: session.modelVersion,
-            tags,
-            description: description || undefined,
-            contact: contact || undefined,
-            consentedAt: new Date().toISOString(),
-        });
+        let incidentId = session.incidentId;
+        let remediationOutcome = session.remediationOutcome;
 
-        let remediationOutcome: IncidentRemediationOutcome = {
-            state: 'failed',
-            notes: 'Could not fetch the target message for remediation.',
-        };
+        if (
+            session.stage !== 'awaiting_remediation_persist' ||
+            !incidentId ||
+            !remediationOutcome
+        ) {
+            const reportResponse = await botApi.reportIncident({
+                reporterUserId: interaction.user.id,
+                guildId: session.guildId,
+                channelId: session.channelId,
+                messageId: session.targetMessageId,
+                jumpUrl: session.jumpUrl,
+                responseId: session.responseId,
+                chainHash: session.chainHash,
+                modelVersion: session.modelVersion,
+                tags,
+                description: description || undefined,
+                contact: contact || undefined,
+                consentedAt: new Date().toISOString(),
+            });
+            incidentId = reportResponse.incident.incidentId;
+            remediationOutcome = {
+                state: 'failed',
+                notes: 'Could not fetch the target message for remediation.',
+            };
 
-        if (session.targetMessageId && interaction.channel?.isTextBased()) {
-            try {
-                const fetchedTargetMessage =
-                    await interaction.channel.messages.fetch(
-                        session.targetMessageId
-                    );
+            if (session.targetMessageId && interaction.channel?.isTextBased()) {
+                try {
+                    const fetchedTargetMessage =
+                        await interaction.channel.messages.fetch(
+                            session.targetMessageId
+                        );
 
-                if (!isMessageLike(fetchedTargetMessage)) {
+                    if (!isMessageLike(fetchedTargetMessage)) {
+                        remediationOutcome = {
+                            state: 'failed',
+                            notes:
+                                'Could not remediate the target message because it was missing or was not a Discord message.',
+                        };
+                    } else {
+                        remediationOutcome =
+                            await remediateReportedAssistantMessage(
+                                fetchedTargetMessage
+                            );
+                    }
+                } catch (error) {
                     remediationOutcome = {
                         state: 'failed',
-                        notes:
-                            'Could not remediate the target message because it was missing or was not a Discord message.',
+                        notes: `Could not fetch the target message for remediation: ${error instanceof Error ? error.message : String(error)}`,
                     };
-                } else {
-                    remediationOutcome =
-                        await remediateReportedAssistantMessage(
-                            fetchedTargetMessage
-                        );
                 }
-            } catch (error) {
-                remediationOutcome = {
-                    state: 'failed',
-                    notes: `Could not fetch the target message for remediation: ${error instanceof Error ? error.message : String(error)}`,
-                };
             }
+
+            updateIncidentReportSession(sessionKey, (currentSession) => ({
+                ...currentSession,
+                stage: 'awaiting_remediation_persist',
+                incidentId,
+                remediationOutcome,
+            }));
         }
 
         try {
-            await persistIncidentRemediationWithRetry(
-                reportResponse.incident.incidentId,
-                {
-                    actorUserId: interaction.user.id,
-                    state: remediationOutcome.state,
-                    notes: remediationOutcome.notes,
-                }
-            );
+            await persistIncidentRemediationWithRetry(incidentId, {
+                actorUserId: interaction.user.id,
+                state: remediationOutcome.state,
+                notes: remediationOutcome.notes,
+            });
         } catch (error) {
             incidentReportLogger.error(
                 'Failed to persist incident remediation outcome',
                 {
                     ...logContext,
-                    incidentId: reportResponse.incident.incidentId,
+                    incidentId,
                     remediationState: remediationOutcome.state,
                     error: formatApiError(error),
                 }
             );
             await interaction.editReply({
                 content:
-                    'The incident was stored, but remediation tracking could not be saved. Please try reporting again in a moment.',
+                    'The incident was stored, but remediation tracking could not be saved yet. Please retry this report to resume saving the existing incident.',
             });
             return;
         }
@@ -492,7 +540,7 @@ export const handleIncidentReportModal = async (
                 'Failed to remove success confirmation for incident report',
                 {
                     ...logContext,
-                    incidentId: reportResponse.incident.incidentId,
+                    incidentId,
                     remediationState: remediationOutcome.state,
                     error: formatApiError(deleteError),
                 }
