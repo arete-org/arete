@@ -80,6 +80,10 @@ import {
     INCIDENT_REPORT_CONSENT_PREFIX,
     INCIDENT_REPORT_MODAL_PREFIX,
 } from './utils/response/incidentReporting.js';
+import {
+    handleIncidentViewSelect,
+    INCIDENT_VIEW_SELECT_PREFIX,
+} from './commands/incident.js';
 //import express from 'express'; // For webhook
 //import bodyParser from "body-parser"; // For webhook
 
@@ -630,6 +634,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
                     ),
                 })
             );
+            return;
+        }
+
+        if (customId.startsWith(INCIDENT_VIEW_SELECT_PREFIX)) {
+            await handleIncidentViewSelect(interaction);
             return;
         }
     }

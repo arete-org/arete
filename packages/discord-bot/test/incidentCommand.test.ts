@@ -10,7 +10,10 @@ import assert from 'node:assert/strict';
 
 import { botApi } from '../src/api/botApi.js';
 import { runtimeConfig } from '../src/config.js';
-import incidentCommand from '../src/commands/incident.js';
+import incidentCommand, {
+    handleIncidentViewSelect,
+    INCIDENT_VIEW_SELECT_PREFIX,
+} from '../src/commands/incident.js';
 
 test('incident command denies non-superusers before calling backend', async () => {
     const superuserIds = runtimeConfig.incidentReview.superuserIds as string[];
@@ -172,6 +175,165 @@ test('incident command view truncates overlong replies instead of exceeding Disc
         const content = String((replyPayloads[0] as { content?: string }).content);
         assert.ok(content.length <= 2000);
         assert.match(content, /\.\.\. \(truncated\)$/);
+    } finally {
+        superuserIds.splice(0, superuserIds.length, ...originalIds);
+        botApi.getIncident = originalGetIncident;
+    }
+});
+
+test('incident command view without an ID shows a picker for unprocessed incidents', async () => {
+    const superuserIds = runtimeConfig.incidentReview.superuserIds as string[];
+    const originalIds = [...superuserIds];
+    const originalListIncidents = botApi.listIncidents;
+    const replyPayloads: unknown[] = [];
+
+    superuserIds.splice(0, superuserIds.length, 'superuser-1');
+    botApi.listIncidents = (async () => ({
+        incidents: [
+            {
+                incidentId: 'resolved01',
+                status: 'resolved',
+                tags: ['done'],
+                description: null,
+                contact: null,
+                createdAt: '2026-03-10T00:00:00.000Z',
+                updatedAt: '2026-03-10T00:00:00.000Z',
+                consentedAt: '2026-03-10T00:00:00.000Z',
+                pointers: {},
+                remediation: {
+                    state: 'applied',
+                    applied: true,
+                    notes: null,
+                    updatedAt: null,
+                },
+            },
+            {
+                incidentId: 'new12345',
+                status: 'new',
+                tags: ['safety'],
+                description: null,
+                contact: null,
+                createdAt: '2026-03-12T00:00:00.000Z',
+                updatedAt: '2026-03-12T00:00:00.000Z',
+                consentedAt: '2026-03-12T00:00:00.000Z',
+                pointers: {},
+                remediation: {
+                    state: 'pending',
+                    applied: false,
+                    notes: null,
+                    updatedAt: null,
+                },
+            },
+            {
+                incidentId: 'review001',
+                status: 'under_review',
+                tags: ['policy'],
+                description: null,
+                contact: null,
+                createdAt: '2026-03-11T00:00:00.000Z',
+                updatedAt: '2026-03-11T00:00:00.000Z',
+                consentedAt: '2026-03-11T00:00:00.000Z',
+                pointers: {},
+                remediation: {
+                    state: 'applied',
+                    applied: true,
+                    notes: null,
+                    updatedAt: null,
+                },
+            },
+        ],
+    })) as typeof botApi.listIncidents;
+
+    try {
+        await incidentCommand.execute({
+            user: { id: 'superuser-1' },
+            options: {
+                getSubcommand: () => 'view',
+                getString: () => null,
+            },
+            reply: async (payload: unknown) => {
+                replyPayloads.push(payload);
+            },
+        } as never);
+
+        const payload = replyPayloads[0] as {
+            content?: string;
+            components?: Array<{
+                components?: Array<{
+                    options?: Array<{ data?: { value?: string }; value?: string }>;
+                    data?: {
+                        custom_id?: string;
+                        options?: Array<{
+                            data?: { value?: string };
+                            value?: string;
+                        }>;
+                    };
+                }>;
+            }>;
+        };
+        assert.match(String(payload.content), /select an unprocessed incident/i);
+        const menu = payload.components?.[0]?.components?.[0];
+        const menuData = menu?.data;
+        const menuOptions = menuData?.options ?? menu?.options ?? [];
+        assert.equal(
+            menuData?.custom_id,
+            `${INCIDENT_VIEW_SELECT_PREFIX}superuser-1`
+        );
+        assert.deepEqual(
+            menuOptions.map((option) => option.data?.value ?? option.value),
+            ['new12345', 'review001']
+        );
+    } finally {
+        superuserIds.splice(0, superuserIds.length, ...originalIds);
+        botApi.listIncidents = originalListIncidents;
+    }
+});
+
+test('incident picker selection updates the ephemeral view with incident detail', async () => {
+    const superuserIds = runtimeConfig.incidentReview.superuserIds as string[];
+    const originalIds = [...superuserIds];
+    const originalGetIncident = botApi.getIncident;
+    const updatePayloads: unknown[] = [];
+
+    superuserIds.splice(0, superuserIds.length, 'superuser-1');
+    botApi.getIncident = (async (incidentId) => ({
+        incident: {
+            incidentId,
+            status: 'new',
+            tags: ['safety'],
+            description: 'reported',
+            contact: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            consentedAt: new Date().toISOString(),
+            pointers: {
+                responseId: 'response_123',
+            },
+            remediation: {
+                state: 'pending',
+                applied: false,
+                notes: null,
+                updatedAt: null,
+            },
+            auditEvents: [],
+        },
+    })) as typeof botApi.getIncident;
+
+    try {
+        await handleIncidentViewSelect({
+            user: { id: 'superuser-1' },
+            customId: `${INCIDENT_VIEW_SELECT_PREFIX}superuser-1`,
+            values: ['1a2b3c4d'],
+            update: async (payload: unknown) => {
+                updatePayloads.push(payload);
+            },
+            reply: async () => undefined,
+            deferUpdate: async () => undefined,
+        } as never);
+
+        const payload = updatePayloads[0] as { content?: string; components?: unknown[] };
+        assert.match(String(payload.content), /Incident 1a2b3c4d/i);
+        assert.deepEqual(payload.components, []);
     } finally {
         superuserIds.splice(0, superuserIds.length, ...originalIds);
         botApi.getIncident = originalGetIncident;

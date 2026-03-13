@@ -6,9 +6,13 @@
  * @footnote-ethics: high - Incident review commands surface sensitive reports and remediation state.
  */
 import {
+    ActionRowBuilder,
     ChatInputCommandInteraction,
     MessageFlags,
     SlashCommandBuilder,
+    StringSelectMenuBuilder,
+    StringSelectMenuInteraction,
+    StringSelectMenuOptionBuilder,
 } from 'discord.js';
 import type { IncidentDetail, IncidentSummary } from '@footnote/contracts/web';
 import { botApi, isDiscordApiClientError } from '../api/botApi.js';
@@ -23,6 +27,7 @@ const incidentCommandLogger =
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral;
 const DISCORD_MESSAGE_MAX_LENGTH = 2000;
+const INCIDENT_VIEW_SELECT_PREFIX = 'incident_view_select:';
 const INCIDENT_STATUS_CHOICES: IncidentSummary['status'][] = [
     'new',
     'under_review',
@@ -140,6 +145,123 @@ const formatApiError = (error: unknown): string => {
     return error instanceof Error ? error.message : String(error);
 };
 
+/**
+ * Keeps select-menu labels and descriptions inside Discord's component limits.
+ */
+const truncateSelectText = (value: string, limit: number): string => {
+    if (value.length <= limit) {
+        return value;
+    }
+
+    return `${value.slice(0, Math.max(0, limit - 3))}...`;
+};
+
+/**
+ * Recent incidents that still need review attention.
+ */
+const getUnprocessedIncidents = (
+    incidents: IncidentSummary[]
+): IncidentSummary[] => {
+    const priority = new Map<IncidentSummary['status'], number>([
+        ['new', 0],
+        ['under_review', 1],
+        ['confirmed', 2],
+        ['dismissed', 3],
+        ['resolved', 4],
+    ]);
+
+    return incidents
+        .filter(
+            (incident) =>
+                incident.status === 'new' || incident.status === 'under_review'
+        )
+        .sort(
+            (left, right) =>
+                (priority.get(left.status) ?? 99) -
+                    (priority.get(right.status) ?? 99) ||
+                right.createdAt.localeCompare(left.createdAt)
+        );
+};
+
+/**
+ * Builds a private select menu so an operator can pick one unprocessed
+ * incident without manually typing its short ID.
+ */
+const buildIncidentViewPicker = (
+    userId: string,
+    incidents: IncidentSummary[]
+): ActionRowBuilder<StringSelectMenuBuilder> => {
+    const menu = new StringSelectMenuBuilder()
+        .setCustomId(`${INCIDENT_VIEW_SELECT_PREFIX}${userId}`)
+        .setPlaceholder('Pick an incident to inspect')
+        .addOptions(
+            incidents.slice(0, 25).map((incident) => {
+                const summaryParts = [
+                    incident.tags[0] ? `tag:${incident.tags[0]}` : null,
+                    incident.createdAt.slice(0, 10),
+                ].filter((part): part is string => Boolean(part));
+
+                return new StringSelectMenuOptionBuilder()
+                    .setLabel(
+                        truncateSelectText(
+                            `${incident.incidentId} • ${incident.status}`,
+                            100
+                        )
+                    )
+                    .setDescription(
+                        truncateSelectText(
+                            summaryParts.join(' • ') || 'Open incident details',
+                            100
+                        )
+                    )
+                    .setValue(incident.incidentId);
+            })
+        );
+
+    return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
+};
+
+/**
+ * Handles one selection from the incident picker and replaces the menu with
+ * the full operator detail view.
+ */
+export const handleIncidentViewSelect = async (
+    interaction: StringSelectMenuInteraction
+): Promise<void> => {
+    const ownerUserId = interaction.customId.slice(INCIDENT_VIEW_SELECT_PREFIX.length);
+    if (interaction.user.id !== ownerUserId || !isIncidentSuperuser(interaction.user.id)) {
+        await interaction.reply({
+            content: 'Only the requesting superuser can use this incident picker.',
+            flags: [EPHEMERAL_FLAG],
+        });
+        return;
+    }
+
+    const incidentId = interaction.values[0];
+    if (!incidentId) {
+        await interaction.deferUpdate();
+        return;
+    }
+
+    try {
+        const response = await botApi.getIncident(incidentId);
+        await interaction.update({
+            content: limitDiscordMessage(formatIncidentDetail(response.incident)),
+            components: [],
+        });
+    } catch (error) {
+        incidentCommandLogger.error('Incident picker failed', {
+            userId: interaction.user.id,
+            incidentId,
+            error: formatApiError(error),
+        });
+        await interaction.reply({
+            content: `Incident command failed: ${formatApiError(error)}`,
+            flags: [EPHEMERAL_FLAG],
+        });
+    }
+};
+
 const incidentCommand: Command = {
     data: new SlashCommandBuilder()
         .setName('incident')
@@ -186,8 +308,8 @@ const incidentCommand: Command = {
                 .addStringOption((option) =>
                     option
                         .setName('incident_id')
-                        .setDescription('Incident short ID.')
-                        .setRequired(true)
+                        .setDescription('Incident short ID. Leave blank to pick from a menu.')
+                        .setRequired(false)
                 )
         )
         .addSubcommand((subcommand) =>
@@ -278,10 +400,36 @@ const incidentCommand: Command = {
                     return;
                 }
                 case 'view': {
-                    const incidentId = interaction.options.getString(
-                        'incident_id',
-                        true
-                    );
+                    const incidentId =
+                        interaction.options.getString('incident_id') ?? undefined;
+                    if (!incidentId) {
+                        const response = await botApi.listIncidents();
+                        const unprocessedIncidents = getUnprocessedIncidents(
+                            response.incidents
+                        );
+                        if (unprocessedIncidents.length === 0) {
+                            await interaction.reply({
+                                content:
+                                    'No unprocessed incidents are waiting for review.',
+                                flags: [EPHEMERAL_FLAG],
+                            });
+                            return;
+                        }
+
+                        await interaction.reply({
+                            content:
+                                'Select an unprocessed incident to open its detail view.',
+                            components: [
+                                buildIncidentViewPicker(
+                                    interaction.user.id,
+                                    unprocessedIncidents
+                                ),
+                            ],
+                            flags: [EPHEMERAL_FLAG],
+                        });
+                        return;
+                    }
+
                     const response = await botApi.getIncident(incidentId);
                     await interaction.reply({
                         content: limitDiscordMessage(
@@ -349,3 +497,4 @@ const incidentCommand: Command = {
 };
 
 export default incidentCommand;
+export { INCIDENT_VIEW_SELECT_PREFIX };
