@@ -243,9 +243,12 @@ export const handleIncidentViewSelect = async (
         return;
     }
 
+    let interactionDeferred = false;
     try {
+        await interaction.deferUpdate();
+        interactionDeferred = true;
         const response = await botApi.getIncident(incidentId);
-        await interaction.update({
+        await interaction.editReply({
             content: limitDiscordMessage(formatIncidentDetail(response.incident)),
             components: [],
         });
@@ -255,6 +258,14 @@ export const handleIncidentViewSelect = async (
             incidentId,
             error: formatApiError(error),
         });
+        if (interactionDeferred) {
+            await interaction.editReply({
+                content: `Incident command failed: ${formatApiError(error)}`,
+                components: [],
+            });
+            return;
+        }
+
         await interaction.reply({
             content: `Incident command failed: ${formatApiError(error)}`,
             flags: [EPHEMERAL_FLAG],
@@ -370,10 +381,15 @@ const incidentCommand: Command = {
         }
 
         const subcommand = interaction.options.getSubcommand(true);
+        let replyDeferred = false;
 
         try {
             switch (subcommand) {
                 case 'list': {
+                    await interaction.deferReply({
+                        flags: [EPHEMERAL_FLAG],
+                    });
+                    replyDeferred = true;
                     const response = await botApi.listIncidents({
                         status: interaction.options.getString('status') ?? undefined,
                         tag: interaction.options.getString('tag') ?? undefined,
@@ -393,13 +409,16 @@ const incidentCommand: Command = {
                                       .join('\n\n')
                               )
                             : 'No incidents matched the current filters.';
-                    await interaction.reply({
+                    await interaction.editReply({
                         content,
-                        flags: [EPHEMERAL_FLAG],
                     });
                     return;
                 }
                 case 'view': {
+                    await interaction.deferReply({
+                        flags: [EPHEMERAL_FLAG],
+                    });
+                    replyDeferred = true;
                     const incidentId =
                         interaction.options.getString('incident_id') ?? undefined;
                     if (!incidentId) {
@@ -408,15 +427,14 @@ const incidentCommand: Command = {
                             response.incidents
                         );
                         if (unprocessedIncidents.length === 0) {
-                            await interaction.reply({
+                            await interaction.editReply({
                                 content:
                                     'No unprocessed incidents are waiting for review.',
-                                flags: [EPHEMERAL_FLAG],
                             });
                             return;
                         }
 
-                        await interaction.reply({
+                        await interaction.editReply({
                             content:
                                 'Select an unprocessed incident to open its detail view.',
                             components: [
@@ -425,21 +443,23 @@ const incidentCommand: Command = {
                                     unprocessedIncidents
                                 ),
                             ],
-                            flags: [EPHEMERAL_FLAG],
                         });
                         return;
                     }
 
                     const response = await botApi.getIncident(incidentId);
-                    await interaction.reply({
+                    await interaction.editReply({
                         content: limitDiscordMessage(
                             formatIncidentDetail(response.incident)
                         ),
-                        flags: [EPHEMERAL_FLAG],
                     });
                     return;
                 }
                 case 'status': {
+                    await interaction.deferReply({
+                        flags: [EPHEMERAL_FLAG],
+                    });
+                    replyDeferred = true;
                     const incidentId = interaction.options.getString(
                         'incident_id',
                         true
@@ -454,13 +474,16 @@ const incidentCommand: Command = {
                         actorUserId: interaction.user.id,
                         notes: note,
                     });
-                    await interaction.reply({
+                    await interaction.editReply({
                         content: `Updated **${response.incident.incidentId}** to **${response.incident.status}**.`,
-                        flags: [EPHEMERAL_FLAG],
                     });
                     return;
                 }
                 case 'note': {
+                    await interaction.deferReply({
+                        flags: [EPHEMERAL_FLAG],
+                    });
+                    replyDeferred = true;
                     const incidentId = interaction.options.getString(
                         'incident_id',
                         true
@@ -470,9 +493,8 @@ const incidentCommand: Command = {
                         actorUserId: interaction.user.id,
                         notes: note,
                     });
-                    await interaction.reply({
+                    await interaction.editReply({
                         content: `Added a note to **${response.incident.incidentId}**.`,
-                        flags: [EPHEMERAL_FLAG],
                     });
                     return;
                 }
@@ -488,6 +510,13 @@ const incidentCommand: Command = {
                 subcommand,
                 error: formatApiError(error),
             });
+            if (replyDeferred) {
+                await interaction.editReply({
+                    content: `Incident command failed: ${formatApiError(error)}`,
+                });
+                return;
+            }
+
             await interaction.reply({
                 content: `Incident command failed: ${formatApiError(error)}`,
                 flags: [EPHEMERAL_FLAG],

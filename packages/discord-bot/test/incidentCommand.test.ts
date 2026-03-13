@@ -60,7 +60,8 @@ test('incident command denies non-superusers before calling backend', async () =
 
 test('incident command view fetches a short-ID incident and replies with operator-safe detail', async () => {
     const originalGetIncident = botApi.getIncident;
-    const replyPayloads: unknown[] = [];
+    const deferReplyPayloads: unknown[] = [];
+    const editReplyPayloads: unknown[] = [];
     let capturedIncidentId = '';
 
     superuserIds.splice(0, superuserIds.length, 'superuser-1');
@@ -106,18 +107,22 @@ test('incident command view fetches a short-ID incident and replies with operato
                 getString: (name: string) =>
                     name === 'incident_id' ? '1a2b3c4d' : null,
             },
-            reply: async (payload: unknown) => {
-                replyPayloads.push(payload);
+            deferReply: async (payload: unknown) => {
+                deferReplyPayloads.push(payload);
+            },
+            editReply: async (payload: unknown) => {
+                editReplyPayloads.push(payload);
             },
         } as never);
 
         assert.equal(capturedIncidentId, '1a2b3c4d');
+        assert.equal(deferReplyPayloads.length, 1);
         assert.match(
-            String((replyPayloads[0] as { content?: string }).content),
+            String((editReplyPayloads[0] as { content?: string }).content),
             /Incident 1a2b3c4d/i
         );
         assert.doesNotMatch(
-            String((replyPayloads[0] as { content?: string }).content),
+            String((editReplyPayloads[0] as { content?: string }).content),
             /123456789012345678/
         );
     } finally {
@@ -127,7 +132,7 @@ test('incident command view fetches a short-ID incident and replies with operato
 
 test('incident command view truncates overlong replies instead of exceeding Discord limits', async () => {
     const originalGetIncident = botApi.getIncident;
-    const replyPayloads: unknown[] = [];
+    const editReplyPayloads: unknown[] = [];
 
     superuserIds.splice(0, superuserIds.length, 'superuser-1');
     botApi.getIncident = (async (incidentId) => {
@@ -170,12 +175,13 @@ test('incident command view truncates overlong replies instead of exceeding Disc
                 getString: (name: string) =>
                     name === 'incident_id' ? '1a2b3c4d' : null,
             },
-            reply: async (payload: unknown) => {
-                replyPayloads.push(payload);
-            },
+            deferReply: async () => undefined,
+            editReply: async (payload: unknown) => {
+                editReplyPayloads.push(payload);
+            }
         } as never);
 
-        const content = String((replyPayloads[0] as { content?: string }).content);
+        const content = String((editReplyPayloads[0] as { content?: string }).content);
         assert.ok(content.length <= 2000);
         assert.match(content, /\.\.\. \(truncated\)$/);
     } finally {
@@ -185,7 +191,7 @@ test('incident command view truncates overlong replies instead of exceeding Disc
 
 test('incident command view without an ID shows a picker for unprocessed incidents', async () => {
     const originalListIncidents = botApi.listIncidents;
-    const replyPayloads: unknown[] = [];
+    const editReplyPayloads: unknown[] = [];
 
     superuserIds.splice(0, superuserIds.length, 'superuser-1');
     botApi.listIncidents = (async () => ({
@@ -251,12 +257,13 @@ test('incident command view without an ID shows a picker for unprocessed inciden
                 getSubcommand: () => 'view',
                 getString: () => null,
             },
-            reply: async (payload: unknown) => {
-                replyPayloads.push(payload);
-            },
+            deferReply: async () => undefined,
+            editReply: async (payload: unknown) => {
+                editReplyPayloads.push(payload);
+            }
         } as never);
 
-        const payload = replyPayloads[0] as {
+        const payload = editReplyPayloads[0] as {
             content?: string;
             components?: Array<{
                 components?: Array<{
@@ -290,7 +297,8 @@ test('incident command view without an ID shows a picker for unprocessed inciden
 
 test('incident picker selection updates the ephemeral view with incident detail', async () => {
     const originalGetIncident = botApi.getIncident;
-    const updatePayloads: unknown[] = [];
+    const editReplyPayloads: unknown[] = [];
+    let deferred = false;
 
     superuserIds.splice(0, superuserIds.length, 'superuser-1');
     botApi.getIncident = (async (incidentId) => ({
@@ -321,14 +329,17 @@ test('incident picker selection updates the ephemeral view with incident detail'
             user: { id: 'superuser-1' },
             customId: `${INCIDENT_VIEW_SELECT_PREFIX}superuser-1`,
             values: ['1a2b3c4d'],
-            update: async (payload: unknown) => {
-                updatePayloads.push(payload);
+            editReply: async (payload: unknown) => {
+                editReplyPayloads.push(payload);
             },
             reply: async () => undefined,
-            deferUpdate: async () => undefined,
+            deferUpdate: async () => {
+                deferred = true;
+            },
         } as never);
 
-        const payload = updatePayloads[0] as { content?: string; components?: unknown[] };
+        assert.equal(deferred, true);
+        const payload = editReplyPayloads[0] as { content?: string; components?: unknown[] };
         assert.match(String(payload.content), /Incident 1a2b3c4d/i);
         assert.deepEqual(payload.components, []);
     } finally {

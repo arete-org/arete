@@ -7,7 +7,6 @@
  */
 import type {
     ButtonInteraction,
-    InteractionReplyOptions,
     Message,
     ModalSubmitInteraction,
 } from 'discord.js';
@@ -29,7 +28,6 @@ import {
 import {
     resolveProvenanceMetadata,
     resolveResponseAnchorMessage,
-    safeInteractionReply,
 } from './provenanceInteractions.js';
 
 const incidentReportLogger =
@@ -41,6 +39,8 @@ const INCIDENT_REPORT_SESSION_TTL_MS = 15 * 60_000;
 const INCIDENT_REPORT_SESSION_PRUNE_INTERVAL_MS = 5 * 60_000;
 const MAX_INCIDENT_REPORT_SESSIONS = 250;
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral;
+const INCIDENT_REMEDIATION_PERSIST_MAX_ATTEMPTS = 3;
+const INCIDENT_REMEDIATION_PERSIST_BASE_DELAY_MS = 250;
 
 export const INCIDENT_REPORT_CONSENT_PREFIX = 'incident_report_consent:';
 export const INCIDENT_REPORT_CANCEL_PREFIX = 'incident_report_cancel:';
@@ -138,6 +138,9 @@ const incidentReportSessionPruner = setInterval(
 );
 incidentReportSessionPruner.unref?.();
 
+const wait = (ms: number): Promise<void> =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Parses free-form comma-separated tags from the modal into a clean unique list
  * before sending them to the backend.
@@ -173,6 +176,34 @@ const isMessageLike = (value: unknown): value is Message => {
     );
 };
 
+const persistIncidentRemediationWithRetry = async (
+    incidentId: string,
+    request: {
+        actorUserId: string;
+        state: IncidentRemediationOutcome['state'];
+        notes: string;
+    }
+): Promise<void> => {
+    for (
+        let attempt = 1;
+        attempt <= INCIDENT_REMEDIATION_PERSIST_MAX_ATTEMPTS;
+        attempt += 1
+    ) {
+        try {
+            await botApi.recordIncidentRemediation(incidentId, request);
+            return;
+        } catch (error) {
+            if (attempt === INCIDENT_REMEDIATION_PERSIST_MAX_ATTEMPTS) {
+                throw error;
+            }
+
+            await wait(
+                INCIDENT_REMEDIATION_PERSIST_BASE_DELAY_MS * 2 ** (attempt - 1)
+            );
+        }
+    }
+};
+
 /**
  * Builds a log payload without forcing every handler to repeat the same
  * interaction metadata.
@@ -191,53 +222,46 @@ const buildLogContext = (
 });
 
 /**
- * Wraps the shared safe reply helper so the report flow can keep user-facing
- * actions and log labels close together.
- */
-const getReplyMessage = async (
-    interaction: ButtonInteraction,
-    payload: InteractionReplyOptions,
-    logContext: Record<string, unknown>,
-    logLabel: string
-): Promise<void> => {
-    await safeInteractionReply(interaction, payload, logContext, logLabel);
-};
-
-/**
  * Starts the report flow by collecting the best available provenance pointers,
  * then asking for explicit consent before any durable write happens.
  */
 export const handleIncidentReportButton = async (
     interaction: ButtonInteraction
 ): Promise<void> => {
-    const logContext = buildLogContext(interaction);
-    const anchorMessage = await resolveResponseAnchorMessage(interaction.message);
-    const { responseId, metadata } = await resolveProvenanceMetadata(
-        interaction.message
-    );
-
-    const sessionKey = buildIncidentReportSessionKey(
-        interaction.user.id,
-        interaction.message.id
-    );
-    setIncidentReportSession(sessionKey, {
-        sourceMessageId: interaction.message.id,
-        targetMessageId: anchorMessage?.id,
-        channelId: interaction.channelId,
-        guildId: interaction.guildId ?? undefined,
-        responseId,
-        chainHash: metadata?.chainHash,
-        modelVersion: metadata?.modelVersion,
-        jumpUrl: anchorMessage?.url,
+    await interaction.deferReply({
+        flags: [EPHEMERAL_FLAG],
     });
 
-    const warningSuffix = anchorMessage
-        ? ''
-        : '\n\nI may not be able to hide the target message automatically if I cannot recover the original assistant message.';
+    const logContext = buildLogContext(interaction);
 
-    await getReplyMessage(
-        interaction,
-        {
+    try {
+        const anchorMessage = await resolveResponseAnchorMessage(
+            interaction.message
+        );
+        const { responseId, metadata } = await resolveProvenanceMetadata(
+            interaction.message
+        );
+
+        const sessionKey = buildIncidentReportSessionKey(
+            interaction.user.id,
+            interaction.message.id
+        );
+        setIncidentReportSession(sessionKey, {
+            sourceMessageId: interaction.message.id,
+            targetMessageId: anchorMessage?.id,
+            channelId: interaction.channelId,
+            guildId: interaction.guildId ?? undefined,
+            responseId,
+            chainHash: metadata?.chainHash,
+            modelVersion: metadata?.modelVersion,
+            jumpUrl: anchorMessage?.url,
+        });
+
+        const warningSuffix = anchorMessage
+            ? ''
+            : '\n\nI may not be able to hide the target message automatically if I cannot recover the original assistant message.';
+
+        await interaction.editReply({
             content:
                 `Reporting this message will create a durable incident record for maintainers to review.${warningSuffix}`,
             components: [
@@ -256,11 +280,18 @@ export const handleIncidentReportButton = async (
                         .setStyle(ButtonStyle.Secondary)
                 ),
             ],
-            flags: [EPHEMERAL_FLAG],
-        },
-        logContext,
-        'incident_report_prompt'
-    );
+        });
+    } catch (error) {
+        incidentReportLogger.error('Failed to open incident report consent flow', {
+            ...logContext,
+            error: formatApiError(error),
+        });
+        await interaction.editReply({
+            content:
+                'I could not open the incident report form for this message. Please try again.',
+            components: [],
+        });
+    }
 };
 
 /**
@@ -428,7 +459,7 @@ export const handleIncidentReportModal = async (
         }
 
         try {
-            await botApi.recordIncidentRemediation(
+            await persistIncidentRemediationWithRetry(
                 reportResponse.incident.incidentId,
                 {
                     actorUserId: interaction.user.id,
@@ -446,11 +477,11 @@ export const handleIncidentReportModal = async (
                     error: formatApiError(error),
                 }
             );
-            remediationOutcome = {
-                state: 'failed',
-                notes:
-                    'The incident was stored, but remediation tracking could not be saved.',
-            };
+            await interaction.editReply({
+                content:
+                    'The incident was stored, but remediation tracking could not be saved. Please try reporting again in a moment.',
+            });
+            return;
         }
 
         clearIncidentReportSession(sessionKey);
