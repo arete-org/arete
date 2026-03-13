@@ -11,8 +11,15 @@ import { strict as assert } from 'node:assert';
 
 import {
     ApiErrorResponseSchema,
+    GetIncidentResponseSchema,
+    GetIncidentsResponseSchema,
     GetTraceApiResponseSchema,
     GetTraceStaleResponseSchema,
+    PostIncidentNotesRequestSchema,
+    PostIncidentRemediationRequestSchema,
+    PostIncidentReportRequestSchema,
+    PostIncidentReportResponseSchema,
+    PostIncidentStatusRequestSchema,
     PostReflectRequestSchema,
     PostReflectResponseSchema,
     PostTraceCardFromTraceRequestSchema,
@@ -24,8 +31,11 @@ import {
     createSchemaResponseValidator,
 } from '../src/web/schemas';
 import type {
+    GetIncidentResponse,
+    GetIncidentsResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
+    PostIncidentReportResponse,
     PostReflectResponse,
 } from '../src/web/types';
 import type { ApiResponseValidationResult } from '../src/web/client-core';
@@ -45,6 +55,41 @@ const baseMetadata = {
             url: 'https://example.com/article',
         },
     ],
+} as const;
+
+const baseIncidentDetail = {
+    incident: {
+        incidentId: '1a2b3c4d',
+        status: 'new',
+        tags: ['safety'],
+        description: 'Reported response',
+        contact: 'contact@example.com',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        consentedAt: new Date().toISOString(),
+        pointers: {
+            responseId: 'response_123',
+            guildId: 'a'.repeat(64),
+            channelId: 'b'.repeat(64),
+            messageId: 'c'.repeat(64),
+            modelVersion: 'gpt-5-mini',
+            chainHash: 'hash_abc',
+        },
+        remediation: {
+            state: 'pending',
+            applied: false,
+            notes: null,
+            updatedAt: null,
+        },
+        auditEvents: [
+            {
+                action: 'incident.created',
+                actorHash: 'd'.repeat(64),
+                notes: 'created',
+                createdAt: new Date().toISOString(),
+            },
+        ],
+    },
 } as const;
 
 test('PostReflectRequestSchema enforces strict request payload rules', () => {
@@ -210,6 +255,26 @@ test('PostTraceCardRequestSchema rejects invalid chip values', () => {
             evidenceScore: 6,
             freshnessScore: 2,
         },
+    });
+
+    assert.equal(parsed.success, false);
+});
+
+test('PostIncidentNotesRequestSchema rejects whitespace-only notes', () => {
+    const parsed = PostIncidentNotesRequestSchema.safeParse({
+        actorUserId: 'user_123',
+        notes: '   ',
+    });
+
+    assert.equal(parsed.success, false);
+});
+
+test('PostIncidentReportRequestSchema rejects whitespace-only description and contact', () => {
+    const parsed = PostIncidentReportRequestSchema.safeParse({
+        reporterUserId: 'user_123',
+        description: '   ',
+        contact: '   ',
+        consentedAt: new Date().toISOString(),
     });
 
     assert.equal(parsed.success, false);
@@ -409,4 +474,108 @@ test('ApiErrorResponseSchema enforces strict known error envelope fields', () =>
         }).success,
         false
     );
+});
+
+test('incident schemas accept valid request and response payloads', () => {
+    const { auditEvents, ...incidentSummary } = baseIncidentDetail.incident;
+
+    assert.equal(
+        PostIncidentReportRequestSchema.safeParse({
+            reporterUserId: '123456789012345678',
+            guildId: '234567890123456789',
+            channelId: '345678901234567890',
+            messageId: '456789012345678901',
+            jumpUrl: 'https://discord.com/channels/1/2/3',
+            responseId: 'response_123',
+            chainHash: 'hash_abc',
+            modelVersion: 'gpt-5-mini',
+            tags: ['safety', 'review'],
+            description: 'Needs review',
+            contact: 'contact@example.com',
+            consentedAt: new Date().toISOString(),
+        }).success,
+        true
+    );
+
+    assert.equal(
+        PostIncidentReportResponseSchema.safeParse({
+            ...baseIncidentDetail,
+            remediation: { state: 'pending' },
+        }).success,
+        true
+    );
+
+    assert.equal(
+        GetIncidentsResponseSchema.safeParse({
+            incidents: [incidentSummary],
+        }).success,
+        true
+    );
+
+    assert.equal(
+        GetIncidentResponseSchema.safeParse(baseIncidentDetail).success,
+        true
+    );
+});
+
+test('incident mutating request schemas enforce strict payload rules', () => {
+    assert.equal(
+        PostIncidentStatusRequestSchema.safeParse({
+            status: 'under_review',
+            actorUserId: '123456789012345678',
+            notes: 'taking a look',
+        }).success,
+        true
+    );
+
+    assert.equal(
+        PostIncidentNotesRequestSchema.safeParse({
+            actorUserId: '123456789012345678',
+            notes: 'internal note',
+        }).success,
+        true
+    );
+
+    assert.equal(
+        PostIncidentRemediationRequestSchema.safeParse({
+            actorUserId: '123456789012345678',
+            state: 'applied',
+            notes: 'warning banner applied',
+        }).success,
+        true
+    );
+
+    assert.equal(
+        PostIncidentRemediationRequestSchema.safeParse({
+            state: 'pending',
+        }).success,
+        false
+    );
+});
+
+test('incident schema validators stay assignable to shared contract types', () => {
+    const incidentReportValidator = createSchemaResponseValidator(
+        PostIncidentReportResponseSchema
+    );
+    const incidentsValidator = createSchemaResponseValidator(
+        GetIncidentsResponseSchema
+    );
+    const incidentValidator = createSchemaResponseValidator(
+        GetIncidentResponseSchema
+    );
+
+    const typedReportValidator: (
+        data: unknown
+    ) => ApiResponseValidationResult<PostIncidentReportResponse> =
+        incidentReportValidator;
+    const typedIncidentsValidator: (
+        data: unknown
+    ) => ApiResponseValidationResult<GetIncidentsResponse> = incidentsValidator;
+    const typedIncidentValidator: (
+        data: unknown
+    ) => ApiResponseValidationResult<GetIncidentResponse> = incidentValidator;
+
+    assert.equal(typeof typedReportValidator, 'function');
+    assert.equal(typeof typedIncidentsValidator, 'function');
+    assert.equal(typeof typedIncidentValidator, 'function');
 });

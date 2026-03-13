@@ -12,6 +12,11 @@ import {
     type CreateApiTransportOptions,
 } from './client.js';
 import {
+    createIncidentApi,
+    type CreateIncidentApiOptions,
+    type IncidentApi,
+} from './incidents.js';
+import {
     createReflectApi,
     type CreateReflectApiOptions,
     type ReflectApi,
@@ -23,13 +28,15 @@ import {
 } from './traces.js';
 
 export type CreateDiscordApiClientOptions = CreateApiTransportOptions &
+    CreateIncidentApiOptions &
     CreateTraceApiOptions &
     CreateReflectApiOptions;
 
 export type DiscordApiClient = {
     requestJson: ApiRequester;
 } & TraceApi &
-    ReflectApi;
+    ReflectApi &
+    IncidentApi;
 
 export const createDiscordApiClient = ({
     baseUrl,
@@ -47,6 +54,7 @@ export const createDiscordApiClient = ({
 
     return {
         requestJson,
+        ...createIncidentApi(requestJson, { traceApiToken }),
         ...createReflectApi(requestJson, { traceApiToken }),
         ...createTraceApi(requestJson, { traceApiToken }),
     };
@@ -64,6 +72,20 @@ export type {
     UnknownReflectActionResponse,
 } from './reflect.js';
 export type {
+    CreateIncidentApiOptions,
+    IncidentApi,
+} from './incidents.js';
+export type {
+    GetIncidentResponse,
+    GetIncidentsResponse,
+    PostIncidentNotesRequest,
+    PostIncidentNotesResponse,
+    PostIncidentRemediationRequest,
+    PostIncidentRemediationResponse,
+    PostIncidentReportRequest,
+    PostIncidentReportResponse,
+    PostIncidentStatusRequest,
+    PostIncidentStatusResponse,
     PostTraceCardFromTraceRequest,
     PostTraceCardFromTraceResponse,
     PostTraceCardRequest,
