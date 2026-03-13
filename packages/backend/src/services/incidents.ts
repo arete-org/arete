@@ -162,26 +162,27 @@ export const createIncidentService = ({
             incident: IncidentDetail;
             remediation: { state: 'pending' };
         }> {
-            const incident = await incidentStore.createIncident({
-                reporterId: request.reporterUserId,
-                tags: request.tags,
-                description: request.description?.trim() || null,
-                contact: request.contact?.trim() || null,
-                consentedAt: request.consentedAt,
-                pointers: {
-                    responseId: request.responseId,
-                    guildId: request.guildId,
-                    channelId: request.channelId,
-                    messageId: request.messageId,
-                    chainHash: request.chainHash,
-                    modelVersion: request.modelVersion,
+            const incident = await incidentStore.createIncidentWithAudit({
+                incident: {
+                    reporterId: request.reporterUserId,
+                    tags: request.tags,
+                    description: request.description?.trim() || null,
+                    contact: request.contact?.trim() || null,
+                    consentedAt: request.consentedAt,
+                    pointers: {
+                        responseId: request.responseId,
+                        guildId: request.guildId,
+                        channelId: request.channelId,
+                        messageId: request.messageId,
+                        chainHash: request.chainHash,
+                        modelVersion: request.modelVersion,
+                    },
                 },
-            });
-
-            await incidentStore.appendAuditEvent(incident.id, {
-                actorHash: request.reporterUserId,
-                action: 'incident.created',
-                notes: buildIncidentCreatedAuditNotes(request),
+                auditEvent: {
+                    actorHash: request.reporterUserId,
+                    action: 'incident.created',
+                    notes: buildIncidentCreatedAuditNotes(request),
+                },
             });
 
             const detail = await getIncidentDetail(incident.shortId);
@@ -216,14 +217,14 @@ export const createIncidentService = ({
             request: PostIncidentStatusRequest
         ): Promise<GetIncidentResponse> {
             const incident = await getIncidentRecord(incidentId);
-            const updatedIncident = await incidentStore.updateStatus(
-                incident.id,
-                request.status
-            );
-            await incidentStore.appendAuditEvent(incident.id, {
-                actorHash: request.actorUserId,
-                action: 'incident.status_changed',
-                notes: request.notes?.trim() || null,
+            const updatedIncident = await incidentStore.updateStatusWithAudit({
+                incidentId: incident.id,
+                status: request.status,
+                auditEvent: {
+                    actorHash: request.actorUserId,
+                    action: 'incident.status_changed',
+                    notes: request.notes?.trim() || null,
+                },
             });
 
             logIncidentEvent('incident.status_changed', updatedIncident, {
@@ -252,21 +253,26 @@ export const createIncidentService = ({
             request: PostIncidentRemediationRequest
         ): Promise<GetIncidentResponse> {
             const incident = await getIncidentRecord(incidentId);
-            const updatedIncident = await incidentStore.updateRemediation(
-                incident.id,
-                {
-                    state: request.state,
-                    notes: request.notes?.trim() || null,
-                }
-            );
+            const updatedIncident =
+                request.state === 'applied'
+                    ? await incidentStore.updateRemediationWithAudit({
+                          incidentId: incident.id,
+                          remediation: {
+                              state: request.state,
+                              notes: request.notes?.trim() || null,
+                          },
+                          auditEvent: {
+                              actorHash: request.actorUserId,
+                              action: 'incident.remediated',
+                              notes: request.notes?.trim() || null,
+                          },
+                      })
+                    : await incidentStore.updateRemediation(incident.id, {
+                          state: request.state,
+                          notes: request.notes?.trim() || null,
+                      });
 
             if (request.state === 'applied') {
-                await incidentStore.appendAuditEvent(incident.id, {
-                    actorHash: request.actorUserId,
-                    action: 'incident.remediated',
-                    notes: request.notes?.trim() || null,
-                });
-
                 logIncidentEvent('incident.remediated', updatedIncident, {
                     action: 'incident.remediated',
                 });

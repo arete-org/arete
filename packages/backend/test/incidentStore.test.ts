@@ -130,3 +130,55 @@ test('SqliteIncidentStore pseudonymizes pointers and audit actors', async () => 
     }
 });
 
+test('SqliteIncidentStore rolls back status changes when the audit append fails', async () => {
+    const tempRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'incident-store-')
+    );
+    const dbPath = path.join(tempRoot, 'incidents.db');
+    const store = new SqliteIncidentStore({
+        dbPath,
+        pseudonymizationSecret: SECRET,
+    });
+
+    try {
+        const incident = await store.createIncident({
+            consentedAt: new Date().toISOString(),
+        });
+        const mutableStore = store as unknown as {
+            insertAuditEvent: { run: (values: unknown) => unknown };
+        };
+        const originalInsertAuditEvent = mutableStore.insertAuditEvent;
+        mutableStore.insertAuditEvent = {
+            run: () => {
+                throw new Error('forced audit write failure');
+            },
+        };
+
+        try {
+            await assert.rejects(
+                () =>
+                    store.updateStatusWithAudit({
+                        incidentId: incident.id,
+                        status: 'under_review',
+                        auditEvent: {
+                            actorHash: '999999999999999999',
+                            action: 'incident.status_changed',
+                            notes: 'reviewing now',
+                        },
+                    }),
+                /forced audit write failure/
+            );
+        } finally {
+            mutableStore.insertAuditEvent = originalInsertAuditEvent;
+        }
+
+        const rolledBackIncident = await store.getIncident(incident.id);
+        assert.equal(rolledBackIncident?.status, 'new');
+        const auditEvents = await store.listAuditEvents(incident.id);
+        assert.equal(auditEvents.length, 0);
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});
+

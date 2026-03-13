@@ -118,6 +118,23 @@ export interface SqliteIncidentStoreConfig {
     pseudonymizationSecret: string;
 }
 
+type CreateIncidentAuditInput = {
+    incident: CreateIncidentInput;
+    auditEvent: AppendAuditEventInput;
+};
+
+type UpdateStatusWithAuditInput = {
+    incidentId: number;
+    status: IncidentStatus;
+    auditEvent: AppendAuditEventInput;
+};
+
+type UpdateRemediationWithAuditInput = {
+    incidentId: number;
+    remediation: UpdateRemediationInput;
+    auditEvent?: AppendAuditEventInput;
+};
+
 type IncidentRow = {
     id: number;
     short_id: string;
@@ -473,6 +490,59 @@ export class SqliteIncidentStore {
         };
     }
 
+    private getIncidentRowByIdSync(id: number): IncidentRow | undefined {
+        return this.getIncidentByIdStatement.get(id) as IncidentRow | undefined;
+    }
+
+    private buildAuditInsertValues(
+        incidentId: number,
+        event: AppendAuditEventInput,
+        createdAt: string
+    ): {
+        incident_id: number;
+        actor_hash: string | null;
+        action: IncidentAuditAction;
+        notes: string | null;
+        created_at: string;
+    } {
+        const actorHash = pseudonymizeActorId(
+            event.actorHash,
+            this.pseudonymizationSecret
+        );
+
+        return {
+            incident_id: incidentId,
+            actor_hash: actorHash ?? null,
+            action: event.action,
+            notes: event.notes ?? null,
+            created_at: createdAt,
+        };
+    }
+
+    private insertIncidentWithUniqueShortIdSync(values: Record<string, unknown>): number {
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+            try {
+                const runResult = this.insertIncident.run({
+                    ...values,
+                    short_id: this.generateShortId(),
+                });
+                return Number(runResult.lastInsertRowid);
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    error.message.includes(
+                        'UNIQUE constraint failed: incidents.short_id'
+                    )
+                ) {
+                    continue;
+                }
+                throw error;
+            }
+        }
+
+        throw new Error('Failed to generate a unique incident short ID.');
+    }
+
     /**
      * Generates a short operator-facing incident ID and retries on the unlikely
      * collision case instead of exposing an internal numeric ID.
@@ -560,6 +630,91 @@ export class SqliteIncidentStore {
         if (!incident) {
             throw new Error(`Incident ${id} was created but could not be read back`);
         }
+
+        return incident;
+    }
+
+    /**
+     * Creates an incident and its initial audit event in one transaction so a
+     * retry cannot leave a durable incident row without `incident.created`.
+     */
+    async createIncidentWithAudit(
+        input: CreateIncidentAuditInput
+    ): Promise<IncidentRecord> {
+        const now = new Date().toISOString();
+        const status = input.incident.status ?? 'new';
+        this.assertValidStatus(status);
+
+        const tags = this.normalizeTags(input.incident.tags);
+        const reporterHash = pseudonymizeActorId(
+            input.incident.reporterId,
+            this.pseudonymizationSecret
+        );
+        const pointers = input.incident.pointers
+            ? pseudonymizeIncidentPointers(
+                  input.incident.pointers,
+                  this.pseudonymizationSecret
+              )
+            : {};
+        const pointerLogValues = ['guildId', 'channelId', 'messageId']
+            .map((key) => {
+                const value = pointers[key as keyof IncidentPointers];
+                return typeof value === 'string' && value.length > 0
+                    ? `${key}=${shortHash(value)}`
+                    : null;
+            })
+            .filter((value): value is string => Boolean(value))
+            .join(', ');
+
+        const transaction = this.db.transaction(() => {
+            const id = this.insertIncidentWithUniqueShortIdSync({
+                reporter_hash: reporterHash ?? null,
+                status,
+                tags_json: JSON.stringify(tags),
+                description: input.incident.description ?? null,
+                contact: input.incident.contact ?? null,
+                consented_at: input.incident.consentedAt,
+                pointers_json: JSON.stringify(pointers),
+                remediation_state: 'pending',
+                remediation_applied: 0,
+                remediation_notes: null,
+                remediation_updated_at: null,
+                created_at: now,
+                updated_at: now,
+            });
+
+            this.insertAuditEvent.run(
+                this.buildAuditInsertValues(id, input.auditEvent, now)
+            );
+
+            const incidentRow = this.getIncidentRowByIdSync(id);
+            if (!incidentRow) {
+                throw new Error(
+                    `Incident ${id} was created but could not be read back`
+                );
+            }
+
+            return this.mapIncidentRow(incidentRow);
+        });
+
+        const incident = await this.withRetry(() => transaction());
+        incidentLogger.info('Incident created in SQLite store', {
+            incidentNumericId: incident.id,
+            reporterHash: reporterHash ? shortHash(reporterHash) : null,
+            pointers: pointerLogValues || 'none',
+        });
+        incidentLogger.info('Incident audit event appended', {
+            incidentNumericId: incident.id,
+            action: input.auditEvent.action,
+            actorHash: input.auditEvent.actorHash
+                ? shortHash(
+                      pseudonymizeActorId(
+                          input.auditEvent.actorHash,
+                          this.pseudonymizationSecret
+                      ) ?? ''
+                  )
+                : null,
+        });
 
         return incident;
     }
@@ -671,6 +826,61 @@ export class SqliteIncidentStore {
     }
 
     /**
+     * Updates review state and appends its audit event inside one transaction
+     * so retries cannot split the durable status from the audit trail.
+     */
+    async updateStatusWithAudit(
+        input: UpdateStatusWithAuditInput
+    ): Promise<IncidentRecord> {
+        this.assertValidStatus(input.status);
+        const updatedAt = new Date().toISOString();
+        const transaction = this.db.transaction(() => {
+            const result = this.updateStatusStatement.run({
+                id: input.incidentId,
+                status: input.status,
+                updated_at: updatedAt,
+            });
+
+            if (result.changes === 0) {
+                throw new Error(`Incident ${input.incidentId} not found`);
+            }
+
+            this.insertAuditEvent.run(
+                this.buildAuditInsertValues(
+                    input.incidentId,
+                    input.auditEvent,
+                    updatedAt
+                )
+            );
+
+            const incidentRow = this.getIncidentRowByIdSync(input.incidentId);
+            if (!incidentRow) {
+                throw new Error(
+                    `Incident ${input.incidentId} was updated but could not be read back`
+                );
+            }
+
+            return this.mapIncidentRow(incidentRow);
+        });
+
+        const incident = await this.withRetry(() => transaction());
+        incidentLogger.info('Incident audit event appended', {
+            incidentNumericId: input.incidentId,
+            action: input.auditEvent.action,
+            actorHash: input.auditEvent.actorHash
+                ? shortHash(
+                      pseudonymizeActorId(
+                          input.auditEvent.actorHash,
+                          this.pseudonymizationSecret
+                      ) ?? ''
+                  )
+                : null,
+        });
+
+        return incident;
+    }
+
+    /**
      * Persists the bot's remediation outcome for an already-created incident.
      */
     async updateRemediation(
@@ -698,6 +908,69 @@ export class SqliteIncidentStore {
         if (!incident) {
             throw new Error(`Incident ${id} was updated but could not be read back`);
         }
+        return incident;
+    }
+
+    /**
+     * Persists remediation state and, when supplied, its audit event inside one
+     * transaction so "applied" cannot commit without `incident.remediated`.
+     */
+    async updateRemediationWithAudit(
+        input: UpdateRemediationWithAuditInput
+    ): Promise<IncidentRecord> {
+        this.assertValidRemediationState(input.remediation.state);
+        const updatedAt = new Date().toISOString();
+        const transaction = this.db.transaction(() => {
+            const result = this.updateRemediationStatement.run({
+                id: input.incidentId,
+                remediation_state: input.remediation.state,
+                remediation_applied:
+                    input.remediation.state === 'applied' ? 1 : 0,
+                remediation_notes: input.remediation.notes ?? null,
+                remediation_updated_at: updatedAt,
+                updated_at: updatedAt,
+            });
+
+            if (result.changes === 0) {
+                throw new Error(`Incident ${input.incidentId} not found`);
+            }
+
+            if (input.auditEvent) {
+                this.insertAuditEvent.run(
+                    this.buildAuditInsertValues(
+                        input.incidentId,
+                        input.auditEvent,
+                        updatedAt
+                    )
+                );
+            }
+
+            const incidentRow = this.getIncidentRowByIdSync(input.incidentId);
+            if (!incidentRow) {
+                throw new Error(
+                    `Incident ${input.incidentId} was updated but could not be read back`
+                );
+            }
+
+            return this.mapIncidentRow(incidentRow);
+        });
+
+        const incident = await this.withRetry(() => transaction());
+        if (input.auditEvent) {
+            incidentLogger.info('Incident audit event appended', {
+                incidentNumericId: input.incidentId,
+                action: input.auditEvent.action,
+                actorHash: input.auditEvent.actorHash
+                    ? shortHash(
+                          pseudonymizeActorId(
+                              input.auditEvent.actorHash,
+                              this.pseudonymizationSecret
+                          ) ?? ''
+                      )
+                    : null,
+            });
+        }
+
         return incident;
     }
 
