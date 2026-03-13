@@ -120,6 +120,7 @@ const parseJsonBody = async (
         if (Number.isFinite(contentLength) && contentLength > maxBodyBytes) {
             sendJson(res, 413, { error: 'Request payload too large' });
             logRequest(req, res, `${routeLabel} payload-too-large`);
+            req.resume();
             return null;
         }
     }

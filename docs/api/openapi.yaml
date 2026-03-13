@@ -790,6 +790,7 @@ components:
                     $ref: '#/components/schemas/IncidentStatus'
                 tags:
                     type: array
+                    maxItems: 25
                     items:
                         type: string
                 description:
@@ -833,7 +834,6 @@ components:
                               $ref: '#/components/schemas/IncidentAuditEvent'
                   required:
                       - auditEvents
-                  additionalProperties: false
 
         IncidentReportRequest:
             type: object

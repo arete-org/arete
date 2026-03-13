@@ -269,6 +269,17 @@ test('PostIncidentNotesRequestSchema rejects whitespace-only notes', () => {
     assert.equal(parsed.success, false);
 });
 
+test('PostIncidentReportRequestSchema rejects whitespace-only description and contact', () => {
+    const parsed = PostIncidentReportRequestSchema.safeParse({
+        reporterUserId: 'user_123',
+        description: '   ',
+        contact: '   ',
+        consentedAt: new Date().toISOString(),
+    });
+
+    assert.equal(parsed.success, false);
+});
+
 test('PostTraceCardRequestSchema accepts missing chips and partial chip payloads', () => {
     const missingChips = PostTraceCardRequestSchema.safeParse({
         temperament: {

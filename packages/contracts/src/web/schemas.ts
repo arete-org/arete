@@ -370,8 +370,8 @@ export const PostIncidentReportRequestSchema = z
         chainHash: z.string().min(1).optional(),
         modelVersion: z.string().min(1).optional(),
         tags: z.array(z.string().min(1)).max(25).optional(),
-        description: z.string().max(2000).optional(),
-        contact: z.string().max(500).optional(),
+        description: z.string().trim().min(1).max(2000).optional(),
+        contact: z.string().trim().min(1).max(500).optional(),
         consentedAt: z.string().datetime(),
     })
     .strict();
