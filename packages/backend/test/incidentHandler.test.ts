@@ -390,3 +390,57 @@ test('incident list rejects an invalid status filter with 400', async () => {
         await fs.rm(tempRoot, { recursive: true, force: true });
     }
 });
+
+test('incident notes endpoint rejects whitespace-only notes with 400', async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'incident-api-'));
+    const dbPath = path.join(tempRoot, 'incidents.db');
+    const store = new SqliteIncidentStore({
+        dbPath,
+        pseudonymizationSecret: SECRET,
+    });
+    const server = await createIncidentServer(store, {
+        traceApiToken: null,
+        serviceToken: 'service-secret',
+    });
+
+    try {
+        const reportResponse = await fetch(`${server.url}/api/incidents/report`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Service-Token': 'service-secret',
+            },
+            body: JSON.stringify({
+                reporterUserId: '123456789012345678',
+                consentedAt: new Date().toISOString(),
+            }),
+        });
+        assert.equal(reportResponse.status, 200);
+        const reportPayload = (await reportResponse.json()) as {
+            incident: { incidentId: string };
+        };
+
+        const noteResponse = await fetch(
+            `${server.url}/api/incidents/${reportPayload.incident.incidentId}/notes`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Service-Token': 'service-secret',
+                },
+                body: JSON.stringify({
+                    actorUserId: '999999999999999999',
+                    notes: '   ',
+                }),
+            }
+        );
+
+        assert.equal(noteResponse.status, 400);
+        const payload = (await noteResponse.json()) as { details?: string };
+        assert.match(String(payload.details), /notes/i);
+    } finally {
+        await server.close();
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});

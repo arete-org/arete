@@ -260,6 +260,15 @@ test('PostTraceCardRequestSchema rejects invalid chip values', () => {
     assert.equal(parsed.success, false);
 });
 
+test('PostIncidentNotesRequestSchema rejects whitespace-only notes', () => {
+    const parsed = PostIncidentNotesRequestSchema.safeParse({
+        actorUserId: 'user_123',
+        notes: '   ',
+    });
+
+    assert.equal(parsed.success, false);
+});
+
 test('PostTraceCardRequestSchema accepts missing chips and partial chip payloads', () => {
     const missingChips = PostTraceCardRequestSchema.safeParse({
         temperament: {

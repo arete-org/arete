@@ -436,7 +436,7 @@ export const PostIncidentStatusResponseSchema = GetIncidentResponseSchema;
 export const PostIncidentNotesRequestSchema = z
     .object({
         actorUserId: z.string().min(1).optional(),
-        notes: z.string().min(1).max(2000),
+        notes: z.string().trim().min(1).max(2000),
     })
     .strict();
 
