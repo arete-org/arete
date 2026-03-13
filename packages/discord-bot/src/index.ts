@@ -71,6 +71,19 @@ import { LLMCostEstimator } from './utils/LLMCostEstimator.js';
 import type { ChannelContextManager } from './state/ChannelContextManager.js';
 import { resolveMemberDisplayName } from './utils/response/provenanceInteractions.js';
 import { parseProvenanceActionCustomId } from './utils/response/provenanceCgi.js';
+import {
+    handleIncidentReportButton,
+    handleIncidentReportCancel,
+    handleIncidentReportConsent,
+    handleIncidentReportModal,
+    INCIDENT_REPORT_CANCEL_PREFIX,
+    INCIDENT_REPORT_CONSENT_PREFIX,
+    INCIDENT_REPORT_MODAL_PREFIX,
+} from './utils/response/incidentReporting.js';
+import {
+    handleIncidentViewSelect,
+    INCIDENT_VIEW_SELECT_PREFIX,
+} from './commands/incident.js';
 //import express from 'express'; // For webhook
 //import bodyParser from "body-parser"; // For webhook
 
@@ -622,10 +635,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
             );
             return;
         }
+
+        if (customId.startsWith(INCIDENT_VIEW_SELECT_PREFIX)) {
+            await handleIncidentViewSelect(interaction);
+            return;
+        }
     }
 
     if (interaction.isModalSubmit()) {
         const { customId } = interaction;
+
+        if (customId.startsWith(INCIDENT_REPORT_MODAL_PREFIX)) {
+            await handleIncidentReportModal(interaction);
+            return;
+        }
 
         if (customId.startsWith(IMAGE_VARIATION_PROMPT_MODAL_ID_PREFIX)) {
             const responseId = customId.slice(
@@ -735,17 +758,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 return;
             }
 
-            logger.info('Report Issue button clicked', {
-                userId: interaction.user.id,
-                messageId: interaction.message.id,
-                messageUrl: interaction.message.url,
-                responseId: provenanceAction.responseId,
-            });
-            await interaction.reply({
-                content:
-                    "This feature isn't active yet. To report ethical or security issues, please follow the instructions in [SECURITY.md](https://github.com/footnote-ai/footnote/blob/main/SECURITY.md).",
-                flags: [1 << 6], // [1 << 6] = EPHEMERAL
-            });
+            if (provenanceAction.action === 'report_issue') {
+                await handleIncidentReportButton(interaction);
+                return;
+            }
+        }
+
+        if (customId.startsWith(INCIDENT_REPORT_CANCEL_PREFIX)) {
+            await handleIncidentReportCancel(interaction);
+            return;
+        }
+
+        if (customId.startsWith(INCIDENT_REPORT_CONSENT_PREFIX)) {
+            await handleIncidentReportConsent(interaction);
             return;
         }
 

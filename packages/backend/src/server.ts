@@ -21,6 +21,7 @@ import {
 import { SimpleRateLimiter } from './services/rateLimiter.js';
 import { createTraceStore, storeTrace } from './services/traceStore.js';
 import { createBlogStore } from './storage/blogStore.js';
+import { getDefaultIncidentStore } from './storage/incidents/incidentStore.js';
 import { createAssetResolver } from './http/assets.js';
 import { verifyGitHubSignature } from './utils/github.js';
 import { logRequest } from './utils/requestLogger.js';
@@ -28,8 +29,10 @@ import { logger } from './utils/logger.js';
 import { createReflectHandler } from './handlers/reflect.js';
 import { createTraceHandlers } from './handlers/trace.js';
 import { createBlogHandlers } from './handlers/blog.js';
+import { createIncidentHandlers } from './handlers/incidents.js';
 import { createWebhookHandler } from './handlers/webhook.js';
 import { createRuntimeConfigHandler } from './handlers/config.js';
+import { createIncidentService } from './services/incidents.js';
 
 // --- Path configuration ---
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -43,6 +46,7 @@ const { resolveAsset, mimeMap } = createAssetResolver(DIST_DIR);
 
 // --- Service state ---
 let traceStore: ReturnType<typeof createTraceStore> | null = null;
+let incidentStore: ReturnType<typeof getDefaultIncidentStore> | null = null;
 let openaiService: OpenAIService | null = null;
 let ipRateLimiter: SimpleRateLimiter | null = null;
 let sessionRateLimiter: SimpleRateLimiter | null = null;
@@ -74,6 +78,9 @@ const initializeServices = () => {
             `Failed to initialize trace store: ${error instanceof Error ? error.message : String(error)}`
         );
     }
+
+    // Incident storage is a required Wave 1 dependency. Surface failures early.
+    incidentStore = getDefaultIncidentStore();
 
     // --- OpenAI service ---
     if (runtimeConfig.openai.apiKey) {
@@ -132,6 +139,7 @@ try {
     logger.error(
         `Failed to initialize services: ${error instanceof Error ? error.message : String(error)}`
     );
+    process.exit(1);
 }
 
 // --- Trace storage wrapper ---
@@ -161,6 +169,24 @@ const {
 const { handleBlogIndexRequest, handleBlogPostRequest } = createBlogHandlers({
     blogStore,
     logRequest,
+});
+if (!incidentStore) {
+    throw new Error('Incident store did not initialize correctly.');
+}
+const incidentService = createIncidentService({ incidentStore });
+const {
+    handleIncidentReportRequest,
+    handleIncidentListRequest,
+    handleIncidentDetailRequest,
+    handleIncidentStatusRequest,
+    handleIncidentNotesRequest,
+    handleIncidentRemediationRequest,
+} = createIncidentHandlers({
+    incidentService,
+    logRequest,
+    maxIncidentBodyBytes: runtimeConfig.reflect.maxBodyBytes,
+    traceApiToken: runtimeConfig.trace.apiToken,
+    serviceToken: runtimeConfig.reflect.serviceToken,
 });
 const handleRuntimeConfigRequest = createRuntimeConfigHandler({ logRequest });
 const handleWebhookRequest = createWebhookHandler({
@@ -213,50 +239,87 @@ const server = http.createServer(async (req, res) => {
     try {
         // --- URL parsing ---
         const parsedUrl = new URL(req.url, 'http://localhost');
+        const normalizedPathname =
+            parsedUrl.pathname.length > 1 && parsedUrl.pathname.endsWith('/')
+                ? parsedUrl.pathname.slice(0, -1)
+                : parsedUrl.pathname;
 
         // --- API routes ---
-        if (parsedUrl.pathname === '/api/webhook/github') {
+        if (normalizedPathname === '/api/webhook/github') {
             await handleWebhookRequest(req, res);
             return;
         }
 
-        if (parsedUrl.pathname === '/config.json') {
+        if (normalizedPathname === '/config.json') {
             await handleRuntimeConfigRequest(req, res);
             return;
         }
 
+        if (normalizedPathname === '/api/incidents') {
+            await handleIncidentListRequest(req, res, parsedUrl);
+            return;
+        }
+
+        if (normalizedPathname === '/api/incidents/report') {
+            await handleIncidentReportRequest(req, res);
+            return;
+        }
+
         if (
-            parsedUrl.pathname === '/api/blog-posts' ||
-            parsedUrl.pathname === '/api/blog-posts/'
+            /^\/api\/incidents\/[^/]+\/status$/.test(normalizedPathname)
         ) {
+            await handleIncidentStatusRequest(req, res, parsedUrl);
+            return;
+        }
+
+        if (
+            /^\/api\/incidents\/[^/]+\/notes$/.test(normalizedPathname)
+        ) {
+            await handleIncidentNotesRequest(req, res, parsedUrl);
+            return;
+        }
+
+        if (
+            /^\/api\/incidents\/[^/]+\/remediation$/.test(normalizedPathname)
+        ) {
+            await handleIncidentRemediationRequest(req, res, parsedUrl);
+            return;
+        }
+
+        if (/^\/api\/incidents\/[^/]+$/.test(normalizedPathname)) {
+            await handleIncidentDetailRequest(req, res, parsedUrl);
+            return;
+        }
+
+        if (normalizedPathname === '/api/blog-posts') {
             await handleBlogIndexRequest(req, res);
             return;
         }
 
-        if (parsedUrl.pathname.startsWith('/api/blog-posts/')) {
-            const postId = parsedUrl.pathname.split('/').pop() || '';
+        if (normalizedPathname.startsWith('/api/blog-posts/')) {
+            const postId = normalizedPathname.split('/').pop() || '';
             await handleBlogPostRequest(req, res, postId);
             return;
         }
 
-        if (parsedUrl.pathname === '/api/traces') {
+        if (normalizedPathname === '/api/traces') {
             await handleTraceUpsertRequest(req, res);
             return;
         }
 
-        if (parsedUrl.pathname === '/api/trace-cards') {
+        if (normalizedPathname === '/api/trace-cards') {
             await handleTraceCardCreateRequest(req, res);
             return;
         }
 
-        if (parsedUrl.pathname === '/api/trace-cards/from-trace') {
+        if (normalizedPathname === '/api/trace-cards/from-trace') {
             await handleTraceCardFromTraceRequest(req, res);
             return;
         }
 
         if (
-            /^\/api\/traces\/[^/]+\/assets\/trace-card\.svg\/?$/.test(
-                parsedUrl.pathname
+            /^\/api\/traces\/[^/]+\/assets\/trace-card\.svg$/.test(
+                normalizedPathname
             )
         ) {
             await handleTraceCardAssetRequest(req, res, parsedUrl);
@@ -266,19 +329,19 @@ const server = http.createServer(async (req, res) => {
         // --- Trace retrieval route (JSON only) ---
         // This path also doubles as a browser route for the trace page.
         // We only return JSON when the caller explicitly asks for JSON.
-        if (parsedUrl.pathname.startsWith('/api/traces/')) {
+        if (normalizedPathname.startsWith('/api/traces/')) {
             // This endpoint can return HTML or JSON depending on the Accept header.
             // Tell caches to keep those two versions separate (so a JSON request never gets a cached HTML page and vice versa).
             res.setHeader('Vary', 'Accept');
             if (wantsJsonResponse(req)) {
-                logger.debug(`Trace route matched: ${parsedUrl.pathname}`);
+                logger.debug(`Trace route matched: ${normalizedPathname}`);
                 await handleTraceRequest(req, res, parsedUrl);
                 return;
             }
             // Fall through to the static asset resolver for the SPA.
         }
 
-        if (parsedUrl.pathname === '/api/reflect') {
+        if (normalizedPathname === '/api/reflect') {
             await handleReflectRequest(req, res);
             return;
         }

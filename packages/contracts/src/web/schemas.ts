@@ -12,6 +12,26 @@ import type { ApiResponseValidationResult } from './client-core';
 
 const ProvenanceSchema = z.enum(['Retrieved', 'Inferred', 'Speculative']);
 const RiskTierSchema = z.enum(['Low', 'Medium', 'High']);
+const IncidentStatusSchema = z.enum([
+    'new',
+    'under_review',
+    'confirmed',
+    'dismissed',
+    'resolved',
+]);
+const IncidentAuditActionSchema = z.enum([
+    'incident.created',
+    'incident.remediated',
+    'incident.status_changed',
+    'incident.note_added',
+]);
+const IncidentRemediationStateSchema = z.enum([
+    'pending',
+    'applied',
+    'already_marked',
+    'skipped_not_assistant',
+    'failed',
+]);
 const ReflectSurfaceSchema = z.enum(['web', 'discord']);
 const ReflectTriggerKindSchema = z.enum([
     'submit',
@@ -286,6 +306,168 @@ export const ApiErrorResponseSchema = z
         retryAfter: z.number().int().nonnegative().optional(),
     })
     .strict();
+
+const IncidentPointersSchema = z
+    .object({
+        responseId: z.string().min(1).optional(),
+        guildId: z.string().min(1).optional(),
+        channelId: z.string().min(1).optional(),
+        messageId: z.string().min(1).optional(),
+        modelVersion: z.string().min(1).optional(),
+        chainHash: z.string().min(1).optional(),
+    })
+    .strict();
+
+const IncidentAuditEventSchema = z
+    .object({
+        action: IncidentAuditActionSchema,
+        actorHash: z.string().min(1).nullable().optional(),
+        notes: z.string().min(1).nullable().optional(),
+        createdAt: z.string().datetime(),
+    })
+    .strict();
+
+const IncidentRemediationSchema = z
+    .object({
+        state: IncidentRemediationStateSchema,
+        applied: z.boolean(),
+        notes: z.string().min(1).nullable().optional(),
+        updatedAt: z.string().datetime().nullable().optional(),
+    })
+    .strict();
+
+const IncidentSummarySchema = z
+    .object({
+        incidentId: z.string().min(1),
+        status: IncidentStatusSchema,
+        tags: z.array(z.string().min(1)),
+        description: z.string().min(1).nullable().optional(),
+        contact: z.string().min(1).nullable().optional(),
+        createdAt: z.string().datetime(),
+        updatedAt: z.string().datetime(),
+        consentedAt: z.string().datetime(),
+        pointers: IncidentPointersSchema,
+        remediation: IncidentRemediationSchema,
+    })
+    .strict();
+
+const IncidentDetailSchema = IncidentSummarySchema.extend({
+    auditEvents: z.array(IncidentAuditEventSchema),
+}).strict();
+
+/**
+ * @api.operationId: postIncidentReport
+ * @api.path: POST /api/incidents/report
+ */
+export const PostIncidentReportRequestSchema = z
+    .object({
+        reporterUserId: z.string().min(1),
+        guildId: z.string().min(1).optional(),
+        channelId: z.string().min(1).optional(),
+        messageId: z.string().min(1).optional(),
+        jumpUrl: z.string().url().optional(),
+        responseId: z.string().min(1).optional(),
+        chainHash: z.string().min(1).optional(),
+        modelVersion: z.string().min(1).optional(),
+        tags: z.array(z.string().min(1)).max(25).optional(),
+        description: z.string().trim().min(1).max(2000).optional(),
+        contact: z.string().trim().min(1).max(500).optional(),
+        consentedAt: z.string().datetime(),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postIncidentReport
+ * @api.path: POST /api/incidents/report
+ */
+export const PostIncidentReportResponseSchema = z
+    .object({
+        incident: IncidentDetailSchema,
+        remediation: z
+            .object({
+                state: z.literal('pending'),
+            })
+            .strict(),
+    })
+    .strict();
+
+/**
+ * @api.operationId: listIncidents
+ * @api.path: GET /api/incidents
+ */
+export const GetIncidentsResponseSchema = z
+    .object({
+        incidents: z.array(IncidentSummarySchema),
+    })
+    .strict();
+
+/**
+ * @api.operationId: getIncident
+ * @api.path: GET /api/incidents/{incidentId}
+ */
+export const GetIncidentResponseSchema = z
+    .object({
+        incident: IncidentDetailSchema,
+    })
+    .strict();
+
+/**
+ * @api.operationId: postIncidentStatus
+ * @api.path: POST /api/incidents/{incidentId}/status
+ */
+export const PostIncidentStatusRequestSchema = z
+    .object({
+        status: IncidentStatusSchema,
+        actorUserId: z.string().min(1).optional(),
+        notes: z.string().max(2000).optional(),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postIncidentStatus
+ * @api.path: POST /api/incidents/{incidentId}/status
+ */
+export const PostIncidentStatusResponseSchema = GetIncidentResponseSchema;
+
+/**
+ * @api.operationId: postIncidentNotes
+ * @api.path: POST /api/incidents/{incidentId}/notes
+ */
+export const PostIncidentNotesRequestSchema = z
+    .object({
+        actorUserId: z.string().min(1).optional(),
+        notes: z.string().trim().min(1).max(2000),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postIncidentNotes
+ * @api.path: POST /api/incidents/{incidentId}/notes
+ */
+export const PostIncidentNotesResponseSchema = GetIncidentResponseSchema;
+
+/**
+ * @api.operationId: postIncidentRemediation
+ * @api.path: POST /api/incidents/{incidentId}/remediation
+ */
+export const PostIncidentRemediationRequestSchema = z
+    .object({
+        actorUserId: z.string().min(1).optional(),
+        state: z.enum([
+            'applied',
+            'already_marked',
+            'skipped_not_assistant',
+            'failed',
+        ]),
+        notes: z.string().max(2000).optional(),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postIncidentRemediation
+ * @api.path: POST /api/incidents/{incidentId}/remediation
+ */
+export const PostIncidentRemediationResponseSchema = GetIncidentResponseSchema;
 
 const formatSchemaIssues = (error: z.ZodError): string => {
     const firstIssue = error.issues[0];

@@ -159,6 +159,18 @@ const getStringArrayEnv = (
     return entries;
 };
 
+const resolveIncidentSuperuserIds = (): string[] => {
+    const configuredIds = getStringArrayEnv('DISCORD_SUPERUSER_IDS', []);
+    if (configuredIds.length > 0) {
+        return configuredIds;
+    }
+
+    bootstrapLogger.info(
+        'DISCORD_SUPERUSER_IDS is unset; incident review will fall back to DISCORD_USER_ID.'
+    );
+    return [process.env.DISCORD_USER_ID!];
+};
+
 const getBotInteractionActionEnv = (
     key: string,
     defaultValue: SupportedBotInteractionAction
@@ -327,6 +339,9 @@ export const runtimeConfig = {
     guildId: process.env.DISCORD_GUILD_ID!,
     openaiApiKey: process.env.OPENAI_API_KEY!,
     developerUserId: process.env.DISCORD_USER_ID!,
+    incidentReview: {
+        superuserIds: resolveIncidentSuperuserIds(),
+    },
     incidentPseudonymizationSecret:
         process.env.INCIDENT_PSEUDONYMIZATION_SECRET!,
     promptConfigPath,
