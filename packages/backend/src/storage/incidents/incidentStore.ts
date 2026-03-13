@@ -102,8 +102,10 @@ export const defaultIncidentStore: IncidentStore = new Proxy(
 );
 export type {
     IncidentAuditEvent,
-    IncidentPointers,
     IncidentRecord,
-    IncidentStatus,
 } from './sqliteIncidentStore.js';
+export type {
+    IncidentPointers,
+    IncidentStatus,
+} from '@footnote/contracts/web';
 

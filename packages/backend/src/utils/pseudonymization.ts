@@ -11,7 +11,7 @@
  */
 
 import crypto from 'node:crypto';
-import type { IncidentPointers } from '../storage/incidents/sqliteIncidentStore.js';
+import type { IncidentPointers } from '@footnote/contracts/web';
 
 const HEX_DIGEST_LENGTH = 64;
 const DEFAULT_SHORT_LENGTH = 12;

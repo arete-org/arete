@@ -241,6 +241,21 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: "DISCORD_SUPERUSER_IDS",
+        owner: "discord-bot",
+        stage: "runtime",
+        section: "discord-bot",
+        required: false,
+        secret: false,
+        kind: "csv",
+        description: "Comma-separated Discord user IDs allowed to review incidents through Discord commands.",
+        defaultValue: noDefault(),
+        usedBy: [
+            "packages/discord-bot/src/config.ts",
+        ],
+    }),
+
+    defineEnv({
         key: "PROMPT_CONFIG_PATH",
         owner: "shared",
         stage: "bootstrap",

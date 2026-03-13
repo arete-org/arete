@@ -67,6 +67,41 @@ export type { GetTraceResponse, GetTraceStaleResponse } from './types';
 export type { GetRuntimeConfigResponse } from './types';
 
 /**
+ * @api.operationId: postIncidentReport
+ * @api.path: POST /api/incidents/report
+ * @api.operationId: listIncidents
+ * @api.path: GET /api/incidents
+ * @api.operationId: getIncident
+ * @api.path: GET /api/incidents/{incidentId}
+ * @api.operationId: postIncidentStatus
+ * @api.path: POST /api/incidents/{incidentId}/status
+ * @api.operationId: postIncidentNotes
+ * @api.path: POST /api/incidents/{incidentId}/notes
+ * @api.operationId: postIncidentRemediation
+ * @api.path: POST /api/incidents/{incidentId}/remediation
+ */
+export type {
+    IncidentAuditAction,
+    IncidentAuditEvent,
+    IncidentDetail,
+    IncidentPointers,
+    IncidentRemediation,
+    IncidentRemediationState,
+    IncidentStatus,
+    IncidentSummary,
+    GetIncidentResponse,
+    GetIncidentsResponse,
+    PostIncidentNotesRequest,
+    PostIncidentNotesResponse,
+    PostIncidentRemediationRequest,
+    PostIncidentRemediationResponse,
+    PostIncidentReportRequest,
+    PostIncidentReportResponse,
+    PostIncidentStatusRequest,
+    PostIncidentStatusResponse,
+} from './types';
+
+/**
  * @api.operationId: listBlogPosts
  * @api.path: GET /api/blog-posts
  */
@@ -87,8 +122,18 @@ export {
     ApiErrorResponseSchema,
     CitationSchema,
     GetTraceApiResponseSchema,
+    GetIncidentResponseSchema,
+    GetIncidentsResponseSchema,
     GetTraceResponseSchema,
     GetTraceStaleResponseSchema,
+    PostIncidentNotesRequestSchema,
+    PostIncidentNotesResponseSchema,
+    PostIncidentRemediationRequestSchema,
+    PostIncidentRemediationResponseSchema,
+    PostIncidentReportRequestSchema,
+    PostIncidentReportResponseSchema,
+    PostIncidentStatusRequestSchema,
+    PostIncidentStatusResponseSchema,
     PostReflectRequestSchema,
     PostReflectResponseSchema,
     PostTraceCardFromTraceRequestSchema,

@@ -20,6 +20,216 @@ export type ApiErrorResponse = {
 };
 
 /**
+ * Review lifecycle used by operators while investigating one report.
+ */
+export type IncidentStatus =
+    | 'new'
+    | 'under_review'
+    | 'confirmed'
+    | 'dismissed'
+    | 'resolved';
+
+/**
+ * Canonical audit event names recorded for incident workflows.
+ */
+export type IncidentAuditAction =
+    | 'incident.created'
+    | 'incident.remediated'
+    | 'incident.status_changed'
+    | 'incident.note_added';
+
+/**
+ * Outcome of the bot's immediate "mark under review" remediation attempt.
+ */
+export type IncidentRemediationState =
+    | 'pending'
+    | 'applied'
+    | 'already_marked'
+    | 'skipped_not_assistant'
+    | 'failed';
+
+/**
+ * Operator-safe provenance pointers. Discord identifiers are already hashed by
+ * the time these values leave the backend.
+ */
+export type IncidentPointers = {
+    responseId?: string;
+    guildId?: string;
+    channelId?: string;
+    messageId?: string;
+    modelVersion?: string;
+    chainHash?: string;
+};
+
+/**
+ * One incident audit entry shown in detail views.
+ */
+export type IncidentAuditEvent = {
+    action: IncidentAuditAction;
+    actorHash?: string | null;
+    notes?: string | null;
+    createdAt: string;
+};
+
+/**
+ * Remediation status returned with each incident response so operators can see
+ * whether the bot successfully marked the message.
+ */
+export type IncidentRemediation = {
+    state: IncidentRemediationState;
+    applied: boolean;
+    notes?: string | null;
+    updatedAt?: string | null;
+};
+
+/**
+ * Compact operator-safe incident row used by list responses and `/incident
+ * list`.
+ */
+export type IncidentSummary = {
+    incidentId: string;
+    status: IncidentStatus;
+    tags: string[];
+    description?: string | null;
+    contact?: string | null;
+    createdAt: string;
+    updatedAt: string;
+    consentedAt: string;
+    pointers: IncidentPointers;
+    remediation: IncidentRemediation;
+};
+
+/**
+ * Full operator-safe incident view, including audit history.
+ */
+export type IncidentDetail = IncidentSummary & {
+    auditEvents: IncidentAuditEvent[];
+};
+
+/**
+ * Report submission sent from the Discord bot to the backend. Raw Discord IDs
+ * may appear here at the boundary, but the backend pseudonymizes them before
+ * storage or operator responses.
+ *
+ * @api.operationId: postIncidentReport
+ * @api.path: POST /api/incidents/report
+ */
+export type PostIncidentReportRequest = {
+    reporterUserId: string;
+    guildId?: string;
+    channelId?: string;
+    messageId?: string;
+    jumpUrl?: string;
+    responseId?: string;
+    chainHash?: string;
+    modelVersion?: string;
+    tags?: string[];
+    description?: string;
+    contact?: string;
+    consentedAt: string;
+};
+
+/**
+ * Report creation response returned after the incident is durably stored.
+ *
+ * @api.operationId: postIncidentReport
+ * @api.path: POST /api/incidents/report
+ */
+export type PostIncidentReportResponse = {
+    incident: IncidentDetail;
+    remediation: {
+        state: 'pending';
+    };
+};
+
+/**
+ * Newest-first incident list response for review tooling.
+ *
+ * @api.operationId: listIncidents
+ * @api.path: GET /api/incidents
+ */
+export type GetIncidentsResponse = {
+    incidents: IncidentSummary[];
+};
+
+/**
+ * Detail response for one incident short ID.
+ *
+ * @api.operationId: getIncident
+ * @api.path: GET /api/incidents/{incidentId}
+ */
+export type GetIncidentResponse = {
+    incident: IncidentDetail;
+};
+
+/**
+ * Operator status change request. `actorUserId` is optional so non-Discord
+ * trusted callers can still use the API.
+ *
+ * @api.operationId: postIncidentStatus
+ * @api.path: POST /api/incidents/{incidentId}/status
+ */
+export type PostIncidentStatusRequest = {
+    status: IncidentStatus;
+    actorUserId?: string;
+    notes?: string;
+};
+
+/**
+ * Status change response containing the fresh incident detail.
+ *
+ * @api.operationId: postIncidentStatus
+ * @api.path: POST /api/incidents/{incidentId}/status
+ */
+export type PostIncidentStatusResponse = {
+    incident: IncidentDetail;
+};
+
+/**
+ * Appends an internal review note without changing incident status.
+ *
+ * @api.operationId: postIncidentNotes
+ * @api.path: POST /api/incidents/{incidentId}/notes
+ */
+export type PostIncidentNotesRequest = {
+    actorUserId?: string;
+    notes: string;
+};
+
+/**
+ * Note append response containing the fresh incident detail.
+ *
+ * @api.operationId: postIncidentNotes
+ * @api.path: POST /api/incidents/{incidentId}/notes
+ */
+export type PostIncidentNotesResponse = {
+    incident: IncidentDetail;
+};
+
+/**
+ * Callback used by the Discord bot after it attempts the immediate under-review
+ * edit.
+ *
+ * @api.operationId: postIncidentRemediation
+ * @api.path: POST /api/incidents/{incidentId}/remediation
+ */
+export type PostIncidentRemediationRequest = {
+    actorUserId?: string;
+    state: Exclude<IncidentRemediationState, 'pending'>;
+    notes?: string;
+};
+
+/**
+ * Remediation update response containing the fresh incident detail.
+ *
+ * @api.operationId: postIncidentRemediation
+ * @api.path: POST /api/incidents/{incidentId}/remediation
+ */
+export type PostIncidentRemediationResponse = {
+    incident: IncidentDetail;
+};
+
+/**
  * Package-local normalized error model.
  * This is intentionally not an OpenAPI schema because it includes client-only fields
  * like endpoint and raw payload references.

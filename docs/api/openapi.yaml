@@ -4,6 +4,12 @@ openapi: 3.1.0
 # Quick Map
 # - POST /api/reflect: Reflection (public; Turnstile + rate limits when configured)
 # - OPTIONS /api/reflect: CORS preflight
+# - POST /api/incidents/report: Incident report create (trusted internal auth)
+# - GET /api/incidents: Incident list (trusted internal auth)
+# - GET /api/incidents/{incidentId}: Incident detail (trusted internal auth)
+# - POST /api/incidents/{incidentId}/status: Incident status update (trusted internal auth)
+# - POST /api/incidents/{incidentId}/notes: Incident note append (trusted internal auth)
+# - POST /api/incidents/{incidentId}/remediation: Incident remediation update (trusted internal auth)
 # - POST /api/traces: Trace upsert (TraceToken required)
 # - POST /api/trace-cards: Generate/store trace-card and return PNG payload (TraceToken required)
 # - POST /api/trace-cards/from-trace: Generate/store trace-card from stored trace metadata by responseId (TraceToken required)
@@ -50,6 +56,8 @@ servers:
 tags:
     - name: Chat
       description: Chat responses.
+    - name: Incidents
+      description: Internal incident report and review workflows.
     - name: Image # [Reserved]
       description: Image generation.
     - name: Voice # [Reserved]
@@ -124,6 +132,250 @@ paths:
             responses:
                 '204':
                     $ref: '#/components/responses/PreflightAccepted'
+
+    /api/incidents/report:
+        post:
+            operationId: postIncidentReport
+            x-codeRefs:
+                - packages/backend/src/handlers/incidents.ts#handleIncidentReportRequest
+                - packages/discord-bot/src/api/incidents.ts#reportIncident
+                - packages/contracts/src/web/types.ts#PostIncidentReportRequest
+                - packages/contracts/src/web/types.ts#PostIncidentReportResponse
+            summary: Create an incident report
+            description: |
+                Trusted internal endpoint for Discord-driven incident reports.
+                Accepts raw Discord resource identifiers from the bot and persists only pseudonymized pointers.
+            tags:
+                - Incidents
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/IncidentReportRequest'
+            responses:
+                '200':
+                    $ref: '#/components/responses/IncidentReportOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+
+    /api/incidents:
+        get:
+            operationId: listIncidents
+            x-codeRefs:
+                - packages/backend/src/handlers/incidents.ts#handleIncidentListRequest
+                - packages/discord-bot/src/api/incidents.ts#listIncidents
+                - packages/contracts/src/web/types.ts#GetIncidentsResponse
+            summary: List incidents
+            description: |
+                Trusted internal endpoint for newest-first operator-safe incident summaries.
+            tags:
+                - Incidents
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            parameters:
+                - name: status
+                  in: query
+                  required: false
+                  schema:
+                      $ref: '#/components/schemas/IncidentStatus'
+                - name: tag
+                  in: query
+                  required: false
+                  schema:
+                      type: string
+                - name: createdFrom
+                  in: query
+                  required: false
+                  schema:
+                      type: string
+                      format: date-time
+                - name: createdTo
+                  in: query
+                  required: false
+                  schema:
+                      type: string
+                      format: date-time
+            responses:
+                '200':
+                    $ref: '#/components/responses/IncidentListOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+
+    /api/incidents/{incidentId}:
+        get:
+            operationId: getIncident
+            x-codeRefs:
+                - packages/backend/src/handlers/incidents.ts#handleIncidentDetailRequest
+                - packages/discord-bot/src/api/incidents.ts#getIncident
+                - packages/contracts/src/web/types.ts#GetIncidentResponse
+            summary: Fetch one incident
+            description: |
+                Trusted internal endpoint for one operator-safe incident detail payload.
+            tags:
+                - Incidents
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            parameters:
+                - $ref: '#/components/parameters/IncidentId'
+            responses:
+                '200':
+                    $ref: '#/components/responses/IncidentDetailOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+
+    /api/incidents/{incidentId}/status:
+        post:
+            operationId: postIncidentStatus
+            x-codeRefs:
+                - packages/backend/src/handlers/incidents.ts#handleIncidentStatusRequest
+                - packages/discord-bot/src/api/incidents.ts#updateIncidentStatus
+                - packages/contracts/src/web/types.ts#PostIncidentStatusRequest
+                - packages/contracts/src/web/types.ts#PostIncidentStatusResponse
+            summary: Update incident status
+            tags:
+                - Incidents
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            parameters:
+                - $ref: '#/components/parameters/IncidentId'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/IncidentStatusRequest'
+            responses:
+                '200':
+                    $ref: '#/components/responses/IncidentDetailOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+
+    /api/incidents/{incidentId}/notes:
+        post:
+            operationId: postIncidentNotes
+            x-codeRefs:
+                - packages/backend/src/handlers/incidents.ts#handleIncidentNotesRequest
+                - packages/discord-bot/src/api/incidents.ts#addIncidentNote
+                - packages/contracts/src/web/types.ts#PostIncidentNotesRequest
+                - packages/contracts/src/web/types.ts#PostIncidentNotesResponse
+            summary: Append an incident note
+            tags:
+                - Incidents
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            parameters:
+                - $ref: '#/components/parameters/IncidentId'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/IncidentNotesRequest'
+            responses:
+                '200':
+                    $ref: '#/components/responses/IncidentDetailOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+
+    /api/incidents/{incidentId}/remediation:
+        post:
+            operationId: postIncidentRemediation
+            x-codeRefs:
+                - packages/backend/src/handlers/incidents.ts#handleIncidentRemediationRequest
+                - packages/discord-bot/src/api/incidents.ts#recordIncidentRemediation
+                - packages/contracts/src/web/types.ts#PostIncidentRemediationRequest
+                - packages/contracts/src/web/types.ts#PostIncidentRemediationResponse
+            summary: Record incident remediation outcome
+            tags:
+                - Incidents
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            parameters:
+                - $ref: '#/components/parameters/IncidentId'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/IncidentRemediationRequest'
+            responses:
+                '200':
+                    $ref: '#/components/responses/IncidentDetailOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
 
     # Trace upsert (TraceToken required, rate-limited).
     /api/traces:
@@ -431,6 +683,11 @@ components:
             in: header
             name: x-trace-token
             description: Shared secret for trusted trace ingestion.
+        TrustedServiceToken:
+            type: apiKey
+            in: header
+            name: x-service-token
+            description: Shared secret for trusted internal service callers.
         # GitHub webhook signature verification.
         GitHubWebhookSignature:
             type: apiKey
@@ -454,6 +711,241 @@ components:
                     description: Seconds until retry is allowed.
             required:
                 - error
+            additionalProperties: false
+
+        IncidentStatus:
+            type: string
+            enum: [new, under_review, confirmed, dismissed, resolved]
+
+        IncidentRemediationState:
+            type: string
+            enum: [pending, applied, already_marked, skipped_not_assistant, failed]
+
+        IncidentPointers:
+            type: object
+            properties:
+                responseId:
+                    type: string
+                guildId:
+                    type: string
+                channelId:
+                    type: string
+                messageId:
+                    type: string
+                modelVersion:
+                    type: string
+                chainHash:
+                    type: string
+            additionalProperties: false
+
+        IncidentAuditEvent:
+            type: object
+            properties:
+                action:
+                    type: string
+                    enum:
+                        - incident.created
+                        - incident.remediated
+                        - incident.status_changed
+                        - incident.note_added
+                actorHash:
+                    type: string
+                    nullable: true
+                notes:
+                    type: string
+                    nullable: true
+                createdAt:
+                    type: string
+                    format: date-time
+            required:
+                - action
+                - createdAt
+            additionalProperties: false
+
+        IncidentRemediation:
+            type: object
+            properties:
+                state:
+                    $ref: '#/components/schemas/IncidentRemediationState'
+                applied:
+                    type: boolean
+                notes:
+                    type: string
+                    nullable: true
+                updatedAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+            required:
+                - state
+                - applied
+            additionalProperties: false
+
+        IncidentSummary:
+            type: object
+            properties:
+                incidentId:
+                    type: string
+                status:
+                    $ref: '#/components/schemas/IncidentStatus'
+                tags:
+                    type: array
+                    items:
+                        type: string
+                description:
+                    type: string
+                    nullable: true
+                contact:
+                    type: string
+                    nullable: true
+                createdAt:
+                    type: string
+                    format: date-time
+                updatedAt:
+                    type: string
+                    format: date-time
+                consentedAt:
+                    type: string
+                    format: date-time
+                pointers:
+                    $ref: '#/components/schemas/IncidentPointers'
+                remediation:
+                    $ref: '#/components/schemas/IncidentRemediation'
+            required:
+                - incidentId
+                - status
+                - tags
+                - createdAt
+                - updatedAt
+                - consentedAt
+                - pointers
+                - remediation
+            additionalProperties: false
+
+        IncidentDetail:
+            allOf:
+                - $ref: '#/components/schemas/IncidentSummary'
+                - type: object
+                  properties:
+                      auditEvents:
+                          type: array
+                          items:
+                              $ref: '#/components/schemas/IncidentAuditEvent'
+                  required:
+                      - auditEvents
+                  additionalProperties: false
+
+        IncidentReportRequest:
+            type: object
+            properties:
+                reporterUserId:
+                    type: string
+                guildId:
+                    type: string
+                channelId:
+                    type: string
+                messageId:
+                    type: string
+                jumpUrl:
+                    type: string
+                    format: uri
+                responseId:
+                    type: string
+                chainHash:
+                    type: string
+                modelVersion:
+                    type: string
+                tags:
+                    type: array
+                    items:
+                        type: string
+                description:
+                    type: string
+                contact:
+                    type: string
+                consentedAt:
+                    type: string
+                    format: date-time
+            required:
+                - reporterUserId
+                - consentedAt
+            additionalProperties: false
+
+        IncidentReportResponse:
+            type: object
+            properties:
+                incident:
+                    $ref: '#/components/schemas/IncidentDetail'
+                remediation:
+                    type: object
+                    properties:
+                        state:
+                            type: string
+                            enum: [pending]
+                    required:
+                        - state
+                    additionalProperties: false
+            required:
+                - incident
+                - remediation
+            additionalProperties: false
+
+        IncidentListResponse:
+            type: object
+            properties:
+                incidents:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/IncidentSummary'
+            required:
+                - incidents
+            additionalProperties: false
+
+        IncidentDetailResponse:
+            type: object
+            properties:
+                incident:
+                    $ref: '#/components/schemas/IncidentDetail'
+            required:
+                - incident
+            additionalProperties: false
+
+        IncidentStatusRequest:
+            type: object
+            properties:
+                status:
+                    $ref: '#/components/schemas/IncidentStatus'
+                actorUserId:
+                    type: string
+                notes:
+                    type: string
+            required:
+                - status
+            additionalProperties: false
+
+        IncidentNotesRequest:
+            type: object
+            properties:
+                actorUserId:
+                    type: string
+                notes:
+                    type: string
+            required:
+                - notes
+            additionalProperties: false
+
+        IncidentRemediationRequest:
+            type: object
+            properties:
+                actorUserId:
+                    type: string
+                state:
+                    type: string
+                    enum: [applied, already_marked, skipped_not_assistant, failed]
+                notes:
+                    type: string
+            required:
+                - state
             additionalProperties: false
 
         # Reflection.
@@ -1117,6 +1609,15 @@ components:
             schema:
                 type: string
 
+        IncidentId:
+            name: incidentId
+            in: path
+            required: true
+            description: Operator-safe incident short ID.
+            schema:
+                type: string
+                minLength: 1
+
         BlogPostId:
             name: postId
             in: path
@@ -1142,6 +1643,24 @@ components:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/ReflectResponse'
+        IncidentReportOk:
+            description: Incident created.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/IncidentReportResponse'
+        IncidentListOk:
+            description: Incident summaries.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/IncidentListResponse'
+        IncidentDetailOk:
+            description: Incident detail.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/IncidentDetailResponse'
         TraceUpsertOk:
             description: Trace stored.
             content:

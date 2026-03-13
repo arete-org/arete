@@ -21,6 +21,7 @@ import {
 import { SimpleRateLimiter } from './services/rateLimiter.js';
 import { createTraceStore, storeTrace } from './services/traceStore.js';
 import { createBlogStore } from './storage/blogStore.js';
+import { getDefaultIncidentStore } from './storage/incidents/incidentStore.js';
 import { createAssetResolver } from './http/assets.js';
 import { verifyGitHubSignature } from './utils/github.js';
 import { logRequest } from './utils/requestLogger.js';
@@ -28,8 +29,10 @@ import { logger } from './utils/logger.js';
 import { createReflectHandler } from './handlers/reflect.js';
 import { createTraceHandlers } from './handlers/trace.js';
 import { createBlogHandlers } from './handlers/blog.js';
+import { createIncidentHandlers } from './handlers/incidents.js';
 import { createWebhookHandler } from './handlers/webhook.js';
 import { createRuntimeConfigHandler } from './handlers/config.js';
+import { createIncidentService } from './services/incidents.js';
 
 // --- Path configuration ---
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -43,6 +46,7 @@ const { resolveAsset, mimeMap } = createAssetResolver(DIST_DIR);
 
 // --- Service state ---
 let traceStore: ReturnType<typeof createTraceStore> | null = null;
+let incidentStore: ReturnType<typeof getDefaultIncidentStore> | null = null;
 let openaiService: OpenAIService | null = null;
 let ipRateLimiter: SimpleRateLimiter | null = null;
 let sessionRateLimiter: SimpleRateLimiter | null = null;
@@ -74,6 +78,9 @@ const initializeServices = () => {
             `Failed to initialize trace store: ${error instanceof Error ? error.message : String(error)}`
         );
     }
+
+    // Incident storage is a required Wave 1 dependency. Surface failures early.
+    incidentStore = getDefaultIncidentStore();
 
     // --- OpenAI service ---
     if (runtimeConfig.openai.apiKey) {
@@ -132,6 +139,7 @@ try {
     logger.error(
         `Failed to initialize services: ${error instanceof Error ? error.message : String(error)}`
     );
+    process.exit(1);
 }
 
 // --- Trace storage wrapper ---
@@ -161,6 +169,24 @@ const {
 const { handleBlogIndexRequest, handleBlogPostRequest } = createBlogHandlers({
     blogStore,
     logRequest,
+});
+if (!incidentStore) {
+    throw new Error('Incident store did not initialize correctly.');
+}
+const incidentService = createIncidentService({ incidentStore });
+const {
+    handleIncidentReportRequest,
+    handleIncidentListRequest,
+    handleIncidentDetailRequest,
+    handleIncidentStatusRequest,
+    handleIncidentNotesRequest,
+    handleIncidentRemediationRequest,
+} = createIncidentHandlers({
+    incidentService,
+    logRequest,
+    maxIncidentBodyBytes: runtimeConfig.reflect.maxBodyBytes,
+    traceApiToken: runtimeConfig.trace.apiToken,
+    serviceToken: runtimeConfig.reflect.serviceToken,
 });
 const handleRuntimeConfigRequest = createRuntimeConfigHandler({ logRequest });
 const handleWebhookRequest = createWebhookHandler({
@@ -222,6 +248,49 @@ const server = http.createServer(async (req, res) => {
 
         if (parsedUrl.pathname === '/config.json') {
             await handleRuntimeConfigRequest(req, res);
+            return;
+        }
+
+        if (
+            parsedUrl.pathname === '/api/incidents' ||
+            parsedUrl.pathname === '/api/incidents/'
+        ) {
+            await handleIncidentListRequest(req, res, parsedUrl);
+            return;
+        }
+
+        if (parsedUrl.pathname === '/api/incidents/report') {
+            await handleIncidentReportRequest(req, res);
+            return;
+        }
+
+        if (
+            /^\/api\/incidents\/[^/]+\/status\/?$/.test(parsedUrl.pathname)
+        ) {
+            await handleIncidentStatusRequest(req, res, parsedUrl);
+            return;
+        }
+
+        if (
+            /^\/api\/incidents\/[^/]+\/notes\/?$/.test(parsedUrl.pathname)
+        ) {
+            await handleIncidentNotesRequest(req, res, parsedUrl);
+            return;
+        }
+
+        if (
+            /^\/api\/incidents\/[^/]+\/remediation\/?$/.test(
+                parsedUrl.pathname
+            )
+        ) {
+            await handleIncidentRemediationRequest(req, res, parsedUrl);
+            return;
+        }
+
+        if (
+            /^\/api\/incidents\/[^/]+\/?$/.test(parsedUrl.pathname)
+        ) {
+            await handleIncidentDetailRequest(req, res, parsedUrl);
             return;
         }
 
