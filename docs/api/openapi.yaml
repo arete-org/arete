@@ -145,6 +145,8 @@ paths:
             description: |
                 Trusted internal endpoint for Discord-driven incident reports.
                 Accepts raw Discord resource identifiers from the bot and persists only pseudonymized pointers.
+                Requires either `x-service-token` or `x-trace-token`.
+                Intended for trusted internal callers; normal internal service rate limits still apply.
             tags:
                 - Incidents
             security:
@@ -156,6 +158,19 @@ paths:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/IncidentReportRequest'
+                        example:
+                            reporterUserId: '123456789012345678'
+                            guildId: '234567890123456789'
+                            channelId: '345678901234567890'
+                            messageId: '456789012345678901'
+                            jumpUrl: 'https://discord.com/channels/234567890123456789/345678901234567890/456789012345678901'
+                            responseId: 'response_123'
+                            chainHash: 'hash_abc'
+                            modelVersion: 'gpt-5-mini'
+                            tags: [safety, review]
+                            description: 'The assistant gave risky instructions.'
+                            contact: 'moderator@example.com'
+                            consentedAt: '2026-03-13T17:00:00.000Z'
             responses:
                 '200':
                     $ref: '#/components/responses/IncidentReportOk'
@@ -182,6 +197,8 @@ paths:
             summary: List incidents
             description: |
                 Trusted internal endpoint for newest-first operator-safe incident summaries.
+                Requires either `x-service-token` or `x-trace-token`.
+                Intended for trusted internal callers; normal internal service rate limits still apply.
             tags:
                 - Incidents
             security:
@@ -234,6 +251,8 @@ paths:
             summary: Fetch one incident
             description: |
                 Trusted internal endpoint for one operator-safe incident detail payload.
+                Requires either `x-service-token` or `x-trace-token`.
+                Intended for trusted internal callers; normal internal service rate limits still apply.
             tags:
                 - Incidents
             security:
@@ -266,6 +285,10 @@ paths:
                 - packages/contracts/src/web/types.ts#PostIncidentStatusRequest
                 - packages/contracts/src/web/types.ts#PostIncidentStatusResponse
             summary: Update incident status
+            description: |
+                Trusted internal endpoint for operator-driven incident status changes.
+                Requires either `x-service-token` or `x-trace-token`.
+                Intended for trusted internal callers; normal internal service rate limits still apply.
             tags:
                 - Incidents
             security:
@@ -279,6 +302,10 @@ paths:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/IncidentStatusRequest'
+                        example:
+                            status: under_review
+                            actorUserId: '999999999999999999'
+                            notes: 'Reviewing report context now.'
             responses:
                 '200':
                     $ref: '#/components/responses/IncidentDetailOk'
@@ -306,6 +333,10 @@ paths:
                 - packages/contracts/src/web/types.ts#PostIncidentNotesRequest
                 - packages/contracts/src/web/types.ts#PostIncidentNotesResponse
             summary: Append an incident note
+            description: |
+                Trusted internal endpoint for adding operator notes without changing incident status.
+                Requires either `x-service-token` or `x-trace-token`.
+                Intended for trusted internal callers; normal internal service rate limits still apply.
             tags:
                 - Incidents
             security:
@@ -319,6 +350,9 @@ paths:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/IncidentNotesRequest'
+                        example:
+                            actorUserId: '999999999999999999'
+                            notes: 'Escalating to the safety review queue.'
             responses:
                 '200':
                     $ref: '#/components/responses/IncidentDetailOk'
@@ -346,6 +380,10 @@ paths:
                 - packages/contracts/src/web/types.ts#PostIncidentRemediationRequest
                 - packages/contracts/src/web/types.ts#PostIncidentRemediationResponse
             summary: Record incident remediation outcome
+            description: |
+                Trusted internal endpoint for recording the bot's immediate remediation attempt.
+                Requires either `x-service-token` or `x-trace-token`.
+                Intended for trusted internal callers; normal internal service rate limits still apply.
             tags:
                 - Incidents
             security:
@@ -359,6 +397,10 @@ paths:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/IncidentRemediationRequest'
+                        example:
+                            actorUserId: '999999999999999999'
+                            state: applied
+                            notes: 'Warning banner applied with spoiler wrapping.'
             responses:
                 '200':
                     $ref: '#/components/responses/IncidentDetailOk'
@@ -822,6 +864,27 @@ components:
                 - pointers
                 - remediation
             additionalProperties: false
+            example:
+                incidentId: '1a2b3c4d'
+                status: under_review
+                tags: [safety, review]
+                description: 'The assistant gave risky instructions.'
+                contact: 'moderator@example.com'
+                createdAt: '2026-03-13T17:00:00.000Z'
+                updatedAt: '2026-03-13T17:05:00.000Z'
+                consentedAt: '2026-03-13T17:00:00.000Z'
+                pointers:
+                    responseId: 'response_123'
+                    guildId: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                    channelId: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                    messageId: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+                    modelVersion: 'gpt-5-mini'
+                    chainHash: 'hash_abc'
+                remediation:
+                    state: applied
+                    applied: true
+                    notes: 'Warning banner applied with spoiler wrapping.'
+                    updatedAt: '2026-03-13T17:01:00.000Z'
 
         IncidentDetail:
             allOf:
@@ -834,6 +897,16 @@ components:
                               $ref: '#/components/schemas/IncidentAuditEvent'
                   required:
                       - auditEvents
+                  example:
+                      auditEvents:
+                          - action: incident.created
+                            actorHash: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+                            notes: 'description provided; contact provided; tags=safety, review'
+                            createdAt: '2026-03-13T17:00:00.000Z'
+                          - action: incident.status_changed
+                            actorHash: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+                            notes: 'Reviewing report context now.'
+                            createdAt: '2026-03-13T17:03:00.000Z'
 
         IncidentReportRequest:
             type: object
@@ -870,6 +943,19 @@ components:
                 - reporterUserId
                 - consentedAt
             additionalProperties: false
+            example:
+                reporterUserId: '123456789012345678'
+                guildId: '234567890123456789'
+                channelId: '345678901234567890'
+                messageId: '456789012345678901'
+                jumpUrl: 'https://discord.com/channels/234567890123456789/345678901234567890/456789012345678901'
+                responseId: 'response_123'
+                chainHash: 'hash_abc'
+                modelVersion: 'gpt-5-mini'
+                tags: [safety, review]
+                description: 'The assistant gave risky instructions.'
+                contact: 'moderator@example.com'
+                consentedAt: '2026-03-13T17:00:00.000Z'
 
         IncidentReportResponse:
             type: object
@@ -889,6 +975,35 @@ components:
                 - incident
                 - remediation
             additionalProperties: false
+            example:
+                incident:
+                    incidentId: '1a2b3c4d'
+                    status: new
+                    tags: [safety, review]
+                    description: 'The assistant gave risky instructions.'
+                    contact: 'moderator@example.com'
+                    createdAt: '2026-03-13T17:00:00.000Z'
+                    updatedAt: '2026-03-13T17:00:00.000Z'
+                    consentedAt: '2026-03-13T17:00:00.000Z'
+                    pointers:
+                        responseId: 'response_123'
+                        guildId: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                        channelId: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                        messageId: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+                        modelVersion: 'gpt-5-mini'
+                        chainHash: 'hash_abc'
+                    remediation:
+                        state: pending
+                        applied: false
+                        notes: null
+                        updatedAt: null
+                    auditEvents:
+                        - action: incident.created
+                          actorHash: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+                          notes: 'description provided; contact provided; tags=safety, review'
+                          createdAt: '2026-03-13T17:00:00.000Z'
+                remediation:
+                    state: pending
 
         IncidentListResponse:
             type: object
@@ -900,6 +1015,28 @@ components:
             required:
                 - incidents
             additionalProperties: false
+            example:
+                incidents:
+                    - incidentId: '1a2b3c4d'
+                      status: under_review
+                      tags: [safety, review]
+                      description: 'The assistant gave risky instructions.'
+                      contact: 'moderator@example.com'
+                      createdAt: '2026-03-13T17:00:00.000Z'
+                      updatedAt: '2026-03-13T17:05:00.000Z'
+                      consentedAt: '2026-03-13T17:00:00.000Z'
+                      pointers:
+                          responseId: 'response_123'
+                          guildId: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                          channelId: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                          messageId: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+                          modelVersion: 'gpt-5-mini'
+                          chainHash: 'hash_abc'
+                      remediation:
+                          state: applied
+                          applied: true
+                          notes: 'Warning banner applied with spoiler wrapping.'
+                          updatedAt: '2026-03-13T17:01:00.000Z'
 
         IncidentDetailResponse:
             type: object
@@ -909,6 +1046,37 @@ components:
             required:
                 - incident
             additionalProperties: false
+            example:
+                incident:
+                    incidentId: '1a2b3c4d'
+                    status: under_review
+                    tags: [safety, review]
+                    description: 'The assistant gave risky instructions.'
+                    contact: 'moderator@example.com'
+                    createdAt: '2026-03-13T17:00:00.000Z'
+                    updatedAt: '2026-03-13T17:05:00.000Z'
+                    consentedAt: '2026-03-13T17:00:00.000Z'
+                    pointers:
+                        responseId: 'response_123'
+                        guildId: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                        channelId: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                        messageId: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+                        modelVersion: 'gpt-5-mini'
+                        chainHash: 'hash_abc'
+                    remediation:
+                        state: applied
+                        applied: true
+                        notes: 'Warning banner applied with spoiler wrapping.'
+                        updatedAt: '2026-03-13T17:01:00.000Z'
+                    auditEvents:
+                        - action: incident.created
+                          actorHash: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+                          notes: 'description provided; contact provided; tags=safety, review'
+                          createdAt: '2026-03-13T17:00:00.000Z'
+                        - action: incident.status_changed
+                          actorHash: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+                          notes: 'Reviewing report context now.'
+                          createdAt: '2026-03-13T17:03:00.000Z'
 
         IncidentStatusRequest:
             type: object
@@ -1649,18 +1817,100 @@ components:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/IncidentReportResponse'
+                    example:
+                        incident:
+                            incidentId: '1a2b3c4d'
+                            status: new
+                            tags: [safety, review]
+                            description: 'The assistant gave risky instructions.'
+                            contact: 'moderator@example.com'
+                            createdAt: '2026-03-13T17:00:00.000Z'
+                            updatedAt: '2026-03-13T17:00:00.000Z'
+                            consentedAt: '2026-03-13T17:00:00.000Z'
+                            pointers:
+                                responseId: 'response_123'
+                                guildId: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                                channelId: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                                messageId: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+                                modelVersion: 'gpt-5-mini'
+                                chainHash: 'hash_abc'
+                            remediation:
+                                state: pending
+                                applied: false
+                                notes: null
+                                updatedAt: null
+                            auditEvents:
+                                - action: incident.created
+                                  actorHash: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+                                  notes: 'description provided; contact provided; tags=safety, review'
+                                  createdAt: '2026-03-13T17:00:00.000Z'
+                        remediation:
+                            state: pending
         IncidentListOk:
             description: Incident summaries.
             content:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/IncidentListResponse'
+                    example:
+                        incidents:
+                            - incidentId: '1a2b3c4d'
+                              status: under_review
+                              tags: [safety, review]
+                              description: 'The assistant gave risky instructions.'
+                              contact: 'moderator@example.com'
+                              createdAt: '2026-03-13T17:00:00.000Z'
+                              updatedAt: '2026-03-13T17:05:00.000Z'
+                              consentedAt: '2026-03-13T17:00:00.000Z'
+                              pointers:
+                                  responseId: 'response_123'
+                                  guildId: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                                  channelId: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                                  messageId: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+                                  modelVersion: 'gpt-5-mini'
+                                  chainHash: 'hash_abc'
+                              remediation:
+                                  state: applied
+                                  applied: true
+                                  notes: 'Warning banner applied with spoiler wrapping.'
+                                  updatedAt: '2026-03-13T17:01:00.000Z'
         IncidentDetailOk:
             description: Incident detail.
             content:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/IncidentDetailResponse'
+                    example:
+                        incident:
+                            incidentId: '1a2b3c4d'
+                            status: under_review
+                            tags: [safety, review]
+                            description: 'The assistant gave risky instructions.'
+                            contact: 'moderator@example.com'
+                            createdAt: '2026-03-13T17:00:00.000Z'
+                            updatedAt: '2026-03-13T17:05:00.000Z'
+                            consentedAt: '2026-03-13T17:00:00.000Z'
+                            pointers:
+                                responseId: 'response_123'
+                                guildId: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                                channelId: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                                messageId: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+                                modelVersion: 'gpt-5-mini'
+                                chainHash: 'hash_abc'
+                            remediation:
+                                state: applied
+                                applied: true
+                                notes: 'Warning banner applied with spoiler wrapping.'
+                                updatedAt: '2026-03-13T17:01:00.000Z'
+                            auditEvents:
+                                - action: incident.created
+                                  actorHash: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+                                  notes: 'description provided; contact provided; tags=safety, review'
+                                  createdAt: '2026-03-13T17:00:00.000Z'
+                                - action: incident.status_changed
+                                  actorHash: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+                                  notes: 'Reviewing report context now.'
+                                  createdAt: '2026-03-13T17:03:00.000Z'
         TraceUpsertOk:
             description: Trace stored.
             content:

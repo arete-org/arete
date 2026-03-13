@@ -125,14 +125,17 @@ const parseJsonBody = async (
         }
     }
 
-    let body = '';
+    const chunks: Buffer[] = [];
     let bodyTooLarge = false;
     let bodyBytes = 0;
     req.on('data', (chunk) => {
         if (bodyTooLarge) {
             return;
         }
-        bodyBytes += chunk.length;
+        const chunkBuffer = Buffer.isBuffer(chunk)
+            ? chunk
+            : Buffer.from(chunk);
+        bodyBytes += chunkBuffer.length;
         if (bodyBytes > maxBodyBytes) {
             bodyTooLarge = true;
             sendJson(res, 413, { error: 'Request payload too large' });
@@ -140,7 +143,7 @@ const parseJsonBody = async (
             req.destroy();
             return;
         }
-        body += chunk.toString();
+        chunks.push(chunkBuffer);
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -188,6 +191,7 @@ const parseJsonBody = async (
         return null;
     }
 
+    const body = Buffer.concat(chunks, bodyBytes).toString('utf8');
     if (!body) {
         sendJson(res, 400, { error: 'Missing request body' });
         logRequest(req, res, `${routeLabel} missing-body`);
