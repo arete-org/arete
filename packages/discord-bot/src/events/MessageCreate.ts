@@ -50,11 +50,13 @@ interface Dependencies {
 }
 
 /**
- * Structure to track the state of a back-and-forth conversation with a specific bot within a channel.
+ * Structure to track one uninterrupted bot-only streak within a channel.
+ * We keep the streak channel-wide so alternating bot identities cannot reset
+ * the reply limit and keep Footnote talking indefinitely.
  */
 type BotConversationState = {
-    botId: string;
-    exchanges: number;
+    participantBotIds: Set<string>;
+    repliesSentInStreak: number;
     lastDirection: 'self' | 'other';
     lastUpdated: number;
     blockedUntil?: number;
@@ -87,8 +89,8 @@ type BotConversationState = {
  * @property {number} STALE_COUNTER_TTL_MS - Configurable counter expiry
  * @property {boolean} ALLOW_THREAD_RESPONSES - Whether responding in threads is allowed
  * @property {Set<string>} allowedThreadIds - Threads where the bot is allowed to engage
- * @property {Map<string, BotConversationState>} botConversationStates - Tracks back-and-forth exchanges with other bots
- * @property {number} BOT_CONVERSATION_TTL_MS - How long to remember bot conversations before resetting
+ * @property {Map<string, BotConversationState>} botConversationStates - Tracks one channel-wide bot-only streak per channel
+ * @property {number} BOT_CONVERSATION_TTL_MS - How long to remember bot-only streak state before resetting
  * @property {number} BOT_INTERACTION_COOLDOWN_MS - Cooldown applied after we stop engaging
  * @property {ChannelContextManager | null} contextManager - The channel context manager that manages the channel-scoped context
  * @property {number} CONTEXT_STATE_LOG_THROTTLE_MS - Throttle context_state logs per channel (ms)
@@ -231,13 +233,12 @@ export class MessageCreate extends Event {
         // If we just posted a message, reset the counter, and ignore self
         if (message.author.id === message.client.user!.id) {
             this.resetCounter(channelKey);
-            this.markBotMessageSent(channelKey);
 
             messageLogger.debug(`Reset message count for ${channelKey}: 0`);
             return;
         }
 
-        // If the author is not a bot, clear any bot-to-bot conversation tracking for this channel
+        // A human message breaks the bot-only streak immediately.
         if (!message.author.bot) {
             this.botConversationStates.delete(channelKey);
         }
@@ -268,7 +269,8 @@ export class MessageCreate extends Event {
                                     this.contextManager.getRecentMessages(
                                         channelKey
                                     ).length,
-                                totalMessages: metrics.totalMessages,
+                                windowTotalMessages:
+                                    metrics.windowTotalMessages,
                                 flags: metrics.flags,
                             })
                         );
@@ -306,6 +308,7 @@ export class MessageCreate extends Event {
                     true,
                     `Mentioned with a direct ping`
                 );
+                this.markLogicalBotReplySent(channelKey, message);
             }
             // If the message is a direct reply to the bot, process it.
             else if (this.isReplyToBot(message)) {
@@ -317,6 +320,7 @@ export class MessageCreate extends Event {
                     true,
                     `Replied to with a direct reply`
                 );
+                this.markLogicalBotReplySent(channelKey, message);
             }
             else if (matchedPlaintextAlias) {
                 messageLogger.debug(
@@ -333,6 +337,7 @@ export class MessageCreate extends Event {
                     true,
                     `Mentioned by plaintext alias: ${matchedPlaintextAlias}`
                 );
+                this.markLogicalBotReplySent(channelKey, message);
             }
             // Check engagement filter for all messages (if enabled), or use catchup threshold for legacy fallback
             else if (
@@ -435,12 +440,12 @@ export class MessageCreate extends Event {
                                     recentMessageCount: recentMessages.length,
                                     channelMetrics: channelMetrics
                                         ? {
-                                              totalMessages:
-                                                  channelMetrics.totalMessages,
-                                              humanMessages:
-                                                  channelMetrics.humanMessages,
-                                              botMessages:
-                                                  channelMetrics.botMessages,
+                                              windowTotalMessages:
+                                                  channelMetrics.windowTotalMessages,
+                                              windowHumanMessages:
+                                                  channelMetrics.windowHumanMessages,
+                                              windowBotMessages:
+                                                  channelMetrics.windowBotMessages,
                                               lastEngagementScore:
                                                   channelMetrics.lastEngagementScore,
                                           }
@@ -546,6 +551,7 @@ export class MessageCreate extends Event {
                     false,
                     `Enough messages have passed since you last replied - catching up. As this is an automatic task, your voice may not be needed.`
                 );
+                this.markLogicalBotReplySent(channelKey, message);
             }
         } catch (error) {
             await this.handleError(error, message);
@@ -714,9 +720,8 @@ export class MessageCreate extends Event {
 
     /**
      * Determines whether we should refuse to respond to another bot in order to avoid
-     * two automated agents getting stuck in an infinite loop. The method keeps lightweight
-     * state per channel so that we can cap the number of back-and-forth exchanges while
-     * still allowing occasional hand-offs between bots.
+     * automated agents getting stuck in an infinite loop. The state is channel-wide
+     * so that multiple bot identities cannot take turns and reset the limit.
      */
     private async shouldSuppressBotResponse(
         message: Message,
@@ -734,54 +739,66 @@ export class MessageCreate extends Event {
 
         if (
             state &&
-            (now - state.lastUpdated > this.BOT_CONVERSATION_TTL_MS ||
-                state.botId !== message.author.id)
+            now - state.lastUpdated > this.BOT_CONVERSATION_TTL_MS
         ) {
-            // Expire stale state or reset when a different bot joins the conversation.
+            // Expire stale streak state so a quiet channel can start fresh.
             state = undefined;
             this.botConversationStates.delete(channelKey);
         }
 
         if (!state) {
-            // First message we have seen from this bot recently – record it and proceed normally.
             state = {
-                botId: message.author.id,
-                exchanges: 0,
+                participantBotIds: new Set<string>(),
+                repliesSentInStreak: 0,
                 lastDirection: 'other',
                 lastUpdated: now,
             };
             this.botConversationStates.set(channelKey, state);
-            return false;
         }
 
         if (state.blockedUntil) {
             if (now < state.blockedUntil) {
+                state.participantBotIds.add(message.author.id);
                 state.lastUpdated = now;
                 state.lastDirection = 'other';
                 await this.reactToSuppressedBotMessage(message);
                 messageLogger.debug(
-                    `Suppressed response to bot ${message.author.id} in ${channelKey} (cooldown active).`
+                    `Suppressed response to bot ${message.author.id} in ${channelKey} (cooldown active).`,
+                    {
+                        participantBotIds: [
+                            ...state.participantBotIds,
+                        ],
+                        repliesSentInStreak: state.repliesSentInStreak,
+                        blockedUntil: state.blockedUntil,
+                    }
                 );
                 return true;
             }
 
-            // Cooldown elapsed, allow a fresh set of exchanges.
+            // Cooldown elapsed, allow a fresh streak.
             delete state.blockedUntil;
-            state.exchanges = 0;
+            state.repliesSentInStreak = 0;
+            state.participantBotIds.clear();
         }
 
-        if (state.lastDirection === 'self') {
-            state.exchanges += 1;
-        }
-
+        state.participantBotIds.add(message.author.id);
         state.lastDirection = 'other';
         state.lastUpdated = now;
 
-        if (state.exchanges >= runtimeConfig.botInteraction.maxBackAndForth) {
+        if (
+            state.repliesSentInStreak >=
+            runtimeConfig.botInteraction.maxBackAndForth
+        ) {
             state.blockedUntil = now + this.BOT_INTERACTION_COOLDOWN_MS;
             await this.reactToSuppressedBotMessage(message);
             messageLogger.info(
-                `Reached bot conversation limit with ${message.author.id} in ${channelKey}; suppressing replies.`
+                `Reached channel-wide bot conversation limit in ${channelKey}; suppressing replies.`,
+                {
+                    participantBotIds: [...state.participantBotIds],
+                    repliesSentInStreak: state.repliesSentInStreak,
+                    blockedUntil: state.blockedUntil,
+                    triggeringBotId: message.author.id,
+                }
             );
             return true;
         }
@@ -822,16 +839,23 @@ export class MessageCreate extends Event {
     }
 
     /**
-     * Marks that the bot has spoken in the tracked channel so that the next bot message counts
-     * as a new exchange when calculating the back-and-forth limit. The existing exchange tally
-     * is preserved so that we continue from the previous count instead of resetting it to zero
-     * each time the bot chooses to re-engage.
+     * Marks one completed logical reply inside the active bot-only streak.
+     * This counts one planner/response cycle rather than raw Discord messages,
+     * so a main reply plus provenance follow-up still consumes only one unit.
      */
-    private markBotMessageSent(channelKey: string): void {
+    private markLogicalBotReplySent(
+        channelKey: string,
+        triggeringMessage: Message
+    ): void {
+        if (!triggeringMessage.author.bot) {
+            return;
+        }
+
         const state = this.botConversationStates.get(channelKey);
         if (state) {
             state.lastDirection = 'self';
             state.lastUpdated = Date.now();
+            state.repliesSentInStreak += 1;
             // Clear any existing cooldown after we choose to re-engage manually (e.g., a human unblocks the conversation).
             delete state.blockedUntil;
         }

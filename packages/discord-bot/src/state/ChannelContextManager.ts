@@ -33,9 +33,9 @@ export interface StoredMessage {
 /**
  * Metrics for the channel context manager
  * @interface ChannelMetrics
- * @property {number} totalMessages - The total number of messages in the channel
- * @property {number} botMessages - The number of bot messages in the channel
- * @property {number} humanMessages - The number of human messages in the channel
+ * @property {number} windowTotalMessages - The number of retained messages in the current rolling window
+ * @property {number} windowBotMessages - The number of retained bot messages in the current rolling window
+ * @property {number} windowHumanMessages - The number of retained human messages in the current rolling window
  * @property {number} llmCalls - The number of LLM calls in the channel
  * @property {number} tokensUsed - The number of tokens used in the channel
  * @property {number} usdEstimated - The estimated cost of the LLM usage in the channel
@@ -44,9 +44,9 @@ export interface StoredMessage {
  * @property {string[]} flags - The flags for the channel
  */
 export interface ChannelMetrics {
-    totalMessages: number;
-    botMessages: number;
-    humanMessages: number;
+    windowTotalMessages: number;
+    windowBotMessages: number;
+    windowHumanMessages: number;
     llmCalls: number;
     tokensUsed: number;
     usdEstimated: number;
@@ -144,12 +144,9 @@ export class ChannelContextManager {
                 );
             }
 
-            state.metrics.totalMessages += 1;
-            if (storedMessage.isBot) {
-                state.metrics.botMessages += 1;
-            } else {
-                state.metrics.humanMessages += 1;
-            }
+            // Recompute after every trim so engagement filters see the same
+            // message mix that is actually retained in memory.
+            this.recomputeWindowMessageMetrics(state);
             state.metrics.lastActivity = storedMessage.timestamp;
 
             logger.debug(
@@ -397,6 +394,7 @@ export class ChannelContextManager {
                 );
                 messagesEvicted += beforeCount - state.messages.length;
                 state.lastEviction = now;
+                this.recomputeWindowMessageMetrics(state);
 
                 if (
                     state.messages.length === 0 &&
@@ -444,7 +442,7 @@ export class ChannelContextManager {
 
             for (const state of this.channelStates.values()) {
                 channelCount += 1;
-                totalMessages += state.metrics.totalMessages;
+                totalMessages += state.metrics.windowTotalMessages;
                 totalCost += state.metrics.usdEstimated;
             }
 
@@ -468,9 +466,9 @@ export class ChannelContextManager {
             state = {
                 messages: [],
                 metrics: {
-                    totalMessages: 0,
-                    botMessages: 0,
-                    humanMessages: 0,
+                    windowTotalMessages: 0,
+                    windowBotMessages: 0,
+                    windowHumanMessages: 0,
                     llmCalls: 0,
                     tokensUsed: 0,
                     usdEstimated: 0,
@@ -483,6 +481,19 @@ export class ChannelContextManager {
             this.channelStates.set(channelId, state);
         }
         return state;
+    }
+
+    /**
+     * Recompute the rolling human/bot composition so engagement filters always
+     * see counters that match the retained in-memory message buffer.
+     */
+    private recomputeWindowMessageMetrics(state: ChannelState): void {
+        state.metrics.windowTotalMessages = state.messages.length;
+        state.metrics.windowBotMessages = state.messages.filter(
+            (message) => message.isBot
+        ).length;
+        state.metrics.windowHumanMessages =
+            state.metrics.windowTotalMessages - state.metrics.windowBotMessages;
     }
 
     /**

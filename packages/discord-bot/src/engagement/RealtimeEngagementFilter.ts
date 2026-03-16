@@ -245,6 +245,52 @@ export class RealtimeEngagementFilter {
     }
 
     /**
+     * Build a recent bot/human composition snapshot for engagement scoring.
+     * Prefer the fetched Discord window plus the current message because it
+     * reflects what is happening now. Fall back to retained channel metrics when
+     * no fetched window is available.
+     */
+    private getRecentMessageComposition(context: EngagementContext): {
+        totalMessages: number;
+        botMessages: number;
+        humanMessages: number;
+        source: 'recent_messages' | 'channel_metrics' | 'current_message';
+    } {
+        const recentWindow = [...context.recentMessages, context.message];
+        if (recentWindow.length > 1) {
+            const botMessages = recentWindow.filter(
+                (message) => message.author.bot
+            ).length;
+            return {
+                totalMessages: recentWindow.length,
+                botMessages,
+                humanMessages: recentWindow.length - botMessages,
+                source: 'recent_messages',
+            };
+        }
+
+        const { channelMetrics } = context;
+        if (
+            channelMetrics &&
+            channelMetrics.windowTotalMessages > 0
+        ) {
+            return {
+                totalMessages: channelMetrics.windowTotalMessages,
+                botMessages: channelMetrics.windowBotMessages,
+                humanMessages: channelMetrics.windowHumanMessages,
+                source: 'channel_metrics',
+            };
+        }
+
+        return {
+            totalMessages: 1,
+            botMessages: context.message.author.bot ? 1 : 0,
+            humanMessages: context.message.author.bot ? 0 : 1,
+            source: 'current_message',
+        };
+    }
+
+    /**
      * Score based on direct mentions and replies
      * Normalized to [0, 1], ranging from low to high engagement.
      * How it works:
@@ -389,23 +435,16 @@ export class RealtimeEngagementFilter {
      * Score based on recent human activity ratio
      * Normalized to [0, 1], ranging from low to high engagement.
      * How it works:
-     * - Calculates the ratio of human messages to total messages in recent history
+     * - Calculates the ratio of human messages to total messages in the recent fetched/retained window
      * - Higher human activity (more human messages) = higher engagement score
-     * - If no channel metrics available, returns neutral score of 0.5
      * - Pure human conversation gets score of 1.0, pure bot conversation gets 0.0
      * @param {EngagementContext} context - The context for the engagement decision
      * @returns {number} The score for the human activity
      */
     private scoreHumanActivity(context: EngagementContext): number {
-        const { channelMetrics } = context;
-        if (!channelMetrics || channelMetrics.totalMessages === 0) {
-            return 0.5; // Neutral score if no data
-        }
-
-        // Calculate human messages as total minus bot messages (some channels may not have botMessages, so we need to handle this gracefully)
-        const humanMessages =
-            channelMetrics.totalMessages - channelMetrics.botMessages;
-        const humanRatio = humanMessages / channelMetrics.totalMessages;
+        const composition = this.getRecentMessageComposition(context);
+        const humanRatio =
+            composition.humanMessages / composition.totalMessages;
         return this.normalizeScore(humanRatio, 0, 1);
     }
 
@@ -458,31 +497,26 @@ export class RealtimeEngagementFilter {
      * Score based on bot noise ratio (negative signal)
      * Normalized to [0, 1], ranging from low to high engagement.
      * How it works:
-     * - Calculates the ratio of bot messages to total messages in recent history
+     * - Calculates the ratio of bot messages to total messages in the recent fetched/retained window
      * - Higher bot noise (more bot messages) = lower engagement score (inverted signal)
      * - Pure human conversation gets score of 1.0, pure bot conversation gets 0.0
-     * - If no channel metrics available, returns 0.0 (no noise)
      * - This prevents the bot from engaging in bot-dominated conversations
      * @param {EngagementContext} context - The context for the engagement decision
      * @returns {number} The score for the bot noise
      */
     private scoreBotNoise(context: EngagementContext): number {
-        const { channelMetrics } = context;
-        if (!channelMetrics || channelMetrics.totalMessages === 0) {
-            return 0.0; // No noise if no data
-        }
-
-        const botRatio =
-            channelMetrics.botMessages / channelMetrics.totalMessages;
+        const composition = this.getRecentMessageComposition(context);
+        const botRatio = composition.botMessages / composition.totalMessages;
         const finalScore = 1.0 - botRatio; // Invert to make it negative signal
 
         // Log high bot noise for monitoring
         if (botRatio > 0.7) {
             engagementLogger.warn('High bot noise detected', {
                 channelId: context.channelKey,
+                compositionSource: composition.source,
                 botRatio,
-                totalMessages: channelMetrics.totalMessages,
-                botMessages: channelMetrics.botMessages,
+                totalMessages: composition.totalMessages,
+                botMessages: composition.botMessages,
                 finalScore,
             });
         }

@@ -19,6 +19,7 @@ import type { BotProfileConfig } from '../src/config/profile.js';
 import { logger } from '../src/utils/logger.js';
 import { MessageProcessor } from '../src/utils/MessageProcessor.js';
 import { ResponseHandler } from '../src/utils/response/ResponseHandler.js';
+import { buildProvenanceActionRow } from '../src/utils/response/provenanceCgi.js';
 
 const createMetadata = (): ResponseMetadata => ({
     responseId: 'resp_123',
@@ -84,10 +85,30 @@ const createReflectBuildMessage = () =>
     }) as never;
 
 type ProcessorPrivateAccess = {
-    sendProvenanceCgi: (
+    prepareProvenanceCgiPayload: (
+        metadata: ResponseMetadata
+    ) => Promise<{
+        files: Array<{ filename: string; data: Buffer }>;
+        components: unknown[];
+    }>;
+    awaitProvenancePayload: (
+        payloadPromise: Promise<{
+            files: Array<{ filename: string; data: Buffer }>;
+            components: unknown[];
+        }>,
+        responseId: string
+    ) => Promise<{
+        files: Array<{ filename: string; data: Buffer }>;
+        components: unknown[];
+    } | null>;
+    sendPreparedProvenanceCgi: (
         provenanceReplyAnchor: unknown,
         originalMessage: unknown,
-        metadata: ResponseMetadata
+        preparedPayload: {
+            files: Array<{ filename: string; data: Buffer }>;
+            components: unknown[];
+        },
+        responseId: string
     ) => Promise<void>;
     executeReflectMessageAction: (
         message: unknown,
@@ -122,31 +143,33 @@ type ProcessorPrivateAccess = {
     } | null>;
 };
 
-test('executeReflectMessageAction sends text, triggers CGI follow-up, and skips trace posting', async () => {
+test('executeReflectMessageAction sends text and provenance together when payload is ready', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const message = createMessage();
     const sentMessages: Array<{
         content: string;
+        files: Array<{ filename: string; data: Buffer }>;
         directReply: boolean;
         suppressEmbeds: boolean;
+        components: unknown[];
     }> = [];
-    const capture = {
-        metadataSeen: null as ResponseMetadata | null,
-    };
     const originalPostTraces = botApi.postTraces;
+    let delayedProvenanceCalls = 0;
 
     (botApi as { postTraces: unknown }).postTraces = async () => {
         throw new Error(
             'postTraces should not run for backend reflect messages'
         );
     };
-    processorAccess.sendProvenanceCgi = async (
-        _provenanceReplyAnchor: unknown,
-        _originalMessage: unknown,
-        metadata: ResponseMetadata
-    ) => {
-        capture.metadataSeen = metadata;
+    processorAccess.prepareProvenanceCgiPayload = async () => ({
+        files: [{ filename: 'trace-card.png', data: Buffer.from('card') }],
+        components: [buildProvenanceActionRow('resp_123')],
+    });
+    processorAccess.awaitProvenancePayload = async (payloadPromise) =>
+        payloadPromise;
+    processorAccess.sendPreparedProvenanceCgi = async () => {
+        delayedProvenanceCalls += 1;
     };
 
     try {
@@ -155,14 +178,17 @@ test('executeReflectMessageAction sends text, triggers CGI follow-up, and skips 
             {
                 async sendMessage(
                     content: string,
-                    _files: unknown[],
+                    files: Array<{ filename: string; data: Buffer }>,
                     directReply: boolean,
-                    suppressEmbeds: boolean = true
+                    suppressEmbeds: boolean = true,
+                    components: unknown[] = []
                 ) {
                     sentMessages.push({
                         content,
+                        files,
                         directReply,
                         suppressEmbeds,
+                        components,
                     });
                     return {
                         channel: { id: 'channel-1' },
@@ -184,13 +210,86 @@ test('executeReflectMessageAction sends text, triggers CGI follow-up, and skips 
     assert.equal(sentMessages.length, 1);
     assert.equal(sentMessages[0].content, 'Backend reflection');
     assert.equal(sentMessages[0].directReply, true);
-    if (!capture.metadataSeen) {
-        throw new Error('Expected metadata to be forwarded to sendProvenanceCgi');
-    }
-    assert.equal(capture.metadataSeen.responseId, 'resp_123');
+    assert.equal(sentMessages[0].files.length, 1);
+    assert.equal(sentMessages[0].files[0].filename, 'trace-card.png');
+    assert.equal(sentMessages[0].components.length, 1);
+    assert.equal(delayedProvenanceCalls, 0);
 });
 
-test('sendProvenanceCgi posts trace-card and sends image plus response-bound buttons', async () => {
+test('executeReflectMessageAction falls back to a provenance follow-up when payload misses the wait window', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const message = createMessage();
+    const sentMessages: Array<{
+        content: string;
+        files: Array<{ filename: string; data: Buffer }>;
+        directReply: boolean;
+        suppressEmbeds: boolean;
+        components: unknown[];
+    }> = [];
+    const delayedCalls: Array<{
+        preparedPayload: {
+            files: Array<{ filename: string; data: Buffer }>;
+            components: unknown[];
+        };
+        responseId: string;
+    }> = [];
+
+    processorAccess.prepareProvenanceCgiPayload = async () => ({
+        files: [{ filename: 'trace-card.png', data: Buffer.from('card') }],
+        components: [buildProvenanceActionRow('resp_123')],
+    });
+    processorAccess.awaitProvenancePayload = async () => null;
+    processorAccess.sendPreparedProvenanceCgi = async (
+        _provenanceReplyAnchor,
+        _originalMessage,
+        preparedPayload,
+        responseId
+    ) => {
+        delayedCalls.push({ preparedPayload, responseId });
+    };
+
+    await processorAccess.executeReflectMessageAction(
+        message,
+        {
+            async sendMessage(
+                content: string,
+                files: Array<{ filename: string; data: Buffer }>,
+                directReply: boolean,
+                suppressEmbeds: boolean = true,
+                components: unknown[] = []
+            ) {
+                sentMessages.push({
+                    content,
+                    files,
+                    directReply,
+                    suppressEmbeds,
+                    components,
+                });
+                return {
+                    channel: { id: 'channel-1' },
+                };
+            },
+        },
+        {
+            action: 'message',
+            message: 'Backend reflection',
+            modality: 'text',
+            metadata: createMetadata(),
+        },
+        true
+    );
+
+    assert.equal(sentMessages.length, 1);
+    assert.equal(sentMessages[0].content, 'Backend reflection');
+    assert.equal(sentMessages[0].files.length, 0);
+    assert.equal(sentMessages[0].components.length, 0);
+    assert.equal(delayedCalls.length, 1);
+    assert.equal(delayedCalls[0].preparedPayload.files.length, 1);
+    assert.equal(delayedCalls[0].responseId, 'resp_123');
+});
+
+test('prepareProvenanceCgiPayload and sendPreparedProvenanceCgi send image plus response-bound buttons', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const originalPostTraceCard = botApi.postTraceCard;
@@ -233,7 +332,17 @@ test('sendProvenanceCgi posts trace-card and sends image plus response-bound but
     }) as typeof ResponseHandler.prototype.sendMessage;
 
     try {
-        await processorAccess.sendProvenanceCgi(
+        const preparedPayload =
+            await processorAccess.prepareProvenanceCgiPayload({
+                ...createMetadata(),
+                temperament: {
+                    tightness: 5,
+                    rationale: 3,
+                },
+                evidenceScore: 4,
+                freshnessScore: 5,
+            });
+        await processorAccess.sendPreparedProvenanceCgi(
             {
                 id: 'anchor-1',
                 channel: { id: 'channel-1' },
@@ -242,15 +351,8 @@ test('sendProvenanceCgi posts trace-card and sends image plus response-bound but
                 id: 'message-1',
                 author: { id: 'user-1', username: 'Jordan' },
             },
-            {
-                ...createMetadata(),
-                temperament: {
-                    tightness: 5,
-                    rationale: 3,
-                },
-                evidenceScore: 4,
-                freshnessScore: 5,
-            }
+            preparedPayload,
+            'resp_123'
         );
     } finally {
         (
@@ -285,7 +387,7 @@ test('sendProvenanceCgi posts trace-card and sends image plus response-bound but
     assert.deepEqual(customIds, ['details:resp_123', 'report_issue:resp_123']);
 });
 
-test('sendProvenanceCgi falls back to buttons-only when trace-card generation fails', async () => {
+test('prepareProvenanceCgiPayload falls back to buttons-only when trace-card generation fails', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const originalPostTraceCard = botApi.postTraceCard;
@@ -315,7 +417,11 @@ test('sendProvenanceCgi falls back to buttons-only when trace-card generation fa
     }) as typeof ResponseHandler.prototype.sendMessage;
 
     try {
-        await processorAccess.sendProvenanceCgi(
+        const preparedPayload =
+            await processorAccess.prepareProvenanceCgiPayload(
+                createMetadata()
+            );
+        await processorAccess.sendPreparedProvenanceCgi(
             {
                 id: 'anchor-2',
                 channel: { id: 'channel-2' },
@@ -324,7 +430,8 @@ test('sendProvenanceCgi falls back to buttons-only when trace-card generation fa
                 id: 'message-2',
                 author: { id: 'user-2', username: 'Taylor' },
             },
-            createMetadata()
+            preparedPayload,
+            'resp_123'
         );
     } finally {
         (
@@ -437,10 +544,9 @@ test('executeReflectMessageAction reports empty backend message payload as an er
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const sentMessages: string[] = [];
-    let provenanceCalls = 0;
-
-    processorAccess.sendProvenanceCgi = async () => {
-        provenanceCalls += 1;
+    let fallbackProvenanceCalls = 0;
+    processorAccess.sendPreparedProvenanceCgi = async () => {
+        fallbackProvenanceCalls += 1;
     };
 
     await processorAccess.executeReflectMessageAction(
@@ -460,7 +566,7 @@ test('executeReflectMessageAction reports empty backend message payload as an er
         true
     );
 
-    assert.equal(provenanceCalls, 0);
+    assert.equal(fallbackProvenanceCalls, 0);
     assert.equal(sentMessages.length, 1);
     assert.match(sentMessages[0], /^```ansi\n/);
     assert.equal(

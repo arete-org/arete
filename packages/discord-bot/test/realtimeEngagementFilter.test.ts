@@ -72,6 +72,7 @@ const createContext = (
             author: {
                 id: 'user-1',
                 username: 'Jordan',
+                bot: false,
             },
             client: {
                 user: {
@@ -92,6 +93,8 @@ const createContext = (
 
 type RealtimeFilterPrivateAccess = {
     scoreMention: (context: EngagementContext) => number;
+    scoreHumanActivity: (context: EngagementContext) => number;
+    scoreBotNoise: (context: EngagementContext) => number;
 };
 
 test('scoreMention returns 0.9 for explicit vendor aliases', async () => {
@@ -193,4 +196,76 @@ test('scoreMention still treats direct mentions and replies as full-strength sig
             1
         );
     });
+});
+
+test('human and bot activity scoring prefers the recent fetched window over stale retained metrics', () => {
+    const filter = createFilter() as unknown as RealtimeFilterPrivateAccess;
+    const context = {
+        ...createContext('latest human message'),
+        recentMessages: [
+            {
+                author: { bot: true },
+                createdTimestamp: 1,
+            },
+            {
+                author: { bot: true },
+                createdTimestamp: 2,
+            },
+            {
+                author: { bot: true },
+                createdTimestamp: 3,
+            },
+            {
+                author: { bot: false },
+                createdTimestamp: 4,
+            },
+        ],
+        channelMetrics: {
+            windowTotalMessages: 20,
+            windowBotMessages: 0,
+            windowHumanMessages: 20,
+            llmCalls: 0,
+            tokensUsed: 0,
+            usdEstimated: 0,
+            lastEngagementScore: 0,
+            lastActivity: Date.now(),
+            flags: [],
+        },
+    } as unknown as EngagementContext;
+
+    assert.equal(filter.scoreHumanActivity(context), 0.4);
+    assert.equal(filter.scoreBotNoise(context), 0.4);
+});
+
+test('scoreBotNoise drops when the current recent window becomes bot-heavy', () => {
+    const filter = createFilter() as unknown as RealtimeFilterPrivateAccess;
+    const context = {
+        ...createContext('another bot message', {
+            author: {
+                id: 'bot-a',
+                username: 'Bot A',
+                bot: true,
+            },
+        }),
+        recentMessages: [
+            {
+                author: { bot: true },
+                createdTimestamp: 1,
+            },
+            {
+                author: { bot: true },
+                createdTimestamp: 2,
+            },
+            {
+                author: { bot: true },
+                createdTimestamp: 3,
+            },
+            {
+                author: { bot: false },
+                createdTimestamp: 4,
+            },
+        ],
+    } as unknown as EngagementContext;
+
+    assert.ok(Math.abs(filter.scoreBotNoise(context) - 0.2) < 0.000001);
 });

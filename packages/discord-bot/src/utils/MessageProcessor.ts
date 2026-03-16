@@ -88,8 +88,21 @@ type ReflectImageAction = {
     imageRequest: ReflectImageRequest;
 };
 
+/**
+ * Provenance assets prepared for either a combined response send or a later
+ * follow-up send. Keeping this payload serializable makes the "wait briefly,
+ * then fall through" logic easier to reason about and test.
+ */
+type PreparedProvenancePayload = {
+    files: Array<{ filename: string; data: Buffer }>;
+    components: [ReturnType<typeof buildProvenanceActionRow>];
+};
+
 const RESPONSE_CONTEXT_SIZE = 24;
 const DISCORD_MAX_MESSAGE_LENGTH = 2000;
+// Give provenance a short head start so we can usually send one combined
+// response, but still fall back before the user waits indefinitely.
+const PROVENANCE_FOOTER_WAIT_MS = 5000;
 const REFLECT_ERROR_BLOCK_PREFIX = '```ansi\n';
 const REFLECT_ERROR_BLOCK_SUFFIX = '\n```';
 const REFLECT_ERROR_TRUNCATION_SUFFIX = '... (truncated)';
@@ -679,6 +692,11 @@ export class MessageProcessor {
         }
 
         const finalResponseText = reflectResponse.message;
+        // Start provenance work immediately so the trace card can race the main
+        // response generation instead of always happening strictly afterward.
+        const provenancePayloadPromise = this.prepareProvenanceCgiPayload(
+            reflectResponse.metadata
+        );
 
         let ttsPath: string | null = null;
         if (reflectResponse.modality === 'tts') {
@@ -710,6 +728,11 @@ export class MessageProcessor {
                 const cleanResponseText = finalResponseText
                     .replace(/\n/g, ' ')
                     .replace(/`/g, '');
+                const preparedProvenance =
+                    await this.awaitProvenancePayload(
+                        provenancePayloadPromise,
+                        reflectResponse.metadata.responseId
+                    );
                 const sentMessages = await responseHandler.sendMessage(
                     `\`\`\`${cleanResponseText}\`\`\``,
                     [
@@ -717,22 +740,30 @@ export class MessageProcessor {
                             filename: path.basename(ttsPath),
                             data: fileBuffer,
                         },
+                        ...(preparedProvenance?.files ?? []),
                     ],
-                    directReply
+                    directReply,
+                    true,
+                    preparedProvenance?.components ?? []
                 );
                 const responseMessages = Array.isArray(sentMessages)
                     ? sentMessages
                     : [sentMessages];
-                const provenanceReplyAnchor =
-                    responseMessages[responseMessages.length - 1];
+                if (!preparedProvenance) {
+                    // The user already has the main reply. Finish provenance in
+                    // a follow-up so the footer still lands at the end.
+                    const provenanceReplyAnchor =
+                        responseMessages[responseMessages.length - 1];
 
-                // Intentional: backend reflect already persisted the canonical trace.
-                // Skipping postTraces here prevents duplicate trace rows for one reply.
-                await this.sendProvenanceCgi(
-                    provenanceReplyAnchor,
-                    message,
-                    reflectResponse.metadata
-                );
+                    // Intentional: backend reflect already persisted the canonical trace.
+                    // Skipping postTraces here prevents duplicate trace rows for one reply.
+                    await this.sendPreparedProvenanceCgi(
+                        provenanceReplyAnchor,
+                        message,
+                        await provenancePayloadPromise,
+                        reflectResponse.metadata.responseId
+                    );
+                }
                 return;
             } catch (error) {
                 logger.error(
@@ -748,25 +779,35 @@ export class MessageProcessor {
             }
         }
 
+        const preparedProvenance = await this.awaitProvenancePayload(
+            provenancePayloadPromise,
+            reflectResponse.metadata.responseId
+        );
         const sentMessages = await responseHandler.sendMessage(
             finalResponseText,
-            [],
+            preparedProvenance?.files ?? [],
             directReply,
-            true
+            true,
+            preparedProvenance?.components ?? []
         );
-        const responseMessages = Array.isArray(sentMessages)
-            ? sentMessages
-            : [sentMessages];
-        const provenanceReplyAnchor =
-            responseMessages[responseMessages.length - 1];
+        if (!preparedProvenance) {
+            // We missed the combined-send window, so attach provenance as the
+            // last follow-up message instead of blocking longer.
+            const responseMessages = Array.isArray(sentMessages)
+                ? sentMessages
+                : [sentMessages];
+            const provenanceReplyAnchor =
+                responseMessages[responseMessages.length - 1];
 
-        // Intentional: backend reflect already persisted the canonical trace.
-        // Skipping postTraces here prevents duplicate trace rows for one reply.
-        await this.sendProvenanceCgi(
-            provenanceReplyAnchor,
-            message,
-            reflectResponse.metadata
-        );
+            // Intentional: backend reflect already persisted the canonical trace.
+            // Skipping postTraces here prevents duplicate trace rows for one reply.
+            await this.sendPreparedProvenanceCgi(
+                provenanceReplyAnchor,
+                message,
+                await provenancePayloadPromise,
+                reflectResponse.metadata.responseId
+            );
+        }
         logger.debug(
             `Backend reflect sent message response for message ${message.id}.`,
             {
@@ -777,11 +818,14 @@ export class MessageProcessor {
         );
     }
 
-    private async sendProvenanceCgi(
-        provenanceReplyAnchor: Message,
-        originalMessage: Message,
+    /**
+     * Prepares the provenance footer payload ahead of sending the response.
+     * If trace-card generation fails, we still return the action buttons so
+     * the user keeps provenance controls instead of losing the footer entirely.
+     */
+    private async prepareProvenanceCgiPayload(
         metadata: ResponseMetadata
-    ): Promise<void> {
+    ): Promise<PreparedProvenancePayload> {
         const actionRow = buildProvenanceActionRow(metadata.responseId);
         const files: Array<{ filename: string; data: Buffer }> = [];
 
@@ -801,18 +845,79 @@ export class MessageProcessor {
             );
         }
 
+        return {
+            files,
+            components: [actionRow],
+        };
+    }
+
+    /**
+     * Waits briefly for provenance so we can usually send one combined message.
+     * When the timeout wins, the caller should send the body immediately and
+     * reuse the same payload promise for a later provenance follow-up.
+     */
+    private async awaitProvenancePayload(
+        payloadPromise: Promise<PreparedProvenancePayload>,
+        responseId: string
+    ): Promise<PreparedProvenancePayload | null> {
+        let timeoutHandle: NodeJS.Timeout | undefined;
+        const timeoutToken = Symbol('provenance-timeout');
+
+        try {
+            const result = await Promise.race<
+                PreparedProvenancePayload | typeof timeoutToken
+            >([
+                payloadPromise,
+                new Promise<typeof timeoutToken>((resolve) => {
+                    timeoutHandle = setTimeout(
+                        () => resolve(timeoutToken),
+                        PROVENANCE_FOOTER_WAIT_MS
+                    );
+                }),
+            ]);
+
+            if (result === timeoutToken) {
+                logger.debug(
+                    `Provenance payload for response ${responseId} exceeded ${PROVENANCE_FOOTER_WAIT_MS}ms; sending body first and footer later.`
+                );
+                return null;
+            }
+
+            return result;
+        } finally {
+            if (timeoutHandle) {
+                clearTimeout(timeoutHandle);
+            }
+        }
+    }
+
+    /**
+     * Sends a prepared provenance footer as its own follow-up message.
+     * This is the fallback path when provenance missed the combined-send window
+     * or when another caller explicitly wants a separate footer message.
+     */
+    private async sendPreparedProvenanceCgi(
+        provenanceReplyAnchor: Message,
+        originalMessage: Message,
+        preparedPayload: PreparedProvenancePayload,
+        responseId: string
+    ): Promise<void> {
         try {
             const provenanceHandler = new ResponseHandler(
                 provenanceReplyAnchor,
                 provenanceReplyAnchor.channel,
                 originalMessage.author
             );
-            await provenanceHandler.sendMessage('', files, false, false, [
-                actionRow,
-            ]);
+            await provenanceHandler.sendMessage(
+                '',
+                preparedPayload.files,
+                false,
+                false,
+                preparedPayload.components
+            );
         } catch (error) {
             logger.error(
-                `Failed to send provenance CGI follow-up for response ${metadata.responseId}: ${
+                `Failed to send provenance CGI follow-up for response ${responseId}: ${
                     (error as Error)?.message ?? error
                 }`
             );
