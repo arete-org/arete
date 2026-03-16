@@ -633,6 +633,21 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: "BOT_DIRECT_INVOCATION_MIN_THRESHOLD",
+        owner: "discord-bot",
+        stage: "runtime",
+        section: "bot-interaction",
+        required: false,
+        secret: false,
+        kind: "number",
+        description: "Minimum engagement score required before answering a bot-authored direct mention or reply.",
+        defaultValue: literal(0.75),
+        usedBy: [
+            "packages/discord-bot/src/config.ts",
+        ],
+    }),
+
+    defineEnv({
         key: "CATCHUP_AFTER_MESSAGES",
         owner: "discord-bot",
         stage: "runtime",

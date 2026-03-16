@@ -424,6 +424,12 @@ export const runtimeConfig = {
             process.env.BOT_BACK_AND_FORTH_REACTION?.trim() ||
             envDefaultValues.BOT_BACK_AND_FORTH_REACTION,
     },
+    botDirectInvocation: {
+        minEngageThreshold: getNumberEnv(
+            'BOT_DIRECT_INVOCATION_MIN_THRESHOLD',
+            envDefaultValues.BOT_DIRECT_INVOCATION_MIN_THRESHOLD
+        ),
+    },
     catchUp: {
         afterMessages: getIntegerEnv(
             'CATCHUP_AFTER_MESSAGES',

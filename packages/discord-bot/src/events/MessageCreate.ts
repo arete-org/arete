@@ -18,11 +18,15 @@ import {
 } from '../utils/mentionAliases.js';
 import { runtimeConfig } from '../config.js';
 import { ResponseHandler } from '../utils/response/ResponseHandler.js';
-import { ChannelContextManager } from '../state/ChannelContextManager.js';
+import {
+    ChannelContextManager,
+    type StoredMessage,
+} from '../state/ChannelContextManager.js';
 import { RealtimeEngagementFilter } from '../engagement/RealtimeEngagementFilter.js';
 import type { LLMCostEstimator } from '../utils/LLMCostEstimator.js';
 import type {
     EngagementContext,
+    EngagementDecision,
     ChannelEngagementOverrides,
 } from '../engagement/RealtimeEngagementFilter.js';
 
@@ -62,6 +66,25 @@ type BotConversationState = {
     blockedUntil?: number;
 };
 
+type BotDirectInvocationTrigger = 'mention' | 'reply' | 'plaintext_alias';
+
+type EngagementContextBuildResult = {
+    context: EngagementContext;
+    recentHumanCount: number;
+    recentMessageSource: 'fetched' | 'retained' | 'none';
+    fetchFailed: boolean;
+    retainedSignalsAvailable: boolean;
+};
+
+type BotDirectInvocationAdmission = {
+    allow: boolean;
+    failOpen: boolean;
+    reason: string;
+    decision: EngagementDecision | null;
+    recentHumanCount: number;
+    threshold: number;
+};
+
 /**
  * Represents the central handler for Discord messages that qualify for engagement by the bot.
  *
@@ -97,6 +120,7 @@ type BotConversationState = {
  * @property {number} CONTEXT_STATE_LOG_RETENTION_MS - Maximum age before pruning context_state entries
  * @property {Map<string, number>} contextStateLogTimestamps - Track last context_state log per channel
  * @property {RealtimeEngagementFilter | null} realtimeFilter - The weighted scoring filter for catchup engagement decisions (null if disabled)
+ * @property {RealtimeEngagementFilter} botDirectInvocationFilter - Private scoring filter used to gate bot-authored direct invocations even when catchup scoring is disabled
  * @property {LLMCostEstimator | null} costEstimator - The LLM cost tracker for budget enforcement and transparency (null if disabled)
  */
 export class MessageCreate extends Event {
@@ -133,6 +157,7 @@ export class MessageCreate extends Event {
         this.CONTEXT_STATE_LOG_THROTTLE_MS * 10;
     private readonly contextStateLogTimestamps = new Map<string, number>();
     private readonly realtimeFilter: RealtimeEngagementFilter | null;
+    private readonly botDirectInvocationFilter: RealtimeEngagementFilter;
     private readonly costEstimator: LLMCostEstimator | null;
 
     /**
@@ -181,13 +206,17 @@ export class MessageCreate extends Event {
         // Store cost estimator reference
         this.costEstimator = estimator;
 
+        // Keep one scoring engine available for bot-directed gating even when
+        // ordinary catch-up scoring is disabled.
+        this.botDirectInvocationFilter = new RealtimeEngagementFilter(
+            runtimeConfig.engagementWeights,
+            runtimeConfig.engagementPreferences,
+            dependencies.openaiService
+        );
+
         // Initialize realtime engagement filter if enabled
         if (runtimeConfig.realtimeFilter.enabled) {
-            this.realtimeFilter = new RealtimeEngagementFilter(
-                runtimeConfig.engagementWeights,
-                runtimeConfig.engagementPreferences,
-                dependencies.openaiService
-            );
+            this.realtimeFilter = this.botDirectInvocationFilter;
             messageLogger.info('RealtimeEngagementFilter enabled');
         } else {
             this.realtimeFilter = null;
@@ -243,11 +272,6 @@ export class MessageCreate extends Event {
             this.botConversationStates.delete(channelKey);
         }
 
-        // Guard against endless loops with other bots before delegating to the planner/response pipeline
-        if (await this.shouldSuppressBotResponse(message, channelKey)) {
-            return;
-        }
-
         // New message: Increment the counter for this channel
         const messageCount = this.incrementCounter(channelKey);
 
@@ -300,6 +324,22 @@ export class MessageCreate extends Event {
             // Do not ignore if the message mentions the bot with @, or is a direct Discord reply
             // If the message is a direct mention of the bot, process it.
             if (this.isBotMentioned(message)) {
+                if (
+                    message.author.bot &&
+                    !(await this.admitBotDirectInvocation(
+                        message,
+                        channelKey,
+                        'mention'
+                    ))
+                ) {
+                    return;
+                }
+                if (
+                    message.author.bot &&
+                    (await this.shouldSuppressBotResponse(message, channelKey))
+                ) {
+                    return;
+                }
                 messageLogger.debug(
                     `Responding to mention in message ID ${message.id} from ${message.author.id} in channel ${message.channel.id} (${message.channel.type})`
                 );
@@ -312,6 +352,22 @@ export class MessageCreate extends Event {
             }
             // If the message is a direct reply to the bot, process it.
             else if (this.isReplyToBot(message)) {
+                if (
+                    message.author.bot &&
+                    !(await this.admitBotDirectInvocation(
+                        message,
+                        channelKey,
+                        'reply'
+                    ))
+                ) {
+                    return;
+                }
+                if (
+                    message.author.bot &&
+                    (await this.shouldSuppressBotResponse(message, channelKey))
+                ) {
+                    return;
+                }
                 messageLogger.debug(
                     `Responding to reply with message ID ${message.id} from ${message.author.id} in channel ${message.channel.id} (${message.channel.type})`
                 );
@@ -323,6 +379,16 @@ export class MessageCreate extends Event {
                 this.markLogicalBotReplySent(channelKey, message);
             }
             else if (matchedPlaintextAlias) {
+                if (
+                    message.author.bot &&
+                    !(await this.admitBotDirectInvocation(
+                        message,
+                        channelKey,
+                        'plaintext_alias'
+                    ))
+                ) {
+                    return;
+                }
                 messageLogger.debug(
                     'Responding to plaintext alias invocation.',
                     {
@@ -356,40 +422,29 @@ export class MessageCreate extends Event {
                     return;
                 }
 
-                // Fetch recent messages for filter analysis
+                // Build one shared engagement context so catch-up and direct
+                // bot gating evaluate the same recent conversation shape.
                 try {
-                    const recentMessagesCollection =
-                        await message.channel.messages.fetch({
-                            limit: this.catchupFilter.RECENT_MESSAGE_WINDOW,
-                            before: message.id,
-                        });
-                    const recentMessages = Array.from(
-                        recentMessagesCollection.values()
-                    ).sort(
-                        (first, second) =>
-                            first.createdTimestamp - second.createdTimestamp
-                    );
+                    const engagementContextResult =
+                        await this.buildEngagementContext(message, channelKey);
+                    const { context: engagementContext } =
+                        engagementContextResult;
+                    const { recentMessages, channelMetrics } =
+                        engagementContext;
+                    const noFallbackContext =
+                        engagementContextResult.fetchFailed &&
+                        !engagementContextResult.retainedSignalsAvailable &&
+                        recentMessages.length === 0;
+
+                    if (noFallbackContext) {
+                        messageLogger.debug(
+                            `Proceeding to planner after message fetch error in ${channelKey}; no retained context was available.`
+                        );
+                    }
 
                     // Use realtime filter if enabled, otherwise fall back to catchup filter
-                    if (this.realtimeFilter) {
+                    if (!noFallbackContext && this.realtimeFilter) {
                         try {
-                            // Gather context for realtime filter
-                            const channelMetrics =
-                                this.contextManager?.getMetrics(channelKey) ??
-                                null;
-                            const costTotals =
-                                this.costEstimator?.getChannelTotals(
-                                    channelKey
-                                ) ?? null;
-
-                            const engagementContext: EngagementContext = {
-                                message,
-                                channelKey,
-                                recentMessages,
-                                channelMetrics,
-                                costTotals,
-                            };
-
                             // Resolve channel-specific overrides if available
                             const channelOverrides =
                                 this.resolveChannelOverrides(channelKey);
@@ -438,6 +493,8 @@ export class MessageCreate extends Event {
                                     messageAuthor: message.author.username,
                                     messageId: message.id,
                                     recentMessageCount: recentMessages.length,
+                                    recentMessageSource:
+                                        engagementContextResult.recentMessageSource,
                                     channelMetrics: channelMetrics
                                         ? {
                                               windowTotalMessages:
@@ -499,7 +556,7 @@ export class MessageCreate extends Event {
                                 `Falling back to planner after realtime filter error`
                             );
                         }
-                    } else {
+                    } else if (!noFallbackContext) {
                         // Fall back to catchup filter (Phase 1)
                         const filterDecision =
                             await this.catchupFilter.shouldSkipPlanner(
@@ -521,6 +578,8 @@ export class MessageCreate extends Event {
                                 messageAuthor: message.author.username,
                                 messageId: message.id,
                                 recentMessageCount: recentMessages.length,
+                                recentMessageSource:
+                                    engagementContextResult.recentMessageSource,
                             })
                         );
                         if (filterDecision.skip) {
@@ -546,6 +605,12 @@ export class MessageCreate extends Event {
                 // Process the message using the message processor.
                 // We mark directReply as false to avoid bothering chatters.
                 // As this is an automatic task, the bot's voice may not be needed. We pass that in the trigger message to help decide how to handle the response.
+                if (
+                    message.author.bot &&
+                    (await this.shouldSuppressBotResponse(message, channelKey))
+                ) {
+                    return;
+                }
                 await this.messageProcessor.processMessage(
                     message,
                     false,
@@ -605,6 +670,277 @@ export class MessageCreate extends Event {
         }
 
         return null;
+    }
+
+    /**
+     * Decide whether an external bot's direct invocation deserves a response.
+     * Human-authored direct invocations stay immediate; this helper exists only
+     * to make bot-directed pings and replies prove there is active human context.
+     */
+    private async admitBotDirectInvocation(
+        message: Message,
+        channelKey: string,
+        trigger: BotDirectInvocationTrigger
+    ): Promise<boolean> {
+        if (!message.author.bot) {
+            return true;
+        }
+
+        if (trigger === 'plaintext_alias') {
+            messageLogger.info(
+                JSON.stringify({
+                    event: 'bot_direct_invocation_gate',
+                    channelId: channelKey,
+                    messageId: message.id,
+                    authorId: message.author.id,
+                    trigger,
+                    recentHumanCount: 0,
+                    score: null,
+                    threshold:
+                        runtimeConfig.botDirectInvocation.minEngageThreshold,
+                    allow: false,
+                    failOpen: false,
+                    reason: 'bot_plaintext_alias_denied',
+                })
+            );
+            return false;
+        }
+
+        const threshold = runtimeConfig.botDirectInvocation.minEngageThreshold;
+        const contextResult = await this.buildEngagementContext(
+            message,
+            channelKey
+        );
+
+        if (
+            contextResult.fetchFailed &&
+            !contextResult.retainedSignalsAvailable
+        ) {
+            messageLogger.warn(
+                JSON.stringify({
+                    event: 'bot_direct_invocation_gate',
+                    channelId: channelKey,
+                    messageId: message.id,
+                    authorId: message.author.id,
+                    trigger,
+                    recentHumanCount: 0,
+                    score: null,
+                    threshold,
+                    allow: true,
+                    failOpen: true,
+                    reason: 'bot_direct_invocation_gate_fail_open',
+                })
+            );
+            return true;
+        }
+
+        const decision = await this.botDirectInvocationFilter.decide(
+            contextResult.context,
+            {
+                preferences: {
+                    minEngageThreshold: threshold,
+                    ignoreMode: 'silent',
+                },
+            }
+        );
+        const admission = this.evaluateBotDirectInvocationAdmission(
+            decision,
+            contextResult.recentHumanCount,
+            threshold
+        );
+
+        messageLogger.info(
+            JSON.stringify({
+                event: 'bot_direct_invocation_gate',
+                channelId: channelKey,
+                messageId: message.id,
+                authorId: message.author.id,
+                trigger,
+                recentHumanCount: admission.recentHumanCount,
+                score: decision.score,
+                threshold: admission.threshold,
+                allow: admission.allow,
+                failOpen: admission.failOpen,
+                reason: admission.reason,
+                scoreReasons: decision.reasons,
+                breakdown: decision.breakdown,
+                recentMessageSource: contextResult.recentMessageSource,
+            })
+        );
+
+        return admission.allow;
+    }
+
+    /**
+     * Build one engagement context object so the bot-invocation gate and the
+     * catch-up path inspect the same kind of recent conversation window.
+     */
+    private async buildEngagementContext(
+        message: Message,
+        channelKey: string
+    ): Promise<EngagementContextBuildResult> {
+        let recentMessages: Message[] = [];
+        let recentMessageSource: EngagementContextBuildResult['recentMessageSource'] =
+            'none';
+        let fetchFailed = false;
+
+        if (message.channel.isTextBased()) {
+            try {
+                const recentMessagesCollection =
+                    await message.channel.messages.fetch({
+                        limit: this.catchupFilter.RECENT_MESSAGE_WINDOW,
+                        before: message.id,
+                    });
+                recentMessages = Array.from(
+                    recentMessagesCollection.values()
+                ).sort(
+                    (first, second) =>
+                        first.createdTimestamp - second.createdTimestamp
+                );
+                if (recentMessages.length > 0) {
+                    recentMessageSource = 'fetched';
+                }
+            } catch (fetchError) {
+                fetchFailed = true;
+                messageLogger.debug(
+                    `Failed to fetch recent messages for ${channelKey}; checking retained context instead: ${(fetchError as Error)?.message ?? fetchError}`
+                );
+            }
+        }
+
+        const channelMetrics = this.contextManager?.getMetrics(channelKey) ?? null;
+        const retainedMessages =
+            recentMessages.length === 0
+                ? this.getRetainedRecentMessages(channelKey, message)
+                : [];
+        if (recentMessages.length === 0 && retainedMessages.length > 0) {
+            recentMessages = retainedMessages;
+            recentMessageSource = 'retained';
+        }
+
+        const retainedSignalsAvailable =
+            retainedMessages.length > 0 ||
+            (channelMetrics?.windowTotalMessages ?? 0) > 1;
+        const recentHumanCount =
+            recentMessages.length > 0
+                ? recentMessages.filter(
+                      (recentMessage) => !recentMessage.author.bot
+                  ).length
+                : channelMetrics?.windowHumanMessages ?? 0;
+
+        return {
+            context: {
+                message,
+                channelKey,
+                recentMessages,
+                channelMetrics,
+                costTotals:
+                    this.costEstimator?.getChannelTotals(channelKey) ?? null,
+            },
+            recentHumanCount,
+            recentMessageSource,
+            fetchFailed,
+            retainedSignalsAvailable,
+        };
+    }
+
+    /**
+     * Convert retained in-memory context into the small Message shape the
+     * engagement scorer needs when live Discord fetches are unavailable.
+     */
+    private getRetainedRecentMessages(
+        channelKey: string,
+        message: Message
+    ): Message[] {
+        const retainedMessages =
+            this.contextManager?.getRecentMessages(
+                channelKey,
+                this.catchupFilter.RECENT_MESSAGE_WINDOW + 1
+            ) ?? [];
+
+        return retainedMessages
+            .filter((storedMessage) => storedMessage.id !== message.id)
+            .slice(-this.catchupFilter.RECENT_MESSAGE_WINDOW)
+            .map((storedMessage) =>
+                this.toSyntheticRecentMessage(storedMessage, message)
+            );
+    }
+
+    /**
+     * The scorer only needs a small subset of Discord's Message API for recent
+     * history. This adapter keeps the fallback path lightweight and testable.
+     */
+    private toSyntheticRecentMessage(
+        storedMessage: StoredMessage,
+        message: Message
+    ): Message {
+        return {
+            id: storedMessage.id,
+            content: storedMessage.content,
+            createdTimestamp: storedMessage.timestamp,
+            author: {
+                id: storedMessage.authorId,
+                username: storedMessage.authorUsername,
+                bot: storedMessage.isBot,
+            },
+            channelId: message.channelId,
+            guildId: message.guildId,
+            client: message.client,
+            // Catch-up heuristics treat any attachment as meaningful content.
+            // Retained messages do not store attachment metadata, so default to
+            // an empty collection rather than leaving the field undefined.
+            attachments: {
+                size: 0,
+            },
+            mentions: {
+                users: {
+                    has: () => false,
+                },
+                repliedUser: null,
+            },
+            reference: undefined,
+        } as unknown as Message;
+    }
+
+    /**
+     * Bot-authored direct invocations must clear both policy gates:
+     * there must be recent human participation and the stricter score threshold.
+     */
+    private evaluateBotDirectInvocationAdmission(
+        decision: EngagementDecision,
+        recentHumanCount: number,
+        threshold: number
+    ): BotDirectInvocationAdmission {
+        if (recentHumanCount < 1) {
+            return {
+                allow: false,
+                failOpen: false,
+                reason: 'bot_direct_invocation_missing_recent_human',
+                decision,
+                recentHumanCount,
+                threshold,
+            };
+        }
+
+        if (!decision.engage || decision.score < threshold) {
+            return {
+                allow: false,
+                failOpen: false,
+                reason: 'bot_direct_invocation_below_threshold',
+                decision,
+                recentHumanCount,
+                threshold,
+            };
+        }
+
+        return {
+            allow: true,
+            failOpen: false,
+            reason: 'bot_direct_invocation_allowed',
+            decision,
+            recentHumanCount,
+            threshold,
+        };
     }
 
     /**

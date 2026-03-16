@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 
 import { runtimeConfig } from '../src/config.js';
 import { MessageCreate } from '../src/events/MessageCreate.js';
+import type { EngagementDecision } from '../src/engagement/RealtimeEngagementFilter.js';
 
 type MutableBotInteractionConfig = {
     maxBackAndForth: number;
@@ -70,7 +71,70 @@ const createEvent = () =>
         costEstimator: null,
     });
 
+type BotLoopGuardEventAccess = {
+    realtimeFilter: unknown;
+    contextManager: unknown;
+    botDirectInvocationFilter: {
+        decide: (
+            context: unknown,
+            overrides?: unknown
+        ) => Promise<EngagementDecision>;
+    };
+    messageProcessor: {
+        processMessage: (
+            message: unknown,
+            directReply: boolean,
+            trigger: string
+        ) => Promise<void>;
+    };
+};
+
+const allowBotDirectInvocations = (event: MessageCreate): BotLoopGuardEventAccess => {
+    const eventAccess = event as unknown as BotLoopGuardEventAccess;
+    eventAccess.realtimeFilter = null;
+    eventAccess.contextManager = null;
+    eventAccess.botDirectInvocationFilter.decide = async () => ({
+        engage: true,
+        score: 0.81,
+        reason: 'allow',
+        reasons: ['mention', 'human_activity'],
+        breakdown: { mention: 1, humanActivity: 1 },
+    });
+    return eventAccess;
+};
+
 let messageSequence = 0;
+
+const createRecentHumanMessage = (content = 'please help explain this bug?') =>
+    ({
+        id: `recent-human-${++messageSequence}`,
+        content,
+        guildId: 'guild-1',
+        channelId: 'channel-1',
+        createdTimestamp: Date.now() - 1_000,
+        author: {
+            id: 'user-2',
+            bot: false,
+            username: 'Taylor',
+        },
+        client: {
+            user: {
+                id: 'bot-1',
+                username: 'FootnoteBot',
+            },
+        },
+        mentions: {
+            users: {
+                has: () => false,
+            },
+            repliedUser: null,
+        },
+        reference: undefined,
+    }) as never;
+
+const createRecentMessageMap = (
+    ...messages: Array<{ id: string }>
+) => new Map<string, unknown>(messages.map((message) => [message.id, message]));
 
 const createMessage = (
     content: string,
@@ -106,7 +170,8 @@ const createMessage = (
             isThread: () => false,
             isTextBased: () => true,
             messages: {
-                fetch: async () => new Map<string, unknown>(),
+                fetch: async () =>
+                    createRecentMessageMap(createRecentHumanMessage()),
             },
         },
         reply: async () => undefined,
@@ -168,21 +233,8 @@ test('execute allows bot direct replies until the shared bot-only streak limit i
         },
         async () => {
             const event = createEvent();
-            const eventAccess = event as unknown as {
-                realtimeFilter: unknown;
-                contextManager: unknown;
-                messageProcessor: {
-                    processMessage: (
-                        message: unknown,
-                        directReply: boolean,
-                        trigger: string
-                    ) => Promise<void>;
-                };
-            };
+            const eventAccess = allowBotDirectInvocations(event);
             const processCalls: string[] = [];
-
-            eventAccess.realtimeFilter = null;
-            eventAccess.contextManager = null;
             eventAccess.messageProcessor.processMessage = async (
                 _message,
                 directReply,
@@ -214,21 +266,8 @@ test('execute does not reset the limit when different bot IDs alternate in one s
         },
         async () => {
             const event = createEvent();
-            const eventAccess = event as unknown as {
-                realtimeFilter: unknown;
-                contextManager: unknown;
-                messageProcessor: {
-                    processMessage: (
-                        message: unknown,
-                        directReply: boolean,
-                        trigger: string
-                    ) => Promise<void>;
-                };
-            };
+            const eventAccess = allowBotDirectInvocations(event);
             let processCalls = 0;
-
-            eventAccess.realtimeFilter = null;
-            eventAccess.contextManager = null;
             eventAccess.messageProcessor.processMessage = async (
                 _message,
                 directReply
@@ -257,21 +296,8 @@ test('execute resets the bot-only streak as soon as a human message arrives', as
         },
         async () => {
             const event = createEvent();
-            const eventAccess = event as unknown as {
-                realtimeFilter: unknown;
-                contextManager: unknown;
-                messageProcessor: {
-                    processMessage: (
-                        message: unknown,
-                        directReply: boolean,
-                        trigger: string
-                    ) => Promise<void>;
-                };
-            };
+            const eventAccess = allowBotDirectInvocations(event);
             let processCalls = 0;
-
-            eventAccess.realtimeFilter = null;
-            eventAccess.contextManager = null;
             eventAccess.messageProcessor.processMessage = async (
                 _message,
                 directReply
@@ -302,21 +328,8 @@ test('execute allows a fresh bot-only streak after cooldown expires', async () =
         async () => {
             await withMockedDateNow(1_000, async (clock) => {
                 const event = createEvent();
-                const eventAccess = event as unknown as {
-                    realtimeFilter: unknown;
-                    contextManager: unknown;
-                    messageProcessor: {
-                        processMessage: (
-                            message: unknown,
-                            directReply: boolean,
-                            trigger: string
-                        ) => Promise<void>;
-                    };
-                };
+                const eventAccess = allowBotDirectInvocations(event);
                 let processCalls = 0;
-
-                eventAccess.realtimeFilter = null;
-                eventAccess.contextManager = null;
                 eventAccess.messageProcessor.processMessage = async (
                     _message,
                     directReply
@@ -337,6 +350,34 @@ test('execute allows a fresh bot-only streak after cooldown expires', async () =
 
                 assert.equal(processCalls, 2);
             });
+        }
+    );
+});
+
+test('execute requires a bot-authored direct mention to pass both the admission gate and the loop guard', async () => {
+    await withBotInteractionConfig(
+        {
+            maxBackAndForth: 1,
+            cooldownMs: 5_000,
+            afterLimitAction: 'ignore',
+        },
+        async () => {
+            const event = createEvent();
+            const eventAccess = allowBotDirectInvocations(event);
+            let processCalls = 0;
+            eventAccess.messageProcessor.processMessage = async (
+                _message,
+                directReply
+            ) => {
+                assert.equal(directReply, true);
+                processCalls += 1;
+            };
+
+            await event.execute(createBotMentionMessage('bot-a'));
+            await event.execute(createSelfMessage());
+            await event.execute(createBotMentionMessage('bot-b'));
+
+            assert.equal(processCalls, 1);
         }
     );
 });
