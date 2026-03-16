@@ -6,13 +6,15 @@ on:
         branches:
             - main
 jobs:
-    deploy:
-        name: Deploy app
+    deploy-core:
+        name: Deploy ${{ matrix.app.name }}
         permissions:
             contents: read
         runs-on: ubuntu-latest
         concurrency: deploy-${{ matrix.app.name }} # ensure only one deploy per app at a time
+        timeout-minutes: 20
         strategy:
+            fail-fast: false
             matrix:
                 app:
                     - name: backend
@@ -21,6 +23,46 @@ jobs:
                     - name: web
                       fly_app: footnote-web
                       config: deploy/fly.web.toml
+        steps:
+            - uses: actions/checkout@v4
+            - uses: superfly/flyctl-actions/setup-flyctl@master
+            - run: flyctl deploy --remote-only --app ${{ matrix.app.fly_app }} -c ${{ matrix.app.config }}
+              env:
+                  FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+    build-bot-image:
+        name: Build bot image
+        permissions:
+            contents: read
+        runs-on: ubuntu-latest
+        concurrency: deploy-bot-image
+        timeout-minutes: 20
+        outputs:
+            image_ref: ${{ steps.build.outputs.image_ref }}
+        steps:
+            - uses: actions/checkout@v4
+            - uses: superfly/flyctl-actions/setup-flyctl@master
+            - id: build
+              run: |
+                  IMAGE_LABEL="bot-${GITHUB_SHA::12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+                  IMAGE_REF="registry.fly.io/footnote-discord:${IMAGE_LABEL}"
+                  flyctl deploy --remote-only --build-only --push --image-label "${IMAGE_LABEL}" --app footnote-discord -c deploy/fly.bot.toml
+                  echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
+              env:
+                  FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+    deploy-bots:
+        name: Deploy ${{ matrix.app.name }}
+        needs: build-bot-image
+        permissions:
+            contents: read
+        runs-on: ubuntu-latest
+        concurrency: deploy-${{ matrix.app.name }} # ensure only one deploy per app at a time
+        timeout-minutes: 20
+        strategy:
+            fail-fast: false
+            matrix:
+                app:
                     - name: bot
                       fly_app: footnote-discord
                       config: deploy/fly.bot.toml
@@ -33,6 +75,17 @@ jobs:
         steps:
             - uses: actions/checkout@v4
             - uses: superfly/flyctl-actions/setup-flyctl@master
-            - run: flyctl deploy --remote-only --app ${{ matrix.app.fly_app }} -c ${{ matrix.app.config }}
+            - run: |
+                  for attempt in 1 2 3; do
+                      if flyctl deploy --app ${{ matrix.app.fly_app }} --image ${{ needs.build-bot-image.outputs.image_ref }} --strategy immediate --wait-timeout 10m -c ${{ matrix.app.config }}; then
+                          exit 0
+                      fi
+
+                      if [ "$attempt" -eq 3 ]; then
+                          exit 1
+                      fi
+
+                      sleep 20
+                  done
               env:
                   FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
