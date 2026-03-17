@@ -6,13 +6,13 @@
  * @footnote-risk: high - Mistakes here change the canonical reflect behavior used by multiple callers.
  * @footnote-ethics: high - This workflow owns the AI response and provenance metadata users rely on.
  */
+import type { RuntimeMessage } from '@footnote/agent-runtime';
 import type {
     PartialResponseTemperament,
     ResponseMetadata,
     RiskTier,
 } from '@footnote/contracts/ethics-core';
 import type { PostReflectResponse } from '@footnote/contracts/web';
-import type { ReflectConversationMessage } from '@footnote/contracts/web';
 import type {
     GenerateResponseOptions,
     OpenAIService,
@@ -69,7 +69,7 @@ export type RunReflectInput = {
  * Shared message-generation input used by the Discord/backend unified path.
  */
 export type RunReflectMessagesInput = {
-    messages: Array<Pick<ReflectConversationMessage, 'role' | 'content'>>;
+    messages: RuntimeMessage[];
     conversationSnapshot: string;
     plannerTemperament?: PartialResponseTemperament;
     riskTier?: RiskTier;
@@ -103,7 +103,7 @@ export const createReflectService = ({
         const repoExplainerHint = generation
             ? buildRepoExplainerResponseHint(generation)
             : null;
-        const messagesWithHints = repoExplainerHint
+        const messagesWithHints: RuntimeMessage[] = repoExplainerHint
             ? [
                   ...messages,
                   {
@@ -116,8 +116,7 @@ export const createReflectService = ({
             ? {
                   reasoningEffort: generation.reasoningEffort,
                   verbosity: generation.verbosity,
-                  toolChoice: generation.toolChoice,
-                  webSearch: generation.webSearch,
+                  search: generation.search,
               }
             : {};
 
@@ -163,7 +162,7 @@ export const createReflectService = ({
             modelVersion: usageModel,
             conversationSnapshot: `${conversationSnapshot}\n\n${normalizedText}`,
             plannerTemperament,
-            usedWebSearch: generation?.toolChoice === 'web_search',
+            usedWebSearch: generation?.search !== undefined,
         };
 
         // Metadata is the contract that downstream UIs and trace storage rely on.
@@ -216,9 +215,7 @@ export const createReflectService = ({
     }: RunReflectInput): Promise<PostReflectResponse> => {
         const botProfileDisplayName = resolveBotProfileDisplayName();
         // Keep prompt assembly here so the public web reflect path stays stable.
-        const messages: Array<
-            Pick<ReflectConversationMessage, 'role' | 'content'>
-        > = [
+        const messages: RuntimeMessage[] = [
             {
                 role: 'system',
                 content: renderPrompt('reflect.chat.system').content,

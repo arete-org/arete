@@ -199,11 +199,10 @@ test('runReflectMessages passes usedWebSearch flag into response metadata runtim
         generation: {
             reasoningEffort: 'medium',
             verbosity: 'medium',
-            toolChoice: 'web_search',
-            webSearch: {
+            search: {
                 query: 'latest OpenAI policy update',
-                searchContextSize: 'low',
-                searchIntent: 'current_facts',
+                contextSize: 'low',
+                intent: 'current_facts',
                 repoHints: [],
             },
         },
@@ -287,11 +286,10 @@ test('runReflectMessages adds a backend repo-explainer response hint', async () 
         generation: {
             reasoningEffort: 'low',
             verbosity: 'medium',
-            toolChoice: 'web_search',
-            webSearch: {
+            search: {
                 query: 'Footnote architecture overview',
-                searchContextSize: 'medium',
-                searchIntent: 'repo_explainer',
+                contextSize: 'medium',
+                intent: 'repo_explainer',
                 repoHints: ['architecture'],
             },
         },
@@ -345,19 +343,18 @@ test('runReflectMessages forwards planner-selected web search options to openaiS
         generation: {
             reasoningEffort: 'medium',
             verbosity: 'medium',
-            toolChoice: 'web_search',
-            webSearch: {
+            search: {
                 query: 'latest OpenAI policy update',
-                searchContextSize: 'low',
-                searchIntent: 'current_facts',
+                contextSize: 'low',
+                intent: 'current_facts',
                 repoHints: [],
             },
         },
     });
 
-    assert.equal(seenOptions?.toolChoice, 'web_search');
+    assert.ok(seenOptions?.search);
     assert.equal(seenOptions?.reasoningEffort, 'medium');
     assert.equal(seenOptions?.verbosity, 'medium');
-    assert.equal(seenOptions?.webSearch?.query, 'latest OpenAI policy update');
-    assert.equal(seenOptions?.webSearch?.searchIntent, 'current_facts');
+    assert.equal(seenOptions?.search?.query, 'latest OpenAI policy update');
+    assert.equal(seenOptions?.search?.intent, 'current_facts');
 });

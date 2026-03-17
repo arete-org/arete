@@ -1,0 +1,22 @@
+{
+    "name": "@footnote/agent-runtime",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        }
+    },
+    "scripts": {
+        "clean": "node -e \"const fs=require('node:fs'); fs.rmSync('dist',{recursive:true,force:true}); fs.rmSync('tsconfig.tsbuildinfo',{force:true});\"",
+        "build:dev": "pnpm clean && tsc -p tsconfig.json",
+        "build": "pnpm clean && tsc -p tsconfig.json"
+    },
+    "devDependencies": {
+        "typescript": "catalog:"
+    }
+}

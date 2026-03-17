@@ -54,7 +54,7 @@ test('web requests go through planner and are coerced to message when planner pi
             options?: GenerateResponseOptions
         ) {
             callCount += 1;
-            if (options?.maxCompletionTokens === 700) {
+            if (options?.maxOutputTokens === 700) {
                 return {
                     normalizedText: JSON.stringify({
                         action: 'react',
@@ -65,7 +65,6 @@ test('web requests go through planner and are coerced to message when planner pi
                         generation: {
                             reasoningEffort: 'low',
                             verbosity: 'low',
-                            toolChoice: 'none',
                         },
                     }),
                     metadata: { model: 'gpt-5-mini' },
@@ -131,7 +130,7 @@ test('discord requests preserve non-message planner actions', async () => {
             options?: GenerateResponseOptions
         ) {
             callCount += 1;
-            if (options?.maxCompletionTokens === 700) {
+            if (options?.maxOutputTokens === 700) {
                 return {
                     normalizedText: JSON.stringify({
                         action: 'image',
@@ -144,7 +143,6 @@ test('discord requests preserve non-message planner actions', async () => {
                         generation: {
                             reasoningEffort: 'low',
                             verbosity: 'low',
-                            toolChoice: 'none',
                         },
                     }),
                     metadata: { model: 'gpt-5-mini' },
@@ -181,7 +179,7 @@ test('message plans pass planner generation options into reflectService', async 
             messages,
             options?: GenerateResponseOptions
         ) {
-            if (options?.maxCompletionTokens === 700) {
+            if (options?.maxOutputTokens === 700) {
                 return {
                     normalizedText: JSON.stringify({
                         action: 'message',
@@ -191,7 +189,6 @@ test('message plans pass planner generation options into reflectService', async 
                         generation: {
                             reasoningEffort: 'medium',
                             verbosity: 'medium',
-                            toolChoice: 'web_search',
                             temperament: {
                                 tightness: 4,
                                 rationale: 3,
@@ -199,10 +196,10 @@ test('message plans pass planner generation options into reflectService', async 
                                 caution: 3,
                                 extent: 4,
                             },
-                            webSearch: {
+                            search: {
                                 query: 'latest OpenAI policy update',
-                                searchContextSize: 'low',
-                                searchIntent: 'current_facts',
+                                contextSize: 'low',
+                                intent: 'current_facts',
                             },
                         },
                     }),
@@ -235,11 +232,8 @@ test('message plans pass planner generation options into reflectService', async 
     const response = await orchestrator.runReflect(createReflectRequest());
 
     assert.equal(response.action, 'message');
-    assert.equal(generationOptionsSeen?.toolChoice, 'web_search');
-    assert.equal(
-        generationOptionsSeen?.webSearch?.searchIntent,
-        'current_facts'
-    );
+    assert.ok(generationOptionsSeen?.search);
+    assert.equal(generationOptionsSeen?.search?.intent, 'current_facts');
     assert.equal(generationOptionsSeen?.reasoningEffort, 'medium');
     assert.equal(generationOptionsSeen?.verbosity, 'medium');
     assert.equal(
@@ -260,7 +254,7 @@ test('discord overlay replaces default persona layer in reflect generation', asy
             messages,
             options?: GenerateResponseOptions
         ) {
-            if (options?.maxCompletionTokens === 700) {
+            if (options?.maxOutputTokens === 700) {
                 return {
                     normalizedText: JSON.stringify({
                         action: 'message',
@@ -270,7 +264,6 @@ test('discord overlay replaces default persona layer in reflect generation', asy
                         generation: {
                             reasoningEffort: 'low',
                             verbosity: 'low',
-                            toolChoice: 'none',
                             temperament: {
                                 tightness: 4,
                                 rationale: 3,
@@ -310,7 +303,8 @@ test('discord overlay replaces default persona layer in reflect generation', asy
             conversation: [
                 {
                     role: 'system',
-                    content: '// BEGIN Bot Profile Overlay\nYou are Myuri.\n// END Bot Profile Overlay',
+                    content:
+                        '// BEGIN Bot Profile Overlay\nYou are Myuri.\n// END Bot Profile Overlay',
                 },
                 { role: 'user', content: 'Tell me about yourself.' },
             ],
@@ -318,7 +312,10 @@ test('discord overlay replaces default persona layer in reflect generation', asy
     );
 
     assert.equal(response.action, 'message');
-    assert.equal(finalMessages[0]?.content, renderPrompt('discord.chat.system').content);
+    assert.equal(
+        finalMessages[0]?.content,
+        renderPrompt('discord.chat.system').content
+    );
     assert.match(finalMessages[1]?.content ?? '', /BEGIN Bot Profile Overlay/);
     assert.equal(
         finalMessages.some(
@@ -329,4 +326,3 @@ test('discord overlay replaces default persona layer in reflect generation', asy
         false
     );
 });
-

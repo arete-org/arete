@@ -5,10 +5,10 @@
  * @footnote-risk: medium - Bad hint construction can degrade retrieval quality or mislead the model.
  * @footnote-ethics: medium - Repo-aware hints affect how accurately Footnote explains itself.
  */
+import type { GenerationSearchRequest } from '@footnote/agent-runtime';
 import type {
     ReflectGenerationPlan,
     ReflectRepoSearchHint,
-    ReflectWebSearchPlan,
 } from './reflectGenerationTypes.js';
 
 const FOOTNOTE_REPO_OWNER = 'footnote-ai';
@@ -33,6 +33,9 @@ const REPO_HINT_QUERY_TERMS: Record<ReflectRepoSearchHint, string[]> = {
     voice: ['voice'],
 };
 
+const isReflectRepoSearchHint = (hint: string): hint is ReflectRepoSearchHint =>
+    hint in REPO_HINT_QUERY_TERMS;
+
 const dedupeSearchTerms = (terms: string[]): string[] => {
     const seen = new Set<string>();
     const uniqueTerms: string[] = [];
@@ -51,27 +54,27 @@ const dedupeSearchTerms = (terms: string[]): string[] => {
 };
 
 export const buildRepoExplainerQuery = (
-    webSearch: Pick<ReflectWebSearchPlan, 'query' | 'repoHints'>
+    search: Pick<GenerationSearchRequest, 'query' | 'repoHints'>
 ): string =>
     dedupeSearchTerms([
         FOOTNOTE_REPO_SLUG,
         FOOTNOTE_REPO_OWNER,
         FOOTNOTE_REPO_NAME,
         'DeepWiki',
-        ...(webSearch.repoHints?.flatMap(
-            (hint) => REPO_HINT_QUERY_TERMS[hint] ?? [hint]
+        ...(search.repoHints?.flatMap((hint) =>
+            isReflectRepoSearchHint(hint) ? REPO_HINT_QUERY_TERMS[hint] : [hint]
         ) ?? []),
-        webSearch.query.trim(),
+        search.query.trim(),
     ]).join(' ');
 
 export const buildWebSearchInstruction = (
-    webSearch: ReflectWebSearchPlan
+    search: GenerationSearchRequest
 ): string => {
-    if (webSearch.searchIntent === 'repo_explainer') {
-        const repoQuery = buildRepoExplainerQuery(webSearch);
+    if (search.intent === 'repo_explainer') {
+        const repoQuery = buildRepoExplainerQuery(search);
         const hintText =
-            webSearch.repoHints.length > 0
-                ? ` Focus areas: ${webSearch.repoHints.join(', ')}.`
+            (search.repoHints?.length ?? 0) > 0
+                ? ` Focus areas: ${search.repoHints?.join(', ')}.`
                 : '';
 
         return [
@@ -80,20 +83,17 @@ export const buildWebSearchInstruction = (
             `Prefer DeepWiki results from ${DEEPWIKI_FOOTNOTE_URL} when they are relevant.`,
             'If DeepWiki coverage is thin, use broader web context instead of getting stuck.',
             `Search query: ${repoQuery}.${hintText}`.trim(),
-            `Original planner query: ${webSearch.query.trim()}.`,
+            `Original planner query: ${search.query.trim()}.`,
         ].join(' ');
     }
 
-    return `The planner instructed you to perform a web search for: ${webSearch.query.trim()}`;
+    return `The planner instructed you to perform a web search for: ${search.query.trim()}`;
 };
 
 export const buildRepoExplainerResponseHint = (
     generation: ReflectGenerationPlan
 ): string | null => {
-    if (
-        generation.toolChoice !== 'web_search' ||
-        generation.webSearch?.searchIntent !== 'repo_explainer'
-    ) {
+    if (generation.search?.intent !== 'repo_explainer') {
         return null;
     }
 

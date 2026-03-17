@@ -265,8 +265,17 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/agent-runtime:
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/backend:
     dependencies:
+      '@footnote/agent-runtime':
+        specifier: workspace:*
+        version: link:../agent-runtime
       '@footnote/config-spec':
         specifier: workspace:*
         version: link:../config-spec

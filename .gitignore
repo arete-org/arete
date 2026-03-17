@@ -30,6 +30,9 @@ packages/config-spec/dist/
 # Shared prompts build artifacts
 packages/prompts/dist/
 
+# Agent runtime build artifacts
+packages/agent-runtime/dist/
+
 # Backend build artifacts
 packages/backend/dist/
 

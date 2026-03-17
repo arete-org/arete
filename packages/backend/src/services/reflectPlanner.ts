@@ -5,6 +5,7 @@
  * @footnote-risk: high - Planner mistakes can pick the wrong modality, skip retrieval, or suppress expected replies.
  * @footnote-ethics: high - Action selection directly affects responsiveness, grounding, and user trust.
  */
+import type { GenerationSearchIntent } from '@footnote/agent-runtime';
 import type {
     PostReflectRequest,
     ReflectCapabilities,
@@ -24,9 +25,8 @@ import {
 } from './llmCostRecorder.js';
 import type {
     ReflectGenerationPlan,
+    ReflectGenerationSearch,
     ReflectRepoSearchHint,
-    ReflectSearchIntent,
-    ReflectWebSearchPlan,
 } from './reflectGenerationTypes.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -78,7 +78,7 @@ type CreateReflectPlannerOptions = {
 type PlannerCandidate = Partial<ReflectPlan> & {
     reasoning?: unknown;
     generation?: Partial<ReflectGenerationPlan> & {
-        webSearch?: Partial<ReflectWebSearchPlan> & {
+        search?: Partial<ReflectGenerationSearch> & {
             repoHints?: unknown;
         };
         temperament?: unknown;
@@ -146,7 +146,7 @@ const normalizeVerbosity = (
 /**
  * Falls back to current_facts to keep invalid planner outputs fail-open.
  */
-const normalizeSearchIntent = (value: unknown): ReflectSearchIntent =>
+const normalizeSearchIntent = (value: unknown): GenerationSearchIntent =>
     value === 'repo_explainer' ? 'repo_explainer' : 'current_facts';
 
 /**
@@ -154,8 +154,8 @@ const normalizeSearchIntent = (value: unknown): ReflectSearchIntent =>
  */
 const normalizeSearchContextSize = (
     value: unknown,
-    searchIntent: ReflectSearchIntent
-): ReflectWebSearchPlan['searchContextSize'] => {
+    searchIntent: GenerationSearchIntent
+): ReflectGenerationSearch['contextSize'] => {
     if (searchIntent === 'repo_explainer') {
         return value === 'high' ? 'high' : 'medium';
     }
@@ -280,7 +280,6 @@ const buildFallbackPlan = (
         generation: {
             reasoningEffort: 'low',
             verbosity: 'low',
-            toolChoice: 'none',
         },
     };
 };
@@ -376,7 +375,7 @@ const normalizeImageRequest = (
 };
 
 /**
- * Normalizes planner generation settings and safely disables invalid web search.
+ * Normalizes planner generation settings and safely disables invalid search.
  */
 const normalizeGeneration = (
     candidate: PlannerCandidate['generation'],
@@ -388,53 +387,46 @@ const normalizeGeneration = (
     const baseGeneration: ReflectGenerationPlan = {
         reasoningEffort: normalizeReasoningEffort(candidate?.reasoningEffort),
         verbosity: normalizeVerbosity(candidate?.verbosity),
-        toolChoice:
-            candidate?.toolChoice === 'web_search' ? 'web_search' : 'none',
     };
     const normalizedTemperament = normalizeTemperament(candidate?.temperament);
     if (normalizedTemperament) {
         baseGeneration.temperament = normalizedTemperament;
     }
 
-    if (baseGeneration.toolChoice !== 'web_search') {
+    if (!candidate?.search) {
         return { generation: baseGeneration };
     }
 
     const rawQuery =
-        typeof candidate?.webSearch?.query === 'string'
-            ? candidate.webSearch.query.trim()
+        typeof candidate.search.query === 'string'
+            ? candidate.search.query.trim()
             : '';
     if (!rawQuery) {
         return {
-            generation: {
-                ...baseGeneration,
-                toolChoice: 'none',
-            },
+            generation: baseGeneration,
             reasoningSuffix: reasoning.includes('search was disabled safely')
                 ? undefined
-                : 'The planner requested web search without a usable query, so search was disabled safely.',
+                : 'The planner requested search without a usable query, so search was disabled safely.',
         };
     }
 
-    const searchIntent = normalizeSearchIntent(
-        candidate?.webSearch?.searchIntent
-    );
+    const searchIntent = normalizeSearchIntent(candidate.search.intent);
     const repoHints =
         searchIntent === 'repo_explainer'
-            ? normalizeRepoHints(candidate?.webSearch?.repoHints)
-            : [];
+            ? normalizeRepoHints(candidate.search.repoHints)
+            : undefined;
 
     return {
         generation: {
             ...baseGeneration,
-            webSearch: {
+            search: {
                 query: rawQuery,
-                searchContextSize: normalizeSearchContextSize(
-                    candidate?.webSearch?.searchContextSize,
+                contextSize: normalizeSearchContextSize(
+                    candidate.search.contextSize,
                     searchIntent
                 ),
-                searchIntent,
-                repoHints,
+                intent: searchIntent,
+                ...(repoHints && repoHints.length > 0 ? { repoHints } : {}),
             },
         },
     };
@@ -515,8 +507,7 @@ const normalizePlan = (
             reaction: trimmedReaction,
             generation: {
                 ...normalizedPlan.generation,
-                toolChoice: 'none',
-                webSearch: undefined,
+                search: undefined,
             },
         };
     }
@@ -545,8 +536,7 @@ const normalizePlan = (
             imageRequest,
             generation: {
                 ...normalizedPlan.generation,
-                toolChoice: 'none',
-                webSearch: undefined,
+                search: undefined,
             },
         };
     }
@@ -557,8 +547,7 @@ const normalizePlan = (
             modality: 'text',
             generation: {
                 ...normalizedPlan.generation,
-                toolChoice: 'none',
-                webSearch: undefined,
+                search: undefined,
             },
         };
     }
@@ -615,7 +604,7 @@ export const createReflectPlanner = ({
                 defaultModel,
                 plannerMessages,
                 {
-                    maxCompletionTokens: 700,
+                    maxOutputTokens: 700,
                     reasoningEffort: 'low',
                     verbosity: 'low',
                 }
@@ -661,11 +650,11 @@ export const createReflectPlanner = ({
                     `Reflect planner chose action=${normalizedPlan.action} modality=${normalizedPlan.modality} riskTier=${normalizedPlan.riskTier}`
                 );
                 logger.debug(
-                    `Reflect planner generation toolChoice=${normalizedPlan.generation.toolChoice} reasoningEffort=${normalizedPlan.generation.reasoningEffort} verbosity=${normalizedPlan.generation.verbosity}`
+                    `Reflect planner generation search=${normalizedPlan.generation.search ? 'enabled' : 'disabled'} reasoningEffort=${normalizedPlan.generation.reasoningEffort} verbosity=${normalizedPlan.generation.verbosity}`
                 );
-                if (normalizedPlan.generation.webSearch) {
+                if (normalizedPlan.generation.search) {
                     logger.debug(
-                        `Reflect planner webSearch intent=${normalizedPlan.generation.webSearch.searchIntent} query=${JSON.stringify(normalizedPlan.generation.webSearch.query)} repoHints=${JSON.stringify(normalizedPlan.generation.webSearch.repoHints)}`
+                        `Reflect planner search intent=${normalizedPlan.generation.search.intent} query=${JSON.stringify(normalizedPlan.generation.search.query)} repoHints=${JSON.stringify(normalizedPlan.generation.search.repoHints ?? [])}`
                     );
                 }
                 logger.debug(

@@ -83,7 +83,6 @@ const coercePlanForSurface = (
         generation: {
             reasoningEffort: 'low',
             verbosity: 'low',
-            toolChoice: 'none',
         },
         reasoning:
             `${normalizedReasoning ? `${normalizedReasoning} ` : ''}Web surface requires a message response, so the planner output was coerced to a text message.`.trim(),
@@ -247,10 +246,7 @@ export const createReflectOrchestrator = ({
         }
         const personaPrompt =
             extractedPersona.personaPrompt ??
-            buildSurfacePersonaPrompt(
-                request.surface,
-                botProfileDisplayName
-            );
+            buildSurfacePersonaPrompt(request.surface, botProfileDisplayName);
 
         const conversationMessages: Array<
             Pick<ReflectConversationMessage, 'role' | 'content'>

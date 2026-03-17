@@ -7,6 +7,10 @@
  */
 import crypto from 'node:crypto';
 import type {
+    GenerationRequest,
+    RuntimeMessage,
+} from '@footnote/agent-runtime';
+import type {
     Citation,
     PartialResponseTemperament,
     Provenance,
@@ -18,10 +22,6 @@ import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { buildWebSearchInstruction } from './reflectGenerationHints.js';
 import { resolveTradeoffCount } from './responseMetadataHeuristics.js';
-import type {
-    ReflectRepoSearchHint,
-    ReflectSearchIntent,
-} from './reflectGenerationTypes.js';
 
 type OpenAIUsage = {
     prompt_tokens?: number;
@@ -47,23 +47,15 @@ type GenerateResponseResult = {
     metadata: OpenAIResponseMetadata;
 };
 
-type GenerateResponseOptions = {
-    maxCompletionTokens?: number;
-    reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
-    verbosity?: 'low' | 'medium' | 'high';
-    toolChoice?: 'none' | 'web_search';
-    webSearch?: {
-        query: string;
-        searchContextSize: 'low' | 'medium' | 'high';
-        searchIntent: ReflectSearchIntent;
-        repoHints?: ReflectRepoSearchHint[];
-    };
-};
+type GenerateResponseOptions = Pick<
+    GenerationRequest,
+    'maxOutputTokens' | 'reasoningEffort' | 'verbosity' | 'search' | 'signal'
+>;
 
 interface OpenAIService {
     generateResponse(
         model: string,
-        messages: Array<{ role: string; content: string }>,
+        messages: RuntimeMessage[],
         options?: GenerateResponseOptions
     ): Promise<GenerateResponseResult>;
 }
@@ -262,8 +254,7 @@ const extractCitationsFromOutputItems = (
  */
 const hasWebSearchCallInOutputItems = (
     outputItems: ResponsesApiOutputItem[]
-): boolean =>
-    outputItems.some((item) => item.type === 'web_search_call');
+): boolean => outputItems.some((item) => item.type === 'web_search_call');
 
 /**
  * Converts internal role/content messages into Responses API input messages.
@@ -276,6 +267,56 @@ const buildInputMessage = (
     type: 'message',
     content: role === 'assistant' ? text : [{ type: 'input_text', text }],
 });
+
+type RequestAbortContext = {
+    signal: AbortSignal;
+    cleanup: () => void;
+    didTimeout: () => boolean;
+};
+
+/**
+ * Merges the backend timeout budget with an optional caller cancellation signal.
+ */
+const createRequestAbortContext = (
+    timeoutMs: number,
+    externalSignal?: AbortSignal
+): RequestAbortContext => {
+    const controller = new AbortController();
+    let timedOut = false;
+
+    const timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, timeoutMs);
+
+    const handleExternalAbort = (): void => {
+        controller.abort();
+    };
+
+    if (externalSignal) {
+        if (externalSignal.aborted) {
+            handleExternalAbort();
+        } else {
+            externalSignal.addEventListener('abort', handleExternalAbort, {
+                once: true,
+            });
+        }
+    }
+
+    return {
+        signal: controller.signal,
+        cleanup: () => {
+            clearTimeout(timeoutHandle);
+            if (externalSignal) {
+                externalSignal.removeEventListener(
+                    'abort',
+                    handleExternalAbort
+                );
+            }
+        },
+        didTimeout: () => timedOut,
+    };
+};
 
 class SimpleOpenAIService implements OpenAIService {
     private readonly apiKey: string;
@@ -290,7 +331,7 @@ class SimpleOpenAIService implements OpenAIService {
 
     async generateResponse(
         model: string,
-        messages: Array<{ role: string; content: string }>,
+        messages: RuntimeMessage[],
         options: GenerateResponseOptions = {}
     ): Promise<GenerateResponseResult> {
         const validMessages = messages.filter((message) => {
@@ -308,23 +349,21 @@ class SimpleOpenAIService implements OpenAIService {
             options.reasoningEffort
         );
         const normalizedVerbosity = normalizeVerbosity(options.verbosity);
-        const shouldUseWebSearch = options.toolChoice === 'web_search';
-        const hasValidWebSearch =
-            shouldUseWebSearch &&
-            typeof options.webSearch?.query === 'string' &&
-            options.webSearch.query.trim().length > 0;
+        const hasSearchRequest =
+            typeof options.search?.query === 'string' &&
+            options.search.query.trim().length > 0;
 
-        if (shouldUseWebSearch && !hasValidWebSearch) {
+        if (options.search && !hasSearchRequest) {
             logger.warn(
-                'Backend reflect requested web_search without a usable query; falling back to toolChoice=none.'
+                'Backend reflect requested search without a usable query; falling back to generation without retrieval.'
             );
         }
 
         const tools: ResponsesApiTool[] = [];
-        if (hasValidWebSearch && options.webSearch) {
+        if (hasSearchRequest && options.search) {
             tools.push({
                 type: 'web_search',
-                search_context_size: options.webSearch.searchContextSize,
+                search_context_size: options.search.contextSize,
             });
         }
 
@@ -332,13 +371,13 @@ class SimpleOpenAIService implements OpenAIService {
             ...validMessages.map((message) =>
                 buildInputMessage(message.role, message.content)
             ),
-            ...(hasValidWebSearch && options.webSearch
+            ...(hasSearchRequest && options.search
                 ? [
                       buildInputMessage(
                           'system',
                           buildWebSearchInstruction({
-                              ...options.webSearch,
-                              repoHints: options.webSearch.repoHints ?? [],
+                              ...options.search,
+                              repoHints: options.search.repoHints ?? [],
                           })
                       ),
                   ]
@@ -348,21 +387,17 @@ class SimpleOpenAIService implements OpenAIService {
         const requestBody = JSON.stringify({
             model,
             input: requestInput,
-            max_output_tokens: options.maxCompletionTokens ?? 4000,
+            max_output_tokens: options.maxOutputTokens ?? 4000,
             reasoning: { effort: normalizedReasoningEffort },
             text: { verbosity: normalizedVerbosity },
             ...(tools.length > 0 && { tools }),
         });
 
         const performRequest = async (attempt: number): Promise<Response> => {
-            let abortSignal: AbortSignal;
-            try {
-                abortSignal = AbortSignal.timeout(this.requestTimeoutMs);
-            } catch {
-                const controller = new AbortController();
-                setTimeout(() => controller.abort(), this.requestTimeoutMs);
-                abortSignal = controller.signal;
-            }
+            const abortContext = createRequestAbortContext(
+                this.requestTimeoutMs,
+                options.signal
+            );
 
             try {
                 return await fetch('https://api.openai.com/v1/responses', {
@@ -372,13 +407,17 @@ class SimpleOpenAIService implements OpenAIService {
                         'Content-Type': 'application/json',
                     },
                     body: requestBody,
-                    signal: abortSignal,
+                    signal: abortContext.signal,
                 });
             } catch (error) {
                 if (error instanceof Error && error.name === 'AbortError') {
-                    throw new Error(
-                        `OpenAI request timed out after ${this.requestTimeoutMs}ms`
-                    );
+                    if (abortContext.didTimeout()) {
+                        throw new Error(
+                            `OpenAI request timed out after ${this.requestTimeoutMs}ms`
+                        );
+                    }
+
+                    throw new Error('OpenAI request was aborted by caller');
                 }
 
                 if (attempt < this.retryAttempts) {
@@ -390,6 +429,8 @@ class SimpleOpenAIService implements OpenAIService {
                 }
 
                 throw error;
+            } finally {
+                abortContext.cleanup();
             }
         };
 

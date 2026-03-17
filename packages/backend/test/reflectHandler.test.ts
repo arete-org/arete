@@ -122,12 +122,12 @@ const createTestServer = (
                 options?: GenerateResponseOptions
             ) {
                 if (
-                    options?.maxCompletionTokens ===
+                    options?.maxOutputTokens ===
                     TEST_PLANNER_MAX_COMPLETION_TOKENS
                 ) {
                     return {
                         normalizedText:
-                            '{"action":"message","modality":"text","riskTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","toolChoice":"none","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',
+                            '{"action":"message","modality":"text","riskTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',
                         metadata: {
                             model: 'gpt-5-mini',
                         },
@@ -679,4 +679,3 @@ test('reflect rate limits public callers before calling Turnstile', async () => 
         env.TURNSTILE_ALLOWED_HOSTNAMES = previousAllowedHostnames;
     }
 });
-
