@@ -6,7 +6,10 @@
  * @footnote-risk: high - Mistakes here change the canonical reflect behavior used by multiple callers.
  * @footnote-ethics: high - This workflow owns the AI response and provenance metadata users rely on.
  */
-import type { RuntimeMessage } from '@footnote/agent-runtime';
+import type {
+    GenerationRequest,
+    RuntimeMessage,
+} from '@footnote/agent-runtime';
 import type {
     PartialResponseTemperament,
     ResponseMetadata,
@@ -14,11 +17,11 @@ import type {
 } from '@footnote/contracts/ethics-core';
 import type { PostReflectResponse } from '@footnote/contracts/web';
 import type {
-    GenerateResponseOptions,
     OpenAIService,
     OpenAIResponseMetadata,
     ResponseMetadataRuntimeContext,
 } from './openaiService.js';
+import { executeOpenAIGeneration } from './generationExecution.js';
 import {
     estimateBackendTextCost,
     recordBackendLLMUsage,
@@ -112,22 +115,26 @@ export const createReflectService = ({
                   },
               ]
             : messages;
-        const generationOptions: GenerateResponseOptions = generation
-            ? {
-                  reasoningEffort: generation.reasoningEffort,
-                  verbosity: generation.verbosity,
-                  search: generation.search,
-              }
-            : {};
+        const generationRequest: GenerationRequest = {
+            messages: messagesWithHints,
+            model: model ?? defaultModel,
+            ...(generation?.reasoningEffort !== undefined && {
+                reasoningEffort: generation.reasoningEffort,
+            }),
+            ...(generation?.verbosity !== undefined && {
+                verbosity: generation.verbosity,
+            }),
+            ...(generation?.search !== undefined && {
+                search: generation.search,
+            }),
+        };
 
-        // The OpenAI wrapper already handles provider-specific request/retry details.
-        const aiResponse = await openaiService.generateResponse(
-            model ?? defaultModel,
-            messagesWithHints,
-            generationOptions
-        );
+        const { generationResult, assistantMetadata } =
+            await executeOpenAIGeneration({
+                openaiService,
+                request: generationRequest,
+            });
 
-        const { normalizedText, metadata: assistantMetadata } = aiResponse;
         const usageModel = assistantMetadata.model || defaultModel;
         const promptTokens = assistantMetadata.usage?.prompt_tokens ?? 0;
         const completionTokens =
@@ -160,7 +167,7 @@ export const createReflectService = ({
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
-            conversationSnapshot: `${conversationSnapshot}\n\n${normalizedText}`,
+            conversationSnapshot: `${conversationSnapshot}\n\n${generationResult.text}`,
             plannerTemperament,
             usedWebSearch: generation?.search !== undefined,
         };
@@ -205,7 +212,7 @@ export const createReflectService = ({
         });
 
         return {
-            message: normalizedText,
+            message: generationResult.text,
             metadata: normalizedResponseMetadata,
         };
     };
