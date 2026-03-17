@@ -34,6 +34,15 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 - **Communication style**: Prefer a junior-friendly teaching tone by default
   (plain language first, then technical detail)
 
+## Commenting And JSDoc
+
+- **Bias toward more explanation**: AI assistants should slightly over-index on useful comments rather than leaving non-obvious logic undocumented.
+- **Quality over quota**: Prefer high-quality comments and JSDoc over numeric coverage targets. Avoid adding repetitive or low-signal documentation just to hit a percentage.
+- **JSDoc bias**: Use more JSDoc than default AI output, especially on exported functions, exported types/interfaces, and substantive modules, within reason.
+- **Prioritize architectural seams**: Prefer JSDoc on public APIs, runtime boundaries, provenance/trace code, policy logic, and other exported symbols where readers benefit from hover documentation and intent.
+- **Junior-friendly wording**: Prefer plain language over compressed technical shorthand when the longer wording better explains intent, trigger, and consequence.
+- **Stay selective**: Do not force JSDoc onto tiny, obvious local helpers or trivial data containers whose names already explain the behavior.
+
 ## Runtime Boundary Rules
 
 - **Backend stays public**: Keep `packages/backend` as the only public runtime entrypoint for `web` and `discord-bot` unless a decision doc explicitly says otherwise.

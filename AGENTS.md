@@ -48,6 +48,9 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 - Keep explanations concrete and actionable.
 - Write code comments in the same style: short, plain-language, and easy for a junior contributor to follow.
 - Prefer comments that explain purpose, trigger, and consequence over comments that restate the code.
+- Bias toward slightly more comments and JSDoc than default AI output when a new contributor would otherwise have to infer too much from the code alone.
+- Prioritize comment and JSDoc quality over numeric coverage targets.
+- Prefer plain language over compressed technical shorthand when the longer wording makes the code easier for a junior contributor to understand.
 
 ## Current `@footnote-*` Header Format
 

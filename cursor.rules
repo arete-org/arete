@@ -16,10 +16,14 @@
 
 ## Commenting Standards
 - **Add meaningful comments when a new contributor would otherwise have to guess** (AI assistants tend to under-comment important decisions), but preserve readability.
+- **Bias toward slightly more documentation than default AI output** when the tradeoff is between a clear explanation and a terse but guess-heavy file.
 - Comments serve as documentation for future maintainers and community contributors.
 - Prioritize comments that explain "why" and "what", not just "how".
 - Write comments so a junior contributor can follow the code without guessing.
 - Prefer short, plain language over dense jargon or architecture shorthand.
+- Optimize for comment quality, not comment count. A smaller number of clear, useful comments is better than broad low-signal coverage.
+- Prefer plain-language explanation over compressed technical shorthand when the longer wording makes intent easier to understand.
+- Use more words when they genuinely reduce ambiguity for a junior contributor; do not force brevity if it harms clarity.
 - A good comment should help a reader answer three questions quickly:
   - what is happening here?
   - why does this code exist?
@@ -78,6 +82,9 @@ enabled = true;
 - Use JSDoc for interfaces/types that benefit from hover documentation and AI assistant context.
 - Focus on complex types, public APIs, and interfaces where understanding the "why" matters.
 - Skip JSDoc for simple, self-explanatory types where the property names are clear.
+- JSDoc coverage should be meaningfully above default AI habits, especially on exported surfaces and substantive modules, but do not optimize for a numeric quota.
+- When deciding whether to add JSDoc, bias toward documenting exported surfaces and non-obvious orchestration code rather than leaving future readers to infer intent from implementation details.
+- If a numeric coverage target would produce noisy or repetitive documentation, prefer fewer higher-quality JSDoc blocks.
 
 **When to use JSDoc:**
 - Public interfaces that other modules will use
@@ -85,12 +92,14 @@ enabled = true;
 - Types where hover documentation helps developers understand requirements
 - Interfaces that benefit AI assistants for better context understanding
 - File headers and exported functions where a new contributor would otherwise need to read the whole file first
+- Exported helpers that participate in core flow, policy, provenance, runtime boundaries, or other architectural seams
 
 **When to skip JSDoc:**
 - Simple, self-explanatory interfaces where property names are clear
 - Internal types that are obvious from context
 - Types that are just data containers without business meaning
 - Tiny helpers where the name already says enough and a comment would repeat the code
+- Small local functions whose behavior is obvious and whose surrounding code already explains the intent
 
 **Good JSDoc Example:**
 ```typescript
