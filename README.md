@@ -57,7 +57,7 @@ INCIDENT_PSEUDONYMIZATION_SECRET=...
 
 > This is the minimum config—See [.env.example](.env.example) for the full list.
 
-> OpenAI is currently the only LLM provider—Broader model/provider support is planned.
+> Current deployments still rely on an OpenAI-backed runtime for several paths—broader runtime/provider support is planned.
 
 3. Start all services (backend/web/Discord bot)
 
