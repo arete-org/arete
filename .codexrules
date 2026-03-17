@@ -9,6 +9,7 @@
 # - Follow TypeScript best practices and fail-open design patterns
 # - Maintain cost tracking for all LLM interactions via ChannelContextManager
 # - Preserve provenance comments and licensing headers
+# - Keep backend as the only public runtime boundary and isolate framework-specific runtime code behind internal adapters
 #
 # Reference the complete rules in cursor.rules for:
 # - Detailed module tagging requirements

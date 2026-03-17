@@ -15,9 +15,10 @@ _Coordinated guidance for AI assistants and developers._
 - **`.codexrules`** - Points to cursor.rules for Codex
 - **`.github/copilot-instructions.md`** - GitHub Copilot instructions
 - **`docs/ai/contributing_cursor.md`** - Detailed Cursor guide
-- **`docs/ai/deepwiki-vendoring.md`** - Vendoring/system note for DeepWiki and repo explainer tooling
 - **`cursor.dictionary`** - Project terminology
 - **`.cursor/README.md`** - Cursor IDE configuration
+- **`docs/decisions/2026-03-voltagent-runtime-adoption.md`** - Runtime-boundary decision for VoltAgent adoption
+- **`docs/status/voltagent-reflect-runtime-status.md`** - Working status doc for the reflect runtime migration
 
 ## 🎯 Usage
 
@@ -27,3 +28,4 @@ _Coordinated guidance for AI assistants and developers._
 ## 🔧 Maintenance
 
 All rules changes go in `cursor.rules`. Update references when needed.
+Keep the runtime-boundary docs in sync when the agent-runtime direction changes.

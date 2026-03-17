@@ -122,6 +122,13 @@ export interface SimpleConfig {
 - Log every decision at debug level with structured data.
 - Keep all public interfaces serializable for future web UI integration (e.g., Cognitive Budget panel).
 
+## Runtime Boundary Guidance
+- Treat `packages/backend` as the only public runtime/control-plane boundary for web and Discord unless a decision doc explicitly says otherwise.
+- Keep framework-specific runtime code (for example VoltAgent integration) behind an internal package or boundary rather than spreading it across backend handlers.
+- Keep Footnote-owned provenance, trace, incident, auth, and review semantics outside framework-specific adapters.
+- Do not leak framework-native types into public API contracts when Footnote-owned contracts already exist.
+- Prefer boundary-oriented names and abstractions such as runtime seam, runtime adapter, or reflect runtime over provider-specific naming when the code is intended to be replaceable.
+
 ## Current `@footnote-*` Module Tagging
 - Canonical reference: `docs/architecture/footnote-annotations.md`.
 - Every module must include the current structured `@footnote-*` annotations in its JSDoc header.

@@ -34,6 +34,9 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 - Record LLM costs via `ChannelContextManager.recordLLMUsage()`.
 - Keep interfaces serializable for future UI integration.
 - Use fail-open design: if uncertain, do not block execution.
+- Keep `packages/backend` as the only public runtime/control-plane boundary for `web` and `discord-bot` unless a decision doc explicitly says otherwise.
+- Place framework-specific runtime code behind an internal package or boundary instead of spreading it through backend handlers.
+- Keep Footnote-owned provenance, trace, auth, incident, and review semantics outside framework-specific adapters.
 - For API boundary code, keep OpenAPI links current:
   - code annotations: `@api.operationId` + `@api.path`
   - spec references: `x-codeRefs` in `docs/api/openapi.yaml`
