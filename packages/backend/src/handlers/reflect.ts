@@ -309,11 +309,11 @@ const createReflectHandler = ({
                 res,
                 `reflect success surface=${parsedRequestResult.data.surface} latestUserInputLength=${parsedRequestResult.data.latestUserInput.length}`
             );
-        } catch (openaiError) {
+        } catch (generationError) {
             const errorMessage =
-                openaiError instanceof Error
-                    ? openaiError.message
-                    : String(openaiError);
+                generationError instanceof Error
+                    ? generationError.message
+                    : String(generationError);
 
             sendJson(res, 502, {
                 error: 'AI generation failed',
