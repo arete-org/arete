@@ -16,9 +16,11 @@ test('news command calls the backend-owned news task and renders the returned su
     const deferReplyPayloads: unknown[] = [];
     const editReplyPayloads: unknown[] = [];
     const seenRequests: unknown[] = [];
+    let seenSignal: AbortSignal | undefined;
 
-    botApi.runNewsTaskViaApi = (async (request) => {
+    botApi.runNewsTaskViaApi = (async (request, options) => {
         seenRequests.push(request);
+        seenSignal = options?.signal;
         return {
             task: 'news',
             result: {
@@ -83,6 +85,8 @@ test('news command calls the backend-owned news task and renders the returned su
                 },
             },
         ]);
+        assert.ok(seenSignal);
+        assert.equal(seenSignal.aborted, false);
 
         const reply = editReplyPayloads[0] as {
             content?: string;

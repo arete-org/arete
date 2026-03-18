@@ -134,10 +134,14 @@ const newsCommand: Command = {
 
         // Set a timeout for the entire operation
         const timeoutMs = 120000; // 2 minutes timeout
+        const controller = new AbortController();
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
         const timeoutPromise = new Promise<never>((_, reject) => {
             timeoutId = setTimeout(
-                () => reject(new Error('Operation timed out after 2 minutes')),
+                () => {
+                    controller.abort();
+                    reject(new Error('Operation timed out after 2 minutes'));
+                },
                 timeoutMs
             );
             timeoutId.unref?.();
@@ -172,7 +176,7 @@ const newsCommand: Command = {
                         channelId: interaction.channelId ?? undefined,
                         guildId: interaction.guildId ?? undefined,
                     },
-                }),
+                }, { signal: controller.signal }),
                 timeoutPromise,
             ]);
 
