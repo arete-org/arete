@@ -197,7 +197,15 @@ export const createReflectService = ({
             modelVersion: usageModel,
             conversationSnapshot: `${conversationSnapshot}\n\n${generationResult.text}`,
             plannerTemperament,
-            usedWebSearch: generation?.search !== undefined,
+            retrieval: {
+                requested: generation?.search !== undefined,
+                used:
+                    generationResult.retrieval?.used === true ||
+                    generationResult.provenance === 'Retrieved' ||
+                    (generationResult.citations?.length ?? 0) > 0,
+                intent: generation?.search?.intent,
+                contextSize: generation?.search?.contextSize,
+            },
         };
 
         // Metadata is the contract that downstream UIs and trace storage rely on.

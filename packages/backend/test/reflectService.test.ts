@@ -14,6 +14,10 @@ import type {
 } from '@footnote/agent-runtime';
 import { createVoltAgentRuntime } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import {
+    buildResponseMetadata,
+    type ResponseMetadataRetrievalContext,
+} from '../src/services/openaiService.js';
 import { createReflectService } from '../src/services/reflectService.js';
 import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
 
@@ -143,8 +147,8 @@ test('runReflectMessages passes planner temperament into response metadata runti
     });
 });
 
-test('runReflectMessages passes usedWebSearch flag into response metadata runtime context', async () => {
-    let capturedUsedWebSearch: boolean | undefined;
+test('runReflectMessages passes structured retrieval facts into response metadata runtime context', async () => {
+    let capturedRetrieval: ResponseMetadataRetrievalContext | undefined;
 
     const reflectService = createReflectService({
         generationRuntime: createRuntime({
@@ -157,7 +161,7 @@ test('runReflectMessages passes usedWebSearch flag into response metadata runtim
         }),
         storeTrace: async () => undefined,
         buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
-            capturedUsedWebSearch = runtimeContext.usedWebSearch;
+            capturedRetrieval = runtimeContext.retrieval;
             return createMetadata();
         },
         defaultModel: 'gpt-5-mini',
@@ -179,7 +183,51 @@ test('runReflectMessages passes usedWebSearch flag into response metadata runtim
         },
     });
 
-    assert.equal(capturedUsedWebSearch, true);
+    assert.deepEqual(capturedRetrieval, {
+        requested: true,
+        used: true,
+        intent: 'current_facts',
+        contextSize: 'low',
+    });
+});
+
+test('runReflectMessages passes non-retrieval facts for plain VoltAgent-backed runs', async () => {
+    let capturedRetrieval: ResponseMetadataRetrievalContext | undefined;
+
+    const reflectService = createReflectService({
+        generationRuntime: createRuntime({
+            usage: {
+                promptTokens: 12,
+                completionTokens: 8,
+                totalTokens: 20,
+            },
+            provenance: 'Inferred',
+            citations: [],
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedRetrieval = runtimeContext.retrieval;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    await reflectService.runReflectMessages({
+        messages: [{ role: 'user', content: 'Give me a quick summary.' }],
+        conversationSnapshot: 'Give me a quick summary.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+        },
+    });
+
+    assert.deepEqual(capturedRetrieval, {
+        requested: false,
+        used: false,
+        intent: undefined,
+        contextSize: undefined,
+    });
 });
 
 test('createReflectService swallows usage recording failures', async () => {
@@ -375,4 +423,70 @@ test('runReflectMessages records usage correctly when VoltAgent search falls bac
     assert.equal(usageRecords[0].promptTokens, 50);
     assert.equal(usageRecords[0].completionTokens, 25);
     assert.equal(usageRecords[0].totalTokens, 75);
+});
+
+test('runReflectMessages stores evidence and freshness chips for retrieved search replies', async () => {
+    let storedMetadata: ResponseMetadata | undefined;
+
+    const reflectService = createReflectService({
+        generationRuntime: createVoltAgentRuntime({
+            defaultModel: 'gpt-5-mini',
+            fallbackRuntime: {
+                kind: 'legacy-openai',
+                async generate() {
+                    return {
+                        text: 'search-backed reply',
+                        model: 'gpt-5-mini',
+                        usage: {
+                            promptTokens: 50,
+                            completionTokens: 25,
+                            totalTokens: 75,
+                        },
+                        provenance: 'Retrieved',
+                        citations: [
+                            { title: 'One', url: 'https://example.com/1' },
+                            { title: 'Two', url: 'https://example.com/2' },
+                        ],
+                        retrieval: {
+                            requested: true,
+                            used: true,
+                        },
+                    };
+                },
+            },
+            createExecutor: () => ({
+                async generateText() {
+                    return {
+                        text: 'unexpected',
+                    };
+                },
+            }),
+        }),
+        storeTrace: async (metadata) => {
+            storedMetadata = metadata;
+        },
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    const response = await reflectService.runReflectMessages({
+        messages: [{ role: 'user', content: 'What changed today?' }],
+        conversationSnapshot: 'What changed today?',
+        generation: {
+            reasoningEffort: 'medium',
+            verbosity: 'medium',
+            search: {
+                query: 'latest OpenAI policy update',
+                contextSize: 'low',
+                intent: 'current_facts',
+            },
+        },
+    });
+
+    assert.equal(response.metadata.provenance, 'Retrieved');
+    assert.equal(response.metadata.evidenceScore, 4);
+    assert.equal(response.metadata.freshnessScore, 4);
+    assert.equal(storedMetadata?.evidenceScore, 4);
+    assert.equal(storedMetadata?.freshnessScore, 4);
 });

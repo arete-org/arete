@@ -32,24 +32,85 @@ const baseRuntimeContext = (
     ...overrides,
 });
 
-test('buildResponseMetadata leaves chips omitted when retrieved web-search chips are missing', () => {
+test('buildResponseMetadata derives conservative chips for retrieved current-facts responses with no citations', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
-        baseRuntimeContext({ usedWebSearch: true })
+        baseAssistantMetadata({ citations: [] }),
+        baseRuntimeContext({
+            retrieval: {
+                requested: true,
+                used: true,
+                intent: 'current_facts',
+                contextSize: 'low',
+            },
+        })
     );
 
-    assert.equal(metadata.evidenceScore, undefined);
-    assert.equal(metadata.freshnessScore, undefined);
+    assert.equal(metadata.evidenceScore, 2);
+    assert.equal(metadata.freshnessScore, 3);
 });
 
-test('buildResponseMetadata does not backfill chips when web search was not used', () => {
+test('buildResponseMetadata derives chips for retrieved current-facts responses with one citation', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
-        baseRuntimeContext({ usedWebSearch: false })
+        baseRuntimeContext({
+            retrieval: {
+                requested: true,
+                used: true,
+                intent: 'current_facts',
+                contextSize: 'low',
+            },
+        })
     );
 
-    assert.equal(metadata.evidenceScore, undefined);
-    assert.equal(metadata.freshnessScore, undefined);
+    assert.equal(metadata.evidenceScore, 3);
+    assert.equal(metadata.freshnessScore, 4);
+});
+
+test('buildResponseMetadata derives stronger evidence for retrieved current-facts responses with multiple citations', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata({
+            citations: [
+                { title: 'One', url: 'https://example.com/1' },
+                { title: 'Two', url: 'https://example.com/2' },
+                { title: 'Three', url: 'https://example.com/3' },
+            ],
+        }),
+        baseRuntimeContext({
+            retrieval: {
+                requested: true,
+                used: true,
+                intent: 'current_facts',
+                contextSize: 'high',
+            },
+        })
+    );
+
+    assert.equal(metadata.evidenceScore, 4);
+    assert.equal(metadata.freshnessScore, 4);
+});
+
+test('buildResponseMetadata derives repo-explainer freshness more conservatively', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata({
+            citations: [
+                { title: 'One', url: 'https://example.com/1' },
+                { title: 'Two', url: 'https://example.com/2' },
+                { title: 'Three', url: 'https://example.com/3' },
+                { title: 'Four', url: 'https://example.com/4' },
+            ],
+        }),
+        baseRuntimeContext({
+            retrieval: {
+                requested: true,
+                used: true,
+                intent: 'repo_explainer',
+                contextSize: 'medium',
+            },
+        })
+    );
+
+    assert.equal(metadata.evidenceScore, 5);
+    assert.equal(metadata.freshnessScore, 3);
 });
 
 test('buildResponseMetadata preserves explicit chip values when present', () => {
@@ -58,7 +119,14 @@ test('buildResponseMetadata preserves explicit chip values when present', () => 
             evidenceScore: 5,
             freshnessScore: 2,
         }),
-        baseRuntimeContext({ usedWebSearch: true })
+        baseRuntimeContext({
+            retrieval: {
+                requested: true,
+                used: true,
+                intent: 'current_facts',
+                contextSize: 'low',
+            },
+        })
     );
 
     assert.equal(metadata.evidenceScore, 5);
@@ -68,7 +136,14 @@ test('buildResponseMetadata preserves explicit chip values when present', () => 
 test('buildResponseMetadata does not add chips for non-retrieved responses', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata({ provenance: 'Speculative' }),
-        baseRuntimeContext({ usedWebSearch: true })
+        baseRuntimeContext({
+            retrieval: {
+                requested: true,
+                used: true,
+                intent: 'current_facts',
+                contextSize: 'low',
+            },
+        })
     );
 
     assert.equal(metadata.evidenceScore, undefined);

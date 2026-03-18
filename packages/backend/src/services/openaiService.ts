@@ -7,6 +7,8 @@
  */
 import crypto from 'node:crypto';
 import type {
+    GenerationSearchContextSize,
+    GenerationSearchIntent,
     GenerationRequest,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
@@ -21,7 +23,10 @@ import type {
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { buildWebSearchInstruction } from './reflectGenerationHints.js';
-import { resolveTradeoffCount } from './responseMetadataHeuristics.js';
+import {
+    deriveRetrievedChips,
+    resolveTradeoffCount,
+} from './responseMetadataHeuristics.js';
 
 type OpenAIUsage = {
     prompt_tokens?: number;
@@ -262,6 +267,67 @@ const extractCitationsFromOutputItems = (
                 });
             }
         }
+    }
+
+    return citations;
+};
+
+/**
+ * Numeric markdown footnote markers are not useful user-facing titles.
+ */
+const normalizeFallbackCitationTitle = (label: string): string => {
+    const normalizedLabel = label.trim();
+
+    return /^\d+$/.test(normalizedLabel) ? 'Source' : normalizedLabel;
+};
+
+/**
+ * Recovers visible markdown links when retrieved output lacks structured
+ * `url_citation` annotations.
+ *
+ * This intentionally stays narrow: only markdown links are preserved here, and
+ * only for retrieval-backed responses. Bare URLs are out of scope for this
+ * fallback because they are more likely to capture incidental text.
+ */
+const extractMarkdownLinkCitations = (text: string): Citation[] => {
+    const citations: Citation[] = [];
+    const seenUrls = new Set<string>();
+    const markdownLinkPattern = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+
+    for (const match of text.matchAll(markdownLinkPattern)) {
+        const rawLabel = match[1];
+        const rawUrl = match[2];
+        if (
+            typeof rawLabel !== 'string' ||
+            rawLabel.trim().length === 0 ||
+            typeof rawUrl !== 'string'
+        ) {
+            continue;
+        }
+
+        let normalizedUrl: string;
+        try {
+            const parsedUrl = new URL(rawUrl);
+            if (
+                parsedUrl.protocol !== 'http:' &&
+                parsedUrl.protocol !== 'https:'
+            ) {
+                continue;
+            }
+            normalizedUrl = parsedUrl.toString();
+        } catch {
+            continue;
+        }
+
+        if (seenUrls.has(normalizedUrl)) {
+            continue;
+        }
+
+        seenUrls.add(normalizedUrl);
+        citations.push({
+            title: normalizeFallbackCitationTitle(rawLabel),
+            url: normalizedUrl,
+        });
     }
 
     return citations;
@@ -512,11 +578,17 @@ class SimpleOpenAIService implements OpenAIService {
 
         // User-facing reply body is model text only; metadata is produced out-of-band.
         const normalizedText = rawOutputText.trimEnd();
-        const citations = extractCitationsFromOutputItems(outputItems);
+        const hasWebSearchCall = hasWebSearchCallInOutputItems(outputItems);
+        const citationsFromAnnotations =
+            extractCitationsFromOutputItems(outputItems);
+        const citations =
+            citationsFromAnnotations.length === 0 &&
+            hasWebSearchCall &&
+            normalizedText.length > 0
+                ? extractMarkdownLinkCitations(normalizedText)
+                : citationsFromAnnotations;
         const provenance: Provenance =
-            citations.length > 0 || hasWebSearchCallInOutputItems(outputItems)
-                ? 'Retrieved'
-                : 'Inferred';
+            citations.length > 0 || hasWebSearchCall ? 'Retrieved' : 'Inferred';
 
         const assistantMetadata: OpenAIResponseMetadata = {
             model: data.model ?? model,
@@ -542,11 +614,18 @@ class SimpleOpenAIService implements OpenAIService {
     }
 }
 
+type ResponseMetadataRetrievalContext = {
+    requested: boolean;
+    used: boolean;
+    intent?: GenerationSearchIntent;
+    contextSize?: GenerationSearchContextSize;
+};
+
 type ResponseMetadataRuntimeContext = {
     modelVersion: string;
     conversationSnapshot: string;
     plannerTemperament?: PartialResponseTemperament;
-    usedWebSearch?: boolean;
+    retrieval?: ResponseMetadataRetrievalContext;
 };
 
 /**
@@ -568,12 +647,13 @@ const buildResponseMetadata = (
     const citations = Array.isArray(assistantMetadata.citations)
         ? assistantMetadata.citations
         : [];
+    const retrieval = runtimeContext.retrieval;
     const provenance: Provenance =
         assistantMetadata.provenance === 'Retrieved' ||
         assistantMetadata.provenance === 'Inferred' ||
         assistantMetadata.provenance === 'Speculative'
             ? assistantMetadata.provenance
-            : runtimeContext.usedWebSearch || citations.length > 0
+            : retrieval?.used || citations.length > 0
               ? 'Retrieved'
               : 'Inferred';
     const tradeoffCount = resolveTradeoffCount(
@@ -589,16 +669,31 @@ const buildResponseMetadata = (
     const freshnessScore = isTraceAxisScore(assistantMetadata.freshnessScore)
         ? assistantMetadata.freshnessScore
         : undefined;
-    const isMissingRetrievedWebSearchChip =
-        runtimeContext.usedWebSearch === true &&
+    const shouldDeriveRetrievedChips =
         provenance === 'Retrieved' &&
         (evidenceScore === undefined || freshnessScore === undefined);
-    if (isMissingRetrievedWebSearchChip) {
-        logger.warn(
-            'Response metadata missing evidence/freshness; leaving chips omitted.',
+    const derivedRetrievedChips = shouldDeriveRetrievedChips
+        ? deriveRetrievedChips({
+              citationCount: citations.length,
+              intent: retrieval?.intent,
+              contextSize: retrieval?.contextSize,
+          })
+        : undefined;
+    const finalEvidenceScore =
+        evidenceScore ?? derivedRetrievedChips?.evidenceScore;
+    const finalFreshnessScore =
+        freshnessScore ?? derivedRetrievedChips?.freshnessScore;
+
+    if (
+        provenance === 'Retrieved' &&
+        (finalEvidenceScore === undefined || finalFreshnessScore === undefined)
+    ) {
+        logger.error(
+            'Retrieved response metadata is missing required evidence/freshness chips.',
             {
                 responseId,
-                missingChip: 'retrieved_web_search',
+                retrievalRequested: retrieval?.requested ?? false,
+                retrievalUsed: retrieval?.used ?? false,
             }
         );
     }
@@ -618,11 +713,11 @@ const buildResponseMetadata = (
         staleAfter: new Date(Date.now() + ninetyDaysMs).toISOString(),
         citations,
         ...(temperament && { temperament }),
-        ...(evidenceScore !== undefined && {
-            evidenceScore,
+        ...(finalEvidenceScore !== undefined && {
+            evidenceScore: finalEvidenceScore,
         }),
-        ...(freshnessScore !== undefined && {
-            freshnessScore,
+        ...(finalFreshnessScore !== undefined && {
+            freshnessScore: finalFreshnessScore,
         }),
     };
 };
@@ -633,6 +728,12 @@ export type {
     GenerateResponseOptions,
     OpenAIService,
     OpenAIResponseMetadata,
+    ResponseMetadataRetrievalContext,
     ResponseMetadataRuntimeContext,
 };
-export { SimpleOpenAIService, buildResponseMetadata };
+export {
+    SimpleOpenAIService,
+    buildResponseMetadata,
+    extractMarkdownLinkCitations,
+    normalizeFallbackCitationTitle,
+};
