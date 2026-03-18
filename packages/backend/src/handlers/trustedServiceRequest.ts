@@ -130,7 +130,7 @@ export const parseTrustedJsonBody = async (
             bodyTooLarge = true;
             sendJson(res, 413, { error: 'Request payload too large' });
             logRequest(req, res, `${routeLabel} payload-too-large`);
-            req.destroy();
+            req.resume();
             return;
         }
 
