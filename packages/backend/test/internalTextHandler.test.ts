@@ -211,6 +211,50 @@ test('internal text endpoint rejects missing trusted auth', async () => {
     }
 });
 
+test('internal text endpoint rejects GET requests with 405', async () => {
+    const server = await createInternalTextServer({
+        kind: 'test-runtime',
+        async generate() {
+            throw new Error('should not be called');
+        },
+    });
+
+    try {
+        const response = await fetch(`${server.url}/api/internal/text`, {
+            method: 'GET',
+            headers: {
+                'X-Trace-Token': 'trace-secret',
+            },
+        });
+
+        assert.equal(response.status, 405);
+    } finally {
+        await server.close();
+    }
+});
+
+test('internal text endpoint returns 503 when the internal news task service is unavailable', async () => {
+    const server = await createInternalTextServer(null);
+
+    try {
+        const response = await fetch(`${server.url}/api/internal/text`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+            },
+            body: JSON.stringify({
+                task: 'news',
+                query: 'latest ai policy',
+            }),
+        });
+
+        assert.equal(response.status, 503);
+    } finally {
+        await server.close();
+    }
+});
+
 test('internal text endpoint rejects invalid task payloads', async () => {
     const server = await createInternalTextServer({
         kind: 'test-runtime',
