@@ -80,9 +80,17 @@ const extractJsonPayload = (rawText: string): unknown => {
             throw new Error('Internal text task did not return a JSON object.');
         }
 
-        return JSON.parse(
-            candidate.slice(firstBraceIndex, lastBraceIndex + 1)
-        ) as unknown;
+        try {
+            return JSON.parse(
+                candidate.slice(firstBraceIndex, lastBraceIndex + 1)
+            ) as unknown;
+        } catch (error) {
+            const parseMessage =
+                error instanceof Error ? ` ${error.message}` : '';
+            throw new Error(
+                `Internal text task did not return a JSON object.${parseMessage}`
+            );
+        }
     }
 };
 

@@ -302,3 +302,28 @@ test('internal news task service records usage even when structured parsing fail
 
     assert.equal(recordedUsageCount, 1);
 });
+
+test('internal news task service preserves its descriptive JSON-object error when fallback parsing fails', async () => {
+    const service = createInternalNewsTaskService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                return {
+                    text: 'Wrapped output: {"news": [}',
+                    model: 'gpt-5-mini',
+                };
+            },
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    await assert.rejects(
+        () =>
+            service.runNewsTask({
+                task: 'news',
+                query: 'latest ai policy',
+            }),
+        /Internal text task did not return a JSON object\./i
+    );
+});
