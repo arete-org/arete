@@ -148,6 +148,7 @@ paths:
                 Trusted internal endpoint for backend-owned text tasks that should not become a generic prompt proxy.
                 The current task set includes `news` only.
                 Requires either `x-service-token` or `x-trace-token`.
+                Applies the backend trusted-service rate limit bucket, including per-token constraints for authenticated internal callers.
             tags:
                 - Chat
             security:
