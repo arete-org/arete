@@ -10,7 +10,6 @@ import assert from 'node:assert/strict';
 
 import type { PostReflectRequest } from '@footnote/contracts/web';
 import { createReflectPlanner } from '../src/services/reflectPlanner.js';
-import type { OpenAIService } from '../src/services/openaiService.js';
 
 const createReflectRequest = (
     overrides: Partial<PostReflectRequest> = {}
@@ -27,41 +26,39 @@ const createReflectRequest = (
     ...overrides,
 });
 
-test('reflectPlanner parses plain JSON output from the backend-native planner prompt', async () => {
-    const openaiService: OpenAIService = {
-        async generateResponse() {
-            return {
-                normalizedText: JSON.stringify({
-                    action: 'message',
-                    modality: 'text',
-                    riskTier: 'Low',
-                    reasoning:
-                        'The user is asking a question that needs a reply.',
-                    generation: {
-                        reasoningEffort: 'medium',
-                        verbosity: 'medium',
-                        temperament: {
-                            tightness: 4,
-                            rationale: 3,
-                            attribution: 4,
-                            caution: 3,
-                            extent: 4,
-                        },
-                        search: {
-                            query: 'latest Footnote release notes',
-                            contextSize: 'low',
-                            intent: 'current_facts',
-                        },
-                    },
-                }),
-                metadata: {
-                    model: 'gpt-5-mini',
-                },
-            };
-        },
-    };
+const createPlanner = (normalizedText: string) =>
+    createReflectPlanner({
+        executePlanner: async () => ({
+            text: normalizedText,
+            model: 'gpt-5-mini',
+        }),
+    });
 
-    const planner = createReflectPlanner({ openaiService });
+test('reflectPlanner parses plain JSON output from the backend-native planner prompt', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'The user is asking a question that needs a reply.',
+            generation: {
+                reasoningEffort: 'medium',
+                verbosity: 'medium',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                search: {
+                    query: 'latest Footnote release notes',
+                    contextSize: 'low',
+                    intent: 'current_facts',
+                },
+            },
+        })
+    );
     const plan = await planner.planReflect(createReflectRequest());
 
     assert.equal(plan.action, 'message');
@@ -74,18 +71,7 @@ test('reflectPlanner parses plain JSON output from the backend-native planner pr
 });
 
 test('reflectPlanner fails open to a valid fallback generation config when planner JSON is invalid', async () => {
-    const openaiService: OpenAIService = {
-        async generateResponse() {
-            return {
-                normalizedText: '{not-valid-json',
-                metadata: {
-                    model: 'gpt-5-mini',
-                },
-            };
-        },
-    };
-
-    const planner = createReflectPlanner({ openaiService });
+    const planner = createPlanner('{not-valid-json');
     const plan = await planner.planReflect(createReflectRequest());
 
     assert.equal(plan.action, 'message');
@@ -95,45 +81,36 @@ test('reflectPlanner fails open to a valid fallback generation config when plann
 });
 
 test('repo_explainer search plans normalize repo hints and medium context', async () => {
-    const openaiService: OpenAIService = {
-        async generateResponse() {
-            return {
-                normalizedText: JSON.stringify({
-                    action: 'message',
-                    modality: 'text',
-                    riskTier: 'Low',
-                    reasoning: 'This is a Footnote architecture question.',
-                    generation: {
-                        reasoningEffort: 'low',
-                        verbosity: 'medium',
-                        temperament: {
-                            tightness: 4,
-                            rationale: 3,
-                            attribution: 4,
-                            caution: 3,
-                            extent: 4,
-                        },
-                        search: {
-                            query: 'How does Discord provenance work in Footnote?',
-                            contextSize: 'low',
-                            intent: 'repo_explainer',
-                            repoHints: [
-                                'Discord',
-                                'provenance',
-                                'discord',
-                                'wiki',
-                            ],
-                        },
-                    },
-                }),
-                metadata: {
-                    model: 'gpt-5-mini',
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'This is a Footnote architecture question.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'medium',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
                 },
-            };
-        },
-    };
-
-    const planner = createReflectPlanner({ openaiService });
+                search: {
+                    query: 'How does Discord provenance work in Footnote?',
+                    contextSize: 'low',
+                    intent: 'repo_explainer',
+                    repoHints: [
+                        'Discord',
+                        'provenance',
+                        'discord',
+                        'wiki',
+                    ],
+                },
+            },
+        })
+    );
     const plan = await planner.planReflect(createReflectRequest());
 
     assert.ok(plan.generation.search);
@@ -146,40 +123,31 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
 });
 
 test('invalid web_search query downgrades safely to none', async () => {
-    const openaiService: OpenAIService = {
-        async generateResponse() {
-            return {
-                normalizedText: JSON.stringify({
-                    action: 'message',
-                    modality: 'text',
-                    riskTier: 'Low',
-                    reasoning: 'This could have used search.',
-                    generation: {
-                        reasoningEffort: 'low',
-                        verbosity: 'low',
-                        temperament: {
-                            tightness: 4,
-                            rationale: 3,
-                            attribution: 4,
-                            caution: 3,
-                            extent: 4,
-                        },
-                        search: {
-                            query: '   ',
-                            contextSize: 'medium',
-                            intent: 'repo_explainer',
-                            repoHints: ['discord'],
-                        },
-                    },
-                }),
-                metadata: {
-                    model: 'gpt-5-mini',
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'This could have used search.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
                 },
-            };
-        },
-    };
-
-    const planner = createReflectPlanner({ openaiService });
+                search: {
+                    query: '   ',
+                    contextSize: 'medium',
+                    intent: 'repo_explainer',
+                    repoHints: ['discord'],
+                },
+            },
+        })
+    );
     const plan = await planner.planReflect(createReflectRequest());
 
     assert.equal(plan.generation.search, undefined);
@@ -187,35 +155,25 @@ test('invalid web_search query downgrades safely to none', async () => {
 });
 
 test('planner temperament is accepted when all TRACE axes are integer 1..5', async () => {
-    const openaiService: OpenAIService = {
-        async generateResponse() {
-            return {
-                normalizedText: JSON.stringify({
-                    action: 'message',
-                    modality: 'text',
-                    riskTier: 'Low',
-                    reasoning:
-                        'This should include TRACE temperament guidance.',
-                    generation: {
-                        reasoningEffort: 'low',
-                        verbosity: 'low',
-                        temperament: {
-                            tightness: 5,
-                            rationale: 3,
-                            attribution: 4,
-                            caution: 2,
-                            extent: 1,
-                        },
-                    },
-                }),
-                metadata: {
-                    model: 'gpt-5-mini',
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'This should include TRACE temperament guidance.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 5,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 2,
+                    extent: 1,
                 },
-            };
-        },
-    };
-
-    const planner = createReflectPlanner({ openaiService });
+            },
+        })
+    );
     const plan = await planner.planReflect(createReflectRequest());
 
     assert.deepEqual(plan.generation.temperament, {
@@ -228,40 +186,30 @@ test('planner temperament is accepted when all TRACE axes are integer 1..5', asy
 });
 
 test('message plans with missing or invalid TRACE axes fall back safely', async () => {
-    const openaiService: OpenAIService = {
-        async generateResponse() {
-            return {
-                normalizedText: JSON.stringify({
-                    action: 'message',
-                    modality: 'text',
-                    riskTier: 'Low',
-                    reasoning:
-                        'This should include TRACE temperament guidance.',
-                    generation: {
-                        reasoningEffort: 'medium',
-                        verbosity: 'high',
-                        temperament: {
-                            tightness: 5,
-                            rationale: 3,
-                            attribution: 4,
-                            caution: 6,
-                            extent: 1,
-                        },
-                        search: {
-                            query: 'latest release notes',
-                            contextSize: 'low',
-                            intent: 'current_facts',
-                        },
-                    },
-                }),
-                metadata: {
-                    model: 'gpt-5-mini',
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'This should include TRACE temperament guidance.',
+            generation: {
+                reasoningEffort: 'medium',
+                verbosity: 'high',
+                temperament: {
+                    tightness: 5,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 6,
+                    extent: 1,
                 },
-            };
-        },
-    };
-
-    const planner = createReflectPlanner({ openaiService });
+                search: {
+                    query: 'latest release notes',
+                    contextSize: 'low',
+                    intent: 'current_facts',
+                },
+            },
+        })
+    );
     const plan = await planner.planReflect(createReflectRequest());
 
     assert.equal(plan.action, 'message');
@@ -273,28 +221,19 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
 });
 
 test('react plans with non-emoji payload fall back safely', async () => {
-    const openaiService: OpenAIService = {
-        async generateResponse() {
-            return {
-                normalizedText: JSON.stringify({
-                    action: 'react',
-                    modality: 'text',
-                    riskTier: 'Low',
-                    reaction: 'sounds good',
-                    reasoning: 'A reaction is enough.',
-                    generation: {
-                        reasoningEffort: 'low',
-                        verbosity: 'low',
-                    },
-                }),
-                metadata: {
-                    model: 'gpt-5-mini',
-                },
-            };
-        },
-    };
-
-    const planner = createReflectPlanner({ openaiService });
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'react',
+            modality: 'text',
+            riskTier: 'Low',
+            reaction: 'sounds good',
+            reasoning: 'A reaction is enough.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+            },
+        })
+    );
     const plan = await planner.planReflect(createReflectRequest());
 
     assert.equal(plan.action, 'message');

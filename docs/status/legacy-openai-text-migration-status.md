@@ -31,7 +31,6 @@ This branch covers text-generation flows that should end up behind the backend-o
 Current examples include:
 
 - planner -> generation -> output for reflect
-- tertiary text flows such as provenance-lens rewrites
 - `/news` and similar text-first command paths
 
 In the broader architecture, this branch is the first migrated modality inside the modality-based runtime package family.
@@ -49,17 +48,21 @@ Status: In progress
 Known high-level state today:
 
 - reflect generation already runs through the shared runtime seam
-- planner work is not fully migrated
-- some Discord-side tertiary text flows still choose providers locally
+- reflect planning now executes through a backend-local seam backed by the shared runtime
+- `/news` still chooses providers locally in Discord
 - legacy fallback behavior still exists for parts of the text path
 
 Likely starting points to track as this branch becomes concrete:
 
 - backend planner execution
 - runtime parity and fallback behavior
-- provenance-lens and `/news` text flows
+- `/news` text flow
 
-The exact hotspot inventory should be updated here as the migration work is refined.
+Current concrete hotspots:
+
+- `packages/agent-runtime/src/voltagentRuntime.ts` still falls back to the legacy runtime for search-enabled text requests
+- `packages/discord-bot/src/commands/news.ts` still uses local legacy OpenAI text generation
+- reflect handler/orchestrator tests now prove planner execution no longer requires the legacy backend service
 
 ## Target End State
 
@@ -74,13 +77,24 @@ This branch is complete when:
 
 ### 1. Planner abstraction
 
-Status: Planned
+Status: In progress
 
 Track:
 
 - how planner execution stops depending on legacy OpenAI-specific calls
 - what Footnote-owned abstraction will sit between planner policy and model execution
 - what remains owned by `backend` versus what is delegated to the text runtime seam
+
+Current branch status:
+
+- complete for reflect planner execution
+- `createReflectPlanner()` now uses a backend-local planner execution seam instead of `OpenAIService.generateResponse()`
+- `createReflectOrchestrator()` now executes planner calls through the shared runtime
+- `/api/reflect` no longer requires the legacy OpenAI service to run planner logic
+- validated by:
+  - `packages/backend/test/reflectPlanner.test.ts`
+  - `packages/backend/test/reflectOrchestrator.test.ts`
+  - `packages/backend/test/reflectHandler.test.ts`
 
 ### 2. Runtime parity
 
@@ -92,15 +106,19 @@ Track:
 - citation and provenance parity
 - fallback removal criteria
 
+Current next focus:
+
+- remove active search fallback from the VoltAgent runtime path
+- preserve citations, retrieval facts, and provenance-sensitive metadata behavior
+
 ### 3. Tertiary text flows
 
 Status: Planned
 
 Track:
 
-- provenance-lens flows
 - `/news`
-- any other Discord-side text flows that still choose providers locally
+- trusted internal backend text task path for `/news`
 
 ### 4. Legacy cleanup
 
@@ -119,7 +137,6 @@ Already relevant:
 - reflect planner/runtime tests
 - provenance and citation parity tests
 - `/news` regression tests
-- provenance-lens regression tests
 - `pnpm review`
 
 Still to define more precisely for this branch:
@@ -128,17 +145,24 @@ Still to define more precisely for this branch:
 - cutover criteria for removing legacy fallback
 - final deletion gate checks
 
+Current validation snapshot:
+
+- milestone 1 backend tests passing on 2026-03-18:
+  - `pnpm exec tsx --test packages/backend/test/reflectPlanner.test.ts`
+  - `pnpm exec tsx --test packages/backend/test/reflectOrchestrator.test.ts`
+  - `pnpm exec tsx --test packages/backend/test/reflectHandler.test.ts`
+
 ## Open Questions
 
 Capture branch-specific questions here as they arise.
 
 Current placeholders:
 
-- Which Footnote-owned planner abstraction will be simplest without overfitting to VoltAgent?
-- Which tertiary text flows should route through backend versus a shared internal text helper?
 - What is the narrowest acceptable parity bar before deleting the legacy text fallback?
+- What is the narrowest task contract for `/news` without creating a generic internal text proxy?
 
 ## Notes
 
 - Use this file for current-state updates, branch decisions, and validation snapshots.
 - Prefer linking to concrete PRs, tests, and code paths as the work becomes real.
+- Alternate lens / provenance-lens rewrites are intentionally out of scope for this branch.

@@ -12,7 +12,6 @@ import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import type {
     AssistantResponseMetadata,
-    OpenAIService,
     ResponseMetadataRuntimeContext,
 } from '../services/openaiService.js';
 import { runtimeConfig } from '../config.js';
@@ -39,7 +38,6 @@ type BuildResponseMetadata = (
 ) => ResponseMetadata;
 
 type ReflectHandlerDeps = {
-    openaiService: OpenAIService | null;
     generationRuntime: GenerationRuntime | null;
     ipRateLimiter: SimpleRateLimiter | null;
     sessionRateLimiter: SimpleRateLimiter | null;
@@ -135,7 +133,6 @@ const logSuccessfulAuthStep = (
  * 5. Shared reflect workflow
  */
 const createReflectHandler = ({
-    openaiService,
     generationRuntime,
     ipRateLimiter,
     sessionRateLimiter,
@@ -146,9 +143,8 @@ const createReflectHandler = ({
     maxReflectBodyBytes,
 }: ReflectHandlerDeps) => {
     const reflectOrchestrator =
-        openaiService && generationRuntime
+        generationRuntime
             ? createReflectOrchestrator({
-                  openaiService,
                   generationRuntime,
                   storeTrace,
                   buildResponseMetadata,
