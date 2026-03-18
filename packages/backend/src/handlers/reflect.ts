@@ -152,7 +152,7 @@ const createReflectHandler = ({
               })
             : null;
 
-    // If OpenAI is unavailable, we keep the handler alive and return 503 later instead of failing startup.
+    // If the generation runtime is unavailable, we keep the handler alive and return 503 later instead of failing startup.
     // The controller keeps public and trusted-service limiter buckets separate.
     const rateLimitController = createReflectRateLimitController({
         ipRateLimiter,
