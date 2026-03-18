@@ -99,7 +99,8 @@ export const createReflectService = ({
      */
     const buildAssistantMetadata = (
         generationResult: GenerationResult,
-        generation: ReflectGenerationPlan | undefined
+        generation: ReflectGenerationPlan | undefined,
+        requestedModel: string | undefined
     ): AssistantResponseMetadata => {
         const usage: AssistantUsage | undefined = generationResult.usage
             ? {
@@ -110,7 +111,7 @@ export const createReflectService = ({
             : undefined;
 
         return {
-            model: generationResult.model ?? defaultModel,
+            model: generationResult.model ?? requestedModel ?? defaultModel,
             usage,
             finishReason: generationResult.finishReason,
             reasoningEffort: generation?.reasoningEffort,
@@ -161,7 +162,8 @@ export const createReflectService = ({
             await generationRuntime.generate(generationRequest);
         const assistantMetadata = buildAssistantMetadata(
             generationResult,
-            generation
+            generation,
+            generationRequest.model
         );
 
         const usageModel = assistantMetadata.model || defaultModel;

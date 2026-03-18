@@ -159,3 +159,22 @@ test('legacy runtime normalizes provider output into GenerationResult', async ()
     assert.equal(result.generationResult.provenance, 'Retrieved');
     assert.equal(result.metadata.model, 'gpt-5.1');
 });
+
+test('legacy runtime fails fast when the canonical request is missing a model', async () => {
+    const client: LegacyOpenAiClient = {
+        async generateResponse() {
+            throw new Error('provider should not be called');
+        },
+    };
+
+    await assert.rejects(
+        () =>
+            executeLegacyOpenAiGeneration({
+                client,
+                request: {
+                    messages: [{ role: 'user', content: 'Hello there.' }],
+                },
+            }),
+        /Missing model for legacy request\./
+    );
+});

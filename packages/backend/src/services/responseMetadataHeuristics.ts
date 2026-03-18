@@ -60,6 +60,7 @@ export const resolveTradeoffCount = (
 export type RetrievedChipContext = {
     citationCount: number;
     intent?: GenerationSearchIntent;
+    // Reserved for future scoring heuristics that may account for retrieval breadth.
     contextSize?: GenerationSearchContextSize;
 };
 

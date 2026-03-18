@@ -18,15 +18,17 @@ const nodeBin = process.execPath;
 const isWindows = process.platform === 'win32';
 
 const run = (command, args, env = process.env) => {
+    const normalizedCommand = command.toLowerCase();
+    const isWindowsBatchCommand =
+        isWindows &&
+        (normalizedCommand.endsWith('.cmd') ||
+            normalizedCommand.endsWith('.bat'));
+
     // Windows batch files like `pnpm.cmd` need `cmd.exe` to launch reliably.
-    const executable =
-        isWindows && command.toLowerCase().endsWith('.cmd')
-            ? 'cmd.exe'
-            : command;
-    const executableArgs =
-        isWindows && command.toLowerCase().endsWith('.cmd')
-            ? ['/d', '/s', '/c', command, ...args]
-            : args;
+    const executable = isWindowsBatchCommand ? 'cmd.exe' : command;
+    const executableArgs = isWindowsBatchCommand
+        ? ['/d', '/s', '/c', command, ...args]
+        : args;
 
     const result = spawnSync(executable, executableArgs, {
         cwd: repoRoot,

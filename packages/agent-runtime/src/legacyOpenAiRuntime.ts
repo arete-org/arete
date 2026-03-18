@@ -107,8 +107,13 @@ const executeLegacyOpenAiGeneration = async ({
     client,
     request,
 }: ExecuteLegacyOpenAiGenerationInput): Promise<ExecuteLegacyOpenAiGenerationResult> => {
+    const requestedModel = request.model?.trim();
+    if (!requestedModel) {
+        throw new Error('Missing model for legacy request.');
+    }
+
     const response = await client.generateResponse(
-        request.model ?? '',
+        requestedModel,
         request.messages,
         buildLegacyOpenAiGenerateOptions(request)
     );

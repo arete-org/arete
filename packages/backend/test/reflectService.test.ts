@@ -110,6 +110,41 @@ test('createReflectService passes the effective model to response metadata build
     assert.equal(capturedRuntimeContextModelVersion, 'gpt-5.1');
 });
 
+test('createReflectService preserves the caller-requested model when the runtime omits one', async () => {
+    const usageRecords: BackendLLMCostRecord[] = [];
+    let capturedRuntimeContextModelVersion: string | null = null;
+
+    const reflectService = createReflectService({
+        generationRuntime: createRuntime({
+            model: undefined,
+            usage: {
+                promptTokens: 12,
+                completionTokens: 8,
+                totalTokens: 20,
+            },
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedRuntimeContextModelVersion = runtimeContext.modelVersion;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: (record) => {
+            usageRecords.push(record);
+        },
+    });
+
+    await reflectService.runReflectMessages({
+        messages: [{ role: 'user', content: 'What changed?' }],
+        conversationSnapshot: 'What changed?',
+        model: 'gpt-5.1',
+    });
+
+    assert.equal(capturedRuntimeContextModelVersion, 'gpt-5.1');
+    assert.equal(usageRecords.length, 1);
+    assert.equal(usageRecords[0].model, 'gpt-5.1');
+});
+
 test('runReflectMessages passes planner temperament into response metadata runtime context', async () => {
     let capturedPlannerTemperament:
         | import('@footnote/contracts/ethics-core').PartialResponseTemperament

@@ -322,7 +322,7 @@ const createReflectHandler = ({
             sendJson(res, 502, {
                 error: 'AI generation failed',
             });
-            logRequest(req, res, `reflect openai-error ${errorMessage}`);
+            logRequest(req, res, `reflect generation-error ${errorMessage}`);
         }
     };
 };

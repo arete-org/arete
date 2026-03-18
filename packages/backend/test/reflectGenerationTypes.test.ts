@@ -43,6 +43,8 @@ test('reflect generation settings stay assignable to canonical runtime settings'
 
     assert.equal(runtimeSettings.reasoningEffort, 'medium');
     assert.equal(runtimeSettings.verbosity, 'high');
+    assert.equal(canonicalSearch?.query, 'Footnote architecture overview');
+    assert.equal(canonicalSearch?.contextSize, 'medium');
     assert.equal(canonicalSearch?.intent, 'repo_explainer');
     assert.deepEqual(canonicalSearch?.repoHints, ['architecture', 'backend']);
 });
