@@ -4,6 +4,7 @@ openapi: 3.1.0
 # Quick Map
 # - POST /api/reflect: Reflection (public; Turnstile + rate limits when configured)
 # - OPTIONS /api/reflect: CORS preflight
+# - POST /api/internal/text: Trusted internal text task execution
 # - POST /api/incidents/report: Incident report create (trusted internal auth)
 # - GET /api/incidents: Incident list (trusted internal auth)
 # - GET /api/incidents/{incidentId}: Incident detail (trusted internal auth)
@@ -132,6 +133,49 @@ paths:
             responses:
                 '204':
                     $ref: '#/components/responses/PreflightAccepted'
+
+    /api/internal/text:
+        post:
+            operationId: postInternalTextTask
+            x-codeRefs:
+                - packages/backend/src/handlers/internalText.ts#handleInternalTextRequest
+                - packages/backend/src/services/internalText.ts#createInternalNewsTaskService
+                - packages/discord-bot/src/api/internalText.ts#runNewsTaskViaApi
+                - packages/contracts/src/web/types.ts#PostInternalNewsTaskRequest
+                - packages/contracts/src/web/types.ts#PostInternalNewsTaskResponse
+            summary: Run a trusted internal text task
+            description: |
+                Trusted internal endpoint for backend-owned text tasks that should not become a generic prompt proxy.
+                The current task set includes `news` only.
+                Requires either `x-service-token` or `x-trace-token`.
+            tags:
+                - Chat
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/InternalTextRequest'
+            responses:
+                '200':
+                    $ref: '#/components/responses/InternalTextTaskOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '502':
+                    $ref: '#/components/responses/BadGateway'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
 
     /api/incidents/report:
         post:
@@ -1250,6 +1294,133 @@ components:
                 - $ref: '#/components/schemas/ReflectIgnoreAction'
                 - $ref: '#/components/schemas/ReflectImageAction'
 
+        InternalTextRequest:
+            oneOf:
+                - $ref: '#/components/schemas/InternalNewsTaskRequest'
+            discriminator:
+                propertyName: task
+                mapping:
+                    news: '#/components/schemas/InternalNewsTaskRequest'
+
+        InternalTextResponse:
+            oneOf:
+                - $ref: '#/components/schemas/InternalNewsTaskResponse'
+            discriminator:
+                propertyName: task
+                mapping:
+                    news: '#/components/schemas/InternalNewsTaskResponse'
+
+        InternalNewsItem:
+            type: object
+            properties:
+                title:
+                    type: string
+                summary:
+                    type: string
+                url:
+                    type: string
+                    format: uri
+                source:
+                    type: string
+                timestamp:
+                    type: string
+                    format: date-time
+                thumbnail:
+                    type: [string, 'null']
+                    format: uri
+                image:
+                    type: [string, 'null']
+                    format: uri
+            required:
+                - title
+                - summary
+                - url
+                - source
+                - timestamp
+            additionalProperties: false
+
+        InternalNewsTaskRequest:
+            type: object
+            properties:
+                task:
+                    type: string
+                    enum: [news]
+                query:
+                    type: string
+                    minLength: 1
+                    maxLength: 512
+                category:
+                    type: string
+                    minLength: 1
+                    maxLength: 128
+                maxResults:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+                reasoningEffort:
+                    type: string
+                    enum: [minimal, low, medium, high]
+                verbosity:
+                    type: string
+                    enum: [low, medium, high]
+                channelContext:
+                    type: object
+                    properties:
+                        channelId:
+                            type: string
+                            minLength: 1
+                        guildId:
+                            type: string
+                            minLength: 1
+                    additionalProperties: false
+            required:
+                - task
+            additionalProperties: false
+            example:
+                task: news
+                query: 'latest ai policy'
+                category: tech
+                maxResults: 3
+                reasoningEffort: medium
+                verbosity: medium
+                channelContext:
+                    channelId: '123456789012345678'
+                    guildId: '234567890123456789'
+
+        InternalNewsTaskResponse:
+            type: object
+            properties:
+                task:
+                    type: string
+                    enum: [news]
+                result:
+                    type: object
+                    properties:
+                        news:
+                            type: array
+                            items:
+                                $ref: '#/components/schemas/InternalNewsItem'
+                        summary:
+                            type: string
+                    required:
+                        - news
+                        - summary
+                    additionalProperties: false
+            required:
+                - task
+                - result
+            additionalProperties: false
+            example:
+                task: news
+                result:
+                    news:
+                        - title: 'Policy update'
+                          summary: 'A concise summary of the policy change.'
+                          url: 'https://example.com/news'
+                          source: 'Example News'
+                          timestamp: '2026-03-18T12:00:00.000Z'
+                    summary: 'One important headline today.'
+
         ReflectConversationMessage:
             type: object
             properties:
@@ -1866,6 +2037,12 @@ components:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/ReflectResponse'
+        InternalTextTaskOk:
+            description: Structured response for a trusted internal text task.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/InternalTextResponse'
         IncidentReportOk:
             description: Incident created.
             content:

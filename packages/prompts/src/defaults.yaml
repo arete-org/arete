@@ -253,6 +253,7 @@ discord:
                 Pass through the original timestamp and username/nickname of the user who said the message.
                 Do not include any additional text or formatting in your response.
                 The summarized strings must be returned in the order given.
+text:
     news:
         system:
             description: >-
@@ -269,7 +270,6 @@ discord:
                 - Query: {{query}}
                 - Category: {{category}}
                 - Max results: {{maxResults}}
-                - Allowed domains: {{allowedDomains}}
 reflect:
     chat:
         system:

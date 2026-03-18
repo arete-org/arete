@@ -32,7 +32,7 @@ const REQUIRED_PROMPT_KEYS: PromptKey[] = [
     'discord.image.system',
     'discord.image.persona.footnote',
     'discord.image.developer',
-    'discord.news.system',
+    'text.news.system',
     'discord.planner.system',
     'discord.realtime.system',
     'discord.realtime.persona.footnote',

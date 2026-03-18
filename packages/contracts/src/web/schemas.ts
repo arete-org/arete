@@ -78,6 +78,17 @@ const ReflectImageRequestSchema = z
         outputCompression: z.number().int().min(1).max(100).optional(),
     })
     .strict();
+export const InternalNewsItemSchema = z
+    .object({
+        title: z.string().min(1),
+        summary: z.string().min(1),
+        url: z.string().url(),
+        source: z.string().min(1),
+        timestamp: z.string().datetime(),
+        thumbnail: z.string().url().nullable().optional(),
+        image: z.string().url().nullable().optional(),
+    })
+    .strict();
 
 /**
  * Shared citation schema used in reflect/traces metadata payloads.
@@ -213,6 +224,65 @@ export const PostReflectResponseSchema = z.discriminatedUnion('action', [
             metadata: z.null(),
         })
         .passthrough(),
+]);
+
+/**
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export const PostInternalNewsTaskRequestSchema = z
+    .object({
+        task: z.literal('news'),
+        query: z.string().min(1).max(512).optional(),
+        category: z.string().min(1).max(128).optional(),
+        maxResults: z.number().int().min(1).max(5).optional(),
+        reasoningEffort: z.enum(['minimal', 'low', 'medium', 'high']).optional(),
+        verbosity: z.enum(['low', 'medium', 'high']).optional(),
+        channelContext: z
+            .object({
+                channelId: z.string().min(1).optional(),
+                guildId: z.string().min(1).optional(),
+            })
+            .strict()
+            .optional(),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export const PostInternalNewsTaskResponseSchema = z
+    .object({
+        task: z.literal('news'),
+        result: z
+            .object({
+                news: z.array(InternalNewsItemSchema),
+                summary: z.string(),
+            })
+            .strict(),
+    })
+    .strict();
+
+/**
+ * Endpoint-level request union for trusted internal text tasks. This stays
+ * narrow on purpose and currently includes the `news` task only.
+ *
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export const PostInternalTextRequestSchema = z.discriminatedUnion('task', [
+    PostInternalNewsTaskRequestSchema,
+]);
+
+/**
+ * Endpoint-level response union for trusted internal text tasks.
+ *
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export const PostInternalTextResponseSchema = z.discriminatedUnion('task', [
+    PostInternalNewsTaskResponseSchema,
 ]);
 
 /**

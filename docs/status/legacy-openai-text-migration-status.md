@@ -50,8 +50,9 @@ Known high-level state today:
 - reflect generation already runs through the shared runtime seam
 - reflect planning now executes through a backend-local seam backed by the shared runtime
 - VoltAgent text runtime now handles search-enabled requests directly in the active text path
-- `/news` still chooses providers locally in Discord
+- `/news` now runs through a backend-owned internal task path instead of choosing providers locally in Discord
 - legacy text fallback behavior is no longer used in the active backend reflect path
+- trusted internal backend text task infrastructure now exists for the `news` task
 
 Likely starting points to track as this branch becomes concrete:
 
@@ -61,8 +62,7 @@ Likely starting points to track as this branch becomes concrete:
 
 Current concrete hotspots:
 
-- `packages/discord-bot/src/commands/news.ts` still uses local legacy OpenAI text generation
-- `/news` still needs a backend-owned internal text task path
+- final text-branch cleanup after `/news` cutover
 - runtime tests now prove search-enabled reflect requests no longer delegate to legacy fallback
 
 ## Target End State
@@ -121,21 +121,39 @@ Current branch status:
 
 Current next focus:
 
-- route `/news` through a backend-owned internal text task endpoint
-- keep the task contract narrow and purpose-built
+- remove the remaining in-scope legacy text helpers that are no longer active
+- add any missing `/news` regression coverage around the backend-owned path
 
 ### 3. Tertiary text flows
 
-Status: Planned
+Status: In progress
 
 Track:
 
 - `/news`
 - trusted internal backend text task path for `/news`
 
+Current branch status:
+
+- complete for the backend-owned internal `news` task endpoint
+- trusted callers can now post `task: 'news'` to `/api/internal/text`
+- backend owns prompt assembly, runtime execution, structured parsing, and response validation for this task
+- Discord now uses a narrow internal news-task API client method for `/news`
+- milestone 3 cleanup narrowed the implementation naming around `news`, removed the unused `allowedDomains` request field, and moved trusted handler auth/body parsing into shared backend helpers
+- `/news` no longer uses local legacy generation
+- validated by:
+  - `packages/contracts/test/webSchemas.test.ts`
+  - `packages/backend/test/internalTextHandler.test.ts`
+  - `packages/discord-bot/test/api.internalText.test.ts`
+
+Current next focus:
+
+- remove the remaining in-scope legacy text helpers that are no longer active
+- add missing regression coverage for the `/news` command cutover itself
+
 ### 4. Legacy cleanup
 
-Status: Planned
+Status: In progress
 
 Track:
 
@@ -167,6 +185,10 @@ Current validation snapshot:
 - milestone 2 runtime parity tests passing on 2026-03-18:
   - `pnpm exec tsx --test packages/agent-runtime/test/voltagentRuntime.test.ts`
   - `pnpm exec tsx --test packages/backend/test/reflectService.test.ts`
+- milestone 3 internal text endpoint tests passing on 2026-03-18:
+  - `pnpm exec tsx --test packages/contracts/test/webSchemas.test.ts`
+  - `pnpm exec tsx --test packages/backend/test/internalTextHandler.test.ts`
+  - `pnpm exec tsx --test packages/discord-bot/test/api.internalText.test.ts`
 - repo validation passing on 2026-03-18:
   - `pnpm review`
 
@@ -176,7 +198,8 @@ Capture branch-specific questions here as they arise.
 
 Current placeholders:
 
-- What is the narrowest task contract for `/news` without creating a generic internal text proxy?
+- Which remaining legacy text helpers can be deleted now that reflect planning/runtime and `/news` are off the active legacy path?
+- What `/news` regression coverage is still missing after the backend cutover?
 
 ## Notes
 

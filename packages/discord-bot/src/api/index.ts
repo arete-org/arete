@@ -22,6 +22,11 @@ import {
     type ReflectApi,
 } from './reflect.js';
 import {
+    createInternalNewsApi,
+    type CreateInternalNewsApiOptions,
+    type InternalNewsApi,
+} from './internalText.js';
+import {
     createTraceApi,
     type CreateTraceApiOptions,
     type TraceApi,
@@ -30,13 +35,15 @@ import {
 export type CreateDiscordApiClientOptions = CreateApiTransportOptions &
     CreateIncidentApiOptions &
     CreateTraceApiOptions &
-    CreateReflectApiOptions;
+    CreateReflectApiOptions &
+    CreateInternalNewsApiOptions;
 
 export type DiscordApiClient = {
     requestJson: ApiRequester;
 } & TraceApi &
     ReflectApi &
-    IncidentApi;
+    IncidentApi &
+    InternalNewsApi;
 
 export const createDiscordApiClient = ({
     baseUrl,
@@ -55,6 +62,7 @@ export const createDiscordApiClient = ({
     return {
         requestJson,
         ...createIncidentApi(requestJson, { traceApiToken }),
+        ...createInternalNewsApi(requestJson, { traceApiToken }),
         ...createReflectApi(requestJson, { traceApiToken }),
         ...createTraceApi(requestJson, { traceApiToken }),
     };
@@ -76,8 +84,14 @@ export type {
     IncidentApi,
 } from './incidents.js';
 export type {
+    CreateInternalNewsApiOptions,
+    InternalNewsApi,
+} from './internalText.js';
+export type {
     GetIncidentResponse,
     GetIncidentsResponse,
+    PostInternalNewsTaskRequest,
+    PostInternalNewsTaskResponse,
     PostIncidentNotesRequest,
     PostIncidentNotesResponse,
     PostIncidentRemediationRequest,

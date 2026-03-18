@@ -13,6 +13,10 @@ import {
     ApiErrorResponseSchema,
     GetIncidentResponseSchema,
     GetIncidentsResponseSchema,
+    PostInternalNewsTaskRequestSchema,
+    PostInternalNewsTaskResponseSchema,
+    PostInternalTextRequestSchema,
+    PostInternalTextResponseSchema,
     GetTraceApiResponseSchema,
     GetTraceStaleResponseSchema,
     PostIncidentNotesRequestSchema,
@@ -33,6 +37,8 @@ import {
 import type {
     GetIncidentResponse,
     GetIncidentsResponse,
+    PostInternalNewsTaskResponse,
+    PostInternalTextResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
     PostIncidentReportResponse,
@@ -578,4 +584,76 @@ test('incident schema validators stay assignable to shared contract types', () =
     assert.equal(typeof typedReportValidator, 'function');
     assert.equal(typeof typedIncidentsValidator, 'function');
     assert.equal(typeof typedIncidentValidator, 'function');
+});
+
+test('internal text task schemas enforce a narrow task union', () => {
+    assert.equal(
+        PostInternalNewsTaskRequestSchema.safeParse({
+            task: 'news',
+            query: 'latest ai policy',
+            category: 'tech',
+            maxResults: 3,
+            reasoningEffort: 'medium',
+            verbosity: 'medium',
+            channelContext: {
+                channelId: '123',
+                guildId: '456',
+            },
+        }).success,
+        true
+    );
+
+    assert.equal(
+        PostInternalNewsTaskRequestSchema.safeParse({
+            task: 'news',
+            maxResults: 6,
+        }).success,
+        false
+    );
+
+    assert.equal(
+        PostInternalTextRequestSchema.safeParse({
+            task: 'basic',
+            prompt: 'hello',
+        }).success,
+        false
+    );
+
+    assert.equal(
+        PostInternalNewsTaskResponseSchema.safeParse({
+            task: 'news',
+            result: {
+                news: [
+                    {
+                        title: 'Policy update',
+                        summary: 'A short summary',
+                        url: 'https://example.com/news',
+                        source: 'Example News',
+                        timestamp: new Date().toISOString(),
+                    },
+                ],
+                summary: 'One headline matters today.',
+            },
+        }).success,
+        true
+    );
+});
+
+test('internal text schema validator stays assignable to shared contract types', () => {
+    const validator = createSchemaResponseValidator(
+        PostInternalNewsTaskResponseSchema
+    );
+    const endpointValidator = createSchemaResponseValidator(
+        PostInternalTextResponseSchema
+    );
+    const typedValidator: (
+        data: unknown
+    ) => ApiResponseValidationResult<PostInternalNewsTaskResponse> = validator;
+    const typedEndpointValidator: (
+        data: unknown
+    ) => ApiResponseValidationResult<PostInternalTextResponse> =
+        endpointValidator;
+
+    assert.equal(typeof typedValidator, 'function');
+    assert.equal(typeof typedEndpointValidator, 'function');
 });
