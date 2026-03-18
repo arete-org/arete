@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - This route controls how trusted callers request backend-owned text tasks and should stay narrow by design.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { PostInternalNewsTaskRequest } from '@footnote/contracts/web';
 import { PostInternalTextRequestSchema } from '@footnote/contracts/web/schemas';
 import type { InternalNewsTaskService } from '../services/internalText.js';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
@@ -109,10 +110,27 @@ export const createInternalTextHandler = ({
                 return;
             }
 
-            const response =
-                await internalNewsTaskService.runNewsTask(parsedRequest);
-            sendJson(res, 200, response);
-            logRequest(req, res, `internal text success task=${response.task}`);
+            if (parsedRequest.task === 'news') {
+                const newsRequest: PostInternalNewsTaskRequest = parsedRequest;
+                const response =
+                    await internalNewsTaskService.runNewsTask(newsRequest);
+                sendJson(res, 200, response);
+                logRequest(
+                    req,
+                    res,
+                    `internal text success task=${response.task}`
+                );
+                return;
+            }
+
+            sendJson(res, 400, {
+                error: `Unsupported task: ${parsedRequest.task}`,
+            });
+            logRequest(
+                req,
+                res,
+                `internal text unsupported-task task=${parsedRequest.task}`
+            );
         } catch (error) {
             logger.error('Internal text task execution failed', {
                 error:
