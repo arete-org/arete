@@ -25,7 +25,11 @@ type TrustedServiceAuthLabels = {
 };
 
 export type TrustedServiceAuthResult =
-    | { ok: true; source: 'x-service-token' | 'x-trace-token' }
+    | {
+          ok: true;
+          source: 'x-service-token' | 'x-trace-token';
+          rateLimitKey: string;
+      }
     | {
           ok: false;
           statusCode: number;
@@ -63,12 +67,20 @@ export const parseTrustedServiceAuth = (
         req.headers['x-service-token']
     );
     if (tokens.serviceToken && serviceHeaderValue === tokens.serviceToken) {
-        return { ok: true, source: 'x-service-token' };
+        return {
+            ok: true,
+            source: 'x-service-token',
+            rateLimitKey: serviceHeaderValue,
+        };
     }
 
     const traceHeaderValue = readTrustedHeaderValue(req.headers['x-trace-token']);
     if (tokens.traceApiToken && traceHeaderValue === tokens.traceApiToken) {
-        return { ok: true, source: 'x-trace-token' };
+        return {
+            ok: true,
+            source: 'x-trace-token',
+            rateLimitKey: traceHeaderValue,
+        };
     }
 
     if (!serviceHeaderValue && !traceHeaderValue) {

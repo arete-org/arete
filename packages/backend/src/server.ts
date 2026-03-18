@@ -223,6 +223,12 @@ const { handleInternalTextRequest } = createInternalTextHandler({
     maxBodyBytes: runtimeConfig.reflect.maxBodyBytes,
     traceApiToken: runtimeConfig.trace.apiToken,
     serviceToken: runtimeConfig.reflect.serviceToken,
+    serviceRateLimiter:
+        serviceRateLimiter ??
+        new SimpleRateLimiter({
+            limit: runtimeConfig.rateLimits.reflectService.limit,
+            window: runtimeConfig.rateLimits.reflectService.windowMs,
+        }),
 });
 // Decide whether /api/traces/:responseId should return JSON or the SPA HTML shell.
 // We default to JSON unless the Accept header clearly asks for HTML.

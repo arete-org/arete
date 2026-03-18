@@ -8,6 +8,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { PostInternalTextRequestSchema } from '@footnote/contracts/web/schemas';
 import type { InternalNewsTaskService } from '../services/internalText.js';
+import { SimpleRateLimiter } from '../services/rateLimiter.js';
+import { logger } from '../utils/logger.js';
 import { sendJson } from './reflectResponses.js';
 import {
     parseTrustedBodyWithSchema,
@@ -21,6 +23,7 @@ type CreateInternalTextHandlerOptions = {
     maxBodyBytes: number;
     traceApiToken: string | null;
     serviceToken: string | null;
+    serviceRateLimiter: SimpleRateLimiter;
 };
 
 export const createInternalTextHandler = ({
@@ -29,6 +32,7 @@ export const createInternalTextHandler = ({
     maxBodyBytes,
     traceApiToken,
     serviceToken,
+    serviceRateLimiter,
 }: CreateInternalTextHandlerOptions) => {
     /**
      * @api.operationId: postInternalTextTask
@@ -55,6 +59,30 @@ export const createInternalTextHandler = ({
             if (!auth.ok) {
                 sendJson(res, auth.statusCode, auth.payload);
                 logRequest(req, res, auth.logLabel);
+                return;
+            }
+
+            const serviceRateLimitResult = serviceRateLimiter.check(
+                `${auth.source}:${auth.rateLimitKey}`
+            );
+            if (!serviceRateLimitResult.allowed) {
+                sendJson(
+                    res,
+                    429,
+                    {
+                        error: 'Too many requests from this trusted service',
+                        retryAfter: serviceRateLimitResult.retryAfter,
+                    },
+                    {
+                        'Retry-After':
+                            serviceRateLimitResult.retryAfter.toString(),
+                    }
+                );
+                logRequest(
+                    req,
+                    res,
+                    `internal text rate-limited source=${auth.source} retryAfter=${serviceRateLimitResult.retryAfter}`
+                );
                 return;
             }
 
@@ -86,6 +114,10 @@ export const createInternalTextHandler = ({
             sendJson(res, 200, response);
             logRequest(req, res, `internal text success task=${response.task}`);
         } catch (error) {
+            logger.error('Internal text task execution failed', {
+                error:
+                    error instanceof Error ? error.message : String(error),
+            });
             sendJson(res, 502, {
                 error: 'Failed to execute internal text task',
             });

@@ -12,6 +12,7 @@ import http from 'node:http';
 import type { GenerationRequest, GenerationRuntime } from '@footnote/agent-runtime';
 import { createInternalTextHandler } from '../src/handlers/internalText.js';
 import { createInternalNewsTaskService } from '../src/services/internalText.js';
+import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 
 type TestServer = {
     url: string;
@@ -19,7 +20,8 @@ type TestServer = {
 };
 
 const createInternalTextServer = async (
-    generationRuntime: GenerationRuntime | null
+    generationRuntime: GenerationRuntime | null,
+    options: { serviceRateLimiter?: SimpleRateLimiter } = {}
 ): Promise<TestServer> => {
     const internalNewsTaskService = generationRuntime
         ? createInternalNewsTaskService({
@@ -34,6 +36,12 @@ const createInternalTextServer = async (
         maxBodyBytes: 50_000,
         traceApiToken: 'trace-secret',
         serviceToken: null,
+        serviceRateLimiter:
+            options.serviceRateLimiter ??
+            new SimpleRateLimiter({
+                limit: 20,
+                window: 60_000,
+            }),
     });
 
     const server = http.createServer((req, res) => {
@@ -124,6 +132,53 @@ test('internal text endpoint accepts trusted news tasks and returns structured r
         assert.equal(payload.task, 'news');
         assert.equal(payload.result.news[0]?.title, 'Policy update');
         assert.equal(payload.result.summary, 'One important headline today.');
+    } finally {
+        await server.close();
+    }
+});
+
+test('internal text endpoint returns 429 when the trusted service limiter is exhausted', async () => {
+    const server = await createInternalTextServer(
+        {
+            kind: 'test-runtime',
+            async generate() {
+                return {
+                    text: JSON.stringify({
+                        news: [],
+                        summary: 'No updates.',
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            },
+        },
+        {
+            serviceRateLimiter: new SimpleRateLimiter({
+                limit: 1,
+                window: 60_000,
+            }),
+        }
+    );
+
+    try {
+        const request = () =>
+            fetch(`${server.url}/api/internal/text`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Trace-Token': 'trace-secret',
+                },
+                body: JSON.stringify({
+                    task: 'news',
+                    query: 'latest ai policy',
+                }),
+            });
+
+        const firstResponse = await request();
+        assert.equal(firstResponse.status, 200);
+
+        const secondResponse = await request();
+        assert.equal(secondResponse.status, 429);
+        assert.equal(secondResponse.headers.get('retry-after'), '60');
     } finally {
         await server.close();
     }
