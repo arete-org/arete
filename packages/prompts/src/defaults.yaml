@@ -253,6 +253,7 @@ discord:
                 Pass through the original timestamp and username/nickname of the user who said the message.
                 Do not include any additional text or formatting in your response.
                 The summarized strings must be returned in the order given.
+text:
     news:
         system:
             description: >-
@@ -263,13 +264,15 @@ discord:
                 1. ALWAYS use the generate_news_response function to return results
                 2. Use web search to find the most recent and relevant news (aim for within the past 24-48 hours)
                 3. Include a concise 1-2 sentence summary of the overall findings
-                4. Return {{maxResults}} news items by default unless specified otherwise
-                5. Format each news item with: title, summary, url, source, and timestamp
+                4. Return up to {{maxResults}} news items
+                5. Every returned news item must come from the current search results for Query={{query}} and Category={{category}}
+                6. Format each news item with: title, summary, url, source, and timestamp
+                7. If no recent hits are found, return generate_news_response with an empty news list and a summary that clearly says no recent results were found
+                8. Do not fabricate, pad, or infer missing articles to reach {{maxResults}}
                 Search parameters:
                 - Query: {{query}}
                 - Category: {{category}}
                 - Max results: {{maxResults}}
-                - Allowed domains: {{allowedDomains}}
 reflect:
     chat:
         system:

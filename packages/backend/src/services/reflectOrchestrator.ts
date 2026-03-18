@@ -16,13 +16,10 @@ import {
     type CreateReflectServiceOptions,
 } from './reflectService.js';
 import { createReflectPlanner, type ReflectPlan } from './reflectPlanner.js';
-import type { OpenAIService } from './openaiService.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
-type CreateReflectOrchestratorOptions = CreateReflectServiceOptions & {
-    openaiService: OpenAIService;
-};
+type CreateReflectOrchestratorOptions = CreateReflectServiceOptions;
 
 const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
 
@@ -168,7 +165,6 @@ const extractDiscordPersonaOverlay = (
  * shared message-generation service for any branch that ends in text output.
  */
 export const createReflectOrchestrator = ({
-    openaiService,
     generationRuntime,
     storeTrace,
     buildResponseMetadata,
@@ -183,7 +179,27 @@ export const createReflectOrchestrator = ({
         recordUsage,
     });
     const reflectPlanner = createReflectPlanner({
-        openaiService,
+        executePlanner: async ({
+            messages,
+            model,
+            maxOutputTokens,
+            reasoningEffort,
+            verbosity,
+        }) => {
+            const plannerResult = await generationRuntime.generate({
+                messages,
+                model,
+                maxOutputTokens,
+                reasoningEffort,
+                verbosity,
+            });
+
+            return {
+                text: plannerResult.text,
+                model: plannerResult.model,
+                usage: plannerResult.usage,
+            };
+        },
         defaultModel,
         recordUsage,
     });

@@ -12,7 +12,6 @@ import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import type {
     AssistantResponseMetadata,
-    OpenAIService,
     ResponseMetadataRuntimeContext,
 } from '../services/openaiService.js';
 import { runtimeConfig } from '../config.js';
@@ -39,7 +38,6 @@ type BuildResponseMetadata = (
 ) => ResponseMetadata;
 
 type ReflectHandlerDeps = {
-    openaiService: OpenAIService | null;
     generationRuntime: GenerationRuntime | null;
     ipRateLimiter: SimpleRateLimiter | null;
     sessionRateLimiter: SimpleRateLimiter | null;
@@ -135,7 +133,6 @@ const logSuccessfulAuthStep = (
  * 5. Shared reflect workflow
  */
 const createReflectHandler = ({
-    openaiService,
     generationRuntime,
     ipRateLimiter,
     sessionRateLimiter,
@@ -146,9 +143,8 @@ const createReflectHandler = ({
     maxReflectBodyBytes,
 }: ReflectHandlerDeps) => {
     const reflectOrchestrator =
-        openaiService && generationRuntime
+        generationRuntime
             ? createReflectOrchestrator({
-                  openaiService,
                   generationRuntime,
                   storeTrace,
                   buildResponseMetadata,
@@ -156,7 +152,7 @@ const createReflectHandler = ({
               })
             : null;
 
-    // If OpenAI is unavailable, we keep the handler alive and return 503 later instead of failing startup.
+    // If the generation runtime is unavailable, we keep the handler alive and return 503 later instead of failing startup.
     // The controller keeps public and trusted-service limiter buckets separate.
     const rateLimitController = createReflectRateLimitController({
         ipRateLimiter,
@@ -313,11 +309,11 @@ const createReflectHandler = ({
                 res,
                 `reflect success surface=${parsedRequestResult.data.surface} latestUserInputLength=${parsedRequestResult.data.latestUserInput.length}`
             );
-        } catch (openaiError) {
+        } catch (generationError) {
             const errorMessage =
-                openaiError instanceof Error
-                    ? openaiError.message
-                    : String(openaiError);
+                generationError instanceof Error
+                    ? generationError.message
+                    : String(generationError);
 
             sendJson(res, 502, {
                 error: 'AI generation failed',

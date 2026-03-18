@@ -23,7 +23,7 @@ export const promptKeys = [
     'reflect.chat.system',
     'reflect.chat.persona.footnote',
     'discord.summarizer.system',
-    'discord.news.system',
+    'text.news.system',
 ] as const;
 
 export type PromptKey = (typeof promptKeys)[number];

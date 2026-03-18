@@ -2,17 +2,15 @@
  * @description: Fetches and processes news data from external sources.
  * @footnote-scope: interface
  * @footnote-module: NewsCommand
- * @footnote-risk: medium - Handles web search, content filtering, and news summarization. Failures can return stale data or break the command.
- * @footnote-ethics: medium - Presents curated news content to users, affecting information access and potential bias in source selection.
+ * @footnote-risk: medium - Handles current-facts retrieval and summarization. Failures can return stale data or break the command.
+ * @footnote-ethics: medium - Presents curated news content to users, affecting information access and source framing.
  */
 
 import { SlashCommandBuilder } from 'discord.js';
 import { ChatInputCommandInteraction } from 'discord.js';
 import { Command } from './BaseCommand.js';
-import { openaiService } from '../index.js';
-import { OpenAIOptions } from '../utils/openaiService.js';
+import { botApi } from '../api/botApi.js';
 import { EmbedBuilder } from '../utils/response/EmbedBuilder.js';
-import { renderPrompt } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 const DEFAULT_MAX_RESULTS = 3;
@@ -31,62 +29,6 @@ type NewsItem = {
 type NewsResponse = {
     news: NewsItem[];
     summary?: string;
-};
-
-const newsFunction = {
-    name: 'generate_news_response',
-    description:
-        'Generates a structured news response with multiple news items and a summary',
-    parameters: {
-        type: 'object',
-        properties: {
-            news: {
-                type: 'array',
-                items: {
-                    type: 'object',
-                    properties: {
-                        title: {
-                            type: 'string',
-                            description: 'Title of the news article',
-                        },
-                        summary: {
-                            type: 'string',
-                            description: 'Summary of the news article',
-                        },
-                        url: {
-                            type: 'string',
-                            description: 'URL to the full article',
-                        },
-                        source: {
-                            type: 'string',
-                            description: 'Source of the article',
-                        },
-                        timestamp: {
-                            type: 'string',
-                            description: 'Publication timestamp',
-                        },
-                        thumbnail: {
-                            type: 'string',
-                            description: 'URL to article thumbnail image',
-                            nullable: true,
-                        },
-                    },
-                    required: [
-                        'title',
-                        'summary',
-                        'url',
-                        'source',
-                        'timestamp',
-                    ],
-                },
-            },
-            summary: {
-                type: 'string',
-                description: 'A brief summary of the news findings',
-            },
-        },
-        required: ['news', 'summary'],
-    },
 };
 
 /**
@@ -115,14 +57,6 @@ const newsCommand: Command = {
                 .setRequired(false)
                 .setMinValue(1)
                 .setMaxValue(MAX_RESULTS)
-        )
-        .addStringOption((option) =>
-            option
-                .setName('allowed_domains')
-                .setDescription(
-                    'Comma-separated list of allowed domains (e.g., bbc.com,nytimes.com)'
-                )
-                .setRequired(false)
         )
         .addStringOption((option) =>
             option
@@ -200,24 +134,22 @@ const newsCommand: Command = {
 
         // Set a timeout for the entire operation
         const timeoutMs = 120000; // 2 minutes timeout
+        const controller = new AbortController();
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
         const timeoutPromise = new Promise<never>((_, reject) => {
-            setTimeout(
-                () => reject(new Error('Operation timed out after 2 minutes')),
+            timeoutId = setTimeout(
+                () => {
+                    controller.abort();
+                    reject(new Error('Operation timed out after 2 minutes'));
+                },
                 timeoutMs
             );
+            timeoutId.unref?.();
         });
 
         try {
             const query = interaction.options.getString('query') ?? '';
             const category = interaction.options.getString('category') ?? '';
-            const allowedDomains = interaction.options.getString(
-                'allowed_domains'
-            )
-                ? interaction.options
-                      .getString('allowed_domains')!
-                      .split(',')
-                      .map((s) => s.trim())
-                : undefined;
             const reasoningEffort =
                 interaction.options.getString('reasoning_effort') ?? 'medium';
             const verbosity =
@@ -226,69 +158,29 @@ const newsCommand: Command = {
                 interaction.options.getInteger('max_results') ??
                 DEFAULT_MAX_RESULTS;
 
-            const openAIOptions: OpenAIOptions = {
-                reasoningEffort: reasoningEffort as
-                    | 'minimal'
-                    | 'low'
-                    | 'medium'
-                    | 'high',
-                verbosity: verbosity as 'low' | 'medium' | 'high',
-                tool_choice: {
-                    type: 'web_search',
-                    function: { name: 'generate_news_response' },
-                },
-                webSearch: {
-                    query: query || category || 'latest news',
-                    allowedDomains,
-                    searchContextSize: 'medium', // Reduced from 'high' to speed up
-                    userLocation: { type: 'approximate' },
-                },
-            };
-
-            const { content: systemPrompt } = renderPrompt(
-                'discord.news.system',
-                {
-                    query: query || 'Not specified',
-                    category: category || 'Not specified',
-                    maxResults,
-                    allowedDomains: allowedDomains?.join(', ') || 'Any',
-                }
-            );
-
-            // Race between OpenAI response and timeout
+            // `/news` now delegates generation to the backend-owned task path,
+            // so the bot stays out of provider selection and prompt assembly.
             const response = await Promise.race([
-                openaiService.generateResponse(
-                    undefined,
-                    [
-                        { role: 'system' as const, content: systemPrompt },
-                        {
-                            role: 'user' as const,
-                            content: `User provided arguments: ${JSON.stringify({ query, category, maxResults, allowedDomains, reasoningEffort, verbosity })}`,
-                        },
-                    ],
-                    {
-                        ...openAIOptions,
-                        functions: [newsFunction],
-                        function_call: { name: 'generate_news_response' },
-                        channelContext: {
-                            channelId: interaction.channelId ?? 'unknown',
-                            guildId: interaction.guildId ?? undefined,
-                        },
-                    }
-                ),
+                botApi.runNewsTaskViaApi({
+                    task: 'news',
+                    query: query || undefined,
+                    category: category || undefined,
+                    maxResults,
+                    reasoningEffort: reasoningEffort as
+                        | 'minimal'
+                        | 'low'
+                        | 'medium'
+                        | 'high',
+                    verbosity: verbosity as 'low' | 'medium' | 'high',
+                    channelContext: {
+                        channelId: interaction.channelId ?? undefined,
+                        guildId: interaction.guildId ?? undefined,
+                    },
+                }, { signal: controller.signal }),
                 timeoutPromise,
             ]);
 
-            // Process the tool call response
-            const functionCall = response.message?.function_call;
-            logger.info(`Function call: ${JSON.stringify(response)}`);
-            if (!functionCall || !functionCall.arguments) {
-                throw new Error('No function call returned from OpenAI');
-            }
-
-            const newsResponse = JSON.parse(
-                functionCall.arguments
-            ) as NewsResponse;
+            const newsResponse = response.result as NewsResponse;
             if (!newsResponse.news || !Array.isArray(newsResponse.news)) {
                 throw new Error('Invalid news response format');
             }
@@ -329,8 +221,6 @@ const newsCommand: Command = {
             const searchParams = [];
             if (query) searchParams.push(`query: "${query}"`);
             if (category) searchParams.push(`category: "${category}"`);
-            if (allowedDomains?.length)
-                searchParams.push(`sources: ${allowedDomains.join(', ')}`);
 
             const headerMessage = `**News** ${searchParams.length ? `for ${searchParams.join(', ')}` : 'from around the world'}`;
             const resultMessage =
@@ -357,6 +247,10 @@ const newsCommand: Command = {
                 }
             } catch (editError) {
                 logger.error(`Failed to respond to interaction: ${editError}`);
+            }
+        } finally {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
             }
         }
     },

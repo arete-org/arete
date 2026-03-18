@@ -7,6 +7,7 @@
  */
 import type {
     GenerationSearchIntent,
+    GenerationUsage,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
 import type {
@@ -20,7 +21,6 @@ import type {
     TraceAxisScore,
 } from '@footnote/contracts/ethics-core';
 import { renderPrompt } from './prompts/promptRegistry.js';
-import type { OpenAIService } from './openaiService.js';
 import {
     estimateBackendTextCost,
     recordBackendLLMUsage,
@@ -73,10 +73,37 @@ export type ReflectPlan = {
 };
 
 type CreateReflectPlannerOptions = {
-    openaiService: OpenAIService;
+    executePlanner: ReflectPlannerExecutor;
     defaultModel?: string;
     recordUsage?: (record: BackendLLMCostRecord) => void;
 };
+
+/**
+ * Narrow planner-only execution input.
+ * This stays backend-local so planner policy can move off legacy OpenAI
+ * without creating a second shared runtime abstraction.
+ */
+type ReflectPlannerExecutionRequest = {
+    messages: RuntimeMessage[];
+    model: string;
+    maxOutputTokens: number;
+    reasoningEffort: ReflectGenerationPlan['reasoningEffort'];
+    verbosity: ReflectGenerationPlan['verbosity'];
+};
+
+/**
+ * Narrow planner-only execution output.
+ * The planner only needs text plus enough runtime facts for logging/costs.
+ */
+type ReflectPlannerExecutionResult = {
+    text: string;
+    model?: string;
+    usage?: GenerationUsage;
+};
+
+type ReflectPlannerExecutor = (
+    request: ReflectPlannerExecutionRequest
+) => Promise<ReflectPlannerExecutionResult>;
 
 type PlannerCandidate = Partial<ReflectPlan> & {
     reasoning?: unknown;
@@ -575,7 +602,7 @@ const normalizePlan = (
  * planner drift is visible during pre-production rollout.
  */
 export const createReflectPlanner = ({
-    openaiService,
+    executePlanner,
     defaultModel = runtimeConfig.openai.defaultModel,
     recordUsage = recordBackendLLMUsage,
 }: CreateReflectPlannerOptions) => {
@@ -603,22 +630,19 @@ export const createReflectPlanner = ({
         ];
 
         try {
-            const plannerResponse = await openaiService.generateResponse(
-                defaultModel,
-                plannerMessages,
-                {
-                    maxOutputTokens: 700,
-                    reasoningEffort: 'low',
-                    verbosity: 'low',
-                }
-            );
-            const usageModel = plannerResponse.metadata.model || defaultModel;
-            const promptTokens =
-                plannerResponse.metadata.usage?.prompt_tokens ?? 0;
+            const plannerResponse = await executePlanner({
+                messages: plannerMessages,
+                model: defaultModel,
+                maxOutputTokens: 700,
+                reasoningEffort: 'low',
+                verbosity: 'low',
+            });
+            const usageModel = plannerResponse.model || defaultModel;
+            const promptTokens = plannerResponse.usage?.promptTokens ?? 0;
             const completionTokens =
-                plannerResponse.metadata.usage?.completion_tokens ?? 0;
+                plannerResponse.usage?.completionTokens ?? 0;
             const totalTokens =
-                plannerResponse.metadata.usage?.total_tokens ??
+                plannerResponse.usage?.totalTokens ??
                 promptTokens + completionTokens;
             if (recordUsage) {
                 try {
@@ -641,7 +665,7 @@ export const createReflectPlanner = ({
                     );
                 }
             }
-            const rawPlan = stripJsonFences(plannerResponse.normalizedText);
+            const rawPlan = stripJsonFences(plannerResponse.text);
             const parsed = JSON.parse(rawPlan) as PlannerCandidate;
             const normalizedPlan = normalizePlan(request, parsed);
 

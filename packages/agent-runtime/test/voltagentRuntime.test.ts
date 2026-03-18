@@ -11,7 +11,6 @@ import assert from 'node:assert/strict';
 import { Agent } from '@voltagent/core';
 import type {
     GenerationRequest,
-    GenerationRuntime,
     RuntimeMessage,
 } from '../src/index.js';
 import {
@@ -126,33 +125,34 @@ test('voltagent runtime normalizes non-search output into GenerationResult', asy
     assert.equal(result.provenance, 'Inferred');
 });
 
-test('voltagent runtime delegates search requests to the fallback runtime unchanged', async () => {
-    let executorCalled = false;
-    let fallbackRequest: GenerationRequest | undefined;
-    const fallbackRuntime: GenerationRuntime = {
-        kind: 'legacy-openai',
-        async generate(request: GenerationRequest) {
-            fallbackRequest = request;
-
-            return {
-                text: 'legacy search reply',
-                retrieval: {
-                    requested: true,
-                    used: true,
-                },
-                provenance: 'Retrieved',
-            };
-        },
-    };
+test('voltagent runtime executes search requests through the VoltAgent executor', async () => {
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
     const runtime = createVoltAgentRuntime({
         defaultModel: 'gpt-5-mini',
-        fallbackRuntime,
+        fallbackRuntime: {
+            kind: 'legacy-openai',
+            async generate() {
+                throw new Error('fallback should not be used');
+            },
+        },
         createExecutor: () => ({
-            async generateText() {
-                executorCalled = true;
+            async generateText(_messages, options) {
+                seenOptions = options;
 
                 return {
-                    text: 'unexpected',
+                    text: 'search-backed reply',
+                    sources: [
+                        {
+                            title: 'Latest Policy Update',
+                            url: 'https://example.com/policy',
+                        },
+                    ],
+                    response: {
+                        modelId: 'openai/gpt-5-mini',
+                        body: {
+                            output: [{ type: 'web_search_call' }],
+                        },
+                    },
                 };
             },
         }),
@@ -170,13 +170,99 @@ test('voltagent runtime delegates search requests to the fallback runtime unchan
 
     const result = await runtime.generate(request);
 
-    assert.equal(executorCalled, false);
-    assert.deepEqual(fallbackRequest, request);
-    assert.equal(result.text, 'legacy search reply');
+    assert.deepEqual(seenOptions?.search, {
+        query: 'latest policy changes',
+        contextSize: 'low',
+        intent: 'current_facts',
+    });
+    assert.equal(result.text, 'search-backed reply');
+    assert.deepEqual(result.citations, [
+        {
+            title: 'Latest Policy Update',
+            url: 'https://example.com/policy',
+        },
+    ]);
     assert.deepEqual(result.retrieval, {
         requested: true,
         used: true,
     });
+    assert.equal(result.provenance, 'Retrieved');
+});
+
+test('voltagent runtime recovers markdown-link citations when retrieved output lacks structured sources', async () => {
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'gpt-5-mini',
+        fallbackRuntime: {
+            kind: 'legacy-openai',
+            async generate() {
+                throw new Error('fallback should not be used');
+            },
+        },
+        createExecutor: () => ({
+            async generateText() {
+                return {
+                    text: 'Recent headlines: [1](https://example.com/a) [Policy Blog](https://example.com/b)',
+                    response: {
+                        modelId: 'openai/gpt-5-mini',
+                        body: {
+                            output: [{ type: 'web_search_call' }],
+                        },
+                    },
+                };
+            },
+        }),
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'What changed today?' }],
+        search: {
+            query: 'latest changes today',
+            contextSize: 'low',
+            intent: 'current_facts',
+        },
+    });
+
+    assert.deepEqual(result.citations, [
+        { title: 'Source', url: 'https://example.com/a' },
+        { title: 'Policy Blog', url: 'https://example.com/b' },
+    ]);
+    assert.equal(result.provenance, 'Retrieved');
+});
+
+test('voltagent runtime ignores malformed bracket-heavy markdown without falling back or hanging', async () => {
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'gpt-5-mini',
+        fallbackRuntime: {
+            kind: 'legacy-openai',
+            async generate() {
+                throw new Error('fallback should not be used');
+            },
+        },
+        createExecutor: () => ({
+            async generateText() {
+                return {
+                    text: `${'[!](http://'.repeat(200)} not a real citation`,
+                    response: {
+                        modelId: 'openai/gpt-5-mini',
+                        body: {
+                            output: [{ type: 'web_search_call' }],
+                        },
+                    },
+                };
+            },
+        }),
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'What changed today?' }],
+        search: {
+            query: 'latest changes today',
+            contextSize: 'low',
+            intent: 'current_facts',
+        },
+    });
+
+    assert.deepEqual(result.citations, []);
     assert.equal(result.provenance, 'Retrieved');
 });
 
@@ -207,36 +293,81 @@ test('voltagent runtime requires a request model or configured default model', a
 });
 
 test('default VoltAgent executor maps usage from the installed AI SDK token fields', async () => {
-    const originalGenerateText = Agent.prototype.generateText;
-    Agent.prototype.generateText = (async () => ({
-        text: 'executor reply',
-        finishReason: 'stop',
-        usage: {
-            inputTokens: 21,
-            outputTokens: 9,
-            totalTokens: 30,
-        },
-        response: {
-            modelId: 'openai/gpt-5-mini',
-        },
-    })) as unknown as Agent['generateText'];
+    const fakeAgent = {
+        generateText: async (
+            ..._args: Parameters<Agent['generateText']>
+        ): Promise<Awaited<ReturnType<Agent['generateText']>>> => ({
+            content: [],
+            text: 'executor reply',
+            reasoning: [],
+            reasoningText: undefined,
+            files: [],
+            sources: [],
+            toolCalls: [],
+            staticToolCalls: [],
+            dynamicToolCalls: [],
+            toolResults: [],
+            staticToolResults: [],
+            dynamicToolResults: [],
+            finishReason: 'stop',
+            rawFinishReason: 'stop',
+            usage: {
+                inputTokens: 21,
+                inputTokenDetails: {
+                    noCacheTokens: 21,
+                    cacheReadTokens: 0,
+                    cacheWriteTokens: 0,
+                },
+                outputTokens: 9,
+                outputTokenDetails: {
+                    textTokens: 9,
+                    reasoningTokens: 0,
+                },
+                totalTokens: 30,
+            },
+            totalUsage: {
+                inputTokens: 21,
+                inputTokenDetails: {
+                    noCacheTokens: 21,
+                    cacheReadTokens: 0,
+                    cacheWriteTokens: 0,
+                },
+                outputTokens: 9,
+                outputTokenDetails: {
+                    textTokens: 9,
+                    reasoningTokens: 0,
+                },
+                totalTokens: 30,
+            },
+            warnings: undefined,
+            request: {},
+            response: {
+                modelId: 'openai/gpt-5-mini',
+                id: 'response_1',
+                timestamp: new Date(0),
+                messages: [],
+            },
+            providerMetadata: undefined,
+            steps: [],
+            experimental_output: undefined,
+            output: undefined,
+            context: new Map(),
+            feedback: null,
+        }),
+    } satisfies Pick<Agent, 'generateText'>;
+    const executor = createDefaultVoltAgentExecutor({
+        model: 'openai/gpt-5-mini',
+        agentFactory: () => fakeAgent,
+    });
 
-    try {
-        const executor = createDefaultVoltAgentExecutor({
-            model: 'openai/gpt-5-mini',
-        });
+    const result = await executor.generateText(
+        [{ role: 'user', content: 'Summarize the change.' }],
+        {}
+    );
 
-        const result = await executor.generateText(
-            [{ role: 'user', content: 'Summarize the change.' }],
-            {}
-        );
-
-        assert.deepEqual(result.usage, {
-            promptTokens: 21,
-            completionTokens: 9,
-            totalTokens: 30,
-        });
-    } finally {
-        Agent.prototype.generateText = originalGenerateText;
-    }
+    assert.deepEqual(result.usage, {
+        promptTokens: 21,
+        completionTokens: 9,
+        totalTokens: 30,
+    });
 });

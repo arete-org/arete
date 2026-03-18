@@ -29,6 +29,19 @@ export type {
 } from './types';
 
 /**
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export type {
+    InternalTextTask,
+    InternalNewsItem,
+    PostInternalNewsTaskRequest,
+    PostInternalNewsTaskResponse,
+    PostInternalTextRequest,
+    PostInternalTextResponse,
+} from './types';
+
+/**
  * @api.operationId: postTraces
  * @api.path: POST /api/traces
  */
@@ -134,6 +147,10 @@ export {
     PostIncidentReportResponseSchema,
     PostIncidentStatusRequestSchema,
     PostIncidentStatusResponseSchema,
+    PostInternalNewsTaskRequestSchema,
+    PostInternalNewsTaskResponseSchema,
+    PostInternalTextRequestSchema,
+    PostInternalTextResponseSchema,
     PostReflectRequestSchema,
     PostReflectResponseSchema,
     PostTraceCardFromTraceRequestSchema,

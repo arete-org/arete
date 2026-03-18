@@ -38,6 +38,8 @@ import { createIncidentHandlers } from './handlers/incidents.js';
 import { createWebhookHandler } from './handlers/webhook.js';
 import { createRuntimeConfigHandler } from './handlers/config.js';
 import { createIncidentService } from './services/incidents.js';
+import { createInternalNewsTaskService } from './services/internalText.js';
+import { createInternalTextHandler } from './handlers/internalText.js';
 
 // --- Path configuration ---
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -54,6 +56,8 @@ let traceStore: ReturnType<typeof createTraceStore> | null = null;
 let incidentStore: ReturnType<typeof getDefaultIncidentStore> | null = null;
 let openaiService: OpenAIService | null = null;
 let generationRuntime: GenerationRuntime | null = null;
+let internalNewsTaskService: ReturnType<typeof createInternalNewsTaskService> | null =
+    null;
 let ipRateLimiter: SimpleRateLimiter | null = null;
 let sessionRateLimiter: SimpleRateLimiter | null = null;
 let serviceRateLimiter: SimpleRateLimiter | null = null;
@@ -99,11 +103,16 @@ const initializeServices = () => {
             fallbackRuntime: legacyRuntime,
             defaultModel: runtimeConfig.openai.defaultModel,
         });
+        internalNewsTaskService = createInternalNewsTaskService({
+            generationRuntime,
+            defaultModel: runtimeConfig.openai.defaultModel,
+        });
     } else {
         openaiService = null;
         generationRuntime = null;
+        internalNewsTaskService = null;
         logger.warn(
-            'OPENAI_API_KEY is missing; /api/reflect will return 503 until configured.'
+            'OPENAI_API_KEY is missing; /api/reflect and runtime-backed internal text tasks will return 503 until configured.'
         );
     }
 
@@ -208,6 +217,19 @@ const handleWebhookRequest = createWebhookHandler({
     verifyGitHubSignature,
     logRequest,
 });
+const { handleInternalTextRequest } = createInternalTextHandler({
+    internalNewsTaskService,
+    logRequest,
+    maxBodyBytes: runtimeConfig.reflect.maxBodyBytes,
+    traceApiToken: runtimeConfig.trace.apiToken,
+    serviceToken: runtimeConfig.reflect.serviceToken,
+    serviceRateLimiter:
+        serviceRateLimiter ??
+        new SimpleRateLimiter({
+            limit: runtimeConfig.rateLimits.reflectService.limit,
+            window: runtimeConfig.rateLimits.reflectService.windowMs,
+        }),
+});
 // Decide whether /api/traces/:responseId should return JSON or the SPA HTML shell.
 // We default to JSON unless the Accept header clearly asks for HTML.
 // This keeps API clients working even when they send a generic "*/*" Accept header.
@@ -231,7 +253,6 @@ const wantsJsonResponse = (req: http.IncomingMessage): boolean => {
 };
 // Reflection is the slim, web-facing chat interface (Turnstile + rate-limited).
 const handleReflectRequest = createReflectHandler({
-    openaiService,
     generationRuntime,
     ipRateLimiter,
     sessionRateLimiter,
@@ -277,6 +298,11 @@ const server = http.createServer(async (req, res) => {
 
         if (normalizedPathname === '/api/incidents/report') {
             await handleIncidentReportRequest(req, res);
+            return;
+        }
+
+        if (normalizedPathname === '/api/internal/text') {
+            await handleInternalTextRequest(req, res);
             return;
         }
 

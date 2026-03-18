@@ -21,190 +21,18 @@ import {
 import type { IncidentService } from '../services/incidents.js';
 import { IncidentNotFoundError } from '../services/incidents.js';
 import { sendJson } from './reflectResponses.js';
-
-type LogRequest = (
-    req: IncomingMessage,
-    res: ServerResponse,
-    extra?: string
-) => void;
+import {
+    parseTrustedBodyWithSchema,
+    parseTrustedServiceAuth,
+    type TrustedRouteLogRequest,
+} from './trustedServiceRequest.js';
 
 type IncidentHandlerDeps = {
     incidentService: IncidentService;
-    logRequest: LogRequest;
+    logRequest: TrustedRouteLogRequest;
     maxIncidentBodyBytes: number;
     traceApiToken: string | null;
     serviceToken: string | null;
-};
-
-/**
- * Normalizes a header into one trimmed string so auth checks do not need to
- * care whether Node exposed the header as one value or an array.
- */
-const readHeaderValue = (
-    headerValue: string | string[] | undefined
-): string | null => {
-    if (!headerValue) {
-        return null;
-    }
-
-    const rawValue = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-    const trimmedValue = rawValue.trim();
-    return trimmedValue.length > 0 ? trimmedValue : null;
-};
-
-/**
- * Applies the trusted internal auth rule for incident endpoints. We prefer the
- * dedicated service token when configured, but still allow the legacy trace
- * token so existing internal callers keep working.
- */
-const parseTrustedServiceAuth = (
-    req: IncomingMessage,
-    {
-        traceApiToken,
-        serviceToken,
-    }: {
-        traceApiToken: string | null;
-        serviceToken: string | null;
-    }
-): { ok: true; source: 'x-service-token' | 'x-trace-token' } | {
-    ok: false;
-    statusCode: number;
-    payload: { error: string; details?: string };
-    logLabel: string;
-} => {
-    const serviceHeaderValue = readHeaderValue(req.headers['x-service-token']);
-    if (serviceToken && serviceHeaderValue === serviceToken) {
-        return { ok: true, source: 'x-service-token' };
-    }
-
-    const traceHeaderValue = readHeaderValue(req.headers['x-trace-token']);
-    if (traceApiToken && traceHeaderValue === traceApiToken) {
-        return { ok: true, source: 'x-trace-token' };
-    }
-
-    if (!serviceHeaderValue && !traceHeaderValue) {
-        return {
-            ok: false,
-            statusCode: 401,
-            payload: {
-                error: 'Missing trusted service credentials',
-            },
-            logLabel: 'incidents missing-trusted-auth',
-        };
-    }
-
-    return {
-        ok: false,
-        statusCode: 403,
-        payload: {
-            error: 'Invalid trusted service credentials',
-        },
-        logLabel: 'incidents invalid-trusted-auth',
-    };
-};
-
-/**
- * Reads one JSON body with an explicit size limit so oversized requests fail
- * quickly instead of holding the process open.
- */
-const parseJsonBody = async (
-    req: IncomingMessage,
-    res: ServerResponse,
-    logRequest: LogRequest,
-    routeLabel: string,
-    maxBodyBytes: number
-): Promise<unknown | null> => {
-    const contentLengthHeader = req.headers['content-length'];
-    if (contentLengthHeader) {
-        const contentLength = Number(contentLengthHeader);
-        if (Number.isFinite(contentLength) && contentLength > maxBodyBytes) {
-            sendJson(res, 413, { error: 'Request payload too large' });
-            logRequest(req, res, `${routeLabel} payload-too-large`);
-            req.resume();
-            return null;
-        }
-    }
-
-    const chunks: Buffer[] = [];
-    let bodyTooLarge = false;
-    let bodyBytes = 0;
-    req.on('data', (chunk) => {
-        if (bodyTooLarge) {
-            return;
-        }
-        const chunkBuffer = Buffer.isBuffer(chunk)
-            ? chunk
-            : Buffer.from(chunk);
-        bodyBytes += chunkBuffer.length;
-        if (bodyBytes > maxBodyBytes) {
-            bodyTooLarge = true;
-            sendJson(res, 413, { error: 'Request payload too large' });
-            logRequest(req, res, `${routeLabel} payload-too-large`);
-            req.destroy();
-            return;
-        }
-        chunks.push(chunkBuffer);
-    });
-
-    await new Promise<void>((resolve, reject) => {
-        const cleanup = () => {
-            req.off('end', onEnd);
-            req.off('error', onError);
-            req.off('close', onClose);
-            req.off('aborted', onAborted);
-        };
-        const onEnd = () => {
-            cleanup();
-            resolve();
-        };
-        const onError = (error: Error) => {
-            cleanup();
-            if (bodyTooLarge) {
-                resolve();
-                return;
-            }
-            reject(error);
-        };
-        const onClose = () => {
-            cleanup();
-            if (bodyTooLarge) {
-                resolve();
-                return;
-            }
-            reject(new Error(`${routeLabel} request closed before body completed`));
-        };
-        const onAborted = () => {
-            cleanup();
-            if (bodyTooLarge) {
-                resolve();
-                return;
-            }
-            reject(new Error(`${routeLabel} request aborted before body completed`));
-        };
-        req.on('end', onEnd);
-        req.on('error', onError);
-        req.on('close', onClose);
-        req.on('aborted', onAborted);
-    });
-
-    if (bodyTooLarge) {
-        return null;
-    }
-
-    const body = Buffer.concat(chunks, bodyBytes).toString('utf8');
-    if (!body) {
-        sendJson(res, 400, { error: 'Missing request body' });
-        logRequest(req, res, `${routeLabel} missing-body`);
-        return null;
-    }
-
-    try {
-        return JSON.parse(body) as unknown;
-    } catch {
-        sendJson(res, 400, { error: 'Invalid JSON body' });
-        logRequest(req, res, `${routeLabel} invalid-json`);
-        return null;
-    }
 };
 
 /**
@@ -246,6 +74,9 @@ export const createIncidentHandlers = ({
         const auth = parseTrustedServiceAuth(req, {
             traceApiToken,
             serviceToken,
+        }, {
+            missing: 'incidents missing-trusted-auth',
+            invalid: 'incidents invalid-trusted-auth',
         });
         if (auth.ok) {
             return true;
@@ -260,35 +91,21 @@ export const createIncidentHandlers = ({
         req: IncomingMessage,
         res: ServerResponse,
         routeLabel: string,
-        safeParse: (value: unknown) => { success: true; data: T } | { success: false; error: { issues: Array<{ path: PropertyKey[]; message: string }> } }
+        safeParse: (value: unknown) =>
+            | { success: true; data: T }
+            | {
+                  success: false;
+                  error: {
+                      issues: Array<{ path: PropertyKey[]; message: string }>;
+                  };
+              }
     ): Promise<T | null> => {
-        const payload = await parseJsonBody(
-            req,
-            res,
+        return parseTrustedBodyWithSchema(req, res, {
             logRequest,
             routeLabel,
-            maxIncidentBodyBytes
-        );
-        if (payload === null) {
-            return null;
-        }
-
-        const parsed = safeParse(payload);
-        if (parsed.success) {
-            return parsed.data;
-        }
-
-        const firstIssue = parsed.error.issues[0];
-        const issuePath =
-            firstIssue && firstIssue.path.length > 0
-                ? firstIssue.path.join('.')
-                : 'body';
-        sendJson(res, 400, {
-            error: 'Invalid request payload',
-            details: `${issuePath}: ${firstIssue?.message ?? 'Invalid request payload'}`,
+            maxBodyBytes: maxIncidentBodyBytes,
+            safeParse,
         });
-        logRequest(req, res, `${routeLabel} invalid-payload`);
-        return null;
     };
 
     /**

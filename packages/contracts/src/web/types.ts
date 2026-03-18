@@ -377,6 +377,83 @@ export type PostReflectResponse =
     | ReflectImageActionResponse;
 
 /**
+ * Internal task discriminator for the trusted `/api/internal/text` endpoint.
+ * The endpoint stays task-based on purpose and currently implements `news`
+ * only.
+ *
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export type InternalTextTask = 'news';
+
+/**
+ * One structured news item returned by the internal `news` task.
+ *
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export type InternalNewsItem = {
+    title: string;
+    summary: string;
+    url: string;
+    source: string;
+    timestamp: string;
+    thumbnail?: string | null;
+    image?: string | null;
+};
+
+/**
+ * Trusted internal request for the `/news` task. The backend owns
+ * prompt assembly and model execution; callers only send task inputs.
+ *
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export type PostInternalNewsTaskRequest = {
+    task: 'news';
+    query?: string;
+    category?: string;
+    maxResults?: number;
+    reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
+    verbosity?: 'low' | 'medium' | 'high';
+    channelContext?: {
+        channelId?: string;
+        guildId?: string;
+    };
+};
+
+/**
+ * Trusted internal response for the `/news` task.
+ *
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export type PostInternalNewsTaskResponse = {
+    task: 'news';
+    result: {
+        news: InternalNewsItem[];
+        summary: string;
+    };
+};
+
+/**
+ * Narrow trusted internal text-task request union. This stays purpose-built on
+ * purpose; it is not a generic prompt proxy.
+ *
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export type PostInternalTextRequest = PostInternalNewsTaskRequest;
+
+/**
+ * Narrow trusted internal text-task response union.
+ *
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export type PostInternalTextResponse = PostInternalNewsTaskResponse;
+
+/**
  * @api.operationId: postTraces
  * @api.path: POST /api/traces
  */
