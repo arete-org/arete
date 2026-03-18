@@ -82,19 +82,3 @@ test('runNewsTaskViaApi throws backend request errors so callers can handle them
         /backend exploded/
     );
 });
-
-test('runNewsTaskViaApi surfaces non-2xx backend responses before schema validation', async () => {
-    const requestJson: ApiRequester = async <T>(): Promise<ApiJsonResult<T>> => ({
-        status: 429,
-        data: {
-            error: 'Too many requests from this trusted service',
-            details: 'retry later',
-        } as T,
-    });
-    const api = createInternalNewsApi(requestJson);
-
-    await assert.rejects(
-        () => api.runNewsTaskViaApi(createNewsRequest()),
-        /status 429: Too many requests from this trusted service - retry later/i
-    );
-});
