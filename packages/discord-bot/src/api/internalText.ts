@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - Narrow task transport helps keep backend-owned generation policy explicit.
  */
 import type {
+    ApiErrorResponse,
     PostInternalNewsTaskRequest,
     PostInternalNewsTaskResponse,
 } from '@footnote/contracts/web';
@@ -34,6 +35,25 @@ const buildTrustedHeaders = (traceApiToken?: string): Record<string, string> => 
     return headers;
 };
 
+const buildInternalTaskHttpError = (
+    status: number,
+    payload: unknown
+): Error => {
+    const responsePayload =
+        payload && typeof payload === 'object'
+            ? (payload as Partial<ApiErrorResponse>)
+            : null;
+    const details = [responsePayload?.error, responsePayload?.details]
+        .filter((value): value is string => typeof value === 'string')
+        .join(' - ');
+    const message =
+        details.length > 0
+            ? `Internal news task request failed with status ${status}: ${details}`
+            : `Internal news task request failed with status ${status}`;
+
+    return new Error(message);
+};
+
 export const createInternalNewsApi = (
     requestJson: ApiRequester,
     { traceApiToken }: CreateInternalNewsApiOptions = {}
@@ -60,6 +80,10 @@ export const createInternalNewsApi = (
                 ),
             }
         );
+
+        if (response.status < 200 || response.status >= 300) {
+            throw buildInternalTaskHttpError(response.status, response.data);
+        }
 
         return response.data;
     };
