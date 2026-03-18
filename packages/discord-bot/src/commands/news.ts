@@ -134,11 +134,13 @@ const newsCommand: Command = {
 
         // Set a timeout for the entire operation
         const timeoutMs = 120000; // 2 minutes timeout
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
         const timeoutPromise = new Promise<never>((_, reject) => {
-            setTimeout(
+            timeoutId = setTimeout(
                 () => reject(new Error('Operation timed out after 2 minutes')),
                 timeoutMs
             );
+            timeoutId.unref?.();
         });
 
         try {
@@ -241,6 +243,10 @@ const newsCommand: Command = {
                 }
             } catch (editError) {
                 logger.error(`Failed to respond to interaction: ${editError}`);
+            }
+        } finally {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
             }
         }
     },

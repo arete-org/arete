@@ -43,7 +43,7 @@ This branch does **not** own:
 
 ## Current State
 
-Status: In progress
+Status: Complete for current branch scope
 
 Known high-level state today:
 
@@ -62,8 +62,8 @@ Likely starting points to track as this branch becomes concrete:
 
 Current concrete hotspots:
 
-- final text-branch cleanup after `/news` cutover
 - runtime tests now prove search-enabled reflect requests no longer delegate to legacy fallback
+- `/news` command tests now prove the bot uses the backend-owned task path directly
 
 ## Target End State
 
@@ -121,12 +121,11 @@ Current branch status:
 
 Current next focus:
 
-- remove the remaining in-scope legacy text helpers that are no longer active
-- add any missing `/news` regression coverage around the backend-owned path
+- text branch scope is complete; any remaining legacy OpenAI helpers now belong to out-of-scope branches such as image, voice, or alternate lens overhaul work
 
 ### 3. Tertiary text flows
 
-Status: In progress
+Status: Complete
 
 Track:
 
@@ -141,19 +140,16 @@ Current branch status:
 - Discord now uses a narrow internal news-task API client method for `/news`
 - milestone 3 cleanup narrowed the implementation naming around `news`, removed the unused `allowedDomains` request field, and moved trusted handler auth/body parsing into shared backend helpers
 - `/news` no longer uses local legacy generation
+- `/news` command tests now verify the bot calls `runNewsTaskViaApi()` and renders the backend-owned result shape
 - validated by:
   - `packages/contracts/test/webSchemas.test.ts`
   - `packages/backend/test/internalTextHandler.test.ts`
   - `packages/discord-bot/test/api.internalText.test.ts`
-
-Current next focus:
-
-- remove the remaining in-scope legacy text helpers that are no longer active
-- add missing regression coverage for the `/news` command cutover itself
+  - `packages/discord-bot/test/newsCommand.test.ts`
 
 ### 4. Legacy cleanup
 
-Status: In progress
+Status: Complete for current branch scope
 
 Track:
 
@@ -172,9 +168,7 @@ Already relevant:
 
 Still to define more precisely for this branch:
 
-- branch-specific test list
-- cutover criteria for removing legacy fallback
-- final deletion gate checks
+- none; the branch exit gates are now covered for reflect planning, runtime parity, and `/news`
 
 Current validation snapshot:
 
@@ -189,6 +183,8 @@ Current validation snapshot:
   - `pnpm exec tsx --test packages/contracts/test/webSchemas.test.ts`
   - `pnpm exec tsx --test packages/backend/test/internalTextHandler.test.ts`
   - `pnpm exec tsx --test packages/discord-bot/test/api.internalText.test.ts`
+- milestone 4 `/news` cutover tests passing on 2026-03-18:
+  - `pnpm exec tsx --test packages/discord-bot/test/newsCommand.test.ts`
 - repo validation passing on 2026-03-18:
   - `pnpm review`
 
@@ -198,8 +194,7 @@ Capture branch-specific questions here as they arise.
 
 Current placeholders:
 
-- Which remaining legacy text helpers can be deleted now that reflect planning/runtime and `/news` are off the active legacy path?
-- What `/news` regression coverage is still missing after the backend cutover?
+- none blocking for the text branch scope
 
 ## Notes
 
