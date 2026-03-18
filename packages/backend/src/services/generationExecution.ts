@@ -9,6 +9,11 @@ import type {
     GenerationRequest,
     GenerationResult,
 } from '@footnote/agent-runtime';
+import {
+    buildLegacyOpenAiGenerateOptions,
+    executeLegacyOpenAiGeneration,
+    type LegacyOpenAiClient,
+} from '@footnote/agent-runtime/legacyOpenAiRuntime';
 import type {
     GenerateResponseOptions,
     OpenAIResponseMetadata,
@@ -27,67 +32,32 @@ type ExecuteOpenAIGenerationResult = {
 
 /**
  * Converts the canonical generation request into the current OpenAI wrapper
- * options. This keeps provider-shaped request details out of Reflect service
- * code while the backend still executes through the OpenAI path.
+ * options by delegating to the legacy runtime adapter mapping. This keeps the
+ * canonical provider bridge in `@footnote/agent-runtime` while backend still
+ * executes through the legacy OpenAI path.
  */
 const buildGenerateResponseOptions = (
     request: GenerationRequest
-): GenerateResponseOptions => ({
-    ...(request.maxOutputTokens !== undefined && {
-        maxOutputTokens: request.maxOutputTokens,
-    }),
-    ...(request.reasoningEffort !== undefined && {
-        reasoningEffort: request.reasoningEffort,
-    }),
-    ...(request.verbosity !== undefined && {
-        verbosity: request.verbosity,
-    }),
-    ...(request.search !== undefined && {
-        search: request.search,
-    }),
-    ...(request.signal !== undefined && { signal: request.signal }),
-});
+): GenerateResponseOptions => buildLegacyOpenAiGenerateOptions(request);
 
 /**
- * Normalizes OpenAI wrapper output into the generic generation result shape
- * while preserving the raw assistant metadata that backend still needs for
- * response metadata assembly and cost tracking.
+ * Thin backend compatibility wrapper over the legacy runtime adapter execution.
+ * Backend still needs raw assistant metadata today, so this wrapper preserves
+ * that value while delegating canonical request/result mapping to
+ * `@footnote/agent-runtime`.
  */
 const executeOpenAIGeneration = async ({
     openaiService,
     request,
 }: ExecuteOpenAIGenerationInput): Promise<ExecuteOpenAIGenerationResult> => {
-    const response = await openaiService.generateResponse(
-        request.model ?? '',
-        request.messages,
-        buildGenerateResponseOptions(request)
-    );
-    const assistantMetadata = response.metadata;
-    const citations = assistantMetadata.citations ?? [];
-    const requestedSearch = request.search !== undefined;
-    const usedSearch = assistantMetadata.provenance === 'Retrieved';
+    const { generationResult, metadata } = await executeLegacyOpenAiGeneration({
+        client: openaiService as LegacyOpenAiClient,
+        request,
+    });
 
     return {
-        generationResult: {
-            text: response.normalizedText,
-            model: assistantMetadata.model || request.model,
-            finishReason: assistantMetadata.finishReason,
-            usage: assistantMetadata.usage
-                ? {
-                      promptTokens: assistantMetadata.usage.prompt_tokens,
-                      completionTokens:
-                          assistantMetadata.usage.completion_tokens,
-                      totalTokens: assistantMetadata.usage.total_tokens,
-                  }
-                : undefined,
-            citations,
-            retrieval: {
-                requested: requestedSearch,
-                used: usedSearch,
-            },
-            provenance: assistantMetadata.provenance,
-        },
-        assistantMetadata,
+        generationResult,
+        assistantMetadata: metadata as OpenAIResponseMetadata,
     };
 };
 

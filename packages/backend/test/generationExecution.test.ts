@@ -10,12 +10,17 @@ import assert from 'node:assert/strict';
 
 import type { GenerationRequest } from '@footnote/agent-runtime';
 import {
+    buildLegacyOpenAiGenerateOptions,
+    executeLegacyOpenAiGeneration,
+    type LegacyOpenAiClient,
+} from '@footnote/agent-runtime/legacyOpenAiRuntime';
+import {
     buildGenerateResponseOptions,
     executeOpenAIGeneration,
 } from '../src/services/generationExecution.js';
 import type { OpenAIService } from '../src/services/openaiService.js';
 
-test('buildGenerateResponseOptions maps canonical search and generation settings', () => {
+test('buildGenerateResponseOptions delegates to the legacy runtime adapter mapping', () => {
     const request: GenerationRequest = {
         messages: [{ role: 'user', content: 'What changed today?' }],
         model: 'gpt-5-mini',
@@ -30,17 +35,10 @@ test('buildGenerateResponseOptions maps canonical search and generation settings
         },
     };
 
-    const options = buildGenerateResponseOptions(request);
-
-    assert.equal(options.maxOutputTokens, 900);
-    assert.equal(options.reasoningEffort, 'medium');
-    assert.equal(options.verbosity, 'high');
-    assert.deepEqual(options.search, {
-        query: 'latest OpenAI policy update',
-        contextSize: 'low',
-        intent: 'current_facts',
-        repoHints: [],
-    });
+    assert.deepEqual(
+        buildGenerateResponseOptions(request),
+        buildLegacyOpenAiGenerateOptions(request)
+    );
 });
 
 test('buildGenerateResponseOptions omits search when generation request does not include it', () => {
@@ -91,6 +89,7 @@ test('executeOpenAIGeneration normalizes OpenAI output into GenerationResult', a
             };
         },
     };
+    const legacyClient: LegacyOpenAiClient = openaiService;
     const request: GenerationRequest = {
         messages: [{ role: 'user', content: 'What changed today?' }],
         model: 'gpt-5-mini',
@@ -106,6 +105,10 @@ test('executeOpenAIGeneration normalizes OpenAI output into GenerationResult', a
 
     const result = await executeOpenAIGeneration({
         openaiService,
+        request,
+    });
+    const delegatedResult = await executeLegacyOpenAiGeneration({
+        client: legacyClient,
         request,
     });
 
@@ -137,4 +140,6 @@ test('executeOpenAIGeneration normalizes OpenAI output into GenerationResult', a
     });
     assert.equal(result.generationResult.provenance, 'Retrieved');
     assert.equal(result.assistantMetadata.model, 'gpt-5.1');
+    assert.deepEqual(result.generationResult, delegatedResult.generationResult);
+    assert.deepEqual(result.assistantMetadata, delegatedResult.metadata);
 });

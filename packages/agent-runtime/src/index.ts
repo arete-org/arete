@@ -262,3 +262,11 @@ export function createGenerationRuntime(
         },
     };
 }
+
+export {
+    createLegacyOpenAiRuntime,
+    type LegacyOpenAiClient,
+    type LegacyOpenAiGenerateOptions,
+    type LegacyOpenAiMetadata,
+    type LegacyOpenAiResult,
+} from './legacyOpenAiRuntime.js';

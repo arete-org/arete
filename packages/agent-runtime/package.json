@@ -9,6 +9,10 @@
         ".": {
             "types": "./dist/index.d.ts",
             "default": "./dist/index.js"
+        },
+        "./legacyOpenAiRuntime": {
+            "types": "./dist/legacyOpenAiRuntime.d.ts",
+            "default": "./dist/legacyOpenAiRuntime.js"
         }
     },
     "scripts": {
