@@ -60,6 +60,64 @@ const buildNewsSearchQuery = ({
     category?: string;
 }): string => query ?? category ?? DEFAULT_NEWS_QUERY;
 
+const normalizeNewsTimestamp = (value: unknown): string | null => {
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+        return null;
+    }
+
+    const parsedDate = new Date(trimmed);
+    return Number.isNaN(parsedDate.getTime()) ? null : parsedDate.toISOString();
+};
+
+/**
+ * The news task asks for ISO timestamps, but models sometimes return dates
+ * that are parseable without already being strict ISO strings. We normalize the
+ * timestamps we can trust and drop only the malformed items instead of failing
+ * the whole task response.
+ */
+const normalizeNewsTaskResult = (value: unknown): unknown => {
+    if (!value || typeof value !== 'object') {
+        return value;
+    }
+
+    const candidate = value as {
+        news?: unknown;
+        summary?: unknown;
+    };
+    if (!Array.isArray(candidate.news)) {
+        return value;
+    }
+
+    const normalizedNews = candidate.news.flatMap((item) => {
+        if (!item || typeof item !== 'object') {
+            return [];
+        }
+
+        const itemRecord = item as Record<string, unknown>;
+        const normalizedTimestamp = normalizeNewsTimestamp(itemRecord.timestamp);
+        if (!normalizedTimestamp) {
+            return [];
+        }
+
+        return [
+            {
+                ...itemRecord,
+                timestamp: normalizedTimestamp,
+            },
+        ];
+    });
+
+    return {
+        ...candidate,
+        news: normalizedNews,
+    };
+};
+
 /**
  * The news task asks the model for raw JSON, but models still sometimes wrap
  * that JSON in markdown fences or brief prose. We recover the common wrappers
@@ -177,7 +235,9 @@ export const createInternalNewsTaskService = ({
 
         const responsePayload = {
             task: 'news' as const,
-            result: extractJsonPayload(generationResult.text),
+            result: normalizeNewsTaskResult(
+                extractJsonPayload(generationResult.text)
+            ),
         };
         const parsedResponse =
             PostInternalNewsTaskResponseSchema.safeParse(responsePayload);

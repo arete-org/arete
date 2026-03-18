@@ -371,3 +371,49 @@ test('internal news task service preserves its descriptive JSON-object error whe
         /Internal text task did not return a JSON object\./i
     );
 });
+
+test('internal news task service normalizes parseable timestamps and drops malformed items', async () => {
+    const service = createInternalNewsTaskService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                return {
+                    text: JSON.stringify({
+                        news: [
+                            {
+                                title: 'Policy update',
+                                summary: 'A concise summary',
+                                url: 'https://example.com/news-1',
+                                source: 'Example News',
+                                timestamp: '2026-03-18 23:48:53Z',
+                            },
+                            {
+                                title: 'Bad timestamp item',
+                                summary: 'This one should be dropped.',
+                                url: 'https://example.com/news-2',
+                                source: 'Example News',
+                                timestamp: 'later tonight maybe',
+                            },
+                        ],
+                        summary: 'One valid headline remains.',
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            },
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    const response = await service.runNewsTask({
+        task: 'news',
+        query: 'latest ai policy',
+    });
+
+    assert.equal(response.result.news.length, 1);
+    assert.equal(
+        response.result.news[0]?.timestamp,
+        '2026-03-18T23:48:53.000Z'
+    );
+    assert.equal(response.result.summary, 'One valid headline remains.');
+});
