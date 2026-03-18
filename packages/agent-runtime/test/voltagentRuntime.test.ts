@@ -226,6 +226,43 @@ test('voltagent runtime recovers markdown-link citations when retrieved output l
     assert.equal(result.provenance, 'Retrieved');
 });
 
+test('voltagent runtime ignores malformed bracket-heavy markdown without falling back or hanging', async () => {
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'gpt-5-mini',
+        fallbackRuntime: {
+            kind: 'legacy-openai',
+            async generate() {
+                throw new Error('fallback should not be used');
+            },
+        },
+        createExecutor: () => ({
+            async generateText() {
+                return {
+                    text: `${'[!](http://'.repeat(200)} not a real citation`,
+                    response: {
+                        modelId: 'openai/gpt-5-mini',
+                        body: {
+                            output: [{ type: 'web_search_call' }],
+                        },
+                    },
+                };
+            },
+        }),
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'What changed today?' }],
+        search: {
+            query: 'latest changes today',
+            contextSize: 'low',
+            intent: 'current_facts',
+        },
+    });
+
+    assert.deepEqual(result.citations, []);
+    assert.equal(result.provenance, 'Retrieved');
+});
+
 test('voltagent runtime requires a request model or configured default model', async () => {
     const runtime = createVoltAgentRuntime({
         fallbackRuntime: {

@@ -184,37 +184,64 @@ const normalizeFallbackCitationTitle = (label: string): string => {
     return /^\d+$/.test(normalizedLabel) ? 'Source' : normalizedLabel;
 };
 
+const normalizeCitationUrl = (rawUrl: string): string | null => {
+    try {
+        const parsedUrl = new URL(rawUrl);
+        if (
+            parsedUrl.protocol !== 'http:' &&
+            parsedUrl.protocol !== 'https:'
+        ) {
+            return null;
+        }
+
+        return parsedUrl.toString();
+    } catch {
+        return null;
+    }
+};
+
 const extractMarkdownLinkCitations = (text: string): GenerationCitation[] => {
     const citations: GenerationCitation[] = [];
     const seenUrls = new Set<string>();
-    const markdownLinkPattern = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+    let index = 0;
 
-    for (const match of text.matchAll(markdownLinkPattern)) {
-        const rawLabel = match[1];
-        const rawUrl = match[2];
+    while (index < text.length) {
+        const labelStart = text.indexOf('[', index);
+        if (labelStart === -1) {
+            break;
+        }
+
+        const labelEnd = text.indexOf(']', labelStart + 1);
+        if (labelEnd === -1) {
+            break;
+        }
+
+        if (labelEnd + 1 >= text.length || text[labelEnd + 1] !== '(') {
+            index = labelEnd + 1;
+            continue;
+        }
+
+        const urlStart = labelEnd + 2;
+        const urlEnd = text.indexOf(')', urlStart);
+        if (urlEnd === -1) {
+            break;
+        }
+
+        const rawLabel = text.slice(labelStart + 1, labelEnd);
+        const rawUrl = text.slice(urlStart, urlEnd);
+        index = urlEnd + 1;
+
         if (
-            typeof rawLabel !== 'string' ||
             rawLabel.trim().length === 0 ||
-            typeof rawUrl !== 'string'
+            rawUrl.length === 0 ||
+            /\s/.test(rawUrl) ||
+            (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://'))
         ) {
             continue;
         }
 
-        let normalizedUrl: string;
-        try {
-            const parsedUrl = new URL(rawUrl);
-            if (
-                parsedUrl.protocol !== 'http:' &&
-                parsedUrl.protocol !== 'https:'
-            ) {
-                continue;
-            }
-            normalizedUrl = parsedUrl.toString();
-        } catch {
-            continue;
-        }
-
-        if (seenUrls.has(normalizedUrl)) {
+        const normalizedUrl = normalizeCitationUrl(rawUrl);
+        if (!normalizedUrl || seenUrls.has(normalizedUrl)) {
             continue;
         }
 
