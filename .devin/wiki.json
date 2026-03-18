@@ -45,7 +45,7 @@
             "author": "Maintainer"
         },
         {
-            "content": "Document the runtime boundary clearly: backend owns the public Reflect contract, provenance, and traces, while `@footnote/agent-runtime` owns the replaceable execution layer. For this branch, VoltAgent is the active plain-text runtime and search-enabled requests still fall back to the legacy runtime.",
+            "content": "Document the runtime boundary clearly: backend owns the public Reflect contract, provenance, and traces, while `@footnote/agent-runtime` owns the replaceable execution layer. VoltAgent is the active Reflect text runtime.",
             "author": "Maintainer"
         }
     ],
@@ -117,7 +117,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Call out the runtime seam explicitly: backend composes `@footnote/agent-runtime`, rather than letting framework code leak into handlers. Mention that VoltAgent is active for plain text Reflect, while search-enabled requests still route through the legacy runtime fallback.",
+                    "content": "Call out the runtime seam explicitly: backend composes `@footnote/agent-runtime`, rather than letting framework code leak into handlers. Mention that VoltAgent is the active Reflect text runtime.",
                     "author": "Maintainer"
                 },
                 {
@@ -239,7 +239,7 @@
         },
         {
             "title": "Agent Runtime",
-            "purpose": "Explain the internal runtime package that sits behind backend Reflect, owns the replaceable generation seam, and currently hosts both the VoltAgent and legacy OpenAI runtime implementations.",
+            "purpose": "Explain the internal runtime package that sits behind backend Reflect, owns the replaceable generation seam, and currently hosts the active VoltAgent runtime plus the legacy OpenAI adapter.",
             "parent": "Packages",
             "entrypoints": [
                 "packages/agent-runtime/src",
@@ -252,7 +252,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Document the current state plainly: VoltAgent is the active plain-text Reflect runtime, and search-enabled requests still use the legacy runtime fallback so retrieval behavior stays stable.",
+                    "content": "Document the current state plainly: VoltAgent is the active Reflect text runtime. The package still contains the legacy OpenAI adapter, but it is no longer the active Reflect path.",
                     "author": "Maintainer"
                 }
             ]
@@ -301,7 +301,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Update this page for the runtime seam: planner decisions stay in backend, generation runs through `@footnote/agent-runtime`, VoltAgent handles plain text Reflect, and search-enabled requests still fall back to the legacy runtime path.",
+                    "content": "Update this page for the runtime seam: planner decisions stay in backend, generation runs through `@footnote/agent-runtime`, and VoltAgent handles Reflect text generation.",
                     "author": "Maintainer"
                 }
             ]
