@@ -141,19 +141,6 @@ export const createInternalNewsTaskService = ({
             },
         });
 
-        const responsePayload = {
-            task: 'news' as const,
-            result: extractJsonPayload(generationResult.text),
-        };
-        const parsedResponse =
-            PostInternalNewsTaskResponseSchema.safeParse(responsePayload);
-        if (!parsedResponse.success) {
-            const firstIssue = parsedResponse.error.issues[0];
-            throw new Error(
-                `Internal news task returned invalid structured output: ${firstIssue?.path.join('.') ?? 'body'} ${firstIssue?.message ?? 'Invalid response'}`
-            );
-        }
-
         const usageModel = generationResult.model ?? defaultModel;
         const promptTokens = generationResult.usage?.promptTokens ?? 0;
         const completionTokens = generationResult.usage?.completionTokens ?? 0;
@@ -177,6 +164,19 @@ export const createInternalNewsTaskService = ({
         } catch (error) {
             logger.warn(
                 `Internal news task usage recording failed: ${error instanceof Error ? error.message : String(error)}`
+            );
+        }
+
+        const responsePayload = {
+            task: 'news' as const,
+            result: extractJsonPayload(generationResult.text),
+        };
+        const parsedResponse =
+            PostInternalNewsTaskResponseSchema.safeParse(responsePayload);
+        if (!parsedResponse.success) {
+            const firstIssue = parsedResponse.error.issues[0];
+            throw new Error(
+                `Internal news task returned invalid structured output: ${firstIssue?.path.join('.') ?? 'body'} ${firstIssue?.message ?? 'Invalid response'}`
             );
         }
 

@@ -212,3 +212,38 @@ test('internal text endpoint returns 502 when the runtime output is not valid st
         await server.close();
     }
 });
+
+test('internal news task service records usage even when structured parsing fails', async () => {
+    let recordedUsageCount = 0;
+    const service = createInternalNewsTaskService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                return {
+                    text: 'not json',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 12,
+                        completionTokens: 8,
+                        totalTokens: 20,
+                    },
+                };
+            },
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => {
+            recordedUsageCount += 1;
+        },
+    });
+
+    await assert.rejects(
+        () =>
+            service.runNewsTask({
+                task: 'news',
+                query: 'latest ai policy',
+            }),
+        /invalid structured output|did not return a JSON object/i
+    );
+
+    assert.equal(recordedUsageCount, 1);
+});
