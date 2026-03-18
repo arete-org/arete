@@ -5,7 +5,7 @@
  * @footnote-risk: high - Incorrect request mapping or fallback behavior here can silently change model selection, retrieval handling, or usage facts.
  * @footnote-ethics: high - This adapter must preserve Footnote's sourcing and transparency expectations even before VoltAgent becomes the active backend runtime.
  */
-import { Agent, type BaseMessage } from '@voltagent/core';
+import { Agent, type AgentOptions, type BaseMessage, type ProviderTool } from '@voltagent/core';
 import type {
     GenerationCitation,
     GenerationRequest,
@@ -66,7 +66,7 @@ export interface VoltAgentSource {
     title?: string;
 }
 
-type VoltAgentProviderTool = {
+type VoltAgentProviderTool = ProviderTool & {
     type: 'provider';
     id: 'openai.web_search';
     name: 'web_search';
@@ -112,7 +112,6 @@ export interface CreateVoltAgentRuntimeOptions {
 }
 
 type VoltAgentCallOptions = NonNullable<Parameters<Agent['generateText']>[1]>;
-type VoltAgentToolSet = NonNullable<VoltAgentCallOptions['tools']>;
 
 /**
  * Turns the shared runtime transcript into the simple message shape VoltAgent
@@ -305,7 +304,14 @@ const buildVoltAgentSearchInstruction = (
 
 const createVoltAgentSearchTool = (
     search: GenerationSearchRequest
-): VoltAgentProviderTool => ({
+): {
+    type: 'provider';
+    id: 'openai.web_search';
+    name: 'web_search';
+    args: {
+        searchContextSize?: GenerationSearchRequest['contextSize'];
+    };
+} => ({
     type: 'provider',
     id: 'openai.web_search',
     name: 'web_search',
@@ -313,6 +319,29 @@ const createVoltAgentSearchTool = (
         searchContextSize: search.contextSize,
     },
 });
+
+const toVoltAgentProviderTool = (
+    tool: ReturnType<typeof createVoltAgentSearchTool>
+): VoltAgentProviderTool => {
+    if (
+        tool.type !== 'provider' ||
+        tool.id !== 'openai.web_search' ||
+        tool.name !== 'web_search' ||
+        !tool.args ||
+        (tool.args.searchContextSize !== undefined &&
+            tool.args.searchContextSize !== 'low' &&
+            tool.args.searchContextSize !== 'medium' &&
+            tool.args.searchContextSize !== 'high')
+    ) {
+        throw new Error('Invalid VoltAgent search tool payload.');
+    }
+
+    return tool as VoltAgentProviderTool;
+};
+
+const toVoltAgentAgentTools = (
+    tool: VoltAgentProviderTool
+): NonNullable<AgentOptions['tools']> => [tool];
 
 type VoltAgentResponseBody = {
     output?: Array<{
@@ -429,13 +458,17 @@ const normalizeVoltAgentResult = (
 const createDefaultVoltAgentExecutor: VoltAgentExecutorFactory = ({
     model,
 }) => {
-    const agent = new Agent({
-        name: 'footnote-generation-runtime',
-        instructions:
-            'Continue the provided conversation transcript and follow any system messages included in it.',
-        model,
-        memory: false,
-    });
+    const createAgent = (tools?: NonNullable<AgentOptions['tools']>) =>
+        new Agent({
+            name: 'footnote-generation-runtime',
+            instructions:
+                'Continue the provided conversation transcript and follow any system messages included in it.',
+            model,
+            memory: false,
+            ...(tools !== undefined && { tools }),
+        });
+
+    const agent = createAgent();
 
     return {
         async generateText(
@@ -453,10 +486,6 @@ const createDefaultVoltAgentExecutor: VoltAgentExecutorFactory = ({
                       },
                   ]
                 : messages;
-            const searchTools =
-                options.search !== undefined
-                    ? ([createVoltAgentSearchTool(options.search)] as unknown as VoltAgentToolSet)
-                    : undefined;
             const callOptions: VoltAgentCallOptions = {
                 ...(options.maxOutputTokens !== undefined && {
                     maxOutputTokens: options.maxOutputTokens,
@@ -465,15 +494,24 @@ const createDefaultVoltAgentExecutor: VoltAgentExecutorFactory = ({
                     providerOptions:
                         options.providerOptions as VoltAgentCallOptions['providerOptions'],
                 }),
-                ...(searchTools !== undefined && {
-                    tools: searchTools,
+                ...(options.search !== undefined && {
                     toolChoice: 'required' as VoltAgentCallOptions['toolChoice'],
                 }),
                 ...(options.signal !== undefined && {
                     signal: options.signal,
                 }),
             };
-            const result = await agent.generateText(
+            const activeAgent =
+                options.search !== undefined
+                    ? createAgent(
+                          toVoltAgentAgentTools(
+                              toVoltAgentProviderTool(
+                                  createVoltAgentSearchTool(options.search)
+                              )
+                          )
+                      )
+                    : agent;
+            const result = await activeAgent.generateText(
                 toVoltAgentMessages(runtimeMessages),
                 callOptions
             );
