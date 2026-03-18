@@ -7,9 +7,11 @@
  */
 import { Agent, type BaseMessage } from '@voltagent/core';
 import type {
+    GenerationCitation,
     GenerationRequest,
     GenerationResult,
     GenerationRuntime,
+    GenerationSearchRequest,
     GenerationUsage,
     RuntimeMessage,
 } from './index.js';
@@ -35,6 +37,7 @@ export type VoltAgentProviderOptions = Record<string, unknown> & {
 export interface VoltAgentGenerateTextOptions {
     maxOutputTokens?: number;
     providerOptions?: VoltAgentProviderOptions;
+    search?: GenerationSearchRequest;
     signal?: AbortSignal;
 }
 
@@ -52,16 +55,32 @@ export interface VoltAgentUsage {
  */
 export interface VoltAgentResponseMetadata {
     modelId?: string;
+    body?: unknown;
 }
 
 /**
  * Narrow text result shape exposed by the VoltAgent executor wrapper.
  */
+export interface VoltAgentSource {
+    url: string;
+    title?: string;
+}
+
+type VoltAgentProviderTool = {
+    type: 'provider';
+    id: 'openai.web_search';
+    name: 'web_search';
+    args: {
+        searchContextSize?: GenerationSearchRequest['contextSize'];
+    };
+};
+
 export interface VoltAgentTextResult {
     text: string;
     finishReason?: string;
     usage?: VoltAgentUsage;
     response?: VoltAgentResponseMetadata;
+    sources?: VoltAgentSource[];
 }
 
 /**
@@ -93,6 +112,7 @@ export interface CreateVoltAgentRuntimeOptions {
 }
 
 type VoltAgentCallOptions = NonNullable<Parameters<Agent['generateText']>[1]>;
+type VoltAgentToolSet = NonNullable<VoltAgentCallOptions['tools']>;
 
 /**
  * Turns the shared runtime transcript into the simple message shape VoltAgent
@@ -158,11 +178,185 @@ const buildVoltAgentProviderOptions = (
     };
 };
 
+const normalizeFallbackCitationTitle = (label: string): string => {
+    const normalizedLabel = label.trim();
+
+    return /^\d+$/.test(normalizedLabel) ? 'Source' : normalizedLabel;
+};
+
+const extractMarkdownLinkCitations = (text: string): GenerationCitation[] => {
+    const citations: GenerationCitation[] = [];
+    const seenUrls = new Set<string>();
+    const markdownLinkPattern = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+
+    for (const match of text.matchAll(markdownLinkPattern)) {
+        const rawLabel = match[1];
+        const rawUrl = match[2];
+        if (
+            typeof rawLabel !== 'string' ||
+            rawLabel.trim().length === 0 ||
+            typeof rawUrl !== 'string'
+        ) {
+            continue;
+        }
+
+        let normalizedUrl: string;
+        try {
+            const parsedUrl = new URL(rawUrl);
+            if (
+                parsedUrl.protocol !== 'http:' &&
+                parsedUrl.protocol !== 'https:'
+            ) {
+                continue;
+            }
+            normalizedUrl = parsedUrl.toString();
+        } catch {
+            continue;
+        }
+
+        if (seenUrls.has(normalizedUrl)) {
+            continue;
+        }
+
+        seenUrls.add(normalizedUrl);
+        citations.push({
+            title: normalizeFallbackCitationTitle(rawLabel),
+            url: normalizedUrl,
+        });
+    }
+
+    return citations;
+};
+
+const buildRepoExplainerQuery = (search: GenerationSearchRequest): string => {
+    const rawTerms = [
+        'footnote-ai/footnote',
+        'footnote-ai',
+        'footnote',
+        'DeepWiki',
+        ...(search.repoHints ?? []),
+        search.query.trim(),
+    ];
+    const seenTerms = new Set<string>();
+    const dedupedTerms: string[] = [];
+
+    for (const term of rawTerms) {
+        const normalized = term.trim().toLowerCase();
+        if (!normalized || seenTerms.has(normalized)) {
+            continue;
+        }
+
+        seenTerms.add(normalized);
+        dedupedTerms.push(term.trim());
+    }
+
+    return dedupedTerms.join(' ');
+};
+
+const buildVoltAgentSearchInstruction = (
+    search: GenerationSearchRequest
+): string => {
+    if (search.intent === 'repo_explainer') {
+        const repoQuery = buildRepoExplainerQuery(search);
+        const hintText =
+            (search.repoHints?.length ?? 0) > 0
+                ? ` Focus areas: ${search.repoHints?.join(', ')}.`
+                : '';
+
+        return [
+            'The planner marked this as a Footnote repository explanation lookup.',
+            'Treat footnote-ai/footnote as the canonical repository identity for this search.',
+            'Prefer DeepWiki results from https://deepwiki.com/footnote-ai/footnote when they are relevant.',
+            'If DeepWiki coverage is thin, use broader web context instead of getting stuck.',
+            `Search query: ${repoQuery}.${hintText}`.trim(),
+            `Original planner query: ${search.query.trim()}.`,
+        ].join(' ');
+    }
+
+    return `The planner instructed you to perform a web search for: ${search.query.trim()}`;
+};
+
+const createVoltAgentSearchTool = (
+    search: GenerationSearchRequest
+): VoltAgentProviderTool => ({
+    type: 'provider',
+    id: 'openai.web_search',
+    name: 'web_search',
+    args: {
+        searchContextSize: search.contextSize,
+    },
+});
+
+type VoltAgentResponseBody = {
+    output?: Array<{
+        type?: string;
+    }>;
+};
+
+const hasWebSearchCallInResponseBody = (body: unknown): boolean => {
+    if (!body || typeof body !== 'object') {
+        return false;
+    }
+
+    const outputItems = (body as VoltAgentResponseBody).output;
+    return (
+        Array.isArray(outputItems) &&
+        outputItems.some((item) => item?.type === 'web_search_call')
+    );
+};
+
+const extractCitationsFromSources = (
+    sources: VoltAgentSource[] | undefined
+): GenerationCitation[] => {
+    if (!Array.isArray(sources) || sources.length === 0) {
+        return [];
+    }
+
+    const citations: GenerationCitation[] = [];
+    const seenUrls = new Set<string>();
+
+    for (const source of sources) {
+        if (!source || typeof source.url !== 'string') {
+            continue;
+        }
+
+        let normalizedUrl: string;
+        try {
+            const parsedUrl = new URL(source.url);
+            if (
+                parsedUrl.protocol !== 'http:' &&
+                parsedUrl.protocol !== 'https:'
+            ) {
+                continue;
+            }
+            normalizedUrl = parsedUrl.toString();
+        } catch {
+            continue;
+        }
+
+        if (seenUrls.has(normalizedUrl)) {
+            continue;
+        }
+
+        seenUrls.add(normalizedUrl);
+        citations.push({
+            title:
+                typeof source.title === 'string' && source.title.trim()
+                    ? source.title.trim()
+                    : 'Source',
+            url: normalizedUrl,
+        });
+    }
+
+    return citations;
+};
+
 /**
  * Converts the executor result into the shared generation result shape.
  */
 const normalizeVoltAgentResult = (
     executedModel: string,
+    request: GenerationRequest,
     result: VoltAgentTextResult
 ): GenerationResult => {
     const responseModel = result.response?.modelId ?? executedModel;
@@ -173,18 +367,29 @@ const normalizeVoltAgentResult = (
               totalTokens: result.usage.totalTokens,
           }
         : undefined;
+    const hasSearchRequest = request.search !== undefined;
+    const hasWebSearchCall = hasWebSearchCallInResponseBody(result.response?.body);
+    const citationsFromSources = extractCitationsFromSources(result.sources);
+    const citations =
+        citationsFromSources.length === 0 &&
+        hasWebSearchCall &&
+        result.text.trim().length > 0
+            ? extractMarkdownLinkCitations(result.text)
+            : citationsFromSources;
+    const retrievalUsed =
+        hasSearchRequest && (hasWebSearchCall || citations.length > 0);
 
     return {
         text: result.text,
         model: toFootnoteModel(responseModel),
         finishReason: result.finishReason,
         usage,
-        citations: [],
+        citations,
         retrieval: {
-            requested: false,
-            used: false,
+            requested: hasSearchRequest,
+            used: retrievalUsed,
         },
-        provenance: 'Inferred',
+        provenance: retrievalUsed ? 'Retrieved' : 'Inferred',
     };
 };
 
@@ -210,6 +415,21 @@ const createDefaultVoltAgentExecutor: VoltAgentExecutorFactory = ({
             messages: RuntimeMessage[],
             options: VoltAgentGenerateTextOptions
         ): Promise<VoltAgentTextResult> {
+            const runtimeMessages = options.search
+                ? [
+                      ...messages,
+                      {
+                          role: 'system' as const,
+                          content: buildVoltAgentSearchInstruction(
+                              options.search
+                          ),
+                      },
+                  ]
+                : messages;
+            const searchTools =
+                options.search !== undefined
+                    ? ([createVoltAgentSearchTool(options.search)] as unknown as VoltAgentToolSet)
+                    : undefined;
             const callOptions: VoltAgentCallOptions = {
                 ...(options.maxOutputTokens !== undefined && {
                     maxOutputTokens: options.maxOutputTokens,
@@ -218,12 +438,16 @@ const createDefaultVoltAgentExecutor: VoltAgentExecutorFactory = ({
                     providerOptions:
                         options.providerOptions as VoltAgentCallOptions['providerOptions'],
                 }),
+                ...(searchTools !== undefined && {
+                    tools: searchTools,
+                    toolChoice: 'required' as VoltAgentCallOptions['toolChoice'],
+                }),
                 ...(options.signal !== undefined && {
                     signal: options.signal,
                 }),
             };
             const result = await agent.generateText(
-                toVoltAgentMessages(messages),
+                toVoltAgentMessages(runtimeMessages),
                 callOptions
             );
 
@@ -237,7 +461,24 @@ const createDefaultVoltAgentExecutor: VoltAgentExecutorFactory = ({
                 },
                 response: {
                     modelId: result.response.modelId,
+                    body: result.response.body,
                 },
+                sources:
+                    result.sources
+                        ?.filter(
+                            (
+                                source
+                            ): source is typeof source & {
+                                sourceType: 'url';
+                                url: string;
+                            } =>
+                                source.type === 'source' &&
+                                source.sourceType === 'url'
+                        )
+                        .map((source) => ({
+                            url: source.url,
+                            title: source.title,
+                        })) ?? [],
             };
         },
     };
@@ -245,23 +486,15 @@ const createDefaultVoltAgentExecutor: VoltAgentExecutorFactory = ({
 
 /**
  * Creates the VoltAgent-backed runtime implementation.
- *
- * Search requests deliberately fall back to another runtime for now so this
- * step can prove the second implementation without taking on retrieval parity
- * work at the same time.
  */
 const createVoltAgentRuntime = ({
-    fallbackRuntime,
+    fallbackRuntime: _fallbackRuntime,
     defaultModel,
     createExecutor = createDefaultVoltAgentExecutor,
     kind = 'voltagent',
 }: CreateVoltAgentRuntimeOptions): GenerationRuntime => ({
     kind,
     async generate(request: GenerationRequest): Promise<GenerationResult> {
-        if (request.search !== undefined) {
-            return fallbackRuntime.generate(request);
-        }
-
         const selectedModel = request.model ?? defaultModel;
         if (!selectedModel) {
             throw new Error(
@@ -276,11 +509,14 @@ const createVoltAgentRuntime = ({
             ...(request.maxOutputTokens !== undefined && {
                 maxOutputTokens: request.maxOutputTokens,
             }),
+            ...(request.search !== undefined && {
+                search: request.search,
+            }),
             ...(request.signal !== undefined && { signal: request.signal }),
             ...(providerOptions !== undefined && { providerOptions }),
         });
 
-        return normalizeVoltAgentResult(executedModel, result);
+        return normalizeVoltAgentResult(executedModel, request, result);
     },
 });
 

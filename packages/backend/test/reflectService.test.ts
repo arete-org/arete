@@ -396,9 +396,65 @@ test('runReflectMessages forwards planner-selected generation settings to Genera
     assert.equal(seenRequest?.search?.intent, 'current_facts');
 });
 
-test('runReflectMessages records usage correctly when VoltAgent search falls back to the legacy runtime', async () => {
+test('runReflectMessages drops blank search queries before building the runtime request', async () => {
+    let seenRequest:
+        | import('@footnote/agent-runtime').GenerationRequest
+        | undefined;
+    let capturedRetrieval: ResponseMetadataRetrievalContext | undefined;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request) {
+            seenRequest = request;
+            return {
+                text: 'reflect response',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 20,
+                    completionTokens: 10,
+                    totalTokens: 30,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const reflectService = createReflectService({
+        generationRuntime,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedRetrieval = runtimeContext.retrieval;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    await reflectService.runReflectMessages({
+        messages: [{ role: 'user', content: 'Give me a quick summary.' }],
+        conversationSnapshot: 'Give me a quick summary.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            search: {
+                query: '   ',
+                contextSize: 'low',
+                intent: 'current_facts',
+            },
+        },
+    });
+
+    assert.equal(seenRequest?.search, undefined);
+    assert.deepEqual(capturedRetrieval, {
+        requested: false,
+        used: false,
+        intent: undefined,
+        contextSize: undefined,
+    });
+});
+
+test('runReflectMessages records usage correctly when VoltAgent handles search directly', async () => {
     const usageRecords: BackendLLMCostRecord[] = [];
-    let fallbackCalled = false;
     let executorCalled = false;
     const reflectService = createReflectService({
         generationRuntime: createVoltAgentRuntime({
@@ -406,25 +462,31 @@ test('runReflectMessages records usage correctly when VoltAgent search falls bac
             fallbackRuntime: {
                 kind: 'legacy-openai',
                 async generate() {
-                    fallbackCalled = true;
-                    return {
-                        text: 'legacy search reply',
-                        model: 'gpt-5-mini',
-                        usage: {
-                            promptTokens: 50,
-                            completionTokens: 25,
-                            totalTokens: 75,
-                        },
-                        provenance: 'Retrieved',
-                        citations: [],
-                    };
+                    throw new Error('fallback should not be used');
                 },
             },
             createExecutor: () => ({
                 async generateText() {
                     executorCalled = true;
                     return {
-                        text: 'unexpected',
+                        text: 'search-backed reply',
+                        usage: {
+                            promptTokens: 50,
+                            completionTokens: 25,
+                            totalTokens: 75,
+                        },
+                        response: {
+                            modelId: 'openai/gpt-5-mini',
+                            body: {
+                                output: [{ type: 'web_search_call' }],
+                            },
+                        },
+                        sources: [
+                            {
+                                title: 'OpenAI Policy Update',
+                                url: 'https://example.com/policy',
+                            },
+                        ],
                     };
                 },
             }),
@@ -451,8 +513,7 @@ test('runReflectMessages records usage correctly when VoltAgent search falls bac
         },
     });
 
-    assert.equal(fallbackCalled, true);
-    assert.equal(executorCalled, false);
+    assert.equal(executorCalled, true);
     assert.equal(usageRecords.length, 1);
     assert.equal(usageRecords[0].model, 'gpt-5-mini');
     assert.equal(usageRecords[0].promptTokens, 50);
@@ -469,30 +530,28 @@ test('runReflectMessages stores evidence and freshness chips for retrieved searc
             fallbackRuntime: {
                 kind: 'legacy-openai',
                 async generate() {
-                    return {
-                        text: 'search-backed reply',
-                        model: 'gpt-5-mini',
-                        usage: {
-                            promptTokens: 50,
-                            completionTokens: 25,
-                            totalTokens: 75,
-                        },
-                        provenance: 'Retrieved',
-                        citations: [
-                            { title: 'One', url: 'https://example.com/1' },
-                            { title: 'Two', url: 'https://example.com/2' },
-                        ],
-                        retrieval: {
-                            requested: true,
-                            used: true,
-                        },
-                    };
+                    throw new Error('fallback should not be used');
                 },
             },
             createExecutor: () => ({
                 async generateText() {
                     return {
-                        text: 'unexpected',
+                        text: 'search-backed reply',
+                        usage: {
+                            promptTokens: 50,
+                            completionTokens: 25,
+                            totalTokens: 75,
+                        },
+                        response: {
+                            modelId: 'openai/gpt-5-mini',
+                            body: {
+                                output: [{ type: 'web_search_call' }],
+                            },
+                        },
+                        sources: [
+                            { title: 'One', url: 'https://example.com/1' },
+                            { title: 'Two', url: 'https://example.com/2' },
+                        ],
                     };
                 },
             }),

@@ -36,6 +36,38 @@ import { logger } from '../utils/logger.js';
 const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
 
 /**
+ * Search is optional, but if it is present it needs a real query. Blank values
+ * should fail open to normal generation instead of forcing retrieval tooling.
+ */
+const normalizeGenerationPlan = (
+    generation: ReflectGenerationPlan | undefined
+): ReflectGenerationPlan | undefined => {
+    if (!generation?.search) {
+        return generation;
+    }
+
+    const normalizedQuery = generation.search.query.trim();
+    if (normalizedQuery.length === 0) {
+        logger.warn(
+            'Reflect generation requested search without a usable query; continuing without retrieval.'
+        );
+
+        return {
+            ...generation,
+            search: undefined,
+        };
+    }
+
+    return {
+        ...generation,
+        search: {
+            ...generation.search,
+            query: normalizedQuery,
+        },
+    };
+};
+
+/**
  * Keeps backend-only reflect persona rendering aligned with deployment naming.
  */
 const resolveBotProfileDisplayName = (): string => {
@@ -132,8 +164,9 @@ export const createReflectService = ({
         message: string;
         metadata: ResponseMetadata;
     }> => {
-        const repoExplainerHint = generation
-            ? buildRepoExplainerResponseHint(generation)
+        const normalizedGeneration = normalizeGenerationPlan(generation);
+        const repoExplainerHint = normalizedGeneration
+            ? buildRepoExplainerResponseHint(normalizedGeneration)
             : null;
         const messagesWithHints: RuntimeMessage[] = repoExplainerHint
             ? [
@@ -147,14 +180,14 @@ export const createReflectService = ({
         const generationRequest: GenerationRequest = {
             messages: messagesWithHints,
             model: model ?? defaultModel,
-            ...(generation?.reasoningEffort !== undefined && {
-                reasoningEffort: generation.reasoningEffort,
+            ...(normalizedGeneration?.reasoningEffort !== undefined && {
+                reasoningEffort: normalizedGeneration.reasoningEffort,
             }),
-            ...(generation?.verbosity !== undefined && {
-                verbosity: generation.verbosity,
+            ...(normalizedGeneration?.verbosity !== undefined && {
+                verbosity: normalizedGeneration.verbosity,
             }),
-            ...(generation?.search !== undefined && {
-                search: generation.search,
+            ...(normalizedGeneration?.search !== undefined && {
+                search: normalizedGeneration.search,
             }),
         };
 
@@ -162,7 +195,7 @@ export const createReflectService = ({
             await generationRuntime.generate(generationRequest);
         const assistantMetadata = buildAssistantMetadata(
             generationResult,
-            generation,
+            normalizedGeneration,
             generationRequest.model
         );
 
@@ -200,13 +233,13 @@ export const createReflectService = ({
             conversationSnapshot: `${conversationSnapshot}\n\n${generationResult.text}`,
             plannerTemperament,
             retrieval: {
-                requested: generation?.search !== undefined,
+                requested: normalizedGeneration?.search !== undefined,
                 used:
                     generationResult.retrieval?.used === true ||
                     generationResult.provenance === 'Retrieved' ||
                     (generationResult.citations?.length ?? 0) > 0,
-                intent: generation?.search?.intent,
-                contextSize: generation?.search?.contextSize,
+                intent: normalizedGeneration?.search?.intent,
+                contextSize: normalizedGeneration?.search?.contextSize,
             },
         };
 

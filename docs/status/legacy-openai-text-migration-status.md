@@ -49,8 +49,9 @@ Known high-level state today:
 
 - reflect generation already runs through the shared runtime seam
 - reflect planning now executes through a backend-local seam backed by the shared runtime
+- VoltAgent text runtime now handles search-enabled requests directly in the active text path
 - `/news` still chooses providers locally in Discord
-- legacy fallback behavior still exists for parts of the text path
+- legacy text fallback behavior is no longer used in the active backend reflect path
 
 Likely starting points to track as this branch becomes concrete:
 
@@ -60,9 +61,9 @@ Likely starting points to track as this branch becomes concrete:
 
 Current concrete hotspots:
 
-- `packages/agent-runtime/src/voltagentRuntime.ts` still falls back to the legacy runtime for search-enabled text requests
 - `packages/discord-bot/src/commands/news.ts` still uses local legacy OpenAI text generation
-- reflect handler/orchestrator tests now prove planner execution no longer requires the legacy backend service
+- `/news` still needs a backend-owned internal text task path
+- runtime tests now prove search-enabled reflect requests no longer delegate to legacy fallback
 
 ## Target End State
 
@@ -98,7 +99,7 @@ Current branch status:
 
 ### 2. Runtime parity
 
-Status: Planned
+Status: In progress
 
 Track:
 
@@ -106,10 +107,22 @@ Track:
 - citation and provenance parity
 - fallback removal criteria
 
+Current branch status:
+
+- complete for active backend reflect search flow
+- VoltAgent runtime no longer delegates search-enabled generation to the legacy runtime in the active text path
+- retrieved replies now normalize back into Footnote citations, retrieval facts, and retrieved provenance
+- markdown-link citation recovery is preserved for retrieval-backed replies that lack structured source records
+- backend reflect request building now strips blank search queries before they reach the shared runtime
+- milestone 2 review gate is complete for backend reflect text flow
+- validated by:
+  - `packages/agent-runtime/test/voltagentRuntime.test.ts`
+  - `packages/backend/test/reflectService.test.ts`
+
 Current next focus:
 
-- remove active search fallback from the VoltAgent runtime path
-- preserve citations, retrieval facts, and provenance-sensitive metadata behavior
+- route `/news` through a backend-owned internal text task endpoint
+- keep the task contract narrow and purpose-built
 
 ### 3. Tertiary text flows
 
@@ -151,6 +164,11 @@ Current validation snapshot:
   - `pnpm exec tsx --test packages/backend/test/reflectPlanner.test.ts`
   - `pnpm exec tsx --test packages/backend/test/reflectOrchestrator.test.ts`
   - `pnpm exec tsx --test packages/backend/test/reflectHandler.test.ts`
+- milestone 2 runtime parity tests passing on 2026-03-18:
+  - `pnpm exec tsx --test packages/agent-runtime/test/voltagentRuntime.test.ts`
+  - `pnpm exec tsx --test packages/backend/test/reflectService.test.ts`
+- repo validation passing on 2026-03-18:
+  - `pnpm review`
 
 ## Open Questions
 
@@ -158,7 +176,6 @@ Capture branch-specific questions here as they arise.
 
 Current placeholders:
 
-- What is the narrowest acceptable parity bar before deleting the legacy text fallback?
 - What is the narrowest task contract for `/news` without creating a generic internal text proxy?
 
 ## Notes

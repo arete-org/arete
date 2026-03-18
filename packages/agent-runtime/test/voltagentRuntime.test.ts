@@ -11,7 +11,6 @@ import assert from 'node:assert/strict';
 import { Agent } from '@voltagent/core';
 import type {
     GenerationRequest,
-    GenerationRuntime,
     RuntimeMessage,
 } from '../src/index.js';
 import {
@@ -126,33 +125,34 @@ test('voltagent runtime normalizes non-search output into GenerationResult', asy
     assert.equal(result.provenance, 'Inferred');
 });
 
-test('voltagent runtime delegates search requests to the fallback runtime unchanged', async () => {
-    let executorCalled = false;
-    let fallbackRequest: GenerationRequest | undefined;
-    const fallbackRuntime: GenerationRuntime = {
-        kind: 'legacy-openai',
-        async generate(request: GenerationRequest) {
-            fallbackRequest = request;
-
-            return {
-                text: 'legacy search reply',
-                retrieval: {
-                    requested: true,
-                    used: true,
-                },
-                provenance: 'Retrieved',
-            };
-        },
-    };
+test('voltagent runtime executes search requests through the VoltAgent executor', async () => {
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
     const runtime = createVoltAgentRuntime({
         defaultModel: 'gpt-5-mini',
-        fallbackRuntime,
+        fallbackRuntime: {
+            kind: 'legacy-openai',
+            async generate() {
+                throw new Error('fallback should not be used');
+            },
+        },
         createExecutor: () => ({
-            async generateText() {
-                executorCalled = true;
+            async generateText(_messages, options) {
+                seenOptions = options;
 
                 return {
-                    text: 'unexpected',
+                    text: 'search-backed reply',
+                    sources: [
+                        {
+                            title: 'Latest Policy Update',
+                            url: 'https://example.com/policy',
+                        },
+                    ],
+                    response: {
+                        modelId: 'openai/gpt-5-mini',
+                        body: {
+                            output: [{ type: 'web_search_call' }],
+                        },
+                    },
                 };
             },
         }),
@@ -170,13 +170,59 @@ test('voltagent runtime delegates search requests to the fallback runtime unchan
 
     const result = await runtime.generate(request);
 
-    assert.equal(executorCalled, false);
-    assert.deepEqual(fallbackRequest, request);
-    assert.equal(result.text, 'legacy search reply');
+    assert.equal(seenOptions?.search?.query, 'latest policy changes');
+    assert.equal(seenOptions?.search?.intent, 'current_facts');
+    assert.equal(result.text, 'search-backed reply');
+    assert.deepEqual(result.citations, [
+        {
+            title: 'Latest Policy Update',
+            url: 'https://example.com/policy',
+        },
+    ]);
     assert.deepEqual(result.retrieval, {
         requested: true,
         used: true,
     });
+    assert.equal(result.provenance, 'Retrieved');
+});
+
+test('voltagent runtime recovers markdown-link citations when retrieved output lacks structured sources', async () => {
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'gpt-5-mini',
+        fallbackRuntime: {
+            kind: 'legacy-openai',
+            async generate() {
+                throw new Error('fallback should not be used');
+            },
+        },
+        createExecutor: () => ({
+            async generateText() {
+                return {
+                    text: 'Recent headlines: [1](https://example.com/a) [Policy Blog](https://example.com/b)',
+                    response: {
+                        modelId: 'openai/gpt-5-mini',
+                        body: {
+                            output: [{ type: 'web_search_call' }],
+                        },
+                    },
+                };
+            },
+        }),
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'What changed today?' }],
+        search: {
+            query: 'latest changes today',
+            contextSize: 'low',
+            intent: 'current_facts',
+        },
+    });
+
+    assert.deepEqual(result.citations, [
+        { title: 'Source', url: 'https://example.com/a' },
+        { title: 'Policy Blog', url: 'https://example.com/b' },
+    ]);
     assert.equal(result.provenance, 'Retrieved');
 });
 
