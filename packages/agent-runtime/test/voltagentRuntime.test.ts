@@ -170,8 +170,11 @@ test('voltagent runtime executes search requests through the VoltAgent executor'
 
     const result = await runtime.generate(request);
 
-    assert.equal(seenOptions?.search?.query, 'latest policy changes');
-    assert.equal(seenOptions?.search?.intent, 'current_facts');
+    assert.deepEqual(seenOptions?.search, {
+        query: 'latest policy changes',
+        contextSize: 'low',
+        intent: 'current_facts',
+    });
     assert.equal(result.text, 'search-backed reply');
     assert.deepEqual(result.citations, [
         {
