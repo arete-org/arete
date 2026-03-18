@@ -293,36 +293,33 @@ test('voltagent runtime requires a request model or configured default model', a
 });
 
 test('default VoltAgent executor maps usage from the installed AI SDK token fields', async () => {
-    const originalGenerateText = Agent.prototype.generateText;
-    Agent.prototype.generateText = (async () => ({
-        text: 'executor reply',
-        finishReason: 'stop',
-        usage: {
-            inputTokens: 21,
-            outputTokens: 9,
-            totalTokens: 30,
-        },
-        response: {
-            modelId: 'openai/gpt-5-mini',
-        },
-    })) as unknown as Agent['generateText'];
+    const fakeAgent: Pick<Agent, 'generateText'> = {
+        generateText: (async () => ({
+            text: 'executor reply',
+            finishReason: 'stop',
+            usage: {
+                inputTokens: 21,
+                outputTokens: 9,
+                totalTokens: 30,
+            },
+            response: {
+                modelId: 'openai/gpt-5-mini',
+            },
+        })) as Agent['generateText'],
+    };
+    const executor = createDefaultVoltAgentExecutor({
+        model: 'openai/gpt-5-mini',
+        agentFactory: () => fakeAgent,
+    });
 
-    try {
-        const executor = createDefaultVoltAgentExecutor({
-            model: 'openai/gpt-5-mini',
-        });
+    const result = await executor.generateText(
+        [{ role: 'user', content: 'Summarize the change.' }],
+        {}
+    );
 
-        const result = await executor.generateText(
-            [{ role: 'user', content: 'Summarize the change.' }],
-            {}
-        );
-
-        assert.deepEqual(result.usage, {
-            promptTokens: 21,
-            completionTokens: 9,
-            totalTokens: 30,
-        });
-    } finally {
-        Agent.prototype.generateText = originalGenerateText;
-    }
+    assert.deepEqual(result.usage, {
+        promptTokens: 21,
+        completionTokens: 9,
+        totalTokens: 30,
+    });
 });

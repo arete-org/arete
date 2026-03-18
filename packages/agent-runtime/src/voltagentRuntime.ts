@@ -101,6 +101,13 @@ export type VoltAgentExecutorFactory = (input: {
     model: string;
 }) => VoltAgentTextExecutor;
 
+type VoltAgentLike = Pick<Agent, 'generateText'>;
+
+type CreateVoltAgentAgentFactoryInput = {
+    model: string;
+    tools?: NonNullable<AgentOptions['tools']>;
+};
+
 /**
  * Constructor input for the VoltAgent runtime implementation.
  */
@@ -455,18 +462,28 @@ const normalizeVoltAgentResult = (
  * This stays intentionally narrow: no memory, no server, and no extra runtime
  * wiring yet. The adapter only needs plain text generation for now.
  */
-const createDefaultVoltAgentExecutor: VoltAgentExecutorFactory = ({
+const createDefaultVoltAgentExecutor = ({
     model,
-}) => {
-    const createAgent = (tools?: NonNullable<AgentOptions['tools']>) =>
+    agentFactory = ({
+        model: agentModel,
+        tools,
+    }: CreateVoltAgentAgentFactoryInput): VoltAgentLike =>
         new Agent({
             name: 'footnote-generation-runtime',
             instructions:
                 'Continue the provided conversation transcript and follow any system messages included in it.',
-            model,
+            model: agentModel,
             memory: false,
             ...(tools !== undefined && { tools }),
-        });
+        }),
+}: {
+    model: string;
+    agentFactory?: (
+        input: CreateVoltAgentAgentFactoryInput
+    ) => VoltAgentLike;
+}): VoltAgentTextExecutor => {
+    const createAgent = (tools?: NonNullable<AgentOptions['tools']>) =>
+        agentFactory({ model, ...(tools !== undefined && { tools }) });
 
     const agent = createAgent();
 
