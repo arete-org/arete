@@ -8,6 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import type { GenerationRuntime } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type { PostReflectRequest } from '@footnote/contracts/web';
 import { createReflectOrchestrator } from '../src/services/reflectOrchestrator.js';
@@ -44,6 +45,15 @@ const createReflectRequest = (
     ...overrides,
 });
 
+const createGenerationRuntime = (
+    implementation: (
+        request: import('@footnote/agent-runtime').GenerationRequest
+    ) => Promise<import('@footnote/agent-runtime').GenerationResult>
+): GenerationRuntime => ({
+    kind: 'test-runtime',
+    generate: implementation,
+});
+
 test('web requests go through planner and are coerced to message when planner picks react', async () => {
     let callCount = 0;
     let finalMessages: Array<{ role: string; content: string }> = [];
@@ -54,7 +64,7 @@ test('web requests go through planner and are coerced to message when planner pi
             options?: GenerateResponseOptions
         ) {
             callCount += 1;
-            if (options?.maxCompletionTokens === 700) {
+            if (options?.maxOutputTokens === 700) {
                 return {
                     normalizedText: JSON.stringify({
                         action: 'react',
@@ -65,7 +75,6 @@ test('web requests go through planner and are coerced to message when planner pi
                         generation: {
                             reasoningEffort: 'low',
                             verbosity: 'low',
-                            toolChoice: 'none',
                         },
                     }),
                     metadata: { model: 'gpt-5-mini' },
@@ -87,6 +96,15 @@ test('web requests go through planner and are coerced to message when planner pi
 
     const orchestrator = createReflectOrchestrator({
         openaiService,
+        generationRuntime: createGenerationRuntime(async ({ messages }) => {
+            finalMessages = messages;
+            return {
+                text: 'coerced web reply',
+                model: 'gpt-5-mini',
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
@@ -105,7 +123,7 @@ test('web requests go through planner and are coerced to message when planner pi
         })
     );
 
-    assert.equal(callCount, 2);
+    assert.equal(callCount, 1);
     assert.equal(response.action, 'message');
     assert.equal(response.message, 'coerced web reply');
     assert.equal(
@@ -131,7 +149,7 @@ test('discord requests preserve non-message planner actions', async () => {
             options?: GenerateResponseOptions
         ) {
             callCount += 1;
-            if (options?.maxCompletionTokens === 700) {
+            if (options?.maxOutputTokens === 700) {
                 return {
                     normalizedText: JSON.stringify({
                         action: 'image',
@@ -144,7 +162,6 @@ test('discord requests preserve non-message planner actions', async () => {
                         generation: {
                             reasoningEffort: 'low',
                             verbosity: 'low',
-                            toolChoice: 'none',
                         },
                     }),
                     metadata: { model: 'gpt-5-mini' },
@@ -159,6 +176,11 @@ test('discord requests preserve non-message planner actions', async () => {
 
     const orchestrator = createReflectOrchestrator({
         openaiService,
+        generationRuntime: createGenerationRuntime(async () => {
+            throw new Error(
+                'message generation should not run for image actions'
+            );
+        }),
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
@@ -173,15 +195,14 @@ test('discord requests preserve non-message planner actions', async () => {
 });
 
 test('message plans pass planner generation options into reflectService', async () => {
-    let generationOptionsSeen: GenerateResponseOptions | undefined;
     let finalMessages: Array<{ role: string; content: string }> = [];
     const openaiService: OpenAIService = {
         async generateResponse(
             _model,
-            messages,
+            _messages,
             options?: GenerateResponseOptions
         ) {
-            if (options?.maxCompletionTokens === 700) {
+            if (options?.maxOutputTokens === 700) {
                 return {
                     normalizedText: JSON.stringify({
                         action: 'message',
@@ -191,7 +212,6 @@ test('message plans pass planner generation options into reflectService', async 
                         generation: {
                             reasoningEffort: 'medium',
                             verbosity: 'medium',
-                            toolChoice: 'web_search',
                             temperament: {
                                 tightness: 4,
                                 rationale: 3,
@@ -199,33 +219,35 @@ test('message plans pass planner generation options into reflectService', async 
                                 caution: 3,
                                 extent: 4,
                             },
-                            webSearch: {
+                            search: {
                                 query: 'latest OpenAI policy update',
-                                searchContextSize: 'low',
-                                searchIntent: 'current_facts',
+                                contextSize: 'low',
+                                intent: 'current_facts',
                             },
                         },
                     }),
                     metadata: { model: 'gpt-5-mini' },
                 };
             }
-
-            finalMessages = messages;
-            generationOptionsSeen = options;
-            return {
-                normalizedText: 'message with retrieval',
-                metadata: {
-                    model: 'gpt-5-mini',
-                    provenance: 'Retrieved',
-                    tradeoffCount: 0,
-                    citations: [],
-                },
-            };
+            throw new Error('planner should be the only OpenAI caller here');
         },
     };
 
     const orchestrator = createReflectOrchestrator({
         openaiService,
+        generationRuntime: createGenerationRuntime(async (request) => {
+            finalMessages = request.messages;
+            assert.ok(request.search);
+            assert.equal(request.search.intent, 'current_facts');
+            assert.equal(request.reasoningEffort, 'medium');
+            assert.equal(request.verbosity, 'medium');
+            return {
+                text: 'message with retrieval',
+                model: 'gpt-5-mini',
+                provenance: 'Retrieved',
+                citations: [],
+            };
+        }),
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
@@ -235,13 +257,6 @@ test('message plans pass planner generation options into reflectService', async 
     const response = await orchestrator.runReflect(createReflectRequest());
 
     assert.equal(response.action, 'message');
-    assert.equal(generationOptionsSeen?.toolChoice, 'web_search');
-    assert.equal(
-        generationOptionsSeen?.webSearch?.searchIntent,
-        'current_facts'
-    );
-    assert.equal(generationOptionsSeen?.reasoningEffort, 'medium');
-    assert.equal(generationOptionsSeen?.verbosity, 'medium');
     assert.equal(
         finalMessages[0]?.content,
         renderPrompt('discord.chat.system').content
@@ -260,7 +275,7 @@ test('discord overlay replaces default persona layer in reflect generation', asy
             messages,
             options?: GenerateResponseOptions
         ) {
-            if (options?.maxCompletionTokens === 700) {
+            if (options?.maxOutputTokens === 700) {
                 return {
                     normalizedText: JSON.stringify({
                         action: 'message',
@@ -270,7 +285,6 @@ test('discord overlay replaces default persona layer in reflect generation', asy
                         generation: {
                             reasoningEffort: 'low',
                             verbosity: 'low',
-                            toolChoice: 'none',
                             temperament: {
                                 tightness: 4,
                                 rationale: 3,
@@ -299,6 +313,15 @@ test('discord overlay replaces default persona layer in reflect generation', asy
 
     const orchestrator = createReflectOrchestrator({
         openaiService,
+        generationRuntime: createGenerationRuntime(async ({ messages }) => {
+            finalMessages = messages;
+            return {
+                text: 'overlay persona reply',
+                model: 'gpt-5-mini',
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
@@ -310,7 +333,8 @@ test('discord overlay replaces default persona layer in reflect generation', asy
             conversation: [
                 {
                     role: 'system',
-                    content: '// BEGIN Bot Profile Overlay\nYou are Myuri.\n// END Bot Profile Overlay',
+                    content:
+                        '// BEGIN Bot Profile Overlay\nYou are Myuri.\n// END Bot Profile Overlay',
                 },
                 { role: 'user', content: 'Tell me about yourself.' },
             ],
@@ -318,7 +342,10 @@ test('discord overlay replaces default persona layer in reflect generation', asy
     );
 
     assert.equal(response.action, 'message');
-    assert.equal(finalMessages[0]?.content, renderPrompt('discord.chat.system').content);
+    assert.equal(
+        finalMessages[0]?.content,
+        renderPrompt('discord.chat.system').content
+    );
     assert.match(finalMessages[1]?.content ?? '', /BEGIN Bot Profile Overlay/);
     assert.equal(
         finalMessages.some(
@@ -329,4 +356,3 @@ test('discord overlay replaces default persona layer in reflect generation', asy
         false
     );
 });
-

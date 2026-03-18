@@ -9,6 +9,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 
+import type {
+    GenerationRequest,
+    GenerationRuntime,
+} from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type { PostReflectRequest } from '@footnote/contracts/web';
 import { createReflectHandler } from '../src/handlers/reflect.js';
@@ -39,6 +43,7 @@ type TestServer = {
 
 type CreateTestServerOptions = {
     openaiService?: OpenAIService;
+    generationRuntime?: GenerationRuntime;
     ipRateLimiter?: SimpleRateLimiter;
     sessionRateLimiter?: SimpleRateLimiter;
     serviceRateLimiter?: SimpleRateLimiter;
@@ -122,12 +127,12 @@ const createTestServer = (
                 options?: GenerateResponseOptions
             ) {
                 if (
-                    options?.maxCompletionTokens ===
+                    options?.maxOutputTokens ===
                     TEST_PLANNER_MAX_COMPLETION_TOKENS
                 ) {
                     return {
                         normalizedText:
-                            '{"action":"message","modality":"text","riskTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","toolChoice":"none","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',
+                            '{"action":"message","modality":"text","riskTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',
                         metadata: {
                             model: 'gpt-5-mini',
                         },
@@ -146,9 +151,23 @@ const createTestServer = (
             },
         };
         const openaiService = options.openaiService ?? defaultOpenaiService;
+        const generationRuntime =
+            options.generationRuntime ??
+            ({
+                kind: 'test-runtime',
+                async generate(_request: GenerationRequest) {
+                    return {
+                        text: 'service response',
+                        model: 'gpt-5-mini',
+                        provenance: 'Inferred',
+                        citations: [],
+                    };
+                },
+            } satisfies GenerationRuntime);
 
         const handler = createReflectHandler({
             openaiService,
+            generationRuntime,
             ipRateLimiter:
                 options.ipRateLimiter ??
                 new SimpleRateLimiter({ limit: 5, window: 60000 }),
@@ -458,6 +477,12 @@ test('reflect does not expose raw upstream error details to clients', async () =
                 throw new Error('OpenAI upstream leaked diagnostic details');
             },
         },
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                throw new Error('VoltAgent upstream leaked diagnostic details');
+            },
+        },
         logRequest: (_req, _res, extra) => {
             if (extra) {
                 loggedEvents.push(extra);
@@ -485,7 +510,7 @@ test('reflect does not expose raw upstream error details to clients', async () =
         });
         assert.ok(
             loggedEvents.some((entry) =>
-                entry.includes('OpenAI upstream leaked diagnostic details')
+                entry.includes('VoltAgent upstream leaked diagnostic details')
             )
         );
     } finally {
@@ -679,4 +704,3 @@ test('reflect rate limits public callers before calling Turnstile', async () => 
         env.TURNSTILE_ALLOWED_HOSTNAMES = previousAllowedHostnames;
     }
 });
-

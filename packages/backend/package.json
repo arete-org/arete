@@ -4,9 +4,10 @@
     "type": "module",
     "main": "dist/server.js",
     "scripts": {
-        "build": "pnpm --dir ../.. --filter @footnote/config-spec run build && pnpm --dir ../.. --filter @footnote/prompts run build && tsc -p tsconfig.json"
+        "build": "pnpm --dir ../.. --filter @footnote/config-spec run build && pnpm --dir ../.. --filter @footnote/prompts run build && pnpm --dir ../.. --filter @footnote/agent-runtime run build && tsc -p tsconfig.json"
     },
     "dependencies": {
+        "@footnote/agent-runtime": "workspace:*",
         "@footnote/config-spec": "workspace:*",
         "@footnote/contracts": "workspace:*",
         "@footnote/prompts": "workspace:*",

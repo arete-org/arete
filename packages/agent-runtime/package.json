@@ -1,0 +1,34 @@
+{
+    "name": "@footnote/agent-runtime",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./legacyOpenAiRuntime": {
+            "types": "./dist/legacyOpenAiRuntime.d.ts",
+            "default": "./dist/legacyOpenAiRuntime.js"
+        },
+        "./voltagentRuntime": {
+            "types": "./dist/voltagentRuntime.d.ts",
+            "default": "./dist/voltagentRuntime.js"
+        }
+    },
+    "scripts": {
+        "clean": "node -e \"const fs=require('node:fs'); fs.rmSync('dist',{recursive:true,force:true}); fs.rmSync('tsconfig.tsbuildinfo',{force:true});\"",
+        "build:dev": "pnpm clean && tsc -p tsconfig.json",
+        "build": "pnpm clean && tsc -p tsconfig.json"
+    },
+    "devDependencies": {
+        "typescript": "catalog:"
+    },
+    "dependencies": {
+        "@voltagent/core": "2.6.10",
+        "ai": "6.0.116"
+    }
+}

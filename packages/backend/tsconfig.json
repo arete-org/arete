@@ -7,6 +7,8 @@
         "moduleResolution": "NodeNext",
         "baseUrl": ".",
         "paths": {
+            "@footnote/agent-runtime": ["../agent-runtime/dist/index.d.ts"],
+            "@footnote/agent-runtime/*": ["../agent-runtime/dist/*"],
             "@footnote/config-spec": ["../config-spec/dist/index.d.ts"],
             "@footnote/config-spec/*": ["../config-spec/dist/*"],
             "@footnote/contracts": ["../contracts/src/index.ts"],
@@ -17,6 +19,7 @@
         "types": ["node"],
         "noEmitOnError": true
     },
+    "references": [{ "path": "../agent-runtime" }],
     "include": ["src/**/*.ts"],
     "exclude": ["node_modules", "dist"]
 }

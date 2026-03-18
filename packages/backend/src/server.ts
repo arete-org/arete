@@ -10,6 +10,11 @@ import './bootstrapEnv.js';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+    createLegacyOpenAiRuntime,
+    createVoltAgentRuntime,
+    type GenerationRuntime,
+} from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 
 import { runtimeConfig } from './config.js';
@@ -48,6 +53,7 @@ const { resolveAsset, mimeMap } = createAssetResolver(DIST_DIR);
 let traceStore: ReturnType<typeof createTraceStore> | null = null;
 let incidentStore: ReturnType<typeof getDefaultIncidentStore> | null = null;
 let openaiService: OpenAIService | null = null;
+let generationRuntime: GenerationRuntime | null = null;
 let ipRateLimiter: SimpleRateLimiter | null = null;
 let sessionRateLimiter: SimpleRateLimiter | null = null;
 let serviceRateLimiter: SimpleRateLimiter | null = null;
@@ -86,8 +92,16 @@ const initializeServices = () => {
     if (runtimeConfig.openai.apiKey) {
         // Only enable OpenAI when an API key is configured.
         openaiService = new SimpleOpenAIService(runtimeConfig.openai.apiKey);
+        const legacyRuntime = createLegacyOpenAiRuntime({
+            client: openaiService,
+        });
+        generationRuntime = createVoltAgentRuntime({
+            fallbackRuntime: legacyRuntime,
+            defaultModel: runtimeConfig.openai.defaultModel,
+        });
     } else {
         openaiService = null;
+        generationRuntime = null;
         logger.warn(
             'OPENAI_API_KEY is missing; /api/reflect will return 503 until configured.'
         );
@@ -218,6 +232,7 @@ const wantsJsonResponse = (req: http.IncomingMessage): boolean => {
 // Reflection is the slim, web-facing chat interface (Turnstile + rate-limited).
 const handleReflectRequest = createReflectHandler({
     openaiService,
+    generationRuntime,
     ipRateLimiter,
     sessionRateLimiter,
     serviceRateLimiter,
@@ -265,23 +280,17 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
-        if (
-            /^\/api\/incidents\/[^/]+\/status$/.test(normalizedPathname)
-        ) {
+        if (/^\/api\/incidents\/[^/]+\/status$/.test(normalizedPathname)) {
             await handleIncidentStatusRequest(req, res, parsedUrl);
             return;
         }
 
-        if (
-            /^\/api\/incidents\/[^/]+\/notes$/.test(normalizedPathname)
-        ) {
+        if (/^\/api\/incidents\/[^/]+\/notes$/.test(normalizedPathname)) {
             await handleIncidentNotesRequest(req, res, parsedUrl);
             return;
         }
 
-        if (
-            /^\/api\/incidents\/[^/]+\/remediation$/.test(normalizedPathname)
-        ) {
+        if (/^\/api\/incidents\/[^/]+\/remediation$/.test(normalizedPathname)) {
             await handleIncidentRemediationRequest(req, res, parsedUrl);
             return;
         }

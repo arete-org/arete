@@ -40,7 +40,6 @@ test('reflectPlanner parses plain JSON output from the backend-native planner pr
                     generation: {
                         reasoningEffort: 'medium',
                         verbosity: 'medium',
-                        toolChoice: 'web_search',
                         temperament: {
                             tightness: 4,
                             rationale: 3,
@@ -48,10 +47,10 @@ test('reflectPlanner parses plain JSON output from the backend-native planner pr
                             caution: 3,
                             extent: 4,
                         },
-                        webSearch: {
+                        search: {
                             query: 'latest Footnote release notes',
-                            searchContextSize: 'low',
-                            searchIntent: 'current_facts',
+                            contextSize: 'low',
+                            intent: 'current_facts',
                         },
                     },
                 }),
@@ -66,12 +65,12 @@ test('reflectPlanner parses plain JSON output from the backend-native planner pr
     const plan = await planner.planReflect(createReflectRequest());
 
     assert.equal(plan.action, 'message');
-    assert.equal(plan.generation.toolChoice, 'web_search');
+    assert.ok(plan.generation.search);
     assert.equal(
-        plan.generation.webSearch?.query,
+        plan.generation.search?.query,
         'latest Footnote release notes'
     );
-    assert.equal(plan.generation.webSearch?.searchIntent, 'current_facts');
+    assert.equal(plan.generation.search?.intent, 'current_facts');
 });
 
 test('reflectPlanner fails open to a valid fallback generation config when planner JSON is invalid', async () => {
@@ -90,7 +89,7 @@ test('reflectPlanner fails open to a valid fallback generation config when plann
     const plan = await planner.planReflect(createReflectRequest());
 
     assert.equal(plan.action, 'message');
-    assert.equal(plan.generation.toolChoice, 'none');
+    assert.equal(plan.generation.search, undefined);
     assert.equal(plan.generation.reasoningEffort, 'low');
     assert.equal(plan.generation.verbosity, 'low');
 });
@@ -107,7 +106,6 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
                     generation: {
                         reasoningEffort: 'low',
                         verbosity: 'medium',
-                        toolChoice: 'web_search',
                         temperament: {
                             tightness: 4,
                             rationale: 3,
@@ -115,10 +113,10 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
                             caution: 3,
                             extent: 4,
                         },
-                        webSearch: {
+                        search: {
                             query: 'How does Discord provenance work in Footnote?',
-                            searchContextSize: 'low',
-                            searchIntent: 'repo_explainer',
+                            contextSize: 'low',
+                            intent: 'repo_explainer',
                             repoHints: [
                                 'Discord',
                                 'provenance',
@@ -138,10 +136,10 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
     const planner = createReflectPlanner({ openaiService });
     const plan = await planner.planReflect(createReflectRequest());
 
-    assert.equal(plan.generation.toolChoice, 'web_search');
-    assert.equal(plan.generation.webSearch?.searchIntent, 'repo_explainer');
-    assert.equal(plan.generation.webSearch?.searchContextSize, 'medium');
-    assert.deepEqual(plan.generation.webSearch?.repoHints, [
+    assert.ok(plan.generation.search);
+    assert.equal(plan.generation.search?.intent, 'repo_explainer');
+    assert.equal(plan.generation.search?.contextSize, 'medium');
+    assert.deepEqual(plan.generation.search?.repoHints, [
         'discord',
         'provenance',
     ]);
@@ -159,7 +157,6 @@ test('invalid web_search query downgrades safely to none', async () => {
                     generation: {
                         reasoningEffort: 'low',
                         verbosity: 'low',
-                        toolChoice: 'web_search',
                         temperament: {
                             tightness: 4,
                             rationale: 3,
@@ -167,10 +164,10 @@ test('invalid web_search query downgrades safely to none', async () => {
                             caution: 3,
                             extent: 4,
                         },
-                        webSearch: {
+                        search: {
                             query: '   ',
-                            searchContextSize: 'medium',
-                            searchIntent: 'repo_explainer',
+                            contextSize: 'medium',
+                            intent: 'repo_explainer',
                             repoHints: ['discord'],
                         },
                     },
@@ -185,8 +182,7 @@ test('invalid web_search query downgrades safely to none', async () => {
     const planner = createReflectPlanner({ openaiService });
     const plan = await planner.planReflect(createReflectRequest());
 
-    assert.equal(plan.generation.toolChoice, 'none');
-    assert.equal(plan.generation.webSearch, undefined);
+    assert.equal(plan.generation.search, undefined);
     assert.match(plan.reasoning, /search was disabled safely/i);
 });
 
@@ -203,7 +199,6 @@ test('planner temperament is accepted when all TRACE axes are integer 1..5', asy
                     generation: {
                         reasoningEffort: 'low',
                         verbosity: 'low',
-                        toolChoice: 'none',
                         temperament: {
                             tightness: 5,
                             rationale: 3,
@@ -245,7 +240,6 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
                     generation: {
                         reasoningEffort: 'medium',
                         verbosity: 'high',
-                        toolChoice: 'web_search',
                         temperament: {
                             tightness: 5,
                             rationale: 3,
@@ -253,10 +247,10 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
                             caution: 6,
                             extent: 1,
                         },
-                        webSearch: {
+                        search: {
                             query: 'latest release notes',
-                            searchContextSize: 'low',
-                            searchIntent: 'current_facts',
+                            contextSize: 'low',
+                            intent: 'current_facts',
                         },
                     },
                 }),
@@ -271,7 +265,7 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
     const plan = await planner.planReflect(createReflectRequest());
 
     assert.equal(plan.action, 'message');
-    assert.equal(plan.generation.toolChoice, 'none');
+    assert.equal(plan.generation.search, undefined);
     assert.equal(plan.generation.reasoningEffort, 'low');
     assert.equal(plan.generation.verbosity, 'low');
     assert.equal(plan.generation.temperament, undefined);
@@ -291,7 +285,6 @@ test('react plans with non-emoji payload fall back safely', async () => {
                     generation: {
                         reasoningEffort: 'low',
                         verbosity: 'low',
-                        toolChoice: 'none',
                     },
                 }),
                 metadata: {
@@ -306,7 +299,7 @@ test('react plans with non-emoji payload fall back safely', async () => {
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.reaction, undefined);
-    assert.equal(plan.generation.toolChoice, 'none');
+    assert.equal(plan.generation.search, undefined);
     assert.equal(plan.generation.temperament, undefined);
     assert.match(plan.reasoning, /not a valid emoji token/i);
 });

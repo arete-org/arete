@@ -16,10 +16,13 @@ import {
     type CreateReflectServiceOptions,
 } from './reflectService.js';
 import { createReflectPlanner, type ReflectPlan } from './reflectPlanner.js';
+import type { OpenAIService } from './openaiService.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
-type CreateReflectOrchestratorOptions = CreateReflectServiceOptions;
+type CreateReflectOrchestratorOptions = CreateReflectServiceOptions & {
+    openaiService: OpenAIService;
+};
 
 const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
 
@@ -83,7 +86,6 @@ const coercePlanForSurface = (
         generation: {
             reasoningEffort: 'low',
             verbosity: 'low',
-            toolChoice: 'none',
         },
         reasoning:
             `${normalizedReasoning ? `${normalizedReasoning} ` : ''}Web surface requires a message response, so the planner output was coerced to a text message.`.trim(),
@@ -167,13 +169,14 @@ const extractDiscordPersonaOverlay = (
  */
 export const createReflectOrchestrator = ({
     openaiService,
+    generationRuntime,
     storeTrace,
     buildResponseMetadata,
     defaultModel = runtimeConfig.openai.defaultModel,
     recordUsage,
 }: CreateReflectOrchestratorOptions) => {
     const reflectService = createReflectService({
-        openaiService,
+        generationRuntime,
         storeTrace,
         buildResponseMetadata,
         defaultModel,
@@ -247,10 +250,7 @@ export const createReflectOrchestrator = ({
         }
         const personaPrompt =
             extractedPersona.personaPrompt ??
-            buildSurfacePersonaPrompt(
-                request.surface,
-                botProfileDisplayName
-            );
+            buildSurfacePersonaPrompt(request.surface, botProfileDisplayName);
 
         const conversationMessages: Array<
             Pick<ReflectConversationMessage, 'role' | 'content'>

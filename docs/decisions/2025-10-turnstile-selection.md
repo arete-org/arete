@@ -1,9 +1,7 @@
 # Decision Record: Cloudflare Turnstile Selection
 
 **Decision:** Adopt **Cloudflare Turnstile** as the human verification mechanism for Footnote web interactions.  
-**Date:** 2025-10-27  
-**Status:** Accepted  
-**License Context:** MIT + HL3
+**Date:** 2025-10-27
 
 ---
 

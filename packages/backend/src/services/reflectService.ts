@@ -7,16 +7,20 @@
  * @footnote-ethics: high - This workflow owns the AI response and provenance metadata users rely on.
  */
 import type {
+    GenerationResult,
+    GenerationRuntime,
+    GenerationRequest,
+    RuntimeMessage,
+} from '@footnote/agent-runtime';
+import type {
     PartialResponseTemperament,
     ResponseMetadata,
     RiskTier,
 } from '@footnote/contracts/ethics-core';
 import type { PostReflectResponse } from '@footnote/contracts/web';
-import type { ReflectConversationMessage } from '@footnote/contracts/web';
 import type {
-    GenerateResponseOptions,
-    OpenAIService,
-    OpenAIResponseMetadata,
+    AssistantResponseMetadata,
+    AssistantUsage,
     ResponseMetadataRuntimeContext,
 } from './openaiService.js';
 import {
@@ -48,10 +52,10 @@ const resolveBotProfileDisplayName = (): string => {
  * The HTTP handler injects these so the core logic stays transport-agnostic.
  */
 export type CreateReflectServiceOptions = {
-    openaiService: OpenAIService;
+    generationRuntime: GenerationRuntime;
     storeTrace: (metadata: ResponseMetadata) => Promise<void>;
     buildResponseMetadata: (
-        assistantMetadata: OpenAIResponseMetadata,
+        assistantMetadata: AssistantResponseMetadata,
         runtimeContext: ResponseMetadataRuntimeContext
     ) => ResponseMetadata;
     defaultModel: string;
@@ -69,7 +73,7 @@ export type RunReflectInput = {
  * Shared message-generation input used by the Discord/backend unified path.
  */
 export type RunReflectMessagesInput = {
-    messages: Array<Pick<ReflectConversationMessage, 'role' | 'content'>>;
+    messages: RuntimeMessage[];
     conversationSnapshot: string;
     plannerTemperament?: PartialResponseTemperament;
     riskTier?: RiskTier;
@@ -83,12 +87,40 @@ export type RunReflectMessagesInput = {
  * so transports do not need to reshape it.
  */
 export const createReflectService = ({
-    openaiService,
+    generationRuntime,
     storeTrace,
     buildResponseMetadata,
     defaultModel,
     recordUsage = recordBackendLLMUsage,
 }: CreateReflectServiceOptions) => {
+    /**
+     * Normalizes one runtime result into the metadata shape backend already
+     * uses for provenance, trace storage, and cost accounting.
+     */
+    const buildAssistantMetadata = (
+        generationResult: GenerationResult,
+        generation: ReflectGenerationPlan | undefined,
+        requestedModel: string | undefined
+    ): AssistantResponseMetadata => {
+        const usage: AssistantUsage | undefined = generationResult.usage
+            ? {
+                  promptTokens: generationResult.usage.promptTokens,
+                  completionTokens: generationResult.usage.completionTokens,
+                  totalTokens: generationResult.usage.totalTokens,
+              }
+            : undefined;
+
+        return {
+            model: generationResult.model ?? requestedModel ?? defaultModel,
+            usage,
+            finishReason: generationResult.finishReason,
+            reasoningEffort: generation?.reasoningEffort,
+            verbosity: generation?.verbosity,
+            provenance: generationResult.provenance,
+            citations: generationResult.citations ?? [],
+        };
+    };
+
     const runReflectMessages = async ({
         messages,
         conversationSnapshot,
@@ -103,7 +135,7 @@ export const createReflectService = ({
         const repoExplainerHint = generation
             ? buildRepoExplainerResponseHint(generation)
             : null;
-        const messagesWithHints = repoExplainerHint
+        const messagesWithHints: RuntimeMessage[] = repoExplainerHint
             ? [
                   ...messages,
                   {
@@ -112,29 +144,33 @@ export const createReflectService = ({
                   },
               ]
             : messages;
-        const generationOptions: GenerateResponseOptions = generation
-            ? {
-                  reasoningEffort: generation.reasoningEffort,
-                  verbosity: generation.verbosity,
-                  toolChoice: generation.toolChoice,
-                  webSearch: generation.webSearch,
-              }
-            : {};
+        const generationRequest: GenerationRequest = {
+            messages: messagesWithHints,
+            model: model ?? defaultModel,
+            ...(generation?.reasoningEffort !== undefined && {
+                reasoningEffort: generation.reasoningEffort,
+            }),
+            ...(generation?.verbosity !== undefined && {
+                verbosity: generation.verbosity,
+            }),
+            ...(generation?.search !== undefined && {
+                search: generation.search,
+            }),
+        };
 
-        // The OpenAI wrapper already handles provider-specific request/retry details.
-        const aiResponse = await openaiService.generateResponse(
-            model ?? defaultModel,
-            messagesWithHints,
-            generationOptions
+        const generationResult =
+            await generationRuntime.generate(generationRequest);
+        const assistantMetadata = buildAssistantMetadata(
+            generationResult,
+            generation,
+            generationRequest.model
         );
 
-        const { normalizedText, metadata: assistantMetadata } = aiResponse;
         const usageModel = assistantMetadata.model || defaultModel;
-        const promptTokens = assistantMetadata.usage?.prompt_tokens ?? 0;
-        const completionTokens =
-            assistantMetadata.usage?.completion_tokens ?? 0;
+        const promptTokens = assistantMetadata.usage?.promptTokens ?? 0;
+        const completionTokens = assistantMetadata.usage?.completionTokens ?? 0;
         const totalTokens =
-            assistantMetadata.usage?.total_tokens ??
+            assistantMetadata.usage?.totalTokens ??
             promptTokens + completionTokens;
         const estimatedCost = estimateBackendTextCost(
             usageModel,
@@ -161,9 +197,17 @@ export const createReflectService = ({
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
-            conversationSnapshot: `${conversationSnapshot}\n\n${normalizedText}`,
+            conversationSnapshot: `${conversationSnapshot}\n\n${generationResult.text}`,
             plannerTemperament,
-            usedWebSearch: generation?.toolChoice === 'web_search',
+            retrieval: {
+                requested: generation?.search !== undefined,
+                used:
+                    generationResult.retrieval?.used === true ||
+                    generationResult.provenance === 'Retrieved' ||
+                    (generationResult.citations?.length ?? 0) > 0,
+                intent: generation?.search?.intent,
+                contextSize: generation?.search?.contextSize,
+            },
         };
 
         // Metadata is the contract that downstream UIs and trace storage rely on.
@@ -206,7 +250,7 @@ export const createReflectService = ({
         });
 
         return {
-            message: normalizedText,
+            message: generationResult.text,
             metadata: normalizedResponseMetadata,
         };
     };
@@ -216,9 +260,7 @@ export const createReflectService = ({
     }: RunReflectInput): Promise<PostReflectResponse> => {
         const botProfileDisplayName = resolveBotProfileDisplayName();
         // Keep prompt assembly here so the public web reflect path stays stable.
-        const messages: Array<
-            Pick<ReflectConversationMessage, 'role' | 'content'>
-        > = [
+        const messages: RuntimeMessage[] = [
             {
                 role: 'system',
                 content: renderPrompt('reflect.chat.system').content,

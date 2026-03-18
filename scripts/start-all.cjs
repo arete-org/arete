@@ -15,9 +15,22 @@ const { spawnSync } = require('node:child_process');
 const repoRoot = path.resolve(__dirname, '..');
 const pnpmBin = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const nodeBin = process.execPath;
+const isWindows = process.platform === 'win32';
 
 const run = (command, args, env = process.env) => {
-    const result = spawnSync(command, args, {
+    const normalizedCommand = command.toLowerCase();
+    const isWindowsBatchCommand =
+        isWindows &&
+        (normalizedCommand.endsWith('.cmd') ||
+            normalizedCommand.endsWith('.bat'));
+
+    // Windows batch files like `pnpm.cmd` need `cmd.exe` to launch reliably.
+    const executable = isWindowsBatchCommand ? 'cmd.exe' : command;
+    const executableArgs = isWindowsBatchCommand
+        ? ['/d', '/s', '/c', command, ...args]
+        : args;
+
+    const result = spawnSync(executable, executableArgs, {
         cwd: repoRoot,
         env,
         stdio: 'inherit',

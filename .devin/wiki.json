@@ -43,6 +43,10 @@
         {
             "content": "Explain that TRACE metadata is built by backend code and API annotations, not by assistant-written message text.",
             "author": "Maintainer"
+        },
+        {
+            "content": "Document the runtime boundary clearly: backend owns the public Reflect contract, provenance, and traces, while `@footnote/agent-runtime` owns the replaceable execution layer. For this branch, VoltAgent is the active plain-text runtime and search-enabled requests still fall back to the legacy runtime.",
+            "author": "Maintainer"
         }
     ],
     "pages": [
@@ -79,6 +83,7 @@
                 "README.md",
                 "docs/api/openapi.yaml",
                 "packages/contracts/src",
+                "packages/agent-runtime/src",
                 "packages/backend/src",
                 "packages/web/src",
                 "packages/discord-bot/src"
@@ -109,6 +114,10 @@
             "page_notes": [
                 {
                     "content": "Use this as the system map. Make the package boundary obvious: contracts define shared shapes, backend owns execution and validation, and web and Discord are backend API clients.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Call out the runtime seam explicitly: backend composes `@footnote/agent-runtime`, rather than letting framework code leak into handlers. Mention that VoltAgent is active for plain text Reflect, while search-enabled requests still route through the legacy runtime fallback.",
                     "author": "Maintainer"
                 },
                 {
@@ -207,6 +216,7 @@
             "title": "Packages",
             "purpose": "Group the major code areas by package so contributors can quickly find where features live and which surfaces they affect.",
             "entrypoints": [
+                "packages/agent-runtime/src",
                 "packages/backend/src",
                 "packages/contracts/src",
                 "packages/discord-bot/src",
@@ -219,6 +229,30 @@
                 },
                 {
                     "content": "Backend, Contracts, Discord, and Web should be hub pages that branch into concrete features such as traces, voice, images, incidents, embeds, and shared schemas.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Include Agent Runtime as its own package page. It is backend-facing and not a public client surface, but it is now important enough to deserve a first-class wiki entry.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Agent Runtime",
+            "purpose": "Explain the internal runtime package that sits behind backend Reflect, owns the replaceable generation seam, and currently hosts both the VoltAgent and legacy OpenAI runtime implementations.",
+            "parent": "Packages",
+            "entrypoints": [
+                "packages/agent-runtime/src",
+                "packages/backend/src/services/reflectService.ts",
+                "docs/decisions/2026-03-voltagent-runtime-adoption.md"
+            ],
+            "page_notes": [
+                {
+                    "content": "Make the ownership split explicit: this package owns generation runtime implementations and runtime-facing types, while backend still owns planner logic, provenance metadata, traces, and API behavior.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Document the current state plainly: VoltAgent is the active plain-text Reflect runtime, and search-enabled requests still use the legacy runtime fallback so retrieval behavior stays stable.",
                     "author": "Maintainer"
                 }
             ]
@@ -236,6 +270,10 @@
                 {
                     "content": "Make it clear that the backend owns execution, persistence, and validation. Web and Discord should be described as clients of backend HTTP APIs.",
                     "author": "Maintainer"
+                },
+                {
+                    "content": "Describe runtime composition as a backend responsibility. The backend builds and selects the generation runtime, but it still owns the public Reflect contract and all user-facing provenance semantics.",
+                    "author": "Maintainer"
                 }
             ]
         },
@@ -245,7 +283,10 @@
             "parent": "Backend",
             "entrypoints": [
                 "packages/backend/src/handlers/reflect.ts",
+                "packages/backend/src/services/reflectService.ts",
+                "packages/backend/src/services/reflectOrchestrator.ts",
                 "packages/backend/src/services/openaiService.ts",
+                "packages/agent-runtime/src",
                 "packages/backend/src/services/responseMetadataHeuristics.ts",
                 "packages/contracts/src/web/types.ts",
                 "packages/contracts/src/web/schemas.ts"
@@ -257,6 +298,10 @@
                 },
                 {
                     "content": "Explain how reflect metadata is built from backend request context and API annotations.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Update this page for the runtime seam: planner decisions stay in backend, generation runs through `@footnote/agent-runtime`, VoltAgent handles plain text Reflect, and search-enabled requests still fall back to the legacy runtime path.",
                     "author": "Maintainer"
                 }
             ]

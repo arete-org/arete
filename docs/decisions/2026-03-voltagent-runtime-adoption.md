@@ -3,6 +3,8 @@
 **Decision:** Adopt VoltAgent as the primary agent-runtime framework behind Footnote's existing backend boundary, while keeping Footnote's user-facing API, provenance contract, and review surfaces owned by Footnote.  
 **Date:** 2026-03-17
 
+**Architectural outcome:** The adopted runtime boundary is `@footnote/agent-runtime`, which allows VoltAgent-backed text generation and legacy fallback runtimes to sit behind the existing backend contract.
+
 ---
 
 ## 1. Context

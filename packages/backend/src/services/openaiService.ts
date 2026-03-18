@@ -7,6 +7,12 @@
  */
 import crypto from 'node:crypto';
 import type {
+    GenerationSearchContextSize,
+    GenerationSearchIntent,
+    GenerationRequest,
+    RuntimeMessage,
+} from '@footnote/agent-runtime';
+import type {
     Citation,
     PartialResponseTemperament,
     Provenance,
@@ -17,11 +23,10 @@ import type {
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { buildWebSearchInstruction } from './reflectGenerationHints.js';
-import { resolveTradeoffCount } from './responseMetadataHeuristics.js';
-import type {
-    ReflectRepoSearchHint,
-    ReflectSearchIntent,
-} from './reflectGenerationTypes.js';
+import {
+    deriveRetrievedChips,
+    resolveTradeoffCount,
+} from './responseMetadataHeuristics.js';
 
 type OpenAIUsage = {
     prompt_tokens?: number;
@@ -29,9 +34,15 @@ type OpenAIUsage = {
     total_tokens?: number;
 };
 
-type OpenAIResponseMetadata = {
+type AssistantUsage = {
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+};
+
+type AssistantResponseMetadata = {
     model: string;
-    usage?: OpenAIUsage;
+    usage?: AssistantUsage;
     finishReason?: string;
     reasoningEffort?: string;
     verbosity?: string;
@@ -42,28 +53,33 @@ type OpenAIResponseMetadata = {
     freshnessScore?: TraceAxisScore;
 };
 
+type OpenAIResponseMetadata = {
+    model: AssistantResponseMetadata['model'];
+    usage?: OpenAIUsage;
+    finishReason?: AssistantResponseMetadata['finishReason'];
+    reasoningEffort?: AssistantResponseMetadata['reasoningEffort'];
+    verbosity?: AssistantResponseMetadata['verbosity'];
+    provenance?: AssistantResponseMetadata['provenance'];
+    tradeoffCount?: AssistantResponseMetadata['tradeoffCount'];
+    citations?: AssistantResponseMetadata['citations'];
+    evidenceScore?: AssistantResponseMetadata['evidenceScore'];
+    freshnessScore?: AssistantResponseMetadata['freshnessScore'];
+};
+
 type GenerateResponseResult = {
     normalizedText: string;
     metadata: OpenAIResponseMetadata;
 };
 
-type GenerateResponseOptions = {
-    maxCompletionTokens?: number;
-    reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
-    verbosity?: 'low' | 'medium' | 'high';
-    toolChoice?: 'none' | 'web_search';
-    webSearch?: {
-        query: string;
-        searchContextSize: 'low' | 'medium' | 'high';
-        searchIntent: ReflectSearchIntent;
-        repoHints?: ReflectRepoSearchHint[];
-    };
-};
+type GenerateResponseOptions = Pick<
+    GenerationRequest,
+    'maxOutputTokens' | 'reasoningEffort' | 'verbosity' | 'search' | 'signal'
+>;
 
 interface OpenAIService {
     generateResponse(
         model: string,
-        messages: Array<{ role: string; content: string }>,
+        messages: RuntimeMessage[],
         options?: GenerateResponseOptions
     ): Promise<GenerateResponseResult>;
 }
@@ -257,13 +273,73 @@ const extractCitationsFromOutputItems = (
 };
 
 /**
+ * Numeric markdown footnote markers are not useful user-facing titles.
+ */
+const normalizeFallbackCitationTitle = (label: string): string => {
+    const normalizedLabel = label.trim();
+
+    return /^\d+$/.test(normalizedLabel) ? 'Source' : normalizedLabel;
+};
+
+/**
+ * Recovers visible markdown links when retrieved output lacks structured
+ * `url_citation` annotations.
+ *
+ * This intentionally stays narrow: only markdown links are preserved here, and
+ * only for retrieval-backed responses. Bare URLs are out of scope for this
+ * fallback because they are more likely to capture incidental text.
+ */
+const extractMarkdownLinkCitations = (text: string): Citation[] => {
+    const citations: Citation[] = [];
+    const seenUrls = new Set<string>();
+    const markdownLinkPattern = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+
+    for (const match of text.matchAll(markdownLinkPattern)) {
+        const rawLabel = match[1];
+        const rawUrl = match[2];
+        if (
+            typeof rawLabel !== 'string' ||
+            rawLabel.trim().length === 0 ||
+            typeof rawUrl !== 'string'
+        ) {
+            continue;
+        }
+
+        let normalizedUrl: string;
+        try {
+            const parsedUrl = new URL(rawUrl);
+            if (
+                parsedUrl.protocol !== 'http:' &&
+                parsedUrl.protocol !== 'https:'
+            ) {
+                continue;
+            }
+            normalizedUrl = parsedUrl.toString();
+        } catch {
+            continue;
+        }
+
+        if (seenUrls.has(normalizedUrl)) {
+            continue;
+        }
+
+        seenUrls.add(normalizedUrl);
+        citations.push({
+            title: normalizeFallbackCitationTitle(rawLabel),
+            url: normalizedUrl,
+        });
+    }
+
+    return citations;
+};
+
+/**
  * Detects whether the model output includes an executed web search tool call.
  * This is stronger evidence than planner intent alone.
  */
 const hasWebSearchCallInOutputItems = (
     outputItems: ResponsesApiOutputItem[]
-): boolean =>
-    outputItems.some((item) => item.type === 'web_search_call');
+): boolean => outputItems.some((item) => item.type === 'web_search_call');
 
 /**
  * Converts internal role/content messages into Responses API input messages.
@@ -276,6 +352,56 @@ const buildInputMessage = (
     type: 'message',
     content: role === 'assistant' ? text : [{ type: 'input_text', text }],
 });
+
+type RequestAbortContext = {
+    signal: AbortSignal;
+    cleanup: () => void;
+    didTimeout: () => boolean;
+};
+
+/**
+ * Merges the backend timeout budget with an optional caller cancellation signal.
+ */
+const createRequestAbortContext = (
+    timeoutMs: number,
+    externalSignal?: AbortSignal
+): RequestAbortContext => {
+    const controller = new AbortController();
+    let timedOut = false;
+
+    const timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, timeoutMs);
+
+    const handleExternalAbort = (): void => {
+        controller.abort();
+    };
+
+    if (externalSignal) {
+        if (externalSignal.aborted) {
+            handleExternalAbort();
+        } else {
+            externalSignal.addEventListener('abort', handleExternalAbort, {
+                once: true,
+            });
+        }
+    }
+
+    return {
+        signal: controller.signal,
+        cleanup: () => {
+            clearTimeout(timeoutHandle);
+            if (externalSignal) {
+                externalSignal.removeEventListener(
+                    'abort',
+                    handleExternalAbort
+                );
+            }
+        },
+        didTimeout: () => timedOut,
+    };
+};
 
 class SimpleOpenAIService implements OpenAIService {
     private readonly apiKey: string;
@@ -290,7 +416,7 @@ class SimpleOpenAIService implements OpenAIService {
 
     async generateResponse(
         model: string,
-        messages: Array<{ role: string; content: string }>,
+        messages: RuntimeMessage[],
         options: GenerateResponseOptions = {}
     ): Promise<GenerateResponseResult> {
         const validMessages = messages.filter((message) => {
@@ -308,23 +434,21 @@ class SimpleOpenAIService implements OpenAIService {
             options.reasoningEffort
         );
         const normalizedVerbosity = normalizeVerbosity(options.verbosity);
-        const shouldUseWebSearch = options.toolChoice === 'web_search';
-        const hasValidWebSearch =
-            shouldUseWebSearch &&
-            typeof options.webSearch?.query === 'string' &&
-            options.webSearch.query.trim().length > 0;
+        const hasSearchRequest =
+            typeof options.search?.query === 'string' &&
+            options.search.query.trim().length > 0;
 
-        if (shouldUseWebSearch && !hasValidWebSearch) {
+        if (options.search && !hasSearchRequest) {
             logger.warn(
-                'Backend reflect requested web_search without a usable query; falling back to toolChoice=none.'
+                'Backend reflect requested search without a usable query; falling back to generation without retrieval.'
             );
         }
 
         const tools: ResponsesApiTool[] = [];
-        if (hasValidWebSearch && options.webSearch) {
+        if (hasSearchRequest && options.search) {
             tools.push({
                 type: 'web_search',
-                search_context_size: options.webSearch.searchContextSize,
+                search_context_size: options.search.contextSize,
             });
         }
 
@@ -332,13 +456,13 @@ class SimpleOpenAIService implements OpenAIService {
             ...validMessages.map((message) =>
                 buildInputMessage(message.role, message.content)
             ),
-            ...(hasValidWebSearch && options.webSearch
+            ...(hasSearchRequest && options.search
                 ? [
                       buildInputMessage(
                           'system',
                           buildWebSearchInstruction({
-                              ...options.webSearch,
-                              repoHints: options.webSearch.repoHints ?? [],
+                              ...options.search,
+                              repoHints: options.search.repoHints ?? [],
                           })
                       ),
                   ]
@@ -348,21 +472,17 @@ class SimpleOpenAIService implements OpenAIService {
         const requestBody = JSON.stringify({
             model,
             input: requestInput,
-            max_output_tokens: options.maxCompletionTokens ?? 4000,
+            max_output_tokens: options.maxOutputTokens ?? 4000,
             reasoning: { effort: normalizedReasoningEffort },
             text: { verbosity: normalizedVerbosity },
             ...(tools.length > 0 && { tools }),
         });
 
         const performRequest = async (attempt: number): Promise<Response> => {
-            let abortSignal: AbortSignal;
-            try {
-                abortSignal = AbortSignal.timeout(this.requestTimeoutMs);
-            } catch {
-                const controller = new AbortController();
-                setTimeout(() => controller.abort(), this.requestTimeoutMs);
-                abortSignal = controller.signal;
-            }
+            const abortContext = createRequestAbortContext(
+                this.requestTimeoutMs,
+                options.signal
+            );
 
             try {
                 return await fetch('https://api.openai.com/v1/responses', {
@@ -372,13 +492,17 @@ class SimpleOpenAIService implements OpenAIService {
                         'Content-Type': 'application/json',
                     },
                     body: requestBody,
-                    signal: abortSignal,
+                    signal: abortContext.signal,
                 });
             } catch (error) {
                 if (error instanceof Error && error.name === 'AbortError') {
-                    throw new Error(
-                        `OpenAI request timed out after ${this.requestTimeoutMs}ms`
-                    );
+                    if (abortContext.didTimeout()) {
+                        throw new Error(
+                            `OpenAI request timed out after ${this.requestTimeoutMs}ms`
+                        );
+                    }
+
+                    throw new Error('OpenAI request was aborted by caller');
                 }
 
                 if (attempt < this.retryAttempts) {
@@ -390,6 +514,8 @@ class SimpleOpenAIService implements OpenAIService {
                 }
 
                 throw error;
+            } finally {
+                abortContext.cleanup();
             }
         };
 
@@ -452,11 +578,17 @@ class SimpleOpenAIService implements OpenAIService {
 
         // User-facing reply body is model text only; metadata is produced out-of-band.
         const normalizedText = rawOutputText.trimEnd();
-        const citations = extractCitationsFromOutputItems(outputItems);
+        const hasWebSearchCall = hasWebSearchCallInOutputItems(outputItems);
+        const citationsFromAnnotations =
+            extractCitationsFromOutputItems(outputItems);
+        const citations =
+            citationsFromAnnotations.length === 0 &&
+            hasWebSearchCall &&
+            normalizedText.length > 0
+                ? extractMarkdownLinkCitations(normalizedText)
+                : citationsFromAnnotations;
         const provenance: Provenance =
-            citations.length > 0 || hasWebSearchCallInOutputItems(outputItems)
-                ? 'Retrieved'
-                : 'Inferred';
+            citations.length > 0 || hasWebSearchCall ? 'Retrieved' : 'Inferred';
 
         const assistantMetadata: OpenAIResponseMetadata = {
             model: data.model ?? model,
@@ -482,11 +614,18 @@ class SimpleOpenAIService implements OpenAIService {
     }
 }
 
+type ResponseMetadataRetrievalContext = {
+    requested: boolean;
+    used: boolean;
+    intent?: GenerationSearchIntent;
+    contextSize?: GenerationSearchContextSize;
+};
+
 type ResponseMetadataRuntimeContext = {
     modelVersion: string;
     conversationSnapshot: string;
     plannerTemperament?: PartialResponseTemperament;
-    usedWebSearch?: boolean;
+    retrieval?: ResponseMetadataRetrievalContext;
 };
 
 /**
@@ -494,7 +633,7 @@ type ResponseMetadataRuntimeContext = {
  * All values are derived from control-plane context and API annotations.
  */
 const buildResponseMetadata = (
-    assistantMetadata: OpenAIResponseMetadata,
+    assistantMetadata: AssistantResponseMetadata,
     runtimeContext: ResponseMetadataRuntimeContext
 ): ResponseMetadata => {
     const responseId = crypto.randomBytes(6).toString('base64url').slice(0, 8);
@@ -508,12 +647,13 @@ const buildResponseMetadata = (
     const citations = Array.isArray(assistantMetadata.citations)
         ? assistantMetadata.citations
         : [];
+    const retrieval = runtimeContext.retrieval;
     const provenance: Provenance =
         assistantMetadata.provenance === 'Retrieved' ||
         assistantMetadata.provenance === 'Inferred' ||
         assistantMetadata.provenance === 'Speculative'
             ? assistantMetadata.provenance
-            : runtimeContext.usedWebSearch || citations.length > 0
+            : retrieval?.used || citations.length > 0
               ? 'Retrieved'
               : 'Inferred';
     const tradeoffCount = resolveTradeoffCount(
@@ -529,16 +669,31 @@ const buildResponseMetadata = (
     const freshnessScore = isTraceAxisScore(assistantMetadata.freshnessScore)
         ? assistantMetadata.freshnessScore
         : undefined;
-    const isMissingRetrievedWebSearchChip =
-        runtimeContext.usedWebSearch === true &&
+    const shouldDeriveRetrievedChips =
         provenance === 'Retrieved' &&
         (evidenceScore === undefined || freshnessScore === undefined);
-    if (isMissingRetrievedWebSearchChip) {
-        logger.warn(
-            'Response metadata missing evidence/freshness; leaving chips omitted.',
+    const derivedRetrievedChips = shouldDeriveRetrievedChips
+        ? deriveRetrievedChips({
+              citationCount: citations.length,
+              intent: retrieval?.intent,
+              contextSize: retrieval?.contextSize,
+          })
+        : undefined;
+    const finalEvidenceScore =
+        evidenceScore ?? derivedRetrievedChips?.evidenceScore;
+    const finalFreshnessScore =
+        freshnessScore ?? derivedRetrievedChips?.freshnessScore;
+
+    if (
+        provenance === 'Retrieved' &&
+        (finalEvidenceScore === undefined || finalFreshnessScore === undefined)
+    ) {
+        logger.error(
+            'Retrieved response metadata is missing required evidence/freshness chips.',
             {
                 responseId,
-                missingChip: 'retrieved_web_search',
+                retrievalRequested: retrieval?.requested ?? false,
+                retrievalUsed: retrieval?.used ?? false,
             }
         );
     }
@@ -558,19 +713,27 @@ const buildResponseMetadata = (
         staleAfter: new Date(Date.now() + ninetyDaysMs).toISOString(),
         citations,
         ...(temperament && { temperament }),
-        ...(evidenceScore !== undefined && {
-            evidenceScore,
+        ...(finalEvidenceScore !== undefined && {
+            evidenceScore: finalEvidenceScore,
         }),
-        ...(freshnessScore !== undefined && {
-            freshnessScore,
+        ...(finalFreshnessScore !== undefined && {
+            freshnessScore: finalFreshnessScore,
         }),
     };
 };
 
 export type {
+    AssistantResponseMetadata,
+    AssistantUsage,
     GenerateResponseOptions,
     OpenAIService,
     OpenAIResponseMetadata,
+    ResponseMetadataRetrievalContext,
     ResponseMetadataRuntimeContext,
 };
-export { SimpleOpenAIService, buildResponseMetadata };
+export {
+    SimpleOpenAIService,
+    buildResponseMetadata,
+    extractMarkdownLinkCitations,
+    normalizeFallbackCitationTitle,
+};

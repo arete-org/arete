@@ -16,7 +16,7 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 - Web app: `packages/web/src`
 - Server wrapper: `server.js`
 - Environment templates: `.env.example`
-- Project docs: `README.md`, `docs/Philosophy_new.md`, `SECURITY.md`
+- Project docs: `README.md`, `docs/Philosophy.md`, `SECURITY.md`
 
 ## Preferred Context (load first)
 
@@ -34,6 +34,9 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 - Record LLM costs via `ChannelContextManager.recordLLMUsage()`.
 - Keep interfaces serializable for future UI integration.
 - Use fail-open design: if uncertain, do not block execution.
+- Keep `packages/backend` as the only public runtime/control-plane boundary for `web` and `discord-bot` unless a decision doc explicitly says otherwise.
+- Place framework-specific runtime code behind an internal package or boundary instead of spreading it through backend handlers.
+- Keep Footnote-owned provenance, trace, auth, incident, and review semantics outside framework-specific adapters.
 - For API boundary code, keep OpenAPI links current:
   - code annotations: `@api.operationId` + `@api.path`
   - spec references: `x-codeRefs` in `docs/api/openapi.yaml`
@@ -45,6 +48,9 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 - Keep explanations concrete and actionable.
 - Write code comments in the same style: short, plain-language, and easy for a junior contributor to follow.
 - Prefer comments that explain purpose, trigger, and consequence over comments that restate the code.
+- Bias toward slightly more comments and JSDoc than default AI output when a new contributor would otherwise have to infer too much from the code alone.
+- Prioritize comment and JSDoc quality over numeric coverage targets.
+- Prefer plain language over compressed technical shorthand when the longer wording makes the code easier for a junior contributor to understand.
 
 ## Current `@footnote-*` Header Format
 

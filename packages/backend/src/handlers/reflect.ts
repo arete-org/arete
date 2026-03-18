@@ -7,11 +7,12 @@
  * @footnote-ethics: high - Incorrect metadata harms transparency and user trust.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { GenerationRuntime } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import type {
+    AssistantResponseMetadata,
     OpenAIService,
-    OpenAIResponseMetadata,
     ResponseMetadataRuntimeContext,
 } from '../services/openaiService.js';
 import { runtimeConfig } from '../config.js';
@@ -22,10 +23,7 @@ import {
     resolveReflectAuth,
     verifyTurnstileCaptcha,
 } from './reflectAuth.js';
-import {
-    getRequestIdentity,
-    parseReflectRequest,
-} from './reflectRequest.js';
+import { getRequestIdentity, parseReflectRequest } from './reflectRequest.js';
 import { createReflectRateLimitController } from './reflectRateLimit.js';
 import { sendJson } from './reflectResponses.js';
 
@@ -36,12 +34,13 @@ type LogRequest = (
 ) => void;
 
 type BuildResponseMetadata = (
-    assistantMetadata: OpenAIResponseMetadata,
+    assistantMetadata: AssistantResponseMetadata,
     runtimeContext: ResponseMetadataRuntimeContext
 ) => ResponseMetadata;
 
 type ReflectHandlerDeps = {
     openaiService: OpenAIService | null;
+    generationRuntime: GenerationRuntime | null;
     ipRateLimiter: SimpleRateLimiter | null;
     sessionRateLimiter: SimpleRateLimiter | null;
     serviceRateLimiter: SimpleRateLimiter | null;
@@ -108,12 +107,22 @@ const logSuccessfulAuthStep = (
     authContext: ReflectAuthContext
 ): void => {
     if (authContext.skipCaptcha && authContext.skipReason) {
-        logger.info(`Skipping CAPTCHA verification (${authContext.skipReason})`);
-        logRequest(req, res, `reflect captcha-skipped-${authContext.skipReason}`);
+        logger.info(
+            `Skipping CAPTCHA verification (${authContext.skipReason})`
+        );
+        logRequest(
+            req,
+            res,
+            `reflect captcha-skipped-${authContext.skipReason}`
+        );
         return;
     }
 
-    logRequest(req, res, `reflect captcha-verified source=${authContext.tokenSource}`);
+    logRequest(
+        req,
+        res,
+        `reflect captcha-verified source=${authContext.tokenSource}`
+    );
 };
 
 /**
@@ -127,6 +136,7 @@ const logSuccessfulAuthStep = (
  */
 const createReflectHandler = ({
     openaiService,
+    generationRuntime,
     ipRateLimiter,
     sessionRateLimiter,
     serviceRateLimiter,
@@ -135,14 +145,16 @@ const createReflectHandler = ({
     buildResponseMetadata,
     maxReflectBodyBytes,
 }: ReflectHandlerDeps) => {
-    const reflectOrchestrator = openaiService
-        ? createReflectOrchestrator({
-              openaiService,
-              storeTrace,
-              buildResponseMetadata,
-              defaultModel: runtimeConfig.openai.defaultModel,
-          })
-        : null;
+    const reflectOrchestrator =
+        openaiService && generationRuntime
+            ? createReflectOrchestrator({
+                  openaiService,
+                  generationRuntime,
+                  storeTrace,
+                  buildResponseMetadata,
+                  defaultModel: runtimeConfig.openai.defaultModel,
+              })
+            : null;
 
     // If OpenAI is unavailable, we keep the handler alive and return 503 later instead of failing startup.
     // The controller keeps public and trusted-service limiter buckets separate.
@@ -198,7 +210,10 @@ const createReflectHandler = ({
                 maxReflectBodyBytes
             );
             if (!parsedRequestResult.success) {
-                if (parsedRequestResult.error.logLabel === 'reflect invalid-json') {
+                if (
+                    parsedRequestResult.error.logLabel ===
+                    'reflect invalid-json'
+                ) {
                     logger.warn('Reflect handler received invalid JSON body.');
                 }
 
@@ -307,11 +322,7 @@ const createReflectHandler = ({
             sendJson(res, 502, {
                 error: 'AI generation failed',
             });
-            logRequest(
-                req,
-                res,
-                `reflect openai-error ${errorMessage}`
-            );
+            logRequest(req, res, `reflect generation-error ${errorMessage}`);
         }
     };
 };

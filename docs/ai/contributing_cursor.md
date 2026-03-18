@@ -34,6 +34,22 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 - **Communication style**: Prefer a junior-friendly teaching tone by default
   (plain language first, then technical detail)
 
+## Commenting And JSDoc
+
+- **Bias toward more explanation**: AI assistants should slightly over-index on useful comments rather than leaving non-obvious logic undocumented.
+- **Quality over quota**: Prefer high-quality comments and JSDoc over numeric coverage targets. Avoid adding repetitive or low-signal documentation just to hit a percentage.
+- **JSDoc bias**: Use more JSDoc than default AI output, especially on exported functions, exported types/interfaces, and substantive modules, within reason.
+- **Prioritize architectural seams**: Prefer JSDoc on public APIs, runtime boundaries, provenance/trace code, policy logic, and other exported symbols where readers benefit from hover documentation and intent.
+- **Junior-friendly wording**: Prefer plain language over compressed technical shorthand when the longer wording better explains intent, trigger, and consequence.
+- **Stay selective**: Do not force JSDoc onto tiny, obvious local helpers or trivial data containers whose names already explain the behavior.
+
+## Runtime Boundary Rules
+
+- **Backend stays public**: Keep `packages/backend` as the only public runtime entrypoint for `web` and `discord-bot` unless a decision doc explicitly says otherwise.
+- **Framework code stays isolated**: Put framework-specific runtime integrations (for example VoltAgent) behind an internal package or boundary instead of spreading them through backend handlers.
+- **Product semantics stay Footnote-owned**: Provenance, trace, auth, incident, and review semantics should stay outside framework-specific adapters.
+- **Contracts stay stable**: Avoid leaking framework-native types into Footnote's public contracts when Footnote-owned interfaces already exist.
+
 ## Cost Awareness
 
 - **Session tracking**: Use `/cost-summary` command to check LLM spending
@@ -45,6 +61,10 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 - **Risk assessment**: Modules are tagged with structured annotations separating technical risk (`@footnote-risk`) from ethical sensitivity (`@footnote-ethics`). See the tagging format in `cursor.rules` for details.
 - **Governance**: Decision-making modules require extra scrutiny
 - **Accountability**: All changes must maintain audit trails
+
+### Current runtime-boundary context
+
+- The runtime-boundary direction is documented in `docs/decisions/2026-03-voltagent-runtime-adoption.md`.
 
 ### API Linking
 
