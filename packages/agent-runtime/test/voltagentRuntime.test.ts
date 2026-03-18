@@ -293,20 +293,68 @@ test('voltagent runtime requires a request model or configured default model', a
 });
 
 test('default VoltAgent executor maps usage from the installed AI SDK token fields', async () => {
-    const fakeAgent: Pick<Agent, 'generateText'> = {
-        generateText: (async () => ({
+    const fakeAgent = {
+        generateText: async (
+            ..._args: Parameters<Agent['generateText']>
+        ): Promise<Awaited<ReturnType<Agent['generateText']>>> => ({
+            content: [],
             text: 'executor reply',
+            reasoning: [],
+            reasoningText: undefined,
+            files: [],
+            sources: [],
+            toolCalls: [],
+            staticToolCalls: [],
+            dynamicToolCalls: [],
+            toolResults: [],
+            staticToolResults: [],
+            dynamicToolResults: [],
             finishReason: 'stop',
+            rawFinishReason: 'stop',
             usage: {
                 inputTokens: 21,
+                inputTokenDetails: {
+                    noCacheTokens: 21,
+                    cacheReadTokens: 0,
+                    cacheWriteTokens: 0,
+                },
                 outputTokens: 9,
+                outputTokenDetails: {
+                    textTokens: 9,
+                    reasoningTokens: 0,
+                },
                 totalTokens: 30,
             },
+            totalUsage: {
+                inputTokens: 21,
+                inputTokenDetails: {
+                    noCacheTokens: 21,
+                    cacheReadTokens: 0,
+                    cacheWriteTokens: 0,
+                },
+                outputTokens: 9,
+                outputTokenDetails: {
+                    textTokens: 9,
+                    reasoningTokens: 0,
+                },
+                totalTokens: 30,
+            },
+            warnings: undefined,
+            request: {},
             response: {
                 modelId: 'openai/gpt-5-mini',
+                id: 'response_1',
+                timestamp: new Date(0),
+                messages: [],
             },
-        })) as Agent['generateText'],
-    };
+            providerMetadata: undefined,
+            steps: [],
+            experimental_output: undefined,
+            output: undefined,
+            context: new Map(),
+            feedback: null,
+        }),
+    } satisfies Pick<Agent, 'generateText'>;
     const executor = createDefaultVoltAgentExecutor({
         model: 'openai/gpt-5-mini',
         agentFactory: () => fakeAgent,
