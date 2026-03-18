@@ -9,14 +9,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+    type AssistantResponseMetadata,
     buildResponseMetadata,
-    type OpenAIResponseMetadata,
     type ResponseMetadataRuntimeContext,
 } from '../src/services/openaiService.js';
 
 const baseAssistantMetadata = (
-    overrides: Partial<OpenAIResponseMetadata> = {}
-): OpenAIResponseMetadata => ({
+    overrides: Partial<AssistantResponseMetadata> = {}
+): AssistantResponseMetadata => ({
     model: 'gpt-5-mini',
     provenance: 'Retrieved',
     tradeoffCount: 1,

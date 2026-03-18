@@ -8,6 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import type { GenerationRuntime } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type { PostReflectRequest } from '@footnote/contracts/web';
 import { createReflectOrchestrator } from '../src/services/reflectOrchestrator.js';
@@ -42,6 +43,15 @@ const createReflectRequest = (
         canUseTts: true,
     },
     ...overrides,
+});
+
+const createGenerationRuntime = (
+    implementation: (
+        request: import('@footnote/agent-runtime').GenerationRequest
+    ) => Promise<import('@footnote/agent-runtime').GenerationResult>
+): GenerationRuntime => ({
+    kind: 'test-runtime',
+    generate: implementation,
 });
 
 test('web requests go through planner and are coerced to message when planner picks react', async () => {
@@ -86,6 +96,15 @@ test('web requests go through planner and are coerced to message when planner pi
 
     const orchestrator = createReflectOrchestrator({
         openaiService,
+        generationRuntime: createGenerationRuntime(async ({ messages }) => {
+            finalMessages = messages;
+            return {
+                text: 'coerced web reply',
+                model: 'gpt-5-mini',
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
@@ -104,7 +123,7 @@ test('web requests go through planner and are coerced to message when planner pi
         })
     );
 
-    assert.equal(callCount, 2);
+    assert.equal(callCount, 1);
     assert.equal(response.action, 'message');
     assert.equal(response.message, 'coerced web reply');
     assert.equal(
@@ -157,6 +176,11 @@ test('discord requests preserve non-message planner actions', async () => {
 
     const orchestrator = createReflectOrchestrator({
         openaiService,
+        generationRuntime: createGenerationRuntime(async () => {
+            throw new Error(
+                'message generation should not run for image actions'
+            );
+        }),
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
@@ -171,12 +195,11 @@ test('discord requests preserve non-message planner actions', async () => {
 });
 
 test('message plans pass planner generation options into reflectService', async () => {
-    let generationOptionsSeen: GenerateResponseOptions | undefined;
     let finalMessages: Array<{ role: string; content: string }> = [];
     const openaiService: OpenAIService = {
         async generateResponse(
             _model,
-            messages,
+            _messages,
             options?: GenerateResponseOptions
         ) {
             if (options?.maxOutputTokens === 700) {
@@ -206,23 +229,25 @@ test('message plans pass planner generation options into reflectService', async 
                     metadata: { model: 'gpt-5-mini' },
                 };
             }
-
-            finalMessages = messages;
-            generationOptionsSeen = options;
-            return {
-                normalizedText: 'message with retrieval',
-                metadata: {
-                    model: 'gpt-5-mini',
-                    provenance: 'Retrieved',
-                    tradeoffCount: 0,
-                    citations: [],
-                },
-            };
+            throw new Error('planner should be the only OpenAI caller here');
         },
     };
 
     const orchestrator = createReflectOrchestrator({
         openaiService,
+        generationRuntime: createGenerationRuntime(async (request) => {
+            finalMessages = request.messages;
+            assert.ok(request.search);
+            assert.equal(request.search.intent, 'current_facts');
+            assert.equal(request.reasoningEffort, 'medium');
+            assert.equal(request.verbosity, 'medium');
+            return {
+                text: 'message with retrieval',
+                model: 'gpt-5-mini',
+                provenance: 'Retrieved',
+                citations: [],
+            };
+        }),
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
@@ -232,10 +257,6 @@ test('message plans pass planner generation options into reflectService', async 
     const response = await orchestrator.runReflect(createReflectRequest());
 
     assert.equal(response.action, 'message');
-    assert.ok(generationOptionsSeen?.search);
-    assert.equal(generationOptionsSeen?.search?.intent, 'current_facts');
-    assert.equal(generationOptionsSeen?.reasoningEffort, 'medium');
-    assert.equal(generationOptionsSeen?.verbosity, 'medium');
     assert.equal(
         finalMessages[0]?.content,
         renderPrompt('discord.chat.system').content
@@ -292,6 +313,15 @@ test('discord overlay replaces default persona layer in reflect generation', asy
 
     const orchestrator = createReflectOrchestrator({
         openaiService,
+        generationRuntime: createGenerationRuntime(async ({ messages }) => {
+            finalMessages = messages;
+            return {
+                text: 'overlay persona reply',
+                model: 'gpt-5-mini',
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',

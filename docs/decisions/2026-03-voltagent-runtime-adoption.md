@@ -3,6 +3,8 @@
 **Decision:** Adopt VoltAgent as the primary agent-runtime framework behind Footnote's existing backend boundary, while keeping Footnote's user-facing API, provenance contract, and review surfaces owned by Footnote.  
 **Date:** 2026-03-17
 
+**Implementation note:** The Reflect MVP now runs through `@footnote/agent-runtime`, with VoltAgent as the active plain-text runtime and the legacy runtime retained as an internal fallback for search-enabled requests.
+
 ---
 
 ## 1. Context

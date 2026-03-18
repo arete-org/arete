@@ -6,124 +6,72 @@
 
 ## Purpose
 
-Track the branch work that introduces a replaceable generation/runtime boundary for Reflect before VoltAgent is wired in as a real implementation.
+Capture the completed Reflect runtime migration as a branch-level status snapshot.
 
-This file should reflect the branch's actual state. Architecture and decision docs should stay more stable.
+This file is historical implementation context, not a primary AI quick-reference document. Durable guidance should come from `cursor.rules` and the VoltAgent decision record.
 
 ## Current State
 
-Footnote still has one stable public reflect boundary:
+Reflect now runs through the shared runtime seam behind backend:
 
 - `web` calls `backend`
 - `discord-bot` calls `backend`
-- `backend` owns `POST /api/reflect`, auth, abuse controls, trace generation, and response metadata
+- `backend` owns `POST /api/reflect`, auth, abuse controls, trace generation, response metadata, and API shaping
+- `@footnote/agent-runtime` owns the replaceable generation runtime implementations
 
-The branch now has a new internal runtime package at `packages/agent-runtime`, but backend Reflect still executes generation through the existing backend OpenAI path. No public API, endpoint, or container boundary has changed.
+The active Reflect runtime is now VoltAgent for plain text generation. Search-enabled requests still use the legacy runtime path through the VoltAgent adapter's explicit fallback behavior so retrieval parity remains intact for this branch.
 
-### What is already done
+## Branch Outcome
 
-- `@footnote/agent-runtime` exists as a workspace package
-- the runtime seam has been generalized away from Reflect-specific naming
-- the package now exports canonical runtime-facing generation types:
+The branch achieved the following:
+
+- created `@footnote/agent-runtime` as a dedicated internal package
+- established provider-neutral runtime types:
     - `RuntimeMessage`
     - `GenerationRequest`
     - `GenerationResult`
     - `GenerationRuntime`
     - `createGenerationRuntime()`
-- runtime-facing generation settings now live in `@footnote/agent-runtime`
-- backend Reflect code imports and uses the canonical runtime-facing vocabulary instead of maintaining a duplicate local shape
-- backend generation settings now use runtime-neutral search semantics:
-    - `search`
-    - `contextSize`
-    - `intent`
-    - `maxOutputTokens`
-- the runtime result contract now includes normalized usage, retrieval, citations, and provenance facts
-- `agent-runtime` currently exposes a placeholder factory only; no adapter construction exists yet
+- moved the legacy OpenAI-backed generation behavior into a dedicated legacy runtime adapter
+- added a VoltAgent-backed runtime adapter for stateless text generation
+- cut backend Reflect over to the runtime seam
+- kept planner behavior, prompt assembly, trace persistence, and response metadata in backend
+- avoided any new public endpoint, service, or container
 
-### What remains true today
+## What Remains True
 
 - the reflect planner stays in `backend`
 - prompt assembly stays in `backend`
 - trace persistence and `ResponseMetadata` stay in `backend`
-- the real generation call still happens in `packages/backend/src/services/openaiService.ts`
-- backend does not yet call `createGenerationRuntime()` or a runtime adapter
-- VoltAgent is not yet installed or wired into the runtime package
+- legacy runtime behavior remains available internally for search fallback
+- OpenAI-specific backend code is still used where it genuinely belongs today, especially planner execution
 
-## Validation Baseline
+## Validation Snapshot
 
-Current validation now covers both the existing Reflect path and the new internal seam.
-
-Already in place:
+Validation for the completed branch includes:
 
 - `packages/agent-runtime/test/index.test.ts`
+- `packages/agent-runtime/test/legacyOpenAiRuntime.test.ts`
+- `packages/agent-runtime/test/voltagentRuntime.test.ts`
 - `packages/backend/test/reflectGenerationTypes.test.ts`
-- `packages/backend/test/reflectHandler.test.ts`
-- `packages/backend/test/reflectOrchestrator.test.ts`
 - `packages/backend/test/reflectPlanner.test.ts`
 - `packages/backend/test/reflectService.test.ts`
+- `packages/backend/test/reflectOrchestrator.test.ts`
+- `packages/backend/test/reflectHandler.test.ts`
 - `packages/backend/test/openaiService.metadata.test.ts`
 
 Most recent validation run:
 
 - `pnpm --filter @footnote/agent-runtime run build`
+- `pnpm exec tsx --test packages/agent-runtime/test/index.test.ts packages/agent-runtime/test/legacyOpenAiRuntime.test.ts packages/agent-runtime/test/voltagentRuntime.test.ts`
 - `pnpm --filter @footnote/backend run build`
-- `pnpm exec tsx --test packages/agent-runtime/test/index.test.ts packages/backend/test/reflectGenerationTypes.test.ts packages/backend/test/reflectPlanner.test.ts packages/backend/test/reflectService.test.ts packages/backend/test/reflectOrchestrator.test.ts packages/backend/test/reflectHandler.test.ts`
+- `pnpm exec tsx --test packages/backend/test/reflectGenerationTypes.test.ts packages/backend/test/reflectPlanner.test.ts packages/backend/test/reflectService.test.ts packages/backend/test/reflectOrchestrator.test.ts packages/backend/test/reflectHandler.test.ts packages/backend/test/openaiService.metadata.test.ts`
 - `pnpm lint-check`
+- `pnpm install --frozen-lockfile`
 
-Still missing:
+## Residual Limits
 
-- runtime-adapter conformance tests
-- backend tests that prove `/api/reflect` still behaves the same after backend starts calling the runtime seam
-- VoltAgent adapter tests
-- end-to-end tests covering runtime-produced metadata facts flowing into backend trace storage
-
-## Next Work
-
-### 1. Make the seam real in backend execution
-
-Backend Reflect should call the runtime seam for text generation instead of calling the OpenAI wrapper directly.
-
-Expected outcome:
-
-- `/api/reflect` behavior stays unchanged
-- backend still owns planner behavior, metadata, traces, and API shape
-- the new seam stops being placeholder-only
-
-### 2. Add a legacy runtime adapter
-
-Implement a backend-compatible adapter in `@footnote/agent-runtime` that preserves the current OpenAI-backed generation behavior behind the new seam.
-
-Expected outcome:
-
-- backend can depend on `GenerationRuntime`
-- the legacy path remains the execution backend for now
-- the cutover is architectural, not behavioral
-
-### 3. Introduce VoltAgent as another runtime implementation
-
-Once backend is using the seam, add a text-only VoltAgent adapter in `@footnote/agent-runtime`.
-
-Expected outcome:
-
-- VoltAgent dependencies live only in the runtime package
-- backend contracts remain unchanged
-- planner, traces, incidents, and response metadata remain backend-owned
-
-### 4. Cut Reflect over and clean up
-
-Switch backend Reflect generation to the VoltAgent adapter and remove dead direct-generation code that is no longer needed.
-
-Expected outcome:
-
-- web and Discord continue using the same backend reflect API
-- no additional service or container is required
-- remaining OpenAI code is limited to planner or other non-Reflect features that still need it
-
-## Non-Goals For This Branch
-
-- adding a new public reflect endpoint
-- introducing another runtime service or container
-- migrating voice or image generation
-- moving the reflect planner into VoltAgent
-- replacing Footnote trace, incident, or provenance systems
-- making the entire repo provider-agnostic in one pass
+- VoltAgent is the active Reflect runtime, but search requests still fall back to the legacy runtime adapter
+- this branch does not migrate voice or image generation
+- this branch does not move planner logic into VoltAgent
+- this branch does not replace Footnote-owned trace, incident, or provenance systems

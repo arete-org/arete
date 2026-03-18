@@ -29,9 +29,15 @@ type OpenAIUsage = {
     total_tokens?: number;
 };
 
-type OpenAIResponseMetadata = {
+type AssistantUsage = {
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+};
+
+type AssistantResponseMetadata = {
     model: string;
-    usage?: OpenAIUsage;
+    usage?: AssistantUsage;
     finishReason?: string;
     reasoningEffort?: string;
     verbosity?: string;
@@ -40,6 +46,19 @@ type OpenAIResponseMetadata = {
     citations?: Citation[];
     evidenceScore?: TraceAxisScore;
     freshnessScore?: TraceAxisScore;
+};
+
+type OpenAIResponseMetadata = {
+    model: AssistantResponseMetadata['model'];
+    usage?: OpenAIUsage;
+    finishReason?: AssistantResponseMetadata['finishReason'];
+    reasoningEffort?: AssistantResponseMetadata['reasoningEffort'];
+    verbosity?: AssistantResponseMetadata['verbosity'];
+    provenance?: AssistantResponseMetadata['provenance'];
+    tradeoffCount?: AssistantResponseMetadata['tradeoffCount'];
+    citations?: AssistantResponseMetadata['citations'];
+    evidenceScore?: AssistantResponseMetadata['evidenceScore'];
+    freshnessScore?: AssistantResponseMetadata['freshnessScore'];
 };
 
 type GenerateResponseResult = {
@@ -535,7 +554,7 @@ type ResponseMetadataRuntimeContext = {
  * All values are derived from control-plane context and API annotations.
  */
 const buildResponseMetadata = (
-    assistantMetadata: OpenAIResponseMetadata,
+    assistantMetadata: AssistantResponseMetadata,
     runtimeContext: ResponseMetadataRuntimeContext
 ): ResponseMetadata => {
     const responseId = crypto.randomBytes(6).toString('base64url').slice(0, 8);
@@ -609,6 +628,8 @@ const buildResponseMetadata = (
 };
 
 export type {
+    AssistantResponseMetadata,
+    AssistantUsage,
     GenerateResponseOptions,
     OpenAIService,
     OpenAIResponseMetadata,

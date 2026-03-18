@@ -65,7 +65,6 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 ### Current runtime-boundary context
 
 - The runtime-boundary direction is documented in `docs/decisions/2026-03-voltagent-runtime-adoption.md`.
-- Active implementation staging for that work lives in `docs/status/voltagent-reflect-runtime-status.md`.
 
 ### API Linking
 

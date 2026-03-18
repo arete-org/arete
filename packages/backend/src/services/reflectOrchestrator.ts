@@ -16,10 +16,13 @@ import {
     type CreateReflectServiceOptions,
 } from './reflectService.js';
 import { createReflectPlanner, type ReflectPlan } from './reflectPlanner.js';
+import type { OpenAIService } from './openaiService.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
-type CreateReflectOrchestratorOptions = CreateReflectServiceOptions;
+type CreateReflectOrchestratorOptions = CreateReflectServiceOptions & {
+    openaiService: OpenAIService;
+};
 
 const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
 
@@ -166,13 +169,14 @@ const extractDiscordPersonaOverlay = (
  */
 export const createReflectOrchestrator = ({
     openaiService,
+    generationRuntime,
     storeTrace,
     buildResponseMetadata,
     defaultModel = runtimeConfig.openai.defaultModel,
     recordUsage,
 }: CreateReflectOrchestratorOptions) => {
     const reflectService = createReflectService({
-        openaiService,
+        generationRuntime,
         storeTrace,
         buildResponseMetadata,
         defaultModel,

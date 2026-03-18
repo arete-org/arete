@@ -7,6 +7,8 @@
  * @footnote-ethics: high - This workflow owns the AI response and provenance metadata users rely on.
  */
 import type {
+    GenerationResult,
+    GenerationRuntime,
     GenerationRequest,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
@@ -17,11 +19,10 @@ import type {
 } from '@footnote/contracts/ethics-core';
 import type { PostReflectResponse } from '@footnote/contracts/web';
 import type {
-    OpenAIService,
-    OpenAIResponseMetadata,
+    AssistantResponseMetadata,
+    AssistantUsage,
     ResponseMetadataRuntimeContext,
 } from './openaiService.js';
-import { executeOpenAIGeneration } from './generationExecution.js';
 import {
     estimateBackendTextCost,
     recordBackendLLMUsage,
@@ -51,10 +52,10 @@ const resolveBotProfileDisplayName = (): string => {
  * The HTTP handler injects these so the core logic stays transport-agnostic.
  */
 export type CreateReflectServiceOptions = {
-    openaiService: OpenAIService;
+    generationRuntime: GenerationRuntime;
     storeTrace: (metadata: ResponseMetadata) => Promise<void>;
     buildResponseMetadata: (
-        assistantMetadata: OpenAIResponseMetadata,
+        assistantMetadata: AssistantResponseMetadata,
         runtimeContext: ResponseMetadataRuntimeContext
     ) => ResponseMetadata;
     defaultModel: string;
@@ -86,12 +87,39 @@ export type RunReflectMessagesInput = {
  * so transports do not need to reshape it.
  */
 export const createReflectService = ({
-    openaiService,
+    generationRuntime,
     storeTrace,
     buildResponseMetadata,
     defaultModel,
     recordUsage = recordBackendLLMUsage,
 }: CreateReflectServiceOptions) => {
+    /**
+     * Normalizes one runtime result into the metadata shape backend already
+     * uses for provenance, trace storage, and cost accounting.
+     */
+    const buildAssistantMetadata = (
+        generationResult: GenerationResult,
+        generation: ReflectGenerationPlan | undefined
+    ): AssistantResponseMetadata => {
+        const usage: AssistantUsage | undefined = generationResult.usage
+            ? {
+                  promptTokens: generationResult.usage.promptTokens,
+                  completionTokens: generationResult.usage.completionTokens,
+                  totalTokens: generationResult.usage.totalTokens,
+              }
+            : undefined;
+
+        return {
+            model: generationResult.model ?? defaultModel,
+            usage,
+            finishReason: generationResult.finishReason,
+            reasoningEffort: generation?.reasoningEffort,
+            verbosity: generation?.verbosity,
+            provenance: generationResult.provenance,
+            citations: generationResult.citations ?? [],
+        };
+    };
+
     const runReflectMessages = async ({
         messages,
         conversationSnapshot,
@@ -129,18 +157,18 @@ export const createReflectService = ({
             }),
         };
 
-        const { generationResult, assistantMetadata } =
-            await executeOpenAIGeneration({
-                openaiService,
-                request: generationRequest,
-            });
+        const generationResult =
+            await generationRuntime.generate(generationRequest);
+        const assistantMetadata = buildAssistantMetadata(
+            generationResult,
+            generation
+        );
 
         const usageModel = assistantMetadata.model || defaultModel;
-        const promptTokens = assistantMetadata.usage?.prompt_tokens ?? 0;
-        const completionTokens =
-            assistantMetadata.usage?.completion_tokens ?? 0;
+        const promptTokens = assistantMetadata.usage?.promptTokens ?? 0;
+        const completionTokens = assistantMetadata.usage?.completionTokens ?? 0;
         const totalTokens =
-            assistantMetadata.usage?.total_tokens ??
+            assistantMetadata.usage?.totalTokens ??
             promptTokens + completionTokens;
         const estimatedCost = estimateBackendTextCost(
             usageModel,
