@@ -6,7 +6,7 @@
  * @footnote-ethics: high - Context selection influences user privacy and fairness.
  */
 import { Message } from 'discord.js';
-import { OpenAIMessage, OpenAIService } from '../openaiService.js';
+import { OpenAIMessage } from '../openaiService.js';
 import { logger } from '../logger.js';
 import { renderPrompt, runtimeConfig } from '../../config.js';
 
@@ -65,12 +65,7 @@ function buildEmbedSummary(message: Message): string | null {
  * pipeline.
  */
 export class ContextBuilder {
-    private readonly openaiService: OpenAIService;
     private readonly DEFAULT_CONTEXT_MESSAGES = 12;
-
-    constructor(openaiService: OpenAIService) {
-        this.openaiService = openaiService;
-    }
 
     /**
      * Builds the message context for the given message
@@ -193,12 +188,10 @@ export class ContextBuilder {
                 };
             });
 
-        // Reduce the context by summarizing large messages
-        // Note that this does not include the message being replied to (it is added later), because we should always have full context of that message
-        let reducedHistory = await this.openaiService.reduceContext(history);
+        const contextHistory = [...history];
 
         // Add the current message
-        reducedHistory.push({
+        contextHistory.push({
             role: 'user',
             content: `${message.member?.displayName || message.author.username} said: "${message.content}" ${repliedMessageIndex ? ` (Replying to message ${repliedMessageIndex - 1})` : ''}`,
         });
@@ -207,12 +200,12 @@ export class ContextBuilder {
         const systemPrompt = renderPrompt('discord.chat.system').content;
         const context: OpenAIMessage[] = [
             { role: 'system', content: systemPrompt },
-            ...reducedHistory,
+            ...contextHistory,
         ];
         logContextIfVerbose(context);
 
         logger.debug(
-            `Final context built with ${context.length} messages (${reducedHistory.length} history + 1 system)`
+            `Final context built with ${context.length} messages (${contextHistory.length} history + 1 system)`
         );
         return { context };
     }

@@ -255,7 +255,7 @@ export class MessageProcessor {
 
     constructor(options: MessageProcessorOptions) {
         this.openaiService = options.openaiService;
-        this.contextBuilder = new ContextBuilder(this.openaiService);
+        this.contextBuilder = new ContextBuilder();
 
         this.rateLimiters = {};
         if (runtimeConfig.rateLimits.user.enabled) {
