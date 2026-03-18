@@ -6,198 +6,122 @@
 
 ## Purpose
 
-Track the active branch-level status for completing the text migration away from the legacy OpenAI system.
+Track branch-level status for completing the text migration away from the legacy OpenAI system.
 
-This file should evolve as the migration moves. The durable architectural direction lives in:
+This file records current state and validation. The durable architecture decisions live in:
 
 - [Completing Legacy OpenAI Removal Across Text, Image, and Voice](../decisions/2026-03-legacy-openai-removal-and-runtime-branching.md)
 - [VoltAgent Runtime Adoption (Behind the Existing Backend)](../decisions/2026-03-voltagent-runtime-adoption.md)
 
-This file is the working status tracker for the text branch, not the final architecture record.
+## Scope
 
-## Architecture Already Locked
+This branch covered the text flows that now belong behind the backend-owned text runtime path:
 
-These points are already decided at the architecture level:
+- reflect planner -> generation -> output
+- `/news`
 
-- `backend` remains the only public control plane for `web` and `discord-bot`
-- `@footnote/agent-runtime` is evolving from a text-first seam into a Footnote-owned home for modality-specific runtime adapters
-- text remains the first and most mature migrated slice inside that package family
-- provider/framework details must stay behind Footnote-owned boundaries
+Out of scope:
 
-## Scope of This Branch
+- image generation
+- TTS
+- realtime voice/session work
+- alternate lens / provenance-lens rewrite work
 
-This branch covers text-generation flows that should end up behind the backend-owned text runtime path.
-
-Current examples include:
-
-- planner -> generation -> output for reflect
-- `/news` and similar text-first command paths
-
-In the broader architecture, this branch is the first migrated modality inside the modality-based runtime package family.
-
-This branch does **not** own:
-
-- image generation architecture
-- TTS architecture
-- realtime voice/session architecture
-
-## Current State
+## Status
 
 Status: Complete for current branch scope
 
-Known high-level state today:
+### Exit Gates Met
+
+- reflect planning no longer depends on legacy `OpenAIService.generateResponse()`
+- active reflect retrieval no longer depends on legacy fallback runtime
+- `/news` no longer uses local legacy generation
+- in-scope text product flows now reach provider/framework code only through Footnote-owned boundaries
+
+### Final State
 
 - reflect generation already runs through the shared runtime seam
-- reflect planning now executes through a backend-local seam backed by the shared runtime
-- VoltAgent text runtime now handles search-enabled requests directly in the active text path
+- reflect planning now executes through a backend-local planner seam backed by the shared runtime
+- VoltAgent text runtime now handles search-enabled reflect requests directly in the active text path
 - `/news` now runs through a backend-owned internal task path instead of choosing providers locally in Discord
-- legacy text fallback behavior is no longer used in the active backend reflect path
 - trusted internal backend text task infrastructure now exists for the `news` task
+- any remaining legacy OpenAI helpers now belong to out-of-scope branches such as image, voice, or alternate lens overhaul work
 
-Likely starting points to track as this branch becomes concrete:
+## Completed Work
 
-- backend planner execution
-- runtime parity and fallback behavior
-- `/news` text flow
+### 1. Planner Abstraction
 
-Current concrete hotspots:
+Status: Complete
 
-- runtime tests now prove search-enabled reflect requests no longer delegate to legacy fallback
-- `/news` command tests now prove the bot uses the backend-owned task path directly
-
-## Target End State
-
-This branch is complete when:
-
-- text planner and generation no longer split across legacy and new product paths
-- tertiary text flows no longer depend on direct legacy `OpenAIService.generateResponse()` calls
-- search, citation, and provenance-sensitive behavior are preserved on the new path
-- text product flows reach provider/framework code only through Footnote-owned boundaries
-
-## Working Breakdown
-
-### 1. Planner abstraction
-
-Status: In progress
-
-Track:
-
-- how planner execution stops depending on legacy OpenAI-specific calls
-- what Footnote-owned abstraction will sit between planner policy and model execution
-- what remains owned by `backend` versus what is delegated to the text runtime seam
-
-Current branch status:
-
-- complete for reflect planner execution
 - `createReflectPlanner()` now uses a backend-local planner execution seam instead of `OpenAIService.generateResponse()`
 - `createReflectOrchestrator()` now executes planner calls through the shared runtime
 - `/api/reflect` no longer requires the legacy OpenAI service to run planner logic
-- validated by:
-  - `packages/backend/test/reflectPlanner.test.ts`
-  - `packages/backend/test/reflectOrchestrator.test.ts`
-  - `packages/backend/test/reflectHandler.test.ts`
 
-### 2. Runtime parity
+Validated by:
 
-Status: In progress
+- `packages/backend/test/reflectPlanner.test.ts`
+- `packages/backend/test/reflectOrchestrator.test.ts`
+- `packages/backend/test/reflectHandler.test.ts`
 
-Track:
+### 2. Runtime Parity
 
-- search parity
-- citation and provenance parity
-- fallback removal criteria
+Status: Complete
 
-Current branch status:
-
-- complete for active backend reflect search flow
 - VoltAgent runtime no longer delegates search-enabled generation to the legacy runtime in the active text path
 - retrieved replies now normalize back into Footnote citations, retrieval facts, and retrieved provenance
 - markdown-link citation recovery is preserved for retrieval-backed replies that lack structured source records
 - backend reflect request building now strips blank search queries before they reach the shared runtime
-- milestone 2 review gate is complete for backend reflect text flow
-- validated by:
-  - `packages/agent-runtime/test/voltagentRuntime.test.ts`
-  - `packages/backend/test/reflectService.test.ts`
 
-Current next focus:
+Validated by:
 
-- text branch scope is complete; any remaining legacy OpenAI helpers now belong to out-of-scope branches such as image, voice, or alternate lens overhaul work
+- `packages/agent-runtime/test/voltagentRuntime.test.ts`
+- `packages/backend/test/reflectService.test.ts`
 
-### 3. Tertiary text flows
+### 3. `/news` Cutover
 
 Status: Complete
 
-Track:
-
-- `/news`
-- trusted internal backend text task path for `/news`
-
-Current branch status:
-
-- complete for the backend-owned internal `news` task endpoint
-- trusted callers can now post `task: 'news'` to `/api/internal/text`
-- backend owns prompt assembly, runtime execution, structured parsing, and response validation for this task
+- backend now owns the internal `news` task endpoint at `/api/internal/text`
+- trusted callers can post `task: 'news'` to that endpoint
+- backend owns prompt assembly, runtime execution, structured parsing, and response validation for the task
 - Discord now uses a narrow internal news-task API client method for `/news`
-- milestone 3 cleanup narrowed the implementation naming around `news`, removed the unused `allowedDomains` request field, and moved trusted handler auth/body parsing into shared backend helpers
 - `/news` no longer uses local legacy generation
+- milestone cleanup narrowed the implementation naming around `news`
+- the unused `allowedDomains` request field was removed
+- trusted handler auth/body parsing now uses shared backend helpers
 - `/news` command tests now verify the bot calls `runNewsTaskViaApi()` and renders the backend-owned result shape
-- validated by:
-  - `packages/contracts/test/webSchemas.test.ts`
-  - `packages/backend/test/internalTextHandler.test.ts`
-  - `packages/discord-bot/test/api.internalText.test.ts`
-  - `packages/discord-bot/test/newsCommand.test.ts`
 
-### 4. Legacy cleanup
+Validated by:
+
+- `packages/contracts/test/webSchemas.test.ts`
+- `packages/backend/test/internalTextHandler.test.ts`
+- `packages/discord-bot/test/api.internalText.test.ts`
+- `packages/discord-bot/test/newsCommand.test.ts`
+
+### 4. Legacy Cleanup
 
 Status: Complete for current branch scope
 
-Track:
+- active legacy text-path usage is removed for reflect planning/runtime and `/news`
+- dead text-path prompt and contract naming was cleaned up where it affected the migrated flow
+- remaining legacy helpers are no longer part of the active text path for this branch
 
-- legacy text runtime adapter removal
-- dead prompt cleanup
-- obsolete helper cleanup
+## Validation Snapshot
 
-## Validation Baseline
+Passing on 2026-03-18:
 
-Already relevant:
-
-- reflect planner/runtime tests
-- provenance and citation parity tests
-- `/news` regression tests
+- `pnpm exec tsx --test packages/backend/test/reflectPlanner.test.ts`
+- `pnpm exec tsx --test packages/backend/test/reflectOrchestrator.test.ts`
+- `pnpm exec tsx --test packages/backend/test/reflectHandler.test.ts`
+- `pnpm exec tsx --test packages/agent-runtime/test/voltagentRuntime.test.ts`
+- `pnpm exec tsx --test packages/backend/test/reflectService.test.ts`
+- `pnpm exec tsx --test packages/contracts/test/webSchemas.test.ts`
+- `pnpm exec tsx --test packages/backend/test/internalTextHandler.test.ts`
+- `pnpm exec tsx --test packages/discord-bot/test/api.internalText.test.ts`
+- `pnpm exec tsx --test packages/discord-bot/test/newsCommand.test.ts`
 - `pnpm review`
-
-Still to define more precisely for this branch:
-
-- none; the branch exit gates are now covered for reflect planning, runtime parity, and `/news`
-
-Current validation snapshot:
-
-- milestone 1 backend tests passing on 2026-03-18:
-  - `pnpm exec tsx --test packages/backend/test/reflectPlanner.test.ts`
-  - `pnpm exec tsx --test packages/backend/test/reflectOrchestrator.test.ts`
-  - `pnpm exec tsx --test packages/backend/test/reflectHandler.test.ts`
-- milestone 2 runtime parity tests passing on 2026-03-18:
-  - `pnpm exec tsx --test packages/agent-runtime/test/voltagentRuntime.test.ts`
-  - `pnpm exec tsx --test packages/backend/test/reflectService.test.ts`
-- milestone 3 internal text endpoint tests passing on 2026-03-18:
-  - `pnpm exec tsx --test packages/contracts/test/webSchemas.test.ts`
-  - `pnpm exec tsx --test packages/backend/test/internalTextHandler.test.ts`
-  - `pnpm exec tsx --test packages/discord-bot/test/api.internalText.test.ts`
-- milestone 4 `/news` cutover tests passing on 2026-03-18:
-  - `pnpm exec tsx --test packages/discord-bot/test/newsCommand.test.ts`
-- repo validation passing on 2026-03-18:
-  - `pnpm review`
-
-## Open Questions
-
-Capture branch-specific questions here as they arise.
-
-Current placeholders:
-
-- none blocking for the text branch scope
 
 ## Notes
 
-- Use this file for current-state updates, branch decisions, and validation snapshots.
-- Prefer linking to concrete PRs, tests, and code paths as the work becomes real.
-- Alternate lens / provenance-lens rewrites are intentionally out of scope for this branch.
+- This status file is a closeout snapshot for the text branch scope, not a new architecture decision.
+- Follow-on removal work for image, voice, and alternate lens flows belongs in their own branch/status tracking.
