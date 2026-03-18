@@ -13,6 +13,10 @@
         "./legacyOpenAiRuntime": {
             "types": "./dist/legacyOpenAiRuntime.d.ts",
             "default": "./dist/legacyOpenAiRuntime.js"
+        },
+        "./voltagentRuntime": {
+            "types": "./dist/voltagentRuntime.d.ts",
+            "default": "./dist/voltagentRuntime.js"
         }
     },
     "scripts": {
@@ -22,5 +26,9 @@
     },
     "devDependencies": {
         "typescript": "catalog:"
+    },
+    "dependencies": {
+        "@voltagent/core": "2.6.10",
+        "ai": "6.0.116"
     }
 }

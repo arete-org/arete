@@ -229,38 +229,50 @@ export interface GenerationRuntime {
     generate(request: GenerationRequest): Promise<GenerationResult>;
 }
 
-/**
- * Minimal runtime factory options for the internal generation seam.
- *
- * This stays intentionally small so backend code can depend on one stable
- * entrypoint while runtime wiring evolves behind the package boundary.
- */
-export interface CreateGenerationRuntimeOptions {
-    /**
-     * Requested runtime implementation key.
-     */
-    kind?: string;
-}
+import {
+    createLegacyOpenAiRuntime,
+    type LegacyOpenAiClient,
+} from './legacyOpenAiRuntime.js';
+import {
+    createVoltAgentRuntime,
+    type CreateVoltAgentRuntimeOptions,
+} from './voltagentRuntime.js';
 
 /**
- * Placeholder runtime factory for the internal generation boundary.
+ * Explicit construction options for the shared runtime factory.
  *
- * The current implementation only establishes the seam. Real adapter
- * construction will replace this placeholder when backend wiring is ready.
+ * The factory is intentionally strict so callers have to provide the
+ * dependencies each runtime needs instead of relying on hidden defaults.
+ */
+export type CreateGenerationRuntimeOptions =
+    | {
+          kind: 'legacy-openai';
+          client: LegacyOpenAiClient;
+      }
+    | ({
+          kind: 'voltagent';
+      } & Pick<
+          CreateVoltAgentRuntimeOptions,
+          'fallbackRuntime' | 'defaultModel' | 'createExecutor'
+      >);
+
+/**
+ * Creates one configured generation runtime implementation.
  */
 export function createGenerationRuntime(
-    options: CreateGenerationRuntimeOptions = {}
+    options: CreateGenerationRuntimeOptions
 ): GenerationRuntime {
-    const kind = options.kind ?? 'unconfigured';
+    if (options.kind === 'legacy-openai') {
+        return createLegacyOpenAiRuntime({
+            client: options.client,
+        });
+    }
 
-    return {
-        kind,
-        async generate(): Promise<GenerationResult> {
-            throw new Error(
-                `Generation runtime "${kind}" has not been implemented yet.`
-            );
-        },
-    };
+    return createVoltAgentRuntime({
+        fallbackRuntime: options.fallbackRuntime,
+        defaultModel: options.defaultModel,
+        createExecutor: options.createExecutor,
+    });
 }
 
 export {
@@ -270,3 +282,14 @@ export {
     type LegacyOpenAiMetadata,
     type LegacyOpenAiResult,
 } from './legacyOpenAiRuntime.js';
+export {
+    createVoltAgentRuntime,
+    type CreateVoltAgentRuntimeOptions,
+    type VoltAgentExecutorFactory,
+    type VoltAgentGenerateTextOptions,
+    type VoltAgentProviderOptions,
+    type VoltAgentResponseMetadata,
+    type VoltAgentTextExecutor,
+    type VoltAgentTextResult,
+    type VoltAgentUsage,
+} from './voltagentRuntime.js';
