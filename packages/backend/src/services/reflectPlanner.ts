@@ -5,7 +5,10 @@
  * @footnote-risk: high - Planner mistakes can pick the wrong modality, skip retrieval, or suppress expected replies.
  * @footnote-ethics: high - Action selection directly affects responsiveness, grounding, and user trust.
  */
-import type { GenerationSearchIntent } from '@footnote/agent-runtime';
+import type {
+    GenerationSearchIntent,
+    RuntimeMessage,
+} from '@footnote/agent-runtime';
 import type {
     PostReflectRequest,
     ReflectCapabilities,
@@ -581,7 +584,7 @@ export const createReflectPlanner = ({
     ): Promise<ReflectPlan> => {
         const plannerPrompt = renderPrompt('reflect.planner.system').content;
         const requestSummary = summarizeRequest(request);
-        const plannerMessages = [
+        const plannerMessages: RuntimeMessage[] = [
             { role: 'system', content: plannerPrompt },
             {
                 role: 'system',
