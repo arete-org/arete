@@ -2,9 +2,7 @@
 
 ## Purpose
 
-Define the user-facing incident reporting flow for assistant messages on Discord.
-
-This document is intentionally about behavior and boundaries, not milestone status.
+Define the user-facing incident reporting flow, and its behavior and boundaries, for assistant messages on Discord.
 
 ## Scope
 
@@ -16,15 +14,6 @@ This flow covers:
 - automatic capture of stable pointers,
 - immediate confirmation back to the reporter,
 - optional follow-on remediation of the reported assistant message.
-
-This flow does not define:
-
-- SQLite schema details,
-- alert transport details,
-- deterministic breaker rule design,
-- moderator command syntax.
-
-Those belong in separate documents.
 
 ## User Flow
 
@@ -87,23 +76,3 @@ The reporting flow is allowed to trigger immediate remediation only when:
 - The system never persists raw Discord identifiers in incident storage.
 - Reporting one message creates at most one incident per completed submission action.
 - User-facing failures do not block normal message processing outside the report flow.
-
-## Failure Modes
-
-Realistic failures to design for:
-
-- The user clicks report, but the interaction expires before consent is submitted.
-- Provenance metadata is missing, so only Discord pointers are available.
-- The incident store is unavailable, so the bot must fail clearly without pretending the report was saved.
-- The target message has already been remediated, so remediation must not stack duplicate markers.
-
-## Validation Expectations
-
-This flow should eventually be covered by:
-
-- interaction tests for consent and cancel behavior,
-- integration tests proving incident creation uses pseudonymized pointers,
-- remediation tests proving idempotent edits,
-- privacy tests ensuring logs and stored rows never contain raw Discord IDs.
-
-Current implementation gaps belong in the status document, not here.
