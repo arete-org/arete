@@ -67,16 +67,16 @@ pnpm start:all
 
 ## Vendoring and Multiple Discord Bots
 
-We treat `Footnote` as the default Discord persona. If you do nothing beyond the base setup, the bot runs with this identity.
+We treat `Footnote` as the default Discord persona, which is used if you do nothing beyond the base setup.
 
-If you want a vendored bot identity on top of the same backend, configure the bot runtime with profile env vars:
+If you want a vendored bot identity on top, configure the runtime with profile env vars:
 
 ```env
 BOT_PROFILE_ID=acme-bot
-BOT_PROFILE_DISPLAY_NAME="Acme Assistant"
+BOT_PROFILE_DISPLAY_NAME=Acme Assistant
+BOT_PROFILE_MENTION_ALIASES=acme,a-bot
 BOT_PROFILE_PROMPT_OVERLAY=
 BOT_PROFILE_PROMPT_OVERLAY_PATH=
-BOT_PROFILE_MENTION_ALIASES=
 ```
 
 If you omit these values, the runtime falls back to the default Footnote identity.
@@ -88,32 +88,20 @@ Recommended vendoring workflow:
 3. Add either [1] `BOT_PROFILE_PROMPT_OVERLAY` or [2] `BOT_PROFILE_PROMPT_OVERLAY_PATH` for persona-specific instructions (1 takes priority over 2).
 4. Add `BOT_PROFILE_MENTION_ALIASES` when the bot should respond to vendor-specific plaintext names.
 
-Persona overlay templates are available in `packages/prompts/src/profile-overlays/`:
+Persona overlay templates are available:
 
 ```env
+BOT_PROFILE_ID=danny
+BOT_PROFILE_DISPLAY_NAME=Danny
 BOT_PROFILE_PROMPT_OVERLAY_PATH=packages/prompts/src/profile-overlays/danny.md
+```
+```env
+BOT_PROFILE_ID=myuri
+BOT_PROFILE_DISPLAY_NAME=Myuri
 BOT_PROFILE_PROMPT_OVERLAY_PATH=packages/prompts/src/profile-overlays/myuri.md
 ```
 
-Suggested profile identity values when using those templates:
-
-```env
-# Danny
-BOT_PROFILE_ID=danny
-BOT_PROFILE_DISPLAY_NAME=Danny
-
-# Myuri
-BOT_PROFILE_ID=myuri
-BOT_PROFILE_DISPLAY_NAME=Myuri
-```
-
-Base prompt ownership is now shared:
-
-1. Canonical Footnote base prompts live in `packages/prompts/src/defaults.yaml`.
-2. `PROMPT_CONFIG_PATH` overrides those same base prompts for both the backend and Discord bot runtime.
-3. Bot generation paths use `core + one active persona layer` (default Footnote persona unless `BOT_PROFILE_*` overlay is configured).
-4. Vendored bot identity changes should go in `BOT_PROFILE_*` overlay settings, not a forked base prompt file.
-5. Canonical precedence rules are documented in [`docs/architecture/prompt-resolution.md`](docs/architecture/prompt-resolution.md).
+Precedence rules are documented in [`prompt-resolution.md`](docs/architecture/prompt-resolution.md).
 
 ---
 
@@ -125,14 +113,7 @@ The docs are split by purpose:
 - decisions: durable technical choices and rationale
 - status: implementation progress for active work
 
-Start here:
-
-- [Documentation Map](docs/README.md)
-- [Incident Reporting](docs/architecture/incident-reporting.md)
-- [Incident Storage And Audit](docs/architecture/incident-storage-and-audit.md)
-- [Risk Evaluation And Breakers](docs/architecture/risk-evaluation-and-breakers.md)
-- [Incident Identifier Pseudonymization](docs/decisions/2026-03-incident-pseudonymization.md)
-- [Incident And Breakers Status](docs/status/incident-breakers-status.md)
+Start here: [Documentation Map](docs/README.md)
 
 ---
 
