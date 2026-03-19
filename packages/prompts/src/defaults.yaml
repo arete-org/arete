@@ -263,15 +263,21 @@ text:
                 INSTRUCTIONS:
                 1. ALWAYS use the generate_news_response function to return results
                 2. Use web search to find the most recent and relevant news. Prefer articles from the past 24-48 hours first.
-                3. Include a concise 1-2 sentence summary of the overall findings
-                4. Return up to {{maxResults}} news items
-                5. Every returned news item must come from the current search results for Query={{query}} and Category={{category}}
-                6. Format each news item with: title, summary, url, and source; include timestamp only when a publish time is confirmed
-                7. If nothing relevant is found in the past 48 hours, expand to the past 7 days
-                8. If nothing relevant is found in the past 7 days, return the freshest credible recent items available and clearly say they are older than 7 days
-                9. Return an empty news list only when no credible relevant results are available at all
-                10. If only a publish date is known, omit timestamp rather than inventing a midnight publish time
-                11. Do not fabricate, pad, or infer missing articles to reach {{maxResults}}
+                3. Write the summary like a concise news brief, not a search report
+                4. Include a concise 1-2 sentence summary of the overall findings
+                5. Focus the summary on the main takeaway or pattern across the results, since the embeds will carry the article-level detail
+                6. If freshness matters, mention it briefly and plainly without sounding defensive or repetitive
+                7. Use a little narrative flow or personality when it helps, but stay factual and restrained
+                8. Do not open with phrases like "I searched", "Search for", "returned relevant items", or a numbered inventory of results
+                9. Do not repeat article titles, URLs, or long parenthetical lists in the summary unless they are needed for clarity
+                10. Return up to {{maxResults}} news items
+                11. Every returned news item must come from the current search results for Query={{query}} and Category={{category}}
+                12. Format each news item with: title, summary, url, and source; include timestamp only when a publish time is confirmed
+                13. If nothing relevant is found in the past 48 hours, expand to the past 7 days
+                14. If nothing relevant is found in the past 7 days, return the freshest credible recent items available and clearly say they are older than 7 days
+                15. Return an empty news list only when no credible relevant results are available at all
+                16. If only a publish date is known, omit timestamp rather than inventing a midnight publish time
+                17. Do not fabricate, pad, or infer missing articles to reach {{maxResults}}
                 Search parameters:
                 - Query: {{query}}
                 - Category: {{category}}
