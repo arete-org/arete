@@ -108,7 +108,7 @@ test('news command calls the backend-owned news task and renders the returned su
         );
         assert.match(
             String(reply.embeds?.[0]?.data?.footer?.text),
-            /Source: Example News •/
+            /Example News •/
         );
     } finally {
         botApi.runNewsTaskViaApi = originalRunNewsTaskViaApi;
@@ -162,7 +162,7 @@ test('news command omits publish time when the backend does not provide one', as
         };
         assert.equal(
             reply.embeds?.[0]?.data?.footer?.text,
-            'Source: Example News'
+            'Example News'
         );
     } finally {
         botApi.runNewsTaskViaApi = originalRunNewsTaskViaApi;

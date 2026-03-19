@@ -203,8 +203,8 @@ const newsCommand: Command = {
                 .slice(0, maxResults)
                 .map((item) => {
                     const footerText = item.timestamp
-                        ? `Source: ${item.source} • ${new Date(item.timestamp).toLocaleString()}`
-                        : `Source: ${item.source}`;
+                        ? `${item.source} • ${new Date(item.timestamp).toLocaleString()}`
+                        : item.source;
                     const embed = new EmbedBuilder()
                         .setTitle(item.title)
                         .setDescription(item.summary)
