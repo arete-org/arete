@@ -397,7 +397,7 @@ export type InternalNewsItem = {
     summary: string;
     url: string;
     source: string;
-    timestamp: string;
+    timestamp?: string;
     thumbnail?: string | null;
     image?: string | null;
 };

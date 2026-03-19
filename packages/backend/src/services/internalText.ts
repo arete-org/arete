@@ -60,25 +60,52 @@ const buildNewsSearchQuery = ({
     category?: string;
 }): string => query ?? category ?? DEFAULT_NEWS_QUERY;
 
-const normalizeNewsTimestamp = (value: unknown): string | null => {
+const hasExplicitTimeComponent = (value: string): boolean =>
+    /(?:T|\s)\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:\s?(?:Z|[+-]\d{2}:?\d{2}|[AP]M))?/i.test(
+        value
+    );
+
+const isMidnightTimestamp = (date: Date): boolean =>
+    date.getUTCHours() === 0 &&
+    date.getUTCMinutes() === 0 &&
+    date.getUTCSeconds() === 0 &&
+    date.getUTCMilliseconds() === 0;
+
+const normalizeNewsTimestamp = (value: unknown): string | undefined => {
     if (typeof value !== 'string') {
-        return null;
+        return undefined;
     }
 
     const trimmed = value.trim();
     if (trimmed.length === 0) {
-        return null;
+        return undefined;
     }
 
     const parsedDate = new Date(trimmed);
-    return Number.isNaN(parsedDate.getTime()) ? null : parsedDate.toISOString();
+    if (Number.isNaN(parsedDate.getTime())) {
+        return undefined;
+    }
+
+    // Many publishers expose only a publish date. Treat midnight placeholders
+    // as "time unknown" so the UI does not imply precision we never gathered.
+    if (isMidnightTimestamp(parsedDate) && !hasExplicitTimeComponent(trimmed)) {
+        return undefined;
+    }
+
+    if (
+        isMidnightTimestamp(parsedDate) &&
+        /(?:T|\s)00:00(?::00(?:\.0+)?)?/i.test(trimmed)
+    ) {
+        return undefined;
+    }
+
+    return parsedDate.toISOString();
 };
 
 /**
- * The news task asks for ISO timestamps, but models sometimes return dates
- * that are parseable without already being strict ISO strings. We normalize the
- * timestamps we can trust and drop only the malformed items instead of failing
- * the whole task response.
+ * The news task can keep an article even when publish time is fuzzy. We
+ * normalize trustworthy timestamps, but strip placeholder or malformed ones
+ * so one weak date does not sink the whole response.
  */
 const normalizeNewsTaskResult = (value: unknown): unknown => {
     if (!value || typeof value !== 'object') {
@@ -100,14 +127,14 @@ const normalizeNewsTaskResult = (value: unknown): unknown => {
 
         const itemRecord = item as Record<string, unknown>;
         const normalizedTimestamp = normalizeNewsTimestamp(itemRecord.timestamp);
-        if (!normalizedTimestamp) {
-            return [];
-        }
+        const { timestamp: _timestamp, ...rest } = itemRecord;
 
         return [
             {
-                ...itemRecord,
-                timestamp: normalizedTimestamp,
+                ...rest,
+                ...(normalizedTimestamp
+                    ? { timestamp: normalizedTimestamp }
+                    : {}),
             },
         ];
     });
@@ -157,9 +184,10 @@ const buildNewsJsonInstruction = (maxResults: number): string =>
         'Return only one JSON object and no surrounding prose or markdown.',
         'The JSON object must have exactly two top-level keys: "news" and "summary".',
         `"news" must be an array with at most ${maxResults} items.`,
-        'Each news item must include: title, summary, url, source, and timestamp.',
+        'Each news item must include: title, summary, url, and source.',
+        'timestamp is optional and should only be included when a publish time is actually confirmed.',
         'thumbnail and image are optional and may be null.',
-        'Use ISO-8601 timestamps when known. If a timestamp cannot be confirmed, omit the article instead of inventing one.',
+        'Use ISO-8601 timestamps when known. If only a publish date is known, omit timestamp instead of inventing a midnight time.',
     ].join(' ');
 
 export const createInternalNewsTaskService = ({

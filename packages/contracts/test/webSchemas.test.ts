@@ -655,6 +655,24 @@ test('internal text task schemas enforce a narrow task union', () => {
     );
 
     assert.equal(
+        PostInternalNewsTaskResponseSchema.safeParse({
+            task: 'news',
+            result: {
+                news: [
+                    {
+                        title: 'Policy update',
+                        summary: 'A short summary',
+                        url: 'https://example.com/news',
+                        source: 'Example News',
+                    },
+                ],
+                summary: 'One headline matters today.',
+            },
+        }).success,
+        true
+    );
+
+    assert.equal(
         PostInternalTextResponseSchema.safeParse({
             task: 'news',
             result: {
@@ -665,6 +683,24 @@ test('internal text task schemas enforce a narrow task union', () => {
                         url: 'https://example.com/news',
                         source: 'Example News',
                         timestamp: new Date().toISOString(),
+                    },
+                ],
+                summary: 'One headline matters today.',
+            },
+        }).success,
+        true
+    );
+
+    assert.equal(
+        PostInternalTextResponseSchema.safeParse({
+            task: 'news',
+            result: {
+                news: [
+                    {
+                        title: 'Policy update',
+                        summary: 'A short summary',
+                        url: 'https://example.com/news',
+                        source: 'Example News',
                     },
                 ],
                 summary: 'One headline matters today.',

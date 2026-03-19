@@ -84,7 +84,7 @@ export const InternalNewsItemSchema = z
         summary: z.string().min(1),
         url: z.string().url(),
         source: z.string().min(1),
-        timestamp: z.string().datetime(),
+        timestamp: z.string().datetime().optional(),
         thumbnail: z.string().url().nullable().optional(),
         image: z.string().url().nullable().optional(),
     })

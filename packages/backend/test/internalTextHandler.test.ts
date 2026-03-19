@@ -372,7 +372,7 @@ test('internal news task service preserves its descriptive JSON-object error whe
     );
 });
 
-test('internal news task service normalizes parseable timestamps and drops malformed items', async () => {
+test('internal news task service keeps articles when timestamps are missing or malformed', async () => {
     const service = createInternalNewsTaskService({
         generationRuntime: {
             kind: 'test-runtime',
@@ -389,13 +389,20 @@ test('internal news task service normalizes parseable timestamps and drops malfo
                             },
                             {
                                 title: 'Bad timestamp item',
-                                summary: 'This one should be dropped.',
+                                summary: 'This one should keep the article.',
                                 url: 'https://example.com/news-2',
                                 source: 'Example News',
                                 timestamp: 'later tonight maybe',
                             },
+                            {
+                                title: 'Date-only item',
+                                summary: 'This one should omit the midnight placeholder.',
+                                url: 'https://example.com/news-3',
+                                source: 'Example News',
+                                timestamp: '2026-03-18',
+                            },
                         ],
-                        summary: 'One valid headline remains.',
+                        summary: 'Articles remain even when publish time is fuzzy.',
                     }),
                     model: 'gpt-5-mini',
                 };
@@ -410,10 +417,15 @@ test('internal news task service normalizes parseable timestamps and drops malfo
         query: 'latest ai policy',
     });
 
-    assert.equal(response.result.news.length, 1);
+    assert.equal(response.result.news.length, 3);
     assert.equal(
         response.result.news[0]?.timestamp,
         '2026-03-18T23:48:53.000Z'
     );
-    assert.equal(response.result.summary, 'One valid headline remains.');
+    assert.equal('timestamp' in response.result.news[1]!, false);
+    assert.equal('timestamp' in response.result.news[2]!, false);
+    assert.equal(
+        response.result.summary,
+        'Articles remain even when publish time is fuzzy.'
+    );
 });

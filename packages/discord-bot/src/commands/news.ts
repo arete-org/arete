@@ -21,7 +21,7 @@ type NewsItem = {
     summary: string;
     url: string;
     source: string;
-    timestamp: string;
+    timestamp?: string;
     thumbnail?: string | null;
     image?: string | null;
 };
@@ -202,12 +202,15 @@ const newsCommand: Command = {
             const embeds = newsResponse.news
                 .slice(0, maxResults)
                 .map((item) => {
+                    const footerText = item.timestamp
+                        ? `Source: ${item.source} • ${new Date(item.timestamp).toLocaleString()}`
+                        : `Source: ${item.source}`;
                     const embed = new EmbedBuilder()
                         .setTitle(item.title)
                         .setDescription(item.summary)
                         .setURL(item.url)
                         .setFooter({
-                            text: `Source: ${item.source} • ${new Date(item.timestamp).toLocaleString()}`,
+                            text: footerText,
                         });
 
                     if (item.thumbnail) {

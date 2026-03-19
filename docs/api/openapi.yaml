@@ -1339,7 +1339,6 @@ components:
                 - summary
                 - url
                 - source
-                - timestamp
             additionalProperties: false
 
         InternalNewsTaskRequest:

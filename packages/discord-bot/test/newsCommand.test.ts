@@ -90,7 +90,13 @@ test('news command calls the backend-owned news task and renders the returned su
 
         const reply = editReplyPayloads[0] as {
             content?: string;
-            embeds?: Array<{ data?: { title?: string; description?: string } }>;
+            embeds?: Array<{
+                data?: {
+                    title?: string;
+                    description?: string;
+                    footer?: { text?: string };
+                };
+            }>;
         };
         assert.match(String(reply.content), /\*\*News\*\* for query: "latest ai policy"/i);
         assert.match(String(reply.content), /One important headline today\./);
@@ -99,6 +105,64 @@ test('news command calls the backend-owned news task and renders the returned su
         assert.equal(
             reply.embeds?.[0]?.data?.description,
             'A concise summary'
+        );
+        assert.match(
+            String(reply.embeds?.[0]?.data?.footer?.text),
+            /Source: Example News •/
+        );
+    } finally {
+        botApi.runNewsTaskViaApi = originalRunNewsTaskViaApi;
+    }
+});
+
+test('news command omits publish time when the backend does not provide one', async () => {
+    const originalRunNewsTaskViaApi = botApi.runNewsTaskViaApi;
+    const editReplyPayloads: unknown[] = [];
+
+    botApi.runNewsTaskViaApi = (async () => {
+        return {
+            task: 'news',
+            result: {
+                news: [
+                    {
+                        title: 'Date-only article',
+                        summary: 'The backend kept the article but stripped the fake time.',
+                        url: 'https://example.com/news',
+                        source: 'Example News',
+                    },
+                ],
+                summary: 'One headline without a confirmed publish time.',
+            },
+        };
+    }) as typeof botApi.runNewsTaskViaApi;
+
+    try {
+        await newsCommand.execute({
+            id: 'interaction-optional-time',
+            commandName: 'news',
+            channelId: 'channel-123',
+            guildId: 'guild-456',
+            token: 'token-present',
+            user: { tag: 'tester#0001' },
+            channel: { id: 'channel-123' },
+            isChatInputCommand: () => true,
+            options: {
+                data: [],
+                getString: () => null,
+                getInteger: () => null,
+            },
+            deferReply: async () => undefined,
+            editReply: async (payload: unknown) => {
+                editReplyPayloads.push(payload);
+            },
+        } as never);
+
+        const reply = editReplyPayloads[0] as {
+            embeds?: Array<{ data?: { footer?: { text?: string } } }>;
+        };
+        assert.equal(
+            reply.embeds?.[0]?.data?.footer?.text,
+            'Source: Example News'
         );
     } finally {
         botApi.runNewsTaskViaApi = originalRunNewsTaskViaApi;
