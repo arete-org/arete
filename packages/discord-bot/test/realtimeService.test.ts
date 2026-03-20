@@ -33,13 +33,11 @@ test('RealtimeSession maps backend audio, text, and completion events into local
     session.on('response.output_audio.done', () => {
         seenEventTypes.push('response.output_audio.done');
     });
-    session.on(
-        'response.completed',
-        (event: { usage?: InternalVoiceRealtimeUsage }) => {
-            seenEventTypes.push('response.completed');
-            completionUsage = event.usage;
-        }
-    );
+    session.on('response.completed', (...args: unknown[]) => {
+        const event = args[0] as { usage?: InternalVoiceRealtimeUsage };
+        seenEventTypes.push('response.completed');
+        completionUsage = event.usage;
+    });
 
     session.handleBackendEvent(
         JSON.stringify({
