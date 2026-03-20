@@ -10,20 +10,22 @@ import assert from 'node:assert/strict';
 
 import { RealtimeSession } from '../src/utils/realtimeService.js';
 
-type RealtimeSessionWithPrivateHandler = RealtimeSession & {
-    handleBackendEvent: (raw: string) => void;
+type RealtimeSessionProbe = {
+    on(event: string, listener: (...args: unknown[]) => void): unknown;
+    removeAllListeners(): unknown;
+    handleBackendEvent(raw: string): void;
 };
 
 test('RealtimeSession maps backend audio, text, and completion events into local listeners', async () => {
-    const session = new RealtimeSession() as RealtimeSessionWithPrivateHandler;
+    const session = new RealtimeSession() as unknown as RealtimeSessionProbe;
     const seenAudio: Buffer[] = [];
     const seenText: string[] = [];
     const seenEventTypes: string[] = [];
 
-    session.on('audio', (audio) => {
+    session.on('audio', (audio: unknown) => {
         seenAudio.push(audio as Buffer);
     });
-    session.on('text', (text) => {
+    session.on('text', (text: unknown) => {
         seenText.push(text as string);
     });
     session.on('response.output_audio.done', () => {
@@ -66,7 +68,7 @@ test('RealtimeSession maps backend audio, text, and completion events into local
 });
 
 test('RealtimeSession emits connected when the backend reports session.ready', () => {
-    const session = new RealtimeSession() as RealtimeSessionWithPrivateHandler;
+    const session = new RealtimeSession() as unknown as RealtimeSessionProbe;
     let connected = false;
 
     session.on('connected', () => {
