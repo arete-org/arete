@@ -6,6 +6,13 @@
  * @footnote-risk: high - An incorrect runtime seam can leak framework assumptions or block later runtime migration work.
  * @footnote-ethics: high - This boundary protects Footnote-owned provenance and review semantics from being swallowed by framework-specific code.
  */
+import type {
+    ImageGenerationQuality as ContractImageGenerationQuality,
+    ImageGenerationSize as ContractImageGenerationSize,
+    SupportedImageOutputFormat,
+    SupportedOpenAIImageModel,
+    SupportedOpenAITextModel,
+} from '@footnote/contracts';
 
 /**
  * Runtime-facing role labels for one normalized generation transcript.
@@ -231,21 +238,17 @@ export interface GenerationRuntime {
 /**
  * Output formats supported by the shared image runtime seam.
  */
-export type ImageOutputFormat = 'png' | 'webp' | 'jpeg';
+export type ImageOutputFormat = SupportedImageOutputFormat;
 
 /**
  * Quality levels supported by the shared image runtime seam.
  */
-export type ImageGenerationQuality = 'low' | 'medium' | 'high' | 'auto';
+export type ImageGenerationQuality = ContractImageGenerationQuality;
 
 /**
  * Canvas sizes supported by the shared image runtime seam.
  */
-export type ImageGenerationSize =
-    | '1024x1024'
-    | '1024x1536'
-    | '1536x1024'
-    | 'auto';
+export type ImageGenerationSize = ContractImageGenerationSize;
 
 /**
  * Background treatments supported by the shared image runtime seam.
@@ -267,8 +270,8 @@ export interface ImageGenerationRequest {
     prompt: string;
     systemPrompt: string;
     developerPrompt: string;
-    textModel: string;
-    imageModel: string;
+    textModel: SupportedOpenAITextModel;
+    imageModel: SupportedOpenAIImageModel;
     quality: ImageGenerationQuality;
     size: ImageGenerationSize;
     background: ImageGenerationBackground;
@@ -319,8 +322,8 @@ export interface ImageGenerationCosts {
  */
 export interface ImageGenerationResult {
     responseId: string | null;
-    textModel: string;
-    imageModel: string;
+    textModel: SupportedOpenAITextModel;
+    imageModel: SupportedOpenAIImageModel;
     revisedPrompt: string | null;
     finalStyle: string;
     annotations: ImageGenerationAnnotations;
