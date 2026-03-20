@@ -1,73 +1,104 @@
 /**
- * @description: Shared provider and model vocabulary used across Footnote packages.
+ * @description: Lists the provider, model, and shared option values that multiple Footnote packages agree on.
  * @footnote-scope: interface
  * @footnote-module: SupportedProviders
- * @footnote-risk: low - Wrong provider/model names cause type drift, not runtime behavior by themselves.
- * @footnote-ethics: medium - Provider/model naming shapes defaults, routing, and transparency language.
+ * @footnote-risk: low - A wrong value here can make one package accept input that another package rejects.
+ * @footnote-ethics: medium - Shared model names and defaults shape routing, cost tracking, and transparency language.
  */
 
 /**
- * Provider backends currently supported by shared Footnote packages.
+ * Provider backends currently recognized by shared Footnote packages.
  */
 export const supportedProviders = ['openai'] as const;
+
 /**
- * Union of currently supported provider identifiers.
+ * One known provider identifier.
  */
 export type SupportedProvider = (typeof supportedProviders)[number];
 
 /**
  * Node environment values the repo treats as valid runtime modes.
  */
-export const supportedNodeEnvs = [
-    'production',
-    'development',
-    'test',
-] as const;
+export const supportedNodeEnvs = ['production', 'development', 'test'] as const;
+
 /**
- * Union of supported Node runtime modes.
+ * One supported Node runtime mode.
  */
 export type SupportedNodeEnv = (typeof supportedNodeEnvs)[number];
 
 /**
- * OpenAI text-capable models explicitly recognized by shared config and cost
- * logic.
+ * OpenAI text models Footnote knows how to validate, display, and price today.
+ * This list is the shared source of truth for trusted image-task contracts and
+ * other curated model pickers.
  */
 export const supportedOpenAITextModels = [
+    'gpt-5.2',
+    'gpt-5.1',
     'gpt-5',
     'gpt-5-mini',
+    'gpt-5-nano',
+    'gpt-4o',
+    'gpt-4o-mini',
     'gpt-4.1',
     'gpt-4.1-mini',
+    'gpt-4.1-nano',
 ] as const;
+
 /**
- * Union of the text model identifiers Footnote currently treats as known.
+ * One known OpenAI text model identifier.
  */
 export type SupportedOpenAITextModel =
     (typeof supportedOpenAITextModels)[number];
 
 /**
- * OpenAI image-capable models explicitly recognized by shared config and image
- * tooling.
+ * OpenAI image models Footnote knows how to validate, display, and price
+ * today.
  */
 export const supportedOpenAIImageModels = [
-    'gpt-image-1-mini',
-    'gpt-image-1',
     'gpt-image-1.5',
+    'gpt-image-1',
+    'gpt-image-1-mini',
 ] as const;
+
 /**
- * Union of the known image model identifiers.
+ * One known OpenAI image model identifier.
  */
 export type SupportedOpenAIImageModel =
     (typeof supportedOpenAIImageModels)[number];
+
+/**
+ * Curated text models accepted by the trusted internal image route.
+ * This currently matches the shared OpenAI text registry exactly.
+ */
+export const internalImageTextModels = supportedOpenAITextModels;
+
+/**
+ * One text-model identifier accepted by the trusted internal image route.
+ */
+export type InternalImageTextModelId = (typeof internalImageTextModels)[number];
+
+/**
+ * Curated image models accepted by the trusted internal image route.
+ * This currently matches the shared OpenAI image registry exactly.
+ */
+export const internalImageRenderModels = supportedOpenAIImageModels;
+
+/**
+ * One image-model identifier accepted by the trusted internal image route.
+ */
+export type InternalImageRenderModelId =
+    (typeof internalImageRenderModels)[number];
 
 // "Supported" means Footnote knows about the model. "Configured" stays a bit
 // wider so operators can try newer provider model strings before the codebase
 // is updated.
 /**
- * Models the codebase knows how to reason about today.
+ * Any model identifier the codebase knows how to reason about today.
  */
 export type SupportedProviderModel =
     | SupportedOpenAITextModel
     | SupportedOpenAIImageModel;
+
 /**
  * Model strings accepted from config, including forward-compatible custom
  * values.
@@ -78,8 +109,9 @@ export type ConfiguredProviderModel = SupportedProviderModel | (string & {});
  * Reasoning effort levels shared across planner and generation surfaces.
  */
 export const supportedReasoningEfforts = ['low', 'medium', 'high'] as const;
+
 /**
- * Union of supported reasoning effort settings.
+ * One supported reasoning effort value.
  */
 export type SupportedReasoningEffort =
     (typeof supportedReasoningEfforts)[number];
@@ -88,8 +120,9 @@ export type SupportedReasoningEffort =
  * Verbosity levels shared across provider-backed text generation.
  */
 export const supportedVerbosityLevels = ['low', 'medium', 'high'] as const;
+
 /**
- * Union of supported verbosity settings.
+ * One supported verbosity value.
  */
 export type SupportedVerbosity = (typeof supportedVerbosityLevels)[number];
 
@@ -105,8 +138,9 @@ export const supportedLogLevels = [
     'debug',
     'silly',
 ] as const;
+
 /**
- * Union of supported log levels.
+ * One supported log level.
  */
 export type SupportedLogLevel = (typeof supportedLogLevels)[number];
 
@@ -114,8 +148,9 @@ export type SupportedLogLevel = (typeof supportedLogLevels)[number];
  * Actions the bot can take when it detects back-and-forth bot chatter.
  */
 export const supportedBotInteractionActions = ['ignore', 'react'] as const;
+
 /**
- * Union of supported bot-interaction responses.
+ * One supported bot-interaction response.
  */
 export type SupportedBotInteractionAction =
     (typeof supportedBotInteractionActions)[number];
@@ -124,18 +159,20 @@ export type SupportedBotInteractionAction =
  * Strategies for how the engagement filter declines to respond.
  */
 export const supportedEngagementIgnoreModes = ['silent', 'react'] as const;
+
 /**
- * Union of supported engagement ignore modes.
+ * One supported engagement ignore mode.
  */
 export type SupportedEngagementIgnoreMode =
     (typeof supportedEngagementIgnoreModes)[number];
 
 /**
- * Image output formats supported by the Discord image workflow.
+ * Image output formats accepted by the shared image workflow.
  */
 export const supportedImageOutputFormats = ['png', 'webp', 'jpeg'] as const;
+
 /**
- * Union of supported image output format identifiers.
+ * One supported image output format identifier.
  */
 export type SupportedImageOutputFormat =
     (typeof supportedImageOutputFormats)[number];

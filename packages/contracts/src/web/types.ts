@@ -1,5 +1,5 @@
 /**
- * @description: Shared web API contract types for request and response payloads.
+ * @description: Defines the request and response shapes shared by Footnote's web-facing APIs.
  * @footnote-scope: interface
  * @footnote-module: WebContracts
  * @footnote-risk: low - Contract drift can break client/server compatibility.
@@ -11,6 +11,11 @@ import type {
     ResponseMetadata,
     TraceAxisScore,
 } from '../ethics-core';
+import type {
+    InternalImageRenderModelId,
+    InternalImageTextModelId,
+    SupportedImageOutputFormat,
+} from '../providers';
 
 // Standard API error envelope used by multiple endpoints.
 export type ApiErrorResponse = {
@@ -377,14 +382,231 @@ export type PostReflectResponse =
     | ReflectImageActionResponse;
 
 /**
+ * Curated text-model vocabulary accepted by the trusted internal image route.
+ * The concrete list lives in the shared provider registry so contracts, schema
+ * validation, and Discord model choices stay aligned.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type InternalImageTextModel = InternalImageTextModelId;
+
+/**
+ * Curated image-model vocabulary accepted by the trusted internal image route.
+ * The concrete list lives in the shared provider registry so contracts, schema
+ * validation, and Discord model choices stay aligned.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type InternalImageRenderModel = InternalImageRenderModelId;
+
+/**
+ * Internal image quality values accepted by the trusted backend image route.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type InternalImageQuality = 'low' | 'medium' | 'high' | 'auto';
+
+/**
+ * Internal image size values accepted by the trusted backend image route.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type InternalImageSize =
+    | '1024x1024'
+    | '1024x1536'
+    | '1536x1024'
+    | 'auto';
+
+/**
+ * Internal image background values accepted by the trusted backend image route.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type InternalImageBackground = 'auto' | 'transparent' | 'opaque';
+
+/**
+ * One normalized image annotation bundle returned by backend-owned image
+ * execution.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type InternalImageAnnotations = {
+    title: string | null;
+    description: string | null;
+    note: string | null;
+    adjustedPrompt?: string | null;
+};
+
+/**
+ * User-context fields the backend image runtime uses to assemble the
+ * Footnote-owned prompt overlay and developer prompt.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type InternalImageUserContext = {
+    username: string;
+    nickname: string;
+    guildName: string;
+};
+
+/**
+ * Optional routing context used for backend logging and Discord-side usage
+ * accounting.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type InternalImageChannelContext = {
+    channelId?: string;
+    guildId?: string;
+};
+
+/**
+ * Trusted internal request for backend-owned image generation.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type PostInternalImageGenerateRequest = {
+    task: 'generate';
+    prompt: string;
+    textModel: InternalImageTextModel;
+    imageModel: InternalImageRenderModel;
+    size: InternalImageSize;
+    quality: InternalImageQuality;
+    background: InternalImageBackground;
+    style: string;
+    allowPromptAdjustment: boolean;
+    outputFormat: SupportedImageOutputFormat;
+    outputCompression: number;
+    user: InternalImageUserContext;
+    followUpResponseId?: string;
+    channelContext?: InternalImageChannelContext;
+    stream?: boolean;
+};
+
+/**
+ * Normalized image artifact payload returned by backend-owned image execution.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type InternalImageGenerationArtifact = {
+    responseId: string | null;
+    textModel: InternalImageTextModel;
+    imageModel: InternalImageRenderModel;
+    revisedPrompt: string | null;
+    finalStyle: string;
+    annotations: InternalImageAnnotations;
+    finalImageBase64: string;
+    outputFormat: SupportedImageOutputFormat;
+    outputCompression: number;
+    usage: {
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+        imageCount: number;
+    };
+    costs: {
+        text: number;
+        image: number;
+        total: number;
+        perImage: number;
+    };
+    generationTimeMs: number;
+};
+
+/**
+ * Trusted internal response for backend-owned image generation.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type PostInternalImageGenerateResponse = {
+    task: 'generate';
+    result: InternalImageGenerationArtifact;
+};
+
+/**
+ * One streamed partial-image preview emitted by the trusted internal image
+ * route when the caller opts into NDJSON streaming.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type InternalImagePartialImageEvent = {
+    type: 'partial_image';
+    index: number;
+    base64: string;
+};
+
+/**
+ * One streamed final result event emitted by the trusted internal image route.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type InternalImageResultEvent = {
+    type: 'result';
+    task: 'generate';
+    result: InternalImageGenerationArtifact;
+};
+
+/**
+ * One streamed terminal error emitted by the trusted internal image route
+ * after streaming has already started.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type InternalImageErrorEvent = {
+    type: 'error';
+    error: string;
+};
+
+/**
+ * Narrow streamed event union for the trusted internal image route.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type InternalImageStreamEvent =
+    | InternalImagePartialImageEvent
+    | InternalImageResultEvent
+    | InternalImageErrorEvent;
+
+/**
+ * Narrow trusted internal image-task request union.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type PostInternalImageRequest = PostInternalImageGenerateRequest;
+
+/**
+ * Narrow trusted internal image-task response union.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type PostInternalImageResponse = PostInternalImageGenerateResponse;
+
+/**
  * Internal task discriminator for the trusted `/api/internal/text` endpoint.
- * The endpoint stays task-based on purpose and currently implements `news`
- * only.
+ * The endpoint stays task-based on purpose so trusted callers cannot turn it
+ * into a generic prompt proxy.
  *
  * @api.operationId: postInternalTextTask
  * @api.path: POST /api/internal/text
  */
-export type InternalTextTask = 'news';
+export type InternalTextTask = 'news' | 'image_description';
 
 /**
  * One structured news item returned by the internal `news` task.
@@ -437,13 +659,86 @@ export type PostInternalNewsTaskResponse = {
 };
 
 /**
+ * Optional routing context used for backend logging and Discord-side usage
+ * attribution on trusted internal text tasks.
+ *
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export type InternalTextChannelContext = {
+    channelId?: string;
+    guildId?: string;
+};
+
+/**
+ * Trusted internal request for the image-description helper task. The backend
+ * owns the prompt, vision call, and spend recording; callers only send the
+ * image URL plus optional grounding text.
+ *
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export type PostInternalImageDescriptionTaskRequest = {
+    task: 'image_description';
+    imageUrl: string;
+    context?: string;
+    channelContext?: InternalTextChannelContext;
+};
+
+/**
+ * Normalized token usage returned by the internal image-description helper.
+ *
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export type InternalTextUsage = {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+};
+
+/**
+ * Normalized cost breakdown returned by the internal image-description helper.
+ *
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export type InternalTextCosts = {
+    input: number;
+    output: number;
+    total: number;
+};
+
+/**
+ * Trusted internal response for the image-description helper task.
+ *
+ * The `description` field carries the compact text payload that Discord uses
+ * for reflect grounding today. It may contain structured JSON text when that
+ * preserves more useful image details than a plain sentence would.
+ *
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export type PostInternalImageDescriptionTaskResponse = {
+    task: 'image_description';
+    result: {
+        description: string;
+        model: string;
+        usage: InternalTextUsage;
+        costs: InternalTextCosts;
+    };
+};
+
+/**
  * Narrow trusted internal text-task request union. This stays purpose-built on
  * purpose; it is not a generic prompt proxy.
  *
  * @api.operationId: postInternalTextTask
  * @api.path: POST /api/internal/text
  */
-export type PostInternalTextRequest = PostInternalNewsTaskRequest;
+export type PostInternalTextRequest =
+    | PostInternalNewsTaskRequest
+    | PostInternalImageDescriptionTaskRequest;
 
 /**
  * Narrow trusted internal text-task response union.
@@ -451,7 +746,9 @@ export type PostInternalTextRequest = PostInternalNewsTaskRequest;
  * @api.operationId: postInternalTextTask
  * @api.path: POST /api/internal/text
  */
-export type PostInternalTextResponse = PostInternalNewsTaskResponse;
+export type PostInternalTextResponse =
+    | PostInternalNewsTaskResponse
+    | PostInternalImageDescriptionTaskResponse;
 
 /**
  * @api.operationId: postTraces

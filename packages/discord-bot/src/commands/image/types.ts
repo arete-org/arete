@@ -1,62 +1,59 @@
 /**
- * @description: Defines image command types and OpenAI response helpers.
+ * @description: Defines the shared model and metadata types used by the Discord image command.
  * @footnote-scope: interface
  * @footnote-module: ImageTypes
- * @footnote-risk: low - Type drift can break build-time validation and runtime assumptions.
- * @footnote-ethics: low - Types document structure without changing behavior.
+ * @footnote-risk: low - Type drift here can make the Discord image UI disagree with backend validation.
+ * @footnote-ethics: low - These types document shape and ownership but do not change behavior by themselves.
  */
 import type { ResponseOutputItem } from 'openai/resources/responses/responses.js';
+import {
+    internalImageRenderModels,
+    internalImageTextModels,
+    supportedImageOutputFormats,
+    type InternalImageRenderModelId,
+    type InternalImageTextModelId,
+    type SupportedImageOutputFormat,
+} from '@footnote/contracts/providers';
 import type {
     ImageGenerationQuality,
     ImageGenerationSize,
-    ImageModelPricingKey,
 } from '../../utils/pricing.js';
 
-export type ImageTextModel =
-    | 'gpt-5.2'
-    | 'gpt-5.1'
-    | 'gpt-5'
-    | 'gpt-5-mini'
-    | 'gpt-5-nano'
-    | 'gpt-4o'
-    | 'gpt-4o-mini'
-    | 'gpt-4.1'
-    | 'gpt-4.1-mini'
-    | 'gpt-4.1-nano';
-export type ImageRenderModel = ImageModelPricingKey;
+export type ImageTextModel = InternalImageTextModelId;
+export type ImageRenderModel = InternalImageRenderModelId;
 export type ImageQualityType = ImageGenerationQuality;
 export type ImageSizeType = ImageGenerationSize;
 export type ImageBackgroundType = 'auto' | 'transparent' | 'opaque';
-export type ImageOutputFormat = 'png' | 'webp' | 'jpeg';
+export type ImageOutputFormat = SupportedImageOutputFormat;
 export type ImageOutputCompression = number;
-export const imageTextModels = [
-    'gpt-5.2',
-    'gpt-5.1',
-    'gpt-5',
-    'gpt-5-mini',
-    'gpt-5-nano',
-    'gpt-4o',
-    'gpt-4o-mini',
-    'gpt-4.1',
-    'gpt-4.1-mini',
-    'gpt-4.1-nano',
-] as const satisfies readonly ImageTextModel[];
-export const imageRenderModels = [
-    'gpt-image-1.5',
-    'gpt-image-1',
-    'gpt-image-1-mini',
-] as const satisfies readonly ImageRenderModel[];
+
+/**
+ * Text models exposed by the Discord image command. This list comes from the
+ * shared provider registry so the UI stays aligned with trusted-route
+ * validation.
+ */
+export const imageTextModels =
+    internalImageTextModels satisfies readonly ImageTextModel[];
+
+/**
+ * Image render models exposed by the Discord image command.
+ */
+export const imageRenderModels =
+    internalImageRenderModels satisfies readonly ImageRenderModel[];
+
+/**
+ * Output formats accepted by the Discord image command.
+ */
+export const imageOutputFormats =
+    supportedImageOutputFormats satisfies readonly ImageOutputFormat[];
+
 export const imageQualities = [
     'low',
     'medium',
     'high',
     'auto',
 ] as const satisfies readonly ImageQualityType[];
-export const imageOutputFormats = [
-    'png',
-    'webp',
-    'jpeg',
-] as const satisfies readonly ImageOutputFormat[];
+
 export type ImageStylePreset =
     | 'natural'
     | 'vivid'
@@ -83,14 +80,17 @@ export type ImageStylePreset =
     | 'pop_art'
     | 'dreamcore'
     | 'isometric'
-    | 'unspecified'; // "unspecified" is used when no style preset is specified
+    | 'unspecified';
 
-export type ImageGenerationCallWithPrompt =
-    ResponseOutputItem.ImageGenerationCall & {
-        revised_prompt?: string | null;
-        style_preset?: ImageStylePreset | null;
-    };
+export interface ImageGenerationCallWithPrompt
+    extends ResponseOutputItem.ImageGenerationCall {
+    revised_prompt?: string | null;
+    style_preset?: ImageStylePreset | null;
+}
 
+/**
+ * Small annotation bundle attached to completed image results.
+ */
 export interface AnnotationFields {
     title: string | null;
     description: string | null;
@@ -98,11 +98,17 @@ export interface AnnotationFields {
     adjustedPrompt?: string | null;
 }
 
+/**
+ * One streamed preview image emitted before the final artifact is ready.
+ */
 export interface PartialImagePayload {
     index: number;
     base64: string;
 }
 
+/**
+ * Usage data preserved on uploaded image metadata.
+ */
 export interface CloudinaryUsageMetadata {
     inputTokens: number;
     outputTokens: number;
@@ -113,6 +119,9 @@ export interface CloudinaryUsageMetadata {
     combinedTotalTokens: number;
 }
 
+/**
+ * Cost data preserved on uploaded image metadata.
+ */
 export interface CloudinaryCostMetadata {
     text: number;
     image: number;
@@ -120,6 +129,10 @@ export interface CloudinaryCostMetadata {
     perImage: number;
 }
 
+/**
+ * Metadata persisted alongside one uploaded image result so retries,
+ * variations, and trace surfaces can reconstruct what happened.
+ */
 export interface UploadMetadata {
     originalPrompt: string;
     revisedPrompt?: string | null;
@@ -138,4 +151,3 @@ export interface UploadMetadata {
     usage: CloudinaryUsageMetadata;
     cost: CloudinaryCostMetadata;
 }
-

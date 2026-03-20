@@ -9,6 +9,10 @@
         ".": {
             "types": "./dist/index.d.ts",
             "default": "./dist/index.js"
+        },
+        "./bot-profile": {
+            "types": "./dist/bot-profile.d.ts",
+            "default": "./dist/bot-profile.js"
         }
     },
     "scripts": {

@@ -1,13 +1,14 @@
 /**
- * @description: Public entry point for shared type contracts used across packages.
+ * @description: Re-exports the shared contract types used by backend, Discord, and web.
  * @footnote-scope: interface
  * @footnote-module: ContractsIndex
  * @footnote-risk: low - Incorrect exports can cause type drift between packages.
  * @footnote-ethics: medium - Types document data meaning but do not execute logic.
  */
 
-// This file is intentionally small. It only re-exports types so every package
-// can import from one place without pulling in runtime code.
+// This file stays small on purpose. Packages can import shared types from one
+// place without needing to know the internal folder layout of the contracts
+// package.
 
 // Ethics Core contracts (provenance/risk metadata)
 export type {
@@ -36,6 +37,25 @@ export type {
     ReflectIgnoreActionResponse,
     ReflectImageActionResponse,
     PostReflectResponse,
+    InternalImageAnnotations,
+    InternalImageBackground,
+    InternalImageChannelContext,
+    InternalImageErrorEvent,
+    InternalImageGenerationArtifact,
+    InternalImagePartialImageEvent,
+    InternalImageQuality,
+    InternalImageRenderModel,
+    InternalImageResultEvent,
+    InternalImageSize,
+    InternalImageStreamEvent,
+    InternalImageTextModel,
+    InternalImageUserContext,
+    PostInternalImageGenerateRequest,
+    PostInternalImageGenerateResponse,
+    PostInternalImageRequest,
+    PostInternalImageResponse,
+    PostInternalImageDescriptionTaskRequest,
+    PostInternalImageDescriptionTaskResponse,
     PostTracesRequest,
     PostTracesResponse,
     GetTraceResponse,
@@ -51,6 +71,8 @@ export type {
 // Shared AI/provider vocabulary
 export type {
     ConfiguredProviderModel,
+    InternalImageRenderModelId,
+    InternalImageTextModelId,
     SupportedBotInteractionAction,
     SupportedEngagementIgnoreMode,
     SupportedImageOutputFormat,
@@ -62,3 +84,33 @@ export type {
     SupportedReasoningEffort,
     SupportedVerbosity,
 } from './providers';
+
+// Shared pricing vocabulary and pure cost helpers
+export type {
+    EffectiveImageGenerationQuality,
+    EffectiveImageGenerationSize,
+    GPT5ModelType,
+    ImageGenerationCostEstimate,
+    ImageGenerationCostOptions,
+    ImageGenerationQuality,
+    ImageGenerationSize,
+    ImageModelPricingKey,
+    OmniModelType,
+    OpenAITextCostBreakdown,
+    OpenAITextPricingEntry,
+    PricedOpenAITextModel,
+    SupportedOpenAIEmbeddingModel,
+    TextModelPricingKey,
+} from './pricing';
+export {
+    estimateOpenAIImageGenerationCost,
+    estimateOpenAITextCost,
+    hasOpenAIImagePricing,
+    hasOpenAITextPricing,
+    openAIImageGenerationPricingTable,
+    openAITextPricingTable,
+    resolveEffectiveImageGenerationQuality,
+    resolveEffectiveImageGenerationSize,
+    supportedOpenAIEmbeddingModels,
+    supportedPricedOpenAITextModels,
+} from './pricing';

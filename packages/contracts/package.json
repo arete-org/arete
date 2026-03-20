@@ -29,6 +29,10 @@
         "./providers": {
             "types": "./dist/providers.d.ts",
             "default": "./dist/providers.js"
+        },
+        "./pricing": {
+            "types": "./dist/pricing.d.ts",
+            "default": "./dist/pricing.js"
         }
     },
     "scripts": {

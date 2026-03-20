@@ -1,5 +1,5 @@
 /**
- * @description: Runtime schemas for high-value web API routes (reflect + traces).
+ * @description: Validates the shared request and response payloads used by Footnote's main web-facing APIs.
  * @footnote-scope: interface
  * @footnote-module: WebContractSchemas
  * @footnote-risk: medium - Schema drift can reject valid traffic or allow invalid payloads.
@@ -9,6 +9,11 @@
 import { z } from 'zod';
 import type { TraceAxisScore } from '../ethics-core';
 import type { ApiResponseValidationResult } from './client-core';
+import {
+    internalImageRenderModels,
+    internalImageTextModels,
+    supportedImageOutputFormats,
+} from '../providers';
 
 const ProvenanceSchema = z.enum(['Retrieved', 'Inferred', 'Speculative']);
 const RiskTierSchema = z.enum(['Low', 'Medium', 'High']);
@@ -236,7 +241,9 @@ export const PostInternalNewsTaskRequestSchema = z
         query: z.string().min(1).max(512).optional(),
         category: z.string().min(1).max(128).optional(),
         maxResults: z.number().int().min(1).max(5).optional(),
-        reasoningEffort: z.enum(['minimal', 'low', 'medium', 'high']).optional(),
+        reasoningEffort: z
+            .enum(['minimal', 'low', 'medium', 'high'])
+            .optional(),
         verbosity: z.enum(['low', 'medium', 'high']).optional(),
         channelContext: z
             .object({
@@ -265,14 +272,197 @@ export const PostInternalNewsTaskResponseSchema = z
     .strict();
 
 /**
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export const PostInternalImageDescriptionTaskRequestSchema = z
+    .object({
+        task: z.literal('image_description'),
+        imageUrl: z.string().url(),
+        context: z.string().min(1).max(4096).optional(),
+        channelContext: z
+            .object({
+                channelId: z.string().min(1).optional(),
+                guildId: z.string().min(1).optional(),
+            })
+            .strict()
+            .optional(),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postInternalTextTask
+ * @api.path: POST /api/internal/text
+ */
+export const PostInternalImageDescriptionTaskResponseSchema = z
+    .object({
+        task: z.literal('image_description'),
+        result: z
+            .object({
+                description: z.string().min(1),
+                model: z.string().min(1),
+                usage: z
+                    .object({
+                        inputTokens: z.number().int().nonnegative(),
+                        outputTokens: z.number().int().nonnegative(),
+                        totalTokens: z.number().int().nonnegative(),
+                    })
+                    .strict(),
+                costs: z
+                    .object({
+                        input: z.number().nonnegative(),
+                        output: z.number().nonnegative(),
+                        total: z.number().nonnegative(),
+                    })
+                    .strict(),
+            })
+            .strict(),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export const PostInternalImageGenerateRequestSchema = z
+    .object({
+        task: z.literal('generate'),
+        prompt: z.string().min(1).max(4096),
+        textModel: z.enum(internalImageTextModels),
+        imageModel: z.enum(internalImageRenderModels),
+        size: z.enum(['1024x1024', '1024x1536', '1536x1024', 'auto']),
+        quality: z.enum(['low', 'medium', 'high', 'auto']),
+        background: z.enum(['auto', 'transparent', 'opaque']),
+        style: z.string().min(1).max(128),
+        allowPromptAdjustment: z.boolean(),
+        outputFormat: z.enum(supportedImageOutputFormats),
+        outputCompression: z.number().int().min(1).max(100),
+        user: z
+            .object({
+                username: z.string().min(1).max(128),
+                nickname: z.string().min(1).max(128),
+                guildName: z.string().min(1).max(256),
+            })
+            .strict(),
+        followUpResponseId: z.string().min(1).optional(),
+        stream: z.boolean().optional(),
+        channelContext: z
+            .object({
+                channelId: z.string().min(1).optional(),
+                guildId: z.string().min(1).optional(),
+            })
+            .strict()
+            .optional(),
+    })
+    .strict();
+
+const InternalImageAnnotationsSchema = z
+    .object({
+        title: z.string().nullable(),
+        description: z.string().nullable(),
+        note: z.string().nullable(),
+        adjustedPrompt: z.string().nullable().optional(),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export const PostInternalImageGenerateResponseSchema = z
+    .object({
+        task: z.literal('generate'),
+        result: z
+            .object({
+                responseId: z.string().min(1).nullable(),
+                textModel: z.enum(internalImageTextModels),
+                imageModel: z.enum(internalImageRenderModels),
+                revisedPrompt: z.string().nullable(),
+                finalStyle: z.string().min(1),
+                annotations: InternalImageAnnotationsSchema,
+                finalImageBase64: z.string().min(1),
+                outputFormat: z.enum(supportedImageOutputFormats),
+                outputCompression: z.number().int().min(1).max(100),
+                usage: z
+                    .object({
+                        inputTokens: z.number().int().nonnegative(),
+                        outputTokens: z.number().int().nonnegative(),
+                        totalTokens: z.number().int().nonnegative(),
+                        imageCount: z.number().int().positive(),
+                    })
+                    .strict(),
+                costs: z
+                    .object({
+                        text: z.number().nonnegative(),
+                        image: z.number().nonnegative(),
+                        total: z.number().nonnegative(),
+                        perImage: z.number().nonnegative(),
+                    })
+                    .strict(),
+                generationTimeMs: z.number().int().nonnegative(),
+            })
+            .strict(),
+    })
+    .strict();
+
+/**
+ * Endpoint-level request union for trusted internal image tasks. This stays
+ * narrow on purpose and currently includes the `generate` task only.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export const PostInternalImageRequestSchema = z.discriminatedUnion('task', [
+    PostInternalImageGenerateRequestSchema,
+]);
+
+/**
+ * Endpoint-level response union for trusted internal image tasks.
+ *
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export const PostInternalImageResponseSchema = z.discriminatedUnion('task', [
+    PostInternalImageGenerateResponseSchema,
+]);
+
+/**
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export const InternalImageStreamEventSchema = z.discriminatedUnion('type', [
+    z
+        .object({
+            type: z.literal('partial_image'),
+            index: z.number().int().nonnegative(),
+            base64: z.string().min(1),
+        })
+        .strict(),
+    z
+        .object({
+            type: z.literal('result'),
+            task: z.literal('generate'),
+            result: PostInternalImageGenerateResponseSchema.shape.result,
+        })
+        .strict(),
+    z
+        .object({
+            type: z.literal('error'),
+            error: z.string().min(1),
+        })
+        .strict(),
+]);
+
+/**
  * Endpoint-level request union for trusted internal text tasks. This stays
- * narrow on purpose and currently includes the `news` task only.
+ * narrow on purpose and includes only purpose-built backend helpers.
  *
  * @api.operationId: postInternalTextTask
  * @api.path: POST /api/internal/text
  */
 export const PostInternalTextRequestSchema = z.discriminatedUnion('task', [
     PostInternalNewsTaskRequestSchema,
+    PostInternalImageDescriptionTaskRequestSchema,
 ]);
 
 /**
@@ -283,6 +473,7 @@ export const PostInternalTextRequestSchema = z.discriminatedUnion('task', [
  */
 export const PostInternalTextResponseSchema = z.discriminatedUnion('task', [
     PostInternalNewsTaskResponseSchema,
+    PostInternalImageDescriptionTaskResponseSchema,
 ]);
 
 /**
