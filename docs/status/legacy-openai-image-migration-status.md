@@ -4,6 +4,14 @@
 
 2026-03-19
 
+## Maintainer
+
+Jordan
+
+## Version
+
+2026-03-19
+
 ## Purpose
 
 This note explains what this branch ended up doing for image migration, why the scope grew, and what architectural decisions we made along the way.
