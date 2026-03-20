@@ -10,6 +10,47 @@ import { renderPrompt } from './promptRegistry.js';
 import { buildProfileOverlaySystemMessage } from './profilePromptOverlay.js';
 import { runtimeConfig } from '../../config.js';
 
+const WHITESPACE_REGEX = /\s+/g;
+const MAX_PARTICIPANT_LABEL_LENGTH = 128;
+const MAX_TRANSCRIPT_LINE_LENGTH = 240;
+
+const normalizeControlChars = (value: string): string => {
+    let result = '';
+    for (const char of value) {
+        const code = char.charCodeAt(0);
+        if (code < 32 || code === 127) {
+            result += ' ';
+        } else {
+            result += char;
+        }
+    }
+    return result;
+};
+
+const sanitizePromptLine = (
+    value: string | undefined,
+    maxLength: number,
+    fallback: string
+): string => {
+    if (!value) {
+        return fallback;
+    }
+
+    const normalized = normalizeControlChars(value)
+        .replace(WHITESPACE_REGEX, ' ')
+        .trim();
+    if (!normalized) {
+        return fallback;
+    }
+
+    if (normalized.length <= maxLength) {
+        return normalized;
+    }
+
+    const trimLength = Math.max(1, maxLength - 3);
+    return `${normalized.slice(0, trimLength)}...`;
+};
+
 const buildRealtimePersonaLayer = (): string => {
     const overlayMessage = buildProfileOverlaySystemMessage(
         runtimeConfig.profile,
@@ -34,8 +75,14 @@ const formatParticipantRoster = (
 
     return participants
         .map(
-            (participant) =>
-                `- ${participant.displayName}${participant.isBot ? ' (bot)' : ''}`
+            (participant) => {
+                const label = sanitizePromptLine(
+                    participant.displayName,
+                    MAX_PARTICIPANT_LABEL_LENGTH,
+                    'Unknown participant'
+                );
+                return `- ${label}${participant.isBot ? ' (bot)' : ''}`;
+            }
         )
         .join('\n');
 };
@@ -46,7 +93,13 @@ const formatTranscriptBlock = (transcripts?: string[]): string => {
     }
 
     return `\nRecent conversation summary:\n${transcripts
-        .map((line) => `- ${line}`)
+        .map((line) =>
+            `- ${sanitizePromptLine(
+                line,
+                MAX_TRANSCRIPT_LINE_LENGTH,
+                '(redacted)'
+            )}`
+        )
         .join('\n')}`;
 };
 
