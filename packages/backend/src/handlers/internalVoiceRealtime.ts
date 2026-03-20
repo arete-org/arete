@@ -89,6 +89,10 @@ const sendServerEvent = (
     ws.send(JSON.stringify(parsed.data));
 };
 
+/**
+ * @api.operationId: openInternalVoiceRealtime
+ * @api.path: GET /api/internal/voice/realtime
+ */
 export const createInternalVoiceRealtimeHandler = ({
     realtimeVoiceRuntime,
     traceApiToken,
