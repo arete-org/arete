@@ -215,8 +215,8 @@ Every module must include:
 
 ### Issue: Missing Cost Tracking
 
-**Solution**: Use cost tracking prompts
-**Prevention**: Framework compliance checks
+**Solution**: Use backend cost-tracking prompts and enforce them with framework compliance checks on server-side components only.
+**Prevention**: Apply those checks at ownership-boundary seams such as backend request handlers or backend API client wrappers, not in Discord-local implementations.
 
 ### Issue: Overly Complex Functions
 
