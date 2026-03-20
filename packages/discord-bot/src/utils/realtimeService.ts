@@ -111,6 +111,9 @@ export class RealtimeSession extends EventEmitter {
     private eventHandler: RealtimeEventHandler;
     private sessionConfig: RealtimeSessionConfig;
     private sessionContext: InternalVoiceSessionContext;
+    private sessionReady = false;
+    private sessionReadyPromise: Promise<void> | null = null;
+    private resolveSessionReady: (() => void) | null = null;
 
     constructor(options: RealtimeSessionOptions = {}) {
         super();
@@ -146,6 +149,7 @@ export class RealtimeSession extends EventEmitter {
      * Connect to the backend realtime voice boundary.
      */
     public async connect(): Promise<void> {
+        const readyPromise = this.ensureSessionReadyPromise();
         const wsUrl = this.buildBackendRealtimeUrl(
             runtimeConfig.backendBaseUrl
         );
@@ -164,6 +168,7 @@ export class RealtimeSession extends EventEmitter {
             context: this.sessionContext,
             options: this.sessionConfig.getOptions(),
         });
+        await readyPromise;
     }
 
     /**
@@ -179,6 +184,7 @@ export class RealtimeSession extends EventEmitter {
         speakerLabel: string,
         speakerId?: string
     ): Promise<void> {
+        await this.waitForSessionReady();
         if (!this.audioHandler) {
             return;
         }
@@ -220,7 +226,8 @@ export class RealtimeSession extends EventEmitter {
     /**
      * Start a new conversation turn after text or audio input has been queued.
      */
-    public createResponse(): void {
+    public async createResponse(): Promise<void> {
+        await this.waitForSessionReady();
         this.sendClientEvent({ type: 'response.create' });
     }
 
@@ -232,9 +239,9 @@ export class RealtimeSession extends EventEmitter {
     }
 
     public async sendGreeting(): Promise<void> {
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        await this.waitForSessionReady();
         this.sendClientEvent({ type: 'input_text.create', text: 'Hello!' });
-        this.sendClientEvent({ type: 'response.create' });
+        await this.createResponse();
     }
 
     private buildBackendRealtimeUrl(baseUrl: string): string {
@@ -256,6 +263,22 @@ export class RealtimeSession extends EventEmitter {
         }
 
         this.wsManager.send(JSON.stringify(event));
+    }
+
+    private ensureSessionReadyPromise(): Promise<void> {
+        if (this.sessionReady) {
+            return Promise.resolve();
+        }
+        if (!this.sessionReadyPromise) {
+            this.sessionReadyPromise = new Promise((resolve) => {
+                this.resolveSessionReady = resolve;
+            });
+        }
+        return this.sessionReadyPromise;
+    }
+
+    private async waitForSessionReady(): Promise<void> {
+        await this.ensureSessionReadyPromise();
     }
 
     private handleBackendEvent(raw: string): void {
@@ -287,6 +310,12 @@ export class RealtimeSession extends EventEmitter {
 
         const event = validation.data;
         if (event.type === 'session.ready') {
+            this.sessionReady = true;
+            if (this.resolveSessionReady) {
+                this.resolveSessionReady();
+                this.resolveSessionReady = null;
+                this.sessionReadyPromise = null;
+            }
             realtimeLogger.info('Backend realtime session ready.');
             this.emit('connected');
             return;
