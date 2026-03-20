@@ -5,6 +5,9 @@
  * @footnote-risk: high - Bad request mapping or response parsing here can break reflect grounding or leak provider-specific failures.
  * @footnote-ethics: medium - Image descriptions shape what the assistant says about uploaded content, so prompt handling and OCR extraction must stay predictable.
  */
+import dns from 'node:dns/promises';
+import net from 'node:net';
+
 import { logger as defaultLogger } from '../utils/logger.js';
 
 const IMAGE_DESCRIPTION_TOOL_NAME = 'describe_image';
@@ -12,6 +15,8 @@ const IMAGE_DESCRIPTION_MODEL = 'gpt-4o-mini';
 const IMAGE_DESCRIPTION_DETAIL = 'auto';
 const IMAGE_DESCRIPTION_MAX_TOKENS = 16384;
 const IMAGE_DESCRIPTION_DEFAULT_CONTENT_TYPE = 'image/jpeg';
+const MAX_IMAGE_DESCRIPTION_REDIRECTS = 3;
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 type ImageDescriptionStructuredPayload = {
     key_elements: string[];
@@ -72,6 +77,7 @@ export type CreateOpenAiImageDescriptionAdapterOptions = {
     apiKey: string;
     requestTimeoutMs?: number;
     fetchImpl?: typeof fetch;
+    lookupImpl?: typeof dns.lookup;
     logger?: Pick<typeof defaultLogger, 'warn'>;
 };
 
@@ -259,26 +265,243 @@ const detectContentTypeFromUrl = (imageUrl: string): string | null => {
     return null;
 };
 
+const isPrivateIpv4Address = (address: string): boolean => {
+    const octets = address.split('.').map((segment) => Number(segment));
+    if (octets.length !== 4 || octets.some((octet) => Number.isNaN(octet))) {
+        return true;
+    }
+
+    const [first, second] = octets;
+
+    return (
+        first === 0 ||
+        first === 10 ||
+        first === 127 ||
+        (first === 100 && second >= 64 && second <= 127) ||
+        (first === 169 && second === 254) ||
+        (first === 172 && second >= 16 && second <= 31) ||
+        (first === 192 && second === 0) ||
+        (first === 192 && second === 168) ||
+        (first === 198 && (second === 18 || second === 19))
+    );
+};
+
+const isPrivateIpv6Address = (address: string): boolean => {
+    const normalized = address.toLowerCase();
+
+    return (
+        normalized === '::1' ||
+        normalized === '::' ||
+        normalized.startsWith('fc') ||
+        normalized.startsWith('fd') ||
+        normalized.startsWith('fe8') ||
+        normalized.startsWith('fe9') ||
+        normalized.startsWith('fea') ||
+        normalized.startsWith('feb') ||
+        normalized.startsWith('::ffff:127.')
+    );
+};
+
+const isPrivateIpAddress = (address: string): boolean => {
+    const family = net.isIP(address);
+    if (family === 4) {
+        return isPrivateIpv4Address(address);
+    }
+
+    if (family === 6) {
+        return isPrivateIpv6Address(address);
+    }
+
+    return false;
+};
+
+const validateSafeImageUrl = async (
+    imageUrl: string,
+    lookupImpl: typeof dns.lookup
+): Promise<URL> => {
+    let parsedUrl: URL;
+    try {
+        parsedUrl = new URL(imageUrl);
+    } catch {
+        throw new Error('Image URL is invalid.');
+    }
+
+    if (parsedUrl.protocol !== 'https:') {
+        throw new Error('Image URL must use HTTPS.');
+    }
+
+    if (parsedUrl.username || parsedUrl.password) {
+        throw new Error('Image URL must not include embedded credentials.');
+    }
+
+    const hostname = parsedUrl.hostname.toLowerCase();
+    if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
+        throw new Error('Image URL host is not allowed.');
+    }
+
+    if (net.isIP(hostname)) {
+        if (isPrivateIpAddress(hostname)) {
+            throw new Error('Image URL host is not allowed.');
+        }
+
+        return parsedUrl;
+    }
+
+    let resolvedAddresses: Array<{ address: string }> = [];
+    try {
+        const lookupResult = await lookupImpl(hostname, {
+            all: true,
+            verbatim: true,
+        });
+        resolvedAddresses = Array.isArray(lookupResult)
+            ? lookupResult
+            : [lookupResult];
+    } catch (error) {
+        throw new Error(
+            `Could not resolve image host "${hostname}": ${error instanceof Error ? error.message : String(error)}`
+        );
+    }
+
+    if (resolvedAddresses.length === 0) {
+        throw new Error(`Could not resolve image host "${hostname}".`);
+    }
+
+    if (resolvedAddresses.some((entry) => isPrivateIpAddress(entry.address))) {
+        throw new Error('Image URL host is not allowed.');
+    }
+
+    return parsedUrl;
+};
+
+const isRedirectStatus = (status: number): boolean =>
+    status === 301 ||
+    status === 302 ||
+    status === 303 ||
+    status === 307 ||
+    status === 308;
+
+const safeFetchImageResponse = async (
+    imageUrl: string,
+    fetchImpl: typeof fetch,
+    lookupImpl: typeof dns.lookup,
+    signal?: AbortSignal
+): Promise<{ response: Response; resolvedUrl: URL }> => {
+    let currentUrl = await validateSafeImageUrl(imageUrl, lookupImpl);
+
+    for (
+        let redirectCount = 0;
+        redirectCount <= MAX_IMAGE_DESCRIPTION_REDIRECTS;
+        redirectCount += 1
+    ) {
+        const response = await fetchImpl(currentUrl.toString(), {
+            signal,
+            redirect: 'manual',
+        });
+
+        if (!isRedirectStatus(response.status)) {
+            return {
+                response,
+                resolvedUrl: currentUrl,
+            };
+        }
+
+        if (redirectCount === MAX_IMAGE_DESCRIPTION_REDIRECTS) {
+            throw new Error('Image URL exceeded the maximum redirect limit.');
+        }
+
+        const location = response.headers.get('location');
+        if (!location) {
+            throw new Error('Image URL redirect response did not include a Location header.');
+        }
+
+        currentUrl = await validateSafeImageUrl(
+            new URL(location, currentUrl).toString(),
+            lookupImpl
+        );
+    }
+
+    throw new Error('Image URL exceeded the maximum redirect limit.');
+};
+
 const fetchImageAsDataUrl = async (
     imageUrl: string,
     fetchImpl: typeof fetch,
+    lookupImpl: typeof dns.lookup,
     signal?: AbortSignal
 ): Promise<string> => {
-    const response = await fetchImpl(imageUrl, { signal });
+    const { response, resolvedUrl } = await safeFetchImageResponse(
+        imageUrl,
+        fetchImpl,
+        lookupImpl,
+        signal
+    );
     if (!response.ok) {
         throw new Error(
             `Failed to download image for description: ${response.status} ${response.statusText}`
         );
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const base64Image = Buffer.from(arrayBuffer).toString('base64');
-    const contentType =
-        response.headers.get('content-type') ??
-        detectContentTypeFromUrl(imageUrl) ??
-        IMAGE_DESCRIPTION_DEFAULT_CONTENT_TYPE;
+    const contentTypeHeader = response.headers.get('content-type');
+    const normalizedContentType = contentTypeHeader
+        ?.split(';', 1)[0]
+        ?.trim()
+        ?.toLowerCase();
+    const detectedContentType = detectContentTypeFromUrl(resolvedUrl.toString());
 
-    return `data:${contentType};base64,${base64Image}`;
+    if (
+        !normalizedContentType ||
+        !normalizedContentType.startsWith('image/')
+    ) {
+        const hintedType =
+            detectedContentType ?? IMAGE_DESCRIPTION_DEFAULT_CONTENT_TYPE;
+        throw new Error(
+            `Downloaded image response was not an image. Received content-type "${contentTypeHeader ?? 'missing'}" while URL hint was "${hintedType}".`
+        );
+    }
+
+    const contentLength = response.headers.get('content-length');
+    if (
+        contentLength &&
+        Number.isFinite(Number(contentLength)) &&
+        Number(contentLength) > MAX_IMAGE_BYTES
+    ) {
+        throw new Error(
+            `Downloaded image exceeded the maximum size of ${MAX_IMAGE_BYTES} bytes.`
+        );
+    }
+
+    if (!response.body) {
+        throw new Error('Downloaded image response did not include a readable body.');
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+            break;
+        }
+
+        if (!value) {
+            continue;
+        }
+
+        totalBytes += value.byteLength;
+        if (totalBytes > MAX_IMAGE_BYTES) {
+            await reader.cancel();
+            throw new Error(
+                `Downloaded image exceeded the maximum size of ${MAX_IMAGE_BYTES} bytes.`
+            );
+        }
+
+        chunks.push(Buffer.from(value));
+    }
+
+    const base64Image = Buffer.concat(chunks, totalBytes).toString('base64');
+
+    return `data:${normalizedContentType};base64,${base64Image}`;
 };
 
 const createTimeoutSignal = (
@@ -297,6 +520,7 @@ export const createOpenAiImageDescriptionAdapter = ({
     apiKey,
     requestTimeoutMs = 30_000,
     fetchImpl = fetch,
+    lookupImpl = dns.lookup,
     logger = defaultLogger,
 }: CreateOpenAiImageDescriptionAdapterOptions): InternalImageDescriptionAdapter => ({
     async describeImage(
@@ -308,6 +532,7 @@ export const createOpenAiImageDescriptionAdapter = ({
             const imageDataUrl = await fetchImageAsDataUrl(
                 request.imageUrl,
                 fetchImpl,
+                lookupImpl,
                 abortContext.signal
             );
             const response = await fetchImpl(

@@ -7,11 +7,25 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import dns from 'node:dns/promises';
 
 import {
     createOpenAiImageDescriptionAdapter,
     detectContentTypeFromUrl,
 } from '../src/services/internalImageDescription.js';
+
+const publicLookup: typeof dns.lookup = async (_hostname, options) => {
+    const resolvedAddress = {
+        address: '93.184.216.34',
+        family: 4 as const,
+    };
+
+    if (typeof options === 'object' && options?.all) {
+        return [resolvedAddress];
+    }
+
+    return resolvedAddress;
+};
 
 test('image-description adapter downloads the image, sends a data URL, and returns normalized usage', async () => {
     const fetchCalls: Array<{
@@ -20,6 +34,7 @@ test('image-description adapter downloads the image, sends a data URL, and retur
     }> = [];
     const adapter = createOpenAiImageDescriptionAdapter({
         apiKey: 'test-key',
+        lookupImpl: publicLookup,
         fetchImpl: async (url, init) => {
             fetchCalls.push({ url: String(url), init });
 
@@ -134,10 +149,10 @@ test('detectContentTypeFromUrl recovers common image content types from the URL 
     assert.equal(detectContentTypeFromUrl('not-a-url'), null);
 });
 
-test('image-description adapter uses URL-based content-type fallback when the download response omits one', async () => {
-    let openAiRequestBody = '';
+test('image-description adapter rejects downloads that omit an image content-type header', async () => {
     const adapter = createOpenAiImageDescriptionAdapter({
         apiKey: 'test-key',
+        lookupImpl: publicLookup,
         fetchImpl: async (url, init) => {
             if (String(url) === 'https://example.com/image.webp') {
                 return new Response(Buffer.from('webp-bytes'), {
@@ -145,7 +160,7 @@ test('image-description adapter uses URL-based content-type fallback when the do
                 });
             }
 
-            openAiRequestBody = String(init?.body ?? '');
+            void init;
             return new Response(
                 JSON.stringify({
                     choices: [
@@ -177,17 +192,20 @@ test('image-description adapter uses URL-based content-type fallback when the do
         },
     });
 
-    await adapter.describeImage({
-        imageUrl: 'https://example.com/image.webp',
-        prompt: 'Describe this image.',
-    });
-
-    assert.match(openAiRequestBody, /data:image\/webp;base64,/);
+    await assert.rejects(
+        () =>
+            adapter.describeImage({
+                imageUrl: 'https://example.com/image.webp',
+                prompt: 'Describe this image.',
+            }),
+        /was not an image/i
+    );
 });
 
 test('image-description adapter surfaces provider HTTP failures with a stable error', async () => {
     const adapter = createOpenAiImageDescriptionAdapter({
         apiKey: 'test-key',
+        lookupImpl: publicLookup,
         fetchImpl: async (url) => {
             if (String(url) === 'https://example.com/image.png') {
                 return new Response(Buffer.from('png-bytes'), {
@@ -219,6 +237,7 @@ test('image-description adapter warns and fails when the tool payload is invalid
     const warnings: string[] = [];
     const adapter = createOpenAiImageDescriptionAdapter({
         apiKey: 'test-key',
+        lookupImpl: publicLookup,
         logger: {
             warn(message) {
                 warnings.push(message);
@@ -269,4 +288,48 @@ test('image-description adapter warns and fails when the tool payload is invalid
 
     assert.equal(warnings.length, 1);
     assert.match(warnings[0] ?? '', /invalid tool JSON/i);
+});
+
+test('image-description adapter rejects non-HTTPS image URLs before fetching', async () => {
+    const fetchCalls: string[] = [];
+    const adapter = createOpenAiImageDescriptionAdapter({
+        apiKey: 'test-key',
+        lookupImpl: publicLookup,
+        fetchImpl: async (url) => {
+            fetchCalls.push(String(url));
+            throw new Error('fetch should not be called');
+        },
+    });
+
+    await assert.rejects(
+        () =>
+            adapter.describeImage({
+                imageUrl: 'http://example.com/image.png',
+                prompt: 'Describe this image.',
+            }),
+        /must use HTTPS/i
+    );
+    assert.deepEqual(fetchCalls, []);
+});
+
+test('image-description adapter rejects private-network image URLs before fetching', async () => {
+    const fetchCalls: string[] = [];
+    const adapter = createOpenAiImageDescriptionAdapter({
+        apiKey: 'test-key',
+        lookupImpl: publicLookup,
+        fetchImpl: async (url) => {
+            fetchCalls.push(String(url));
+            throw new Error('fetch should not be called');
+        },
+    });
+
+    await assert.rejects(
+        () =>
+            adapter.describeImage({
+                imageUrl: 'https://127.0.0.1/image.png',
+                prompt: 'Describe this image.',
+            }),
+        /host is not allowed/i
+    );
+    assert.deepEqual(fetchCalls, []);
 });
