@@ -1,5 +1,5 @@
 /**
- * @description: Reads image command configuration with environment overrides and defaults.
+ * @description: Reads the Discord image-command config from environment variables and shared defaults.
  * @footnote-scope: utility
  * @footnote-module: ImageConfig
  * @footnote-risk: medium - Bad config can spike costs or break image generation.

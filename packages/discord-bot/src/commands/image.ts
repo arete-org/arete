@@ -47,6 +47,7 @@ import type {
     ImageTextModel,
     ImageOutputFormat,
 } from './image/types.js';
+import { imageRenderModels, imageTextModels } from './image/types.js';
 import {
     evictFollowUpContext,
     saveFollowUpContext,
@@ -75,7 +76,19 @@ const ensureDeferredReply = async (
 
 type StatusField = { name: string; value: string; inline: boolean };
 
+type StringChoice = { name: string; value: string };
+
 const QUALITY_LEVELS: ImageQualityType[] = ['low', 'medium', 'high'];
+const imageRenderModelChoices: StringChoice[] = imageRenderModels.map(
+    (model) => ({
+        name: model,
+        value: model,
+    })
+);
+const imageTextModelChoices: StringChoice[] = imageTextModels.map((model) => ({
+    name: model,
+    value: model,
+}));
 
 const clampOutputCompression = (value: number | null): number => {
     if (!Number.isFinite(value)) {
@@ -274,6 +287,10 @@ export async function runImageGenerationSession(
                     interaction.guild?.name ??
                     `No guild for ${interaction.type} interaction`,
             },
+            channelContext: {
+                channelId: interaction.channelId ?? undefined,
+                guildId: interaction.guildId ?? undefined,
+            },
             onPartialImage: (payload) =>
                 queueEmbedUpdate(async () => {
                     const previewName = `image-preview-${payload.index + 1}.png`;
@@ -303,7 +320,7 @@ export async function runImageGenerationSession(
         );
 
         const presentation = buildImageResultPresentation(context, artifacts, {
-            followUpResponseId,
+            followUpResponseId: followUpResponseId ?? undefined,
         });
 
         if (artifacts.responseId) {
@@ -484,11 +501,7 @@ const imageCommand: Command = {
                 .setDescription(
                     `The image model to render with (optional; defaults to ${DEFAULT_IMAGE_MODEL})`
                 )
-                .addChoices(
-                    { name: 'gpt-image-1.5', value: 'gpt-image-1.5' },
-                    { name: 'gpt-image-1', value: 'gpt-image-1' },
-                    { name: 'gpt-image-1-mini', value: 'gpt-image-1-mini' }
-                )
+                .addChoices(...imageRenderModelChoices)
                 .setRequired(false)
         )
         .addStringOption((option) =>
@@ -497,16 +510,7 @@ const imageCommand: Command = {
                 .setDescription(
                     `The text model to use for prompt adjustment (optional; defaults to ${DEFAULT_TEXT_MODEL})`
                 )
-                .addChoices(
-                    { name: 'gpt-5', value: 'gpt-5' },
-                    { name: 'gpt-5-mini', value: 'gpt-5-mini' },
-                    { name: 'gpt-5-nano', value: 'gpt-5-nano' },
-                    { name: 'gpt-4.1', value: 'gpt-4.1' },
-                    { name: 'gpt-4.1-mini', value: 'gpt-4.1-mini' },
-                    { name: 'gpt-4.1-nano', value: 'gpt-4.1-nano' },
-                    { name: 'gpt-4o', value: 'gpt-4o' },
-                    { name: 'gpt-4o-mini', value: 'gpt-4o-mini' }
-                )
+                .addChoices(...imageTextModelChoices)
                 .setRequired(false)
         )
         .addStringOption((option) =>
@@ -656,4 +660,3 @@ const imageCommand: Command = {
  * Default export for Discord command registration.
  */
 export default imageCommand;
-

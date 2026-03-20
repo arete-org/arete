@@ -13,14 +13,9 @@ import {
     EmbedBuilder,
     type APIEmbedField,
 } from 'discord.js';
-import { OpenAI } from 'openai';
+import { botApi } from '../../api/botApi.js';
 import { logger } from '../../utils/logger.js';
-import {
-    estimateImageGenerationCost,
-    estimateTextCost,
-    formatUsd,
-    type TextModelPricingKey,
-} from '../../utils/pricing.js';
+import { formatUsd } from '../../utils/pricing.js';
 import {
     EMBED_FIELD_VALUE_LIMIT,
     EMBED_MAX_FIELDS,
@@ -30,9 +25,7 @@ import {
     IMAGE_VARIATION_CUSTOM_ID_PREFIX,
 } from './constants.js';
 import { isCloudinaryConfigured, uploadToCloudinary } from './cloudinary.js';
-import { generateImageWithMetadata } from './openai.js';
 import type {
-    ImageGenerationCallWithPrompt,
     ImageRenderModel,
     ImageStylePreset,
     ImageTextModel,
@@ -89,106 +82,97 @@ interface ExecuteImageGenerationOptions {
         nickname: string;
         guildName: string;
     };
+    channelContext?: {
+        channelId?: string;
+        guildId?: string;
+    };
 }
 
+const buildImageTaskRequest = (
+    context: ImageGenerationContext,
+    options: ExecuteImageGenerationOptions
+) => {
+    const shouldStream = options.stream ?? Boolean(options.onPartialImage);
+
+    return {
+        task: 'generate' as const,
+        prompt: context.prompt,
+        textModel: context.textModel,
+        imageModel: context.imageModel,
+        size: context.size,
+        quality: context.quality,
+        background: context.background,
+        style: context.style,
+        allowPromptAdjustment: context.allowPromptAdjustment,
+        outputFormat: context.outputFormat,
+        outputCompression: context.outputCompression,
+        user: options.user,
+        followUpResponseId: options.followUpResponseId ?? undefined,
+        channelContext: options.channelContext,
+        stream: shouldStream || undefined,
+    };
+};
+
 /**
- * Runs the OpenAI image pipeline, uploads the final asset, and returns a
- * normalized payload describing the generation. The caller is responsible for
- * presenting the result (embed, plain message, etc.) and for caching follow-up
- * context entries.
+ * Runs the backend-owned image pipeline, uploads the final asset, and returns
+ * a normalized payload describing the generation. The caller is responsible
+ * for presenting the result (embed, plain message, etc.) and for caching
+ * follow-up context entries.
  */
 export async function executeImageGeneration(
     context: ImageGenerationContext,
     options: ExecuteImageGenerationOptions
 ): Promise<ImageGenerationArtifacts> {
     const start = Date.now();
-    const openai = new OpenAI();
+    const request = buildImageTaskRequest(context, options);
+    const generation = request.stream
+        ? await botApi.runImageTaskStreamViaApi(request, {
+              onPartialImage: options.onPartialImage,
+          })
+        : await botApi.runImageTaskViaApi(request);
 
-    const generation = await generateImageWithMetadata({
-        openai,
-        prompt: context.prompt,
-        textModel: context.textModel,
-        imageModel: context.imageModel,
-        quality: context.quality,
-        size: context.size,
-        background: context.background,
-        style: context.style,
-        allowPromptAdjustment: context.allowPromptAdjustment,
-        outputFormat: context.outputFormat,
-        outputCompression: context.outputCompression,
-        followUpResponseId: options.followUpResponseId,
-        stream: options.stream,
-        username: options.user.username,
-        nickname: options.user.nickname,
-        guildName: options.user.guildName,
-        onPartialImage: options.onPartialImage,
-    });
-
-    const { response, imageCall, finalImageBase64, annotations } = generation;
-    const inputTokens = response.usage?.input_tokens ?? 0;
-    const outputTokens = response.usage?.output_tokens ?? 0;
-    const totalTokens =
-        response.usage?.total_tokens ?? inputTokens + outputTokens;
-
-    const imageCallOutputs = response.output.filter(
-        (output): output is ImageGenerationCallWithPrompt =>
-            output.type === 'image_generation_call' && Boolean(output.result)
+    const finalImageBuffer = Buffer.from(
+        generation.result.finalImageBase64,
+        'base64'
     );
-    const successfulImageCount = imageCallOutputs.length || 1;
-    const finalStyle = imageCall.style_preset ?? context.style;
-
-    const textCostEstimate = estimateTextCost(
-        context.textModel as TextModelPricingKey,
-        inputTokens,
-        outputTokens
-    );
-    const imageCostEstimate = estimateImageGenerationCost({
-        quality: context.quality,
-        size: context.size,
-        imageCount: successfulImageCount,
-        model: context.imageModel,
-    });
-    const totalCost = textCostEstimate.totalCost + imageCostEstimate.totalCost;
-
-    const finalImageBuffer = Buffer.from(finalImageBase64, 'base64');
-    const extension = context.outputFormat ?? 'png';
+    const extension = generation.result.outputFormat ?? 'png';
     const finalImageFileName = `footnote-image-${Date.now()}.${extension}`;
     let imageUrl: string | null = null;
+    const revisedPrompt = generation.result.revisedPrompt ?? null;
+    const finalStyle =
+        (generation.result.finalStyle as ImageStylePreset) ?? context.style;
 
     if (isCloudinaryConfigured) {
         try {
             imageUrl = await uploadToCloudinary(finalImageBuffer, {
                 originalPrompt: context.originalPrompt ?? context.prompt,
-                revisedPrompt:
-                    annotations.adjustedPrompt ??
-                    imageCall.revised_prompt ??
-                    null,
-                title: annotations.title,
-                description: annotations.description,
-                noteMessage: annotations.note,
-                textModel: context.textModel,
-                imageModel: context.imageModel,
-                outputFormat: context.outputFormat,
-                outputCompression: context.outputCompression,
+                revisedPrompt,
+                title: generation.result.annotations.title,
+                description: generation.result.annotations.description,
+                noteMessage: generation.result.annotations.note,
+                textModel: generation.result.textModel,
+                imageModel: generation.result.imageModel,
+                outputFormat: generation.result.outputFormat,
+                outputCompression: generation.result.outputCompression,
                 quality: context.quality,
                 size: context.size,
                 background: context.background,
                 style: finalStyle,
                 startTime: start,
                 usage: {
-                    inputTokens,
-                    outputTokens,
-                    totalTokens,
-                    imageCount: successfulImageCount,
-                    combinedInputTokens: inputTokens,
-                    combinedOutputTokens: outputTokens,
-                    combinedTotalTokens: totalTokens,
+                    inputTokens: generation.result.usage.inputTokens,
+                    outputTokens: generation.result.usage.outputTokens,
+                    totalTokens: generation.result.usage.totalTokens,
+                    imageCount: generation.result.usage.imageCount,
+                    combinedInputTokens: generation.result.usage.inputTokens,
+                    combinedOutputTokens: generation.result.usage.outputTokens,
+                    combinedTotalTokens: generation.result.usage.totalTokens,
                 },
                 cost: {
-                    text: textCostEstimate.totalCost,
-                    image: imageCostEstimate.totalCost,
-                    total: totalCost,
-                    perImage: imageCostEstimate.perImageCost,
+                    text: generation.result.costs.text,
+                    image: generation.result.costs.image,
+                    total: generation.result.costs.total,
+                    perImage: generation.result.costs.perImage,
                 },
             });
         } catch (error) {
@@ -200,36 +184,35 @@ export async function executeImageGeneration(
         );
     }
 
-    const generationTimeMs = Date.now() - start;
-    const revisedPrompt =
-        annotations.adjustedPrompt ?? imageCall.revised_prompt ?? null;
-
-    return {
-        responseId: response.id ?? null,
-        textModel: context.textModel,
-        imageModel: context.imageModel,
+    const artifacts: ImageGenerationArtifacts = {
+        responseId: generation.result.responseId,
+        textModel: generation.result.textModel as ImageTextModel,
+        imageModel: generation.result.imageModel as ImageRenderModel,
         revisedPrompt,
         finalStyle,
-        annotations,
+        annotations: generation.result.annotations,
         finalImageBuffer,
         finalImageFileName,
         imageUrl,
-        outputFormat: context.outputFormat,
-        outputCompression: context.outputCompression,
+        outputFormat: generation.result.outputFormat,
+        outputCompression: generation.result.outputCompression,
         usage: {
-            inputTokens,
-            outputTokens,
-            totalTokens,
-            imageCount: successfulImageCount,
+            inputTokens: generation.result.usage.inputTokens,
+            outputTokens: generation.result.usage.outputTokens,
+            totalTokens: generation.result.usage.totalTokens,
+            imageCount: generation.result.usage.imageCount,
         },
         costs: {
-            text: textCostEstimate.totalCost,
-            image: imageCostEstimate.totalCost,
-            total: totalCost,
-            perImage: imageCostEstimate.perImageCost,
+            text: generation.result.costs.text,
+            image: generation.result.costs.image,
+            total: generation.result.costs.total,
+            perImage: generation.result.costs.perImage,
         },
-        generationTimeMs,
+        generationTimeMs:
+            generation.result.generationTimeMs || Date.now() - start,
     };
+
+    return artifacts;
 }
 
 /**
@@ -634,4 +617,3 @@ export function createImageAttachment(
 }
 
 export type { ImageGenerationContext };
-

@@ -1,32 +1,41 @@
 /**
- * @description: Trusted internal `/news` task endpoint methods for Discord bot backend integration.
+ * @description: Trusted internal text-task endpoint methods for Discord bot backend integration.
  * @footnote-scope: utility
- * @footnote-module: DiscordInternalNewsApi
- * @footnote-risk: medium - Transport mistakes can break the backend-owned `/news` task.
+ * @footnote-module: DiscordInternalTextApi
+ * @footnote-risk: medium - Transport mistakes can break backend-owned internal text tasks.
  * @footnote-ethics: medium - Narrow task transport helps keep backend-owned generation policy explicit.
  */
 import type {
+    PostInternalImageDescriptionTaskRequest,
+    PostInternalImageDescriptionTaskResponse,
     PostInternalNewsTaskRequest,
     PostInternalNewsTaskResponse,
 } from '@footnote/contracts/web';
 import {
+    PostInternalImageDescriptionTaskResponseSchema,
     PostInternalNewsTaskResponseSchema,
     createSchemaResponseValidator,
 } from '@footnote/contracts/web/schemas';
 import type { ApiRequester } from './client.js';
 
-export type CreateInternalNewsApiOptions = {
+export type CreateInternalTextApiOptions = {
     traceApiToken?: string;
 };
 
-export type InternalNewsApi = {
+export type InternalTextApi = {
     runNewsTaskViaApi: (
         request: PostInternalNewsTaskRequest,
         options?: { signal?: AbortSignal }
     ) => Promise<PostInternalNewsTaskResponse>;
+    runImageDescriptionTaskViaApi: (
+        request: PostInternalImageDescriptionTaskRequest,
+        options?: { signal?: AbortSignal }
+    ) => Promise<PostInternalImageDescriptionTaskResponse>;
 };
 
-const buildTrustedHeaders = (traceApiToken?: string): Record<string, string> => {
+const buildTrustedHeaders = (
+    traceApiToken?: string
+): Record<string, string> => {
     const headers: Record<string, string> = {};
     if (traceApiToken) {
         headers['X-Trace-Token'] = traceApiToken;
@@ -34,10 +43,10 @@ const buildTrustedHeaders = (traceApiToken?: string): Record<string, string> => 
     return headers;
 };
 
-export const createInternalNewsApi = (
+export const createInternalTextApi = (
     requestJson: ApiRequester,
-    { traceApiToken }: CreateInternalNewsApiOptions = {}
-): InternalNewsApi => {
+    { traceApiToken }: CreateInternalTextApiOptions = {}
+): InternalTextApi => {
     const headers = buildTrustedHeaders(traceApiToken);
 
     /**
@@ -64,7 +73,33 @@ export const createInternalNewsApi = (
         return response.data;
     };
 
+    /**
+     * @api.operationId: postInternalTextTask
+     * @api.path: POST /api/internal/text
+     */
+    const runImageDescriptionTaskViaApi = async (
+        request: PostInternalImageDescriptionTaskRequest,
+        options?: { signal?: AbortSignal }
+    ): Promise<PostInternalImageDescriptionTaskResponse> => {
+        const response =
+            await requestJson<PostInternalImageDescriptionTaskResponse>(
+                '/api/internal/text',
+                {
+                    method: 'POST',
+                    headers,
+                    body: request,
+                    signal: options?.signal,
+                    validateResponse: createSchemaResponseValidator(
+                        PostInternalImageDescriptionTaskResponseSchema
+                    ),
+                }
+            );
+
+        return response.data;
+    };
+
     return {
         runNewsTaskViaApi,
+        runImageDescriptionTaskViaApi,
     };
 };

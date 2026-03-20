@@ -378,8 +378,8 @@ export class MessageProcessor {
 
     /**
      * Builds the transport-neutral request the backend planner needs, while
-     * preserving image descriptions and follow-up hints that used to live only
-     * inside the local planner path.
+     * preserving attachment grounding and follow-up hints from the Discord
+     * surface.
      */
     private async buildReflectRequestFromMessage(
         message: Message,
@@ -409,17 +409,18 @@ export class MessageProcessor {
                 imageAttachments.map(async (attachment) => {
                     try {
                         const response =
-                            await this.openaiService.generateImageDescription(
-                                attachment.url,
-                                message.content,
-                                {
+                            await botApi.runImageDescriptionTaskViaApi({
+                                task: 'image_description',
+                                imageUrl: attachment.url,
+                                context: message.content,
+                                channelContext: {
                                     channelId: message.channelId,
                                     guildId: message.guildId ?? undefined,
-                                }
-                            );
+                                },
+                            });
 
                         return (
-                            response.message?.content ??
+                            response.result.description ??
                             `Error generating image description for message ${message.id} attachment ${attachment.id}`
                         );
                     } catch (error) {
@@ -728,11 +729,10 @@ export class MessageProcessor {
                 const cleanResponseText = finalResponseText
                     .replace(/\n/g, ' ')
                     .replace(/`/g, '');
-                const preparedProvenance =
-                    await this.awaitProvenancePayload(
-                        provenancePayloadPromise,
-                        reflectResponse.metadata.responseId
-                    );
+                const preparedProvenance = await this.awaitProvenancePayload(
+                    provenancePayloadPromise,
+                    reflectResponse.metadata.responseId
+                );
                 const sentMessages = await responseHandler.sendMessage(
                     `\`\`\`${cleanResponseText}\`\`\``,
                     [
@@ -1104,6 +1104,10 @@ export class MessageProcessor {
                     guildName: message.guild?.name ?? 'Direct message channel',
                 },
                 followUpResponseId,
+                channelContext: {
+                    channelId: message.channelId,
+                    guildId: message.guildId ?? undefined,
+                },
                 stream: false,
             });
 
