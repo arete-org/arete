@@ -88,8 +88,6 @@ export class CatchupFilter {
     private readonly HIGH_VELOCITY_WINDOW_MS = 30_000;
     public readonly MIN_RELEVANCE_SCORE = 0.2;
 
-    constructor() {}
-
     // ---------------------------------------------------------------------------
     // Public API
     // ---------------------------------------------------------------------------
