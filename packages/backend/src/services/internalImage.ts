@@ -27,6 +27,17 @@ import {
 import { composeImagePrompts } from './prompts/imagePromptComposer.js';
 import { logger } from '../utils/logger.js';
 
+/**
+ * @footnote-logger: internalImageTaskService
+ * @logs: Image generation request metadata, usage summaries, and cost recording failures.
+ * @footnote-risk: high - Missing logs hide backend image outages or cost spikes.
+ * @footnote-ethics: medium - Image prompts can include user content, so logs stay metadata-only.
+ */
+const imageTaskLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'internalImageTaskService' })
+        : logger;
+
 export type CreateInternalImageTaskServiceOptions = {
     imageGenerationRuntime: ImageGenerationRuntime;
     recordUsage?: (record: BackendLLMCostRecord) => void;
@@ -111,6 +122,20 @@ export const createInternalImageTaskService = ({
         request: PostInternalImageGenerateRequest,
         options: RunInternalImageTaskOptions = {}
     ): Promise<PostInternalImageGenerateResponse> => {
+        imageTaskLogger.debug('Internal image task starting.', {
+            textModel: request.textModel,
+            imageModel: request.imageModel,
+            quality: request.quality,
+            size: request.size,
+            style: request.style,
+            background: request.background,
+            outputFormat: request.outputFormat,
+            outputCompression: request.outputCompression,
+            allowPromptAdjustment: Boolean(request.allowPromptAdjustment),
+            stream: Boolean(request.stream),
+            hasFollowUpResponseId: Boolean(request.followUpResponseId),
+            promptLength: request.prompt.length,
+        });
         const { systemPrompt, developerPrompt } = composeImagePrompts({
             prompt: request.prompt,
             allowPromptAdjustment: request.allowPromptAdjustment,
@@ -160,10 +185,20 @@ export const createInternalImageTaskService = ({
                 timestamp: Date.now(),
             });
         } catch (error) {
-            logger.warn(
+            imageTaskLogger.warn(
                 `Internal image task usage recording failed: ${error instanceof Error ? error.message : String(error)}`
             );
         }
+
+        imageTaskLogger.info('Internal image task complete.', {
+            imageModel: result.imageModel,
+            textModel: result.textModel,
+            outputFormat: result.outputFormat,
+            outputCompression: result.outputCompression,
+            generationTimeMs: result.generationTimeMs,
+            usage: result.usage,
+            costs: result.costs,
+        });
 
         const response = toInternalImageResponse(result);
         const parsed =
