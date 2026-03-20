@@ -54,6 +54,8 @@ test('slash command choices match the shared registry', async () => {
 
     try {
         const moduleUrl = new URL('../src/commands/image.ts', import.meta.url);
+        // Add a cache-busting query so each test import re-evaluates the module
+        // with the current env-backed config instead of reusing stale values.
         moduleUrl.searchParams.set('test', String(Date.now()));
         const { default: imageCommand } = (await import(
             moduleUrl.href
