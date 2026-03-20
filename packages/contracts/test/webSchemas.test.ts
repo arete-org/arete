@@ -862,6 +862,27 @@ test('internal image task schemas enforce a narrow generate-only task union', ()
     assert.equal(
         PostInternalImageGenerateRequestSchema.safeParse({
             ...requestPayload,
+            prompt: 'x'.repeat(8001),
+        }).success,
+        false
+    );
+    assert.equal(
+        PostInternalImageGenerateRequestSchema.safeParse({
+            ...requestPayload,
+            style: 'x'.repeat(101),
+        }).success,
+        false
+    );
+    assert.equal(
+        PostInternalImageGenerateRequestSchema.safeParse({
+            ...requestPayload,
+            outputCompression: 0,
+        }).success,
+        true
+    );
+    assert.equal(
+        PostInternalImageGenerateRequestSchema.safeParse({
+            ...requestPayload,
             outputCompression: 101,
         }).success,
         false
@@ -890,12 +911,12 @@ test('internal image task schemas enforce a narrow generate-only task union', ()
             },
             finalImageBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
             outputFormat: 'png',
-            outputCompression: 100,
+            outputCompression: 0,
             usage: {
                 inputTokens: 42,
                 outputTokens: 18,
                 totalTokens: 60,
-                imageCount: 1,
+                imageCount: 0,
             },
             costs: {
                 text: 0.000046,

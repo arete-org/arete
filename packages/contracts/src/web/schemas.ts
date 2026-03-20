@@ -327,16 +327,16 @@ export const PostInternalImageDescriptionTaskResponseSchema = z
 export const PostInternalImageGenerateRequestSchema = z
     .object({
         task: z.literal('generate'),
-        prompt: z.string().min(1).max(4096),
+        prompt: z.string().min(1).max(8000),
         textModel: z.enum(internalImageTextModels),
         imageModel: z.enum(internalImageRenderModels),
         size: z.enum(['1024x1024', '1024x1536', '1536x1024', 'auto']),
         quality: z.enum(['low', 'medium', 'high', 'auto']),
         background: z.enum(['auto', 'transparent', 'opaque']),
-        style: z.string().min(1).max(128),
+        style: z.string().min(1).max(100),
         allowPromptAdjustment: z.boolean(),
         outputFormat: z.enum(supportedImageOutputFormats),
-        outputCompression: z.number().int().min(1).max(100),
+        outputCompression: z.number().int().min(0).max(100),
         user: z
             .object({
                 username: z.string().min(1).max(128),
@@ -382,13 +382,13 @@ export const PostInternalImageGenerateResponseSchema = z
                 annotations: InternalImageAnnotationsSchema,
                 finalImageBase64: z.string().min(1),
                 outputFormat: z.enum(supportedImageOutputFormats),
-                outputCompression: z.number().int().min(1).max(100),
+                outputCompression: z.number().int().min(0).max(100),
                 usage: z
                     .object({
                         inputTokens: z.number().int().nonnegative(),
                         outputTokens: z.number().int().nonnegative(),
                         totalTokens: z.number().int().nonnegative(),
-                        imageCount: z.number().int().positive(),
+                        imageCount: z.number().int().nonnegative(),
                     })
                     .strict(),
                 costs: z
