@@ -363,6 +363,9 @@ const backendBaseUrl =
 bootstrapLogger.info(`Using backend base URL: ${backendBaseUrl}`);
 
 const traceApiToken = process.env.TRACE_API_TOKEN?.trim();
+const serviceToken =
+    process.env.REFLECT_SERVICE_TOKEN?.trim() ??
+    process.env.SERVICE_TOKEN?.trim();
 const rawNodeEnv = process.env.NODE_ENV?.trim();
 const nodeEnv =
     rawNodeEnv && SUPPORTED_NODE_ENVS.has(rawNodeEnv as SupportedNodeEnv)
@@ -396,6 +399,7 @@ export const runtimeConfig = {
     webBaseUrl,
     backendBaseUrl,
     traceApiToken,
+    serviceToken,
     webhookPort: getIntegerEnv('WEBHOOK_PORT', envDefaultValues.WEBHOOK_PORT),
     api: {
         backendRequestTimeoutMs: getIntegerEnv(

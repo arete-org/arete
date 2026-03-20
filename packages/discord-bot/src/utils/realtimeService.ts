@@ -114,6 +114,7 @@ export class RealtimeSession extends EventEmitter {
     private sessionReady = false;
     private sessionReadyPromise: Promise<void> | null = null;
     private resolveSessionReady: (() => void) | null = null;
+    private rejectSessionReady: ((error: Error) => void) | null = null;
 
     constructor(options: RealtimeSessionOptions = {}) {
         super();
@@ -149,7 +150,6 @@ export class RealtimeSession extends EventEmitter {
      * Connect to the backend realtime voice boundary.
      */
     public async connect(): Promise<void> {
-        const readyPromise = this.ensureSessionReadyPromise();
         const wsUrl = this.buildBackendRealtimeUrl(
             runtimeConfig.backendBaseUrl
         );
@@ -157,8 +157,19 @@ export class RealtimeSession extends EventEmitter {
             url: wsUrl,
         });
         const headers: Record<string, string> = {};
+        if (runtimeConfig.serviceToken) {
+            headers['X-Service-Token'] = runtimeConfig.serviceToken;
+        }
         if (runtimeConfig.traceApiToken) {
             headers['X-Trace-Token'] = runtimeConfig.traceApiToken;
+        }
+        if (Object.keys(headers).length === 0) {
+            realtimeLogger.error(
+                'Missing trusted service credentials for realtime websocket.'
+            );
+            throw new Error(
+                'Realtime session requires a trusted service credential.'
+            );
         }
 
         await this.wsManager.connect(wsUrl, headers);
@@ -168,7 +179,7 @@ export class RealtimeSession extends EventEmitter {
             context: this.sessionContext,
             options: this.sessionConfig.getOptions(),
         });
-        await readyPromise;
+        await this.waitForSessionReady();
     }
 
     /**
@@ -269,16 +280,98 @@ export class RealtimeSession extends EventEmitter {
         if (this.sessionReady) {
             return Promise.resolve();
         }
-        if (!this.sessionReadyPromise) {
-            this.sessionReadyPromise = new Promise((resolve) => {
-                this.resolveSessionReady = resolve;
-            });
+        if (this.sessionReadyPromise) {
+            return this.sessionReadyPromise;
         }
+
+        if (!this.wsManager.isConnectionReady()) {
+            return Promise.reject(
+                new Error('Realtime websocket is not connected.')
+            );
+        }
+
+        const ws = this.wsManager.getWebSocket();
+        if (!ws) {
+            return Promise.reject(
+                new Error('Realtime websocket is not connected.')
+            );
+        }
+
+        this.sessionReadyPromise = new Promise((resolve, reject) => {
+            const cleanup = () => {
+                this.wsManager.off('event', handleEvent);
+                ws.off('close', handleClose);
+                ws.off('error', handleSocketError);
+                this.resolveSessionReady = null;
+                this.rejectSessionReady = null;
+                this.sessionReadyPromise = null;
+            };
+
+            const resolveReady = () => {
+                cleanup();
+                resolve();
+            };
+
+            const rejectReady = (error: Error) => {
+                cleanup();
+                reject(error);
+            };
+
+            const handleEvent = (data: unknown) => {
+                if (!data || typeof data !== 'object') {
+                    return;
+                }
+                const event = data as InternalVoiceRealtimeServerEvent;
+                if (event.type === 'session.ready') {
+                    this.markSessionReady();
+                    return;
+                }
+                if (event.type === 'error') {
+                    rejectReady(new Error(event.message));
+                    return;
+                }
+                if (event.type === 'session.closed') {
+                    rejectReady(
+                        new Error(event.reason ?? 'Realtime session closed.')
+                    );
+                }
+            };
+
+            const handleClose = (code: number, reason: Buffer) => {
+                const suffix = reason?.length
+                    ? `: ${reason.toString()}`
+                    : '';
+                rejectReady(
+                    new Error(
+                        `Realtime websocket closed before ready (${code})${suffix}`
+                    )
+                );
+            };
+
+            const handleSocketError = (error: Error) => {
+                rejectReady(error);
+            };
+
+            this.resolveSessionReady = resolveReady;
+            this.rejectSessionReady = rejectReady;
+            this.wsManager.on('event', handleEvent);
+            ws.on('close', handleClose);
+            ws.on('error', handleSocketError);
+        });
+
         return this.sessionReadyPromise;
     }
 
     private async waitForSessionReady(): Promise<void> {
         await this.ensureSessionReadyPromise();
+    }
+
+    private markSessionReady(): void {
+        if (this.sessionReady) {
+            return;
+        }
+        this.sessionReady = true;
+        this.resolveSessionReady?.();
     }
 
     private handleBackendEvent(raw: string): void {
@@ -310,12 +403,7 @@ export class RealtimeSession extends EventEmitter {
 
         const event = validation.data;
         if (event.type === 'session.ready') {
-            this.sessionReady = true;
-            if (this.resolveSessionReady) {
-                this.resolveSessionReady();
-                this.resolveSessionReady = null;
-                this.sessionReadyPromise = null;
-            }
+            this.markSessionReady();
             realtimeLogger.info('Backend realtime session ready.');
             this.emit('connected');
             return;
@@ -337,11 +425,20 @@ export class RealtimeSession extends EventEmitter {
         }
 
         if (event.type === 'session.closed') {
+            if (!this.sessionReady) {
+                this.rejectSessionReady?.(
+                    new Error(event.reason ?? 'session closed')
+                );
+            }
             realtimeLogger.warn('Backend realtime session closed.', {
                 reason: event.reason ?? 'session closed',
                 code: event.code,
             });
             this.emit('error', new Error(event.reason ?? 'session closed'));
+        }
+
+        if (event.type === 'error' && !this.sessionReady) {
+            this.rejectSessionReady?.(new Error(event.message));
         }
     }
 }

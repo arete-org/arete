@@ -99,21 +99,26 @@ const createRequestAbortContext = (
     };
 };
 
-// Speaker annotations preserve Discord identity context inside the provider
-// transcript without exposing raw Discord IDs in plain text.
+// Speaker annotations preserve Discord display context inside the provider
+// transcript without sending raw Discord IDs upstream.
+const escapeSpeakerLabel = (label: string): string => {
+    return label
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+};
+
 const buildSpeakerAnnotation = (
-    speakerLabel?: string,
-    speakerId?: string
+    speakerLabel?: string
 ): string | null => {
     if (!speakerLabel) {
         return null;
     }
 
-    if (speakerId) {
-        return `<discord_speaker id="${speakerId}">${speakerLabel}</discord_speaker>`;
-    }
-
-    return `<discord_speaker>${speakerLabel}</discord_speaker>`;
+    const escapedLabel = escapeSpeakerLabel(speakerLabel);
+    return `<discord_speaker>${escapedLabel}</discord_speaker>`;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
@@ -360,10 +365,7 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
             this.pendingBytes += deficit;
         }
 
-        const annotation = buildSpeakerAnnotation(
-            this.pendingSpeaker?.label,
-            this.pendingSpeaker?.id
-        );
+        const annotation = buildSpeakerAnnotation(this.pendingSpeaker?.label);
         if (annotation) {
             this.sendPayload({
                 type: 'conversation.item.create',
@@ -395,10 +397,7 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
     private sendTextCreate(
         event: Extract<RealtimeVoiceClientCommand, { type: 'input_text.create' }>
     ): void {
-        const annotation = buildSpeakerAnnotation(
-            event.speakerLabel,
-            event.speakerId
-        );
+        const annotation = buildSpeakerAnnotation(event.speakerLabel);
         const content = annotation
             ? [
                   { type: 'input_text', text: annotation },
@@ -445,7 +444,8 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
             case 'input_audio.append': {
                 if (
                     this.pendingSpeaker &&
-                    this.pendingSpeaker.label !== event.speakerLabel
+                    (this.pendingSpeaker.label !== event.speakerLabel ||
+                        this.pendingSpeaker.id !== event.speakerId)
                 ) {
                     await this.flushPendingAudio();
                 }
@@ -555,7 +555,9 @@ const connectWebSocket = async (
     return new Promise((resolve, reject) => {
         const handleAbort = () => {
             ws.close(1000, 'client_abort');
-            reject(new Error('Realtime connection aborted.'));
+            const abortError = new Error('Realtime connection aborted.');
+            abortError.name = 'AbortError';
+            reject(abortError);
         };
 
         if (signal) {

@@ -113,6 +113,10 @@ export const createInternalVoiceRealtimeHandler = ({
         let session: RealtimeVoiceSession | null = null;
         let sessionStarted = false;
         let closed = false;
+        let socketClosed = false;
+
+        const isSocketOpen = () =>
+            !socketClosed && ws.readyState === WebSocket.OPEN;
 
         const closeSocket = (code = 1000, reason?: string) => {
             if (closed) {
@@ -189,26 +193,35 @@ export const createInternalVoiceRealtimeHandler = ({
                     model: event.options?.model,
                     voice: event.options?.voice,
                 });
+                let createdSession: RealtimeVoiceSession | null = null;
                 try {
-                    session = await realtimeVoiceRuntime.createSession({
+                    createdSession = await realtimeVoiceRuntime.createSession({
                         instructions: buildInstructions(event.context),
                         options: event.options,
                     });
+                    if (!isSocketOpen()) {
+                        createdSession.close('client_close');
+                        return;
+                    }
+                    session = createdSession;
                     session.onEvent(forwardRuntimeEvent);
                     return;
                 } catch (error) {
                     sessionStarted = false;
+                    createdSession?.close('client_close');
                     realtimeLogger.error('Internal voice realtime session start failed.', {
                         error:
                             error instanceof Error ? error.message : String(error),
                     });
-                    sendServerEvent(ws, {
-                        type: 'error',
-                        message:
-                            error instanceof Error
-                                ? error.message
-                                : 'Failed to start realtime session.',
-                    });
+                    if (isSocketOpen()) {
+                        sendServerEvent(ws, {
+                            type: 'error',
+                            message:
+                                error instanceof Error
+                                    ? error.message
+                                    : 'Failed to start realtime session.',
+                        });
+                    }
                     return;
                 }
             }
@@ -247,11 +260,13 @@ export const createInternalVoiceRealtimeHandler = ({
         });
 
         ws.on('close', () => {
+            socketClosed = true;
             closed = true;
             session?.close('client_close');
         });
 
         ws.on('error', (error) => {
+            socketClosed = true;
             realtimeLogger.error('Internal voice realtime websocket error.', {
                 error: error instanceof Error ? error.message : String(error),
             });
