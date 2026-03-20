@@ -313,7 +313,7 @@ export class VoiceStateHandler extends Event {
             participants,
         });
         const realtimeSession = new RealtimeSession({
-            instructions: context.instructions,
+            context: context.sessionContext,
         });
 
         // Attach listeners only once

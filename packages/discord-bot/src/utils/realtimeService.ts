@@ -12,27 +12,22 @@ import { RealtimeWebSocketManager } from '../realtime/RealtimeWebSocketManager.j
 import { RealtimeAudioHandler } from '../realtime/RealtimeAudioHandler.js';
 import { RealtimeEventHandler } from '../realtime/RealtimeEventHandler.js';
 import { RealtimeSessionConfig } from '../realtime/RealtimeSessionConfig.js';
+import { logger } from '../utils/logger.js';
+import type {
+    InternalVoiceRealtimeClientEvent,
+    InternalVoiceRealtimeOptions,
+    InternalVoiceRealtimeServerEvent,
+    InternalVoiceSessionContext,
+} from '@footnote/contracts/voice';
+import { InternalVoiceRealtimeServerEventSchema } from '@footnote/contracts/voice';
 
 /**
  * Runtime options used when opening a new OpenAI realtime session.
  */
 export interface RealtimeSessionOptions {
-    model?:
-        | 'gpt-realtime'
-        | 'gpt-4o-realtime-preview'
-        | 'gpt-4o-mini-realtime-preview';
-    voice?:
-        | 'alloy'
-        | 'ash'
-        | 'ballad'
-        | 'coral'
-        | 'echo'
-        | 'fable'
-        | 'nova'
-        | 'onyx'
-        | 'sage'
-        | 'shimmer';
-    instructions?: string;
+    context?: InternalVoiceSessionContext;
+    model?: InternalVoiceRealtimeOptions['model'];
+    voice?: InternalVoiceRealtimeOptions['voice'];
     temperature?: number;
     maxResponseOutputTokens?: number;
 }
@@ -85,7 +80,7 @@ export interface RealtimeErrorEvent {
     type: 'error';
     error: {
         message: string;
-        code: string;
+        code?: string;
         [key: string]: unknown;
     };
 }
@@ -98,6 +93,7 @@ export class RealtimeSession extends EventEmitter {
     private audioHandler: RealtimeAudioHandler;
     private eventHandler: RealtimeEventHandler;
     private sessionConfig: RealtimeSessionConfig;
+    private sessionContext: InternalVoiceSessionContext;
 
     constructor(options: RealtimeSessionOptions = {}) {
         super();
@@ -106,6 +102,7 @@ export class RealtimeSession extends EventEmitter {
         this.audioHandler = new RealtimeAudioHandler();
         this.eventHandler = new RealtimeEventHandler();
         this.sessionConfig = new RealtimeSessionConfig(options);
+        this.sessionContext = options.context ?? { participants: [] };
 
         // Forward all events from eventHandler to RealtimeSession
         this.eventHandler.on('event', (event: RealtimeEvent) => {
@@ -122,26 +119,30 @@ export class RealtimeSession extends EventEmitter {
         this.eventHandler.on('text', (text: string) => {
             this.emit('text', text);
         });
+
+        this.wsManager.onMessage((data) => {
+            this.handleBackendEvent(data.toString());
+        });
     }
 
     /**
      * Connect to OpenAI's Realtime API
      */
     public async connect(): Promise<void> {
-        const wsUrl = `wss://api.openai.com/v1/realtime?model=${this.sessionConfig.getModel()}`;
-        const headers = {
-            Authorization: `Bearer ${runtimeConfig.openaiApiKey}`,
-        };
+        const wsUrl = this.buildBackendRealtimeUrl(
+            runtimeConfig.backendBaseUrl
+        );
+        const headers: Record<string, string> = {};
+        if (runtimeConfig.traceApiToken) {
+            headers['X-Trace-Token'] = runtimeConfig.traceApiToken;
+        }
 
         await this.wsManager.connect(wsUrl, headers);
-        this.eventHandler.setupWebSocketEventHandlers(this.wsManager);
-
-        // Send session configuration
-        const ws = this.wsManager.getWebSocket();
-        if (ws) {
-            this.sessionConfig.sendSessionConfig(ws);
-            this.sessionConfig.enableVAD(ws);
-        }
+        this.sendClientEvent({
+            type: 'session.start',
+            context: this.sessionContext,
+            options: this.sessionConfig.getOptions(),
+        });
     }
 
     /**
@@ -156,16 +157,16 @@ export class RealtimeSession extends EventEmitter {
         speakerLabel: string,
         speakerId?: string
     ): Promise<void> {
-        const ws = this.wsManager.getWebSocket();
-        if (ws && this.audioHandler) {
-            await this.audioHandler.sendAudio(
-                ws,
-                this.eventHandler,
-                audioBuffer,
-                speakerLabel,
-                speakerId
-            );
+        if (!this.audioHandler) {
+            return;
         }
+
+        await this.audioHandler.sendAudio(
+            this.sendClientEvent.bind(this),
+            audioBuffer,
+            speakerLabel,
+            speakerId
+        );
     }
 
     /**
@@ -179,27 +180,26 @@ export class RealtimeSession extends EventEmitter {
      * Clear the current audio buffer
      */
     public clearAudio(): void {
-        const ws = this.wsManager.getWebSocket();
-        if (ws) {
-            this.audioHandler.clearAudio(ws);
+        if (!this.audioHandler) {
+            return;
         }
+
+        this.audioHandler.clearAudio(this.sendClientEvent.bind(this));
     }
 
     public async flushAudio(): Promise<void> {
-        const ws = this.wsManager.getWebSocket();
-        if (ws && this.audioHandler) {
-            await this.audioHandler.flushAudio(ws, this.eventHandler);
+        if (!this.audioHandler) {
+            return;
         }
+
+        await this.audioHandler.flushAudio(this.sendClientEvent.bind(this));
     }
 
     /**
      * Start a new conversation turn
      */
     public createResponse(): void {
-        const ws = this.wsManager.getWebSocket();
-        if (ws) {
-            this.sessionConfig.createResponse(ws);
-        }
+        this.sendClientEvent({ type: 'response.create' });
     }
 
     public async waitForResponseCompleted(): Promise<void> {
@@ -210,41 +210,110 @@ export class RealtimeSession extends EventEmitter {
     }
 
     public waitForAudioCollected(): Promise<void> {
-        if (this.eventHandler) {
-            return this.eventHandler.waitForAudioCollected();
-        }
-        throw new Error('Event handler not initialized');
+        return Promise.resolve();
     }
 
     public async sendGreeting(): Promise<void> {
-        const ws = this.wsManager.getWebSocket();
-        if (!ws) return;
-
         await new Promise((resolve) => setTimeout(resolve, 300));
+        this.sendClientEvent({ type: 'input_text.create', text: 'Hello!' });
+        this.sendClientEvent({ type: 'response.create' });
+    }
 
-        ws.send(
-            JSON.stringify({
-                type: 'conversation.item.create',
-                item: {
-                    type: 'message',
-                    role: 'user',
-                    content: [{ type: 'input_text', text: 'Hello!' }],
-                },
-            })
-        );
+    private buildBackendRealtimeUrl(baseUrl: string): string {
+        const trimmed = baseUrl.trim().replace(/\/+$/, '');
+        if (!trimmed) {
+            return 'ws://localhost:3000/api/internal/voice/realtime';
+        }
 
-        ws.send(
-            JSON.stringify({
-                type: 'response.create',
-                response: {
-                    output_modalities: ['audio'],
-                    instructions: (
-                        `${this.sessionConfig.getInstructions() ?? ''}` +
-                        ' Say: Hello!'
-                    ).trim(),
-                },
-            })
-        );
+        const hasProtocol = /^https?:\/\//i.test(trimmed);
+        const normalized = hasProtocol ? trimmed : `http://${trimmed}`;
+        const wsScheme = normalized.startsWith('https://') ? 'wss://' : 'ws://';
+        const withoutScheme = normalized.replace(/^https?:\/\//i, '');
+        return `${wsScheme}${withoutScheme}/api/internal/voice/realtime`;
+    }
+
+    private sendClientEvent(event: InternalVoiceRealtimeClientEvent): void {
+        if (!this.wsManager.isConnectionReady()) {
+            throw new Error('Session is not connected');
+        }
+
+        this.wsManager.send(JSON.stringify(event));
+    }
+
+    private handleBackendEvent(raw: string): void {
+        let parsed: InternalVoiceRealtimeServerEvent;
+        try {
+            parsed = JSON.parse(raw) as InternalVoiceRealtimeServerEvent;
+        } catch (error) {
+            logger.warn('[realtime] Ignoring malformed backend event payload.', {
+                error: error instanceof Error ? error.message : String(error),
+            });
+            return;
+        }
+
+        const validation =
+            InternalVoiceRealtimeServerEventSchema.safeParse(parsed);
+        if (!validation.success) {
+            logger.warn('[realtime] Ignoring invalid backend event shape.', {
+                issues: validation.error.issues,
+            });
+            return;
+        }
+
+        const event = validation.data;
+        if (event.type === 'session.ready') {
+            this.emit('connected');
+            return;
+        }
+
+        // Emit an audio-done signal when the response completes so the audio
+        // handler can clear its per-response buffer.
+        if (event.type === 'response.completed') {
+            this.eventHandler.handleEvent({
+                type: 'response.output_audio.done',
+            });
+        }
+
+        const mapped = mapInternalEventToRealtimeEvent(event);
+        if (mapped) {
+            this.eventHandler.handleEvent(mapped);
+        }
+
+        if (event.type === 'session.closed') {
+            this.emit('error', new Error(event.reason ?? 'session closed'));
+        }
     }
 }
+
+const mapInternalEventToRealtimeEvent = (
+    event: InternalVoiceRealtimeServerEvent
+): RealtimeEvent | null => {
+    switch (event.type) {
+        case 'output_audio.delta':
+            return {
+                type: 'response.output_audio.delta',
+                delta: event.audioBase64,
+            };
+        case 'output_text.delta':
+            return {
+                type: 'response.text.delta',
+                delta: event.text,
+            };
+        case 'response.completed':
+            return {
+                type: 'response.completed',
+                response_id: event.responseId ?? '',
+            };
+        case 'error':
+            return {
+                type: 'error',
+                error: {
+                    message: event.message,
+                    code: event.code,
+                },
+            };
+        default:
+            return null;
+    }
+};
 

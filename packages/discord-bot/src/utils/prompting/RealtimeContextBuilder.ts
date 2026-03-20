@@ -30,6 +30,10 @@ interface RealtimeContextOutput {
         participants: RealtimeContextParticipant[];
         transcripts: string[];
     };
+    sessionContext: {
+        participants: RealtimeContextParticipant[];
+        transcripts?: string[];
+    };
 }
 
 /**
@@ -65,6 +69,10 @@ export class RealtimeContextBuilder {
             metadata: {
                 participants: input.participants,
                 transcripts,
+            },
+            sessionContext: {
+                participants: input.participants,
+                ...(transcripts.length > 0 ? { transcripts } : {}),
             },
         };
     }

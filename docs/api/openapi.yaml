@@ -7,6 +7,7 @@ openapi: 3.1.0
 # - POST /api/internal/text: Trusted internal text task execution
 # - POST /api/internal/image: Trusted internal image task execution
 # - POST /api/internal/voice/tts: Trusted internal voice TTS execution
+# - GET /api/internal/voice/realtime: Trusted internal voice realtime session (WebSocket)
 # - POST /api/incidents/report: Incident report create (trusted internal auth)
 # - GET /api/incidents: Incident list (trusted internal auth)
 # - GET /api/incidents/{incidentId}: Incident detail (trusted internal auth)
@@ -276,6 +277,39 @@ paths:
                     $ref: '#/components/responses/PayloadTooLarge'
                 '502':
                     $ref: '#/components/responses/BadGateway'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
+    /api/internal/voice/realtime:
+        get:
+            operationId: openInternalVoiceRealtime
+            x-codeRefs:
+                - packages/backend/src/handlers/internalVoiceRealtime.ts#handleUpgrade
+                - packages/discord-bot/src/utils/realtimeService.ts#connect
+                - packages/contracts/src/voice/types.ts#InternalVoiceRealtimeClientEvent
+                - packages/contracts/src/voice/types.ts#InternalVoiceRealtimeServerEvent
+            summary: Open a trusted internal realtime voice session (WebSocket)
+            description: |
+                Upgrades the request to a WebSocket connection used for realtime
+                voice sessions. Clients send `InternalVoiceRealtimeClientEvent`
+                payloads and receive `InternalVoiceRealtimeServerEvent` payloads.
+                Requires either `x-service-token` or `x-trace-token`.
+            tags:
+                - Voice
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            responses:
+                '101':
+                    description: Switching Protocols (WebSocket accepted).
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '429':
+                    $ref: '#/components/responses/TooManyRequests'
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
 
