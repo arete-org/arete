@@ -22,9 +22,14 @@ import {
     type ReflectApi,
 } from './reflect.js';
 import {
-    createInternalNewsApi,
-    type CreateInternalNewsApiOptions,
-    type InternalNewsApi,
+    createInternalImageApi,
+    type CreateInternalImageApiOptions,
+    type InternalImageApi,
+} from './internalImage.js';
+import {
+    createInternalTextApi,
+    type CreateInternalTextApiOptions,
+    type InternalTextApi,
 } from './internalText.js';
 import {
     createTraceApi,
@@ -36,14 +41,16 @@ export type CreateDiscordApiClientOptions = CreateApiTransportOptions &
     CreateIncidentApiOptions &
     CreateTraceApiOptions &
     CreateReflectApiOptions &
-    CreateInternalNewsApiOptions;
+    CreateInternalImageApiOptions &
+    CreateInternalTextApiOptions;
 
 export type DiscordApiClient = {
     requestJson: ApiRequester;
 } & TraceApi &
     ReflectApi &
     IncidentApi &
-    InternalNewsApi;
+    InternalImageApi &
+    InternalTextApi;
 
 export const createDiscordApiClient = ({
     baseUrl,
@@ -62,7 +69,14 @@ export const createDiscordApiClient = ({
     return {
         requestJson,
         ...createIncidentApi(requestJson, { traceApiToken }),
-        ...createInternalNewsApi(requestJson, { traceApiToken }),
+        ...createInternalImageApi(requestJson, {
+            traceApiToken,
+            baseUrl,
+            defaultHeaders,
+            defaultTimeoutMs,
+            fetchImpl,
+        }),
+        ...createInternalTextApi(requestJson, { traceApiToken }),
         ...createReflectApi(requestJson, { traceApiToken }),
         ...createTraceApi(requestJson, { traceApiToken }),
     };
@@ -79,17 +93,22 @@ export type {
     DiscordReflectApiResponse,
     UnknownReflectActionResponse,
 } from './reflect.js';
+export type { CreateIncidentApiOptions, IncidentApi } from './incidents.js';
 export type {
-    CreateIncidentApiOptions,
-    IncidentApi,
-} from './incidents.js';
+    CreateInternalImageApiOptions,
+    InternalImageApi,
+} from './internalImage.js';
 export type {
-    CreateInternalNewsApiOptions,
-    InternalNewsApi,
+    CreateInternalTextApiOptions,
+    InternalTextApi,
 } from './internalText.js';
 export type {
     GetIncidentResponse,
     GetIncidentsResponse,
+    PostInternalImageGenerateRequest,
+    PostInternalImageGenerateResponse,
+    PostInternalImageDescriptionTaskRequest,
+    PostInternalImageDescriptionTaskResponse,
     PostInternalNewsTaskRequest,
     PostInternalNewsTaskResponse,
     PostIncidentNotesRequest,
@@ -107,4 +126,3 @@ export type {
     PostTracesRequest,
     PostTracesResponse,
 } from '@footnote/contracts/web';
-

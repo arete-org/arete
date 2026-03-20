@@ -7,6 +7,8 @@
  */
 
 import { envDefaultValues } from '@footnote/config-spec';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { supportedNodeEnvs } from '@footnote/contracts/providers';
 import {
     parseBooleanEnv,
@@ -16,6 +18,9 @@ import {
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
 const SUPPORTED_NODE_ENVS = new Set(supportedNodeEnvs);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, '../../../../../');
 
 /**
  * Builds backend runtime flags and bind settings that other services read
@@ -48,6 +53,7 @@ export const buildRuntimeSections = (
             promptConfigPath: parseOptionalTrimmedString(
                 env.PROMPT_CONFIG_PATH
             ),
+            projectRoot: PROJECT_ROOT,
         },
         server: {
             dataDir:

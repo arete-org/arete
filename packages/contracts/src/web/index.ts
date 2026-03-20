@@ -1,5 +1,5 @@
 /**
- * @description: Public exports for web API contract types and runtime schemas.
+ * @description: Re-exports the shared web API types and validation schemas used across Footnote packages.
  * @footnote-scope: interface
  * @footnote-module: WebContractsIndex
  * @footnote-risk: low - Incorrect exports can cause type mismatches.
@@ -34,11 +34,40 @@ export type {
  */
 export type {
     InternalTextTask,
+    InternalTextChannelContext,
+    InternalTextCosts,
     InternalNewsItem,
+    InternalTextUsage,
+    PostInternalImageDescriptionTaskRequest,
+    PostInternalImageDescriptionTaskResponse,
     PostInternalNewsTaskRequest,
     PostInternalNewsTaskResponse,
     PostInternalTextRequest,
     PostInternalTextResponse,
+} from './types';
+
+/**
+ * @api.operationId: postInternalImageTask
+ * @api.path: POST /api/internal/image
+ */
+export type {
+    InternalImageAnnotations,
+    InternalImageBackground,
+    InternalImageChannelContext,
+    InternalImageErrorEvent,
+    InternalImageGenerationArtifact,
+    InternalImagePartialImageEvent,
+    InternalImageQuality,
+    InternalImageRenderModel,
+    InternalImageResultEvent,
+    InternalImageSize,
+    InternalImageStreamEvent,
+    InternalImageTextModel,
+    InternalImageUserContext,
+    PostInternalImageGenerateRequest,
+    PostInternalImageGenerateResponse,
+    PostInternalImageRequest,
+    PostInternalImageResponse,
 } from './types';
 
 /**
@@ -145,10 +174,17 @@ export {
     PostIncidentRemediationResponseSchema,
     PostIncidentReportRequestSchema,
     PostIncidentReportResponseSchema,
+    PostInternalImageDescriptionTaskRequestSchema,
+    PostInternalImageDescriptionTaskResponseSchema,
     PostIncidentStatusRequestSchema,
     PostIncidentStatusResponseSchema,
     PostInternalNewsTaskRequestSchema,
     PostInternalNewsTaskResponseSchema,
+    PostInternalImageGenerateRequestSchema,
+    PostInternalImageGenerateResponseSchema,
+    PostInternalImageRequestSchema,
+    PostInternalImageResponseSchema,
+    InternalImageStreamEventSchema,
     PostInternalTextRequestSchema,
     PostInternalTextResponseSchema,
     PostReflectRequestSchema,
@@ -162,4 +198,3 @@ export {
     ResponseMetadataSchema,
     createSchemaResponseValidator,
 } from './schemas';
-

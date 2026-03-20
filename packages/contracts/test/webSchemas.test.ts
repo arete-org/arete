@@ -8,11 +8,21 @@
 
 import test from 'node:test';
 import { strict as assert } from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
     ApiErrorResponseSchema,
     GetIncidentResponseSchema,
     GetIncidentsResponseSchema,
+    InternalImageStreamEventSchema,
+    PostInternalImageDescriptionTaskRequestSchema,
+    PostInternalImageDescriptionTaskResponseSchema,
+    PostInternalImageGenerateRequestSchema,
+    PostInternalImageGenerateResponseSchema,
+    PostInternalImageRequestSchema,
+    PostInternalImageResponseSchema,
     PostInternalNewsTaskRequestSchema,
     PostInternalNewsTaskResponseSchema,
     PostInternalTextRequestSchema,
@@ -34,9 +44,15 @@ import {
     ResponseMetadataSchema,
     createSchemaResponseValidator,
 } from '../src/web/schemas';
+import {
+    internalImageRenderModels,
+    internalImageTextModels,
+} from '../src/providers';
 import type {
     GetIncidentResponse,
     GetIncidentsResponse,
+    PostInternalImageGenerateResponse,
+    PostInternalImageResponse,
     PostInternalNewsTaskResponse,
     PostInternalTextResponse,
     GetTraceResponse,
@@ -45,6 +61,13 @@ import type {
     PostReflectResponse,
 } from '../src/web/types';
 import type { ApiResponseValidationResult } from '../src/web/client-core';
+
+const testDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(testDir, '../../..');
+const openApiSource = fs.readFileSync(
+    path.join(repoRoot, 'docs/api/openapi.yaml'),
+    'utf-8'
+);
 
 const baseMetadata = {
     responseId: 'response_123',
@@ -620,9 +643,38 @@ test('internal text task schemas enforce a narrow task union', () => {
     );
 
     assert.equal(
+        PostInternalImageDescriptionTaskRequestSchema.safeParse({
+            task: 'image_description',
+            imageUrl: 'https://example.com/screenshot.png',
+            context: 'User asked what changed in this screenshot.',
+            channelContext: {
+                channelId: '123',
+                guildId: '456',
+            },
+        }).success,
+        true
+    );
+
+    assert.equal(
+        PostInternalTextRequestSchema.safeParse({
+            task: 'image_description',
+            imageUrl: 'https://example.com/screenshot.png',
+        }).success,
+        true
+    );
+
+    assert.equal(
         PostInternalNewsTaskRequestSchema.safeParse({
             task: 'news',
             maxResults: 6,
+        }).success,
+        false
+    );
+
+    assert.equal(
+        PostInternalImageDescriptionTaskRequestSchema.safeParse({
+            task: 'image_description',
+            imageUrl: 'not-a-url',
         }).success,
         false
     );
@@ -673,6 +725,27 @@ test('internal text task schemas enforce a narrow task union', () => {
     );
 
     assert.equal(
+        PostInternalImageDescriptionTaskResponseSchema.safeParse({
+            task: 'image_description',
+            result: {
+                description: '{"summary":"Screenshot of a policy update"}',
+                model: 'gpt-4o-mini',
+                usage: {
+                    inputTokens: 10,
+                    outputTokens: 5,
+                    totalTokens: 15,
+                },
+                costs: {
+                    input: 0.0000015,
+                    output: 0.000003,
+                    total: 0.0000045,
+                },
+            },
+        }).success,
+        true
+    );
+
+    assert.equal(
         PostInternalTextResponseSchema.safeParse({
             task: 'news',
             result: {
@@ -708,6 +781,27 @@ test('internal text task schemas enforce a narrow task union', () => {
         }).success,
         true
     );
+
+    assert.equal(
+        PostInternalTextResponseSchema.safeParse({
+            task: 'image_description',
+            result: {
+                description: '{"summary":"Screenshot of a policy update"}',
+                model: 'gpt-4o-mini',
+                usage: {
+                    inputTokens: 10,
+                    outputTokens: 5,
+                    totalTokens: 15,
+                },
+                costs: {
+                    input: 0.0000015,
+                    output: 0.000003,
+                    total: 0.0000045,
+                },
+            },
+        }).success,
+        true
+    );
 });
 
 test('internal text schema validator stays assignable to shared contract types', () => {
@@ -723,6 +817,199 @@ test('internal text schema validator stays assignable to shared contract types',
     const typedEndpointValidator: (
         data: unknown
     ) => ApiResponseValidationResult<PostInternalTextResponse> =
+        endpointValidator;
+
+    assert.equal(typeof typedValidator, 'function');
+    assert.equal(typeof typedEndpointValidator, 'function');
+});
+
+test('internal image task schemas enforce a narrow generate-only task union', () => {
+    const requestPayload = {
+        task: 'generate',
+        prompt: 'draw a reflective skyline',
+        textModel: 'gpt-5-mini',
+        imageModel: 'gpt-image-1-mini',
+        size: '1024x1024',
+        quality: 'medium',
+        background: 'auto',
+        style: 'vivid',
+        allowPromptAdjustment: true,
+        outputFormat: 'png',
+        outputCompression: 100,
+        user: {
+            username: 'Jordan',
+            nickname: 'Jordan',
+            guildName: 'Footnote Lab',
+        },
+        followUpResponseId: 'resp_prev_123',
+        channelContext: {
+            channelId: '123',
+            guildId: '456',
+        },
+        stream: true,
+    } as const;
+
+    assert.equal(
+        PostInternalImageGenerateRequestSchema.safeParse(requestPayload)
+            .success,
+        true
+    );
+    assert.equal(
+        PostInternalImageRequestSchema.safeParse(requestPayload).success,
+        true
+    );
+
+    assert.equal(
+        PostInternalImageGenerateRequestSchema.safeParse({
+            ...requestPayload,
+            prompt: 'x'.repeat(8001),
+        }).success,
+        false
+    );
+    assert.equal(
+        PostInternalImageGenerateRequestSchema.safeParse({
+            ...requestPayload,
+            style: 'x'.repeat(101),
+        }).success,
+        false
+    );
+    assert.equal(
+        PostInternalImageGenerateRequestSchema.safeParse({
+            ...requestPayload,
+            outputCompression: 0,
+        }).success,
+        true
+    );
+    assert.equal(
+        PostInternalImageGenerateRequestSchema.safeParse({
+            ...requestPayload,
+            outputCompression: 101,
+        }).success,
+        false
+    );
+    assert.equal(
+        PostInternalImageRequestSchema.safeParse({
+            task: 'render',
+            prompt: 'hello',
+        }).success,
+        false
+    );
+
+    const responsePayload = {
+        task: 'generate',
+        result: {
+            responseId: 'resp_123',
+            textModel: 'gpt-5-mini',
+            imageModel: 'gpt-image-1-mini',
+            revisedPrompt: 'draw a reflective skyline at dusk',
+            finalStyle: 'vivid',
+            annotations: {
+                title: 'Reflective Skyline',
+                description: 'A city scene at dusk.',
+                note: 'The skyline emphasizes calm light.',
+                adjustedPrompt: 'draw a reflective skyline at dusk',
+            },
+            finalImageBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+            outputFormat: 'png',
+            outputCompression: 0,
+            usage: {
+                inputTokens: 42,
+                outputTokens: 18,
+                totalTokens: 60,
+                imageCount: 0,
+            },
+            costs: {
+                text: 0.000046,
+                image: 0.011,
+                total: 0.011046,
+                perImage: 0.011,
+            },
+            generationTimeMs: 2100,
+        },
+    } as const;
+
+    assert.equal(
+        PostInternalImageGenerateResponseSchema.safeParse(responsePayload)
+            .success,
+        true
+    );
+    assert.equal(
+        PostInternalImageResponseSchema.safeParse(responsePayload).success,
+        true
+    );
+    assert.equal(
+        InternalImageStreamEventSchema.safeParse({
+            type: 'partial_image',
+            index: 0,
+            base64: 'aGVsbG8=',
+        }).success,
+        true
+    );
+    assert.equal(
+        InternalImageStreamEventSchema.safeParse({
+            type: 'result',
+            task: 'generate',
+            result: responsePayload.result,
+        }).success,
+        true
+    );
+    assert.equal(
+        InternalImageStreamEventSchema.safeParse({
+            type: 'error',
+            error: 'Failed to execute internal image task',
+        }).success,
+        true
+    );
+});
+
+test('internal image schema enums stay aligned with the shared model registry', () => {
+    const requestTextOptions =
+        PostInternalImageGenerateRequestSchema.shape.textModel.options;
+    const requestImageOptions =
+        PostInternalImageGenerateRequestSchema.shape.imageModel.options;
+    const responseTextOptions =
+        PostInternalImageGenerateResponseSchema.shape.result.shape.textModel
+            .options;
+    const responseImageOptions =
+        PostInternalImageGenerateResponseSchema.shape.result.shape.imageModel
+            .options;
+
+    assert.deepEqual(requestTextOptions, [...internalImageTextModels]);
+    assert.deepEqual(requestImageOptions, [...internalImageRenderModels]);
+    assert.deepEqual(responseTextOptions, [...internalImageTextModels]);
+    assert.deepEqual(responseImageOptions, [...internalImageRenderModels]);
+});
+
+test('openapi internal image enums stay aligned with the shared model registry', () => {
+    const normalizedOpenApiSource = openApiSource.replace(/\s+/g, ' ');
+    const buildEnumPattern = (values: readonly string[]) =>
+        `enum:\\s*\\[\\s*${values.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join(',\\s*')}\\s*,?\\s*\\]`;
+
+    const textEnumMatches = normalizedOpenApiSource.match(
+        new RegExp(buildEnumPattern(internalImageTextModels), 'g')
+    );
+    const imageEnumMatches = normalizedOpenApiSource.match(
+        new RegExp(buildEnumPattern(internalImageRenderModels), 'g')
+    );
+
+    assert.ok((textEnumMatches?.length ?? 0) >= 2);
+    assert.ok((imageEnumMatches?.length ?? 0) >= 2);
+});
+
+test('internal image schema validator stays assignable to shared contract types', () => {
+    const validator = createSchemaResponseValidator(
+        PostInternalImageGenerateResponseSchema
+    );
+    const endpointValidator = createSchemaResponseValidator(
+        PostInternalImageResponseSchema
+    );
+    const typedValidator: (
+        data: unknown
+    ) => ApiResponseValidationResult<PostInternalImageGenerateResponse> =
+        validator;
+    const typedEndpointValidator: (
+        data: unknown
+    ) => ApiResponseValidationResult<PostInternalImageResponse> =
         endpointValidator;
 
     assert.equal(typeof typedValidator, 'function');

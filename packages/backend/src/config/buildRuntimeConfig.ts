@@ -1,5 +1,5 @@
 /**
- * @description: Orchestrates one-pass backend runtime config construction from process env.
+ * @description: Builds the backend runtime config from environment variables.
  * @footnote-scope: utility
  * @footnote-module: BuildBackendRuntimeConfig
  * @footnote-risk: medium - Missing a config section here can break startup or silently change behavior.
@@ -8,6 +8,7 @@
 
 import { buildLoggingSection } from './sections/logging.js';
 import { buildOpenAISection } from './sections/openai.js';
+import { readBotProfileConfig } from './profile.js';
 import { buildRateLimitsSection } from './sections/rateLimits.js';
 import { buildRuntimeSections } from './sections/runtime.js';
 import { buildServiceSections } from './sections/services.js';
@@ -18,8 +19,9 @@ import { buildWebhookSection } from './sections/webhook.js';
 import type { RuntimeConfig, WarningSink } from './types.js';
 
 /**
- * Builds the full backend config object from one environment snapshot so all
- * sections agree on the same defaults and warnings.
+ * Builds the full backend config object from one env snapshot. Reading env
+ * once keeps every config section on the same defaults, warnings, and file
+ * paths during startup.
  */
 export const buildRuntimeConfig = (
     env: NodeJS.ProcessEnv,
@@ -34,6 +36,11 @@ export const buildRuntimeConfig = (
     const webhook = buildWebhookSection(env, warn);
     const storage = buildStorageSection(env, warn);
     const logging = buildLoggingSection(env, warn);
+    const profile = readBotProfileConfig({
+        env,
+        projectRoot: runtime.projectRoot,
+        warn,
+    });
 
     return {
         runtime,
@@ -48,5 +55,6 @@ export const buildRuntimeConfig = (
         webhook,
         storage,
         logging,
+        profile,
     };
 };

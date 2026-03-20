@@ -535,9 +535,6 @@ CONTEXT_MANAGER_MAX_MESSAGES=50
 CONTEXT_MANAGER_RETENTION_MS=3600000
 CONTEXT_MANAGER_EVICTION_INTERVAL_MS=300000
 
-# Optional LLM cost tracking configuration
-COST_ESTIMATOR_ENABLED=true
-
 # Optional realtime engagement filter configuration
 REALTIME_FILTER_ENABLED=false
 
@@ -546,7 +543,6 @@ ENGAGEMENT_WEIGHT_MENTION=0.3
 ENGAGEMENT_WEIGHT_QUESTION=0.2
 ENGAGEMENT_WEIGHT_TECHNICAL=0.15
 ENGAGEMENT_WEIGHT_HUMAN_ACTIVITY=0.15
-ENGAGEMENT_WEIGHT_COST_SATURATION=0.1
 ENGAGEMENT_WEIGHT_BOT_NOISE=0.05
 ENGAGEMENT_WEIGHT_DM_BOOST=1.5
 ENGAGEMENT_WEIGHT_DECAY=0.05
@@ -612,9 +608,6 @@ CONTEXT_MANAGER_MAX_MESSAGES=50
 CONTEXT_MANAGER_RETENTION_MS=3600000
 CONTEXT_MANAGER_EVICTION_INTERVAL_MS=300000
 
-# Optional LLM cost tracking configuration
-COST_ESTIMATOR_ENABLED=true
-
 # Optional realtime engagement filter configuration
 REALTIME_FILTER_ENABLED=false
 
@@ -623,7 +616,6 @@ ENGAGEMENT_WEIGHT_MENTION=0.3
 ENGAGEMENT_WEIGHT_QUESTION=0.2
 ENGAGEMENT_WEIGHT_TECHNICAL=0.15
 ENGAGEMENT_WEIGHT_HUMAN_ACTIVITY=0.15
-ENGAGEMENT_WEIGHT_COST_SATURATION=0.1
 ENGAGEMENT_WEIGHT_BOT_NOISE=0.05
 ENGAGEMENT_WEIGHT_DM_BOOST=1.5
 ENGAGEMENT_WEIGHT_DECAY=0.05
@@ -764,9 +756,6 @@ CONTEXT_MANAGER_MAX_MESSAGES=50            # Max messages per channel (Integer �
 CONTEXT_MANAGER_RETENTION_MS=3600000       # Message retention time in ms (Integer)
 CONTEXT_MANAGER_EVICTION_INTERVAL_MS=300000 # Cleanup frequency in ms (Integer)
 
-# Optional LLM cost tracking configuration
-COST_ESTIMATOR_ENABLED=true                # Enable cost tracking (Boolean)
-
 # Optional realtime engagement filter configuration
 REALTIME_FILTER_ENABLED=false              # Enable weighted engagement scoring (Boolean)
 
@@ -775,7 +764,6 @@ ENGAGEMENT_WEIGHT_MENTION=0.3              # Weight for mentions/replies (Float:
 ENGAGEMENT_WEIGHT_QUESTION=0.2            # Weight for questions (Float: 0.0-1.0)
 ENGAGEMENT_WEIGHT_TECHNICAL=0.15          # Weight for technical keywords (Float: 0.0-1.0)
 ENGAGEMENT_WEIGHT_HUMAN_ACTIVITY=0.15     # Weight for human activity (Float: 0.0-1.0)
-ENGAGEMENT_WEIGHT_COST_SATURATION=0.1     # Weight for cost velocity (Float: 0.0-1.0)
 ENGAGEMENT_WEIGHT_BOT_NOISE=0.05          # Weight for bot noise (Float: 0.0-1.0)
 ENGAGEMENT_WEIGHT_DM_BOOST=1.5            # DM context multiplier (Float ≥ 0)
 ENGAGEMENT_WEIGHT_DECAY=0.05              # Time decay factor (Float ≥ 0)

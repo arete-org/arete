@@ -10,9 +10,13 @@ RUN corepack enable && corepack prepare pnpm@10.26.2 --activate
 # --- Workspace metadata ---
 COPY tsconfig.json ./tsconfig.json
 COPY package.json pnpm-workspace.yaml ./
+COPY packages/agent-runtime/package.json packages/agent-runtime/tsconfig.json packages/agent-runtime/
 COPY packages/web/package.json packages/web/package.json
 COPY packages/backend/package.json packages/backend/tsconfig.json packages/backend/
+COPY packages/config-spec/package.json packages/config-spec/tsconfig.json packages/config-spec/
 COPY packages/contracts/package.json packages/contracts/tsconfig.json packages/contracts/
+COPY packages/discord-bot/package.json packages/discord-bot/tsconfig.json packages/discord-bot/
+COPY packages/prompts/package.json packages/prompts/tsconfig.json packages/prompts/
 
 # --- Dependencies ---
 COPY pnpm-lock.yaml* ./

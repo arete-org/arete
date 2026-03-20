@@ -21,14 +21,16 @@
     },
     "scripts": {
         "clean": "node -e \"const fs=require('node:fs'); fs.rmSync('dist',{recursive:true,force:true}); fs.rmSync('tsconfig.tsbuildinfo',{force:true});\"",
-        "build:dev": "pnpm clean && tsc -p tsconfig.json",
-        "build": "pnpm clean && tsc -p tsconfig.json"
+        "build:dev": "tsc -b tsconfig.json",
+        "build": "pnpm clean && tsc -b tsconfig.json"
     },
     "devDependencies": {
         "typescript": "catalog:"
     },
     "dependencies": {
+        "@footnote/contracts": "workspace:*",
         "@voltagent/core": "2.6.10",
-        "ai": "6.0.116"
+        "ai": "6.0.116",
+        "openai": "catalog:"
     }
 }

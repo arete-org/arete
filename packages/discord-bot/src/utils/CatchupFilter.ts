@@ -13,7 +13,6 @@ import {
     containsPlaintextBotAlias,
     resolveBotMentionAliases,
 } from './mentionAliases.js';
-import type { OpenAIService } from './openaiService.js';
 
 type CatchupFilterDecision = { skip: boolean; reason: string };
 
@@ -88,9 +87,6 @@ export class CatchupFilter {
     public readonly HIGH_VELOCITY_THRESHOLD = 5;
     private readonly HIGH_VELOCITY_WINDOW_MS = 30_000;
     public readonly MIN_RELEVANCE_SCORE = 0.2;
-
-    // Reserved for future enhancements that may use the OpenAI service for richer heuristics.
-    constructor(_openaiService?: OpenAIService) {}
 
     // ---------------------------------------------------------------------------
     // Public API

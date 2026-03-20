@@ -1,5 +1,5 @@
 /**
- * @description: Shared backend config types used by the runtime config builders.
+ * @description: Defines the backend config shapes returned by the startup config builders.
  * @footnote-scope: utility
  * @footnote-module: BackendRuntimeConfigTypes
  * @footnote-risk: medium - Wrong config typing can hide missing sections or invalid defaults.
@@ -13,6 +13,7 @@ import type {
     SupportedReasoningEffort,
     SupportedVerbosity,
 } from '@footnote/contracts/providers';
+import type { BotProfileConfig } from './profile.js';
 
 /**
  * Sink used by config builders to report ignored or risky env values without
@@ -38,6 +39,7 @@ export type RuntimeConfig = {
         isDevelopment: boolean;
         flyAppName: string | null;
         promptConfigPath: string | null;
+        projectRoot: string;
     };
     server: {
         dataDir: string;
@@ -95,4 +97,5 @@ export type RuntimeConfig = {
         directory: string;
         level: SupportedLogLevel;
     };
+    profile: BotProfileConfig;
 };

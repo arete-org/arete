@@ -1,70 +1,77 @@
 {
-  "name": "footnote",
-  "private": true,
-  "packageManager": "pnpm@10.27.0",
-  "workspaces": [
-    "packages/*"
-  ],
-  "scripts": {
-    "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:web\"",
-    "dev:backend": "pnpm backend:prepare && pnpm exec tsx packages/backend/src/server.ts",
-    "dev:web": "pnpm --filter @footnote/web dev",
-    "dev:bot": "pnpm --filter @footnote/discord-bot dev",
-    "start:dev": "pnpm dev",
-    "start:backend": "node scripts/preflight-dev-ports.cjs backend && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:backend",
-    "start:web": "node scripts/preflight-dev-ports.cjs web && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:web",
-    "start:bot": "node scripts/preflight-dev-ports.cjs bot && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:bot",
-    "start:all": "node scripts/start-all.cjs",
-    "start:prod-test": "pnpm backend:prepare && pnpm --filter @footnote/backend build && cross-env NODE_ENV=production node server.js",
-    "dev:prod-test": "concurrently \"pnpm backend:prepare && pnpm --filter @footnote/backend build && cross-env NODE_ENV=production node server.js\" \"pnpm --filter @footnote/web dev\"",
-    "build": "pnpm -r build",
-    "generate-annotation-schema": "pnpm exec tsx scripts/generate-annotation-schema.ts",
-    "check-annotation-schema": "pnpm exec tsx scripts/check-annotation-schema.ts",
-    "validate-footnote-tags": "pnpm exec tsx scripts/validate-footnote-tags.ts",
-    "validate-openapi-links": "pnpm exec tsx scripts/validate-openapi-links.ts",
-    "blog-sync": "node scripts/blog-sync.cjs",
-    "review": "node scripts/review.cjs",
-    "test:annotation-governance": "pnpm exec tsx --test scripts/annotation-schema.test.ts scripts/validate-footnote-tags.test.ts scripts/review.test.ts",
-    "type-check": "pnpm exec tsc --noEmit",
-    "lint-check": "pnpm exec eslint packages/",
-    "backend:prepare": "pnpm --filter @footnote/config-spec run build:dev && pnpm --filter @footnote/prompts run build:dev"
-  },
-  "devDependencies": {
-    "@eslint/js": "catalog:",
-    "@swc/core": "catalog:",
-    "@swc/helpers": "catalog:",
-    "@types/better-sqlite3": "catalog:",
-    "@types/js-yaml": "catalog:",
-    "@types/mime-types": "catalog:",
-    "@types/node": "catalog:",
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "@types/ws": "catalog:",
-    "@typescript-eslint/eslint-plugin": "catalog:",
-    "@typescript-eslint/parser": "catalog:",
-    "concurrently": "catalog:",
-    "cross-env": "catalog:",
-    "csstype": "catalog:",
-    "dependency-cruiser": "catalog:",
-    "eslint": "catalog:",
-    "eslint-config-prettier": "catalog:",
-    "eslint-plugin-react-hooks": "catalog:",
-    "prettier": "catalog:",
-    "tsx": "catalog:",
-    "typescript": "catalog:"
-  },
-  "pnpm": {
-    "overrides": {
-      "@types/react": "19.2.14",
-      "@types/react-dom": "19.2.3",
-      "csstype": "3.2.3"
+    "name": "footnote",
+    "private": true,
+    "packageManager": "pnpm@10.27.0",
+    "workspaces": [
+        "packages/*"
+    ],
+    "scripts": {
+        "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:web\"",
+        "dev:backend": "pnpm backend:prepare && pnpm exec tsx packages/backend/src/server.ts",
+        "dev:web": "pnpm --filter @footnote/web dev",
+        "dev:bot": "pnpm --filter @footnote/discord-bot dev",
+        "start:dev": "pnpm dev",
+        "start:backend": "node scripts/preflight-dev-ports.cjs backend && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:backend",
+        "start:web": "node scripts/preflight-dev-ports.cjs web && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:web",
+        "start:bot": "node scripts/preflight-dev-ports.cjs bot && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:bot",
+        "start:all": "node scripts/start-all.cjs",
+        "start:prod-test": "pnpm backend:prepare && pnpm --filter @footnote/backend build && cross-env NODE_ENV=production node server.js",
+        "dev:prod-test": "concurrently \"pnpm backend:prepare && pnpm --filter @footnote/backend build && cross-env NODE_ENV=production node server.js\" \"pnpm --filter @footnote/web dev\"",
+        "build:contracts": "pnpm --filter @footnote/contracts build",
+        "build:prompts": "pnpm --filter @footnote/prompts build",
+        "build:config-spec": "pnpm --filter @footnote/config-spec build",
+        "build:agent-runtime": "pnpm --filter @footnote/agent-runtime build",
+        "build:backend": "pnpm --filter @footnote/backend build",
+        "build:discord-bot": "pnpm --filter @footnote/discord-bot build",
+        "build:web": "pnpm --filter @footnote/web build",
+        "build": "pnpm build:contracts && pnpm build:prompts && pnpm build:config-spec && pnpm build:agent-runtime && pnpm build:backend && pnpm build:discord-bot && pnpm build:web",
+        "generate-annotation-schema": "pnpm exec tsx scripts/generate-annotation-schema.ts",
+        "check-annotation-schema": "pnpm exec tsx scripts/check-annotation-schema.ts",
+        "validate-footnote-tags": "pnpm exec tsx scripts/validate-footnote-tags.ts",
+        "validate-openapi-links": "pnpm exec tsx scripts/validate-openapi-links.ts",
+        "blog-sync": "node scripts/blog-sync.cjs",
+        "review": "node scripts/review.cjs",
+        "test:annotation-governance": "pnpm exec tsx --test scripts/annotation-schema.test.ts scripts/validate-footnote-tags.test.ts scripts/review.test.ts",
+        "type-check": "pnpm exec tsc --noEmit",
+        "lint-check": "pnpm exec eslint packages/",
+        "backend:prepare": "pnpm --filter @footnote/config-spec run build:dev && pnpm --filter @footnote/prompts run build:dev"
     },
-    "onlyBuiltDependencies": [
-      "better-sqlite3"
-    ]
-  },
-  "dependencies": {
-    "dotenv": "catalog:",
-    "jsonwebtoken": "catalog:"
-  }
+    "devDependencies": {
+        "@eslint/js": "catalog:",
+        "@swc/core": "catalog:",
+        "@swc/helpers": "catalog:",
+        "@types/better-sqlite3": "catalog:",
+        "@types/js-yaml": "catalog:",
+        "@types/mime-types": "catalog:",
+        "@types/node": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "@types/ws": "catalog:",
+        "@typescript-eslint/eslint-plugin": "catalog:",
+        "@typescript-eslint/parser": "catalog:",
+        "concurrently": "catalog:",
+        "cross-env": "catalog:",
+        "csstype": "catalog:",
+        "dependency-cruiser": "catalog:",
+        "eslint": "catalog:",
+        "eslint-config-prettier": "catalog:",
+        "eslint-plugin-react-hooks": "catalog:",
+        "prettier": "catalog:",
+        "tsx": "catalog:",
+        "typescript": "catalog:"
+    },
+    "pnpm": {
+        "overrides": {
+            "@types/react": "19.2.14",
+            "@types/react-dom": "19.2.3",
+            "csstype": "3.2.3"
+        },
+        "onlyBuiltDependencies": [
+            "better-sqlite3"
+        ]
+    },
+    "dependencies": {
+        "dotenv": "catalog:",
+        "jsonwebtoken": "catalog:"
+    }
 }

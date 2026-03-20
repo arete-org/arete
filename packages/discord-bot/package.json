@@ -15,7 +15,7 @@
         "start": "node --es-module-specifier-resolution=node dist/index.js",
         "predev": "pnpm --dir ../.. --filter @footnote/config-spec run build:dev && pnpm --dir ../.. --filter @footnote/prompts run build:dev",
         "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
-        "build": "pnpm clean && pnpm --dir ../.. --filter @footnote/config-spec run build && pnpm --dir ../.. --filter @footnote/prompts run build && tsc -b tsconfig.json",
+        "build": "pnpm clean && tsc -b tsconfig.json",
         "clean": "rimraf dist",
         "watch": "tsc -b -w"
     },

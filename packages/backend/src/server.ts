@@ -12,8 +12,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
     createLegacyOpenAiRuntime,
+    createOpenAiImageRuntime,
     createVoltAgentRuntime,
     type GenerationRuntime,
+    type ImageGenerationRuntime,
 } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 
@@ -38,8 +40,14 @@ import { createIncidentHandlers } from './handlers/incidents.js';
 import { createWebhookHandler } from './handlers/webhook.js';
 import { createRuntimeConfigHandler } from './handlers/config.js';
 import { createIncidentService } from './services/incidents.js';
-import { createInternalNewsTaskService } from './services/internalText.js';
+import {
+    createInternalImageDescriptionTaskService,
+    createInternalNewsTaskService,
+} from './services/internalText.js';
+import { createOpenAiImageDescriptionAdapter } from './services/internalImageDescription.js';
+import { createInternalImageTaskService } from './services/internalImage.js';
 import { createInternalTextHandler } from './handlers/internalText.js';
+import { createInternalImageHandler } from './handlers/internalImage.js';
 
 // --- Path configuration ---
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -56,8 +64,16 @@ let traceStore: ReturnType<typeof createTraceStore> | null = null;
 let incidentStore: ReturnType<typeof getDefaultIncidentStore> | null = null;
 let openaiService: OpenAIService | null = null;
 let generationRuntime: GenerationRuntime | null = null;
-let internalNewsTaskService: ReturnType<typeof createInternalNewsTaskService> | null =
-    null;
+let imageGenerationRuntime: ImageGenerationRuntime | null = null;
+let internalNewsTaskService: ReturnType<
+    typeof createInternalNewsTaskService
+> | null = null;
+let internalImageDescriptionTaskService: ReturnType<
+    typeof createInternalImageDescriptionTaskService
+> | null = null;
+let internalImageTaskService: ReturnType<
+    typeof createInternalImageTaskService
+> | null = null;
 let ipRateLimiter: SimpleRateLimiter | null = null;
 let sessionRateLimiter: SimpleRateLimiter | null = null;
 let serviceRateLimiter: SimpleRateLimiter | null = null;
@@ -103,14 +119,31 @@ const initializeServices = () => {
             fallbackRuntime: legacyRuntime,
             defaultModel: runtimeConfig.openai.defaultModel,
         });
+        imageGenerationRuntime = createOpenAiImageRuntime({
+            apiKey: runtimeConfig.openai.apiKey,
+            requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
+        });
         internalNewsTaskService = createInternalNewsTaskService({
             generationRuntime,
             defaultModel: runtimeConfig.openai.defaultModel,
         });
+        internalImageDescriptionTaskService =
+            createInternalImageDescriptionTaskService({
+                adapter: createOpenAiImageDescriptionAdapter({
+                    apiKey: runtimeConfig.openai.apiKey,
+                    requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
+                }),
+            });
+        internalImageTaskService = createInternalImageTaskService({
+            imageGenerationRuntime,
+        });
     } else {
         openaiService = null;
         generationRuntime = null;
+        imageGenerationRuntime = null;
         internalNewsTaskService = null;
+        internalImageDescriptionTaskService = null;
+        internalImageTaskService = null;
         logger.warn(
             'OPENAI_API_KEY is missing; /api/reflect and runtime-backed internal text tasks will return 503 until configured.'
         );
@@ -219,6 +252,20 @@ const handleWebhookRequest = createWebhookHandler({
 });
 const { handleInternalTextRequest } = createInternalTextHandler({
     internalNewsTaskService,
+    internalImageDescriptionTaskService,
+    logRequest,
+    maxBodyBytes: runtimeConfig.reflect.maxBodyBytes,
+    traceApiToken: runtimeConfig.trace.apiToken,
+    serviceToken: runtimeConfig.reflect.serviceToken,
+    serviceRateLimiter:
+        serviceRateLimiter ??
+        new SimpleRateLimiter({
+            limit: runtimeConfig.rateLimits.reflectService.limit,
+            window: runtimeConfig.rateLimits.reflectService.windowMs,
+        }),
+});
+const { handleInternalImageRequest } = createInternalImageHandler({
+    internalImageTaskService,
     logRequest,
     maxBodyBytes: runtimeConfig.reflect.maxBodyBytes,
     traceApiToken: runtimeConfig.trace.apiToken,
@@ -303,6 +350,11 @@ const server = http.createServer(async (req, res) => {
 
         if (normalizedPathname === '/api/internal/text') {
             await handleInternalTextRequest(req, res);
+            return;
+        }
+
+        if (normalizedPathname === '/api/internal/image') {
+            await handleInternalImageRequest(req, res);
             return;
         }
 

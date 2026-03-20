@@ -10,8 +10,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Message } from 'discord.js';
 
+import { botApi } from '../src/api/botApi.js';
 import { buildProvenanceActionRow } from '../src/utils/response/provenanceCgi.js';
-import { deriveResponseIdFromMessage } from '../src/utils/response/provenanceInteractions.js';
+import {
+    deriveResponseIdFromMessage,
+    resolveProvenanceMetadata,
+} from '../src/utils/response/provenanceInteractions.js';
 
 test('deriveResponseIdFromMessage recovers responseId from provenance CGI controls', () => {
     const message = {
@@ -81,4 +85,37 @@ test('deriveResponseIdFromMessage parses nested data.custom_id payloads', () => 
     } as unknown as Message;
 
     assert.equal(deriveResponseIdFromMessage(nestedDataMessage), 'resp_nested');
+});
+
+test('resolveProvenanceMetadata rejects mismatched trace payload response IDs', async () => {
+    const originalGetTrace = botApi.getTrace;
+    (botApi as { getTrace: typeof botApi.getTrace }).getTrace = async () =>
+        ({
+            status: 200,
+            data: {
+                responseId: 'resp_other',
+                provenance: 'Retrieved',
+                riskTier: 'Low',
+                tradeoffCount: 1,
+                chainHash: 'hash_123',
+                licenseContext: 'MIT',
+                modelVersion: 'gpt-5-mini',
+                staleAfter: new Date().toISOString(),
+                citations: [],
+            },
+        }) as Awaited<ReturnType<typeof botApi.getTrace>>;
+
+    try {
+        const message = {
+            components: [buildProvenanceActionRow('resp_expected')],
+        } as unknown as Message;
+
+        const result = await resolveProvenanceMetadata(message);
+
+        assert.equal(result.responseId, 'resp_expected');
+        assert.equal(result.metadata, null);
+    } finally {
+        (botApi as { getTrace: typeof botApi.getTrace }).getTrace =
+            originalGetTrace;
+    }
 });

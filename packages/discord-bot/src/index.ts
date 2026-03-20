@@ -17,6 +17,7 @@ import { OpenAIService } from './utils/openaiService.js';
 import type { Command } from './commands/BaseCommand.js';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { botApi } from './api/botApi.js';
+import { ChannelContextManager } from './state/ChannelContextManager.js';
 import {
     evictFollowUpContext,
     readFollowUpContext,
@@ -67,8 +68,6 @@ import {
     describeTokenAvailability,
     refundImageTokens,
 } from './utils/imageTokens.js';
-import { LLMCostEstimator } from './utils/LLMCostEstimator.js';
-import type { ChannelContextManager } from './state/ChannelContextManager.js';
 import { resolveMemberDisplayName } from './utils/response/provenanceInteractions.js';
 import { parseProvenanceActionCustomId } from './utils/response/provenanceCgi.js';
 import {
@@ -97,27 +96,23 @@ type ClientWithCommands = Client & {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Set up cost estimator if enabled, to track OpenAI API usage and costs
-let costEstimator: LLMCostEstimator | undefined = undefined;
-if (runtimeConfig.costEstimator.enabled) {
-    costEstimator = new LLMCostEstimator({
-        enabled: true,
-        contextManager: null as ChannelContextManager | null,
-    });
-    logger.info('LLMCostEstimator initialized');
-} else {
-    logger.debug('LLMCostEstimator disabled by configuration');
-}
-
-// Initialize OpenAI service
 /**
- * Shared OpenAI service instance used by commands, planners, and interaction
- * handlers in the bot process.
+ * Shared OpenAI service instance for the Discord-local helpers that still stay
+ * in-process, such as TTS and embeddings.
  */
+const sharedContextManager = runtimeConfig.contextManager.enabled
+    ? new ChannelContextManager({
+          enabled: true,
+          maxMessagesPerChannel: runtimeConfig.contextManager.maxMessagesPerChannel,
+          messageRetentionMs: runtimeConfig.contextManager.messageRetentionMs,
+          evictionIntervalMs: runtimeConfig.contextManager.evictionIntervalMs,
+      })
+    : null;
+
 export const openaiService = new OpenAIService(
     runtimeConfig.openaiApiKey,
-    costEstimator
-); // Exported for use in other files, like /news command
+    sharedContextManager
+);
 
 // Re-export modules needed by server.js
 export { OpenAIService } from './utils/openaiService.js';
@@ -142,9 +137,8 @@ const client = new Client({
 // ====================
 const commandHandler = new CommandHandler();
 const eventManager = new EventManager(client, {
-    openai: { apiKey: runtimeConfig.openaiApiKey },
     openaiService,
-    costEstimator,
+    contextManager: sharedContextManager,
 });
 
 // Initialize client handlers
@@ -1157,6 +1151,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
                         guildName:
                             interaction.guild?.name ??
                             `No guild for ${interaction.type} interaction`,
+                    },
+                    channelContext: {
+                        channelId: interaction.channelId,
+                        guildId: interaction.guildId ?? undefined,
                     },
                 });
 

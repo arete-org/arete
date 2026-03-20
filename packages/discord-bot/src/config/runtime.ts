@@ -472,12 +472,6 @@ export const runtimeConfig = {
             envDefaultValues.CONTEXT_MANAGER_EVICTION_INTERVAL_MS
         ),
     },
-    costEstimator: {
-        enabled: getBooleanEnv(
-            'COST_ESTIMATOR_ENABLED',
-            envDefaultValues.COST_ESTIMATOR_ENABLED
-        ),
-    },
     realtimeFilter: {
         enabled: getBooleanEnv(
             'REALTIME_FILTER_ENABLED',
@@ -500,10 +494,6 @@ export const runtimeConfig = {
         humanActivity: getNumberEnv(
             'ENGAGEMENT_WEIGHT_HUMAN_ACTIVITY',
             envDefaultValues.ENGAGEMENT_WEIGHT_HUMAN_ACTIVITY
-        ),
-        costSaturation: getNumberEnv(
-            'ENGAGEMENT_WEIGHT_COST_SATURATION',
-            envDefaultValues.ENGAGEMENT_WEIGHT_COST_SATURATION
         ),
         botNoise: getNumberEnv(
             'ENGAGEMENT_WEIGHT_BOT_NOISE',

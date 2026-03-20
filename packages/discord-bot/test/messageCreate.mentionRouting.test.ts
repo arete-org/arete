@@ -52,13 +52,11 @@ const createProfile = (
 
 const createEvent = () =>
     new MessageCreate({
-        openai: { apiKey: 'test-key' },
         openaiService: {
             async generateSpeech() {
                 return 'tts.mp3';
             },
         } as never,
-        costEstimator: null,
     });
 
 type MutableBotDirectInvocationConfig = {
@@ -194,9 +192,8 @@ const createRecentHumanMessage = (content = 'please explain this bug?') =>
         },
     });
 
-const createRecentMessageMap = (
-    ...messages: Array<{ id: string }>
-) => new Map<string, unknown>(messages.map((message) => [message.id, message]));
+const createRecentMessageMap = (...messages: Array<{ id: string }>) =>
+    new Map<string, unknown>(messages.map((message) => [message.id, message]));
 
 test('execute treats vendored plaintext aliases as direct invocations', async () => {
     await withProfile(
@@ -280,7 +277,8 @@ test('execute does not treat substring false positives as plaintext mention alia
 test('execute still responds immediately to direct mentions and replies', async () => {
     await withProfile(createProfile(), async () => {
         const mentionEvent = createEvent();
-        const mentionAccess = mentionEvent as unknown as MentionRoutingEventAccess;
+        const mentionAccess =
+            mentionEvent as unknown as MentionRoutingEventAccess;
         const replyEvent = createEvent();
         const replyAccess = replyEvent as unknown as MentionRoutingEventAccess;
         const mentionCalls: string[] = [];
@@ -577,9 +575,6 @@ test('execute falls back to retained context when recent message fetch fails', a
                     windowTotalMessages: 2,
                     windowBotMessages: 1,
                     windowHumanMessages: 1,
-                    llmCalls: 0,
-                    tokensUsed: 0,
-                    usdEstimated: 0,
                     lastEngagementScore: 0,
                     lastActivity: Date.now(),
                     flags: [],

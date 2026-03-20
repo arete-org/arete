@@ -63,7 +63,6 @@ const createContext = (
         channelKey: 'guild-1:channel-1',
         recentMessages: [],
         channelMetrics: null,
-        costTotals: null,
         message: {
             id: 'message-1',
             content,
@@ -105,7 +104,8 @@ test('scoreMention returns 0.9 for explicit vendor aliases', async () => {
             mentionAliases: ['ari'],
         }),
         () => {
-            const filter = createFilter() as unknown as RealtimeFilterPrivateAccess;
+            const filter =
+                createFilter() as unknown as RealtimeFilterPrivateAccess;
             assert.equal(filter.scoreMention(createContext('hey ari')), 0.9);
         }
     );
@@ -126,7 +126,8 @@ test('scoreMention includes the live Discord username as a fallback alias', asyn
             mentionAliases: ['ari'],
         }),
         () => {
-            const filter = createFilter() as unknown as RealtimeFilterPrivateAccess;
+            const filter =
+                createFilter() as unknown as RealtimeFilterPrivateAccess;
             assert.equal(
                 filter.scoreMention(
                     createContext('hello footnotebot', {
@@ -152,8 +153,12 @@ test('scoreMention blocks substring false positives for vendor aliases', async (
             mentionAliases: ['ari'],
         }),
         () => {
-            const filter = createFilter() as unknown as RealtimeFilterPrivateAccess;
-            assert.equal(filter.scoreMention(createContext('variable naming')), 0);
+            const filter =
+                createFilter() as unknown as RealtimeFilterPrivateAccess;
+            assert.equal(
+                filter.scoreMention(createContext('variable naming')),
+                0
+            );
         }
     );
 });
@@ -224,9 +229,6 @@ test('human and bot activity scoring prefers the recent fetched window over stal
             windowTotalMessages: 20,
             windowBotMessages: 0,
             windowHumanMessages: 20,
-            llmCalls: 0,
-            tokensUsed: 0,
-            usdEstimated: 0,
             lastEngagementScore: 0,
             lastActivity: Date.now(),
             flags: [],

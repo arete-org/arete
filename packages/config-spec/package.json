@@ -9,12 +9,16 @@
         ".": {
             "types": "./dist/index.d.ts",
             "default": "./dist/index.js"
+        },
+        "./bot-profile": {
+            "types": "./dist/bot-profile.d.ts",
+            "default": "./dist/bot-profile.js"
         }
     },
     "scripts": {
         "clean": "node -e \"const fs=require('node:fs'); fs.rmSync('dist',{recursive:true,force:true}); fs.rmSync('tsconfig.tsbuildinfo',{force:true});\"",
-        "build:dev": "pnpm --dir ../.. --filter @footnote/contracts run build:dev && tsc -p tsconfig.json",
-        "build": "pnpm --dir ../.. --filter @footnote/contracts run build && pnpm clean && tsc -p tsconfig.json"
+        "build:dev": "tsc -b tsconfig.json",
+        "build": "pnpm clean && tsc -b tsconfig.json"
     },
     "dependencies": {
         "@footnote/contracts": "workspace:*"

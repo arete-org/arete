@@ -19,7 +19,12 @@
         "types": ["node"],
         "noEmitOnError": true
     },
-    "references": [{ "path": "../agent-runtime" }],
+    "references": [
+        { "path": "../agent-runtime" },
+        { "path": "../config-spec" },
+        { "path": "../contracts" },
+        { "path": "../prompts" }
+    ],
     "include": ["src/**/*.ts"],
     "exclude": ["node_modules", "dist"]
 }

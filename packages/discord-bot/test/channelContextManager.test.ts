@@ -130,3 +130,44 @@ test('getMetrics matches the retained buffer after mixed human and bot traffic',
     assert.equal(metrics.windowBotMessages, botMessages);
     assert.equal(metrics.windowHumanMessages, humanMessages);
 });
+
+test('recordLLMUsage aggregates session totals for Discord-local helper calls', () => {
+    const manager = new ChannelContextManager({
+        enabled: true,
+        maxMessagesPerChannel: 5,
+        messageRetentionMs: 60_000,
+        evictionIntervalMs: 60_000,
+    });
+
+    manager.recordLLMUsage({
+        feature: 'embedding',
+        model: 'text-embedding-3-small',
+        promptTokens: 12,
+        completionTokens: 0,
+        totalTokens: 12,
+        inputCostUsd: 0.00000024,
+        outputCostUsd: 0,
+        totalCostUsd: 0.00000024,
+        estimated: false,
+        timestamp: Date.now(),
+    });
+    manager.recordLLMUsage({
+        feature: 'tts',
+        model: 'gpt-4o-mini-tts',
+        promptTokens: 20,
+        completionTokens: 0,
+        totalTokens: 20,
+        inputCostUsd: 0.000012,
+        outputCostUsd: 0,
+        totalCostUsd: 0.000012,
+        estimated: true,
+        timestamp: Date.now(),
+    });
+
+    assert.deepEqual(manager.getLLMUsageTotals(), {
+        totalCostUsd: 0.00001224,
+        totalCalls: 2,
+        totalTokensIn: 32,
+        totalTokensOut: 0,
+    });
+});

@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { runtimeConfig } from '../src/config.js';
 import { MessageCreate } from '../src/events/MessageCreate.js';
 import type { EngagementDecision } from '../src/engagement/RealtimeEngagementFilter.js';
+import { ResponseHandler } from '../src/utils/response/ResponseHandler.js';
 
 type MutableBotInteractionConfig = {
     maxBackAndForth: number;
@@ -42,7 +43,10 @@ const withBotInteractionConfig = async (
 
 const withMockedDateNow = async (
     startingNow: number,
-    fn: (clock: { now: () => number; advanceBy: (ms: number) => void }) => Promise<void> | void
+    fn: (clock: {
+        now: () => number;
+        advanceBy: (ms: number) => void;
+    }) => Promise<void> | void
 ): Promise<void> => {
     const originalDateNow = Date.now;
     let currentNow = startingNow;
@@ -62,13 +66,11 @@ const withMockedDateNow = async (
 
 const createEvent = () =>
     new MessageCreate({
-        openai: { apiKey: 'test-key' },
         openaiService: {
             async generateSpeech() {
                 return 'tts.mp3';
             },
         } as never,
-        costEstimator: null,
     });
 
 type BotLoopGuardEventAccess = {
@@ -89,7 +91,9 @@ type BotLoopGuardEventAccess = {
     };
 };
 
-const allowBotDirectInvocations = (event: MessageCreate): BotLoopGuardEventAccess => {
+const allowBotDirectInvocations = (
+    event: MessageCreate
+): BotLoopGuardEventAccess => {
     const eventAccess = event as unknown as BotLoopGuardEventAccess;
     eventAccess.realtimeFilter = null;
     eventAccess.contextManager = null;
@@ -132,9 +136,8 @@ const createRecentHumanMessage = (content = 'please help explain this bug?') =>
         reference: undefined,
     }) as never;
 
-const createRecentMessageMap = (
-    ...messages: Array<{ id: string }>
-) => new Map<string, unknown>(messages.map((message) => [message.id, message]));
+const createRecentMessageMap = (...messages: Array<{ id: string }>) =>
+    new Map<string, unknown>(messages.map((message) => [message.id, message]));
 
 const createMessage = (
     content: string,
@@ -255,6 +258,69 @@ test('execute allows bot direct replies until the shared bot-only streak limit i
             assert.match(processCalls[1] ?? '', /direct reply/i);
         }
     );
+});
+
+test('execute uses resolved channel engagement preferences for catchup reactions', async () => {
+    const mutableRuntimeConfig = runtimeConfig as unknown as {
+        engagementPreferences: {
+            ignoreMode: 'silent' | 'react';
+            reactionEmoji: string;
+            minEngageThreshold: number;
+            probabilisticBand: [number, number];
+            enableLLMRefinement: boolean;
+        };
+    };
+    const previousPreferences = {
+        ...mutableRuntimeConfig.engagementPreferences,
+    };
+    const originalAddReaction = ResponseHandler.prototype.addReaction;
+    const seenReactions: string[] = [];
+
+    mutableRuntimeConfig.engagementPreferences = {
+        ...mutableRuntimeConfig.engagementPreferences,
+        ignoreMode: 'silent',
+        reactionEmoji: '👀',
+    };
+    ResponseHandler.prototype.addReaction = async function addReaction(emoji) {
+        seenReactions.push(emoji);
+    };
+
+    try {
+        const event = createEvent();
+        const eventAccess = event as unknown as BotLoopGuardEventAccess & {
+            resolveChannelOverrides: () => unknown;
+        };
+
+        eventAccess.contextManager = null;
+        eventAccess.messageProcessor.processMessage = async () => {
+            assert.fail('planner should not run when the filter declines');
+        };
+        eventAccess.realtimeFilter = {
+            decide: async () => ({
+                engage: false,
+                score: 0.1,
+                reason: 'low score',
+                reasons: ['low_score'],
+                breakdown: {},
+            }),
+        };
+        eventAccess.resolveChannelOverrides = () => ({
+            preferences: {
+                ignoreMode: 'react',
+                reactionEmoji: '🔥',
+                minEngageThreshold: 0.9,
+                probabilisticBand: [0.2, 0.4],
+                enableLLMRefinement: false,
+            },
+        });
+
+        await event.execute(createMessage('background catchup message'));
+
+        assert.deepEqual(seenReactions, ['🔥']);
+    } finally {
+        mutableRuntimeConfig.engagementPreferences = previousPreferences;
+        ResponseHandler.prototype.addReaction = originalAddReaction;
+    }
 });
 
 test('execute does not reset the limit when different bot IDs alternate in one streak', async () => {

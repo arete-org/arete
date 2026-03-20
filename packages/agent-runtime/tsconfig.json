@@ -5,8 +5,16 @@
         "moduleResolution": "NodeNext",
         "rootDir": "src",
         "outDir": "dist",
+        "baseUrl": ".",
+        "paths": {
+            "@footnote/contracts": ["../contracts/src/index.ts"],
+            "@footnote/contracts/pricing": ["../contracts/src/pricing.ts"],
+            "@footnote/contracts/providers": ["../contracts/src/providers.ts"],
+            "@footnote/contracts/*": ["../contracts/src/*"]
+        },
         "noEmitOnError": true
     },
+    "references": [{ "path": "../contracts" }],
     "include": ["src/**/*.ts"],
     "exclude": ["node_modules", "dist"]
 }
