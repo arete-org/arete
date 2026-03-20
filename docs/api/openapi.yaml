@@ -5,6 +5,7 @@ openapi: 3.1.0
 # - POST /api/reflect: Reflection (public; Turnstile + rate limits when configured)
 # - OPTIONS /api/reflect: CORS preflight
 # - POST /api/internal/text: Trusted internal text task execution
+# - POST /api/internal/image: Trusted internal image task execution
 # - POST /api/incidents/report: Incident report create (trusted internal auth)
 # - GET /api/incidents: Incident list (trusted internal auth)
 # - GET /api/incidents/{incidentId}: Incident detail (trusted internal auth)
@@ -140,13 +141,15 @@ paths:
             x-codeRefs:
                 - packages/backend/src/handlers/internalText.ts#handleInternalTextRequest
                 - packages/backend/src/services/internalText.ts#createInternalNewsTaskService
+                - packages/backend/src/services/internalText.ts#createInternalImageDescriptionTaskService
                 - packages/discord-bot/src/api/internalText.ts#runNewsTaskViaApi
-                - packages/contracts/src/web/types.ts#PostInternalNewsTaskRequest
-                - packages/contracts/src/web/types.ts#PostInternalNewsTaskResponse
+                - packages/discord-bot/src/api/internalText.ts#runImageDescriptionTaskViaApi
+                - packages/contracts/src/web/types.ts#PostInternalTextRequest
+                - packages/contracts/src/web/types.ts#PostInternalTextResponse
             summary: Run a trusted internal text task
             description: |
                 Trusted internal endpoint for backend-owned text tasks that should not become a generic prompt proxy.
-                The current task set includes `news` only.
+                The current task set includes `news` and `image_description`.
                 Requires either `x-service-token` or `x-trace-token`.
                 Applies the backend trusted-service rate limit bucket, including per-token constraints for authenticated internal callers.
             tags:
@@ -163,6 +166,55 @@ paths:
             responses:
                 '200':
                     $ref: '#/components/responses/InternalTextTaskOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '429':
+                    $ref: '#/components/responses/TooManyRequests'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '502':
+                    $ref: '#/components/responses/BadGateway'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
+    /api/internal/image:
+        post:
+            operationId: postInternalImageTask
+            x-codeRefs:
+                - packages/backend/src/handlers/internalImage.ts#handleInternalImageRequest
+                - packages/backend/src/services/internalImage.ts#createInternalImageTaskService
+                - packages/discord-bot/src/api/internalImage.ts#runImageTaskViaApi
+                - packages/discord-bot/src/api/internalImage.ts#runImageTaskStreamViaApi
+                - packages/contracts/src/web/types.ts#PostInternalImageGenerateRequest
+                - packages/contracts/src/web/types.ts#PostInternalImageGenerateResponse
+            summary: Run a trusted internal image task
+            description: |
+                Trusted internal endpoint for backend-owned image tasks that should not become a generic image proxy.
+                The current task set includes `generate` only.
+                Backend now owns image prompt assembly, including the active bot-profile overlay for the image system prompt.
+                When `stream` is true, the route responds with NDJSON preview events followed by one terminal result event.
+                Requires either `x-service-token` or `x-trace-token`.
+                Applies the backend trusted-service rate limit bucket, including per-token constraints for authenticated internal callers.
+            tags:
+                - Image
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/InternalImageRequest'
+            responses:
+                '200':
+                    $ref: '#/components/responses/InternalImageTaskOk'
                 '400':
                     $ref: '#/components/responses/BadRequest'
                 '401':
@@ -808,7 +860,14 @@ components:
 
         IncidentRemediationState:
             type: string
-            enum: [pending, applied, already_marked, skipped_not_assistant, failed]
+            enum:
+                [
+                    pending,
+                    applied,
+                    already_marked,
+                    skipped_not_assistant,
+                    failed,
+                ]
 
         IncidentPointers:
             type: object
@@ -1211,7 +1270,8 @@ components:
                     type: string
                 state:
                     type: string
-                    enum: [applied, already_marked, skipped_not_assistant, failed]
+                    enum:
+                        [applied, already_marked, skipped_not_assistant, failed]
                 notes:
                     type: string
             required:
@@ -1300,18 +1360,324 @@ components:
         InternalTextRequest:
             oneOf:
                 - $ref: '#/components/schemas/InternalNewsTaskRequest'
+                - $ref: '#/components/schemas/InternalImageDescriptionTaskRequest'
             discriminator:
                 propertyName: task
                 mapping:
                     news: '#/components/schemas/InternalNewsTaskRequest'
+                    image_description: '#/components/schemas/InternalImageDescriptionTaskRequest'
 
         InternalTextResponse:
             oneOf:
                 - $ref: '#/components/schemas/InternalNewsTaskResponse'
+                - $ref: '#/components/schemas/InternalImageDescriptionTaskResponse'
             discriminator:
                 propertyName: task
                 mapping:
                     news: '#/components/schemas/InternalNewsTaskResponse'
+                    image_description: '#/components/schemas/InternalImageDescriptionTaskResponse'
+
+        InternalImageRequest:
+            oneOf:
+                - $ref: '#/components/schemas/InternalImageGenerateTaskRequest'
+            discriminator:
+                propertyName: task
+                mapping:
+                    generate: '#/components/schemas/InternalImageGenerateTaskRequest'
+
+        InternalImageResponse:
+            oneOf:
+                - $ref: '#/components/schemas/InternalImageGenerateTaskResponse'
+            discriminator:
+                propertyName: task
+                mapping:
+                    generate: '#/components/schemas/InternalImageGenerateTaskResponse'
+
+        InternalImageStreamEvent:
+            oneOf:
+                - $ref: '#/components/schemas/InternalImagePartialImageEvent'
+                - $ref: '#/components/schemas/InternalImageResultEvent'
+                - $ref: '#/components/schemas/InternalImageErrorEvent'
+            discriminator:
+                propertyName: type
+                mapping:
+                    partial_image: '#/components/schemas/InternalImagePartialImageEvent'
+                    result: '#/components/schemas/InternalImageResultEvent'
+                    error: '#/components/schemas/InternalImageErrorEvent'
+
+        InternalImageAnnotations:
+            type: object
+            properties:
+                title:
+                    type: [string, 'null']
+                description:
+                    type: [string, 'null']
+                note:
+                    type: [string, 'null']
+                adjustedPrompt:
+                    type: [string, 'null']
+            required:
+                - title
+                - description
+                - note
+            additionalProperties: false
+
+        InternalImageUserContext:
+            type: object
+            properties:
+                username:
+                    type: string
+                nickname:
+                    type: string
+                guildName:
+                    type: string
+            required:
+                - username
+                - nickname
+                - guildName
+            additionalProperties: false
+
+        InternalImageChannelContext:
+            type: object
+            properties:
+                channelId:
+                    type: string
+                guildId:
+                    type: string
+            additionalProperties: false
+
+        InternalImageUsage:
+            type: object
+            properties:
+                inputTokens:
+                    type: integer
+                    minimum: 0
+                outputTokens:
+                    type: integer
+                    minimum: 0
+                totalTokens:
+                    type: integer
+                    minimum: 0
+                imageCount:
+                    type: integer
+                    minimum: 0
+            required:
+                - inputTokens
+                - outputTokens
+                - totalTokens
+                - imageCount
+            additionalProperties: false
+
+        InternalImageCosts:
+            type: object
+            properties:
+                text:
+                    type: number
+                image:
+                    type: number
+                total:
+                    type: number
+                perImage:
+                    type: number
+            required:
+                - text
+                - image
+                - total
+                - perImage
+            additionalProperties: false
+
+        InternalImageArtifact:
+            type: object
+            properties:
+                responseId:
+                    type: [string, 'null']
+                textModel:
+                    type: string
+                    enum:
+                        [
+                            gpt-5.2,
+                            gpt-5.1,
+                            gpt-5,
+                            gpt-5-mini,
+                            gpt-5-nano,
+                            gpt-4o,
+                            gpt-4o-mini,
+                            gpt-4.1,
+                            gpt-4.1-mini,
+                            gpt-4.1-nano,
+                        ]
+                imageModel:
+                    type: string
+                    enum: [gpt-image-1.5, gpt-image-1, gpt-image-1-mini]
+                revisedPrompt:
+                    type: [string, 'null']
+                finalStyle:
+                    type: string
+                annotations:
+                    $ref: '#/components/schemas/InternalImageAnnotations'
+                finalImageBase64:
+                    type: string
+                outputFormat:
+                    type: string
+                    enum: [png, webp, jpeg]
+                outputCompression:
+                    type: integer
+                    minimum: 0
+                    maximum: 100
+                usage:
+                    $ref: '#/components/schemas/InternalImageUsage'
+                costs:
+                    $ref: '#/components/schemas/InternalImageCosts'
+                generationTimeMs:
+                    type: integer
+                    minimum: 0
+            required:
+                - responseId
+                - textModel
+                - imageModel
+                - revisedPrompt
+                - finalStyle
+                - annotations
+                - finalImageBase64
+                - outputFormat
+                - outputCompression
+                - usage
+                - costs
+                - generationTimeMs
+            additionalProperties: false
+
+        InternalImageGenerateTaskRequest:
+            type: object
+            properties:
+                task:
+                    type: string
+                    enum: [generate]
+                prompt:
+                    type: string
+                    minLength: 1
+                    maxLength: 8000
+                textModel:
+                    type: string
+                    enum:
+                        [
+                            gpt-5.2,
+                            gpt-5.1,
+                            gpt-5,
+                            gpt-5-mini,
+                            gpt-5-nano,
+                            gpt-4o,
+                            gpt-4o-mini,
+                            gpt-4.1,
+                            gpt-4.1-mini,
+                            gpt-4.1-nano,
+                        ]
+                imageModel:
+                    type: string
+                    enum: [gpt-image-1.5, gpt-image-1, gpt-image-1-mini]
+                size:
+                    type: string
+                    enum: [auto, 1024x1024, 1024x1536, 1536x1024]
+                quality:
+                    type: string
+                    enum: [auto, low, medium, high]
+                background:
+                    type: string
+                    enum: [auto, transparent, opaque]
+                style:
+                    type: string
+                    minLength: 1
+                    maxLength: 100
+                allowPromptAdjustment:
+                    type: boolean
+                outputFormat:
+                    type: string
+                    enum: [png, webp, jpeg]
+                outputCompression:
+                    type: integer
+                    minimum: 0
+                    maximum: 100
+                user:
+                    $ref: '#/components/schemas/InternalImageUserContext'
+                followUpResponseId:
+                    type: string
+                stream:
+                    type: boolean
+                channelContext:
+                    $ref: '#/components/schemas/InternalImageChannelContext'
+            required:
+                - task
+                - prompt
+                - textModel
+                - imageModel
+                - size
+                - quality
+                - background
+                - style
+                - allowPromptAdjustment
+                - outputFormat
+                - outputCompression
+                - user
+            additionalProperties: false
+
+        InternalImageGenerateTaskResponse:
+            type: object
+            properties:
+                task:
+                    type: string
+                    enum: [generate]
+                result:
+                    $ref: '#/components/schemas/InternalImageArtifact'
+            required:
+                - task
+                - result
+            additionalProperties: false
+
+        InternalImagePartialImageEvent:
+            type: object
+            properties:
+                type:
+                    type: string
+                    enum: [partial_image]
+                index:
+                    type: integer
+                    minimum: 0
+                base64:
+                    type: string
+            required:
+                - type
+                - index
+                - base64
+            additionalProperties: false
+
+        InternalImageResultEvent:
+            type: object
+            properties:
+                type:
+                    type: string
+                    enum: [result]
+                task:
+                    type: string
+                    enum: [generate]
+                result:
+                    $ref: '#/components/schemas/InternalImageArtifact'
+            required:
+                - type
+                - task
+                - result
+            additionalProperties: false
+
+        InternalImageErrorEvent:
+            type: object
+            properties:
+                type:
+                    type: string
+                    enum: [error]
+                error:
+                    type: string
+            required:
+                - type
+                - error
+            additionalProperties: false
 
         InternalNewsItem:
             type: object
@@ -1422,6 +1788,112 @@ components:
                           source: 'Example News'
                           timestamp: '2026-03-18T12:00:00.000Z'
                     summary: 'One important headline today.'
+
+        InternalImageDescriptionTaskRequest:
+            type: object
+            properties:
+                task:
+                    type: string
+                    enum: [image_description]
+                imageUrl:
+                    type: string
+                    format: uri
+                context:
+                    type: string
+                    minLength: 1
+                    maxLength: 4096
+                channelContext:
+                    type: object
+                    properties:
+                        channelId:
+                            type: string
+                            minLength: 1
+                        guildId:
+                            type: string
+                            minLength: 1
+                    additionalProperties: false
+            required:
+                - task
+                - imageUrl
+            additionalProperties: false
+            example:
+                task: image_description
+                imageUrl: 'https://example.com/screenshot.png'
+                context: 'User asked what changed in this screenshot.'
+                channelContext:
+                    channelId: '123456789012345678'
+                    guildId: '234567890123456789'
+
+        InternalImageDescriptionTaskResponse:
+            type: object
+            properties:
+                task:
+                    type: string
+                    enum: [image_description]
+                result:
+                    type: object
+                    properties:
+                        description:
+                            type: string
+                        model:
+                            type: string
+                        usage:
+                            type: object
+                            properties:
+                                inputTokens:
+                                    type: integer
+                                    minimum: 0
+                                outputTokens:
+                                    type: integer
+                                    minimum: 0
+                                totalTokens:
+                                    type: integer
+                                    minimum: 0
+                            required:
+                                - inputTokens
+                                - outputTokens
+                                - totalTokens
+                            additionalProperties: false
+                        costs:
+                            type: object
+                            properties:
+                                input:
+                                    type: number
+                                    minimum: 0
+                                output:
+                                    type: number
+                                    minimum: 0
+                                total:
+                                    type: number
+                                    minimum: 0
+                            required:
+                                - input
+                                - output
+                                - total
+                            additionalProperties: false
+                    required:
+                        - description
+                        - model
+                        - usage
+                        - costs
+                    additionalProperties: false
+            required:
+                - task
+                - result
+            additionalProperties: false
+            example:
+                task: image_description
+                result:
+                    description: '{"summary":"Screenshot of a policy update"}'
+                    model: 'gpt-4o-mini'
+                    usage:
+                        inputTokens: 10
+                        outputTokens: 5
+                        totalTokens: 15
+                    costs:
+                        input: 0.0000015
+                        output: 0.000003
+                        total: 0.0000045
 
         ReflectConversationMessage:
             type: object
@@ -2045,6 +2517,15 @@ components:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/InternalTextResponse'
+        InternalImageTaskOk:
+            description: Structured response for a trusted internal image task. Returns JSON by default or NDJSON stream events when `stream` is true.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/InternalImageResponse'
+                application/x-ndjson:
+                    schema:
+                        $ref: '#/components/schemas/InternalImageStreamEvent'
         IncidentReportOk:
             description: Incident created.
             content:

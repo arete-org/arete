@@ -167,7 +167,7 @@ Every module must include:
 ### Code Quality Standards
 
 - **Structured Logging**: Use `logger.ts` for all log statements
-- **Cost Tracking**: All LLM interactions use `ChannelContextManager.recordLLMUsage()`
+- **Cost Tracking**: Preserve the current ownership boundary for cost accounting instead of reintroducing Discord-local spend aggregation.
 - **Fail-Open Design**: Uncertain operations don't block execution
 - **Error Handling**: Risky operations wrapped in `try/catch`
 - **TypeScript**: Explicit types everywhere, no `any` usage
@@ -300,4 +300,3 @@ This approach scales well with team growth, maintains high standards, and ensure
 3. Customizing prompts for project architecture
 4. Adapting the checklist for project-specific requirements
 5. Modifying success metrics for project goals
-

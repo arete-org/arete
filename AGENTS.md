@@ -31,15 +31,15 @@ This file provides default context for automation tools (Codex, Cursor) so work 
 
 - Preserve provenance comments and licensing headers.
 - Use explicit types; avoid `any`.
-- Record LLM costs via `ChannelContextManager.recordLLMUsage()`.
+- Keep backend as the authoritative owner of LLM cost recording. Discord should only display cost data that backend or a shared pricing helper already computed.
 - Keep interfaces serializable for future UI integration.
 - Use fail-open design: if uncertain, do not block execution.
 - Keep `packages/backend` as the only public runtime/control-plane boundary for `web` and `discord-bot` unless a decision doc explicitly says otherwise.
 - Place framework-specific runtime code behind an internal package or boundary instead of spreading it through backend handlers.
 - Keep Footnote-owned provenance, trace, auth, incident, and review semantics outside framework-specific adapters.
 - For API boundary code, keep OpenAPI links current:
-  - code annotations: `@api.operationId` + `@api.path`
-  - spec references: `x-codeRefs` in `docs/api/openapi.yaml`
+    - code annotations: `@api.operationId` + `@api.path`
+    - spec references: `x-codeRefs` in `docs/api/openapi.yaml`
 
 ## Communication Style
 
@@ -84,9 +84,9 @@ Example:
 - When reviewing or summarizing changes that affect correctness or safety
   (schemas, validators, CI gates, auth, provenance/audit logging, policy enforcement),
   explicitly state:
-  - invariants (what must always be true)
-  - at least one realistic failure mode
-  - the test(s), validation(s), or CI check(s) that would catch that failure
+    - invariants (what must always be true)
+    - at least one realistic failure mode
+    - the test(s), validation(s), or CI check(s) that would catch that failure
 - If no such check exists, say so plainly as a gap.
 - Do not present correctness/safety-critical changes as review-ready unless those invariants,
   failure modes, and checks can be explained concretely from the code and validation setup.
@@ -109,4 +109,3 @@ Example:
 ## Exclusions
 
 Avoid loading secrets, logs, traces, or build artifacts (see `.codexignore`).
-

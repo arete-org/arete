@@ -18,7 +18,7 @@ Cursor and Traycer are configured to follow the project's ethical and technical 
 ## Safety Requirements
 
 - **Structured logging**: All AI edits must preserve existing logging patterns
-- **Cost tracking**: Never remove `ChannelContextManager.recordLLMUsage()` calls
+- **Cost tracking**: Keep authoritative spend recording in the backend or shared runtime boundary instead of reintroducing Discord-local accounting
 - **Risk annotations**: Preserve the required module annotations (`@description`, `@footnote-scope`, `@footnote-module`, `@footnote-risk`, `@footnote-ethics`)
 - **Licensing**: Maintain all license headers and provenance comments
 
