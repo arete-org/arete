@@ -108,8 +108,7 @@ export type SupportedOpenAITtsVoice =
  */
 export const supportedOpenAIRealtimeModels = [
     'gpt-realtime',
-    'gpt-4o-realtime-preview',
-    'gpt-4o-mini-realtime-preview',
+    'gpt-realtime-mini',
 ] as const;
 
 /**
