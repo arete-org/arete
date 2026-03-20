@@ -6,9 +6,16 @@
  * @footnote-ethics: high - Context selection influences user privacy and fairness.
  */
 import { Message } from 'discord.js';
-import { OpenAIMessage } from '../openaiService.js';
 import { logger } from '../logger.js';
 import { renderPrompt, runtimeConfig } from '../../config.js';
+
+/**
+ * Minimal prompt message shape shared across Discord prompt-building helpers.
+ */
+export type PromptMessage = {
+    role: 'user' | 'assistant' | 'system' | 'developer';
+    content: string;
+};
 
 /**
  * Returns whether verbose prompt-context logging is enabled for debugging.
@@ -19,7 +26,7 @@ export const isFullContextLoggingEnabled = (): boolean =>
 /**
  * Logs the full prompt context only when the explicit debug flag is enabled.
  */
-export const logContextIfVerbose = (context: OpenAIMessage[]): void => {
+export const logContextIfVerbose = (context: PromptMessage[]): void => {
     if (!isFullContextLoggingEnabled()) {
         return;
     }
@@ -70,12 +77,12 @@ export class ContextBuilder {
     /**
      * Builds the message context for the given message
      * @param {Message} message - The message to build the context for
-     * @returns {Promise<{ context: OpenAIMessage[] }>} The message context
+     * @returns {Promise<{ context: PromptMessage[] }>} The message context
      */
     public async buildMessageContext(
         message: Message,
         maxMessages: number = this.DEFAULT_CONTEXT_MESSAGES
-    ): Promise<{ context: OpenAIMessage[] }> {
+    ): Promise<{ context: PromptMessage[] }> {
         logger.debug(
             `Building message context for message ID: ${message.id} (${message.content?.substring(0, 50)}${message.content?.length > 50 ? '...' : ''})`
         );
@@ -139,7 +146,7 @@ export class ContextBuilder {
         // Build the message history
         let messageIndex = 0;
         let repliedMessageIndex = null;
-        const history: OpenAIMessage[] = Array.from(contextMessages.values())
+        const history: PromptMessage[] = Array.from(contextMessages.values())
             .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
             .map((m) => {
                 const isBot = m.author.id === message.client.user?.id;
@@ -198,7 +205,7 @@ export class ContextBuilder {
 
         // Build the final context
         const systemPrompt = renderPrompt('discord.chat.system').content;
-        const context: OpenAIMessage[] = [
+        const context: PromptMessage[] = [
             { role: 'system', content: systemPrompt },
             ...contextHistory,
         ];

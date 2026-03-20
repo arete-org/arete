@@ -13,7 +13,6 @@ import { CommandHandler } from './utils/commandHandler.js';
 import { EventManager } from './utils/eventManager.js';
 import { logger } from './utils/logger.js';
 import { runtimeConfig } from './config.js';
-import { OpenAIService } from './utils/openaiService.js';
 import type { Command } from './commands/BaseCommand.js';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { botApi } from './api/botApi.js';
@@ -96,10 +95,6 @@ type ClientWithCommands = Client & {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/**
- * Shared OpenAI service instance for the Discord-local helpers that still stay
- * in-process, such as TTS and embeddings.
- */
 const sharedContextManager = runtimeConfig.contextManager.enabled
     ? new ChannelContextManager({
           enabled: true,
@@ -109,13 +104,7 @@ const sharedContextManager = runtimeConfig.contextManager.enabled
       })
     : null;
 
-export const openaiService = new OpenAIService(
-    runtimeConfig.openaiApiKey,
-    sharedContextManager
-);
-
 // Re-export modules needed by server.js
-export { OpenAIService } from './utils/openaiService.js';
 export { RateLimiter } from './utils/RateLimiter.js';
 
 // ====================
@@ -137,7 +126,6 @@ const client = new Client({
 // ====================
 const commandHandler = new CommandHandler();
 const eventManager = new EventManager(client, {
-    openaiService,
     contextManager: sharedContextManager,
 });
 

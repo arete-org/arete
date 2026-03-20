@@ -29,7 +29,6 @@ const REQUIRED_ENV_VARS = [
     'DISCORD_TOKEN',
     'DISCORD_CLIENT_ID',
     'DISCORD_GUILD_ID',
-    'OPENAI_API_KEY',
     'DISCORD_USER_ID',
     'INCIDENT_PSEUDONYMIZATION_SECRET',
 ] as const;
@@ -388,7 +387,6 @@ export const runtimeConfig = {
     token: process.env.DISCORD_TOKEN!,
     clientId: process.env.DISCORD_CLIENT_ID!,
     guildId: process.env.DISCORD_GUILD_ID!,
-    openaiApiKey: process.env.OPENAI_API_KEY!,
     developerUserId: process.env.DISCORD_USER_ID!,
     incidentReview: {
         superuserIds: resolveIncidentSuperuserIds(),

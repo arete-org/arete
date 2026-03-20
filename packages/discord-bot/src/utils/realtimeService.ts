@@ -33,7 +33,7 @@ const realtimeLogger =
         : logger;
 
 /**
- * Runtime options used when opening a new OpenAI realtime session.
+ * Runtime options used when opening a new backend realtime session.
  */
 export interface RealtimeSessionOptions {
     context?: InternalVoiceSessionContext;
@@ -76,7 +76,7 @@ export interface RealtimeResponseAudioDeltaEvent {
 }
 
 /**
- * Event emitted when OpenAI marks the current realtime response as complete.
+ * Event emitted when the backend marks the current realtime response as complete.
  */
 export interface RealtimeResponseCompletedEvent {
     type: 'response.completed';
@@ -97,7 +97,7 @@ export interface RealtimeErrorEvent {
 }
 
 /**
- * Manages a connection to OpenAI's Realtime API
+ * Manages a connection to the backend realtime voice boundary.
  */
 export class RealtimeSession extends EventEmitter {
     private wsManager: RealtimeWebSocketManager;
@@ -137,7 +137,7 @@ export class RealtimeSession extends EventEmitter {
     }
 
     /**
-     * Connect to OpenAI's Realtime API
+     * Connect to the backend realtime voice boundary.
      */
     public async connect(): Promise<void> {
         const wsUrl = this.buildBackendRealtimeUrl(
@@ -161,7 +161,7 @@ export class RealtimeSession extends EventEmitter {
     }
 
     /**
-     * Disconnect from the Realtime API
+     * Disconnect from the backend realtime voice boundary.
      */
     public disconnect(): void {
         realtimeLogger.info('Disconnecting backend realtime websocket.');

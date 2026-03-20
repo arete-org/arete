@@ -12,7 +12,7 @@ export const AUDIO_CONSTANTS = {
     // Audio sample rate provided by Discord's voice gateway (48kHz PCM16 mono)
     DISCORD_SAMPLE_RATE: 48000,
     DISCORD_FRAME_SIZE: 960,
-    // Resampled realtime rate expected by the OpenAI Realtime API (24kHz PCM16 mono)
+    // Resampled realtime rate expected by the backend voice runtime (24kHz PCM16 mono)
     REALTIME_SAMPLE_RATE: 24000,
     REALTIME_FRAME_SIZE: 480,
     // Audio channels (mono)

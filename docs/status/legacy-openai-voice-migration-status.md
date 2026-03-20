@@ -16,9 +16,9 @@ This file is the branch review and current-state summary. It is meant to be easi
 
 ## Current Status
 
-Status: In progress (Checkpoint 3 complete: backend-owned realtime boundary + Discord cutover)
+Status: In progress (Checkpoint 4 complete: Discord-local voice cleanup)
 
-Voice is now the main remaining legacy OpenAI migration branch. Text reflect has already moved behind the backend-owned runtime seam, and image generation has already moved behind a backend-owned image boundary. Voice now has both TTS and realtime running through backend-owned boundaries, but cleanup and deletion work remain.
+Voice is now the main remaining legacy OpenAI migration branch. Text reflect has already moved behind the backend-owned runtime seam, and image generation has already moved behind a backend-owned image boundary. Voice now has both TTS and realtime running through backend-owned boundaries, and Discord-local voice helpers have been cleaned up. What remains is deletion-gate verification.
 
 Today, the backend can already choose whether a reflect reply should be plain text or `tts`. That means part of the product decision layer is already backend-owned. The actual speech synthesis now also runs through a backend-owned boundary: the bot calls a trusted internal voice TTS route, and the backend owns the OpenAI adapter and cost recording.
 
@@ -66,11 +66,9 @@ That gives voice the same kind of ownership story image now has: backend owns th
 
 ## What Still Needs To Happen
 
-There are two main pieces of remaining work now that the realtime boundary is live.
+There is one main piece of remaining work now that the realtime boundary and cleanup are done.
 
-First, the branch needs cleanup to remove the remaining Discord-local OpenAI voice helpers and configuration that no longer sit on the hot path. That includes deleting unused provider-specific helpers, renaming comments that still describe OpenAI-specific transport behavior, and reducing any redundant config that is now backend-owned.
-
-Second, after the cleanup work, the branch should define and verify the deletion gate clearly: confirm there are no remaining voice flows (TTS or realtime) that call provider APIs directly, and remove any legacy code paths that would still allow that.
+The branch should define and verify the deletion gate clearly: confirm there are no remaining voice flows (TTS or realtime) that call provider APIs directly, and remove any legacy code paths that would still allow that if discovered during validation.
 
 ## What Stayed Out of Scope So Far
 
@@ -105,6 +103,6 @@ The broader validation expectations remain the usual ones for this repo:
 
 The deletion gate is not yet satisfied for voice.
 
-Reflect TTS now uses the backend-owned internal voice route. Realtime voice now uses the backend-owned websocket boundary instead of a Discord-local provider socket. The remaining work is to delete or re-home unused Discord-local provider helpers and then confirm there are no provider API calls left on the voice paths.
+Reflect TTS now uses the backend-owned internal voice route. Realtime voice now uses the backend-owned websocket boundary instead of a Discord-local provider socket. The remaining work is to confirm, via validation and review, that no voice path still calls provider APIs directly.
 
-In short, the core cutover is now in place, but cleanup and verification are still required before the legacy voice architecture can be removed.
+In short, the core cutover and cleanup are now in place, but deletion-gate verification is still required before the legacy voice architecture can be removed.

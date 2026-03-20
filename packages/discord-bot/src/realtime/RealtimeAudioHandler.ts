@@ -1,5 +1,5 @@
 /**
- * @description: Manages real-time audio streaming to OpenAI Realtime API.
+ * @description: Manages real-time audio streaming to the backend realtime voice boundary.
  * @footnote-scope: core
  * @footnote-module: RealtimeAudioHandler
  * @footnote-risk: high - Handles audio buffering, speaker annotation, and commit timing. Failures can cause audio desync, dropped frames, or API errors.

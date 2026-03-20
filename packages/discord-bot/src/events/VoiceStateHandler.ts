@@ -362,7 +362,7 @@ export class VoiceStateHandler extends Event {
 
             realtimeSession.on('connected', () =>
                 logger.info(
-                    '[RealtimeSession] Connected to OpenAI Realtime API'
+                    '[RealtimeSession] Connected to backend realtime voice boundary'
                 )
             );
         }
