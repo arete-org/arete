@@ -32,17 +32,17 @@ test('estimateOpenAITextCost fails open to zero for unknown model strings', () =
     assert.equal(result.totalCost, 0);
 });
 
-test('estimateOpenAIImageGenerationCost resolves auto settings before pricing', () => {
+test('estimateOpenAIImageGenerationCost keeps auto settings unresolved so callers can treat cost as unknown', () => {
     const result = estimateOpenAIImageGenerationCost({
         model: 'gpt-image-1-mini',
         quality: 'auto',
         size: 'auto',
     });
 
-    assert.equal(result.effectiveQuality, 'low');
-    assert.equal(result.effectiveSize, '1024x1024');
-    assert.equal(result.perImageCost, 0.005);
-    assert.equal(result.totalCost, 0.005);
+    assert.equal(result.effectiveQuality, 'auto');
+    assert.equal(result.effectiveSize, 'auto');
+    assert.equal(result.perImageCost, 0);
+    assert.equal(result.totalCost, 0);
 });
 
 test('estimateOpenAIImageGenerationCost multiplies per-image cost by image count', () => {
@@ -55,6 +55,20 @@ test('estimateOpenAIImageGenerationCost multiplies per-image cost by image count
 
     assert.equal(result.perImageCost, 0.015);
     assert.equal(result.totalCost, 0.03);
+});
+
+test('estimateOpenAIImageGenerationCost adds the partial preview surcharge', () => {
+    const result = estimateOpenAIImageGenerationCost({
+        model: 'gpt-image-1-mini',
+        quality: 'medium',
+        size: '1024x1536',
+        imageCount: 2,
+        partialImageCount: 2,
+    });
+
+    assert.equal(result.partialImageCount, 2);
+    assert.equal(result.perImageCost, 0.015);
+    assert.ok(Math.abs(result.totalCost - 0.0316) < 1e-12);
 });
 
 test('supportedPricedOpenAITextModels includes the shared text registry plus embedding models', () => {

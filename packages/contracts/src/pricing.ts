@@ -79,17 +79,20 @@ export type ImageGenerationSize =
     | 'auto';
 
 /**
- * Resolved quality level after "auto" is converted to the provider default.
+ * Resolved quality level after callers normalize image pricing inputs.
+ * "auto" stays explicit so helpers can fail open instead of under-reporting.
  */
-export type EffectiveImageGenerationQuality = Exclude<
-    ImageGenerationQuality,
-    'auto'
->;
+export type EffectiveImageGenerationQuality = ImageGenerationQuality;
+
+type PricedImageGenerationQuality = Exclude<ImageGenerationQuality, 'auto'>;
 
 /**
- * Resolved canvas size after "auto" is converted to the provider default.
+ * Resolved canvas size after callers normalize image pricing inputs.
+ * "auto" stays explicit so helpers can fail open instead of under-reporting.
  */
-export type EffectiveImageGenerationSize = Exclude<ImageGenerationSize, 'auto'>;
+export type EffectiveImageGenerationSize = ImageGenerationSize;
+
+type PricedImageGenerationSize = Exclude<ImageGenerationSize, 'auto'>;
 
 /**
  * Shared text-cost breakdown used by both backend accounting and bot-side
@@ -111,6 +114,8 @@ export interface ImageGenerationCostOptions {
     size: ImageGenerationSize;
     imageCount?: number;
     model: string;
+    allowPartialImages?: boolean;
+    partialImageCount?: number;
 }
 
 /**
@@ -120,11 +125,17 @@ export interface ImageGenerationCostEstimate {
     effectiveQuality: EffectiveImageGenerationQuality;
     effectiveSize: EffectiveImageGenerationSize;
     imageCount: number;
+    partialImageCount: number;
     perImageCost: number;
     totalCost: number;
 }
 
 export type OpenAITextPricingEntry = {
+    input: number;
+    output: number;
+};
+
+type OpenAIImageTokenPricingEntry = {
     input: number;
     output: number;
 };
@@ -161,8 +172,8 @@ export const openAITextPricingTable: Record<
 export const openAIImageGenerationPricingTable: Record<
     SupportedOpenAIImageModel,
     Record<
-        EffectiveImageGenerationQuality,
-        Record<EffectiveImageGenerationSize, number>
+        PricedImageGenerationQuality,
+        Record<PricedImageGenerationSize, number>
     >
 > = {
     'gpt-image-1.5': {
@@ -219,6 +230,20 @@ export const openAIImageGenerationPricingTable: Record<
 };
 
 /**
+ * Canonical image token pricing per 1M tokens (USD).
+ * Source: https://platform.openai.com/docs/pricing
+ * Last updated in-repo: 2026-03-19
+ */
+const openAIImageTokenPricingTable: Record<
+    SupportedOpenAIImageModel,
+    OpenAIImageTokenPricingEntry
+> = {
+    'gpt-image-1.5': { input: 8.0, output: 32.0 },
+    'gpt-image-1': { input: 10.0, output: 40.0 },
+    'gpt-image-1-mini': { input: 2.5, output: 8.0 },
+};
+
+/**
  * Checks whether Footnote has a shared text-pricing entry for the given model.
  */
 export const hasOpenAITextPricing = (
@@ -244,7 +269,7 @@ export const hasOpenAIImagePricing = (
  */
 export const resolveEffectiveImageGenerationQuality = (
     quality: ImageGenerationQuality
-): EffectiveImageGenerationQuality => (quality === 'auto' ? 'low' : quality);
+): EffectiveImageGenerationQuality => quality;
 
 /**
  * Resolves "auto" image size to the default canvas used by current image
@@ -252,7 +277,7 @@ export const resolveEffectiveImageGenerationQuality = (
  */
 export const resolveEffectiveImageGenerationSize = (
     size: ImageGenerationSize
-): EffectiveImageGenerationSize => (size === 'auto' ? '1024x1024' : size);
+): EffectiveImageGenerationSize => size;
 
 /**
  * Estimates text cost from shared pricing data.
@@ -300,6 +325,13 @@ export const estimateOpenAIImageGenerationCost = (
     options: ImageGenerationCostOptions
 ): ImageGenerationCostEstimate => {
     const imageCount = Math.max(1, options.imageCount ?? 1);
+    const partialImageCount = Math.max(
+        0,
+        Math.round(
+            options.partialImageCount ??
+                (options.allowPartialImages ? 1 : 0)
+        )
+    );
     const effectiveQuality = resolveEffectiveImageGenerationQuality(
         options.quality
     );
@@ -307,23 +339,36 @@ export const estimateOpenAIImageGenerationCost = (
     const pricing = hasOpenAIImagePricing(options.model)
         ? openAIImageGenerationPricingTable[options.model]
         : null;
+    const tokenPricing = hasOpenAIImagePricing(options.model)
+        ? openAIImageTokenPricingTable[options.model]
+        : null;
 
-    if (!pricing) {
+    if (
+        !pricing ||
+        !tokenPricing ||
+        effectiveQuality === 'auto' ||
+        effectiveSize === 'auto'
+    ) {
         return {
             effectiveQuality,
             effectiveSize,
             imageCount,
+            partialImageCount,
             perImageCost: 0,
             totalCost: 0,
         };
     }
 
     const perImageCost = pricing[effectiveQuality][effectiveSize] ?? 0;
+    const partialImageCost =
+        (partialImageCount * 100 * tokenPricing.output) / 1_000_000;
+
     return {
         effectiveQuality,
         effectiveSize,
         imageCount,
+        partialImageCount,
         perImageCost,
-        totalCost: perImageCost * imageCount,
+        totalCost: perImageCost * imageCount + partialImageCost,
     };
 };
