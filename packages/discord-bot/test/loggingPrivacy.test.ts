@@ -170,13 +170,7 @@ test('logContextIfVerbose only emits when high verbosity flag is enabled', () =>
 });
 
 test('reflect overlay injection logs profile metadata without raw overlay body', async () => {
-    const processor = new MessageProcessor({
-        openaiService: {
-            async generateSpeech() {
-                return 'tts.mp3';
-            },
-        } as never,
-    });
+    const processor = new MessageProcessor();
     const processorAccess = processor as unknown as {
         buildReflectRequestFromMessage: (
             message: unknown,

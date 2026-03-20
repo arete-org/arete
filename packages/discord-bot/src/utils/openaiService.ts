@@ -14,6 +14,7 @@ import OpenAI from 'openai';
 import { logger } from './logger.js';
 import { estimateTextCost } from './pricing.js';
 import type { LLMUsageRecord } from '../state/ChannelContextManager.js';
+import { DEFAULT_INTERNAL_TTS_OPTIONS } from '@footnote/contracts/voice';
 
 /**
  * Minimal chat message format used by context-building helpers.
@@ -72,15 +73,7 @@ export const DEFAULT_EMBEDDING_MODEL: EmbeddingModelType =
 /**
  * Default TTS settings used when callers do not provide voice overrides.
  */
-export const TTS_DEFAULT_OPTIONS: TTSOptions = {
-    model: 'gpt-4o-mini-tts',
-    voice: 'echo',
-    speed: 'normal',
-    pitch: 'normal',
-    emphasis: 'moderate',
-    style: 'conversational',
-    styleDegree: 'normal',
-};
+export const TTS_DEFAULT_OPTIONS: TTSOptions = DEFAULT_INTERNAL_TTS_OPTIONS;
 
 let isDirectoryInitialized = false;
 const TTS_INPUT_TOKEN_PRICING_PER_MILLION: Record<TTSOptions['model'], number> =

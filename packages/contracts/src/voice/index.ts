@@ -29,6 +29,11 @@ export type {
     PostInternalVoiceTtsResponse,
 } from './types.js';
 
+export {
+    DEFAULT_INTERNAL_TTS_OPTIONS,
+    DEFAULT_INTERNAL_TTS_OUTPUT_FORMAT,
+} from './constants.js';
+
 // Runtime validation schemas for internal voice contracts.
 export {
     PostInternalVoiceTtsRequestSchema,

@@ -16,26 +16,28 @@ This file is the branch review and current-state summary. It is meant to be easi
 
 ## Current Status
 
-Status: In progress (Checkpoint 1 complete: contracts + runtime seams)
+Status: In progress (Checkpoint 2 complete: backend-owned TTS + Discord cutover)
 
 Voice is now the main remaining legacy OpenAI migration branch. Text reflect has already moved behind the backend-owned runtime seam, and image generation has already moved behind a backend-owned image boundary. Voice has not had that cutover yet.
 
-Today, the backend can already choose whether a reflect reply should be plain text or `tts`. That means part of the product decision layer is already backend-owned. But the actual speech synthesis still happens inside `discord-bot`, where the bot calls the OpenAI TTS API directly and writes a temporary audio file locally before sending it back to Discord.
+Today, the backend can already choose whether a reflect reply should be plain text or `tts`. That means part of the product decision layer is already backend-owned. The actual speech synthesis now also runs through a backend-owned boundary: the bot calls a trusted internal voice TTS route, and the backend owns the OpenAI adapter and cost recording.
 
 Realtime voice is even less migrated. The active realtime session code still lives in `discord-bot`, still opens the provider websocket directly, still sends provider-native event payloads, and still couples Discord voice orchestration to provider transport behavior.
 
 So the short version is:
 
-- backend already owns the decision that a reply may use TTS
-- Discord still owns the provider call for TTS execution
+- backend owns the decision that a reply may use TTS
+- backend owns the TTS execution boundary and provider adapter
 - Discord still owns the provider transport for realtime voice
-- there is not yet a Footnote-owned voice runtime boundary comparable to the completed image boundary
+- there is still no backend-owned realtime voice/session boundary comparable to the completed image boundary
 
 ## What Changed So Far
 
-The main voice-related progress so far is structural. In addition to reflect planning already understanding `tts` as a modality, the repo now has a dedicated `@footnote/contracts/voice` surface plus agent-runtime voice seams for both TTS and realtime sessions. Those seams include OpenAI-backed adapters so backend can call voice runtimes without importing provider SDKs directly.
+The main voice-related progress so far is structural and now includes an active cutover for TTS. In addition to reflect planning already understanding `tts` as a modality, the repo now has a dedicated `@footnote/contracts/voice` surface plus agent-runtime voice seams for both TTS and realtime sessions. Those seams include OpenAI-backed adapters so backend can call voice runtimes without importing provider SDKs directly.
 
-What has not changed yet is ownership of execution. The Discord bot still uses its local `OpenAIService` for TTS generation, and the realtime session stack still uses Discord-local realtime service, websocket, audio handler, and session wiring. Voice still behaves like the old product-edge OpenAI design even though text and image no longer do.
+The backend also now exposes `POST /api/internal/voice/tts`, and the Discord bot sends TTS requests there instead of calling the provider directly. That keeps speech synthesis and cost tracking in the backend while Discord only handles delivery.
+
+What has not changed yet is realtime execution ownership. The Discord bot still uses its local realtime service, websocket, audio handler, and session wiring. That means realtime voice still behaves like the old product-edge OpenAI design even though text, image, and now TTS no longer do.
 
 ## Decisions That Matter
 
@@ -66,13 +68,9 @@ That would give voice the same kind of ownership story image now has: backend ow
 
 There are four main pieces of remaining work.
 
-First, the project needs the backend-owned TTS boundary. The voice runtime interface now exists in `@footnote/agent-runtime`, but there is still no backend-owned TTS service or trusted internal voice route comparable to `POST /api/internal/image`.
+First, the project needs the backend-owned realtime voice/session boundary. The runtime seam exists, but Discord still opens the OpenAI realtime websocket directly, still sends provider-native `session.update`, `conversation.item.create`, and audio-buffer events, and still couples voice orchestration to those transport details.
 
-Second, reflect TTS needs to cut over from Discord-local execution to backend-owned execution. The backend already decides `tts`, but Discord still calls the provider directly to generate speech. That split is the main remaining product-edge TTS issue.
-
-Third, the project needs the backend-owned realtime voice/session boundary. The runtime seam exists, but Discord still opens the OpenAI realtime websocket directly, still sends provider-native `session.update`, `conversation.item.create`, and audio-buffer events, and still couples voice orchestration to those transport details.
-
-Fourth, after those boundaries exist and are in use, the branch can do the normal cleanup work: narrow or remove the remaining Discord-local OpenAI voice helpers, remove direct provider transport wiring from voice flows, and define the final deletion gate clearly.
+Second, after realtime boundaries exist and are in use, the branch can do the normal cleanup work: narrow or remove remaining Discord-local voice helpers, remove direct provider transport wiring from voice flows, and define the final deletion gate clearly.
 
 ## What Stayed Out of Scope So Far
 
@@ -107,6 +105,6 @@ The broader validation expectations remain the usual ones for this repo:
 
 The deletion gate is not yet satisfied for voice.
 
-Reflect TTS still uses a Discord-local OpenAI client. Realtime voice still uses Discord-local provider websocket transport. There is no backend-owned voice runtime seam yet, and there is no backend-owned internal voice route yet.
+Reflect TTS now uses the backend-owned internal voice route. Realtime voice still uses Discord-local provider websocket transport, and the backend-owned realtime voice runtime seam is not yet wired end-to-end.
 
 In short, the voice branch is still the remaining legacy OpenAI product-edge architecture. The migration direction is now much clearer because text and image already established the ownership pattern, but the actual voice cutover work still needs to be done.

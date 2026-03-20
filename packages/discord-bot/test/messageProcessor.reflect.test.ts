@@ -33,14 +33,7 @@ const createMetadata = (): ResponseMetadata => ({
     citations: [],
 });
 
-const createProcessor = () =>
-    new MessageProcessor({
-        openaiService: {
-            async generateSpeech() {
-                return 'tts.mp3';
-            },
-        } as never,
-    });
+const createProcessor = () => new MessageProcessor();
 
 const createMessage = () =>
     ({

@@ -64,14 +64,7 @@ const withMockedDateNow = async (
     }
 };
 
-const createEvent = () =>
-    new MessageCreate({
-        openaiService: {
-            async generateSpeech() {
-                return 'tts.mp3';
-            },
-        } as never,
-    });
+const createEvent = () => new MessageCreate({});
 
 type BotLoopGuardEventAccess = {
     realtimeFilter: unknown;

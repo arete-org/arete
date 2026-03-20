@@ -6,6 +6,7 @@ openapi: 3.1.0
 # - OPTIONS /api/reflect: CORS preflight
 # - POST /api/internal/text: Trusted internal text task execution
 # - POST /api/internal/image: Trusted internal image task execution
+# - POST /api/internal/voice/tts: Trusted internal voice TTS execution
 # - POST /api/incidents/report: Incident report create (trusted internal auth)
 # - GET /api/incidents: Incident list (trusted internal auth)
 # - GET /api/incidents/{incidentId}: Incident detail (trusted internal auth)
@@ -215,6 +216,52 @@ paths:
             responses:
                 '200':
                     $ref: '#/components/responses/InternalImageTaskOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '429':
+                    $ref: '#/components/responses/TooManyRequests'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '502':
+                    $ref: '#/components/responses/BadGateway'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
+    /api/internal/voice/tts:
+        post:
+            operationId: postInternalVoiceTts
+            x-codeRefs:
+                - packages/backend/src/handlers/internalVoiceTts.ts#handleInternalVoiceTtsRequest
+                - packages/backend/src/services/internalVoiceTts.ts#createInternalVoiceTtsService
+                - packages/discord-bot/src/api/internalVoice.ts#runVoiceTtsViaApi
+                - packages/contracts/src/voice/types.ts#PostInternalVoiceTtsRequest
+                - packages/contracts/src/voice/types.ts#PostInternalVoiceTtsResponse
+            summary: Run a trusted internal voice TTS task
+            description: |
+                Trusted internal endpoint for backend-owned voice synthesis that should not become a generic TTS proxy.
+                The current task set includes `synthesize` only.
+                Requires either `x-service-token` or `x-trace-token`.
+                Applies the backend trusted-service rate limit bucket, including per-token constraints for authenticated internal callers.
+            tags:
+                - Voice
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/InternalVoiceTtsRequest'
+            responses:
+                '200':
+                    $ref: '#/components/responses/InternalVoiceTtsOk'
                 '400':
                     $ref: '#/components/responses/BadRequest'
                 '401':
@@ -1393,6 +1440,194 @@ components:
                 mapping:
                     generate: '#/components/schemas/InternalImageGenerateTaskResponse'
 
+        InternalVoiceTtsRequest:
+            type: object
+            properties:
+                task:
+                    type: string
+                    enum: [synthesize]
+                text:
+                    type: string
+                    minLength: 1
+                    maxLength: 8000
+                options:
+                    $ref: '#/components/schemas/InternalTtsOptions'
+                outputFormat:
+                    $ref: '#/components/schemas/InternalVoiceOutputFormat'
+                channelContext:
+                    $ref: '#/components/schemas/InternalVoiceChannelContext'
+            required:
+                - task
+                - text
+                - options
+                - outputFormat
+            additionalProperties: false
+
+        InternalVoiceTtsResponse:
+            type: object
+            properties:
+                task:
+                    type: string
+                    enum: [synthesize]
+                result:
+                    type: object
+                    properties:
+                        audioBase64:
+                            type: string
+                            minLength: 1
+                        outputFormat:
+                            $ref: '#/components/schemas/InternalVoiceOutputFormat'
+                        mimeType:
+                            type: string
+                            minLength: 1
+                        model:
+                            $ref: '#/components/schemas/InternalTtsModel'
+                        voice:
+                            $ref: '#/components/schemas/InternalTtsVoice'
+                        usage:
+                            $ref: '#/components/schemas/InternalTtsUsage'
+                        costs:
+                            $ref: '#/components/schemas/InternalTtsCosts'
+                        generationTimeMs:
+                            type: integer
+                            minimum: 0
+                    required:
+                        - audioBase64
+                        - outputFormat
+                        - mimeType
+                        - model
+                        - voice
+                        - usage
+                        - costs
+                        - generationTimeMs
+                    additionalProperties: false
+            required:
+                - task
+                - result
+            additionalProperties: false
+
+        InternalVoiceOutputFormat:
+            type: string
+            enum:
+                - mp3
+                - opus
+                - aac
+                - flac
+                - wav
+                - pcm
+
+        InternalTtsModel:
+            type: string
+            enum:
+                - tts-1
+                - tts-1-hd
+                - gpt-4o-mini-tts
+
+        InternalTtsVoice:
+            type: string
+            enum:
+                - alloy
+                - ash
+                - ballad
+                - coral
+                - echo
+                - fable
+                - nova
+                - onyx
+                - sage
+                - shimmer
+
+        InternalVoiceChannelContext:
+            type: object
+            properties:
+                channelId:
+                    type: string
+                    minLength: 1
+                guildId:
+                    type: string
+                    minLength: 1
+            additionalProperties: false
+
+        InternalTtsOptions:
+            type: object
+            properties:
+                model:
+                    $ref: '#/components/schemas/InternalTtsModel'
+                voice:
+                    $ref: '#/components/schemas/InternalTtsVoice'
+                speed:
+                    type: string
+                    enum:
+                        - slow
+                        - normal
+                        - fast
+                pitch:
+                    type: string
+                    enum:
+                        - low
+                        - normal
+                        - high
+                emphasis:
+                    type: string
+                    enum:
+                        - none
+                        - moderate
+                        - strong
+                style:
+                    type: string
+                    minLength: 1
+                    maxLength: 200
+                styleDegree:
+                    type: string
+                    enum:
+                        - low
+                        - normal
+                        - high
+                styleNote:
+                    type: string
+                    minLength: 1
+                    maxLength: 500
+            required:
+                - model
+                - voice
+            additionalProperties: false
+
+        InternalTtsUsage:
+            type: object
+            properties:
+                inputTokens:
+                    type: integer
+                    minimum: 0
+                outputTokens:
+                    type: integer
+                    minimum: 0
+                totalTokens:
+                    type: integer
+                    minimum: 0
+            required:
+                - inputTokens
+                - outputTokens
+                - totalTokens
+            additionalProperties: false
+
+        InternalTtsCosts:
+            type: object
+            properties:
+                input:
+                    type: number
+                    minimum: 0
+                output:
+                    type: number
+                    minimum: 0
+                total:
+                    type: number
+                    minimum: 0
+            required:
+                - input
+                - output
+                - total
+            additionalProperties: false
+
         InternalImageStreamEvent:
             oneOf:
                 - $ref: '#/components/schemas/InternalImagePartialImageEvent'
@@ -2526,6 +2761,12 @@ components:
                 application/x-ndjson:
                     schema:
                         $ref: '#/components/schemas/InternalImageStreamEvent'
+        InternalVoiceTtsOk:
+            description: Structured response for a trusted internal voice TTS task.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/InternalVoiceTtsResponse'
         IncidentReportOk:
             description: Incident created.
             content:
