@@ -14,18 +14,26 @@ import {
     detectContentTypeFromUrl,
 } from '../src/services/internalImageDescription.js';
 
-const publicLookup: typeof dns.lookup = async (_hostname, options) => {
+const publicLookup = (async (
+    _hostname: string,
+    options?: unknown
+) => {
     const resolvedAddress = {
         address: '93.184.216.34',
         family: 4 as const,
     };
 
-    if (typeof options === 'object' && options?.all) {
+    if (
+        typeof options === 'object' &&
+        options !== null &&
+        'all' in options &&
+        options.all === true
+    ) {
         return [resolvedAddress];
     }
 
     return resolvedAddress;
-};
+}) as typeof dns.lookup;
 
 test('image-description adapter downloads the image, sends a data URL, and returns normalized usage', async () => {
     const fetchCalls: Array<{
