@@ -74,6 +74,8 @@ test('slash command choices match the shared registry', async () => {
             textModelOption?.choices?.map((choice) => choice.value),
             [...internalImageTextModels]
         );
+        assert.ok((imageModelOption?.choices?.length ?? 0) <= 25);
+        assert.ok((textModelOption?.choices?.length ?? 0) <= 25);
     } finally {
         restoreProcessEnv(originalEnv);
     }

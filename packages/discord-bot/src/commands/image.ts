@@ -79,16 +79,35 @@ type StatusField = { name: string; value: string; inline: boolean };
 type StringChoice = { name: string; value: string };
 
 const QUALITY_LEVELS: ImageQualityType[] = ['low', 'medium', 'high'];
-const imageRenderModelChoices: StringChoice[] = imageRenderModels.map(
-    (model) => ({
+const DISCORD_CHOICE_LIMIT = 25;
+
+const clampChoicesForDiscord = (
+    label: string,
+    choices: StringChoice[]
+): StringChoice[] => {
+    if (choices.length > DISCORD_CHOICE_LIMIT) {
+        logger.warn(
+            `${label} exceeded Discord's ${DISCORD_CHOICE_LIMIT}-choice limit; truncating command choices.`
+        );
+    }
+
+    return choices.slice(0, DISCORD_CHOICE_LIMIT);
+};
+
+const imageRenderModelChoices: StringChoice[] = clampChoicesForDiscord(
+    'imageRenderModels',
+    imageRenderModels.map((model) => ({
         name: model,
         value: model,
-    })
+    }))
 );
-const imageTextModelChoices: StringChoice[] = imageTextModels.map((model) => ({
-    name: model,
-    value: model,
-}));
+const imageTextModelChoices: StringChoice[] = clampChoicesForDiscord(
+    'imageTextModels',
+    imageTextModels.map((model) => ({
+        name: model,
+        value: model,
+    }))
+);
 
 const clampOutputCompression = (value: number | null): number => {
     if (!Number.isFinite(value)) {
