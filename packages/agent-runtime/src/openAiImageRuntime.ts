@@ -42,10 +42,12 @@ type OpenAiImageGenerationCall = ResponseOutputItem.ImageGenerationCall & {
 
 type OpenAiImageRuntimeResponseClient = {
     createResponse: (
-        request: ResponseCreateParams
+        request: ResponseCreateParams,
+        options?: { signal?: AbortSignal }
     ) => Promise<Pick<Response, 'id' | 'error' | 'output' | 'usage'>>;
     streamResponse?: (
-        request: ResponseStreamParams
+        request: ResponseStreamParams,
+        options?: { signal?: AbortSignal }
     ) => Promise<OpenAiImageRuntimeResponseStream>;
 };
 
@@ -77,6 +79,7 @@ export interface CreateOpenAiImageRuntimeOptions {
     client?: OpenAiImageRuntimeResponseClient;
     logger?: OpenAiImageRuntimeLogger;
     kind?: string;
+    requestTimeoutMs?: number;
 }
 
 type RedactedResponseInputText = {
@@ -314,12 +317,63 @@ const createDefaultResponseClient = (
     const openai = new OpenAI({ apiKey });
 
     return {
-        async createResponse(request) {
-            return openai.responses.create(request);
+        async createResponse(request, options) {
+            return openai.responses.create(request, options);
         },
-        async streamResponse(request) {
-            return openai.responses.stream(request);
+        async streamResponse(request, options) {
+            return openai.responses.stream(request, options);
         },
+    };
+};
+
+const createRequestAbortContext = (
+    requestSignal: AbortSignal | undefined,
+    requestTimeoutMs: number | undefined
+): {
+    signal?: AbortSignal;
+    cleanup: () => void;
+    didTimeout: () => boolean;
+} => {
+    if (
+        requestTimeoutMs === undefined ||
+        !Number.isFinite(requestTimeoutMs) ||
+        requestTimeoutMs <= 0
+    ) {
+        return {
+            signal: requestSignal,
+            cleanup: () => undefined,
+            didTimeout: () => false,
+        };
+    }
+
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, requestTimeoutMs);
+
+    let abortListener: (() => void) | null = null;
+    if (requestSignal) {
+        if (requestSignal.aborted) {
+            controller.abort(requestSignal.reason);
+        } else {
+            abortListener = () => controller.abort(requestSignal.reason);
+            requestSignal.addEventListener('abort', abortListener, {
+                once: true,
+            });
+        }
+    }
+
+    return {
+        signal: controller.signal,
+        cleanup: () => {
+            clearTimeout(timeoutHandle);
+            if (requestSignal && abortListener) {
+                requestSignal.removeEventListener('abort', abortListener);
+            }
+        },
+        didTimeout: () => timedOut,
     };
 };
 
@@ -404,6 +458,7 @@ const createOpenAiImageRuntime = ({
     client,
     logger,
     kind = 'openai-image',
+    requestTimeoutMs,
 }: CreateOpenAiImageRuntimeOptions): ImageGenerationRuntime => {
     const responseClient =
         client ??
@@ -421,6 +476,10 @@ const createOpenAiImageRuntime = ({
             request: ImageGenerationRequest
         ): Promise<ImageGenerationResult> {
             const startedAt = Date.now();
+            const abortContext = createRequestAbortContext(
+                request.signal,
+                requestTimeoutMs
+            );
             const input: ResponseInput = [
                 {
                     role: 'system',
@@ -482,100 +541,123 @@ const createOpenAiImageRuntime = ({
             const shouldStream = Boolean(
                 request.stream ?? request.onPartialImage
             );
-            const streamedResult = shouldStream
-                ? await (async () => {
-                      if (!responseClient.streamResponse) {
-                          throw new Error(
-                              'OpenAI image runtime client does not support streaming.'
-                          );
-                      }
+            try {
+                const streamedResult = shouldStream
+                    ? await (async () => {
+                          if (!responseClient.streamResponse) {
+                              throw new Error(
+                                  'OpenAI image runtime client does not support streaming.'
+                              );
+                          }
 
-                      const stream = await responseClient.streamResponse({
-                          ...requestPayload,
-                          stream: true,
-                      });
-                      let partialImageCount = 0;
-                      let partialImageQueue = Promise.resolve();
-                      stream.on(
-                          'response.image_generation_call.partial_image',
-                          (event) => {
-                              partialImageCount += 1;
-                              if (!request.onPartialImage) {
+                          const stream = await responseClient.streamResponse(
+                              {
+                                  ...requestPayload,
+                                  stream: true,
+                              },
+                              { signal: abortContext.signal }
+                          );
+                          let partialImageCount = 0;
+                          let partialImageQueue = Promise.resolve();
+                          stream.on(
+                              'response.image_generation_call.partial_image',
+                              (event) => {
+                                  partialImageCount += 1;
+                                  if (!request.onPartialImage) {
+                                      return;
+                                  }
+
+                                  partialImageQueue = partialImageQueue
+                                      .then(() =>
+                                          request.onPartialImage?.({
+                                              index: event.partial_image_index,
+                                              base64: event.partial_image_b64,
+                                          })
+                                      )
+                                      .catch((error) => {
+                                          logger?.warn?.(
+                                              'Image runtime partial-image callback failed.',
+                                              {
+                                                  error:
+                                                      error instanceof Error
+                                                          ? error.message
+                                                          : String(error),
+                                              }
+                                          );
+                                      });
+                              }
+                          );
+                          stream.on('error', (error) => {
+                              logger?.error?.('Image runtime stream error.', {
+                                  error:
+                                      error instanceof Error
+                                          ? error.message
+                                          : String(error),
+                              });
+                          });
+                          stream.on('response.failed', (event) => {
+                              if (!event.response?.error) {
                                   return;
                               }
 
-                              partialImageQueue = partialImageQueue
-                                  .then(() =>
-                                      request.onPartialImage?.({
-                                          index: event.partial_image_index,
-                                          base64: event.partial_image_b64,
-                                      })
-                                  )
-                                  .catch((error) => {
-                                      logger?.warn?.(
-                                          'Image runtime partial-image callback failed.',
-                                          {
-                                              error:
-                                                  error instanceof Error
-                                                      ? error.message
-                                                      : String(error),
-                                          }
-                                      );
-                                  });
-                          }
-                      );
-                      stream.on('error', (error) => {
-                          logger?.error?.('Image runtime stream error.', {
-                              error:
-                                  error instanceof Error
-                                      ? error.message
-                                      : String(error),
+                              logger?.error?.(
+                                  'Image runtime stream reported a failed response.',
+                                  {
+                                      code: event.response.error.code,
+                                  }
+                              );
                           });
-                      });
-                      stream.on('response.failed', (event) => {
-                          if (!event.response?.error) {
-                              return;
+
+                          try {
+                              const response = await stream.finalResponse();
+                              await partialImageQueue;
+                              return {
+                                  response,
+                                  partialImageCount,
+                              };
+                          } catch (error) {
+                              await partialImageQueue;
+                              throw error;
                           }
+                      })()
+                    : {
+                          response: await responseClient.createResponse(
+                              requestPayload,
+                              { signal: abortContext.signal }
+                          ),
+                          partialImageCount: 0,
+                      };
 
-                          logger?.error?.(
-                              'Image runtime stream reported a failed response.',
-                              {
-                                  code: event.response.error.code,
-                              }
-                          );
-                      });
+                if (streamedResult.response.error) {
+                    logger?.error?.(
+                        'Image runtime response contained an error.',
+                        {
+                            code: streamedResult.response.error.code,
+                        }
+                    );
+                }
 
-                      try {
-                          const response = await stream.finalResponse();
-                          await partialImageQueue;
-                          return {
-                              response,
-                              partialImageCount,
-                          };
-                      } catch (error) {
-                          await partialImageQueue;
-                          throw error;
-                      }
-                  })()
-                : {
-                      response: await responseClient.createResponse(
-                          requestPayload
-                      ),
-                      partialImageCount: 0,
-                  };
+                return normalizeResponseToImageResult(
+                    request,
+                    streamedResult.response,
+                    startedAt,
+                    streamedResult.partialImageCount
+                );
+            } catch (error) {
+                if (
+                    abortContext.didTimeout() &&
+                    error instanceof Error &&
+                    error.name === 'AbortError'
+                ) {
+                    throw new Error(
+                        `Image-generation request timed out after ${requestTimeoutMs}ms`
+                    );
+                }
 
-            if (streamedResult.response.error) {
-                logger?.error?.('Image runtime response contained an error.', {
-                    code: streamedResult.response.error.code,
-                });
+                throw error;
+            } finally {
+                abortContext.cleanup();
             }
-
-            return normalizeResponseToImageResult(
-                request,
-                streamedResult.response,
-                startedAt,
-                streamedResult.partialImageCount
-            );
         },
     };
 };

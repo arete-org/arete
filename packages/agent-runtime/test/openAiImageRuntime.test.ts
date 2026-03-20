@@ -319,3 +319,34 @@ test('openai image runtime maps provider errors into stable adapter errors', asy
         /rate limit/i
     );
 });
+
+test('openai image runtime aborts long-running requests when a timeout is configured', async () => {
+    let seenSignal: AbortSignal | undefined;
+    const runtime = createOpenAiImageRuntime({
+        requestTimeoutMs: 10,
+        client: {
+            async createResponse(_payload, options) {
+                seenSignal = options?.signal;
+
+                return new Promise((_resolve, reject) => {
+                    options?.signal?.addEventListener(
+                        'abort',
+                        () => {
+                            const abortError = new Error('aborted');
+                            abortError.name = 'AbortError';
+                            reject(abortError);
+                        },
+                        { once: true }
+                    );
+                });
+            },
+        },
+    });
+
+    await assert.rejects(
+        () => runtime.generateImage(createRequest()),
+        /timed out after 10ms/i
+    );
+    assert.equal(seenSignal instanceof AbortSignal, true);
+    assert.equal(seenSignal?.aborted, true);
+});

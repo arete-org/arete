@@ -121,6 +121,7 @@ const initializeServices = () => {
         });
         imageGenerationRuntime = createOpenAiImageRuntime({
             apiKey: runtimeConfig.openai.apiKey,
+            requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
         });
         internalNewsTaskService = createInternalNewsTaskService({
             generationRuntime,
