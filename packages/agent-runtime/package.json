@@ -21,8 +21,8 @@
     },
     "scripts": {
         "clean": "node -e \"const fs=require('node:fs'); fs.rmSync('dist',{recursive:true,force:true}); fs.rmSync('tsconfig.tsbuildinfo',{force:true});\"",
-        "build:dev": "pnpm clean && tsc -p tsconfig.json",
-        "build": "pnpm clean && tsc -p tsconfig.json"
+        "build:dev": "tsc -b tsconfig.json",
+        "build": "pnpm clean && tsc -b tsconfig.json"
     },
     "devDependencies": {
         "typescript": "catalog:"

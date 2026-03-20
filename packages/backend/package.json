@@ -4,7 +4,7 @@
     "type": "module",
     "main": "dist/server.js",
     "scripts": {
-        "build": "pnpm --dir ../.. --filter @footnote/config-spec run build && pnpm --dir ../.. --filter @footnote/prompts run build && pnpm --dir ../.. --filter @footnote/agent-runtime run build && tsc -p tsconfig.json"
+        "build": "tsc -b tsconfig.json"
     },
     "dependencies": {
         "@footnote/agent-runtime": "workspace:*",
