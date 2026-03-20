@@ -350,6 +350,52 @@ test('internal image endpoint rejects missing trusted auth', async () => {
     }
 });
 
+test('internal image task service rejects unsupported runtime model identifiers', async () => {
+    const service = createInternalImageTaskService({
+        imageGenerationRuntime: {
+            kind: 'test-image-runtime',
+            async generateImage(request) {
+                return {
+                    responseId: 'resp_123',
+                    textModel: 'future-text-model' as ImageGenerationRequest['textModel'],
+                    imageModel:
+                        'future-image-model' as ImageGenerationRequest['imageModel'],
+                    revisedPrompt: null,
+                    finalStyle: request.style,
+                    annotations: {
+                        title: null,
+                        description: null,
+                        note: null,
+                        adjustedPrompt: null,
+                    },
+                    finalImageBase64: 'base64-image',
+                    outputFormat: request.outputFormat,
+                    outputCompression: request.outputCompression,
+                    usage: {
+                        inputTokens: 1,
+                        outputTokens: 1,
+                        totalTokens: 2,
+                        imageCount: 1,
+                    },
+                    costs: {
+                        text: 0,
+                        image: 0.011,
+                        total: 0.011,
+                        perImage: 0.011,
+                    },
+                    generationTimeMs: 1,
+                };
+            },
+        },
+        recordUsage: () => undefined,
+    });
+
+    await assert.rejects(
+        () => service.runImageTask(createImageRequestPayload()),
+        /unsupported textModel/i
+    );
+});
+
 test('internal image endpoint rejects invalid task payloads', async () => {
     const server = await createInternalImageServer({
         kind: 'test-image-runtime',

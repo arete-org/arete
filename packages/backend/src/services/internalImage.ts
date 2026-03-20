@@ -15,6 +15,10 @@ import type {
     PostInternalImageGenerateRequest,
     PostInternalImageGenerateResponse,
 } from '@footnote/contracts/web';
+import {
+    internalImageRenderModels,
+    internalImageTextModels,
+} from '@footnote/contracts/providers';
 import { PostInternalImageGenerateResponseSchema } from '@footnote/contracts/web/schemas';
 import {
     recordBackendLLMUsage,
@@ -40,16 +44,52 @@ export type InternalImageTaskService = {
     ): Promise<PostInternalImageGenerateResponse>;
 };
 
+const isSupportedTextModel = (
+    model: string
+): model is PostInternalImageGenerateResponse['result']['textModel'] =>
+    internalImageTextModels.includes(
+        model as PostInternalImageGenerateResponse['result']['textModel']
+    );
+
+const isSupportedImageModel = (
+    model: string
+): model is PostInternalImageGenerateResponse['result']['imageModel'] =>
+    internalImageRenderModels.includes(
+        model as PostInternalImageGenerateResponse['result']['imageModel']
+    );
+
+const validateResponseTextModel = (
+    model: string
+): PostInternalImageGenerateResponse['result']['textModel'] => {
+    if (!isSupportedTextModel(model)) {
+        throw new Error(
+            `Internal image task returned unsupported textModel: ${model}`
+        );
+    }
+
+    return model;
+};
+
+const validateResponseImageModel = (
+    model: string
+): PostInternalImageGenerateResponse['result']['imageModel'] => {
+    if (!isSupportedImageModel(model)) {
+        throw new Error(
+            `Internal image task returned unsupported imageModel: ${model}`
+        );
+    }
+
+    return model;
+};
+
 const toInternalImageResponse = (
     result: ImageGenerationResult
 ): PostInternalImageGenerateResponse => ({
     task: 'generate',
     result: {
         responseId: result.responseId,
-        textModel:
-            result.textModel as PostInternalImageGenerateResponse['result']['textModel'],
-        imageModel:
-            result.imageModel as PostInternalImageGenerateResponse['result']['imageModel'],
+        textModel: validateResponseTextModel(result.textModel),
+        imageModel: validateResponseImageModel(result.imageModel),
         revisedPrompt: result.revisedPrompt,
         finalStyle: result.finalStyle,
         annotations: result.annotations,
