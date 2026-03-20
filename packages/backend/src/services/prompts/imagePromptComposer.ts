@@ -36,7 +36,7 @@ const sanitize = (value: string | null | undefined): string | null => {
         return null;
     }
 
-    return value.replace(/"/g, '\\"');
+    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 };
 
 const buildDeveloperPrompt = (
