@@ -28,7 +28,9 @@
         "typescript": "catalog:"
     },
     "dependencies": {
+        "@footnote/contracts": "workspace:*",
         "@voltagent/core": "2.6.10",
-        "ai": "6.0.116"
+        "ai": "6.0.116",
+        "openai": "catalog:"
     }
 }

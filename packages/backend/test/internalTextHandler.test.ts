@@ -9,7 +9,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 
-import type { GenerationRequest, GenerationRuntime } from '@footnote/agent-runtime';
+import type {
+    GenerationRequest,
+    GenerationRuntime,
+} from '@footnote/agent-runtime';
 import { createInternalTextHandler } from '../src/handlers/internalText.js';
 import { createInternalNewsTaskService } from '../src/services/internalText.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
@@ -30,8 +33,33 @@ const createInternalTextServer = async (
               recordUsage: () => undefined,
           })
         : null;
+    const internalImageDescriptionTaskService = generationRuntime
+        ? {
+              async runImageDescriptionTask() {
+                  return {
+                      task: 'image_description' as const,
+                      result: {
+                          description:
+                              '{"summary":"Screenshot of a policy update"}',
+                          model: 'gpt-4o-mini',
+                          usage: {
+                              inputTokens: 10,
+                              outputTokens: 5,
+                              totalTokens: 15,
+                          },
+                          costs: {
+                              input: 0.0000015,
+                              output: 0.000003,
+                              total: 0.0000045,
+                          },
+                      },
+                  };
+              },
+          }
+        : null;
     const handler = createInternalTextHandler({
         internalNewsTaskService,
+        internalImageDescriptionTaskService,
         logRequest: () => undefined,
         maxBodyBytes: 50_000,
         traceApiToken: 'trace-secret',
@@ -132,6 +160,55 @@ test('internal text endpoint accepts trusted news tasks and returns structured r
         assert.equal(payload.task, 'news');
         assert.equal(payload.result.news[0]?.title, 'Policy update');
         assert.equal(payload.result.summary, 'One important headline today.');
+    } finally {
+        await server.close();
+    }
+});
+
+test('internal text endpoint accepts trusted image-description tasks and returns structured results', async () => {
+    const server = await createInternalTextServer({
+        kind: 'test-runtime',
+        async generate() {
+            throw new Error(
+                'news runtime should not be called for image_description'
+            );
+        },
+    });
+
+    try {
+        const response = await fetch(`${server.url}/api/internal/text`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+            },
+            body: JSON.stringify({
+                task: 'image_description',
+                imageUrl: 'https://example.com/image.png',
+                context: 'User asked what changed in this screenshot.',
+                channelContext: {
+                    channelId: 'channel-1',
+                    guildId: 'guild-1',
+                },
+            }),
+        });
+
+        assert.equal(response.status, 200);
+        const payload = (await response.json()) as {
+            task: string;
+            result: {
+                description: string;
+                model: string;
+                usage: { totalTokens: number };
+            };
+        };
+        assert.equal(payload.task, 'image_description');
+        assert.match(
+            payload.result.description,
+            /Screenshot of a policy update/
+        );
+        assert.equal(payload.result.model, 'gpt-4o-mini');
+        assert.equal(payload.result.usage.totalTokens, 15);
     } finally {
         await server.close();
     }
@@ -277,6 +354,23 @@ test('internal text endpoint rejects invalid task payloads', async () => {
         });
 
         assert.equal(response.status, 400);
+
+        const imageDescriptionResponse = await fetch(
+            `${server.url}/api/internal/text`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Trace-Token': 'trace-secret',
+                },
+                body: JSON.stringify({
+                    task: 'image_description',
+                    imageUrl: 'not-a-url',
+                }),
+            }
+        );
+
+        assert.equal(imageDescriptionResponse.status, 400);
     } finally {
         await server.close();
     }
@@ -396,13 +490,15 @@ test('internal news task service keeps articles when timestamps are missing or m
                             },
                             {
                                 title: 'Date-only item',
-                                summary: 'This one should omit the midnight placeholder.',
+                                summary:
+                                    'This one should omit the midnight placeholder.',
                                 url: 'https://example.com/news-3',
                                 source: 'Example News',
                                 timestamp: '2026-03-18',
                             },
                         ],
-                        summary: 'Articles remain even when publish time is fuzzy.',
+                        summary:
+                            'Articles remain even when publish time is fuzzy.',
                     }),
                     model: 'gpt-5-mini',
                 };

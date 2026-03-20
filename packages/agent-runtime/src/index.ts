@@ -1,7 +1,6 @@
 /**
- * @description: Internal runtime boundary package for Footnote generation work.
- * Defines the replaceable generation seam that backend orchestration can depend
- * on without exposing framework-specific types to public API surfaces.
+ * @description: Defines the shared runtime boundary that backend code uses for text and image generation.
+ * This package keeps provider-specific request details behind one Footnote-owned interface so backend workflows can stay stable while adapters change underneath.
  * @footnote-scope: core
  * @footnote-module: AgentRuntimeBoundary
  * @footnote-risk: high - An incorrect runtime seam can leak framework assumptions or block later runtime migration work.
@@ -229,6 +228,120 @@ export interface GenerationRuntime {
     generate(request: GenerationRequest): Promise<GenerationResult>;
 }
 
+/**
+ * Output formats supported by the shared image runtime seam.
+ */
+export type ImageOutputFormat = 'png' | 'webp' | 'jpeg';
+
+/**
+ * Quality levels supported by the shared image runtime seam.
+ */
+export type ImageGenerationQuality = 'low' | 'medium' | 'high' | 'auto';
+
+/**
+ * Canvas sizes supported by the shared image runtime seam.
+ */
+export type ImageGenerationSize =
+    | '1024x1024'
+    | '1024x1536'
+    | '1536x1024'
+    | 'auto';
+
+/**
+ * Background treatments supported by the shared image runtime seam.
+ */
+export type ImageGenerationBackground = 'auto' | 'transparent' | 'opaque';
+
+/**
+ * One partial image preview emitted during streamed image generation.
+ */
+export interface ImageGenerationPartialImage {
+    index: number;
+    base64: string;
+}
+
+/**
+ * Runtime-facing prompt bundle for one image generation request.
+ */
+export interface ImageGenerationRequest {
+    prompt: string;
+    systemPrompt: string;
+    developerPrompt: string;
+    textModel: string;
+    imageModel: string;
+    quality: ImageGenerationQuality;
+    size: ImageGenerationSize;
+    background: ImageGenerationBackground;
+    style: string;
+    allowPromptAdjustment: boolean;
+    outputFormat: ImageOutputFormat;
+    outputCompression: number;
+    followUpResponseId?: string;
+    signal?: AbortSignal;
+    stream?: boolean;
+    onPartialImage?: (
+        payload: ImageGenerationPartialImage
+    ) => Promise<void> | void;
+}
+
+/**
+ * Normalized annotation bundle returned by an image runtime adapter.
+ */
+export interface ImageGenerationAnnotations {
+    title: string | null;
+    description: string | null;
+    note: string | null;
+    adjustedPrompt?: string | null;
+}
+
+/**
+ * Normalized usage facts returned by an image runtime adapter.
+ */
+export interface ImageGenerationUsage {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    imageCount: number;
+}
+
+/**
+ * Normalized cost facts returned by an image runtime adapter.
+ */
+export interface ImageGenerationCosts {
+    text: number;
+    image: number;
+    total: number;
+    perImage: number;
+}
+
+/**
+ * Runtime-to-backend result for one image generation attempt.
+ */
+export interface ImageGenerationResult {
+    responseId: string | null;
+    textModel: string;
+    imageModel: string;
+    revisedPrompt: string | null;
+    finalStyle: string;
+    annotations: ImageGenerationAnnotations;
+    finalImageBase64: string;
+    outputFormat: ImageOutputFormat;
+    outputCompression: number;
+    usage: ImageGenerationUsage;
+    costs: ImageGenerationCosts;
+    generationTimeMs: number;
+}
+
+/**
+ * Replaceable runtime implementation for image generation.
+ */
+export interface ImageGenerationRuntime {
+    readonly kind: string;
+    generateImage(
+        request: ImageGenerationRequest
+    ): Promise<ImageGenerationResult>;
+}
+
 import {
     createLegacyOpenAiRuntime,
     type LegacyOpenAiClient,
@@ -282,6 +395,13 @@ export {
     type LegacyOpenAiMetadata,
     type LegacyOpenAiResult,
 } from './legacyOpenAiRuntime.js';
+export {
+    createOpenAiImageRuntime,
+    type CreateOpenAiImageRuntimeOptions,
+    type OpenAiImageRuntimeLogger,
+    type OpenAiImageRuntimeResponseClient,
+    type OpenAiImageRuntimeResponseStream,
+} from './openAiImageRuntime.js';
 export {
     createVoltAgentRuntime,
     type CreateVoltAgentRuntimeOptions,
