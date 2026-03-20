@@ -1,9 +1,9 @@
 /**
- * @description: Core real-time AI session management and WebSocket coordination.
+ * @description: Manages Discord's side of a backend-owned realtime voice session.
  * @footnote-scope: core
  * @footnote-module: RealtimeService
- * @footnote-risk: high - Session failures can break all real-time AI functionality and waste resources. Manages WebSocket connections, session lifecycle, and audio streaming coordination.
- * @footnote-ethics: high - Controls real-time AI interactions in voice channels, affecting user privacy, consent, and the quality of live AI participation.
+ * @footnote-risk: high - Session failures can break live voice replies or leave websocket state stuck.
+ * @footnote-ethics: high - Live voice sessions handle privacy-sensitive audio and shape user-facing bot behavior.
  */
 
 import { EventEmitter } from 'events';
@@ -61,6 +61,10 @@ export interface AudioChunk {
 
 /**
  * Incremental text delta emitted while a realtime response is streaming.
+ *
+ * The backend normalizes provider-native events before they reach Discord, but
+ * the Discord voice layer still uses these local event names so existing voice
+ * orchestration code does not need to understand provider protocol details.
  */
 export interface RealtimeResponseTextDeltaEvent {
     type: 'response.text.delta';
@@ -71,7 +75,7 @@ export interface RealtimeResponseTextDeltaEvent {
  * Incremental audio delta emitted while a realtime response is streaming.
  */
 export interface RealtimeResponseAudioDeltaEvent {
-    type: 'response.audio.delta';
+    type: 'response.output_audio.delta';
     delta: string; // base64 encoded audio data
 }
 
@@ -115,18 +119,18 @@ export class RealtimeSession extends EventEmitter {
         this.sessionConfig = new RealtimeSessionConfig(options);
         this.sessionContext = options.context ?? { participants: [] };
 
-        // Forward all events from eventHandler to RealtimeSession
+        // The event handler translates backend-owned protocol events into the
+        // local event names that the older Discord voice flow already expects.
         this.eventHandler.on('event', (event: RealtimeEvent) => {
-            // Emit the event with its type
             this.emit(event.type, event);
         });
 
-        // Special handling for audio events to ensure they're properly forwarded
+        // Audio and text also get their own convenience events so playback and
+        // logging code can subscribe without parsing the raw event payload.
         this.eventHandler.on('audio', (audioData: Buffer) => {
             this.emit('audio', audioData);
         });
 
-        // Forward text events
         this.eventHandler.on('text', (text: string) => {
             this.emit('text', text);
         });
@@ -186,14 +190,14 @@ export class RealtimeSession extends EventEmitter {
     }
 
     /**
-     * Commit the current audio buffer for processing
+     * Commit the current audio buffer for processing.
      */
     public async commitAudio(): Promise<void> {
         await this.flushAudio();
     }
 
     /**
-     * Clear the current audio buffer
+     * Clear the current audio buffer.
      */
     public clearAudio(): void {
         if (!this.audioHandler) {
@@ -212,7 +216,7 @@ export class RealtimeSession extends EventEmitter {
     }
 
     /**
-     * Start a new conversation turn
+     * Start a new conversation turn after text or audio input has been queued.
      */
     public createResponse(): void {
         this.sendClientEvent({ type: 'response.create' });
@@ -223,10 +227,6 @@ export class RealtimeSession extends EventEmitter {
             return this.eventHandler.waitForResponseCompleted();
         }
         throw new Error('Event handler not initialized');
-    }
-
-    public waitForAudioCollected(): Promise<void> {
-        return Promise.resolve();
     }
 
     public async sendGreeting(): Promise<void> {
@@ -290,8 +290,10 @@ export class RealtimeSession extends EventEmitter {
             return;
         }
 
-        // Emit an audio-done signal when the response completes so the audio
-        // handler can clear its per-response buffer.
+        // The backend contract does not expose a separate "audio done" event.
+        // Locally we still emit one when the response completes so the playback
+        // pipeline can reset per-response audio state without reassembling the
+        // raw backend protocol itself.
         if (event.type === 'response.completed') {
             this.eventHandler.handleEvent({
                 type: 'response.output_audio.done',
@@ -318,6 +320,8 @@ const mapInternalEventToRealtimeEvent = (
 ): RealtimeEvent | null => {
     switch (event.type) {
         case 'output_audio.delta':
+            // Keep the Discord-local event name explicit about output audio so
+            // it stays easy to distinguish from microphone input buffering.
             return {
                 type: 'response.output_audio.delta',
                 delta: event.audioBase64,

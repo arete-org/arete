@@ -1,9 +1,9 @@
 /**
- * @description: Manages realtime session options and applies runtime updates.
+ * @description: Builds the options payload Discord sends when opening a backend realtime session.
  * @footnote-scope: utility
  * @footnote-module: RealtimeSessionConfig
- * @footnote-risk: medium - Incorrect options can break realtime sessions or increase costs.
- * @footnote-ethics: medium - Session settings influence audio handling and consent.
+ * @footnote-risk: medium - Incorrect options can break realtime sessions or change live voice behavior.
+ * @footnote-ethics: medium - Session settings influence voice output and user expectations.
  */
 import type { InternalVoiceRealtimeOptions } from '@footnote/contracts/voice';
 import { runtimeConfig } from '../config.js';
@@ -23,10 +23,6 @@ export class RealtimeSessionConfig {
 
     public getOptions(): InternalVoiceRealtimeOptions {
         return { ...this.options };
-    }
-
-    public updateOptions(newOptions: Partial<InternalVoiceRealtimeOptions>): void {
-        this.options = { ...this.options, ...newOptions };
     }
 }
 
