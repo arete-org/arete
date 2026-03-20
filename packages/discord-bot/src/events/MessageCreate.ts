@@ -430,6 +430,10 @@ export class MessageCreate extends Event {
                             // Resolve channel-specific overrides if available
                             const channelOverrides =
                                 this.resolveChannelOverrides(channelKey);
+                            const resolvedEngagementPreferences = {
+                                ...runtimeConfig.engagementPreferences,
+                                ...channelOverrides?.preferences,
+                            };
 
                             // Get engagement decision with optional overrides
                             const decision = await this.realtimeFilter.decide(
@@ -458,12 +462,10 @@ export class MessageCreate extends Event {
                                     channelId: channelKey,
                                     score: decision.score,
                                     threshold:
-                                        runtimeConfig.engagementPreferences
-                                            .minEngageThreshold,
+                                        resolvedEngagementPreferences.minEngageThreshold,
                                     thresholdMet:
                                         decision.score >=
-                                        runtimeConfig.engagementPreferences
-                                            .minEngageThreshold,
+                                        resolvedEngagementPreferences.minEngageThreshold,
                                     shouldRespond: decision.engage,
                                     reasons: decision.reasons,
                                     breakdown: decision.breakdown,
@@ -496,8 +498,8 @@ export class MessageCreate extends Event {
                             if (!decision.engage) {
                                 // If preferences indicate reaction mode, react with emoji
                                 if (
-                                    runtimeConfig.engagementPreferences
-                                        .ignoreMode === 'react'
+                                    resolvedEngagementPreferences.ignoreMode ===
+                                    'react'
                                 ) {
                                     try {
                                         const responseHandler =
@@ -507,11 +509,10 @@ export class MessageCreate extends Event {
                                                 message.author
                                             );
                                         await responseHandler.addReaction(
-                                            runtimeConfig.engagementPreferences
-                                                .reactionEmoji
+                                            resolvedEngagementPreferences.reactionEmoji
                                         );
                                         messageLogger.debug(
-                                            `Reacted with ${runtimeConfig.engagementPreferences.reactionEmoji} for ${channelKey}: ${decision.reason}`
+                                            `Reacted with ${resolvedEngagementPreferences.reactionEmoji} for ${channelKey}: ${decision.reason}`
                                         );
                                     } catch (reactionError) {
                                         messageLogger.debug(
