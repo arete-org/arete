@@ -50,6 +50,26 @@ test('parseBotProfileConfig prefers inline overlay over file overlay', () => {
     });
 });
 
+test('parseBotProfileConfig uses a trimmed file overlay when no inline overlay is present', () => {
+    const parsed = parseBotProfileConfig({
+        profileId: 'ari-vendor',
+        profileDisplayName: 'Ari',
+        mentionAliasesCsv: 'ari, Ari',
+        overlayPath: './overlay.txt',
+        overlayFileText: '  file instructions  ',
+    });
+
+    assert.equal(parsed.id, 'ari-vendor');
+    assert.equal(parsed.displayName, 'Ari');
+    assert.deepEqual(parsed.mentionAliases, ['ari']);
+    assert.deepEqual(parsed.promptOverlay, {
+        source: 'file',
+        text: 'file instructions',
+        path: './overlay.txt',
+        length: 17,
+    });
+});
+
 test('readBotProfileConfig fails open when file overlay cannot be read', () => {
     const warnings: string[] = [];
     const parsed = readBotProfileConfig({
@@ -66,7 +86,6 @@ test('readBotProfileConfig fails open when file overlay cannot be read', () => {
     });
 
     assert.equal(parsed.promptOverlay.source, 'none');
-    assert.equal(warnings.length, 2);
+    assert.equal(warnings.length, 1);
     assert.match(warnings[0], /Could not read BOT_PROFILE_PROMPT_OVERLAY_PATH/);
-    assert.match(warnings[1], /Ignoring BOT_PROFILE_PROMPT_OVERLAY_PATH/);
 });

@@ -250,10 +250,12 @@ export const readBotProfileConfig = (
         : null;
 
     let overlayFileText: string | null = null;
+    let overlayReadFailed = false;
     if (resolvedOverlayPath && !inlineOverlayText) {
         try {
             overlayFileText = readFile(resolvedOverlayPath);
         } catch (error) {
+            overlayReadFailed = true;
             const message =
                 error instanceof Error ? error.message : String(error);
             warn(
@@ -281,6 +283,7 @@ export const readBotProfileConfig = (
     if (
         resolvedOverlayPath &&
         !inlineOverlayText &&
+        !overlayReadFailed &&
         parsed.promptOverlay.source === 'none'
     ) {
         warn(
