@@ -6,11 +6,12 @@
  * @footnote-ethics: high - Realtime audio sessions are privacy-sensitive and must remain within trusted boundaries.
  */
 import type { IncomingMessage } from 'node:http';
-import type { Socket } from 'node:net';
+import type { Duplex } from 'node:stream';
 import WebSocket, { WebSocketServer } from 'ws';
 import type {
     InternalVoiceRealtimeClientEvent,
     InternalVoiceRealtimeServerEvent,
+    InternalVoiceSessionContext,
 } from '@footnote/contracts/voice';
 import {
     InternalVoiceRealtimeClientEventSchema,
@@ -22,7 +23,6 @@ import type {
 } from '@footnote/agent-runtime';
 import { logger } from '../utils/logger.js';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
-import { buildRealtimeInstructions } from '../services/prompts/realtimePromptComposer.js';
 import { parseTrustedServiceAuth } from './trustedServiceRequest.js';
 
 /**
@@ -41,6 +41,7 @@ type CreateInternalVoiceRealtimeHandlerOptions = {
     traceApiToken: string | null;
     serviceToken: string | null;
     serviceRateLimiter: SimpleRateLimiter;
+    buildInstructions: (context: InternalVoiceSessionContext) => string;
 };
 
 const STATUS_MESSAGES: Record<number, string> = {
@@ -53,7 +54,7 @@ const STATUS_MESSAGES: Record<number, string> = {
 };
 
 const rejectUpgrade = (
-    socket: Socket,
+    socket: Duplex,
     statusCode: number,
     payload: { error: string; details?: string }
 ): void => {
@@ -93,6 +94,7 @@ export const createInternalVoiceRealtimeHandler = ({
     traceApiToken,
     serviceToken,
     serviceRateLimiter,
+    buildInstructions,
 }: CreateInternalVoiceRealtimeHandlerOptions) => {
     const wss = new WebSocketServer({ noServer: true });
 
@@ -185,7 +187,7 @@ export const createInternalVoiceRealtimeHandler = ({
                 });
                 try {
                     session = await realtimeVoiceRuntime.createSession({
-                        instructions: buildRealtimeInstructions(event.context),
+                        instructions: buildInstructions(event.context),
                         options: event.options,
                     });
                     session.onEvent(forwardRuntimeEvent);
@@ -255,7 +257,10 @@ export const createInternalVoiceRealtimeHandler = ({
 
     const handleUpgrade = (
         req: IncomingMessage,
-        socket: Socket,
+        // Node exposes HTTP upgrade sockets as Duplex streams. Treat that as
+        // the boundary type here so server.ts can forward the upgrade socket
+        // directly without unsafe casts.
+        socket: Duplex,
         head: Buffer
     ): void => {
         if (req.method !== 'GET') {

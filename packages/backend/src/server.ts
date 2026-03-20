@@ -54,6 +54,7 @@ import { createInternalImageHandler } from './handlers/internalImage.js';
 import { createInternalVoiceTtsService } from './services/internalVoiceTts.js';
 import { createInternalVoiceTtsHandler } from './handlers/internalVoiceTts.js';
 import { createInternalVoiceRealtimeHandler } from './handlers/internalVoiceRealtime.js';
+import { buildRealtimeInstructions } from './services/prompts/realtimePromptComposer.js';
 
 // --- Path configuration ---
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -325,6 +326,7 @@ const { handleUpgrade: handleInternalVoiceRealtimeUpgrade } =
                 limit: runtimeConfig.rateLimits.reflectService.limit,
                 window: runtimeConfig.rateLimits.reflectService.windowMs,
             }),
+        buildInstructions: buildRealtimeInstructions,
     });
 // Decide whether /api/traces/:responseId should return JSON or the SPA HTML shell.
 // We default to JSON unless the Accept header clearly asks for HTML.

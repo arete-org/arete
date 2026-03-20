@@ -175,7 +175,13 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
     private pendingSpeaker: { label: string; id?: string } | null = null;
     private pendingBytes = 0;
     private pendingCommit = false;
-    private sessionReadyEmitted = false;
+    // `session.ready` is emitted during session setup, before backend callers
+    // can attach listeners. Keep the first ready event so late listeners still
+    // learn that the session is usable without changing the public contract.
+    private sessionReadyEvent: Extract<
+        InternalVoiceRealtimeServerEvent,
+        { type: 'session.ready' }
+    > | null = null;
 
     constructor(
         ws: WebSocket,
@@ -195,7 +201,7 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
                     unknown
                 >;
                 if (
-                    !this.sessionReadyEmitted &&
+                    !this.sessionReadyEvent &&
                     (parsed.type === 'session.created' ||
                         parsed.type === 'session.updated')
                 ) {
@@ -233,11 +239,24 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
         listener: (event: InternalVoiceRealtimeServerEvent) => void
     ): void {
         this.emitter.on('event', listener);
+
+        // Replay the latched ready signal for listeners that subscribe after
+        // createSession() returns. This avoids a race between session setup and
+        // backend websocket forwarding.
+        if (this.sessionReadyEvent) {
+            listener(this.sessionReadyEvent);
+        }
     }
 
     public emitEvent(event: InternalVoiceRealtimeServerEvent): void {
         if (event.type === 'session.ready') {
-            this.sessionReadyEmitted = true;
+            // `session.ready` is a one-time state transition. Ignore duplicate
+            // emissions so existing listeners and replayed listeners both see
+            // one stable readiness signal.
+            if (this.sessionReadyEvent) {
+                return;
+            }
+            this.sessionReadyEvent = event;
         }
         this.emitter.emit('event', event);
     }
