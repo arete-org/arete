@@ -503,3 +503,49 @@ test('internal image task service records usage after successful runtime executi
     });
     assert.equal(response.result.responseId, 'resp_123');
 });
+
+test('internal image task service keeps a successful result when usage recording fails', async () => {
+    const service = createInternalImageTaskService({
+        imageGenerationRuntime: {
+            kind: 'test-image-runtime',
+            async generateImage(request) {
+                return {
+                    responseId: 'resp_123',
+                    textModel: request.textModel,
+                    imageModel: request.imageModel,
+                    revisedPrompt: null,
+                    finalStyle: request.style,
+                    annotations: {
+                        title: null,
+                        description: null,
+                        note: null,
+                        adjustedPrompt: null,
+                    },
+                    finalImageBase64: 'base64-image',
+                    outputFormat: request.outputFormat,
+                    outputCompression: request.outputCompression,
+                    usage: {
+                        inputTokens: 12,
+                        outputTokens: 8,
+                        totalTokens: 20,
+                        imageCount: 1,
+                    },
+                    costs: {
+                        text: 0.00002,
+                        image: 0.011,
+                        total: 0.01102,
+                        perImage: 0.011,
+                    },
+                    generationTimeMs: 2,
+                };
+            },
+        },
+        recordUsage: () => {
+            throw new Error('write failed');
+        },
+    });
+
+    const response = await service.runImageTask(createImageRequestPayload());
+
+    assert.equal(response.result.responseId, 'resp_123');
+});

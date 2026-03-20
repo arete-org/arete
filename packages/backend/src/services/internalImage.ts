@@ -25,6 +25,7 @@ import {
     type BackendLLMCostRecord,
 } from './llmCostRecorder.js';
 import { composeImagePrompts } from './prompts/imagePromptComposer.js';
+import { logger } from '../utils/logger.js';
 
 export type CreateInternalImageTaskServiceOptions = {
     imageGenerationRuntime: ImageGenerationRuntime;
@@ -146,17 +147,23 @@ export const createInternalImageTaskService = ({
                 : undefined,
         });
 
-        recordUsage({
-            feature: 'image',
-            model: result.imageModel,
-            promptTokens: result.usage.inputTokens,
-            completionTokens: result.usage.outputTokens,
-            totalTokens: result.usage.totalTokens,
-            inputCostUsd: result.costs.text,
-            outputCostUsd: result.costs.image,
-            totalCostUsd: result.costs.total,
-            timestamp: Date.now(),
-        });
+        try {
+            recordUsage({
+                feature: 'image',
+                model: result.imageModel,
+                promptTokens: result.usage.inputTokens,
+                completionTokens: result.usage.outputTokens,
+                totalTokens: result.usage.totalTokens,
+                inputCostUsd: result.costs.text,
+                outputCostUsd: result.costs.image,
+                totalCostUsd: result.costs.total,
+                timestamp: Date.now(),
+            });
+        } catch (error) {
+            logger.warn(
+                `Internal image task usage recording failed: ${error instanceof Error ? error.message : String(error)}`
+            );
+        }
 
         const response = toInternalImageResponse(result);
         const parsed =
