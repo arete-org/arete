@@ -44,6 +44,7 @@ const messageLogger = logger.child({ module: 'messageCreate' });
  */
 interface Dependencies {
     openaiService: OpenAIService;
+    contextManager?: ChannelContextManager | null;
 }
 
 /**
@@ -168,7 +169,12 @@ export class MessageCreate extends Event {
         });
         this.catchupFilter = new CatchupFilter();
 
-        if (runtimeConfig.contextManager.enabled) {
+        if (dependencies.contextManager !== undefined) {
+            this.contextManager = dependencies.contextManager;
+            messageLogger.info(
+                `ChannelContextManager ${this.contextManager ? 'enabled' : 'disabled'}`
+            );
+        } else if (runtimeConfig.contextManager.enabled) {
             this.contextManager = new ChannelContextManager({
                 enabled: true,
                 maxMessagesPerChannel:

@@ -12,6 +12,8 @@ import fs from 'fs';
 import OpenAI from 'openai';
 
 import { logger } from './logger.js';
+import { estimateTextCost } from './pricing.js';
+import type { LLMUsageRecord } from '../state/ChannelContextManager.js';
 
 /**
  * Minimal chat message format used by context-building helpers.
@@ -52,6 +54,10 @@ export type TTSOptions = {
     styleNote?: string;
 };
 
+export interface LLMUsageRecorder {
+    recordLLMUsage(record: LLMUsageRecord): void;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const OUTPUT_PATH = path.resolve(__dirname, '..', 'output');
@@ -77,6 +83,15 @@ export const TTS_DEFAULT_OPTIONS: TTSOptions = {
 };
 
 let isDirectoryInitialized = false;
+const TTS_INPUT_TOKEN_PRICING_PER_MILLION: Record<TTSOptions['model'], number> =
+    {
+        'tts-1': 15,
+        'tts-1-hd': 30,
+        'gpt-4o-mini-tts': 0.6,
+    };
+
+const estimateTokenCount = (value: string): number =>
+    Math.max(1, Math.ceil((value ?? '').length / 4));
 
 /**
  * Handles the remaining Discord-local OpenAI helpers.
@@ -85,9 +100,11 @@ let isDirectoryInitialized = false;
  */
 export class OpenAIService {
     private openai: OpenAI;
+    private readonly usageRecorder: LLMUsageRecorder | null;
 
-    constructor(apiKey: string) {
+    constructor(apiKey: string, usageRecorder: LLMUsageRecorder | null = null) {
         this.openai = new OpenAI({ apiKey });
+        this.usageRecorder = usageRecorder;
         ensureDirectories();
     }
 
@@ -112,16 +129,35 @@ export class OpenAIService {
         logger.debug(`Using TTS options: ${JSON.stringify(instructions)}`);
 
         try {
+            const instructionsText = `Speed: ${instructions.speed}, Pitch: ${instructions.pitch}, Emphasis: ${instructions.emphasis}, Style: ${instructions.style}, Style weight: ${instructions.styleDegree}, Other style notes: ${instructions.styleNote}`;
             const audioResponse = await this.openai.audio.speech.create({
                 model: instructions.model,
                 voice: instructions.voice,
                 input,
-                instructions: `Speed: ${instructions.speed}, Pitch: ${instructions.pitch}, Emphasis: ${instructions.emphasis}, Style: ${instructions.style}, Style weight: ${instructions.styleDegree}, Other style notes: ${instructions.styleNote}`,
+                instructions: instructionsText,
                 response_format: format,
             });
 
             const buffer = Buffer.from(await audioResponse.arrayBuffer());
             await fs.promises.writeFile(outputPath, buffer);
+            const promptTokens = estimateTokenCount(
+                `${input}\n${instructionsText}`
+            );
+            const inputCostUsd =
+                (promptTokens / 1_000_000) *
+                TTS_INPUT_TOKEN_PRICING_PER_MILLION[instructions.model];
+            this.usageRecorder?.recordLLMUsage({
+                feature: 'tts',
+                model: instructions.model,
+                promptTokens,
+                completionTokens: 0,
+                totalTokens: promptTokens,
+                inputCostUsd,
+                outputCostUsd: 0,
+                totalCostUsd: inputCostUsd,
+                estimated: true,
+                timestamp: Date.now(),
+            });
             logger.debug(`Generated speech file: ${outputPath}`);
             return outputPath;
         } catch (error) {
@@ -150,6 +186,27 @@ export class OpenAIService {
             model: DEFAULT_EMBEDDING_MODEL,
             input: text,
             dimensions,
+        });
+
+        const promptTokens =
+            embedding.usage?.prompt_tokens ?? estimateTokenCount(text);
+        const totalTokens = embedding.usage?.total_tokens ?? promptTokens;
+        const costBreakdown = estimateTextCost(
+            DEFAULT_EMBEDDING_MODEL,
+            promptTokens,
+            0
+        );
+        this.usageRecorder?.recordLLMUsage({
+            feature: 'embedding',
+            model: DEFAULT_EMBEDDING_MODEL,
+            promptTokens,
+            completionTokens: 0,
+            totalTokens,
+            inputCostUsd: costBreakdown.inputCost,
+            outputCostUsd: costBreakdown.outputCost,
+            totalCostUsd: costBreakdown.totalCost,
+            estimated: embedding.usage?.prompt_tokens === undefined,
+            timestamp: Date.now(),
         });
 
         return embedding.data[0].embedding;

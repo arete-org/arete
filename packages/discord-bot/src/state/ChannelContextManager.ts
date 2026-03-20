@@ -7,7 +7,7 @@
  */
 
 import { Message } from 'discord.js';
-import { logger } from '../utils/logger.js';
+import { logger, type LLMCostTotals } from '../utils/logger.js';
 
 /**
  * Stored message for the channel context manager
@@ -47,6 +47,19 @@ export interface ChannelMetrics {
     lastEngagementScore: number;
     lastActivity: number;
     flags: string[];
+}
+
+export interface LLMUsageRecord {
+    feature: 'embedding' | 'tts';
+    model: string;
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    inputCostUsd: number;
+    outputCostUsd: number;
+    totalCostUsd: number;
+    estimated: boolean;
+    timestamp: number;
 }
 
 /**
@@ -92,6 +105,12 @@ export class ChannelContextManager {
     private readonly channelStates = new Map<string, ChannelState>();
     private readonly config: ChannelContextConfig;
     private lastGlobalEviction: number;
+    private llmCostTotals: LLMCostTotals = {
+        totalCostUsd: 0,
+        totalCalls: 0,
+        totalTokensIn: 0,
+        totalTokensOut: 0,
+    };
 
     constructor(config: ChannelContextConfig) {
         this.config = config;
@@ -399,6 +418,44 @@ export class ChannelContextManager {
             );
             return { channelCount: 0, totalMessages: 0 };
         }
+    }
+
+    public recordLLMUsage(record: LLMUsageRecord): void {
+        try {
+            if (!this.config.enabled) {
+                return;
+            }
+
+            this.llmCostTotals = {
+                totalCostUsd:
+                    this.llmCostTotals.totalCostUsd + record.totalCostUsd,
+                totalCalls: this.llmCostTotals.totalCalls + 1,
+                totalTokensIn:
+                    this.llmCostTotals.totalTokensIn + record.promptTokens,
+                totalTokensOut:
+                    this.llmCostTotals.totalTokensOut +
+                    record.completionTokens,
+            };
+
+            logger.debug(
+                JSON.stringify({
+                    event: 'context_llm_usage_recorded',
+                    feature: record.feature,
+                    model: record.model,
+                    totalTokens: record.totalTokens,
+                    totalCostUsd: record.totalCostUsd,
+                    estimated: record.estimated,
+                })
+            );
+        } catch (error) {
+            logger.error(
+                `ChannelContextManager recordLLMUsage failed: ${(error as Error)?.message ?? error}`
+            );
+        }
+    }
+
+    public getLLMUsageTotals(): LLMCostTotals {
+        return { ...this.llmCostTotals };
     }
 
     /**

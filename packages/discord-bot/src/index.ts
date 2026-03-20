@@ -17,6 +17,7 @@ import { OpenAIService } from './utils/openaiService.js';
 import type { Command } from './commands/BaseCommand.js';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { botApi } from './api/botApi.js';
+import { ChannelContextManager } from './state/ChannelContextManager.js';
 import {
     evictFollowUpContext,
     readFollowUpContext,
@@ -99,7 +100,19 @@ const __dirname = path.dirname(__filename);
  * Shared OpenAI service instance for the Discord-local helpers that still stay
  * in-process, such as TTS and embeddings.
  */
-export const openaiService = new OpenAIService(runtimeConfig.openaiApiKey);
+const sharedContextManager = runtimeConfig.contextManager.enabled
+    ? new ChannelContextManager({
+          enabled: true,
+          maxMessagesPerChannel: runtimeConfig.contextManager.maxMessagesPerChannel,
+          messageRetentionMs: runtimeConfig.contextManager.messageRetentionMs,
+          evictionIntervalMs: runtimeConfig.contextManager.evictionIntervalMs,
+      })
+    : null;
+
+export const openaiService = new OpenAIService(
+    runtimeConfig.openaiApiKey,
+    sharedContextManager
+);
 
 // Re-export modules needed by server.js
 export { OpenAIService } from './utils/openaiService.js';
@@ -125,6 +138,7 @@ const client = new Client({
 const commandHandler = new CommandHandler();
 const eventManager = new EventManager(client, {
     openaiService,
+    contextManager: sharedContextManager,
 });
 
 // Initialize client handlers
