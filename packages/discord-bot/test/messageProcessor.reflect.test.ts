@@ -845,6 +845,10 @@ test('buildReflectRequestFromMessage uses backend image-description tasks for at
             'https://example.com/screenshot.png'
         );
         assert.equal(
+            capturedRequests[0]?.context,
+            'What changed in this image?'
+        );
+        assert.equal(
             capturedRequests[0]?.channelContext?.channelId,
             'channel-1'
         );
@@ -853,6 +857,125 @@ test('buildReflectRequestFromMessage uses backend image-description tasks for at
             .join('\n');
         assert.match(joinedConversation, /BEGIN Image Descriptions/);
         assert.match(joinedConversation, /Screenshot of a policy update/);
+    } finally {
+        (
+            botApi as {
+                runImageDescriptionTaskViaApi: typeof botApi.runImageDescriptionTaskViaApi;
+            }
+        ).runImageDescriptionTaskViaApi = originalRunImageDescriptionTaskViaApi;
+    }
+});
+
+test('buildReflectRequestFromMessage omits empty image-description context for image-only messages', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const originalRunImageDescriptionTaskViaApi =
+        botApi.runImageDescriptionTaskViaApi;
+    const capturedRequests: Array<{
+        task: string;
+        imageUrl: string;
+        context?: string;
+        channelContext?: { channelId?: string; guildId?: string };
+    }> = [];
+
+    (
+        processor as unknown as {
+            contextBuilder: {
+                buildMessageContext: (
+                    message: unknown,
+                    maxMessages: number
+                ) => Promise<{
+                    context: Array<{
+                        role: 'system' | 'user' | 'assistant';
+                        content: string;
+                    }>;
+                }>;
+            };
+        }
+    ).contextBuilder = {
+        buildMessageContext: async () => ({
+            context: [
+                { role: 'system', content: 'Base prompt.' },
+                { role: 'user', content: 'Jordan uploaded an image.' },
+            ],
+        }),
+    };
+
+    (
+        botApi as {
+            runImageDescriptionTaskViaApi: typeof botApi.runImageDescriptionTaskViaApi;
+        }
+    ).runImageDescriptionTaskViaApi = (async (request) => {
+        capturedRequests.push(request);
+        return {
+            task: 'image_description',
+            result: {
+                description: '{"summary":"Standalone screenshot description"}',
+                model: 'gpt-4o-mini',
+                usage: {
+                    inputTokens: 10,
+                    outputTokens: 5,
+                    totalTokens: 15,
+                },
+                costs: {
+                    input: 0.0000015,
+                    output: 0.000003,
+                    total: 0.0000045,
+                },
+            },
+        };
+    }) as typeof botApi.runImageDescriptionTaskViaApi;
+
+    try {
+        const built = await processorAccess.buildReflectRequestFromMessage(
+            {
+                id: 'message-attach-2',
+                content: '   ',
+                author: { id: 'user-1', username: 'Jordan' },
+                channelId: 'channel-1',
+                guildId: 'guild-1',
+                attachments: {
+                    filter: () => ({
+                        size: 1,
+                        map: (callback: (attachment: unknown) => unknown) => [
+                            callback({
+                                id: 'attachment-1',
+                                url: 'https://example.com/screenshot.png',
+                                contentType: 'image/png',
+                            }),
+                        ],
+                    }),
+                },
+                mentions: {
+                    users: {
+                        has: () => false,
+                    },
+                },
+                client: {
+                    user: {
+                        id: 'bot-1',
+                    },
+                },
+                channel: {},
+                embeds: [],
+            } as never,
+            ''
+        );
+
+        if (!built) {
+            throw new Error('Expected reflect request to be built');
+        }
+
+        assert.equal(capturedRequests.length, 1);
+        assert.equal(
+            Object.prototype.hasOwnProperty.call(capturedRequests[0] ?? {}, 'context'),
+            false
+        );
+        const joinedConversation = built.request.conversation
+            .map((entry) => entry.content)
+            .join('\n');
+        assert.match(joinedConversation, /BEGIN Image Descriptions/);
+        assert.match(joinedConversation, /Standalone screenshot description/);
     } finally {
         (
             botApi as {

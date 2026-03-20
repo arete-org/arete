@@ -220,6 +220,8 @@ test('openai image runtime redacts prompt text in debug logs', async () => {
 
 test('openai image runtime emits partial-image callbacks when streaming is enabled', async () => {
     const partialImages: Array<{ index: number; base64: string }> = [];
+    const eventOrder: string[] = [];
+    let streamedPayload: Record<string, unknown> | undefined;
     const imageResponse: Awaited<
         ReturnType<OpenAiImageRuntimeResponseClient['createResponse']>
     > = {
@@ -245,7 +247,8 @@ test('openai image runtime emits partial-image callbacks when streaming is enabl
             async createResponse() {
                 throw new Error('non-streaming path should not be used');
             },
-            async streamResponse() {
+            async streamResponse(payload) {
+                streamedPayload = payload as unknown as Record<string, unknown>;
                 return createResponseStream(imageResponse, [
                     'partial-one',
                     'partial-two',
@@ -259,14 +262,25 @@ test('openai image runtime emits partial-image callbacks when streaming is enabl
             stream: true,
             onPartialImage(payload) {
                 partialImages.push(payload);
+                eventOrder.push(`partial-${payload.index}`);
             },
         })
     );
+    eventOrder.push('final');
 
     assert.deepEqual(partialImages, [
         { index: 0, base64: 'partial-one' },
         { index: 1, base64: 'partial-two' },
     ]);
+    assert.deepEqual(eventOrder, ['partial-0', 'partial-1', 'final']);
+    assert.equal(
+        (
+            (streamedPayload?.tools as Array<{
+                partial_images?: number;
+            }>)?.[0]?.partial_images ?? null
+        ),
+        1
+    );
     assert.equal(result.finalImageBase64, 'final-base64-image');
 });
 

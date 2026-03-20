@@ -404,6 +404,7 @@ export class MessageProcessor {
                     contentLength: message.content.length,
                 }
             );
+            const trimmedAttachmentContext = message.content.trim();
 
             const imageDescriptions = await Promise.all(
                 imageAttachments.map(async (attachment) => {
@@ -412,7 +413,11 @@ export class MessageProcessor {
                             await botApi.runImageDescriptionTaskViaApi({
                                 task: 'image_description',
                                 imageUrl: attachment.url,
-                                context: message.content,
+                                ...(trimmedAttachmentContext.length > 0
+                                    ? {
+                                          context: trimmedAttachmentContext,
+                                      }
+                                    : {}),
                                 channelContext: {
                                     channelId: message.channelId,
                                     guildId: message.guildId ?? undefined,

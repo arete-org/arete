@@ -31,6 +31,7 @@ type ResponseCreateParams = ResponseCreateParamsNonStreaming;
 type ResponseStreamParams = ResponseCreateParamsStreaming;
 
 const DEFAULT_IMAGE_OUTPUT_COMPRESSION = 100;
+const PARTIAL_IMAGE_LIMIT = 1;
 
 type ResponseCreateParamsImageTool = Tool.ImageGeneration;
 
@@ -136,7 +137,9 @@ const createImageGenerationTool = (
         | 'background'
         | 'outputFormat'
         | 'outputCompression'
-    >
+    > & {
+        allowPartialImages: boolean;
+    }
 ): ResponseCreateParamsImageTool => {
     const tool: ResponseCreateParamsImageTool = {
         type: 'image_generation',
@@ -153,6 +156,10 @@ const createImageGenerationTool = (
         tool.output_compression = clampOutputCompression(
             request.outputCompression
         );
+    }
+
+    if (request.allowPartialImages) {
+        tool.partial_images = PARTIAL_IMAGE_LIMIT;
     }
 
     return tool;
@@ -446,7 +453,12 @@ const createOpenAiImageRuntime = ({
             const requestPayload: ResponseCreateParams = {
                 model: request.textModel as ResponseCreateParams['model'],
                 input,
-                tools: [createImageGenerationTool(request)],
+                tools: [
+                    createImageGenerationTool({
+                        ...request,
+                        allowPartialImages: Boolean(request.onPartialImage),
+                    }),
+                ],
                 tool_choice: toolChoice,
                 previous_response_id: request.followUpResponseId ?? null,
             };

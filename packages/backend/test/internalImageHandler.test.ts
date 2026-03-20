@@ -13,6 +13,7 @@ import type {
     ImageGenerationRequest,
     ImageGenerationRuntime,
 } from '@footnote/agent-runtime';
+import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
 import { createInternalImageHandler } from '../src/handlers/internalImage.js';
 import { createInternalImageTaskService } from '../src/services/internalImage.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
@@ -396,7 +397,7 @@ test('internal image endpoint returns 503 when the internal image task service i
 });
 
 test('internal image task service records usage after successful runtime execution', async () => {
-    let recordedUsageCount = 0;
+    const recordedUsage: BackendLLMCostRecord[] = [];
     const service = createInternalImageTaskService({
         imageGenerationRuntime: {
             kind: 'test-image-runtime',
@@ -432,13 +433,27 @@ test('internal image task service records usage after successful runtime executi
                 };
             },
         },
-        recordUsage: () => {
-            recordedUsageCount += 1;
+        recordUsage: (record) => {
+            recordedUsage.push(record);
         },
     });
 
     const response = await service.runImageTask(createImageRequestPayload());
 
-    assert.equal(recordedUsageCount, 1);
+    assert.equal(recordedUsage.length, 1);
+    const usageRecord = recordedUsage[0];
+    assert.ok(usageRecord);
+    assert.equal(typeof usageRecord.timestamp, 'number');
+    assert.deepEqual(usageRecord, {
+        feature: 'image',
+        model: 'gpt-image-1-mini',
+        promptTokens: 12,
+        completionTokens: 8,
+        totalTokens: 20,
+        inputCostUsd: 0.00002,
+        outputCostUsd: 0.011,
+        totalCostUsd: 0.01102,
+        timestamp: usageRecord.timestamp,
+    });
     assert.equal(response.result.responseId, 'resp_123');
 });

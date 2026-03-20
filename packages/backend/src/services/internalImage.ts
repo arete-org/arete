@@ -108,7 +108,7 @@ export const createInternalImageTaskService = ({
 
         recordUsage({
             feature: 'image',
-            model: result.textModel,
+            model: result.imageModel,
             promptTokens: result.usage.inputTokens,
             completionTokens: result.usage.outputTokens,
             totalTokens: result.usage.totalTokens,
