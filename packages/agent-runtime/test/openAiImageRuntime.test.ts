@@ -260,9 +260,15 @@ test('openai image runtime emits partial-image callbacks when streaming is enabl
     const result = await runtime.generateImage(
         createRequest({
             stream: true,
-            onPartialImage(payload) {
+            async onPartialImage(payload) {
                 partialImages.push(payload);
-                eventOrder.push(`partial-${payload.index}`);
+                eventOrder.push(`start-${payload.index}`);
+
+                if (payload.index === 0) {
+                    await new Promise((resolve) => setTimeout(resolve, 20));
+                }
+
+                eventOrder.push(`done-${payload.index}`);
             },
         })
     );
@@ -272,7 +278,13 @@ test('openai image runtime emits partial-image callbacks when streaming is enabl
         { index: 0, base64: 'partial-one' },
         { index: 1, base64: 'partial-two' },
     ]);
-    assert.deepEqual(eventOrder, ['partial-0', 'partial-1', 'final']);
+    assert.deepEqual(eventOrder, [
+        'start-0',
+        'done-0',
+        'start-1',
+        'done-1',
+        'final',
+    ]);
     assert.equal(
         (
             (streamedPayload?.tools as Array<{
@@ -282,6 +294,7 @@ test('openai image runtime emits partial-image callbacks when streaming is enabl
         1
     );
     assert.equal(result.finalImageBase64, 'final-base64-image');
+    assert.ok(Math.abs(result.costs.image - 0.0126) < 1e-12);
 });
 
 test('openai image runtime maps provider errors into stable adapter errors', async () => {

@@ -326,7 +326,8 @@ const createDefaultResponseClient = (
 const normalizeResponseToImageResult = (
     request: ImageGenerationRequest,
     response: Pick<Response, 'id' | 'error' | 'output' | 'usage'>,
-    startedAt: number
+    startedAt: number,
+    partialImageCount: number = 0
 ): ImageGenerationResult => {
     if (response.error) {
         throw new Error(mapResponseError(response.error));
@@ -365,6 +366,7 @@ const normalizeResponseToImageResult = (
         quality: request.quality,
         size: request.size,
         imageCount: successfulImageCount,
+        partialImageCount,
     });
 
     return {
@@ -480,7 +482,7 @@ const createOpenAiImageRuntime = ({
             const shouldStream = Boolean(
                 request.stream ?? request.onPartialImage
             );
-            const response = shouldStream
+            const streamedResult = shouldStream
                 ? await (async () => {
                       if (!responseClient.streamResponse) {
                           throw new Error(
@@ -492,29 +494,34 @@ const createOpenAiImageRuntime = ({
                           ...requestPayload,
                           stream: true,
                       });
+                      let partialImageCount = 0;
+                      let partialImageQueue = Promise.resolve();
                       stream.on(
                           'response.image_generation_call.partial_image',
                           (event) => {
+                              partialImageCount += 1;
                               if (!request.onPartialImage) {
                                   return;
                               }
 
-                              void Promise.resolve(
-                                  request.onPartialImage({
-                                      index: event.partial_image_index,
-                                      base64: event.partial_image_b64,
-                                  })
-                              ).catch((error) => {
-                                  logger?.warn?.(
-                                      'Image runtime partial-image callback failed.',
-                                      {
-                                          error:
-                                              error instanceof Error
-                                                  ? error.message
-                                                  : String(error),
-                                      }
-                                  );
-                              });
+                              partialImageQueue = partialImageQueue
+                                  .then(() =>
+                                      request.onPartialImage?.({
+                                          index: event.partial_image_index,
+                                          base64: event.partial_image_b64,
+                                      })
+                                  )
+                                  .catch((error) => {
+                                      logger?.warn?.(
+                                          'Image runtime partial-image callback failed.',
+                                          {
+                                              error:
+                                                  error instanceof Error
+                                                      ? error.message
+                                                      : String(error),
+                                          }
+                                      );
+                                  });
                           }
                       );
                       stream.on('error', (error) => {
@@ -538,17 +545,37 @@ const createOpenAiImageRuntime = ({
                           );
                       });
 
-                      return stream.finalResponse();
+                      try {
+                          const response = await stream.finalResponse();
+                          await partialImageQueue;
+                          return {
+                              response,
+                              partialImageCount,
+                          };
+                      } catch (error) {
+                          await partialImageQueue;
+                          throw error;
+                      }
                   })()
-                : await responseClient.createResponse(requestPayload);
+                : {
+                      response: await responseClient.createResponse(
+                          requestPayload
+                      ),
+                      partialImageCount: 0,
+                  };
 
-            if (response.error) {
+            if (streamedResult.response.error) {
                 logger?.error?.('Image runtime response contained an error.', {
-                    code: response.error.code,
+                    code: streamedResult.response.error.code,
                 });
             }
 
-            return normalizeResponseToImageResult(request, response, startedAt);
+            return normalizeResponseToImageResult(
+                request,
+                streamedResult.response,
+                startedAt,
+                streamedResult.partialImageCount
+            );
         },
     };
 };
