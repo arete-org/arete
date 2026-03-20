@@ -207,7 +207,29 @@ export async function resolveProvenanceMetadata(
                 {
                     responseId,
                     status: response.status,
-                    payload: response.data,
+                    payloadKeys:
+                        response.data &&
+                        typeof response.data === 'object' &&
+                        !Array.isArray(response.data)
+                            ? Object.keys(response.data)
+                            : [],
+                }
+            );
+            return { responseId, metadata: null };
+        }
+
+        if (response.data.responseId !== responseId) {
+            provenanceLogger.warn(
+                'Failed to load provenance metadata: mismatched responseId',
+                {
+                    responseId,
+                    status: response.status,
+                    payloadKeys:
+                        response.data &&
+                        typeof response.data === 'object' &&
+                        !Array.isArray(response.data)
+                            ? Object.keys(response.data)
+                            : [],
                 }
             );
             return { responseId, metadata: null };
