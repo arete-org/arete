@@ -14,6 +14,8 @@ import type {
     SupportedEngagementIgnoreMode,
     SupportedLogLevel,
     SupportedNodeEnv,
+    SupportedOpenAIRealtimeModel,
+    SupportedOpenAITtsVoice,
 } from '@footnote/contracts/providers';
 import { supportedLogLevels } from '@footnote/contracts/providers';
 import { bootstrapLogger } from '../utils/logger.js';
@@ -42,6 +44,14 @@ const SUPPORTED_NODE_ENVS = new Set<SupportedNodeEnv>(
     (envSpecByKey.NODE_ENV.allowedValues ?? []) as readonly SupportedNodeEnv[]
 );
 const VALID_LOG_LEVELS = new Set<SupportedLogLevel>(supportedLogLevels);
+const VALID_REALTIME_MODELS = new Set<SupportedOpenAIRealtimeModel>(
+    (envSpecByKey.REALTIME_DEFAULT_MODEL.allowedValues ??
+        []) as readonly SupportedOpenAIRealtimeModel[]
+);
+const VALID_REALTIME_VOICES = new Set<SupportedOpenAITtsVoice>(
+    (envSpecByKey.REALTIME_DEFAULT_VOICE.allowedValues ??
+        []) as readonly SupportedOpenAITtsVoice[]
+);
 
 const BOT_INTERACTION_ACTIONS = new Set<SupportedBotInteractionAction>(
     (envSpecByKey.BOT_BACK_AND_FORTH_ACTION.allowedValues ??
@@ -231,6 +241,47 @@ const getLogLevelEnv = (
 
     bootstrapLogger.warn(
         `Ignoring invalid LOG_LEVEL "${value}". Using default (${defaultValue}).`
+    );
+    return defaultValue;
+};
+
+const getRealtimeModelEnv = (
+    key: string,
+    defaultValue: SupportedOpenAIRealtimeModel
+): SupportedOpenAIRealtimeModel => {
+    const value = process.env[key];
+    if (!value) {
+        return defaultValue;
+    }
+
+    const normalizedValue =
+        value.trim() as SupportedOpenAIRealtimeModel;
+    if (VALID_REALTIME_MODELS.has(normalizedValue)) {
+        return normalizedValue;
+    }
+
+    bootstrapLogger.warn(
+        `Ignoring invalid realtime model for ${key}: "${value}". Using default (${defaultValue}).`
+    );
+    return defaultValue;
+};
+
+const getRealtimeVoiceEnv = (
+    key: string,
+    defaultValue: SupportedOpenAITtsVoice
+): SupportedOpenAITtsVoice => {
+    const value = process.env[key];
+    if (!value) {
+        return defaultValue;
+    }
+
+    const normalizedValue = value.trim() as SupportedOpenAITtsVoice;
+    if (VALID_REALTIME_VOICES.has(normalizedValue)) {
+        return normalizedValue;
+    }
+
+    bootstrapLogger.warn(
+        `Ignoring invalid realtime voice for ${key}: "${value}". Using default (${defaultValue}).`
     );
     return defaultValue;
 };
@@ -476,6 +527,16 @@ export const runtimeConfig = {
         enabled: getBooleanEnv(
             'REALTIME_FILTER_ENABLED',
             envDefaultValues.REALTIME_FILTER_ENABLED
+        ),
+    },
+    realtime: {
+        defaultModel: getRealtimeModelEnv(
+            'REALTIME_DEFAULT_MODEL',
+            envDefaultValues.REALTIME_DEFAULT_MODEL
+        ),
+        defaultVoice: getRealtimeVoiceEnv(
+            'REALTIME_DEFAULT_VOICE',
+            envDefaultValues.REALTIME_DEFAULT_VOICE
         ),
     },
     engagementWeights: {

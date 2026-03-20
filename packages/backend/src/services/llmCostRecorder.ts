@@ -7,7 +7,9 @@
  */
 import {
     estimateOpenAITextCost,
+    estimateOpenAITtsCost,
     hasOpenAITextPricing,
+    hasOpenAITtsPricing,
 } from '@footnote/contracts/pricing';
 import { formatUsd, logger, type LLMCostTotals } from '../utils/logger.js';
 
@@ -17,7 +19,8 @@ export type BackendLLMCostRecord = {
         | 'reflect_planner'
         | 'news'
         | 'image'
-        | 'image_description';
+        | 'image_description'
+        | 'tts';
     model: string;
     promptTokens: number;
     completionTokens: number;
@@ -54,6 +57,27 @@ export const estimateBackendTextCost = (
         promptTokens,
         completionTokens
     );
+    return {
+        inputCostUsd: estimatedCost.inputCost,
+        outputCostUsd: estimatedCost.outputCost,
+        totalCostUsd: estimatedCost.totalCost,
+    };
+};
+
+export const estimateBackendTtsCost = (
+    model: string,
+    promptTokens: number
+): Pick<
+    BackendLLMCostRecord,
+    'inputCostUsd' | 'outputCostUsd' | 'totalCostUsd'
+> => {
+    if (!hasOpenAITtsPricing(model)) {
+        logger.warn(
+            `No backend TTS pricing configured for model ${model}. Recording zero estimated cost.`
+        );
+    }
+
+    const estimatedCost = estimateOpenAITtsCost(model, promptTokens);
     return {
         inputCostUsd: estimatedCost.inputCost,
         outputCostUsd: estimatedCost.outputCost,

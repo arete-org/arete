@@ -8,14 +8,15 @@
 import WebSocket from 'ws';
 import { RealtimeSessionOptions } from '../utils/realtimeService.js';
 import { logger } from '../utils/logger.js';
+import { runtimeConfig } from '../config.js';
 
 export class RealtimeSessionConfig {
     private options: RealtimeSessionOptions;
 
     constructor(options: RealtimeSessionOptions = {}) {
         this.options = {
-            model: 'gpt-realtime',
-            voice: 'echo',
+            model: runtimeConfig.realtime.defaultModel,
+            voice: runtimeConfig.realtime.defaultVoice,
             ...options,
         };
     }

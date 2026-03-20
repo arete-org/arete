@@ -31,6 +31,7 @@
         "@footnote/contracts": "workspace:*",
         "@voltagent/core": "2.6.10",
         "ai": "6.0.116",
-        "openai": "catalog:"
+        "openai": "catalog:",
+        "ws": "catalog:"
     }
 }

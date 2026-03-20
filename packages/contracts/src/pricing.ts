@@ -9,6 +9,7 @@
 import type {
     SupportedOpenAIImageModel,
     SupportedOpenAITextModel,
+    SupportedOpenAITtsModel,
 } from './providers.js';
 import { supportedOpenAITextModels } from './providers.js';
 
@@ -107,6 +108,17 @@ export interface OpenAITextCostBreakdown {
 }
 
 /**
+ * Shared TTS-cost breakdown used by backend accounting and bot-side display
+ * helpers.
+ */
+export interface OpenAITtsCostBreakdown {
+    inputTokens: number;
+    inputCost: number;
+    outputCost: number;
+    totalCost: number;
+}
+
+/**
  * Shared image-cost request shape.
  */
 export interface ImageGenerationCostOptions {
@@ -162,6 +174,17 @@ export const openAITextPricingTable: Record<
     'text-embedding-3-small': { input: 0.02, output: 0 },
     'text-embedding-3-large': { input: 0.13, output: 0 },
     'text-embedding-ada-002': { input: 0.1, output: 0 },
+};
+
+/**
+ * Canonical TTS pricing per 1M input tokens (USD).
+ * Source: https://platform.openai.com/pricing
+ * Last updated in-repo: 2026-03-20
+ */
+export const openAITtsPricingTable: Record<SupportedOpenAITtsModel, number> = {
+    'tts-1': 15,
+    'tts-1-hd': 30,
+    'gpt-4o-mini-tts': 0.6,
 };
 
 /**
@@ -264,6 +287,14 @@ export const hasOpenAIImagePricing = (
     );
 
 /**
+ * Checks whether Footnote has a shared TTS pricing entry for the given model.
+ */
+export const hasOpenAITtsPricing = (
+    model: string
+): model is SupportedOpenAITtsModel =>
+    Object.prototype.hasOwnProperty.call(openAITtsPricingTable, model);
+
+/**
  * Resolves "auto" image quality to the default tier used by current image
  * generation accounting.
  */
@@ -312,6 +343,37 @@ export const estimateOpenAITextCost = (
         inputCost,
         outputCost,
         totalCost: inputCost + outputCost,
+    };
+};
+
+/**
+ * Estimates TTS cost from shared pricing data.
+ * Unknown model strings fail open to zero cost so callers can keep running
+ * while still surfacing mismatches through their own logs.
+ */
+export const estimateOpenAITtsCost = (
+    model: string,
+    inputTokens: number
+): OpenAITtsCostBreakdown => {
+    const pricing = hasOpenAITtsPricing(model)
+        ? openAITtsPricingTable[model]
+        : null;
+
+    if (!pricing) {
+        return {
+            inputTokens,
+            inputCost: 0,
+            outputCost: 0,
+            totalCost: 0,
+        };
+    }
+
+    const inputCost = (inputTokens / 1_000_000) * pricing;
+    return {
+        inputTokens,
+        inputCost,
+        outputCost: 0,
+        totalCost: inputCost,
     };
 };
 

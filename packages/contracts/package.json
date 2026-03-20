@@ -26,6 +26,14 @@
             "types": "./dist/web/schemas.d.ts",
             "default": "./dist/web/schemas.js"
         },
+        "./voice": {
+            "types": "./dist/voice/index.d.ts",
+            "default": "./dist/voice/index.js"
+        },
+        "./voice/schemas": {
+            "types": "./dist/voice/schemas.d.ts",
+            "default": "./dist/voice/schemas.js"
+        },
         "./providers": {
             "types": "./dist/providers.d.ts",
             "default": "./dist/providers.js"
