@@ -245,12 +245,11 @@ const getLogLevelEnv = (
 };
 
 const getRealtimeModelEnv = (
-    key: string,
-    defaultValue: SupportedOpenAIRealtimeModel
-): SupportedOpenAIRealtimeModel => {
+    key: string
+): SupportedOpenAIRealtimeModel | undefined => {
     const value = process.env[key];
     if (!value) {
-        return defaultValue;
+        return undefined;
     }
 
     const normalizedValue =
@@ -260,18 +259,17 @@ const getRealtimeModelEnv = (
     }
 
     bootstrapLogger.warn(
-        `Ignoring invalid realtime model for ${key}: "${value}". Using default (${defaultValue}).`
+        `Ignoring invalid realtime model for ${key}: "${value}".`
     );
-    return defaultValue;
+    return undefined;
 };
 
 const getRealtimeVoiceEnv = (
-    key: string,
-    defaultValue: SupportedOpenAITtsVoice
-): SupportedOpenAITtsVoice => {
+    key: string
+): SupportedOpenAITtsVoice | undefined => {
     const value = process.env[key];
     if (!value) {
-        return defaultValue;
+        return undefined;
     }
 
     const normalizedValue = value.trim() as SupportedOpenAITtsVoice;
@@ -280,9 +278,9 @@ const getRealtimeVoiceEnv = (
     }
 
     bootstrapLogger.warn(
-        `Ignoring invalid realtime voice for ${key}: "${value}". Using default (${defaultValue}).`
+        `Ignoring invalid realtime voice for ${key}: "${value}".`
     );
-    return defaultValue;
+    return undefined;
 };
 
 validateEnvironment();
@@ -528,14 +526,8 @@ export const runtimeConfig = {
         ),
     },
     realtime: {
-        defaultModel: getRealtimeModelEnv(
-            'REALTIME_DEFAULT_MODEL',
-            envDefaultValues.REALTIME_DEFAULT_MODEL
-        ),
-        defaultVoice: getRealtimeVoiceEnv(
-            'REALTIME_DEFAULT_VOICE',
-            envDefaultValues.REALTIME_DEFAULT_VOICE
-        ),
+        defaultModel: getRealtimeModelEnv('REALTIME_DEFAULT_MODEL'),
+        defaultVoice: getRealtimeVoiceEnv('REALTIME_DEFAULT_VOICE'),
     },
     engagementWeights: {
         mention: getNumberEnv(

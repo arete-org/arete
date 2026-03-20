@@ -14,9 +14,15 @@ export class RealtimeSessionConfig {
 
     constructor(options: RealtimeSessionOptions = {}) {
         const { context: _context, ...runtimeOptions } = options;
+        const defaultOptions: InternalVoiceRealtimeOptions = {};
+        if (runtimeConfig.realtime.defaultModel) {
+            defaultOptions.model = runtimeConfig.realtime.defaultModel;
+        }
+        if (runtimeConfig.realtime.defaultVoice) {
+            defaultOptions.voice = runtimeConfig.realtime.defaultVoice;
+        }
         this.options = {
-            model: runtimeConfig.realtime.defaultModel,
-            voice: runtimeConfig.realtime.defaultVoice,
+            ...defaultOptions,
             ...runtimeOptions,
         };
     }
