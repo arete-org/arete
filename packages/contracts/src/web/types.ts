@@ -10,12 +10,12 @@ import type {
     PartialResponseTemperament,
     ResponseMetadata,
     TraceAxisScore,
-} from '../ethics-core';
+} from '../ethics-core/index.js';
 import type {
     InternalImageRenderModelId,
     InternalImageTextModelId,
     SupportedImageOutputFormat,
-} from '../providers';
+} from '../providers.js';
 
 // Standard API error envelope used by multiple endpoints.
 export type ApiErrorResponse = {

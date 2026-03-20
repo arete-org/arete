@@ -9,8 +9,8 @@
 import type {
     SupportedOpenAIImageModel,
     SupportedOpenAITextModel,
-} from './providers';
-import { supportedOpenAITextModels } from './providers';
+} from './providers.js';
+import { supportedOpenAITextModels } from './providers.js';
 
 /**
  * Embedding models that still need shared cost math even though they are not

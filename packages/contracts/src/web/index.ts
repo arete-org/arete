@@ -7,7 +7,7 @@
  */
 
 // Shared error envelopes.
-export type { ApiErrorResponse, NormalizedApiError } from './types';
+export type { ApiErrorResponse, NormalizedApiError } from './types.js';
 
 /**
  * @api.operationId: postReflect
@@ -26,7 +26,7 @@ export type {
     ReflectIgnoreActionResponse,
     ReflectImageActionResponse,
     PostReflectResponse,
-} from './types';
+} from './types.js';
 
 /**
  * @api.operationId: postInternalTextTask
@@ -44,7 +44,7 @@ export type {
     PostInternalNewsTaskResponse,
     PostInternalTextRequest,
     PostInternalTextResponse,
-} from './types';
+} from './types.js';
 
 /**
  * @api.operationId: postInternalImageTask
@@ -68,13 +68,13 @@ export type {
     PostInternalImageGenerateResponse,
     PostInternalImageRequest,
     PostInternalImageResponse,
-} from './types';
+} from './types.js';
 
 /**
  * @api.operationId: postTraces
  * @api.path: POST /api/traces
  */
-export type { PostTracesRequest, PostTracesResponse } from './types';
+export type { PostTracesRequest, PostTracesResponse } from './types.js';
 
 /**
  * @api.operationId: postTraceCards
@@ -85,7 +85,7 @@ export type {
     PostTraceCardResponse,
     GetTraceCardSvgResponse,
     TraceCardChipData,
-} from './types';
+} from './types.js';
 
 /**
  * @api.operationId: postTraceCardsFromTrace
@@ -94,19 +94,19 @@ export type {
 export type {
     PostTraceCardFromTraceRequest,
     PostTraceCardFromTraceResponse,
-} from './types';
+} from './types.js';
 
 /**
  * @api.operationId: getTrace
  * @api.path: GET /api/traces/{responseId}
  */
-export type { GetTraceResponse, GetTraceStaleResponse } from './types';
+export type { GetTraceResponse, GetTraceStaleResponse } from './types.js';
 
 /**
  * @api.operationId: getRuntimeConfig
  * @api.path: GET /config.json
  */
-export type { GetRuntimeConfigResponse } from './types';
+export type { GetRuntimeConfigResponse } from './types.js';
 
 /**
  * @api.operationId: postIncidentReport
@@ -141,7 +141,7 @@ export type {
     PostIncidentReportResponse,
     PostIncidentStatusRequest,
     PostIncidentStatusResponse,
-} from './types';
+} from './types.js';
 
 /**
  * @api.operationId: listBlogPosts
@@ -151,13 +151,13 @@ export type {
     BlogAuthor,
     BlogPostMetadata,
     ListBlogPostsResponse,
-} from './types';
+} from './types.js';
 
 /**
  * @api.operationId: getBlogPost
  * @api.path: GET /api/blog-posts/{postId}
  */
-export type { BlogPost, GetBlogPostResponse } from './types';
+export type { BlogPost, GetBlogPostResponse } from './types.js';
 
 // Runtime validation schemas for reflect/traces contracts.
 export {
@@ -197,4 +197,4 @@ export {
     PostTracesResponseSchema,
     ResponseMetadataSchema,
     createSchemaResponseValidator,
-} from './schemas';
+} from './schemas.js';

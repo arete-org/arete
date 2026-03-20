@@ -6,7 +6,7 @@
  * @footnote-ethics: medium - Consistent error behavior helps maintain transparent fail-open handling.
  */
 
-import type { NormalizedApiError } from './types';
+import type { NormalizedApiError } from './types.js';
 
 export type ApiClientError = Error & NormalizedApiError;
 

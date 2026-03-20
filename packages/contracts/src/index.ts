@@ -19,7 +19,7 @@ export type {
     PartialResponseTemperament,
     ResponseTemperament,
     ResponseMetadata,
-} from './ethics-core';
+} from './ethics-core/index.js';
 
 // Web API contracts (request/response envelopes)
 export type {
@@ -66,7 +66,7 @@ export type {
     BlogPost,
     ListBlogPostsResponse,
     GetBlogPostResponse,
-} from './web';
+} from './web/index.js';
 
 // Shared AI/provider vocabulary
 export type {
@@ -83,7 +83,7 @@ export type {
     SupportedProviderModel,
     SupportedReasoningEffort,
     SupportedVerbosity,
-} from './providers';
+} from './providers.js';
 
 // Shared pricing vocabulary and pure cost helpers
 export type {
@@ -101,7 +101,7 @@ export type {
     PricedOpenAITextModel,
     SupportedOpenAIEmbeddingModel,
     TextModelPricingKey,
-} from './pricing';
+} from './pricing.js';
 export {
     estimateOpenAIImageGenerationCost,
     estimateOpenAITextCost,
@@ -113,4 +113,4 @@ export {
     resolveEffectiveImageGenerationSize,
     supportedOpenAIEmbeddingModels,
     supportedPricedOpenAITextModels,
-} from './pricing';
+} from './pricing.js';

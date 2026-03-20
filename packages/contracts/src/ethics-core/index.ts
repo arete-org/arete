@@ -17,4 +17,4 @@ export type {
     ResponseTemperament,
     PartialResponseTemperament,
     ResponseMetadata,
-} from './types';
+} from './types.js';

@@ -7,13 +7,13 @@
  */
 
 import { z } from 'zod';
-import type { TraceAxisScore } from '../ethics-core';
-import type { ApiResponseValidationResult } from './client-core';
+import type { TraceAxisScore } from '../ethics-core/index.js';
+import type { ApiResponseValidationResult } from './client-core.js';
 import {
     internalImageRenderModels,
     internalImageTextModels,
     supportedImageOutputFormats,
-} from '../providers';
+} from '../providers.js';
 
 const ProvenanceSchema = z.enum(['Retrieved', 'Inferred', 'Speculative']);
 const RiskTierSchema = z.enum(['Low', 'Medium', 'High']);
