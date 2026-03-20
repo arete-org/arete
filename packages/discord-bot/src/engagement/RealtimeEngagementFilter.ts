@@ -1,5 +1,5 @@
 /**
- * @description: Weighted scoring system for engagement decisions during catchup events, analyzing context, cost, and conversation dynamics
+ * @description: Scores whether the bot should reply during catchup by looking at message signals, recent context, and conversation mix.
  * @footnote-scope: core
  * @footnote-module: RealtimeEngagementFilter
  * @footnote-risk: high - Overly aggressive scoring causes spam; overly conservative scoring causes missed engagement.
@@ -13,9 +13,7 @@ import {
     containsPlaintextBotAlias,
     resolveBotMentionAliases,
 } from '../utils/mentionAliases.js';
-import type { OpenAIService } from '../utils/openaiService.js';
 import type { ChannelMetrics } from '../state/ChannelContextManager.js';
-import type { CostStatistics } from '../utils/pricing.js';
 import { TECHNICAL_KEYWORDS } from '../utils/CatchupFilter.js';
 
 /**
@@ -37,7 +35,6 @@ const engagementLogger = logger.child({ module: 'realtimeEngagementFilter' });
  * @property {number} question - Weight for question marks and interrogatives (default 0.2)
  * @property {number} technical - Weight for technical keywords (default 0.15)
  * @property {number} humanActivity - Weight for recent human message ratio (default 0.15)
- * @property {number} costSaturation - Weight for cost velocity concerns (default 0.1, negative signal)
  * @property {number} botNoise - Weight for bot message ratio (default 0.05, negative signal)
  * @property {number} dmBoost - Multiplier for DM contexts (default 1.5)
  * @property {number} decay - Time decay factor for message recency (default 0.05)
@@ -47,7 +44,6 @@ export interface EngagementWeights {
     question: number;
     technical: number;
     humanActivity: number;
-    costSaturation: number;
     botNoise: number;
     dmBoost: number;
     decay: number;
@@ -95,14 +91,12 @@ export interface EngagementDecision {
  * @property {string} CHANNEL_KEY - Channel identifier
  * @property {Message[]} RECENT_MESSAGES - Recent message history
  * @property {ChannelMetrics | null} CHANNEL_METRICS - From ChannelContextManager
- * @property {CostStatistics | null} COST_TOTALS - From LLMCostEstimator
  */
 export interface EngagementContext {
     message: Message;
     channelKey: string;
     recentMessages: Message[];
     channelMetrics: ChannelMetrics | null;
-    costTotals: CostStatistics | null;
 }
 
 /**
@@ -126,7 +120,6 @@ export interface ChannelEngagementOverrides {
  * @type {Object}
  * @property {EngagementWeights} WEIGHTS - Scoring weights
  * @property {EngagementPreferences} PREFERENCES - Behavior preferences
- * @property {OpenAIService | undefined} OPENAI_SERVICE - Optional OpenAI service for LLM refinement
  */
 export class RealtimeEngagementFilter {
     private readonly weights: EngagementWeights;
@@ -134,8 +127,7 @@ export class RealtimeEngagementFilter {
 
     constructor(
         weights: EngagementWeights,
-        preferences: EngagementPreferences,
-        _openaiService?: OpenAIService
+        preferences: EngagementPreferences
     ) {
         this.weights = weights;
         this.preferences = preferences;
@@ -149,7 +141,7 @@ export class RealtimeEngagementFilter {
     /**
      * Main entry point for engagement decisions
      * How it works:
-     * - Computes individual signal scores for all 6 engagement factors
+     * - Computes individual signal scores for the active engagement factors
      * - Applies configured weights to each signal and sums them
      * - Applies DM boost multiplier if message is in direct message context
      * - Optionally refines score with LLM if in probabilistic band (grey zone)
@@ -183,7 +175,6 @@ export class RealtimeEngagementFilter {
             breakdown.question = this.scoreQuestion(context);
             breakdown.technical = this.scoreTechnical(context);
             breakdown.humanActivity = this.scoreHumanActivity(context);
-            breakdown.costSaturation = this.scoreCostSaturation(context);
             breakdown.botNoise = this.scoreBotNoise(context);
 
             // Calculate weighted score using effective (default or overridden) weights
@@ -192,7 +183,6 @@ export class RealtimeEngagementFilter {
             score += breakdown.question * effectiveWeights.question;
             score += breakdown.technical * effectiveWeights.technical;
             score += breakdown.humanActivity * effectiveWeights.humanActivity;
-            score += breakdown.costSaturation * effectiveWeights.costSaturation;
             score += breakdown.botNoise * effectiveWeights.botNoise;
 
             // Apply DM boost if applicable using effective weights
@@ -270,10 +260,7 @@ export class RealtimeEngagementFilter {
         }
 
         const { channelMetrics } = context;
-        if (
-            channelMetrics &&
-            channelMetrics.windowTotalMessages > 0
-        ) {
+        if (channelMetrics && channelMetrics.windowTotalMessages > 0) {
             return {
                 totalMessages: channelMetrics.windowTotalMessages,
                 botMessages: channelMetrics.windowBotMessages,
@@ -355,15 +342,12 @@ export class RealtimeEngagementFilter {
         );
         for (const alias of aliases) {
             if (containsPlaintextBotAlias(message.content ?? '', [alias])) {
-                engagementLogger.debug(
-                    'Plaintext mention alias detected',
-                    {
-                        channelId: context.channelKey,
-                        profileId: runtimeConfig.profile.id,
-                        matchedAlias: alias,
-                        aliasCount: aliases.length,
-                    }
-                );
+                engagementLogger.debug('Plaintext mention alias detected', {
+                    channelId: context.channelKey,
+                    profileId: runtimeConfig.profile.id,
+                    matchedAlias: alias,
+                    aliasCount: aliases.length,
+                });
                 return 0.9;
             }
         }
@@ -446,51 +430,6 @@ export class RealtimeEngagementFilter {
         const humanRatio =
             composition.humanMessages / composition.totalMessages;
         return this.normalizeScore(humanRatio, 0, 1);
-    }
-
-    /**
-     * Score based on cost saturation (the bot is spending too much money too quickly)
-     * Normalized to [0, 1], ranging from low to high engagement.
-     * How it works:
-     * - Calculates cost velocity (USD spent per minute) over a 5-minute window
-     * - Estimates recent cost as 10% of total channel cost
-     * - Higher cost velocity = higher saturation = lower engagement score (inverted signal)
-     * - Normalizes around $0.10/minute threshold
-     * - If no cost data available, returns 0.0 (no saturation)
-     * @param {EngagementContext} context - The context for the engagement decision
-     * @returns {number} The score for the cost saturation
-     */
-    private scoreCostSaturation(context: EngagementContext): number {
-        const { costTotals, channelMetrics } = context;
-        if (!costTotals || !channelMetrics || !channelMetrics.lastActivity) {
-            return 0.0; // No saturation if no data
-        }
-
-        // Calculate cost velocity (USD per minute) over recent window
-        // const _now = Date.now();
-        const timeWindowMs = 5 * 60 * 1000; // 5 minutes
-        const timeWindowMinutes = timeWindowMs / (1000 * 60);
-
-        // Estimate recent cost based on total cost and activity
-        // TODO: Scale by time since last engagement or number of planner calls for more realistic feedback
-        const recentCost = costTotals.totalCostUsd * 0.1; // Assume 10% is recent
-        const costVelocity = recentCost / timeWindowMinutes;
-
-        // Higher cost velocity = higher saturation = lower engagement
-        const saturationScore = Math.min(1.0, costVelocity / 0.1); // Normalize around $0.10/minute
-        const finalScore = 1.0 - saturationScore; // Invert to make it negative signal
-
-        // Log high cost saturation for monitoring
-        if (saturationScore > 0.7) {
-            engagementLogger.warn('High cost saturation detected', {
-                channelId: context.channelKey,
-                costVelocity,
-                saturationScore,
-                finalScore,
-            });
-        }
-
-        return finalScore;
     }
 
     /**
@@ -599,7 +538,6 @@ export class RealtimeEngagementFilter {
         if (breakdown.question > 0.3) reasons.push('question');
         if (breakdown.technical > 0.2) reasons.push('technical');
         if (breakdown.humanActivity > 0.7) reasons.push('human_activity');
-        if (breakdown.costSaturation > 0.7) reasons.push('low_cost_saturation');
         if (breakdown.botNoise > 0.7) reasons.push('low_bot_noise');
         if (context.message.guildId === null) reasons.push('dm_context');
 
@@ -638,4 +576,3 @@ export class RealtimeEngagementFilter {
         return decision;
     }
 }
-

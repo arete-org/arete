@@ -23,7 +23,6 @@ import {
     type StoredMessage,
 } from '../state/ChannelContextManager.js';
 import { RealtimeEngagementFilter } from '../engagement/RealtimeEngagementFilter.js';
-import type { LLMCostEstimator } from '../utils/LLMCostEstimator.js';
 import type {
     EngagementContext,
     EngagementDecision,
@@ -41,16 +40,10 @@ const messageLogger = logger.child({ module: 'messageCreate' });
 /**
  * Dependencies required for the MentionBotEvent
  * @interface Dependencies
- * @property {Object} openai - Configuration for the OpenAI service
- * @property {string} openai.apiKey - The API key for OpenAI
  * @property {OpenAIService} openaiService - The OpenAI service instance
  */
 interface Dependencies {
-    openai: {
-        apiKey: string;
-    };
     openaiService: OpenAIService;
-    costEstimator?: LLMCostEstimator | null;
 }
 
 /**
@@ -121,7 +114,6 @@ type BotDirectInvocationAdmission = {
  * @property {Map<string, number>} contextStateLogTimestamps - Track last context_state log per channel
  * @property {RealtimeEngagementFilter | null} realtimeFilter - The weighted scoring filter for catchup engagement decisions (null if disabled)
  * @property {RealtimeEngagementFilter} botDirectInvocationFilter - Private scoring filter used to gate bot-authored direct invocations even when catchup scoring is disabled
- * @property {LLMCostEstimator | null} costEstimator - The LLM cost tracker for budget enforcement and transparency (null if disabled)
  */
 export class MessageCreate extends Event {
     public readonly name = 'messageCreate' as const;
@@ -158,8 +150,6 @@ export class MessageCreate extends Event {
     private readonly contextStateLogTimestamps = new Map<string, number>();
     private readonly realtimeFilter: RealtimeEngagementFilter | null;
     private readonly botDirectInvocationFilter: RealtimeEngagementFilter;
-    private readonly costEstimator: LLMCostEstimator | null;
-
     /**
      * Creates an instance of MentionBotEvent
      * @param {Dependencies} dependencies - Required dependencies including OpenAI configuration
@@ -176,42 +166,29 @@ export class MessageCreate extends Event {
         this.messageProcessor = new MessageProcessor({
             openaiService: dependencies.openaiService,
         });
-        this.catchupFilter = new CatchupFilter(dependencies.openaiService);
-
-        const estimator = dependencies.costEstimator ?? null;
+        this.catchupFilter = new CatchupFilter();
 
         if (runtimeConfig.contextManager.enabled) {
             this.contextManager = new ChannelContextManager({
                 enabled: true,
                 maxMessagesPerChannel:
                     runtimeConfig.contextManager.maxMessagesPerChannel,
-                messageRetentionMs: runtimeConfig.contextManager.messageRetentionMs,
-                evictionIntervalMs: runtimeConfig.contextManager.evictionIntervalMs,
+                messageRetentionMs:
+                    runtimeConfig.contextManager.messageRetentionMs,
+                evictionIntervalMs:
+                    runtimeConfig.contextManager.evictionIntervalMs,
             });
             messageLogger.info('ChannelContextManager enabled');
-            if (estimator) {
-                estimator.setContextManager(this.contextManager);
-                messageLogger.debug(
-                    'Connected cost estimator to context manager'
-                );
-            }
         } else {
             this.contextManager = null;
             messageLogger.debug('ChannelContextManager disabled');
-            if (estimator) {
-                estimator.setContextManager(null);
-            }
         }
-
-        // Store cost estimator reference
-        this.costEstimator = estimator;
 
         // Keep one scoring engine available for bot-directed gating even when
         // ordinary catch-up scoring is disabled.
         this.botDirectInvocationFilter = new RealtimeEngagementFilter(
             runtimeConfig.engagementWeights,
-            runtimeConfig.engagementPreferences,
-            dependencies.openaiService
+            runtimeConfig.engagementPreferences
         );
 
         // Initialize realtime engagement filter if enabled
@@ -377,8 +354,7 @@ export class MessageCreate extends Event {
                     `Replied to with a direct reply`
                 );
                 this.markLogicalBotReplySent(channelKey, message);
-            }
-            else if (matchedPlaintextAlias) {
+            } else if (matchedPlaintextAlias) {
                 if (
                     message.author.bot &&
                     !(await this.admitBotDirectInvocation(
@@ -514,8 +490,8 @@ export class MessageCreate extends Event {
                             if (!decision.engage) {
                                 // If preferences indicate reaction mode, react with emoji
                                 if (
-                                    runtimeConfig.engagementPreferences.ignoreMode ===
-                                    'react'
+                                    runtimeConfig.engagementPreferences
+                                        .ignoreMode === 'react'
                                 ) {
                                     try {
                                         const responseHandler =
@@ -808,7 +784,8 @@ export class MessageCreate extends Event {
             }
         }
 
-        const channelMetrics = this.contextManager?.getMetrics(channelKey) ?? null;
+        const channelMetrics =
+            this.contextManager?.getMetrics(channelKey) ?? null;
         const retainedMessages =
             recentMessages.length === 0
                 ? this.getRetainedRecentMessages(channelKey, message)
@@ -826,7 +803,7 @@ export class MessageCreate extends Event {
                 ? recentMessages.filter(
                       (recentMessage) => !recentMessage.author.bot
                   ).length
-                : channelMetrics?.windowHumanMessages ?? 0;
+                : (channelMetrics?.windowHumanMessages ?? 0);
 
         return {
             context: {
@@ -834,8 +811,6 @@ export class MessageCreate extends Event {
                 channelKey,
                 recentMessages,
                 channelMetrics,
-                costTotals:
-                    this.costEstimator?.getChannelTotals(channelKey) ?? null,
             },
             recentHumanCount,
             recentMessageSource,
@@ -1073,10 +1048,7 @@ export class MessageCreate extends Event {
         const now = Date.now();
         let state = this.botConversationStates.get(channelKey);
 
-        if (
-            state &&
-            now - state.lastUpdated > this.BOT_CONVERSATION_TTL_MS
-        ) {
+        if (state && now - state.lastUpdated > this.BOT_CONVERSATION_TTL_MS) {
             // Expire stale streak state so a quiet channel can start fresh.
             state = undefined;
             this.botConversationStates.delete(channelKey);
@@ -1101,9 +1073,7 @@ export class MessageCreate extends Event {
                 messageLogger.debug(
                     `Suppressed response to bot ${message.author.id} in ${channelKey} (cooldown active).`,
                     {
-                        participantBotIds: [
-                            ...state.participantBotIds,
-                        ],
+                        participantBotIds: [...state.participantBotIds],
                         repliesSentInStreak: state.repliesSentInStreak,
                         blockedUntil: state.blockedUntil,
                     }
@@ -1226,4 +1196,3 @@ export class MessageCreate extends Event {
         return undefined;
     }
 }
-

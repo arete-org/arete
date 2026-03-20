@@ -42,7 +42,10 @@ const withBotInteractionConfig = async (
 
 const withMockedDateNow = async (
     startingNow: number,
-    fn: (clock: { now: () => number; advanceBy: (ms: number) => void }) => Promise<void> | void
+    fn: (clock: {
+        now: () => number;
+        advanceBy: (ms: number) => void;
+    }) => Promise<void> | void
 ): Promise<void> => {
     const originalDateNow = Date.now;
     let currentNow = startingNow;
@@ -62,13 +65,11 @@ const withMockedDateNow = async (
 
 const createEvent = () =>
     new MessageCreate({
-        openai: { apiKey: 'test-key' },
         openaiService: {
             async generateSpeech() {
                 return 'tts.mp3';
             },
         } as never,
-        costEstimator: null,
     });
 
 type BotLoopGuardEventAccess = {
@@ -89,7 +90,9 @@ type BotLoopGuardEventAccess = {
     };
 };
 
-const allowBotDirectInvocations = (event: MessageCreate): BotLoopGuardEventAccess => {
+const allowBotDirectInvocations = (
+    event: MessageCreate
+): BotLoopGuardEventAccess => {
     const eventAccess = event as unknown as BotLoopGuardEventAccess;
     eventAccess.realtimeFilter = null;
     eventAccess.contextManager = null;
@@ -132,9 +135,8 @@ const createRecentHumanMessage = (content = 'please help explain this bug?') =>
         reference: undefined,
     }) as never;
 
-const createRecentMessageMap = (
-    ...messages: Array<{ id: string }>
-) => new Map<string, unknown>(messages.map((message) => [message.id, message]));
+const createRecentMessageMap = (...messages: Array<{ id: string }>) =>
+    new Map<string, unknown>(messages.map((message) => [message.id, message]));
 
 const createMessage = (
     content: string,

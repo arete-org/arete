@@ -1,32 +1,23 @@
 /**
- * @description: Records backend LLM token usage and estimated cost totals for server-side features.
+ * @description: Records backend token usage and estimated spend for server-side model calls.
  * @footnote-scope: core
  * @footnote-module: BackendLLMCostRecorder
  * @footnote-risk: medium - Incorrect pricing or totals can hide backend spend and weaken cost visibility.
  * @footnote-ethics: medium - Cost tracking supports transparency and responsible AI resource use.
  */
+import {
+    estimateOpenAITextCost,
+    hasOpenAITextPricing,
+} from '@footnote/contracts/pricing';
 import { formatUsd, logger, type LLMCostTotals } from '../utils/logger.js';
 
-type TextModelPricing = {
-    input: number;
-    output: number;
-};
-
-const TEXT_MODEL_PRICING: Record<string, TextModelPricing> = {
-    'gpt-5.2': { input: 1.75, output: 14.0 },
-    'gpt-5.1': { input: 1.25, output: 10.0 },
-    'gpt-5': { input: 1.25, output: 10.0 },
-    'gpt-5-mini': { input: 0.25, output: 2.0 },
-    'gpt-5-nano': { input: 0.05, output: 0.4 },
-    'gpt-4o': { input: 2.5, output: 10.0 },
-    'gpt-4o-mini': { input: 0.15, output: 0.6 },
-    'gpt-4.1': { input: 2.0, output: 8.0 },
-    'gpt-4.1-mini': { input: 0.4, output: 1.6 },
-    'gpt-4.1-nano': { input: 0.1, output: 0.4 },
-};
-
 export type BackendLLMCostRecord = {
-    feature: 'reflect' | 'reflect_planner' | 'news';
+    feature:
+        | 'reflect'
+        | 'reflect_planner'
+        | 'news'
+        | 'image'
+        | 'image_description';
     model: string;
     promptTokens: number;
     completionTokens: number;
@@ -52,30 +43,25 @@ export const estimateBackendTextCost = (
     BackendLLMCostRecord,
     'inputCostUsd' | 'outputCostUsd' | 'totalCostUsd'
 > => {
-    const pricing = TEXT_MODEL_PRICING[model];
-    if (!pricing) {
+    if (!hasOpenAITextPricing(model)) {
         logger.warn(
             `No backend LLM pricing configured for model ${model}. Recording zero estimated cost.`
         );
-        return {
-            inputCostUsd: 0,
-            outputCostUsd: 0,
-            totalCostUsd: 0,
-        };
     }
 
-    const inputCostUsd = (promptTokens / 1_000_000) * pricing.input;
-    const outputCostUsd = (completionTokens / 1_000_000) * pricing.output;
+    const estimatedCost = estimateOpenAITextCost(
+        model,
+        promptTokens,
+        completionTokens
+    );
     return {
-        inputCostUsd,
-        outputCostUsd,
-        totalCostUsd: inputCostUsd + outputCostUsd,
+        inputCostUsd: estimatedCost.inputCost,
+        outputCostUsd: estimatedCost.outputCost,
+        totalCostUsd: estimatedCost.totalCost,
     };
 };
 
-export const recordBackendLLMUsage = (
-    record: BackendLLMCostRecord
-): void => {
+export const recordBackendLLMUsage = (record: BackendLLMCostRecord): void => {
     backendCostTotals.totalCalls += 1;
     backendCostTotals.totalCostUsd += record.totalCostUsd;
     backendCostTotals.totalTokensIn += record.promptTokens;

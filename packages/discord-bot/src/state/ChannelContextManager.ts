@@ -36,9 +36,6 @@ export interface StoredMessage {
  * @property {number} windowTotalMessages - The number of retained messages in the current rolling window
  * @property {number} windowBotMessages - The number of retained bot messages in the current rolling window
  * @property {number} windowHumanMessages - The number of retained human messages in the current rolling window
- * @property {number} llmCalls - The number of LLM calls in the channel
- * @property {number} tokensUsed - The number of tokens used in the channel
- * @property {number} usdEstimated - The estimated cost of the LLM usage in the channel
  * @property {number} lastEngagementScore - The last engagement score for the channel
  * @property {number} lastActivity - The last activity timestamp for the channel
  * @property {string[]} flags - The flags for the channel
@@ -47,9 +44,6 @@ export interface ChannelMetrics {
     windowTotalMessages: number;
     windowBotMessages: number;
     windowHumanMessages: number;
-    llmCalls: number;
-    tokensUsed: number;
-    usdEstimated: number;
     lastEngagementScore: number;
     lastActivity: number;
     flags: string[];
@@ -236,51 +230,6 @@ export class ChannelContextManager {
     }
 
     /**
-     * Record the LLM usage for the channel
-     * @param channelId - The ID of the channel the LLM usage is for
-     * @param model - The model used for the LLM usage
-     * @param tokensIn - The number of tokens input to the LLM
-     * @param tokensOut - The number of tokens output from the LLM
-     * @param usdCost - The cost of the LLM usage in USD
-     */
-    public recordLLMUsage(
-        channelId: string,
-        model: string,
-        tokensIn: number,
-        tokensOut: number,
-        usdCost: number
-    ): void {
-        try {
-            if (!this.config.enabled) {
-                return;
-            }
-
-            const state = this.getOrCreateState(channelId);
-            state.metrics.llmCalls += 1;
-            state.metrics.tokensUsed +=
-                Math.max(0, tokensIn) + Math.max(0, tokensOut);
-            state.metrics.usdEstimated += Math.max(0, usdCost);
-            state.metrics.lastActivity = Date.now();
-
-            logger.debug(
-                JSON.stringify({
-                    event: 'context_llm_usage',
-                    channelId,
-                    model,
-                    tokensIn,
-                    tokensOut,
-                    usdCost,
-                    cumulativeUsd: state.metrics.usdEstimated,
-                })
-            );
-        } catch (error) {
-            logger.error(
-                `ChannelContextManager recordLLMUsage failed for ${channelId}: ${(error as Error)?.message ?? error}`
-            );
-        }
-    }
-
-    /**
      * Update the engagement score for the channel
      * @param channelId - The ID of the channel to update the engagement score for
      * @param score - The new engagement score
@@ -429,29 +378,26 @@ export class ChannelContextManager {
     public getStateSummary(): {
         channelCount: number;
         totalMessages: number;
-        totalCost: number;
     } {
         try {
             if (!this.config.enabled) {
-                return { channelCount: 0, totalMessages: 0, totalCost: 0 };
+                return { channelCount: 0, totalMessages: 0 };
             }
 
             let channelCount = 0;
             let totalMessages = 0;
-            let totalCost = 0;
 
             for (const state of this.channelStates.values()) {
                 channelCount += 1;
                 totalMessages += state.metrics.windowTotalMessages;
-                totalCost += state.metrics.usdEstimated;
             }
 
-            return { channelCount, totalMessages, totalCost };
+            return { channelCount, totalMessages };
         } catch (error) {
             logger.error(
                 `ChannelContextManager getStateSummary failed: ${(error as Error)?.message ?? error}`
             );
-            return { channelCount: 0, totalMessages: 0, totalCost: 0 };
+            return { channelCount: 0, totalMessages: 0 };
         }
     }
 
@@ -469,9 +415,6 @@ export class ChannelContextManager {
                     windowTotalMessages: 0,
                     windowBotMessages: 0,
                     windowHumanMessages: 0,
-                    llmCalls: 0,
-                    tokensUsed: 0,
-                    usdEstimated: 0,
                     lastEngagementScore: 0,
                     lastActivity: Date.now(),
                     flags: [],
@@ -506,4 +449,3 @@ export class ChannelContextManager {
         return Math.max(1, roughEstimate);
     }
 }
-
