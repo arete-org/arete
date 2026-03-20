@@ -17,6 +17,7 @@ import type {
     InternalVoiceRealtimeClientEvent,
     InternalVoiceRealtimeOptions,
     InternalVoiceRealtimeServerEvent,
+    InternalVoiceRealtimeUsage,
     InternalVoiceSessionContext,
 } from '@footnote/contracts/voice';
 import { InternalVoiceRealtimeServerEventSchema } from '@footnote/contracts/voice';
@@ -85,6 +86,7 @@ export interface RealtimeResponseAudioDeltaEvent {
 export interface RealtimeResponseCompletedEvent {
     type: 'response.completed';
     response_id: string;
+    usage?: InternalVoiceRealtimeUsage;
     [key: string]: unknown;
 }
 
@@ -335,6 +337,7 @@ const mapInternalEventToRealtimeEvent = (
             return {
                 type: 'response.completed',
                 response_id: event.responseId ?? '',
+                usage: event.usage,
             };
         case 'error':
             return {

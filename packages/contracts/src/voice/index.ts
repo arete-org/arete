@@ -24,6 +24,7 @@ export type {
     InternalVoiceRealtimeClientEvent,
     InternalVoiceRealtimeOptions,
     InternalVoiceRealtimeServerEvent,
+    InternalVoiceRealtimeUsage,
     InternalVoiceSessionContext,
     PostInternalVoiceTtsRequest,
     PostInternalVoiceTtsResponse,

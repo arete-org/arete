@@ -141,6 +141,17 @@ export type InternalVoiceRealtimeOptions = {
 };
 
 /**
+ * Optional usage metadata attached to realtime completion events.
+ */
+export type InternalVoiceRealtimeUsage = {
+    tokensPrompt?: number;
+    tokensCompletion?: number;
+    model?: string;
+    requestMs?: number;
+    costUsd?: number;
+};
+
+/**
  * @api.operationId: openInternalVoiceRealtime
  * @api.path: GET /api/internal/voice/realtime
  */
@@ -189,6 +200,7 @@ export type InternalVoiceRealtimeServerEvent =
     | {
           type: 'response.completed';
           responseId?: string;
+          usage?: InternalVoiceRealtimeUsage;
       }
     | {
           type: 'error';

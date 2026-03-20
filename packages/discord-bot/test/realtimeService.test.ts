@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { RealtimeSession } from '../src/utils/realtimeService.js';
+import type { InternalVoiceRealtimeUsage } from '@footnote/contracts/voice';
 
 type RealtimeSessionProbe = {
     on(event: string, listener: (...args: unknown[]) => void): unknown;
@@ -21,6 +22,7 @@ test('RealtimeSession maps backend audio, text, and completion events into local
     const seenAudio: Buffer[] = [];
     const seenText: string[] = [];
     const seenEventTypes: string[] = [];
+    let completionUsage: InternalVoiceRealtimeUsage | undefined;
 
     session.on('audio', (audio: unknown) => {
         seenAudio.push(audio as Buffer);
@@ -31,9 +33,13 @@ test('RealtimeSession maps backend audio, text, and completion events into local
     session.on('response.output_audio.done', () => {
         seenEventTypes.push('response.output_audio.done');
     });
-    session.on('response.completed', () => {
-        seenEventTypes.push('response.completed');
-    });
+    session.on(
+        'response.completed',
+        (event: { usage?: InternalVoiceRealtimeUsage }) => {
+            seenEventTypes.push('response.completed');
+            completionUsage = event.usage;
+        }
+    );
 
     session.handleBackendEvent(
         JSON.stringify({
@@ -51,6 +57,11 @@ test('RealtimeSession maps backend audio, text, and completion events into local
         JSON.stringify({
             type: 'response.completed',
             responseId: 'resp_123',
+            usage: {
+                tokensPrompt: 12,
+                tokensCompletion: 4,
+                model: 'gpt-realtime',
+            },
         })
     );
 
@@ -63,6 +74,11 @@ test('RealtimeSession maps backend audio, text, and completion events into local
         'response.output_audio.done',
         'response.completed',
     ]);
+    assert.deepEqual(completionUsage, {
+        tokensPrompt: 12,
+        tokensCompletion: 4,
+        model: 'gpt-realtime',
+    });
 
     session.removeAllListeners();
 });

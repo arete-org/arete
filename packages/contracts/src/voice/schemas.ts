@@ -114,6 +114,16 @@ const InternalVoiceRealtimeOptionsSchema = z
     })
     .strict();
 
+const InternalVoiceRealtimeUsageSchema = z
+    .object({
+        tokensPrompt: z.number().int().nonnegative().optional(),
+        tokensCompletion: z.number().int().nonnegative().optional(),
+        model: z.string().min(1).optional(),
+        requestMs: z.number().int().nonnegative().optional(),
+        costUsd: z.number().nonnegative().optional(),
+    })
+    .strict();
+
 export const InternalVoiceRealtimeClientEventSchema = z.discriminatedUnion(
     'type',
     [
@@ -174,6 +184,7 @@ export const InternalVoiceRealtimeServerEventSchema = z.discriminatedUnion(
             .object({
                 type: z.literal('response.completed'),
                 responseId: z.string().min(1).optional(),
+                usage: InternalVoiceRealtimeUsageSchema.optional(),
             })
             .strict(),
         z

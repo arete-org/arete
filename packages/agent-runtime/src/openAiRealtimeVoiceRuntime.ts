@@ -10,6 +10,7 @@ import WebSocket from 'ws';
 import type {
     InternalVoiceRealtimeOptions,
     InternalVoiceRealtimeServerEvent,
+    InternalVoiceRealtimeUsage,
 } from '@footnote/contracts/voice';
 import type {
     RealtimeVoiceClientCommand,
@@ -115,6 +116,77 @@ const buildSpeakerAnnotation = (
     return `<discord_speaker>${speakerLabel}</discord_speaker>`;
 };
 
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+    if (!value || typeof value !== 'object') {
+        return null;
+    }
+    return value as Record<string, unknown>;
+};
+
+const toOptionalNumber = (value: unknown): number | undefined => {
+    return typeof value === 'number' && Number.isFinite(value)
+        ? value
+        : undefined;
+};
+
+const toOptionalString = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') {
+        return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+};
+
+const extractRealtimeUsage = (
+    rawEvent: Record<string, unknown>
+): InternalVoiceRealtimeUsage | undefined => {
+    const responsePayload = asRecord(rawEvent.response);
+    const usagePayload =
+        asRecord(responsePayload?.usage) ??
+        asRecord(rawEvent.usage) ??
+        asRecord(rawEvent.usage_stats);
+    const metricsPayload = asRecord(responsePayload?.metrics);
+
+    const usage: InternalVoiceRealtimeUsage = {
+        tokensPrompt: toOptionalNumber(
+            usagePayload?.input_tokens ??
+                usagePayload?.prompt_tokens ??
+                usagePayload?.tokens_prompt ??
+                usagePayload?.inputTokens ??
+                usagePayload?.promptTokens
+        ),
+        tokensCompletion: toOptionalNumber(
+            usagePayload?.output_tokens ??
+                usagePayload?.completion_tokens ??
+                usagePayload?.tokens_completion ??
+                usagePayload?.outputTokens ??
+                usagePayload?.completionTokens
+        ),
+        model: toOptionalString(
+            usagePayload?.model ?? responsePayload?.model ?? rawEvent.model
+        ),
+        requestMs: toOptionalNumber(
+            usagePayload?.request_ms ??
+                responsePayload?.duration_ms ??
+                metricsPayload?.total_ms ??
+                rawEvent.request_ms ??
+                rawEvent.duration_ms
+        ),
+        costUsd: toOptionalNumber(
+            usagePayload?.cost_usd ??
+                usagePayload?.total_cost_usd ??
+                usagePayload?.total_cost ??
+                responsePayload?.cost_usd ??
+                rawEvent.cost_usd
+        ),
+    };
+
+    const hasUsage = Object.values(usage).some(
+        (value) => value !== undefined
+    );
+    return hasUsage ? usage : undefined;
+};
+
 // Convert provider-native events into Footnote-owned session events.
 const mapServerEvent = (
     rawEvent: Record<string, unknown>
@@ -135,12 +207,14 @@ const mapServerEvent = (
     }
 
     if (type === 'response.completed') {
+        const usage = extractRealtimeUsage(rawEvent);
         return {
             type: 'response.completed',
             responseId:
                 typeof rawEvent.response_id === 'string'
                     ? rawEvent.response_id
                     : undefined,
+            usage,
         };
     }
 
