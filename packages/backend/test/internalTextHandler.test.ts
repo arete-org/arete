@@ -14,7 +14,11 @@ import type {
     GenerationRuntime,
 } from '@footnote/agent-runtime';
 import { createInternalTextHandler } from '../src/handlers/internalText.js';
-import { createInternalNewsTaskService } from '../src/services/internalText.js';
+import {
+    createInternalNewsTaskService,
+    type InternalImageDescriptionTaskService,
+    type InternalNewsTaskService,
+} from '../src/services/internalText.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 
 type TestServer = {
@@ -24,39 +28,49 @@ type TestServer = {
 
 const createInternalTextServer = async (
     generationRuntime: GenerationRuntime | null,
-    options: { serviceRateLimiter?: SimpleRateLimiter } = {}
+    options: {
+        serviceRateLimiter?: SimpleRateLimiter;
+        internalNewsTaskService?: InternalNewsTaskService | null;
+        internalImageDescriptionTaskService?: InternalImageDescriptionTaskService | null;
+    } = {}
 ): Promise<TestServer> => {
-    const internalNewsTaskService = generationRuntime
-        ? createInternalNewsTaskService({
-              generationRuntime,
-              defaultModel: 'gpt-5-mini',
-              recordUsage: () => undefined,
-          })
-        : null;
-    const internalImageDescriptionTaskService = generationRuntime
-        ? {
-              async runImageDescriptionTask() {
-                  return {
-                      task: 'image_description' as const,
-                      result: {
-                          description:
-                              '{"summary":"Screenshot of a policy update"}',
-                          model: 'gpt-4o-mini',
-                          usage: {
-                              inputTokens: 10,
-                              outputTokens: 5,
-                              totalTokens: 15,
-                          },
-                          costs: {
-                              input: 0.0000015,
-                              output: 0.000003,
-                              total: 0.0000045,
-                          },
-                      },
-                  };
-              },
-          }
-        : null;
+    const internalNewsTaskService =
+        options.internalNewsTaskService !== undefined
+            ? options.internalNewsTaskService
+            : generationRuntime
+              ? createInternalNewsTaskService({
+                    generationRuntime,
+                    defaultModel: 'gpt-5-mini',
+                    recordUsage: () => undefined,
+                })
+              : null;
+    const internalImageDescriptionTaskService =
+        options.internalImageDescriptionTaskService !== undefined
+            ? options.internalImageDescriptionTaskService
+            : generationRuntime
+              ? {
+                    async runImageDescriptionTask() {
+                        return {
+                            task: 'image_description' as const,
+                            result: {
+                                description:
+                                    '{"summary":"Screenshot of a policy update"}',
+                                model: 'gpt-4o-mini',
+                                usage: {
+                                    inputTokens: 10,
+                                    outputTokens: 5,
+                                    totalTokens: 15,
+                                },
+                                costs: {
+                                    input: 0.0000015,
+                                    output: 0.000003,
+                                    total: 0.0000045,
+                                },
+                            },
+                        };
+                    },
+                }
+              : null;
     const handler = createInternalTextHandler({
         internalNewsTaskService,
         internalImageDescriptionTaskService,
@@ -323,6 +337,88 @@ test('internal text endpoint returns 503 when the internal news task service is 
             body: JSON.stringify({
                 task: 'news',
                 query: 'latest ai policy',
+            }),
+        });
+
+        assert.equal(response.status, 503);
+    } finally {
+        await server.close();
+    }
+});
+
+test('internal text endpoint still serves image-description tasks when the news service is unavailable', async () => {
+    const server = await createInternalTextServer(null, {
+        internalImageDescriptionTaskService: {
+            async runImageDescriptionTask() {
+                return {
+                    task: 'image_description',
+                    result: {
+                        description: '{"summary":"Screenshot of a policy update"}',
+                        model: 'gpt-4o-mini',
+                        usage: {
+                            inputTokens: 10,
+                            outputTokens: 5,
+                            totalTokens: 15,
+                        },
+                        costs: {
+                            input: 0.0000015,
+                            output: 0.000003,
+                            total: 0.0000045,
+                        },
+                    },
+                };
+            },
+        },
+    });
+
+    try {
+        const response = await fetch(`${server.url}/api/internal/text`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+            },
+            body: JSON.stringify({
+                task: 'image_description',
+                imageUrl: 'https://example.com/image.png',
+            }),
+        });
+
+        assert.equal(response.status, 200);
+    } finally {
+        await server.close();
+    }
+});
+
+test('internal text endpoint returns 503 for image-description tasks when only the news service is available', async () => {
+    const server = await createInternalTextServer(
+        {
+            kind: 'test-runtime',
+            async generate() {
+                return {
+                    text: JSON.stringify({
+                        news: [],
+                        summary: 'No updates.',
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            },
+        },
+        {
+            internalImageDescriptionTaskService: null,
+        }
+    );
+
+    try {
+        const response = await fetch(`${server.url}/api/internal/text`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+            },
+            body: JSON.stringify({
+                task: 'image_description',
+                imageUrl: 'https://example.com/image.png',
             }),
         });
 

@@ -99,17 +99,6 @@ export const createInternalTextHandler = ({
                 return;
             }
 
-            if (
-                !internalNewsTaskService ||
-                !internalImageDescriptionTaskService
-            ) {
-                sendJson(res, 503, {
-                    error: 'Internal text service unavailable',
-                });
-                logRequest(req, res, 'internal text service-unavailable');
-                return;
-            }
-
             const parsedRequest = await parseTrustedBodyWithSchema(req, res, {
                 logRequest,
                 routeLabel: 'internal text',
@@ -122,6 +111,14 @@ export const createInternalTextHandler = ({
             }
 
             if (parsedRequest.task === 'news') {
+                if (!internalNewsTaskService) {
+                    sendJson(res, 503, {
+                        error: 'Internal text service unavailable',
+                    });
+                    logRequest(req, res, 'internal text service-unavailable');
+                    return;
+                }
+
                 const newsRequest: PostInternalNewsTaskRequest = parsedRequest;
                 const response =
                     await internalNewsTaskService.runNewsTask(newsRequest);
@@ -135,6 +132,14 @@ export const createInternalTextHandler = ({
             }
 
             if (parsedRequest.task === 'image_description') {
+                if (!internalImageDescriptionTaskService) {
+                    sendJson(res, 503, {
+                        error: 'Internal text service unavailable',
+                    });
+                    logRequest(req, res, 'internal text service-unavailable');
+                    return;
+                }
+
                 const imageDescriptionRequest: PostInternalImageDescriptionTaskRequest =
                     parsedRequest;
                 const response =
