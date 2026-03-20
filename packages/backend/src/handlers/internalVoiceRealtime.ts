@@ -25,6 +25,17 @@ import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { buildRealtimeInstructions } from '../services/prompts/realtimePromptComposer.js';
 import { parseTrustedServiceAuth } from './trustedServiceRequest.js';
 
+/**
+ * @footnote-logger: internalVoiceRealtimeHandler
+ * @logs: Websocket upgrades, session lifecycle, and schema validation outcomes for realtime voice.
+ * @footnote-risk: high - Missing logs hide dropped sessions or auth failures.
+ * @footnote-ethics: high - Realtime audio is privacy sensitive, so logs stay metadata-only.
+ */
+const realtimeLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'internalVoiceRealtimeHandler' })
+        : logger;
+
 type CreateInternalVoiceRealtimeHandlerOptions = {
     realtimeVoiceRuntime: RealtimeVoiceRuntime | null;
     traceApiToken: string | null;
@@ -91,6 +102,8 @@ export const createInternalVoiceRealtimeHandler = ({
             return;
         }
 
+        realtimeLogger.info('Internal voice realtime websocket connected.');
+
         let session: RealtimeVoiceSession | null = null;
         let sessionStarted = false;
         let closed = false;
@@ -107,7 +120,7 @@ export const createInternalVoiceRealtimeHandler = ({
             try {
                 sendServerEvent(ws, event);
             } catch (error) {
-                logger.warn(
+                realtimeLogger.warn(
                     `Failed to send internal voice realtime event: ${
                         error instanceof Error ? error.message : String(error)
                     }`
@@ -115,6 +128,10 @@ export const createInternalVoiceRealtimeHandler = ({
             }
 
             if (event.type === 'session.closed') {
+                realtimeLogger.info('Internal voice realtime session closed.', {
+                    reason: event.reason ?? 'session_closed',
+                    code: event.code,
+                });
                 closeSocket(1000, event.reason ?? 'session_closed');
             }
         };
@@ -124,6 +141,7 @@ export const createInternalVoiceRealtimeHandler = ({
             try {
                 payload = JSON.parse(data.toString()) as InternalVoiceRealtimeClientEvent;
             } catch (_error) {
+                realtimeLogger.warn('Internal voice realtime payload rejected: invalid JSON.');
                 sendServerEvent(ws, {
                     type: 'error',
                     message: 'Realtime payload was not valid JSON.',
@@ -136,6 +154,10 @@ export const createInternalVoiceRealtimeHandler = ({
             );
             if (!parsed.success) {
                 const firstIssue = parsed.error.issues[0];
+                realtimeLogger.warn('Internal voice realtime payload rejected: invalid shape.', {
+                    issuePath: firstIssue?.path.join('.') ?? 'body',
+                    issueMessage: firstIssue?.message ?? 'Invalid event',
+                });
                 sendServerEvent(ws, {
                     type: 'error',
                     message: `Invalid realtime event: ${
@@ -157,6 +179,10 @@ export const createInternalVoiceRealtimeHandler = ({
                 }
 
                 sessionStarted = true;
+                realtimeLogger.info('Internal voice realtime session starting.', {
+                    model: event.options?.model,
+                    voice: event.options?.voice,
+                });
                 try {
                     session = await realtimeVoiceRuntime.createSession({
                         instructions: buildRealtimeInstructions(event.context),
@@ -166,6 +192,10 @@ export const createInternalVoiceRealtimeHandler = ({
                     return;
                 } catch (error) {
                     sessionStarted = false;
+                    realtimeLogger.error('Internal voice realtime session start failed.', {
+                        error:
+                            error instanceof Error ? error.message : String(error),
+                    });
                     sendServerEvent(ws, {
                         type: 'error',
                         message:
@@ -186,6 +216,7 @@ export const createInternalVoiceRealtimeHandler = ({
             }
 
             if (event.type === 'session.close') {
+                realtimeLogger.info('Internal voice realtime session close requested by client.');
                 session.close('client_close');
                 closeSocket(1000, 'client_close');
                 return;
@@ -194,6 +225,11 @@ export const createInternalVoiceRealtimeHandler = ({
             try {
                 await session.send(event);
             } catch (error) {
+                realtimeLogger.error('Internal voice realtime event forwarding failed.', {
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                    eventType: event.type,
+                });
                 sendServerEvent(ws, {
                     type: 'error',
                     message:
@@ -210,7 +246,7 @@ export const createInternalVoiceRealtimeHandler = ({
         });
 
         ws.on('error', (error) => {
-            logger.error('Internal voice realtime websocket error', {
+            realtimeLogger.error('Internal voice realtime websocket error.', {
                 error: error instanceof Error ? error.message : String(error),
             });
             session?.close('socket_error');
@@ -239,6 +275,9 @@ export const createInternalVoiceRealtimeHandler = ({
             }
         );
         if (!auth.ok) {
+            realtimeLogger.warn('Internal voice realtime rejected: auth failed.', {
+                statusCode: auth.statusCode,
+            });
             rejectUpgrade(socket, auth.statusCode, auth.payload);
             return;
         }
@@ -247,6 +286,10 @@ export const createInternalVoiceRealtimeHandler = ({
             `${auth.source}:${auth.rateLimitKey}`
         );
         if (!serviceRateLimitResult.allowed) {
+            realtimeLogger.warn('Internal voice realtime rejected: rate limited.', {
+                source: auth.source,
+                retryAfter: serviceRateLimitResult.retryAfter,
+            });
             rejectUpgrade(socket, 429, {
                 error: 'Too many requests from this trusted service',
                 details: `retryAfter=${serviceRateLimitResult.retryAfter}`,
@@ -255,6 +298,9 @@ export const createInternalVoiceRealtimeHandler = ({
         }
 
         if (!realtimeVoiceRuntime) {
+            realtimeLogger.warn(
+                'Internal voice realtime rejected: service unavailable.'
+            );
             rejectUpgrade(socket, 503, {
                 error: 'Internal voice realtime service unavailable',
             });

@@ -18,6 +18,17 @@ import {
     type TrustedRouteLogRequest,
 } from './trustedServiceRequest.js';
 
+/**
+ * @footnote-logger: internalVoiceTtsHandler
+ * @logs: Auth decisions, request acceptance, and execution failures for internal TTS calls.
+ * @footnote-risk: medium - Missing logs hide TTS outages or abuse; noisy logs can expose metadata volume.
+ * @footnote-ethics: high - Voice requests include user content, so we log only metadata.
+ */
+const ttsLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'internalVoiceTtsHandler' })
+        : logger;
+
 type CreateInternalVoiceTtsHandlerOptions = {
     internalVoiceTtsService: InternalVoiceTtsService | null;
     logRequest: TrustedRouteLogRequest;
@@ -71,6 +82,10 @@ export const createInternalVoiceTtsHandler = ({
                 `${auth.source}:${auth.rateLimitKey}`
             );
             if (!serviceRateLimitResult.allowed) {
+                ttsLogger.warn('Internal voice TTS rate limited.', {
+                    source: auth.source,
+                    retryAfter: serviceRateLimitResult.retryAfter,
+                });
                 sendJson(
                     res,
                     429,
@@ -92,6 +107,9 @@ export const createInternalVoiceTtsHandler = ({
             }
 
             if (!internalVoiceTtsService) {
+                ttsLogger.warn(
+                    'Internal voice TTS service unavailable for request.'
+                );
                 sendJson(res, 503, {
                     error: 'Internal voice service unavailable',
                 });
@@ -111,6 +129,9 @@ export const createInternalVoiceTtsHandler = ({
             }
 
             if (parsedRequest.task !== 'synthesize') {
+                ttsLogger.warn('Internal voice TTS unsupported task.', {
+                    task: parsedRequest.task,
+                });
                 sendJson(res, 400, {
                     error: `Unsupported task: ${parsedRequest.task}`,
                 });
@@ -123,13 +144,20 @@ export const createInternalVoiceTtsHandler = ({
             }
 
             const ttsRequest: PostInternalVoiceTtsRequest = parsedRequest;
+            ttsLogger.info('Internal voice TTS request accepted.', {
+                source: auth.source,
+                model: ttsRequest.options.model,
+                voice: ttsRequest.options.voice,
+                outputFormat: ttsRequest.outputFormat,
+                textLength: ttsRequest.text.length,
+            });
             const response = await internalVoiceTtsService.runTtsTask(
                 ttsRequest
             );
             sendJson(res, 200, response);
             logRequest(req, res, `internal voice tts success task=${response.task}`);
         } catch (error) {
-            logger.error('Internal voice TTS execution failed', {
+            ttsLogger.error('Internal voice TTS execution failed.', {
                 error: error instanceof Error ? error.message : String(error),
             });
             sendJson(res, 502, {

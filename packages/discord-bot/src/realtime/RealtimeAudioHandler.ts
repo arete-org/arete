@@ -11,6 +11,17 @@ import type { InternalVoiceRealtimeClientEvent } from '@footnote/contracts/voice
 
 const COMMIT_INACTIVITY_MS = 320;
 
+/**
+ * @footnote-logger: realtimeAudioHandler
+ * @logs: Audio buffer lifecycle and commit cadence for realtime voice streaming.
+ * @footnote-risk: high - Missing logs make audio dropouts hard to debug.
+ * @footnote-ethics: high - Audio is privacy-sensitive; log sizes and timing only.
+ */
+const audioLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'realtimeAudioHandler' })
+        : logger;
+
 interface PendingSpeaker {
     label: string;
     userId?: string;
@@ -32,7 +43,7 @@ export class RealtimeAudioHandler {
         speakerId?: string
     ): Promise<void> {
         if (!audioBuffer || audioBuffer.length === 0) {
-            logger.debug('[realtime] Ignoring empty audio buffer');
+            audioLogger.debug('[realtime] Ignoring empty audio buffer');
             return;
         }
 
@@ -51,7 +62,7 @@ export class RealtimeAudioHandler {
         this.lastAppendTime = Date.now();
         this.pendingCommit = true;
 
-        logger.debug(
+        audioLogger.debug(
             `[realtime] Sent audio chunk (${audioBuffer.length} bytes) for ${speakerLabel}`
         );
 
@@ -67,7 +78,7 @@ export class RealtimeAudioHandler {
 
         this.commitTimer = setTimeout(() => {
             void this.flushAudio(sendEvent).catch((error) => {
-                logger.error('[realtime] Failed to flush audio buffer:', error);
+                audioLogger.error('[realtime] Failed to flush audio buffer:', error);
             });
         }, COMMIT_INACTIVITY_MS);
     }
@@ -90,7 +101,7 @@ export class RealtimeAudioHandler {
         }
 
         sendEvent({ type: 'input_audio.commit' });
-        logger.debug('[realtime] Committed audio buffer');
+        audioLogger.debug('[realtime] Committed audio buffer');
 
         this.pendingCommit = false;
         this.pendingSpeaker = null;
@@ -107,7 +118,7 @@ export class RealtimeAudioHandler {
             this.commitTimer = null;
         }
 
-        logger.debug('[realtime] Cleared audio buffer');
+        audioLogger.debug('[realtime] Cleared audio buffer');
     }
 
     public resetState(): void {

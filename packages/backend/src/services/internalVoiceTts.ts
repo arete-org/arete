@@ -20,6 +20,17 @@ import {
 } from './llmCostRecorder.js';
 import { logger } from '../utils/logger.js';
 
+/**
+ * @footnote-logger: internalVoiceTtsService
+ * @logs: TTS execution timing, usage summaries, and recording failures (metadata only).
+ * @footnote-risk: medium - Missing logs make it hard to detect TTS regressions or cost spikes.
+ * @footnote-ethics: high - Voice requests include user content; do not log raw text or audio.
+ */
+const ttsLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'internalVoiceTtsService' })
+        : logger;
+
 export type CreateInternalVoiceTtsServiceOptions = {
     ttsRuntime: TextToSpeechRuntime;
     recordUsage?: (record: BackendLLMCostRecord) => void;
@@ -54,6 +65,12 @@ export const createInternalVoiceTtsService = ({
     const runTtsTask = async (
         request: PostInternalVoiceTtsRequest
     ): Promise<PostInternalVoiceTtsResponse> => {
+        ttsLogger.debug('Starting internal voice TTS synthesis.', {
+            model: request.options.model,
+            voice: request.options.voice,
+            outputFormat: request.outputFormat,
+            textLength: request.text.length,
+        });
         const result = await ttsRuntime.synthesize({
             text: request.text,
             options: request.options,
@@ -73,12 +90,21 @@ export const createInternalVoiceTtsService = ({
                 timestamp: Date.now(),
             });
         } catch (error) {
-            logger.warn(
+            ttsLogger.warn(
                 `Internal voice TTS usage recording failed: ${
                     error instanceof Error ? error.message : String(error)
                 }`
             );
         }
+
+        ttsLogger.info('Internal voice TTS synthesis complete.', {
+            model: result.model,
+            voice: result.voice,
+            outputFormat: result.outputFormat,
+            generationTimeMs: result.generationTimeMs,
+            usage: result.usage,
+            costs: result.costs,
+        });
 
         const response = toInternalVoiceTtsResponse(result);
         const parsed = PostInternalVoiceTtsResponseSchema.safeParse(response);

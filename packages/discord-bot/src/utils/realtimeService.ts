@@ -22,6 +22,17 @@ import type {
 import { InternalVoiceRealtimeServerEventSchema } from '@footnote/contracts/voice';
 
 /**
+ * @footnote-logger: realtimeService
+ * @logs: Backend websocket connection lifecycle and schema validation outcomes for realtime voice.
+ * @footnote-risk: high - Missing logs hide realtime outages or protocol drift.
+ * @footnote-ethics: high - Realtime audio is privacy-sensitive; log metadata only.
+ */
+const realtimeLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'realtimeService' })
+        : logger;
+
+/**
  * Runtime options used when opening a new OpenAI realtime session.
  */
 export interface RealtimeSessionOptions {
@@ -132,12 +143,16 @@ export class RealtimeSession extends EventEmitter {
         const wsUrl = this.buildBackendRealtimeUrl(
             runtimeConfig.backendBaseUrl
         );
+        realtimeLogger.info('Connecting to backend realtime websocket.', {
+            url: wsUrl,
+        });
         const headers: Record<string, string> = {};
         if (runtimeConfig.traceApiToken) {
             headers['X-Trace-Token'] = runtimeConfig.traceApiToken;
         }
 
         await this.wsManager.connect(wsUrl, headers);
+        realtimeLogger.info('Backend realtime websocket connected.');
         this.sendClientEvent({
             type: 'session.start',
             context: this.sessionContext,
@@ -149,6 +164,7 @@ export class RealtimeSession extends EventEmitter {
      * Disconnect from the Realtime API
      */
     public disconnect(): void {
+        realtimeLogger.info('Disconnecting backend realtime websocket.');
         this.wsManager.disconnect();
     }
 
@@ -245,23 +261,31 @@ export class RealtimeSession extends EventEmitter {
         try {
             parsed = JSON.parse(raw) as InternalVoiceRealtimeServerEvent;
         } catch (error) {
-            logger.warn('[realtime] Ignoring malformed backend event payload.', {
-                error: error instanceof Error ? error.message : String(error),
-            });
+            realtimeLogger.warn(
+                '[realtime] Ignoring malformed backend event payload.',
+                {
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                }
+            );
             return;
         }
 
         const validation =
             InternalVoiceRealtimeServerEventSchema.safeParse(parsed);
         if (!validation.success) {
-            logger.warn('[realtime] Ignoring invalid backend event shape.', {
-                issues: validation.error.issues,
-            });
+            realtimeLogger.warn(
+                '[realtime] Ignoring invalid backend event shape.',
+                {
+                    issues: validation.error.issues,
+                }
+            );
             return;
         }
 
         const event = validation.data;
         if (event.type === 'session.ready') {
+            realtimeLogger.info('Backend realtime session ready.');
             this.emit('connected');
             return;
         }
@@ -280,6 +304,10 @@ export class RealtimeSession extends EventEmitter {
         }
 
         if (event.type === 'session.closed') {
+            realtimeLogger.warn('Backend realtime session closed.', {
+                reason: event.reason ?? 'session closed',
+                code: event.code,
+            });
             this.emit('error', new Error(event.reason ?? 'session closed'));
         }
     }
