@@ -9,6 +9,17 @@ import WebSocket from 'ws';
 import { logger } from '../utils/logger.js';
 import { RECONNECTION_CONSTANTS } from '../constants/voice.js';
 
+/**
+ * @footnote-logger: realtimeWebSocketManager
+ * @logs: Realtime websocket lifecycle, reconnection attempts, and message dispatch metadata.
+ * @footnote-risk: high - Missing logs hide dropped realtime sessions or reconnection loops.
+ * @footnote-ethics: high - Realtime voice traffic is sensitive; log metadata only.
+ */
+const realtimeWebSocketLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'realtimeWebSocketManager' })
+        : logger;
+
 export class RealtimeWebSocketManager {
     private ws: WebSocket | null = null;
     private isConnected = false;
@@ -33,6 +44,13 @@ export class RealtimeWebSocketManager {
         url: string,
         headers: Record<string, string>
     ): Promise<void> {
+        realtimeWebSocketLogger.debug(
+            '[realtime-ws] Connect requested.',
+            {
+                url,
+                headerKeys: Object.keys(headers),
+            }
+        );
         // If already connected, return immediately
         if (this.isConnected) {
             throw new Error('Session is already connected');
@@ -70,6 +88,10 @@ export class RealtimeWebSocketManager {
         reject: (error: Error) => void
     ): void {
         try {
+            realtimeWebSocketLogger.debug(
+                '[realtime-ws] Opening websocket connection.',
+                { url }
+            );
             const ws = new WebSocket(url, { headers });
             this.ws = ws;
 
@@ -79,6 +101,10 @@ export class RealtimeWebSocketManager {
                 this.reconnectAttempts = 0;
                 this.clearReconnectTimer();
                 this.connectionResolver?.();
+                realtimeWebSocketLogger.info(
+                    '[realtime-ws] Websocket connected.',
+                    { url }
+                );
 
                 ws.on('message', (data) => {
                     try {
@@ -97,14 +123,14 @@ export class RealtimeWebSocketManager {
                             try {
                                 cb(data);
                             } catch (error) {
-                                logger.error(
+                                realtimeWebSocketLogger.error(
                                     'Error in message callback:',
                                     error
                                 );
                             }
                         });
                     } catch (error) {
-                        logger.error(
+                        realtimeWebSocketLogger.error(
                             'Error processing WebSocket message:',
                             error
                         );
@@ -112,7 +138,10 @@ export class RealtimeWebSocketManager {
                 });
 
                 ws.on('error', (error) => {
-                    logger.error('WebSocket error:', error);
+                    realtimeWebSocketLogger.error(
+                        '[realtime-ws] WebSocket error:',
+                        error
+                    );
                     this.handleConnectionError(
                         error,
                         url,
@@ -122,7 +151,20 @@ export class RealtimeWebSocketManager {
                     );
                 });
 
-                ws.on('close', (code) => {
+                ws.on('close', (code, reason) => {
+                    const reasonText =
+                        reason && reason.length ? reason.toString() : undefined;
+                    realtimeWebSocketLogger.warn(
+                        '[realtime-ws] WebSocket closed.',
+                        {
+                            code,
+                            reason: reasonText,
+                            wasConnected: this.isConnected,
+                            reconnectAttempts: this.reconnectAttempts,
+                        }
+                    );
+                    this.isConnected = false;
+                    this.isConnecting = false;
                     this.cleanupConnectionPromise();
                     this.cleanup();
 
@@ -132,7 +174,10 @@ export class RealtimeWebSocketManager {
                 });
             });
         } catch (error) {
-            logger.error('Error creating WebSocket connection:', error);
+            realtimeWebSocketLogger.error(
+                'Error creating WebSocket connection:',
+                error
+            );
             this.isConnecting = false;
             this.handleConnectionError(
                 error instanceof Error ? error : new Error(String(error)),
@@ -155,12 +200,14 @@ export class RealtimeWebSocketManager {
         this.isConnecting = false;
 
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
-            logger.warn(
+            realtimeWebSocketLogger.warn(
                 `Connection failed, attempting reconnection (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`
             );
             this.scheduleReconnection(url, headers);
         } else {
-            logger.error('Max reconnection attempts reached, giving up');
+            realtimeWebSocketLogger.error(
+                'Max reconnection attempts reached, giving up'
+            );
             this.connectionRejector?.(error);
             this.cleanupConnectionPromise();
             this.cleanup();
@@ -181,7 +228,7 @@ export class RealtimeWebSocketManager {
             this.maxReconnectDelay
         );
 
-        logger.info(
+        realtimeWebSocketLogger.info(
             `Scheduling reconnection attempt ${this.reconnectAttempts} in ${delay}ms`
         );
 
@@ -217,8 +264,12 @@ export class RealtimeWebSocketManager {
             try {
                 this.ws.removeAllListeners();
             } catch (error) {
-                logger.error('Error cleaning up WebSocket listeners:', error);
+                realtimeWebSocketLogger.error(
+                    'Error cleaning up WebSocket listeners:',
+                    error
+                );
             }
+            this.ws = null;
         }
     }
 
@@ -226,11 +277,16 @@ export class RealtimeWebSocketManager {
         if (this.ws && this.isConnected) {
             this.ws.close();
         }
+        this.isConnected = false;
+        this.isConnecting = false;
         this.cleanup();
     }
 
     public send(data: string): void {
         if (!this.isConnected || !this.ws) {
+            realtimeWebSocketLogger.warn(
+                '[realtime-ws] Send attempted without active connection.'
+            );
             throw new Error('Session is not connected');
         }
         this.ws.send(data);
@@ -265,7 +321,10 @@ export class RealtimeWebSocketManager {
             try {
                 callback(data);
             } catch (error) {
-                logger.error(`Error in ${event} handler:`, error);
+                realtimeWebSocketLogger.error(
+                    `Error in ${event} handler:`,
+                    error
+                );
             }
         });
     }

@@ -56,6 +56,17 @@ import { createInternalVoiceTtsHandler } from './handlers/internalVoiceTts.js';
 import { createInternalVoiceRealtimeHandler } from './handlers/internalVoiceRealtime.js';
 import { buildRealtimeInstructions } from './services/prompts/realtimePromptComposer.js';
 
+/**
+ * @footnote-logger: openAiRealtimeVoiceRuntime
+ * @logs: Provider websocket lifecycle and session update metadata for realtime voice.
+ * @footnote-risk: high - Missing logs hide provider-level realtime failures.
+ * @footnote-ethics: high - Realtime audio is sensitive; log metadata only.
+ */
+const openAiRealtimeLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'openAiRealtimeVoiceRuntime' })
+        : logger;
+
 // --- Path configuration ---
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(currentDirectory, '../../web/dist');
@@ -159,6 +170,7 @@ const initializeServices = () => {
             requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
             defaultModel: runtimeConfig.openai.defaultRealtimeModel,
             defaultVoice: runtimeConfig.openai.defaultRealtimeVoice,
+            logger: openAiRealtimeLogger,
         });
     } else {
         openaiService = null;

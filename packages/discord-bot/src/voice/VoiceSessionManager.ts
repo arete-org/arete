@@ -12,6 +12,17 @@ import { logger } from '../utils/logger.js';
 import { AudioCaptureHandler, AudioChunkEvent } from './AudioCaptureHandler.js';
 import { AudioPlaybackHandler } from './AudioPlaybackHandler.js';
 
+/**
+ * @footnote-logger: voiceSessionManager
+ * @logs: Session lifecycle and audio forwarding metadata for realtime voice.
+ * @footnote-risk: high - Missing logs hide dropped audio or stalled sessions.
+ * @footnote-ethics: high - Voice sessions are privacy sensitive; log metadata only.
+ */
+const voiceSessionLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'voiceSessionManager' })
+        : logger;
+
 export interface VoiceSession {
     connection: VoiceConnection;
     realtimeSession: RealtimeSession;
@@ -53,13 +64,13 @@ export class VoiceSessionManager {
     }
 
     public addSession(guildId: string, session: VoiceSession): void {
-        logger.debug(
+        voiceSessionLogger.debug(
             `Adding session for guild ${guildId}, current sessions: ${this.activeSessions.size}`
         );
 
         const existingSession = this.activeSessions.get(guildId);
         if (existingSession) {
-            logger.warn(
+            voiceSessionLogger.warn(
                 `Session already exists for guild ${guildId}, cleaning up existing session`
             );
             this.cleanupSessionEventListeners(existingSession);
@@ -83,25 +94,28 @@ export class VoiceSessionManager {
         const sessionWithHandlers = session as VoiceSessionWithHandlers;
         sessionWithHandlers.audioChunkHandler = chunkHandler;
 
-        logger.debug(
+        voiceSessionLogger.debug(
             `Added voice session for guild ${guildId}, total sessions: ${this.activeSessions.size}`
         );
     }
 
     private enqueueAudioTask(guildId: string, task: () => Promise<void>): void {
         const session = this.activeSessions.get(guildId);
-        if (!session) return;
+            if (!session) return;
 
-        session.audioPipeline = session.audioPipeline
+            session.audioPipeline = session.audioPipeline
             .catch((error) => {
-                logger.error(
+                voiceSessionLogger.error(
                     `Audio pipeline error for guild ${guildId}:`,
                     error
                 );
             })
             .then(task)
             .catch((error) => {
-                logger.error(`Failed audio task for guild ${guildId}:`, error);
+                voiceSessionLogger.error(
+                    `Failed audio task for guild ${guildId}:`,
+                    error
+                );
             });
     }
 
@@ -112,7 +126,7 @@ export class VoiceSessionManager {
     ): Promise<void> {
         const session = this.activeSessions.get(guildId);
         if (!session) {
-            logger.warn(
+            voiceSessionLogger.warn(
                 `No session found for guild ${guildId} when forwarding audio chunk`
             );
             return;
@@ -123,12 +137,20 @@ export class VoiceSessionManager {
         }
 
         const label = session.participantLabels.get(userId) || userId;
-        logger.debug(
+        voiceSessionLogger.debug(
             `Forwarding ${audioBuffer.length} bytes for ${label} (${userId}) in guild ${guildId}`
         );
 
-        await session.realtimeSession.sendAudio(audioBuffer, label, userId);
-        session.lastAudioTime = Date.now();
+        try {
+            await session.realtimeSession.sendAudio(audioBuffer, label, userId);
+            session.lastAudioTime = Date.now();
+        } catch (error) {
+            voiceSessionLogger.error(
+                `Failed to forward audio chunk for guild ${guildId}:`,
+                error
+            );
+            throw error;
+        }
     }
 
     private cleanupSessionEventListeners(session: VoiceSession): void {
@@ -167,11 +189,14 @@ export class VoiceSessionManager {
                 this.cleanupSessionEventListeners(session);
                 session.realtimeSession.disconnect();
             } catch (error) {
-                logger.error('Error disconnecting realtime session:', error);
+                voiceSessionLogger.error(
+                    'Error disconnecting realtime session:',
+                    error
+                );
             }
         }
         this.activeSessions.delete(guildId);
-        logger.debug(
+        voiceSessionLogger.debug(
             `Removed voice session for guild ${guildId}, remaining sessions: ${this.activeSessions.size}`
         );
     }

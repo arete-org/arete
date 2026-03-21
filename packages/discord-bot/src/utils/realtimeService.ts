@@ -33,6 +33,14 @@ const realtimeLogger =
         ? logger.child({ module: 'realtimeService' })
         : logger;
 
+const estimateBase64Bytes = (value: string): number => {
+    if (!value) {
+        return 0;
+    }
+    const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+    return Math.max(0, Math.floor((value.length * 3) / 4) - padding);
+};
+
 /**
  * Runtime options used when opening a new backend realtime session.
  */
@@ -156,6 +164,14 @@ export class RealtimeSession extends EventEmitter {
         realtimeLogger.info('Connecting to backend realtime websocket.', {
             url: wsUrl,
         });
+        realtimeLogger.debug('Realtime session connect metadata.', {
+            participantCount: this.sessionContext.participants.length,
+            botCount: this.sessionContext.participants.filter(
+                (participant) => participant.isBot
+            ).length,
+            hasTranscripts: Boolean(this.sessionContext.transcripts?.length),
+            options: this.sessionConfig.getOptions(),
+        });
         const headers: Record<string, string> = {};
         if (runtimeConfig.serviceToken) {
             headers['X-Service-Token'] = runtimeConfig.serviceToken;
@@ -171,6 +187,10 @@ export class RealtimeSession extends EventEmitter {
                 'Realtime session requires a trusted service credential.'
             );
         }
+        realtimeLogger.debug('Realtime websocket auth headers ready.', {
+            hasServiceToken: Boolean(runtimeConfig.serviceToken),
+            hasTraceToken: Boolean(runtimeConfig.traceApiToken),
+        });
 
         await this.wsManager.connect(wsUrl, headers);
         realtimeLogger.info('Backend realtime websocket connected.');
@@ -258,6 +278,10 @@ export class RealtimeSession extends EventEmitter {
             throw new Error('Session is not connected');
         }
 
+        realtimeLogger.debug(
+            'Sending realtime client event.',
+            buildClientEventMetadata(event)
+        );
         this.wsManager.send(JSON.stringify(event));
     }
 
@@ -312,10 +336,18 @@ export class RealtimeSession extends EventEmitter {
                     return;
                 }
                 if (event.type === 'error') {
+                    realtimeLogger.warn(
+                        'Realtime session error before ready.',
+                        { message: event.message, code: event.code }
+                    );
                     rejectReady(new Error(event.message));
                     return;
                 }
                 if (event.type === 'session.closed') {
+                    realtimeLogger.warn(
+                        'Realtime session closed before ready.',
+                        { reason: event.reason, code: event.code }
+                    );
                     rejectReady(
                         new Error(event.reason ?? 'Realtime session closed.')
                     );
@@ -326,6 +358,10 @@ export class RealtimeSession extends EventEmitter {
                 const suffix = reason?.length
                     ? `: ${reason.toString()}`
                     : '';
+                realtimeLogger.warn(
+                    'Realtime websocket closed before ready.',
+                    { code, reason: reason?.toString() || undefined }
+                );
                 rejectReady(
                     new Error(
                         `Realtime websocket closed before ready (${code})${suffix}`
@@ -356,6 +392,7 @@ export class RealtimeSession extends EventEmitter {
             return;
         }
         this.sessionReady = true;
+        realtimeLogger.debug('Realtime session marked ready.');
         this.resolveSessionReady?.();
     }
 
@@ -427,6 +464,39 @@ export class RealtimeSession extends EventEmitter {
         }
     }
 }
+
+const buildClientEventMetadata = (
+    event: InternalVoiceRealtimeClientEvent
+): Record<string, unknown> => {
+    switch (event.type) {
+        case 'session.start':
+            return {
+                type: event.type,
+                participantCount: event.context.participants.length,
+                botCount: event.context.participants.filter(
+                    (participant) => participant.isBot
+                ).length,
+                hasTranscripts: Boolean(event.context.transcripts?.length),
+                options: event.options,
+            };
+        case 'input_audio.append':
+            return {
+                type: event.type,
+                audioBytes: estimateBase64Bytes(event.audioBase64),
+                speakerLabelLength: event.speakerLabel.length,
+                speakerId: event.speakerId,
+            };
+        case 'input_text.create':
+            return {
+                type: event.type,
+                textLength: event.text.length,
+                speakerLabelLength: event.speakerLabel?.length,
+                speakerId: event.speakerId,
+            };
+        default:
+            return { type: event.type };
+    }
+};
 
 const mapInternalEventToRealtimeEvent = (
     event: InternalVoiceRealtimeServerEvent

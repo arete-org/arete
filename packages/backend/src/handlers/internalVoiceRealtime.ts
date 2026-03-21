@@ -59,6 +59,14 @@ const STATUS_MESSAGES: Record<number, string> = {
     503: 'Service Unavailable',
 };
 
+const estimateBase64Bytes = (value: string): number => {
+    if (!value) {
+        return 0;
+    }
+    const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+    return Math.max(0, Math.floor((value.length * 3) / 4) - padding);
+};
+
 const rejectUpgrade = (
     socket: Duplex,
     statusCode: number,
@@ -221,6 +229,14 @@ export const createInternalVoiceRealtimeHandler = ({
             const event = parsed.data;
 
             if (event.type === 'session.start') {
+                realtimeLogger.debug('Realtime session start payload received.', {
+                    participantCount: event.context.participants.length,
+                    botCount: event.context.participants.filter(
+                        (participant) => participant.isBot
+                    ).length,
+                    hasTranscripts: Boolean(event.context.transcripts?.length),
+                    options: event.options,
+                });
                 if (sessionStarted) {
                     sendServerEvent(ws, {
                         type: 'error',
@@ -276,10 +292,31 @@ export const createInternalVoiceRealtimeHandler = ({
             }
 
             if (event.type === 'session.close') {
+                realtimeLogger.debug(
+                    'Internal voice realtime session close requested by client.'
+                );
                 realtimeLogger.info('Internal voice realtime session close requested by client.');
                 session.close('client_close');
                 closeSocket(1000, 'client_close');
                 return;
+            }
+
+            if (event.type === 'input_audio.append') {
+                realtimeLogger.debug('Internal voice realtime audio append.', {
+                    audioBytes: estimateBase64Bytes(event.audioBase64),
+                    speakerLabelLength: event.speakerLabel.length,
+                    speakerId: event.speakerId,
+                });
+            } else if (event.type === 'input_text.create') {
+                realtimeLogger.debug('Internal voice realtime input text.', {
+                    textLength: event.text.length,
+                    speakerLabelLength: event.speakerLabel?.length,
+                    speakerId: event.speakerId,
+                });
+            } else {
+                realtimeLogger.debug('Internal voice realtime client event.', {
+                    type: event.type,
+                });
             }
 
             try {

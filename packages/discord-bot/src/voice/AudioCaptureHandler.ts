@@ -14,6 +14,17 @@ import { AUDIO_CONSTANTS, TIMEOUT_CONSTANTS } from '../constants/voice.js';
 import { createCaptureResampler } from './audioTransforms.js';
 import { EventEmitter } from 'events';
 
+/**
+ * @footnote-logger: audioCaptureHandler
+ * @logs: Voice capture lifecycle events and PCM chunk metadata.
+ * @footnote-risk: high - Missing logs make audio capture dropouts hard to diagnose.
+ * @footnote-ethics: high - Voice data is sensitive; log sizes and IDs only.
+ */
+const audioCaptureLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'audioCaptureHandler' })
+        : logger;
+
 interface ActiveReceiver {
     cleanup: () => void;
 }
@@ -51,9 +62,13 @@ export class AudioCaptureHandler extends EventEmitter {
         const receiver = connection.receiver;
 
         this.ignoredUserIdsByGuild.set(guildId, new Set(ignoredUserIds));
+        audioCaptureLogger.debug(
+            `Updated ignored user list for guild ${guildId}`,
+            { ignoredUserCount: ignoredUserIds.size }
+        );
 
         if (this.captureInitialized.has(guildId)) {
-            logger.debug(
+            audioCaptureLogger.debug(
                 `Audio capture already initialized for guild ${guildId}`
             );
             return;
@@ -63,18 +78,21 @@ export class AudioCaptureHandler extends EventEmitter {
             receiver.speaking.removeAllListeners('start');
             receiver.speaking.removeAllListeners('end');
         } catch (error) {
-            logger.warn(
+            audioCaptureLogger.warn(
                 `Failed to clear existing speaking listeners for guild ${guildId}: ${error}`
             );
         }
 
         receiver.speaking.on('start', (userId: string) => {
             if (this.shouldIgnoreUser(guildId, userId)) {
-                logger.debug(
+                audioCaptureLogger.debug(
                     `[${this.getCaptureKey(guildId, userId)}] Ignoring bot/self audio capture`
                 );
                 return;
             }
+            audioCaptureLogger.debug(
+                `[${this.getCaptureKey(guildId, userId)}] Speaking started`
+            );
             this.startReceiverStream(guildId, userId, receiver);
         });
 
@@ -87,12 +105,12 @@ export class AudioCaptureHandler extends EventEmitter {
             if (!active) {
                 return;
             }
-            logger.debug(`[${key}] Discord speaking event ended`);
+            audioCaptureLogger.debug(`[${key}] Discord speaking event ended`);
             active.cleanup();
         });
 
         this.captureInitialized.add(guildId);
-        logger.debug(`Audio capture setup completed for guild ${guildId}`);
+        audioCaptureLogger.debug(`Audio capture setup completed for guild ${guildId}`);
     }
 
     public isCaptureInitialized(guildId: string): boolean {
@@ -114,11 +132,11 @@ export class AudioCaptureHandler extends EventEmitter {
     ): void {
         const captureKey = this.getCaptureKey(guildId, userId);
         if (this.activeReceivers.has(captureKey)) {
-            logger.debug(`[${captureKey}] Receiver already active`);
+            audioCaptureLogger.debug(`[${captureKey}] Receiver already active`);
             return;
         }
 
-        logger.debug(`[${captureKey}] Starting PCM capture stream`);
+        audioCaptureLogger.debug(`[${captureKey}] Starting PCM capture stream`);
 
         const opusStream = receiver.subscribe(userId, {
             end: {
@@ -135,10 +153,18 @@ export class AudioCaptureHandler extends EventEmitter {
         const resampler = createCaptureResampler();
         const pcmStream = opusStream.pipe(decoder).pipe(resampler);
         let cleanedUp = false;
+        let firstChunkLogged = false;
 
         const onData = (chunk: Buffer) => {
             if (chunk.length === 0) return;
 
+            if (!firstChunkLogged) {
+                firstChunkLogged = true;
+                audioCaptureLogger.debug(
+                    `[${captureKey}] First PCM chunk received`,
+                    { bytes: chunk.length }
+                );
+            }
             const event: AudioChunkEvent = {
                 guildId,
                 userId,
@@ -152,7 +178,7 @@ export class AudioCaptureHandler extends EventEmitter {
                 return;
             }
             cleanedUp = true;
-            logger.debug(`[${captureKey}] Cleaning up PCM stream`);
+            audioCaptureLogger.debug(`[${captureKey}] Cleaning up PCM stream`);
             pcmStream.off('data', onData);
             pcmStream.removeAllListeners();
             resampler.removeAllListeners();
@@ -190,17 +216,17 @@ export class AudioCaptureHandler extends EventEmitter {
         pcmStream.once('end', cleanup);
         pcmStream.once('close', cleanup);
         pcmStream.on('error', (err: Error) => {
-            logger.error(`[${captureKey}] PCM stream error:`, err);
+            audioCaptureLogger.error(`[${captureKey}] PCM stream error:`, err);
             cleanup();
         });
 
         decoder.on('error', (err: Error) => {
-            logger.error(`[${captureKey}] Decoder error:`, err);
+            audioCaptureLogger.error(`[${captureKey}] Decoder error:`, err);
             cleanup();
         });
 
         opusStream.on('error', (err: Error) => {
-            logger.error(`[${captureKey}] Opus stream error:`, err);
+            audioCaptureLogger.error(`[${captureKey}] Opus stream error:`, err);
             cleanup();
         });
 
@@ -216,7 +242,7 @@ export class AudioCaptureHandler extends EventEmitter {
 
         this.captureInitialized.delete(guildId);
         this.ignoredUserIdsByGuild.delete(guildId);
-        logger.debug(`Cleaned up audio capture for guild ${guildId}`);
+        audioCaptureLogger.debug(`Cleaned up audio capture for guild ${guildId}`);
     }
 
     public getDebugInfo(): AudioCaptureDebugInfo {

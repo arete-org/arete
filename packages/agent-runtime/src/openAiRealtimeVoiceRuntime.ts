@@ -274,9 +274,27 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
                     string,
                     unknown
                 >;
+                const rawType =
+                    typeof parsed.type === 'string' ? parsed.type : 'unknown';
+                if (
+                    rawType !== 'response.output_audio.delta' &&
+                    rawType !== 'response.text.delta'
+                ) {
+                    this.logger?.debug?.(
+                        'OpenAI realtime event received.',
+                        {
+                            type: rawType,
+                        }
+                    );
+                }
                 const mapped = mapServerEvent(parsed);
                 if (mapped) {
                     this.emitEvent(mapped);
+                } else if (rawType !== 'unknown') {
+                    this.logger?.debug?.(
+                        'OpenAI realtime event ignored (unmapped).',
+                        { type: rawType }
+                    );
                 }
             } catch (error) {
                 this.logger?.warn?.('Realtime message parse failed.', {
@@ -286,7 +304,11 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
             }
         });
 
-        this.ws.on('close', (_code, reason) => {
+        this.ws.on('close', (code, reason) => {
+            this.logger?.warn?.('OpenAI realtime websocket closed.', {
+                code,
+                reason: reason?.toString() || undefined,
+            });
             this.emitEvent({
                 type: 'session.closed',
                 reason: reason?.toString() || undefined,
@@ -294,6 +316,9 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
         });
 
         this.ws.on('error', (error) => {
+            this.logger?.error?.('OpenAI realtime websocket error.', {
+                error: error instanceof Error ? error.message : String(error),
+            });
             this.emitEvent({
                 type: 'error',
                 message: error instanceof Error ? error.message : String(error),
@@ -622,6 +647,11 @@ export const createOpenAiRealtimeVoiceRuntime = ({
                 const resolvedVoice =
                     request.options?.voice ?? defaultVoice ?? DEFAULT_VOICE;
                 const url = `wss://api.openai.com/v1/realtime?model=${resolvedModel}`;
+                logger?.debug?.('Opening OpenAI realtime websocket.', {
+                    model: resolvedModel,
+                    voice: resolvedVoice,
+                    url,
+                });
                 const ws = await connectWebSocket(
                     url,
                     {
@@ -642,6 +672,13 @@ export const createOpenAiRealtimeVoiceRuntime = ({
                     ws,
                     abortContext.signal
                 );
+                logger?.debug?.('Sending OpenAI realtime session.update.', {
+                    model: resolvedModel,
+                    voice: resolvedVoice,
+                    inputSampleRate: REALTIME_SAMPLE_RATE,
+                    outputSampleRate: REALTIME_SAMPLE_RATE,
+                    turnDetection: 'server_vad',
+                });
                 sendSessionConfig(
                     ws,
                     request.instructions,
@@ -649,6 +686,10 @@ export const createOpenAiRealtimeVoiceRuntime = ({
                     resolvedVoice
                 );
                 await readyPromise;
+                logger?.debug?.('OpenAI realtime session ready.', {
+                    model: resolvedModel,
+                    voice: resolvedVoice,
+                });
                 session.emitEvent({ type: 'session.ready' });
 
                 return session;
