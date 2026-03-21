@@ -34,6 +34,8 @@ interface AudioCaptureDebugInfo {
 export class AudioCaptureHandler extends EventEmitter {
     private readonly captureInitialized: Set<string> = new Set();
     private readonly activeReceivers: Map<string, ActiveReceiver> = new Map();
+    private readonly ignoredUserIdsByGuild: Map<string, Set<string>> =
+        new Map();
 
     constructor() {
         super();
@@ -43,9 +45,12 @@ export class AudioCaptureHandler extends EventEmitter {
     public setupAudioCapture(
         connection: VoiceConnection,
         _unusedRealtimeSession: unknown,
-        guildId: string
+        guildId: string,
+        ignoredUserIds: Set<string> = new Set()
     ): void {
         const receiver = connection.receiver;
+
+        this.ignoredUserIdsByGuild.set(guildId, new Set(ignoredUserIds));
 
         if (this.captureInitialized.has(guildId)) {
             logger.debug(
@@ -64,10 +69,19 @@ export class AudioCaptureHandler extends EventEmitter {
         }
 
         receiver.speaking.on('start', (userId: string) => {
+            if (this.shouldIgnoreUser(guildId, userId)) {
+                logger.debug(
+                    `[${this.getCaptureKey(guildId, userId)}] Ignoring bot/self audio capture`
+                );
+                return;
+            }
             this.startReceiverStream(guildId, userId, receiver);
         });
 
         receiver.speaking.on('end', (userId: string) => {
+            if (this.shouldIgnoreUser(guildId, userId)) {
+                return;
+            }
             const key = this.getCaptureKey(guildId, userId);
             const active = this.activeReceivers.get(key);
             if (!active) {
@@ -87,6 +101,10 @@ export class AudioCaptureHandler extends EventEmitter {
 
     private getCaptureKey(guildId: string, userId: string): string {
         return `${guildId}:${userId}`;
+    }
+
+    private shouldIgnoreUser(guildId: string, userId: string): boolean {
+        return this.ignoredUserIdsByGuild.get(guildId)?.has(userId) ?? false;
     }
 
     private startReceiverStream(
@@ -197,6 +215,7 @@ export class AudioCaptureHandler extends EventEmitter {
         }
 
         this.captureInitialized.delete(guildId);
+        this.ignoredUserIdsByGuild.delete(guildId);
         logger.debug(`Cleaned up audio capture for guild ${guildId}`);
     }
 

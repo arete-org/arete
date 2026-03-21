@@ -187,6 +187,11 @@ export class VoiceStateHandler extends Event {
 
         const { participantMap, contextParticipants } =
             this.collectVoiceParticipants(voiceChannel);
+        const ignoredUserIds = new Set(
+            contextParticipants
+                .filter((participant) => participant.isBot)
+                .map((participant) => participant.id)
+        );
         const realtimeSession = await this.createRealtimeSession(
             guildId,
             contextParticipants
@@ -205,7 +210,8 @@ export class VoiceStateHandler extends Event {
         this.audioCaptureHandler.setupAudioCapture(
             connection,
             realtimeSession,
-            guildId
+            guildId,
+            ignoredUserIds
         );
 
         logger.info(
@@ -251,6 +257,11 @@ export class VoiceStateHandler extends Event {
 
             const { participantMap, contextParticipants } =
                 this.collectVoiceParticipants(isVoiceChannel);
+            const ignoredUserIds = new Set(
+                contextParticipants
+                    .filter((participant) => participant.isBot)
+                    .map((participant) => participant.id)
+            );
             const realtimeSession = await this.createRealtimeSession(
                 guildId,
                 contextParticipants
@@ -267,7 +278,8 @@ export class VoiceStateHandler extends Event {
             this.audioCaptureHandler.setupAudioCapture(
                 connection,
                 realtimeSession,
-                guildId
+                guildId,
+                ignoredUserIds
             );
         }
 
