@@ -25,6 +25,17 @@ import {
 import type { InternalImageDescriptionAdapter } from './internalImageDescription.js';
 import { logger } from '../utils/logger.js';
 
+/**
+ * @footnote-logger: internalTextTaskService
+ * @logs: Task start/finish metadata, usage summaries, and schema failures for internal text helpers.
+ * @footnote-risk: high - Missing logs hide helper regressions or unexpected cost spikes.
+ * @footnote-ethics: medium - Text tasks can contain user content, so logs stay metadata-only.
+ */
+const textTaskLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'internalTextTaskService' })
+        : logger;
+
 const DEFAULT_NEWS_MAX_RESULTS = 3;
 const MAX_NEWS_RESULTS = 5;
 const DEFAULT_NEWS_QUERY = 'latest news';
@@ -91,6 +102,18 @@ const normalizeOptionalString = (
 
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const safeHostnameFromUrl = (value: string | undefined): string | null => {
+    if (!value) {
+        return null;
+    }
+
+    try {
+        return new URL(value).hostname;
+    } catch {
+        return null;
+    }
 };
 
 const clampNewsMaxResults = (maxResults: number | undefined): number => {
@@ -277,6 +300,15 @@ export const createInternalNewsTaskService = ({
         const category = normalizeOptionalString(request.category);
         const maxResults = clampNewsMaxResults(request.maxResults);
         const searchQuery = buildNewsSearchQuery({ query, category });
+        textTaskLogger.debug('Internal news task starting.', {
+            queryLength: query?.length ?? 0,
+            categoryLength: category?.length ?? 0,
+            maxResults,
+            reasoningEffort: request.reasoningEffort ?? 'medium',
+            verbosity: request.verbosity ?? 'medium',
+            searchQueryLength: searchQuery.length,
+            hasChannelContext: Boolean(request.channelContext),
+        });
         const { content: systemPrompt } = renderPrompt('text.news.system', {
             query: query ?? 'Not specified',
             category: category ?? 'Not specified',
@@ -332,10 +364,17 @@ export const createInternalNewsTaskService = ({
                 timestamp: Date.now(),
             });
         } catch (error) {
-            logger.warn(
+            textTaskLogger.warn(
                 `Internal news task usage recording failed: ${error instanceof Error ? error.message : String(error)}`
             );
         }
+
+        textTaskLogger.info('Internal news task complete.', {
+            model: usageModel,
+            promptTokens,
+            completionTokens,
+            totalTokens,
+        });
 
         const responsePayload = {
             task: 'news' as const,
@@ -367,6 +406,11 @@ export const createInternalImageDescriptionTaskService = ({
     const runImageDescriptionTask = async (
         request: PostInternalImageDescriptionTaskRequest
     ): Promise<PostInternalImageDescriptionTaskResponse> => {
+        const imageHost = safeHostnameFromUrl(request.imageUrl);
+        textTaskLogger.debug('Internal image-description task starting.', {
+            imageHost,
+            contextLength: request.context?.length ?? 0,
+        });
         const result = await adapter.describeImage({
             imageUrl: request.imageUrl,
             prompt: buildImageDescriptionPrompt(request.context),
@@ -391,10 +435,17 @@ export const createInternalImageDescriptionTaskService = ({
                 timestamp: Date.now(),
             });
         } catch (error) {
-            logger.warn(
+            textTaskLogger.warn(
                 `Internal image-description task usage recording failed: ${error instanceof Error ? error.message : String(error)}`
             );
         }
+
+        textTaskLogger.info('Internal image-description task complete.', {
+            model: result.model,
+            promptTokens,
+            completionTokens,
+            totalTokens,
+        });
 
         const responsePayload = {
             task: 'image_description' as const,

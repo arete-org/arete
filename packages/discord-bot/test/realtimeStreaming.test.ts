@@ -7,40 +7,14 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type WebSocket from 'ws';
 import type { VoiceConnection } from '@discordjs/voice';
 import { RealtimeAudioHandler } from '../src/realtime/RealtimeAudioHandler.js';
 import { VoiceSessionManager } from '../src/voice/VoiceSessionManager.js';
 import { AudioCaptureHandler } from '../src/voice/AudioCaptureHandler.js';
-import { RealtimeEventHandler } from '../src/realtime/RealtimeEventHandler.js';
 import type { RealtimeSession } from '../src/utils/realtimeService.js';
 import type { AudioPlaybackHandler } from '../src/voice/AudioPlaybackHandler.js';
 
-type SentItemContent = { type: string; text?: string };
-type SentItem = { content: SentItemContent[] };
-type SentPayload = { type: string; item?: SentItem };
-type TestWebSocket = WebSocket & { sent: SentPayload[] };
-
-class MockWebSocket {
-    public sent: SentPayload[] = [];
-    public readyState = 1;
-
-    send(payload: string) {
-        this.sent.push(JSON.parse(payload) as SentPayload);
-    }
-}
-
-class MockEventHandler extends RealtimeEventHandler {
-    public collected = 0;
-
-    constructor() {
-        super();
-    }
-
-    async waitForAudioCollected(): Promise<void> {
-        this.collected += 1;
-    }
-}
+type SentPayload = { type: string; [key: string]: unknown };
 
 class FakeRealtimeSession {
     public readonly chunks: {
@@ -74,24 +48,20 @@ const waitForPipeline = async (session: { audioPipeline: Promise<void> }) => {
     await new Promise((resolve) => setImmediate(resolve));
 };
 
-test('RealtimeAudioHandler annotates speaker label before commit', async () => {
+test('RealtimeAudioHandler forwards audio chunks before commit', async () => {
     const handler = new RealtimeAudioHandler();
-    const ws = new MockWebSocket() as unknown as TestWebSocket;
-    const eventHandler = new MockEventHandler();
+    const sent: SentPayload[] = [];
+    const sendEvent = (payload: SentPayload) => {
+        sent.push(payload);
+    };
     const chunk = Buffer.from([0, 1, 2, 3]);
 
-    await handler.sendAudio(ws, eventHandler, chunk, 'Alice', 'user-1');
-    await handler.flushAudio(ws, eventHandler);
+    await handler.sendAudio(sendEvent, chunk, 'Alice', 'user-1');
+    await handler.flushAudio(sendEvent);
 
-    assert.equal(ws.sent.length, 4);
-    assert.equal(ws.sent[0].type, 'input_audio_buffer.append');
-    assert.equal(ws.sent[1].type, 'input_audio_buffer.append');
-    assert.equal(ws.sent[2].type, 'conversation.item.create');
-    assert.equal(ws.sent[2].item?.content[0]?.type, 'input_text');
-    assert.match(ws.sent[2].item?.content[0]?.text ?? '', /Alice/);
-    assert.equal(ws.sent[2].item?.content[1]?.type, 'input_audio_buffer');
-    assert.equal(ws.sent[3].type, 'input_audio_buffer.commit');
-    assert.equal(eventHandler.collected, 1);
+    assert.equal(sent.length, 2);
+    assert.equal(sent[0].type, 'input_audio.append');
+    assert.equal(sent[1].type, 'input_audio.commit');
 });
 
 test('VoiceSessionManager forwards multi-speaker audio with display names', async () => {

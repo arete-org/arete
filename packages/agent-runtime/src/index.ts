@@ -13,6 +13,15 @@ import type {
     SupportedOpenAIImageModel,
     SupportedOpenAITextModel,
 } from '@footnote/contracts';
+import type {
+    InternalTtsCosts,
+    InternalTtsOptions,
+    InternalTtsUsage,
+    InternalVoiceOutputFormat,
+    InternalVoiceRealtimeClientEvent,
+    InternalVoiceRealtimeOptions,
+    InternalVoiceRealtimeServerEvent,
+} from '@footnote/contracts/voice';
 
 /**
  * Runtime-facing role labels for one normalized generation transcript.
@@ -345,6 +354,74 @@ export interface ImageGenerationRuntime {
     ): Promise<ImageGenerationResult>;
 }
 
+/**
+ * Backend-to-runtime input for one text-to-speech request.
+ */
+export interface TextToSpeechRequest {
+    text: string;
+    options: InternalTtsOptions;
+    outputFormat: InternalVoiceOutputFormat;
+    signal?: AbortSignal;
+}
+
+/**
+ * Runtime-to-backend result for one text-to-speech request.
+ */
+export interface TextToSpeechResult {
+    audioBase64: string;
+    outputFormat: InternalVoiceOutputFormat;
+    mimeType: string;
+    model: InternalTtsOptions['model'];
+    voice: InternalTtsOptions['voice'];
+    usage: InternalTtsUsage;
+    costs: InternalTtsCosts;
+    generationTimeMs: number;
+}
+
+/**
+ * Replaceable runtime implementation for text-to-speech.
+ */
+export interface TextToSpeechRuntime {
+    readonly kind: string;
+    synthesize(request: TextToSpeechRequest): Promise<TextToSpeechResult>;
+}
+
+/**
+ * Client events accepted by a live realtime voice session.
+ */
+export type RealtimeVoiceClientCommand = Exclude<
+    InternalVoiceRealtimeClientEvent,
+    { type: 'session.start' }
+>;
+
+/**
+ * Live realtime session instance returned by voice runtime adapters.
+ */
+export interface RealtimeVoiceSession {
+    send(event: RealtimeVoiceClientCommand): Promise<void>;
+    onEvent(listener: (event: InternalVoiceRealtimeServerEvent) => void): void;
+    close(reason?: string): void;
+}
+
+/**
+ * Backend-to-runtime input for one realtime voice session.
+ */
+export interface RealtimeVoiceSessionRequest {
+    instructions: string;
+    options?: InternalVoiceRealtimeOptions;
+    signal?: AbortSignal;
+}
+
+/**
+ * Replaceable runtime implementation for realtime voice sessions.
+ */
+export interface RealtimeVoiceRuntime {
+    readonly kind: string;
+    createSession(
+        request: RealtimeVoiceSessionRequest
+    ): Promise<RealtimeVoiceSession>;
+}
+
 import {
     createLegacyOpenAiRuntime,
     type LegacyOpenAiClient,
@@ -405,6 +482,16 @@ export {
     type OpenAiImageRuntimeResponseClient,
     type OpenAiImageRuntimeResponseStream,
 } from './openAiImageRuntime.js';
+export {
+    createOpenAiTtsRuntime,
+    type CreateOpenAiTtsRuntimeOptions,
+    type OpenAiTtsRuntimeLogger,
+} from './openAiTtsRuntime.js';
+export {
+    createOpenAiRealtimeVoiceRuntime,
+    type CreateOpenAiRealtimeVoiceRuntimeOptions,
+    type OpenAiRealtimeRuntimeLogger,
+} from './openAiRealtimeVoiceRuntime.js';
 export {
     createVoltAgentRuntime,
     type CreateVoltAgentRuntimeOptions,

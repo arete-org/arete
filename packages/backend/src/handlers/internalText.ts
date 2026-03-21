@@ -24,6 +24,17 @@ import {
     type TrustedRouteLogRequest,
 } from './trustedServiceRequest.js';
 
+/**
+ * @footnote-logger: internalTextHandler
+ * @logs: Auth decisions, task acceptance, and execution failures for internal text tasks.
+ * @footnote-risk: high - Missing logs hide trusted-task regressions or abuse.
+ * @footnote-ethics: medium - Text tasks can include user content, so logs stay metadata-only.
+ */
+const textLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'internalTextHandler' })
+        : logger;
+
 type CreateInternalTextHandlerOptions = {
     internalNewsTaskService: InternalNewsTaskService | null;
     internalImageDescriptionTaskService: InternalImageDescriptionTaskService | null;
@@ -70,6 +81,9 @@ export const createInternalTextHandler = ({
                 }
             );
             if (!auth.ok) {
+                textLogger.warn('Internal text rejected: auth failed.', {
+                    statusCode: auth.statusCode,
+                });
                 sendJson(res, auth.statusCode, auth.payload);
                 logRequest(req, res, auth.logLabel);
                 return;
@@ -79,6 +93,10 @@ export const createInternalTextHandler = ({
                 `${auth.source}:${auth.rateLimitKey}`
             );
             if (!serviceRateLimitResult.allowed) {
+                textLogger.warn('Internal text rate limited.', {
+                    source: auth.source,
+                    retryAfter: serviceRateLimitResult.retryAfter,
+                });
                 sendJson(
                     res,
                     429,
@@ -112,6 +130,7 @@ export const createInternalTextHandler = ({
 
             if (parsedRequest.task === 'news') {
                 if (!internalNewsTaskService) {
+                    textLogger.warn('Internal text news task unavailable.');
                     sendJson(res, 503, {
                         error: 'Internal text service unavailable',
                     });
@@ -120,6 +139,13 @@ export const createInternalTextHandler = ({
                 }
 
                 const newsRequest: PostInternalNewsTaskRequest = parsedRequest;
+                textLogger.info('Internal text news task accepted.', {
+                    source: auth.source,
+                    queryLength: newsRequest.query?.length ?? 0,
+                    categoryLength: newsRequest.category?.length ?? 0,
+                    maxResults: newsRequest.maxResults,
+                    hasChannelContext: Boolean(newsRequest.channelContext),
+                });
                 const response =
                     await internalNewsTaskService.runNewsTask(newsRequest);
                 sendJson(res, 200, response);
@@ -133,6 +159,7 @@ export const createInternalTextHandler = ({
 
             if (parsedRequest.task === 'image_description') {
                 if (!internalImageDescriptionTaskService) {
+                    textLogger.warn('Internal text image-description task unavailable.');
                     sendJson(res, 503, {
                         error: 'Internal text service unavailable',
                     });
@@ -142,6 +169,17 @@ export const createInternalTextHandler = ({
 
                 const imageDescriptionRequest: PostInternalImageDescriptionTaskRequest =
                     parsedRequest;
+                let imageHost: string | null = null;
+                try {
+                    imageHost = new URL(imageDescriptionRequest.imageUrl).hostname;
+                } catch {
+                    imageHost = null;
+                }
+                textLogger.info('Internal text image-description task accepted.', {
+                    source: auth.source,
+                    imageHost,
+                    contextLength: imageDescriptionRequest.context?.length ?? 0,
+                });
                 const response =
                     await internalImageDescriptionTaskService.runImageDescriptionTask(
                         imageDescriptionRequest
@@ -163,6 +201,9 @@ export const createInternalTextHandler = ({
                 typeof unsupportedTask === 'string'
                     ? unsupportedTask
                     : 'unknown';
+            textLogger.warn('Internal text unsupported task.', {
+                task: unsupportedTaskLabel,
+            });
             sendJson(res, 400, {
                 error: `Unsupported task: ${unsupportedTaskLabel}`,
             });
@@ -172,7 +213,7 @@ export const createInternalTextHandler = ({
                 `internal text unsupported-task task=${unsupportedTaskLabel}`
             );
         } catch (error) {
-            logger.error('Internal text task execution failed', {
+            textLogger.error('Internal text task execution failed.', {
                 error: error instanceof Error ? error.message : String(error),
             });
             sendJson(res, 502, {

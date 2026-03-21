@@ -9,7 +9,6 @@
 import { Message } from 'discord.js';
 import { Event } from './Event.js';
 import { logger } from '../utils/logger.js';
-import { OpenAIService } from '../utils/openaiService.js';
 import { MessageProcessor } from '../utils/MessageProcessor.js';
 import { CatchupFilter } from '../utils/CatchupFilter.js';
 import {
@@ -40,10 +39,8 @@ const messageLogger = logger.child({ module: 'messageCreate' });
 /**
  * Dependencies required for the MentionBotEvent
  * @interface Dependencies
- * @property {OpenAIService} openaiService - The OpenAI service instance
  */
 interface Dependencies {
-    openaiService: OpenAIService;
     contextManager?: ChannelContextManager | null;
 }
 
@@ -153,20 +150,12 @@ export class MessageCreate extends Event {
     private readonly botDirectInvocationFilter: RealtimeEngagementFilter;
     /**
      * Creates an instance of MentionBotEvent
-     * @param {Dependencies} dependencies - Required dependencies including OpenAI configuration
+     * @param {Dependencies} dependencies - Optional runtime overrides such as a shared context manager
      */
     constructor(dependencies: Dependencies) {
         super({ name: 'messageCreate', once: false });
 
-        if (!dependencies?.openaiService) {
-            throw new Error(
-                'MessageCreate event requires an OpenAI service dependency'
-            );
-        }
-
-        this.messageProcessor = new MessageProcessor({
-            openaiService: dependencies.openaiService,
-        });
+        this.messageProcessor = new MessageProcessor();
         this.catchupFilter = new CatchupFilter();
 
         if (dependencies.contextManager !== undefined) {

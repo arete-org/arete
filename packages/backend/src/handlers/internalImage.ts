@@ -25,6 +25,17 @@ import {
     type TrustedRouteLogRequest,
 } from './trustedServiceRequest.js';
 
+/**
+ * @footnote-logger: internalImageHandler
+ * @logs: Auth decisions, request acceptance, and execution failures for internal image tasks.
+ * @footnote-risk: high - Missing logs hide backend image outages or abuse.
+ * @footnote-ethics: medium - Image prompts can include user content, so logs stay metadata-only.
+ */
+const imageLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ module: 'internalImageHandler' })
+        : logger;
+
 type CreateInternalImageHandlerOptions = {
     internalImageTaskService: InternalImageTaskService | null;
     logRequest: TrustedRouteLogRequest;
@@ -94,6 +105,9 @@ export const createInternalImageHandler = ({
                 }
             );
             if (!auth.ok) {
+                imageLogger.warn('Internal image rejected: auth failed.', {
+                    statusCode: auth.statusCode,
+                });
                 sendJson(res, auth.statusCode, auth.payload);
                 logRequest(req, res, auth.logLabel);
                 return;
@@ -103,6 +117,10 @@ export const createInternalImageHandler = ({
                 `${auth.source}:${auth.rateLimitKey}`
             );
             if (!serviceRateLimitResult.allowed) {
+                imageLogger.warn('Internal image rate limited.', {
+                    source: auth.source,
+                    retryAfter: serviceRateLimitResult.retryAfter,
+                });
                 sendJson(
                     res,
                     429,
@@ -124,6 +142,7 @@ export const createInternalImageHandler = ({
             }
 
             if (!internalImageTaskService) {
+                imageLogger.warn('Internal image service unavailable.');
                 sendJson(res, 503, {
                     error: 'Internal image service unavailable',
                 });
@@ -145,6 +164,22 @@ export const createInternalImageHandler = ({
             if (parsedRequest.task === 'generate') {
                 const imageRequest: PostInternalImageGenerateRequest =
                     parsedRequest;
+                imageLogger.info('Internal image task accepted.', {
+                    source: auth.source,
+                    stream: Boolean(imageRequest.stream),
+                    textModel: imageRequest.textModel,
+                    imageModel: imageRequest.imageModel,
+                    size: imageRequest.size,
+                    quality: imageRequest.quality,
+                    outputFormat: imageRequest.outputFormat,
+                    outputCompression: imageRequest.outputCompression,
+                    allowPromptAdjustment: Boolean(
+                        imageRequest.allowPromptAdjustment
+                    ),
+                    hasFollowUpResponseId: Boolean(
+                        imageRequest.followUpResponseId
+                    ),
+                });
                 if (imageRequest.stream) {
                     streamStarted = true;
                     res.statusCode = 200;
@@ -157,6 +192,14 @@ export const createInternalImageHandler = ({
                     if (typeof res.flushHeaders === 'function') {
                         res.flushHeaders();
                     }
+
+                    imageLogger.info('Internal image stream started.', {
+                        source: auth.source,
+                        textModel: imageRequest.textModel,
+                        imageModel: imageRequest.imageModel,
+                        size: imageRequest.size,
+                        quality: imageRequest.quality,
+                    });
 
                     const response =
                         await internalImageTaskService.runImageTask(
@@ -173,6 +216,9 @@ export const createInternalImageHandler = ({
                         result: response.result,
                     });
                     res.end();
+                    imageLogger.info('Internal image stream completed.', {
+                        task: response.task,
+                    });
                     logRequest(
                         req,
                         res,
@@ -184,6 +230,9 @@ export const createInternalImageHandler = ({
                 const response =
                     await internalImageTaskService.runImageTask(imageRequest);
                 sendJson(res, 200, response);
+                imageLogger.info('Internal image task completed.', {
+                    task: response.task,
+                });
                 logRequest(
                     req,
                     res,
@@ -192,6 +241,9 @@ export const createInternalImageHandler = ({
                 return;
             }
 
+            imageLogger.warn('Internal image unsupported task.', {
+                task: parsedRequest.task,
+            });
             sendJson(res, 400, {
                 error: `Unsupported task: ${parsedRequest.task}`,
             });
@@ -201,7 +253,7 @@ export const createInternalImageHandler = ({
                 `internal image unsupported-task task=${parsedRequest.task}`
             );
         } catch (error) {
-            logger.error('Internal image task execution failed', {
+            imageLogger.error('Internal image task execution failed.', {
                 error: error instanceof Error ? error.message : String(error),
             });
             if (streamStarted) {
@@ -211,7 +263,7 @@ export const createInternalImageHandler = ({
                         error: 'Failed to execute internal image task',
                     });
                 } catch (streamWriteError) {
-                    logger.error('Internal image stream error write failed', {
+                    imageLogger.error('Internal image stream error write failed.', {
                         error:
                             streamWriteError instanceof Error
                                 ? streamWriteError.message

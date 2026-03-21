@@ -12,6 +12,8 @@ import {
     supportedEngagementIgnoreModes,
     supportedLogLevels,
     supportedNodeEnvs,
+    supportedOpenAIRealtimeModels,
+    supportedOpenAITtsVoices,
     supportedReasoningEfforts,
     supportedVerbosityLevels,
 } from '@footnote/contracts/providers';
@@ -1135,6 +1137,38 @@ export const envEntries = [
         description: 'Default model used by backend reflect flows.',
         defaultValue: literal('gpt-5-mini'),
         usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
+        key: 'REALTIME_DEFAULT_MODEL',
+        owner: 'shared',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: false,
+        kind: 'enum',
+        description: 'Default model used by realtime voice sessions.',
+        defaultValue: literal('gpt-realtime'),
+        allowedValues: supportedOpenAIRealtimeModels,
+        usedBy: [
+            'packages/backend/src/config.ts',
+            'packages/discord-bot/src/config.ts',
+        ],
+    }),
+    defineEnv({
+        key: 'REALTIME_DEFAULT_VOICE',
+        owner: 'shared',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: false,
+        kind: 'enum',
+        description: 'Default voice used by realtime voice sessions.',
+        defaultValue: literal('echo'),
+        allowedValues: supportedOpenAITtsVoices,
+        usedBy: [
+            'packages/backend/src/config.ts',
+            'packages/discord-bot/src/config.ts',
+        ],
     }),
 
     defineEnv({

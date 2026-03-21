@@ -32,6 +32,11 @@ import {
     type InternalTextApi,
 } from './internalText.js';
 import {
+    createInternalVoiceApi,
+    type CreateInternalVoiceApiOptions,
+    type InternalVoiceApi,
+} from './internalVoice.js';
+import {
     createTraceApi,
     type CreateTraceApiOptions,
     type TraceApi,
@@ -42,7 +47,8 @@ export type CreateDiscordApiClientOptions = CreateApiTransportOptions &
     CreateTraceApiOptions &
     CreateReflectApiOptions &
     CreateInternalImageApiOptions &
-    CreateInternalTextApiOptions;
+    CreateInternalTextApiOptions &
+    CreateInternalVoiceApiOptions;
 
 export type DiscordApiClient = {
     requestJson: ApiRequester;
@@ -50,7 +56,8 @@ export type DiscordApiClient = {
     ReflectApi &
     IncidentApi &
     InternalImageApi &
-    InternalTextApi;
+    InternalTextApi &
+    InternalVoiceApi;
 
 export const createDiscordApiClient = ({
     baseUrl,
@@ -77,6 +84,7 @@ export const createDiscordApiClient = ({
             fetchImpl,
         }),
         ...createInternalTextApi(requestJson, { traceApiToken }),
+        ...createInternalVoiceApi(requestJson, { traceApiToken }),
         ...createReflectApi(requestJson, { traceApiToken }),
         ...createTraceApi(requestJson, { traceApiToken }),
     };
@@ -103,6 +111,10 @@ export type {
     InternalTextApi,
 } from './internalText.js';
 export type {
+    CreateInternalVoiceApiOptions,
+    InternalVoiceApi,
+} from './internalVoice.js';
+export type {
     GetIncidentResponse,
     GetIncidentsResponse,
     PostInternalImageGenerateRequest,
@@ -126,3 +138,7 @@ export type {
     PostTracesRequest,
     PostTracesResponse,
 } from '@footnote/contracts/web';
+export type {
+    PostInternalVoiceTtsRequest,
+    PostInternalVoiceTtsResponse,
+} from '@footnote/contracts/voice';

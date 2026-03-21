@@ -57,7 +57,7 @@ INCIDENT_PSEUDONYMIZATION_SECRET=...
 
 > This is the minimum config—See [.env.example](.env.example) for the full list.
 
-> Current deployments still rely on an OpenAI-backed runtime for several paths—broader runtime/provider support is planned.
+> Current deployments rely on OpenAI-backed adapters. Broader runtime/provider support is planned.
 
 3. Start all services (backend/web/Discord bot)
 
@@ -95,6 +95,7 @@ BOT_PROFILE_ID=danny
 BOT_PROFILE_DISPLAY_NAME=Danny
 BOT_PROFILE_PROMPT_OVERLAY_PATH=packages/prompts/src/profile-overlays/danny.md
 ```
+
 ```env
 BOT_PROFILE_ID=myuri
 BOT_PROFILE_DISPLAY_NAME=Myuri

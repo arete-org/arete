@@ -27,6 +27,7 @@ import {
     RealtimeContextBuilder,
     RealtimeContextParticipant,
 } from '../utils/prompting/RealtimeContextBuilder.js';
+import type { InternalVoiceRealtimeUsage } from '@footnote/contracts/voice';
 
 type ClientWithHandlers = Client & {
     handlers?: {
@@ -313,7 +314,7 @@ export class VoiceStateHandler extends Event {
             participants,
         });
         const realtimeSession = new RealtimeSession({
-            instructions: context.instructions,
+            context: context.sessionContext,
         });
 
         // Attach listeners only once
@@ -346,10 +347,20 @@ export class VoiceStateHandler extends Event {
             );
             realtimeSession.on(
                 'response.completed',
-                (event: { response_id?: string }) =>
+                (event: {
+                    response_id?: string;
+                    usage?: InternalVoiceRealtimeUsage;
+                }) => {
+                    const usage = event.usage;
+                    const usageSummary = usage
+                        ? ` promptTokens=${usage.tokensPrompt ?? 'n/a'} ` +
+                          `completionTokens=${usage.tokensCompletion ?? 'n/a'} ` +
+                          `model=${usage.model ?? 'unknown'}`
+                        : '';
                     logger.debug(
-                        `[BOT RESPONSE COMPLETED] Response ID: ${event.response_id || 'unknown'}`
-                    )
+                        `[BOT RESPONSE COMPLETED] Response ID: ${event.response_id || 'unknown'}${usageSummary}`
+                    );
+                }
             );
             realtimeSession.on('response.output_audio.done', (event: unknown) =>
                 logger.debug(
@@ -362,7 +373,7 @@ export class VoiceStateHandler extends Event {
 
             realtimeSession.on('connected', () =>
                 logger.info(
-                    '[RealtimeSession] Connected to OpenAI Realtime API'
+                    '[RealtimeSession] Connected to backend realtime voice boundary'
                 )
             );
         }

@@ -6,7 +6,6 @@
     "main": "dist/index.js",
     "exports": {
         ".": "./dist/index.js",
-        "./src/utils/openaiService.js": "./dist/src/utils/openaiService.js",
         "./src/utils/response/metadata.js": "./dist/src/utils/response/metadata.js",
         "./src/utils/RateLimiter.js": "./dist/src/utils/RateLimiter.js"
     },

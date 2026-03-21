@@ -14,6 +14,8 @@ import type {
     SupportedEngagementIgnoreMode,
     SupportedLogLevel,
     SupportedNodeEnv,
+    SupportedOpenAIRealtimeModel,
+    SupportedOpenAITtsVoice,
 } from '@footnote/contracts/providers';
 import { supportedLogLevels } from '@footnote/contracts/providers';
 import { bootstrapLogger } from '../utils/logger.js';
@@ -27,7 +29,6 @@ const REQUIRED_ENV_VARS = [
     'DISCORD_TOKEN',
     'DISCORD_CLIENT_ID',
     'DISCORD_GUILD_ID',
-    'OPENAI_API_KEY',
     'DISCORD_USER_ID',
     'INCIDENT_PSEUDONYMIZATION_SECRET',
 ] as const;
@@ -42,6 +43,14 @@ const SUPPORTED_NODE_ENVS = new Set<SupportedNodeEnv>(
     (envSpecByKey.NODE_ENV.allowedValues ?? []) as readonly SupportedNodeEnv[]
 );
 const VALID_LOG_LEVELS = new Set<SupportedLogLevel>(supportedLogLevels);
+const VALID_REALTIME_MODELS = new Set<SupportedOpenAIRealtimeModel>(
+    (envSpecByKey.REALTIME_DEFAULT_MODEL.allowedValues ??
+        []) as readonly SupportedOpenAIRealtimeModel[]
+);
+const VALID_REALTIME_VOICES = new Set<SupportedOpenAITtsVoice>(
+    (envSpecByKey.REALTIME_DEFAULT_VOICE.allowedValues ??
+        []) as readonly SupportedOpenAITtsVoice[]
+);
 
 const BOT_INTERACTION_ACTIONS = new Set<SupportedBotInteractionAction>(
     (envSpecByKey.BOT_BACK_AND_FORTH_ACTION.allowedValues ??
@@ -235,6 +244,45 @@ const getLogLevelEnv = (
     return defaultValue;
 };
 
+const getRealtimeModelEnv = (
+    key: string
+): SupportedOpenAIRealtimeModel | undefined => {
+    const value = process.env[key];
+    if (!value) {
+        return undefined;
+    }
+
+    const normalizedValue =
+        value.trim() as SupportedOpenAIRealtimeModel;
+    if (VALID_REALTIME_MODELS.has(normalizedValue)) {
+        return normalizedValue;
+    }
+
+    bootstrapLogger.warn(
+        `Ignoring invalid realtime model for ${key}: "${value}".`
+    );
+    return undefined;
+};
+
+const getRealtimeVoiceEnv = (
+    key: string
+): SupportedOpenAITtsVoice | undefined => {
+    const value = process.env[key];
+    if (!value) {
+        return undefined;
+    }
+
+    const normalizedValue = value.trim() as SupportedOpenAITtsVoice;
+    if (VALID_REALTIME_VOICES.has(normalizedValue)) {
+        return normalizedValue;
+    }
+
+    bootstrapLogger.warn(
+        `Ignoring invalid realtime voice for ${key}: "${value}".`
+    );
+    return undefined;
+};
+
 validateEnvironment();
 
 const rawPromptConfigPath = process.env.PROMPT_CONFIG_PATH;
@@ -315,6 +363,9 @@ const backendBaseUrl =
 bootstrapLogger.info(`Using backend base URL: ${backendBaseUrl}`);
 
 const traceApiToken = process.env.TRACE_API_TOKEN?.trim();
+const serviceToken =
+    process.env.REFLECT_SERVICE_TOKEN?.trim() ??
+    process.env.SERVICE_TOKEN?.trim();
 const rawNodeEnv = process.env.NODE_ENV?.trim();
 const nodeEnv =
     rawNodeEnv && SUPPORTED_NODE_ENVS.has(rawNodeEnv as SupportedNodeEnv)
@@ -337,7 +388,6 @@ export const runtimeConfig = {
     token: process.env.DISCORD_TOKEN!,
     clientId: process.env.DISCORD_CLIENT_ID!,
     guildId: process.env.DISCORD_GUILD_ID!,
-    openaiApiKey: process.env.OPENAI_API_KEY!,
     developerUserId: process.env.DISCORD_USER_ID!,
     incidentReview: {
         superuserIds: resolveIncidentSuperuserIds(),
@@ -349,6 +399,7 @@ export const runtimeConfig = {
     webBaseUrl,
     backendBaseUrl,
     traceApiToken,
+    serviceToken,
     webhookPort: getIntegerEnv('WEBHOOK_PORT', envDefaultValues.WEBHOOK_PORT),
     api: {
         backendRequestTimeoutMs: getIntegerEnv(
@@ -477,6 +528,10 @@ export const runtimeConfig = {
             'REALTIME_FILTER_ENABLED',
             envDefaultValues.REALTIME_FILTER_ENABLED
         ),
+    },
+    realtime: {
+        defaultModel: getRealtimeModelEnv('REALTIME_DEFAULT_MODEL'),
+        defaultVoice: getRealtimeVoiceEnv('REALTIME_DEFAULT_VOICE'),
     },
     engagementWeights: {
         mention: getNumberEnv(

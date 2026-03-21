@@ -2,17 +2,19 @@
 
 Footnote is an experiment in **steerable AI**—assistants you can guide and inspect.
 
-(Last updated: 2026-02-28)
+(Last updated: 2026-03-20)
+
+This page describes the current product and its guiding principles rather than one specific migration branch or rollout snapshot.
 
 ## What Footnote is today
 
-Footnote is currently:
+Footnote today is:
 
 - a Discord bot,
 - a web interface, and
 - a backend API.
 
-Current features include stored response traces and provenance metadata, citations and risk tiering, and self-hosting support. The user-facing experience today centers on Discord interaction (chat, voice, and commands), the web demo, and trace inspection (what shaped the reply, within privacy constraints).
+Current features include stored response traces and provenance metadata, citations and risk tiering, and self-hosting support. The user-facing experience centers on Discord interaction (chat, voice, and commands), the web demo, and trace inspection (what shaped the reply, within privacy constraints).
 
 Demo: [ai.jordanmakes.dev](https://ai.jordanmakes.dev)
 
@@ -46,7 +48,7 @@ Depending on the question, that can include:
 
 > “Yes—based on the cited source and the stored trace. I’m assuming you mean the current implementation; if the deployed version or date is different, the answer changes.”
 
-Links: [trace page source](../packages/web/src/pages/TracePage.tsx), [OpenAPI trace definitions](./api/openapi.yaml), [citation handling](../packages/discord-bot/src/utils/openaiService.ts)
+Links: [trace page source](../packages/web/src/pages/TracePage.tsx), [OpenAPI trace definitions](./api/openapi.yaml), [runtime citation normalization](../packages/agent-runtime/src/voltagentRuntime.ts)
 
 ## Why build it this way
 
@@ -79,7 +81,7 @@ If/when a multi-profile system is shipped, a profile would be a bundle of defaul
 - enforceable constraints (policy rules)
 - style guidance for the model.
 
-Current baseline prompt reference: [defaults.yaml](../packages/prompts/src/defaults.yaml)
+Current baseline prompt reference as of 2026-03-20: [defaults.yaml](../packages/prompts/src/defaults.yaml)
 
 ## What’s planned
 

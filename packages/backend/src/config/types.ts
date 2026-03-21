@@ -10,6 +10,8 @@ import type {
     ConfiguredProviderModel,
     SupportedLogLevel,
     SupportedNodeEnv,
+    SupportedOpenAIRealtimeModel,
+    SupportedOpenAITtsVoice,
     SupportedReasoningEffort,
     SupportedVerbosity,
 } from '@footnote/contracts/providers';
@@ -50,6 +52,8 @@ export type RuntimeConfig = {
     openai: {
         apiKey: string | null;
         defaultModel: ConfiguredProviderModel;
+        defaultRealtimeModel: SupportedOpenAIRealtimeModel;
+        defaultRealtimeVoice: SupportedOpenAITtsVoice;
         defaultReasoningEffort: SupportedReasoningEffort;
         defaultVerbosity: SupportedVerbosity;
         defaultChannelContext: { channelId: string };

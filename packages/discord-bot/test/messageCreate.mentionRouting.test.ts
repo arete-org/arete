@@ -50,14 +50,7 @@ const createProfile = (
     ...overrides,
 });
 
-const createEvent = () =>
-    new MessageCreate({
-        openaiService: {
-            async generateSpeech() {
-                return 'tts.mp3';
-            },
-        } as never,
-    });
+const createEvent = () => new MessageCreate({});
 
 type MutableBotDirectInvocationConfig = {
     minEngageThreshold: number;

@@ -11,12 +11,14 @@ import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import { transports } from 'winston';
 
-import type { OpenAIMessage } from '../src/utils/openaiService.js';
 import { runtimeConfig } from '../src/config.js';
 import type { BotProfileConfig } from '../src/config/profile.js';
 import { logger, sanitizeLogData } from '../src/utils/logger.js';
 import { MessageProcessor } from '../src/utils/MessageProcessor.js';
-import { logContextIfVerbose } from '../src/utils/prompting/ContextBuilder.js';
+import {
+    logContextIfVerbose,
+    type PromptMessage,
+} from '../src/utils/prompting/ContextBuilder.js';
 
 test('sanitizeLogData redacts Discord snowflake identifiers in strings and objects', () => {
     const raw = 'guild 123456789012345678 channel 234567890123456789';
@@ -117,7 +119,7 @@ test('incident-style structured logs do not emit raw Discord IDs', () => {
 });
 
 test('logContextIfVerbose only emits when high verbosity flag is enabled', () => {
-    const context: OpenAIMessage[] = [
+    const context: PromptMessage[] = [
         { role: 'user', content: 'discord transcript line' },
     ];
 
@@ -170,13 +172,7 @@ test('logContextIfVerbose only emits when high verbosity flag is enabled', () =>
 });
 
 test('reflect overlay injection logs profile metadata without raw overlay body', async () => {
-    const processor = new MessageProcessor({
-        openaiService: {
-            async generateSpeech() {
-                return 'tts.mp3';
-            },
-        } as never,
-    });
+    const processor = new MessageProcessor();
     const processorAccess = processor as unknown as {
         buildReflectRequestFromMessage: (
             message: unknown,

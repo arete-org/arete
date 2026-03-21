@@ -239,7 +239,7 @@
         },
         {
             "title": "Agent Runtime",
-            "purpose": "Explain the internal runtime package that sits behind backend Reflect, owns the replaceable generation seam, and currently hosts the active VoltAgent runtime plus the legacy OpenAI adapter.",
+            "purpose": "Explain the internal runtime package that sits behind backend Reflect, owns the replaceable generation seam, and currently hosts the active VoltAgent text runtime, modality-specific image and voice adapters, and the transitional legacy text adapter.",
             "parent": "Packages",
             "entrypoints": [
                 "packages/agent-runtime/src",
@@ -252,7 +252,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Document the current state plainly: VoltAgent is the active Reflect text runtime. The package still contains the legacy OpenAI adapter, but it is no longer the active Reflect path.",
+                    "content": "Document the current state plainly: VoltAgent is the active Reflect text runtime. The package also hosts image and voice adapters behind backend-owned boundaries. The legacy OpenAI text adapter remains transitional compatibility code, not the active product path.",
                     "author": "Maintainer"
                 }
             ]
@@ -285,7 +285,7 @@
                 "packages/backend/src/handlers/reflect.ts",
                 "packages/backend/src/services/reflectService.ts",
                 "packages/backend/src/services/reflectOrchestrator.ts",
-                "packages/backend/src/services/openaiService.ts",
+                "packages/backend/src/services/reflectPlanner.ts",
                 "packages/agent-runtime/src",
                 "packages/backend/src/services/responseMetadataHeuristics.ts",
                 "packages/contracts/src/web/types.ts",
@@ -402,7 +402,7 @@
                 "packages/discord-bot/src/events/MessageCreate.ts",
                 "packages/discord-bot/src/utils/MessageProcessor.ts",
                 "packages/discord-bot/src/utils/response/ResponseHandler.ts",
-                "packages/discord-bot/src/utils/openaiService.ts",
+                "packages/discord-bot/src/api/botApi.ts",
                 "packages/discord-bot/src/config/promptComposition.ts",
                 "packages/discord-bot/src/config/profilePromptOverlay.ts",
                 "docs/architecture/prompt-resolution.md"

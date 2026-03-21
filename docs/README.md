@@ -21,9 +21,13 @@ Footnote keeps docs in three buckets:
 - [Env Parsing Standardization](./decisions/2026-03-env-parsing-standardization.md): Records the environment parsing and validation approach used across services.
 - [Multi-Bot Vendoring Plan](./decisions/2026-03-multi-bot-vendoring-plan.md): Records the plan for shared backend support across multiple Discord bot identities.
 - [Persona/Core Split + Out-of-Band TRACE Metadata](./decisions/2026-03-persona-core-and-trace-metadata-separation.md): Records the split between core constraints, persona layers, and control-plane metadata generation.
+- [Completing Legacy OpenAI Removal Across Text, Image, and Voice](./decisions/2026-03-legacy-openai-removal-and-runtime-branching.md): Records the end-state architecture for removing legacy OpenAI product flows across text, image, and voice.
 - [VoltAgent Runtime Adoption Behind the Existing Backend](./decisions/2026-03-voltagent-runtime-adoption.md): Records why VoltAgent is being adopted behind Footnote's backend boundary and what the first MVP should prove.
 
 ## Status
 
 - [Incident And Breakers Status](./status/incident-breakers-status.md): Tracks current implementation progress, gaps, and validation coverage for this active work.
 - [VoltAgent Reflect Runtime Status](./status/voltagent-reflect-runtime-status.md): Records the completed Reflect runtime migration as a branch-level status snapshot.
+- [Legacy OpenAI Text Migration Status](./status/legacy-openai-text-migration-status.md): Records the completed text migration branch and its validation snapshot.
+- [Legacy OpenAI Image Migration Status](./status/legacy-openai-image-migration-status.md): Records the completed image migration branch and the resulting ownership cleanup.
+- [Legacy OpenAI Voice Migration Status](./status/legacy-openai-voice-migration-status.md): Records the completed voice migration branch and the final backend-owned voice boundary.

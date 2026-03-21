@@ -13,9 +13,12 @@ import { fileURLToPath } from 'node:url';
 import {
     createLegacyOpenAiRuntime,
     createOpenAiImageRuntime,
+    createOpenAiRealtimeVoiceRuntime,
+    createOpenAiTtsRuntime,
     createVoltAgentRuntime,
     type GenerationRuntime,
     type ImageGenerationRuntime,
+    type RealtimeVoiceRuntime,
 } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 
@@ -48,6 +51,10 @@ import { createOpenAiImageDescriptionAdapter } from './services/internalImageDes
 import { createInternalImageTaskService } from './services/internalImage.js';
 import { createInternalTextHandler } from './handlers/internalText.js';
 import { createInternalImageHandler } from './handlers/internalImage.js';
+import { createInternalVoiceTtsService } from './services/internalVoiceTts.js';
+import { createInternalVoiceTtsHandler } from './handlers/internalVoiceTts.js';
+import { createInternalVoiceRealtimeHandler } from './handlers/internalVoiceRealtime.js';
+import { buildRealtimeInstructions } from './services/prompts/realtimePromptComposer.js';
 
 // --- Path configuration ---
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -74,6 +81,10 @@ let internalImageDescriptionTaskService: ReturnType<
 let internalImageTaskService: ReturnType<
     typeof createInternalImageTaskService
 > | null = null;
+let internalVoiceTtsService: ReturnType<
+    typeof createInternalVoiceTtsService
+> | null = null;
+let realtimeVoiceRuntime: RealtimeVoiceRuntime | null = null;
 let ipRateLimiter: SimpleRateLimiter | null = null;
 let sessionRateLimiter: SimpleRateLimiter | null = null;
 let serviceRateLimiter: SimpleRateLimiter | null = null;
@@ -137,6 +148,18 @@ const initializeServices = () => {
         internalImageTaskService = createInternalImageTaskService({
             imageGenerationRuntime,
         });
+        internalVoiceTtsService = createInternalVoiceTtsService({
+            ttsRuntime: createOpenAiTtsRuntime({
+                apiKey: runtimeConfig.openai.apiKey,
+                requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
+            }),
+        });
+        realtimeVoiceRuntime = createOpenAiRealtimeVoiceRuntime({
+            apiKey: runtimeConfig.openai.apiKey,
+            requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
+            defaultModel: runtimeConfig.openai.defaultRealtimeModel,
+            defaultVoice: runtimeConfig.openai.defaultRealtimeVoice,
+        });
     } else {
         openaiService = null;
         generationRuntime = null;
@@ -144,8 +167,10 @@ const initializeServices = () => {
         internalNewsTaskService = null;
         internalImageDescriptionTaskService = null;
         internalImageTaskService = null;
+        internalVoiceTtsService = null;
+        realtimeVoiceRuntime = null;
         logger.warn(
-            'OPENAI_API_KEY is missing; /api/reflect and runtime-backed internal text tasks will return 503 until configured.'
+            'OPENAI_API_KEY is missing; /api/reflect and runtime-backed internal text/image/voice tasks will return 503 until configured.'
         );
     }
 
@@ -277,6 +302,32 @@ const { handleInternalImageRequest } = createInternalImageHandler({
             window: runtimeConfig.rateLimits.reflectService.windowMs,
         }),
 });
+const { handleInternalVoiceTtsRequest } = createInternalVoiceTtsHandler({
+    internalVoiceTtsService,
+    logRequest,
+    maxBodyBytes: runtimeConfig.reflect.maxBodyBytes,
+    traceApiToken: runtimeConfig.trace.apiToken,
+    serviceToken: runtimeConfig.reflect.serviceToken,
+    serviceRateLimiter:
+        serviceRateLimiter ??
+        new SimpleRateLimiter({
+            limit: runtimeConfig.rateLimits.reflectService.limit,
+            window: runtimeConfig.rateLimits.reflectService.windowMs,
+        }),
+});
+const { handleUpgrade: handleInternalVoiceRealtimeUpgrade } =
+    createInternalVoiceRealtimeHandler({
+        realtimeVoiceRuntime,
+        traceApiToken: runtimeConfig.trace.apiToken,
+        serviceToken: runtimeConfig.reflect.serviceToken,
+        serviceRateLimiter:
+            serviceRateLimiter ??
+            new SimpleRateLimiter({
+                limit: runtimeConfig.rateLimits.reflectService.limit,
+                window: runtimeConfig.rateLimits.reflectService.windowMs,
+            }),
+        buildInstructions: buildRealtimeInstructions,
+    });
 // Decide whether /api/traces/:responseId should return JSON or the SPA HTML shell.
 // We default to JSON unless the Accept header clearly asks for HTML.
 // This keeps API clients working even when they send a generic "*/*" Accept header.
@@ -355,6 +406,11 @@ const server = http.createServer(async (req, res) => {
 
         if (normalizedPathname === '/api/internal/image') {
             await handleInternalImageRequest(req, res);
+            return;
+        }
+
+        if (normalizedPathname === '/api/internal/voice/tts') {
+            await handleInternalVoiceTtsRequest(req, res);
             return;
         }
 
@@ -518,6 +574,34 @@ const server = http.createServer(async (req, res) => {
             error instanceof Error ? error.message : 'unknown error'
         );
     }
+});
+
+server.on('upgrade', (req, socket, head) => {
+    if (!req.url) {
+        socket.destroy();
+        return;
+    }
+
+    try {
+        const parsedUrl = new URL(req.url, 'http://localhost');
+        const normalizedPathname =
+            parsedUrl.pathname.length > 1 && parsedUrl.pathname.endsWith('/')
+                ? parsedUrl.pathname.slice(0, -1)
+                : parsedUrl.pathname;
+
+        if (normalizedPathname === '/api/internal/voice/realtime') {
+            handleInternalVoiceRealtimeUpgrade(req, socket, head);
+            return;
+        }
+    } catch (error) {
+        logger.error(
+            `Failed to process websocket upgrade: ${
+                error instanceof Error ? error.message : String(error)
+            }`
+        );
+    }
+
+    socket.destroy();
 });
 
 // --- Server startup ---

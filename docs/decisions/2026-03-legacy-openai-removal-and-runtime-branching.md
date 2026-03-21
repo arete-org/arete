@@ -5,7 +5,9 @@
 
 **Relationship to prior decisions:** This decision extends, but does not replace, [VoltAgent Runtime Adoption (Behind the Existing Backend)](./2026-03-voltagent-runtime-adoption.md). The earlier record established the backend-owned boundary and the first migrated runtime slice. This record defines the broader end-state needed to remove the remaining legacy OpenAI system from product flows.
 
-**Implementation context:** The current mixed state is summarized in [VoltAgent Reflect Runtime Status](../status/voltagent-reflect-runtime-status.md). Branch-level implementation tracking should live in `docs/status/` rather than inside this decision record.
+**How to read this document:** This is an architectural decision record. The context section explains the mixed state that motivated the decision, while the latest branch outcomes live in `docs/status/`.
+
+**Implementation context:** The motivating mixed state is summarized below and in [VoltAgent Reflect Runtime Status](../status/voltagent-reflect-runtime-status.md).
 
 ---
 
@@ -40,7 +42,7 @@ These terms are used repeatedly in this document:
 
 ---
 
-## 3. Context
+## 3. Context Behind The Decision
 
 Footnote has already made one important architectural move:
 
@@ -48,9 +50,9 @@ Footnote has already made one important architectural move:
 - `@footnote/agent-runtime` now hosts the first provider-agnostic runtime adapters, starting with text generation
 - VoltAgent is active for plain text reflect generation
 
-That move is incomplete.
+That move was still incomplete when this decision was made.
 
-The current system still has a split personality:
+The system still had a split personality:
 
 - some text generation already flows through the new runtime seam
 - some text planning and tertiary text features still depend on legacy OpenAI-specific code
@@ -60,6 +62,12 @@ The current system still has a split personality:
 The earlier VoltAgent adoption decision intentionally scoped the first step to text reflect generation behind backend. That was the correct MVP because it was the simplest high-value slice. It was not intended to define the permanent scope of runtime abstraction as "text only."
 
 The remaining legacy OpenAI system should now be treated as transitional compatibility code that is scheduled for removal, not as a permanent parallel architecture.
+
+Those migration gaps have since been closed for the text, image, and voice branch scopes documented in:
+
+- [Legacy OpenAI Text Migration Status](../status/legacy-openai-text-migration-status.md)
+- [Legacy OpenAI Image Migration Status](../status/legacy-openai-image-migration-status.md)
+- [Legacy OpenAI Voice Migration Status](../status/legacy-openai-voice-migration-status.md)
 
 ---
 
@@ -87,6 +95,8 @@ Legacy OpenAI is considered removed only when all of the following are true:
 - no product-facing image or voice module constructs provider clients directly
 - provider/framework-specific behavior is isolated behind replaceable Footnote-owned runtime adapters
 - Footnote-owned provenance, trace, auth, incident, and review semantics remain outside framework-native adapters
+
+Those are still the right architectural gates. The linked text, image, and voice status docs record the resulting branch-level outcomes against them.
 
 ---
 
@@ -223,6 +233,8 @@ Legacy OpenAI code may only be deleted when the following gates are true:
 - `pnpm review` and the relevant regression suites pass after each branch cutover
 
 Deletion of the legacy text runtime adapter must happen last, after parity is proven rather than assumed.
+
+These remain the deletion gates for any final cleanup PR that removes transitional adapter code from the repository itself.
 
 ---
 

@@ -1,0 +1,96 @@
+/**
+ * @description: Covers Discord-side mapping of backend realtime voice events.
+ * @footnote-scope: test
+ * @footnote-module: RealtimeServiceTests
+ * @footnote-risk: medium - Missing tests could let protocol cleanup break live playback or completion handling.
+ * @footnote-ethics: medium - These checks help keep the live voice UX predictable for users.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { RealtimeSession } from '../src/utils/realtimeService.js';
+import type { InternalVoiceRealtimeUsage } from '@footnote/contracts/voice';
+
+type RealtimeSessionProbe = {
+    on(event: string, listener: (...args: unknown[]) => void): unknown;
+    removeAllListeners(): unknown;
+    handleBackendEvent(raw: string): void;
+};
+
+test('RealtimeSession maps backend audio, text, and completion events into local listeners', async () => {
+    const session = new RealtimeSession() as unknown as RealtimeSessionProbe;
+    const seenAudio: Buffer[] = [];
+    const seenText: string[] = [];
+    const seenEventTypes: string[] = [];
+    let completionUsage: InternalVoiceRealtimeUsage | undefined;
+
+    session.on('audio', (audio: unknown) => {
+        seenAudio.push(audio as Buffer);
+    });
+    session.on('text', (text: unknown) => {
+        seenText.push(text as string);
+    });
+    session.on('response.output_audio.done', () => {
+        seenEventTypes.push('response.output_audio.done');
+    });
+    session.on('response.completed', (...args: unknown[]) => {
+        const event = args[0] as { usage?: InternalVoiceRealtimeUsage };
+        seenEventTypes.push('response.completed');
+        completionUsage = event.usage;
+    });
+
+    session.handleBackendEvent(
+        JSON.stringify({
+            type: 'output_audio.delta',
+            audioBase64: Buffer.from([1, 2, 3]).toString('base64'),
+        })
+    );
+    session.handleBackendEvent(
+        JSON.stringify({
+            type: 'output_text.delta',
+            text: 'hello there',
+        })
+    );
+    session.handleBackendEvent(
+        JSON.stringify({
+            type: 'response.completed',
+            responseId: 'resp_123',
+            usage: {
+                tokensPrompt: 12,
+                tokensCompletion: 4,
+                model: 'gpt-realtime',
+            },
+        })
+    );
+
+    assert.deepEqual(
+        seenAudio.map((buffer) => Array.from(buffer.values())),
+        [[1, 2, 3]]
+    );
+    assert.deepEqual(seenText, ['hello there']);
+    assert.deepEqual(seenEventTypes, [
+        'response.output_audio.done',
+        'response.completed',
+    ]);
+    assert.deepEqual(completionUsage, {
+        tokensPrompt: 12,
+        tokensCompletion: 4,
+        model: 'gpt-realtime',
+    });
+
+    session.removeAllListeners();
+});
+
+test('RealtimeSession emits connected when the backend reports session.ready', () => {
+    const session = new RealtimeSession() as unknown as RealtimeSessionProbe;
+    let connected = false;
+
+    session.on('connected', () => {
+        connected = true;
+    });
+
+    session.handleBackendEvent(JSON.stringify({ type: 'session.ready' }));
+
+    assert.equal(connected, true);
+    session.removeAllListeners();
+});

@@ -68,17 +68,40 @@ export type {
     GetBlogPostResponse,
 } from './web/index.js';
 
+// Internal voice contracts (tts + realtime)
+export type {
+    InternalTtsCosts,
+    InternalTtsModel,
+    InternalTtsOptions,
+    InternalTtsUsage,
+    InternalTtsVoice,
+    InternalVoiceChannelContext,
+    InternalVoiceOutputFormat,
+    InternalVoiceParticipant,
+    InternalVoiceRealtimeClientEvent,
+    InternalVoiceRealtimeOptions,
+    InternalVoiceRealtimeServerEvent,
+    InternalVoiceSessionContext,
+    PostInternalVoiceTtsRequest,
+    PostInternalVoiceTtsResponse,
+} from './voice/index.js';
+
 // Shared AI/provider vocabulary
 export type {
     ConfiguredProviderModel,
     InternalImageRenderModelId,
     InternalImageTextModelId,
+    InternalTtsModelId,
+    InternalTtsVoiceId,
     SupportedBotInteractionAction,
     SupportedEngagementIgnoreMode,
     SupportedImageOutputFormat,
     SupportedLogLevel,
     SupportedOpenAIImageModel,
+    SupportedOpenAIRealtimeModel,
     SupportedOpenAITextModel,
+    SupportedOpenAITtsModel,
+    SupportedOpenAITtsVoice,
     SupportedProvider,
     SupportedProviderModel,
     SupportedReasoningEffort,
@@ -97,6 +120,7 @@ export type {
     ImageModelPricingKey,
     OmniModelType,
     OpenAITextCostBreakdown,
+    OpenAITtsCostBreakdown,
     OpenAITextPricingEntry,
     PricedOpenAITextModel,
     SupportedOpenAIEmbeddingModel,
@@ -105,10 +129,13 @@ export type {
 export {
     estimateOpenAIImageGenerationCost,
     estimateOpenAITextCost,
+    estimateOpenAITtsCost,
     hasOpenAIImagePricing,
     hasOpenAITextPricing,
+    hasOpenAITtsPricing,
     openAIImageGenerationPricingTable,
     openAITextPricingTable,
+    openAITtsPricingTable,
     resolveEffectiveImageGenerationQuality,
     resolveEffectiveImageGenerationSize,
     supportedOpenAIEmbeddingModels,

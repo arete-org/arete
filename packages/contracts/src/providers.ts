@@ -67,6 +67,57 @@ export type SupportedOpenAIImageModel =
     (typeof supportedOpenAIImageModels)[number];
 
 /**
+ * OpenAI TTS models Footnote knows how to validate and price today.
+ */
+export const supportedOpenAITtsModels = [
+    'tts-1',
+    'tts-1-hd',
+    'gpt-4o-mini-tts',
+] as const;
+
+/**
+ * One known OpenAI TTS model identifier.
+ */
+export type SupportedOpenAITtsModel =
+    (typeof supportedOpenAITtsModels)[number];
+
+/**
+ * OpenAI TTS voices Footnote knows how to validate today.
+ */
+export const supportedOpenAITtsVoices = [
+    'alloy',
+    'ash',
+    'ballad',
+    'coral',
+    'echo',
+    'fable',
+    'nova',
+    'onyx',
+    'sage',
+    'shimmer',
+] as const;
+
+/**
+ * One known OpenAI TTS voice identifier.
+ */
+export type SupportedOpenAITtsVoice =
+    (typeof supportedOpenAITtsVoices)[number];
+
+/**
+ * OpenAI realtime models Footnote knows how to validate today.
+ */
+export const supportedOpenAIRealtimeModels = [
+    'gpt-realtime',
+    'gpt-realtime-mini',
+] as const;
+
+/**
+ * One known OpenAI realtime model identifier.
+ */
+export type SupportedOpenAIRealtimeModel =
+    (typeof supportedOpenAIRealtimeModels)[number];
+
+/**
  * Curated text models accepted by the trusted internal image route.
  * This currently matches the shared OpenAI text registry exactly.
  */
@@ -88,6 +139,26 @@ export const internalImageRenderModels = supportedOpenAIImageModels;
  */
 export type InternalImageRenderModelId =
     (typeof internalImageRenderModels)[number];
+
+/**
+ * Curated TTS models accepted by the trusted internal voice route.
+ */
+export const internalTtsModels = supportedOpenAITtsModels;
+
+/**
+ * One TTS model identifier accepted by the trusted internal voice route.
+ */
+export type InternalTtsModelId = (typeof internalTtsModels)[number];
+
+/**
+ * Curated TTS voices accepted by the trusted internal voice route.
+ */
+export const internalTtsVoices = supportedOpenAITtsVoices;
+
+/**
+ * One TTS voice identifier accepted by the trusted internal voice route.
+ */
+export type InternalTtsVoiceId = (typeof internalTtsVoices)[number];
 
 // "Supported" means Footnote knows about the model. "Configured" stays a bit
 // wider so operators can try newer provider model strings before the codebase

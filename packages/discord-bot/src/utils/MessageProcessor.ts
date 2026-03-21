@@ -7,7 +7,6 @@
  */
 
 import fs from 'fs';
-import * as path from 'path';
 import { Message } from 'discord.js';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type {
@@ -16,10 +15,9 @@ import type {
     ReflectTriggerKind,
 } from '@footnote/contracts/web';
 import {
-    OpenAIService,
-    TTS_DEFAULT_OPTIONS,
-    TTSOptions,
-} from './openaiService.js';
+    DEFAULT_INTERNAL_TTS_OPTIONS,
+    DEFAULT_INTERNAL_TTS_OUTPUT_FORMAT,
+} from '@footnote/contracts/voice';
 import { logger } from './logger.js';
 import { ResponseHandler } from './response/ResponseHandler.js';
 import { RateLimiter } from './RateLimiter.js';
@@ -67,7 +65,6 @@ import type {
 } from '../commands/image/types.js';
 
 type MessageProcessorOptions = {
-    openaiService: OpenAIService;
     systemPrompt?: string;
 };
 
@@ -141,6 +138,9 @@ const VALID_IMAGE_STYLES = new Set<ImageStylePreset>([
     'isometric',
     'unspecified',
 ]);
+// Use shared defaults so the bot and backend remain aligned on voice style.
+const DEFAULT_TTS_OUTPUT_FORMAT = DEFAULT_INTERNAL_TTS_OUTPUT_FORMAT;
+const DEFAULT_TTS_OPTIONS = DEFAULT_INTERNAL_TTS_OPTIONS;
 
 const clampOutputCompression = (value: number | undefined | null): number => {
     if (!Number.isFinite(value)) {
@@ -245,7 +245,6 @@ const formatReflectFailureForDiscord = (error: unknown): string => {
  * Discord-side executor for backend reflect decisions.
  */
 export class MessageProcessor {
-    private readonly openaiService: OpenAIService;
     private readonly contextBuilder: ContextBuilder;
     private readonly rateLimiters: {
         user?: RateLimiter;
@@ -253,8 +252,7 @@ export class MessageProcessor {
         guild?: RateLimiter;
     };
 
-    constructor(options: MessageProcessorOptions) {
-        this.openaiService = options.openaiService;
+    constructor(_options: MessageProcessorOptions = {}) {
         this.contextBuilder = new ContextBuilder();
 
         this.rateLimiters = {};
@@ -704,17 +702,23 @@ export class MessageProcessor {
             reflectResponse.metadata
         );
 
-        let ttsPath: string | null = null;
+        let ttsResult:
+            | Awaited<ReturnType<typeof botApi.runVoiceTtsViaApi>>['result']
+            | null = null;
         if (reflectResponse.modality === 'tts') {
-            const ttsOptions: TTSOptions = TTS_DEFAULT_OPTIONS;
             const ttsRequestId = Date.now().toString();
             try {
-                ttsPath = await this.openaiService.generateSpeech(
-                    finalResponseText,
-                    ttsOptions,
-                    ttsRequestId,
-                    'mp3'
-                );
+                const response = await botApi.runVoiceTtsViaApi({
+                    task: 'synthesize',
+                    text: finalResponseText,
+                    options: DEFAULT_TTS_OPTIONS,
+                    outputFormat: DEFAULT_TTS_OUTPUT_FORMAT,
+                    channelContext: {
+                        channelId: message.channelId,
+                        guildId: message.guildId ?? undefined,
+                    },
+                });
+                ttsResult = response.result;
             } catch (error) {
                 logger.error(
                     `Reflect TTS generation failed for message ${message.id}: ${
@@ -728,9 +732,12 @@ export class MessageProcessor {
             }
         }
 
-        if (ttsPath) {
+        if (ttsResult) {
             try {
-                const fileBuffer = await fs.promises.readFile(ttsPath);
+                const fileBuffer = Buffer.from(
+                    ttsResult.audioBase64,
+                    'base64'
+                );
                 const cleanResponseText = finalResponseText
                     .replace(/\n/g, ' ')
                     .replace(/`/g, '');
@@ -742,7 +749,7 @@ export class MessageProcessor {
                     `\`\`\`${cleanResponseText}\`\`\``,
                     [
                         {
-                            filename: path.basename(ttsPath),
+                            filename: `tts-${message.id}.${ttsResult.outputFormat}`,
                             data: fileBuffer,
                         },
                         ...(preparedProvenance?.files ?? []),
@@ -779,8 +786,6 @@ export class MessageProcessor {
                         responseLength: finalResponseText.length,
                     }
                 );
-            } finally {
-                await cleanupTTSFile(ttsPath);
             }
         }
 
@@ -1190,7 +1195,9 @@ export class MessageProcessor {
 }
 
 /**
- * Best-effort cleanup for temporary TTS files after a reply is delivered.
+ * Best-effort cleanup for legacy TTS temp files.
+ * Most voice synthesis now streams through the backend, but this helper stays
+ * available for any remaining disk-backed callers or tests.
  */
 export async function cleanupTTSFile(ttsPath: string): Promise<void> {
     if (!ttsPath) return;
