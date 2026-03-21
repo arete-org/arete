@@ -18,7 +18,9 @@ import { logger } from '../utils/logger.js';
 import { GuildAudioPipeline } from './GuildAudioPipeline.js';
 import { upsampleToDiscord } from './audioTransforms.js';
 
-const PIPELINE_IDLE_CLEANUP_DELAY_MS = 2000;
+// Keep the playback pipeline around between turns so streamed model responses
+// do not get clipped by a too-aggressive cleanup window.
+const PIPELINE_IDLE_CLEANUP_DELAY_MS = 30000;
 const QUEUE_RETRY_DELAY_MS = 100;
 
 export class AudioPlaybackHandler {
