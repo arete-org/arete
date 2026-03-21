@@ -97,3 +97,26 @@ test('realtime voice runtime emits session.ready only once', async () => {
 
     assert.deepEqual(seenEvents, ['session.ready']);
 });
+
+test('realtime voice runtime commits buffered audio without a synthetic conversation item', async () => {
+    const { runtime, socket } = createRuntimeWithSocket();
+    const session = await runtime.createSession({
+        instructions: 'Be concise.',
+    });
+
+    await session.send({
+        type: 'input_audio.append',
+        audioBase64: Buffer.from([1, 2, 3]).toString('base64'),
+        speakerLabel: 'Alice',
+        speakerId: 'user-1',
+    });
+    await session.send({ type: 'input_audio.commit' });
+
+    const payloadTypes = socket.sentPayloads
+        .map((payload) => JSON.parse(payload) as { type?: string })
+        .map((payload) => payload.type);
+
+    assert.ok(payloadTypes.includes('input_audio_buffer.append'));
+    assert.ok(payloadTypes.includes('input_audio_buffer.commit'));
+    assert.equal(payloadTypes.includes('conversation.item.create'), false);
+});

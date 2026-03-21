@@ -341,8 +341,8 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
         this.ws.send(JSON.stringify(payload));
     }
 
-    // Ensure the provider receives a well-formed audio buffer and any speaker
-    // annotation before we commit the audio for processing.
+    // The input audio buffer commit already creates the user message item on
+    // the provider side, so we only manage the raw audio buffer here.
     private async flushPendingAudio(): Promise<void> {
         if (!this.pendingCommit) {
             return;
@@ -356,21 +356,6 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
                 audio: silence,
             });
             this.pendingBytes += deficit;
-        }
-
-        const annotation = buildSpeakerAnnotation(this.pendingSpeaker?.label);
-        if (annotation) {
-            this.sendPayload({
-                type: 'conversation.item.create',
-                item: {
-                    type: 'message',
-                    role: 'user',
-                    content: [
-                        { type: 'input_text', text: annotation },
-                        { type: 'input_audio_buffer' },
-                    ],
-                },
-            });
         }
 
         this.sendPayload({ type: 'input_audio_buffer.commit' });
