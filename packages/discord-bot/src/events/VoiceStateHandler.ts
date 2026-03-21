@@ -391,6 +391,17 @@ export class VoiceStateHandler extends Event {
     }
 }
 
+/**
+ * Builds the voice state handler with the real Discord client so it can
+ * register itself into `client.handlers` during construction.
+ */
+export const createEvent = (
+    client: Client,
+    _dependencies: Record<string, unknown> = {}
+): VoiceStateHandler => {
+    return new VoiceStateHandler(client);
+};
+
 export async function cleanupVoiceConnection(
     connection: VoiceConnection | null,
     client: Client

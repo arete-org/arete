@@ -1192,3 +1192,17 @@ export class MessageCreate extends Event {
         return undefined;
     }
 }
+
+/**
+ * Builds the message event handler using the injected dependency bag.
+ *
+ * The loader passes the real client as the first argument, but this handler
+ * only needs the optional shared context manager, so we ignore the client
+ * parameter here.
+ */
+export const createEvent = (
+    _client: import('discord.js').Client,
+    dependencies: Record<string, unknown> = {}
+): MessageCreate => {
+    return new MessageCreate(dependencies as Dependencies);
+};

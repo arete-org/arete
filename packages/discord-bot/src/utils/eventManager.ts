@@ -13,6 +13,11 @@ import { logger } from './logger.js';
 import { Event } from '../events/Event.js';
 import { runtimeConfig } from '../config.js';
 
+type EventFactory = (
+    client: Client,
+    dependencies: Record<string, unknown>
+) => Event;
+
 /**
  * Manages Discord.js events for the bot.
  * Handles dynamic loading of event handlers and binding them to Discord client events.
@@ -86,23 +91,33 @@ export class EventManager {
                     // Import the module
                     const module = await import(importPath);
 
-                    // Get the default export or the first class that has an execute method
-                    let EventClass = module.default;
+                    const createEvent = module.createEvent as
+                        | EventFactory
+                        | undefined;
+                    if (typeof createEvent === 'function') {
+                        const event = createEvent(this.client, this.dependencies);
+                        this.events.push(event);
+                        logger.debug(
+                            `Successfully loaded event (factory): ${file}`
+                        );
+                        continue;
+                    }
 
-                    // If no default export, look for a named export with the same name as the file
+                    // Preserve the older class-based path for any event that
+                    // has not been converted yet, but prefer explicit factories
+                    // so constructor shape is never guessed for new code.
+                    let EventClass = module.default;
                     if (!EventClass) {
                         const className = file.replace(/\.(js|ts)$/, '');
                         EventClass = module[className];
                     }
 
-                    // Check if we found a valid event class
                     if (
                         typeof EventClass === 'function' &&
                         EventClass.prototype &&
                         typeof EventClass.prototype.execute === 'function'
                     ) {
                         let instantiated = false;
-                        // Try (dependencies)
                         try {
                             const event = new EventClass(this.dependencies);
                             this.events.push(event);
@@ -114,7 +129,6 @@ export class EventManager {
                             // Ignore errors during event instantiation
                         }
 
-                        // Try (client)
                         if (!instantiated) {
                             try {
                                 const event = new EventClass(this.client);
@@ -128,7 +142,6 @@ export class EventManager {
                             }
                         }
 
-                        // Try () no-arg
                         if (!instantiated) {
                             try {
                                 const event = new EventClass();
