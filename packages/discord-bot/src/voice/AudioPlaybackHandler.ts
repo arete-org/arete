@@ -28,6 +28,9 @@ export class AudioPlaybackHandler {
     private audioQueues: Map<string, Buffer[]> = new Map();
     private isProcessingQueue: Map<string, boolean> = new Map();
     private pipelineCleanupTimers: Map<string, NodeJS.Timeout> = new Map();
+    private pipelineDisposing: Set<string> = new Set();
+    private pipelineErrorHandlers: Map<string, (error: Error) => void> =
+        new Map();
 
     public async playAudioToChannel(
         connection: VoiceConnection,
@@ -73,8 +76,10 @@ export class AudioPlaybackHandler {
         this.pipelines.set(guildId, pipeline);
 
         const player = pipeline.getPlayer();
-
-        pipeline.getOpusEncoder().once('error', (error: Error) => {
+        const handleOpusEncoderError = (error: Error) => {
+            if (this.pipelineDisposing.has(guildId)) {
+                return;
+            }
             logger.error(
                 `[AudioPlayback] Opus encoder error for guild ${guildId}:`,
                 error
@@ -84,7 +89,9 @@ export class AudioPlaybackHandler {
             if (queue && queue.length > 0) {
                 this.retryProcessingQueue(connection);
             }
-        });
+        };
+        this.pipelineErrorHandlers.set(guildId, handleOpusEncoderError);
+        pipeline.getOpusEncoder().once('error', handleOpusEncoderError);
 
         player.on(AudioPlayerStatus.Idle, () => {
             logger.debug(
@@ -288,11 +295,20 @@ export class AudioPlaybackHandler {
     private cleanupPipeline(guildId: string): void {
         const pipeline = this.pipelines.get(guildId);
         if (pipeline) {
+            this.pipelineDisposing.add(guildId);
+            const handleError = this.pipelineErrorHandlers.get(guildId);
+            if (handleError) {
+                pipeline.getOpusEncoder().off('error', handleError);
+                this.pipelineErrorHandlers.delete(guildId);
+            }
+
             void pipeline.destroy().catch((error: Error) => {
                 logger.error(
                     `[AudioPlayback] Error cleaning up pipeline for guild ${guildId}:`,
                     error
                 );
+            }).finally(() => {
+                this.pipelineDisposing.delete(guildId);
             });
             this.pipelines.delete(guildId);
         }
@@ -313,6 +329,8 @@ export class AudioPlaybackHandler {
         this.isProcessingQueue.clear();
         this.pipelineCleanupTimers.forEach((timer) => clearTimeout(timer));
         this.pipelineCleanupTimers.clear();
+        this.pipelineErrorHandlers.clear();
+        this.pipelineDisposing.clear();
     }
 }
 

@@ -150,7 +150,6 @@ export const InternalVoiceRealtimeClientEventSchema = z.discriminatedUnion(
                 speakerId: z.string().min(1).optional(),
             })
             .strict(),
-        z.object({ type: z.literal('input_audio.commit') }).strict(),
         z.object({ type: z.literal('input_audio.clear') }).strict(),
         z.object({ type: z.literal('response.create') }).strict(),
         z.object({ type: z.literal('session.close') }).strict(),

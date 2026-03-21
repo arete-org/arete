@@ -40,13 +40,11 @@ export interface CreateOpenAiRealtimeVoiceRuntimeOptions {
     ) => WebSocket;
 }
 
-// Defaults are still here as a safety net when callers omit config-driven values.
-const DEFAULT_MODEL = 'gpt-realtime';
+// Keep the defaults centralized so backend config and runtime code stay aligned.
+const DEFAULT_MODEL = 'gpt-realtime-mini';
 const DEFAULT_VOICE = 'echo';
 // OpenAI realtime audio is 24kHz PCM16 mono.
 const REALTIME_SAMPLE_RATE = 24000;
-// Minimum buffer size (100ms at 24kHz) before commit to keep audio stable.
-const MIN_AUDIO_BUFFER_SIZE = 4800;
 
 const createRequestAbortContext = (
     requestSignal: AbortSignal | undefined,
@@ -250,10 +248,6 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
     private logger?: OpenAiRealtimeRuntimeLogger;
     private instructions: string;
     private options?: InternalVoiceRealtimeOptions;
-    // Track audio chunks until commit so we can pad short buffers and tag speakers.
-    private pendingSpeaker: { label: string; id?: string } | null = null;
-    private pendingBytes = 0;
-    private pendingCommit = false;
     // `session.ready` is emitted after the upstream session ack, before backend
     // callers can attach listeners. Keep the first ready event so late
     // listeners still learn that the session is usable without changing the
@@ -341,35 +335,6 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
         this.ws.send(JSON.stringify(payload));
     }
 
-    // The input audio buffer commit already creates the user message item on
-    // the provider side, so we only manage the raw audio buffer here.
-    private async flushPendingAudio(): Promise<void> {
-        if (!this.pendingCommit) {
-            return;
-        }
-
-        if (this.pendingBytes > 0 && this.pendingBytes < MIN_AUDIO_BUFFER_SIZE) {
-            const deficit = MIN_AUDIO_BUFFER_SIZE - this.pendingBytes;
-            const silence = Buffer.alloc(deficit).toString('base64');
-            this.sendPayload({
-                type: 'input_audio_buffer.append',
-                audio: silence,
-            });
-            this.pendingBytes += deficit;
-        }
-
-        this.sendPayload({ type: 'input_audio_buffer.commit' });
-        this.pendingCommit = false;
-        this.pendingSpeaker = null;
-        this.pendingBytes = 0;
-    }
-
-    private resetPendingAudio(): void {
-        this.pendingCommit = false;
-        this.pendingSpeaker = null;
-        this.pendingBytes = 0;
-    }
-
     // Used for greeting/bootstrap turns or explicit text messages during a
     // realtime session.
     private sendTextCreate(
@@ -420,34 +385,14 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
                 this.sendTextCreate(event);
                 return;
             case 'input_audio.append': {
-                if (
-                    this.pendingSpeaker &&
-                    (this.pendingSpeaker.label !== event.speakerLabel ||
-                        this.pendingSpeaker.id !== event.speakerId)
-                ) {
-                    await this.flushPendingAudio();
-                }
                 this.sendPayload({
                     type: 'input_audio_buffer.append',
                     audio: event.audioBase64,
                 });
-                this.pendingCommit = true;
-                this.pendingSpeaker = {
-                    label: event.speakerLabel,
-                    id: event.speakerId,
-                };
-                this.pendingBytes += Buffer.from(
-                    event.audioBase64,
-                    'base64'
-                ).length;
                 return;
             }
-            case 'input_audio.commit':
-                await this.flushPendingAudio();
-                return;
             case 'input_audio.clear':
                 this.sendPayload({ type: 'input_audio_buffer.clear' });
-                this.resetPendingAudio();
                 return;
             case 'response.create':
                 this.sendResponseCreate();
@@ -490,12 +435,12 @@ const sendSessionConfig = (
                         type: 'audio/pcm',
                         rate: REALTIME_SAMPLE_RATE,
                     },
-                    turn_detection: {
-                        type: 'semantic_vad',
+                        turn_detection: {
+                            type: 'server_vad',
+                        },
                     },
-                },
-                output: {
-                    format: {
+                    output: {
+                        format: {
                         type: 'audio/pcm',
                         rate: REALTIME_SAMPLE_RATE,
                     },

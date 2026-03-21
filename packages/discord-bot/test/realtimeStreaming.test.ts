@@ -31,11 +31,6 @@ class FakeRealtimeSession {
         this.chunks.push({ speaker, buffer: Buffer.from(buffer), userId });
     }
 
-    async flushAudio(): Promise<void> {
-        // Server VAD owns the turn boundary in production, so this method is
-        // only here to satisfy the realtime session interface.
-    }
-
     clearAudio(): void {}
     disconnect(): void {}
 }
@@ -57,13 +52,12 @@ test('RealtimeAudioHandler forwards audio chunks without committing', async () =
     const chunk = Buffer.from([0, 1, 2, 3]);
 
     await handler.sendAudio(sendEvent, chunk, 'Alice', 'user-1');
-    await handler.flushAudio(sendEvent);
 
     assert.equal(sent.length, 1);
     assert.equal(sent[0].type, 'input_audio.append');
 });
 
-test('RealtimeAudioHandler flushAudio remains a no-op', async () => {
+test('RealtimeAudioHandler keeps append-only turns stable across repeated calls', async () => {
     const handler = new RealtimeAudioHandler();
     const sent: SentPayload[] = [];
     const sendEvent = (payload: SentPayload) => {
@@ -71,14 +65,15 @@ test('RealtimeAudioHandler flushAudio remains a no-op', async () => {
     };
 
     await handler.sendAudio(sendEvent, Buffer.from([1, 2, 3, 4]), 'Alice', 'user-1');
-
-    await Promise.all([
-        handler.flushAudio(sendEvent),
-        handler.flushAudio(sendEvent),
-    ]);
-
     assert.equal(sent.length, 1);
     assert.equal(sent[0].type, 'input_audio.append');
+
+    await handler.sendAudio(sendEvent, Buffer.from([5, 6, 7, 8]), 'Alice', 'user-1');
+    assert.equal(sent.length, 2);
+    assert.deepEqual(
+        sent.map((payload) => payload.type),
+        ['input_audio.append', 'input_audio.append']
+    );
 });
 
 test('RealtimeAudioHandler keeps both speakers as separate append events', async () => {
@@ -90,7 +85,6 @@ test('RealtimeAudioHandler keeps both speakers as separate append events', async
 
     await handler.sendAudio(sendEvent, Buffer.from([1, 2]), 'Alex', 'user-1');
     await handler.sendAudio(sendEvent, Buffer.from([3, 4]), 'Alex', 'user-2');
-    await handler.flushAudio(sendEvent);
 
     assert.deepEqual(
         sent.map((payload) => payload.type),
@@ -129,11 +123,6 @@ test('VoiceSessionManager forwards multi-speaker audio with display names', asyn
         userId: 'user-2',
         audioBuffer: Buffer.from([3, 4]),
     });
-    audioCapture.emit('speakerSilence', {
-        guildId: 'guild-1',
-        userId: 'user-1',
-    });
-
     await waitForPipeline(session);
 
     assert.deepEqual(

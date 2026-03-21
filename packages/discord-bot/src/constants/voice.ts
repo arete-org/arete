@@ -27,8 +27,6 @@ export const TIMEOUT_CONSTANTS = {
     RESPONSE_POLLING_INTERVAL: 50,
     // Session config delay (500ms)
     SESSION_CONFIG_DELAY: 500,
-    // Audio commit delay (500ms - balance between responsiveness and reliability)
-    AUDIO_COMMIT_DELAY: 500,
     // Silence duration before ending audio capture (300ms)
     SILENCE_DURATION: 300,
 } as const;

@@ -173,7 +173,6 @@ export type InternalVoiceRealtimeClientEvent =
           speakerLabel: string;
           speakerId?: string;
       }
-    | { type: 'input_audio.commit' }
     | { type: 'input_audio.clear' }
     | { type: 'response.create' }
     | { type: 'session.close' };
