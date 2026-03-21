@@ -1147,7 +1147,7 @@ export const envEntries = [
         secret: false,
         kind: 'enum',
         description: 'Default model used by realtime voice sessions.',
-        defaultValue: literal('gpt-realtime'),
+        defaultValue: literal('gpt-realtime-mini'),
         allowedValues: supportedOpenAIRealtimeModels,
         usedBy: [
             'packages/backend/src/config.ts',
