@@ -116,6 +116,7 @@ export class AudioCaptureHandler extends EventEmitter {
         });
         const resampler = createCaptureResampler();
         const pcmStream = opusStream.pipe(decoder).pipe(resampler);
+        let cleanedUp = false;
 
         const onData = (chunk: Buffer) => {
             if (chunk.length === 0) return;
@@ -129,6 +130,10 @@ export class AudioCaptureHandler extends EventEmitter {
         };
 
         const cleanup = () => {
+            if (cleanedUp) {
+                return;
+            }
+            cleanedUp = true;
             logger.debug(`[${captureKey}] Cleaning up PCM stream`);
             pcmStream.off('data', onData);
             pcmStream.removeAllListeners();
@@ -144,9 +149,23 @@ export class AudioCaptureHandler extends EventEmitter {
             } catch {
                 // Ignore errors during cleanup
             }
+            try {
+                pcmStream.destroy();
+            } catch {
+                // Ignore errors during cleanup
+            }
+            try {
+                decoder.destroy();
+            } catch {
+                // Ignore errors during cleanup
+            }
+            try {
+                opusStream.destroy();
+            } catch {
+                // Ignore errors during cleanup
+            }
             opusStream.removeAllListeners();
             this.activeReceivers.delete(captureKey);
-            this.emitSpeakerSilence(guildId, userId);
         };
 
         pcmStream.on('data', onData);
@@ -168,10 +187,6 @@ export class AudioCaptureHandler extends EventEmitter {
         });
 
         this.activeReceivers.set(captureKey, { cleanup });
-    }
-
-    private emitSpeakerSilence(guildId: string, userId: string): void {
-        this.emit('speakerSilence', { guildId, userId });
     }
 
     public cleanupGuild(guildId: string): void {
