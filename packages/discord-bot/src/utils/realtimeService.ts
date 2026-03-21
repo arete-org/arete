@@ -209,10 +209,13 @@ export class RealtimeSession extends EventEmitter {
     }
 
     /**
-     * Commit the current audio buffer for processing.
+     * Compatibility shim for older callers.
+     *
+     * Server VAD owns the turn boundary, so this now intentionally does
+     * nothing instead of sending a manual commit.
      */
     public async commitAudio(): Promise<void> {
-        await this.flushAudio();
+        return;
     }
 
     /**
@@ -231,6 +234,8 @@ export class RealtimeSession extends EventEmitter {
             return;
         }
 
+        // The audio handler is append-only now, so there is no manual commit
+        // to send here.
         await this.audioHandler.flushAudio(this.sendClientEvent.bind(this));
     }
 

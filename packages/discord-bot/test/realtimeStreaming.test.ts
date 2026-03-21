@@ -22,7 +22,6 @@ class FakeRealtimeSession {
         buffer: Buffer;
         userId?: string;
     }[] = [];
-    public flushes = 0;
 
     async sendAudio(
         buffer: Buffer,
@@ -33,7 +32,8 @@ class FakeRealtimeSession {
     }
 
     async flushAudio(): Promise<void> {
-        this.flushes += 1;
+        // Server VAD owns the turn boundary in production, so this method is
+        // only here to satisfy the realtime session interface.
     }
 
     clearAudio(): void {}
@@ -48,7 +48,7 @@ const waitForPipeline = async (session: { audioPipeline: Promise<void> }) => {
     await new Promise((resolve) => setImmediate(resolve));
 };
 
-test('RealtimeAudioHandler forwards audio chunks before commit', async () => {
+test('RealtimeAudioHandler forwards audio chunks without committing', async () => {
     const handler = new RealtimeAudioHandler();
     const sent: SentPayload[] = [];
     const sendEvent = (payload: SentPayload) => {
@@ -59,12 +59,11 @@ test('RealtimeAudioHandler forwards audio chunks before commit', async () => {
     await handler.sendAudio(sendEvent, chunk, 'Alice', 'user-1');
     await handler.flushAudio(sendEvent);
 
-    assert.equal(sent.length, 2);
+    assert.equal(sent.length, 1);
     assert.equal(sent[0].type, 'input_audio.append');
-    assert.equal(sent[1].type, 'input_audio.commit');
 });
 
-test('RealtimeAudioHandler only commits a buffered turn once even if flushes overlap', async () => {
+test('RealtimeAudioHandler flushAudio remains a no-op', async () => {
     const handler = new RealtimeAudioHandler();
     const sent: SentPayload[] = [];
     const sendEvent = (payload: SentPayload) => {
@@ -78,13 +77,11 @@ test('RealtimeAudioHandler only commits a buffered turn once even if flushes ove
         handler.flushAudio(sendEvent),
     ]);
 
-    assert.equal(
-        sent.filter((payload) => payload.type === 'input_audio.commit').length,
-        1
-    );
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'input_audio.append');
 });
 
-test('RealtimeAudioHandler flushes when two speakers share a display name', async () => {
+test('RealtimeAudioHandler keeps both speakers as separate append events', async () => {
     const handler = new RealtimeAudioHandler();
     const sent: SentPayload[] = [];
     const sendEvent = (payload: SentPayload) => {
@@ -97,7 +94,7 @@ test('RealtimeAudioHandler flushes when two speakers share a display name', asyn
 
     assert.deepEqual(
         sent.map((payload) => payload.type),
-        ['input_audio.append', 'input_audio.commit', 'input_audio.append', 'input_audio.commit']
+        ['input_audio.append', 'input_audio.append']
     );
 });
 
@@ -153,7 +150,6 @@ test('VoiceSessionManager forwards multi-speaker audio with display names', asyn
         Array.from(realtimeSession.chunks[1].buffer.values()),
         [3, 4]
     );
-    assert.equal(realtimeSession.flushes, 1);
 
     manager.removeSession('guild-1');
 });

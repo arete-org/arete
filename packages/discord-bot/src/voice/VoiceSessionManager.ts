@@ -26,7 +26,6 @@ export interface VoiceSession {
 
 type VoiceSessionWithHandlers = VoiceSession & {
     audioChunkHandler?: (event: AudioChunkEvent) => void;
-    silenceHandler?: (event: { guildId: string; userId: string }) => void;
 };
 
 export class VoiceSessionManager {
@@ -79,19 +78,10 @@ export class VoiceSessionManager {
             });
         };
 
-        const silenceHandler = (event: { guildId: string; userId: string }) => {
-            if (event.guildId !== guildId) return;
-            this.enqueueAudioTask(guildId, async () => {
-                await this.flushRealtimeBuffer(guildId);
-            });
-        };
-
         session.audioCaptureHandler.on('audioChunk', chunkHandler);
-        session.audioCaptureHandler.on('speakerSilence', silenceHandler);
 
         const sessionWithHandlers = session as VoiceSessionWithHandlers;
         sessionWithHandlers.audioChunkHandler = chunkHandler;
-        sessionWithHandlers.silenceHandler = silenceHandler;
 
         logger.debug(
             `Added voice session for guild ${guildId}, total sessions: ${this.activeSessions.size}`
@@ -141,27 +131,12 @@ export class VoiceSessionManager {
         session.lastAudioTime = Date.now();
     }
 
-    private async flushRealtimeBuffer(guildId: string): Promise<void> {
-        const session = this.activeSessions.get(guildId);
-        if (!session) {
-            return;
-        }
-
-        await session.realtimeSession.flushAudio();
-    }
-
     private cleanupSessionEventListeners(session: VoiceSession): void {
         const sessionWithHandlers = session as VoiceSessionWithHandlers;
         const chunkHandler = sessionWithHandlers.audioChunkHandler;
         if (chunkHandler) {
             session.audioCaptureHandler.off('audioChunk', chunkHandler);
             delete sessionWithHandlers.audioChunkHandler;
-        }
-
-        const silenceHandler = sessionWithHandlers.silenceHandler;
-        if (silenceHandler) {
-            session.audioCaptureHandler.off('speakerSilence', silenceHandler);
-            delete sessionWithHandlers.silenceHandler;
         }
     }
 
