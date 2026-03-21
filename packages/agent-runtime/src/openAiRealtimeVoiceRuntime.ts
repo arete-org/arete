@@ -644,19 +644,18 @@ const waitForProviderSessionReady = (
             );
         };
 
-        const handleAbort = signal
-            ? () => {
-                  const abortError = new Error(
-                      'Realtime session setup aborted.'
-                  );
-                  abortError.name = 'AbortError';
-                  settle(() => reject(abortError));
-              }
-            : null;
-
+        let handleAbort: (() => void) | undefined;
         if (signal) {
+            handleAbort = () => {
+                const abortError = new Error(
+                    'Realtime session setup aborted.'
+                );
+                abortError.name = 'AbortError';
+                settle(() => reject(abortError));
+            };
+
             if (signal.aborted) {
-                handleAbort?.();
+                handleAbort();
                 return;
             }
             signal.addEventListener('abort', handleAbort, { once: true });

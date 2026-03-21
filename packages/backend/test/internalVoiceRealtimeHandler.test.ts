@@ -44,13 +44,29 @@ class FakeUpgradeSocket extends Duplex {
         return super.destroy(error);
     }
 
+    public override end(cb?: () => void): this;
+    public override end(chunk: string | Buffer, cb?: () => void): this;
     public override end(
-        chunk?: string | Buffer,
-        encoding?: BufferEncoding,
-        callback?: () => void
+        chunk: string | Buffer,
+        encoding: BufferEncoding,
+        cb?: () => void
+    ): this;
+    public override end(
+        chunk?: string | Buffer | (() => void),
+        encoding?: BufferEncoding | (() => void),
+        cb?: () => void
     ): this {
         this.endedByHandler = true;
-        return super.end(chunk, encoding, callback);
+        if (typeof chunk === 'function') {
+            return super.end(chunk);
+        }
+        if (typeof encoding === 'function') {
+            return super.end(chunk, encoding);
+        }
+        if (typeof encoding === 'string') {
+            return super.end(chunk, encoding, cb);
+        }
+        return super.end(chunk, cb);
     }
 }
 
