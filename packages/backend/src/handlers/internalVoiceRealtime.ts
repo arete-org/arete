@@ -21,6 +21,11 @@ import type {
     RealtimeVoiceRuntime,
     RealtimeVoiceSession,
 } from '@footnote/agent-runtime';
+import type { BackendLLMCostRecord } from '../services/llmCostRecorder.js';
+import {
+    estimateBackendVoiceRealtimeCost,
+    recordBackendLLMUsage,
+} from '../services/llmCostRecorder.js';
 import { logger } from '../utils/logger.js';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { parseTrustedServiceAuth } from './trustedServiceRequest.js';
@@ -42,6 +47,7 @@ type CreateInternalVoiceRealtimeHandlerOptions = {
     serviceToken: string | null;
     serviceRateLimiter: SimpleRateLimiter;
     buildInstructions: (context: InternalVoiceSessionContext) => string;
+    recordUsage?: (record: BackendLLMCostRecord) => void;
 };
 
 const STATUS_MESSAGES: Record<number, string> = {
@@ -103,6 +109,7 @@ export const createInternalVoiceRealtimeHandler = ({
     serviceToken,
     serviceRateLimiter,
     buildInstructions,
+    recordUsage = recordBackendLLMUsage,
 }: CreateInternalVoiceRealtimeHandlerOptions) => {
     const wss = new WebSocketServer({ noServer: true });
 
@@ -131,6 +138,36 @@ export const createInternalVoiceRealtimeHandler = ({
         };
 
         const forwardRuntimeEvent = (event: InternalVoiceRealtimeServerEvent) => {
+            if (event.type === 'response.completed') {
+                const usage = event.usage;
+                const model = usage?.model ?? 'unknown';
+                const promptTokens = usage?.tokensPrompt ?? 0;
+                const completionTokens = usage?.tokensCompletion ?? 0;
+                const estimatedCost = estimateBackendVoiceRealtimeCost(
+                    model,
+                    promptTokens,
+                    completionTokens
+                );
+
+                try {
+                    recordUsage({
+                        feature: 'voice_realtime',
+                        model,
+                        promptTokens,
+                        completionTokens,
+                        totalTokens: promptTokens + completionTokens,
+                        ...estimatedCost,
+                        timestamp: Date.now(),
+                    });
+                } catch (error) {
+                    realtimeLogger.warn(
+                        `Internal voice realtime usage recording failed: ${
+                            error instanceof Error ? error.message : String(error)
+                        }`
+                    );
+                }
+            }
+
             try {
                 sendServerEvent(ws, event);
             } catch (error) {

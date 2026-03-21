@@ -24,7 +24,7 @@ const audioLogger =
 
 interface PendingSpeaker {
     label: string;
-    userId?: string;
+    speakerId?: string;
 }
 
 /**
@@ -47,7 +47,11 @@ export class RealtimeAudioHandler {
             return;
         }
 
-        if (this.pendingSpeaker && this.pendingSpeaker.label !== speakerLabel) {
+        if (
+            this.pendingSpeaker &&
+            (this.pendingSpeaker.label !== speakerLabel ||
+                this.pendingSpeaker.speakerId !== speakerId)
+        ) {
             await this.flushAudio(sendEvent);
         }
 
@@ -58,7 +62,7 @@ export class RealtimeAudioHandler {
             speakerId,
         });
 
-        this.pendingSpeaker = { label: speakerLabel, userId: speakerId };
+        this.pendingSpeaker = { label: speakerLabel, speakerId };
         this.lastAppendTime = Date.now();
         this.pendingCommit = true;
 

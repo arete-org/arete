@@ -8,6 +8,7 @@
 
 import type {
     SupportedOpenAIImageModel,
+    SupportedOpenAIRealtimeModel,
     SupportedOpenAITextModel,
     SupportedOpenAITtsModel,
 } from './providers.js';
@@ -147,6 +148,13 @@ export type OpenAITextPricingEntry = {
     output: number;
 };
 
+/**
+ * Realtime token pricing per 1M tokens (USD).
+ * Source: https://platform.openai.com/docs/models/gpt-realtime
+ * Last updated in-repo: 2026-03-20
+ */
+export type OpenAIRealtimePricingEntry = OpenAITextPricingEntry;
+
 type OpenAIImageTokenPricingEntry = {
     input: number;
     output: number;
@@ -174,6 +182,22 @@ export const openAITextPricingTable: Record<
     'text-embedding-3-small': { input: 0.02, output: 0 },
     'text-embedding-3-large': { input: 0.13, output: 0 },
     'text-embedding-ada-002': { input: 0.1, output: 0 },
+};
+
+/**
+ * Canonical realtime pricing per 1M text tokens (USD).
+ * Source: https://platform.openai.com/docs/models/gpt-realtime
+ * Last updated in-repo: 2026-03-20
+ *
+ * We use the text-token row because the realtime usage payload currently
+ * arrives as generic prompt/completion token counts at our backend boundary.
+ */
+export const openAIRealtimePricingTable: Record<
+    SupportedOpenAIRealtimeModel,
+    OpenAIRealtimePricingEntry
+> = {
+    'gpt-realtime': { input: 4.0, output: 16.0 },
+    'gpt-realtime-mini': { input: 0.6, output: 2.4 },
 };
 
 /**
@@ -295,6 +319,15 @@ export const hasOpenAITtsPricing = (
     Object.prototype.hasOwnProperty.call(openAITtsPricingTable, model);
 
 /**
+ * Checks whether Footnote has a shared realtime pricing entry for the given
+ * model.
+ */
+export const hasOpenAIRealtimePricing = (
+    model: string
+): model is SupportedOpenAIRealtimeModel =>
+    Object.prototype.hasOwnProperty.call(openAIRealtimePricingTable, model);
+
+/**
  * Resolves "auto" image quality to the default tier used by current image
  * generation accounting.
  */
@@ -374,6 +407,42 @@ export const estimateOpenAITtsCost = (
         inputCost,
         outputCost: 0,
         totalCost: inputCost,
+    };
+};
+
+/**
+ * Estimates realtime token cost from shared pricing data.
+ * Unknown model strings fail open to zero cost so callers can keep running
+ * while still surfacing mismatches through their own logs.
+ */
+export const estimateOpenAIRealtimeCost = (
+    model: string,
+    inputTokens: number,
+    outputTokens: number
+): OpenAITextCostBreakdown => {
+    const pricing = hasOpenAIRealtimePricing(model)
+        ? openAIRealtimePricingTable[model]
+        : null;
+
+    if (!pricing) {
+        return {
+            inputTokens,
+            outputTokens,
+            inputCost: 0,
+            outputCost: 0,
+            totalCost: 0,
+        };
+    }
+
+    const inputCost = (inputTokens / 1_000_000) * pricing.input;
+    const outputCost = (outputTokens / 1_000_000) * pricing.output;
+
+    return {
+        inputTokens,
+        outputTokens,
+        inputCost,
+        outputCost,
+        totalCost: inputCost + outputCost,
     };
 };
 

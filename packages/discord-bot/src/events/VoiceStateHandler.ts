@@ -118,42 +118,21 @@ export class VoiceStateHandler extends Event {
             return;
         }
 
-        const connection = getVoiceConnection(guildId);
-        if (!connection) {
+        const voiceChannel = newState.channel;
+        if (!voiceChannel) {
             logger.warn(
-                `No voice connection found for guild ${guildId} after join`
+                `Bot joined voice channel in guild ${guildId} but no channel object was available`
             );
             return;
         }
 
-        const voiceChannel = newState.channel;
-        const { participantMap, contextParticipants } =
-            this.collectVoiceParticipants(voiceChannel);
-
-        const realtimeSession = await this.createRealtimeSession(
-            guildId,
-            contextParticipants
+        // The /call flow waits for the human participant to join before we
+        // create the realtime session. That keeps the session lifecycle tied
+        // to the actual conversation start instead of burning a socket while
+        // the bot sits alone in the channel.
+        logger.info(
+            `Bot joined voice channel ${voiceChannel.name} in guild ${guildId}; waiting for the initiating user to start the session.`
         );
-
-        const session = this.sessionManager.createSession(
-            connection,
-            realtimeSession,
-            this.audioCaptureHandler,
-            this.audioPlaybackHandler,
-            participantMap,
-            this.userVoiceStateHandler.getInitiatingUser(guildId)
-        );
-        this.sessionManager.addSession(guildId, session);
-
-        if (!this.audioCaptureHandler.isCaptureInitialized(guildId)) {
-            this.audioCaptureHandler.setupAudioCapture(
-                connection,
-                realtimeSession,
-                guildId
-            );
-        }
-
-        logger.info('Voice session initialized successfully');
     }
 
     private collectVoiceParticipants(channel: VoiceBasedChannel | null): {

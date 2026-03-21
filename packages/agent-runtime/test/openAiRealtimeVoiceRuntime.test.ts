@@ -116,6 +116,10 @@ test('realtime voice runtime commits buffered audio without a synthetic conversa
         .map((payload) => JSON.parse(payload) as { type?: string })
         .map((payload) => payload.type);
 
+    assert.equal(
+        payloadTypes.filter((type) => type === 'session.update').length,
+        1
+    );
     assert.ok(payloadTypes.includes('input_audio_buffer.append'));
     assert.ok(payloadTypes.includes('input_audio_buffer.commit'));
     assert.equal(payloadTypes.includes('conversation.item.create'), false);

@@ -19,6 +19,7 @@ import type {
     RealtimeVoiceRuntime,
     RealtimeVoiceSession,
 } from '@footnote/agent-runtime';
+import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
 
 import { createInternalVoiceRealtimeHandler } from '../src/handlers/internalVoiceRealtime.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
@@ -99,6 +100,7 @@ type RealtimeHandlerHarness = {
     close: () => Promise<void>;
     connect: (headers?: Record<string, string>) => Promise<WebSocket>;
     lastSession: () => StubRealtimeSession | null;
+    recordedUsage: BackendLLMCostRecord[];
     requests: Array<{
         instructions: string;
         context: InternalVoiceSessionContext;
@@ -113,6 +115,7 @@ type RealtimeHandlerHarness = {
 
 const createRealtimeHandlerHarness = async (): Promise<RealtimeHandlerHarness> => {
     const requests: RealtimeHandlerHarness['requests'] = [];
+    const recordedUsage: BackendLLMCostRecord[] = [];
     let currentSession: StubRealtimeSession | null = null;
     let lastContext: InternalVoiceSessionContext = {
         participants: [],
@@ -138,6 +141,9 @@ const createRealtimeHandlerHarness = async (): Promise<RealtimeHandlerHarness> =
         buildInstructions: (context) => {
             lastContext = context;
             return `participants=${context.participants.length}`;
+        },
+        recordUsage: (record) => {
+            recordedUsage.push(record);
         },
     });
 
@@ -182,6 +188,7 @@ const createRealtimeHandlerHarness = async (): Promise<RealtimeHandlerHarness> =
                 ws.once('error', reject);
             }),
         lastSession: () => currentSession,
+        recordedUsage,
         requests,
     };
 };
@@ -320,6 +327,22 @@ test('internal realtime handler starts a session and forwards session.ready to t
         session.emitServerEvent({ type: 'session.ready' });
         const readyMessage = await waitForJsonMessage(ws);
         assert.deepEqual(readyMessage, { type: 'session.ready' });
+
+        session.emitServerEvent({
+            type: 'response.completed',
+            responseId: 'resp_123',
+            usage: {
+                tokensPrompt: 50,
+                tokensCompletion: 25,
+                model: 'gpt-realtime',
+            },
+        });
+
+        assert.equal(harness.recordedUsage.length, 1);
+        assert.equal(harness.recordedUsage[0].feature, 'voice_realtime');
+        assert.equal(harness.recordedUsage[0].model, 'gpt-realtime');
+        assert.equal(harness.recordedUsage[0].promptTokens, 50);
+        assert.equal(harness.recordedUsage[0].completionTokens, 25);
 
         await closeWebSocket(ws);
     } finally {

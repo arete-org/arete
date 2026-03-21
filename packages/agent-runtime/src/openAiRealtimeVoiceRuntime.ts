@@ -469,7 +469,8 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
     }
 }
 
-// Apply base realtime settings plus VAD to the upstream provider session.
+// Send one complete session.update so the provider sees the final config in a
+// single atomic handshake instead of two separate updates.
 const sendSessionConfig = (
     ws: WebSocket,
     instructions: string,
@@ -489,7 +490,9 @@ const sendSessionConfig = (
                         type: 'audio/pcm',
                         rate: REALTIME_SAMPLE_RATE,
                     },
-                    turn_detection: null,
+                    turn_detection: {
+                        type: 'semantic_vad',
+                    },
                 },
                 output: {
                     format: {
@@ -503,21 +506,6 @@ const sendSessionConfig = (
     };
 
     ws.send(JSON.stringify(payload));
-    ws.send(
-        JSON.stringify({
-            type: 'session.update',
-            session: {
-                type: 'realtime',
-                audio: {
-                    input: {
-                        turn_detection: {
-                            type: 'semantic_vad',
-                        },
-                    },
-                },
-            },
-        })
-    );
 };
 
 const connectWebSocket = async (

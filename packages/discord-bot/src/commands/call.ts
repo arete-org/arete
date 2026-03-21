@@ -251,12 +251,6 @@ const callCommand: Command = {
                 `Registered initiating user ${interaction.user.id} for guild ${voiceChannel.guild.id}`
             );
 
-            // Create the session
-            await voiceStateHandler.createSession(
-                voiceChannel.guild.id,
-                voiceChannel.id
-            );
-
             // Wait for the connection to be ready
             try {
                 await entersState(

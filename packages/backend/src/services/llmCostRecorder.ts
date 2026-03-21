@@ -7,8 +7,10 @@
  */
 import {
     estimateOpenAITextCost,
+    estimateOpenAIRealtimeCost,
     estimateOpenAITtsCost,
     hasOpenAITextPricing,
+    hasOpenAIRealtimePricing,
     hasOpenAITtsPricing,
 } from '@footnote/contracts/pricing';
 import { formatUsd, logger, type LLMCostTotals } from '../utils/logger.js';
@@ -18,9 +20,10 @@ export type BackendLLMCostRecord = {
         | 'reflect'
         | 'reflect_planner'
         | 'news'
-        | 'image'
-        | 'image_description'
-        | 'tts';
+    | 'image'
+    | 'image_description'
+    | 'tts'
+    | 'voice_realtime';
     model: string;
     promptTokens: number;
     completionTokens: number;
@@ -78,6 +81,32 @@ export const estimateBackendTtsCost = (
     }
 
     const estimatedCost = estimateOpenAITtsCost(model, promptTokens);
+    return {
+        inputCostUsd: estimatedCost.inputCost,
+        outputCostUsd: estimatedCost.outputCost,
+        totalCostUsd: estimatedCost.totalCost,
+    };
+};
+
+export const estimateBackendVoiceRealtimeCost = (
+    model: string,
+    promptTokens: number,
+    completionTokens: number
+): Pick<
+    BackendLLMCostRecord,
+    'inputCostUsd' | 'outputCostUsd' | 'totalCostUsd'
+> => {
+    if (!hasOpenAIRealtimePricing(model)) {
+        logger.warn(
+            `No backend realtime pricing configured for model ${model}. Recording zero estimated cost.`
+        );
+    }
+
+    const estimatedCost = estimateOpenAIRealtimeCost(
+        model,
+        promptTokens,
+        completionTokens
+    );
     return {
         inputCostUsd: estimatedCost.inputCost,
         outputCostUsd: estimatedCost.outputCost,
