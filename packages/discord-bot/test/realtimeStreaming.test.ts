@@ -64,6 +64,26 @@ test('RealtimeAudioHandler forwards audio chunks before commit', async () => {
     assert.equal(sent[1].type, 'input_audio.commit');
 });
 
+test('RealtimeAudioHandler only commits a buffered turn once even if flushes overlap', async () => {
+    const handler = new RealtimeAudioHandler();
+    const sent: SentPayload[] = [];
+    const sendEvent = (payload: SentPayload) => {
+        sent.push(payload);
+    };
+
+    await handler.sendAudio(sendEvent, Buffer.from([1, 2, 3, 4]), 'Alice', 'user-1');
+
+    await Promise.all([
+        handler.flushAudio(sendEvent),
+        handler.flushAudio(sendEvent),
+    ]);
+
+    assert.equal(
+        sent.filter((payload) => payload.type === 'input_audio.commit').length,
+        1
+    );
+});
+
 test('RealtimeAudioHandler flushes when two speakers share a display name', async () => {
     const handler = new RealtimeAudioHandler();
     const sent: SentPayload[] = [];

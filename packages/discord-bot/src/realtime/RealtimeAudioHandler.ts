@@ -35,6 +35,7 @@ export class RealtimeAudioHandler {
     private lastAppendTime = 0;
     private pendingSpeaker: PendingSpeaker | null = null;
     private commitTimer: NodeJS.Timeout | null = null;
+    private flushInFlight: Promise<void> | null = null;
 
     public async sendAudio(
         sendEvent: (event: InternalVoiceRealtimeClientEvent) => void,
@@ -88,6 +89,23 @@ export class RealtimeAudioHandler {
     }
 
     public async flushAudio(
+        sendEvent: (event: InternalVoiceRealtimeClientEvent) => void
+    ): Promise<void> {
+        if (!this.pendingCommit) {
+            return;
+        }
+
+        if (this.flushInFlight) {
+            return this.flushInFlight;
+        }
+
+        this.flushInFlight = this.performFlush(sendEvent).finally(() => {
+            this.flushInFlight = null;
+        });
+        return this.flushInFlight;
+    }
+
+    private async performFlush(
         sendEvent: (event: InternalVoiceRealtimeClientEvent) => void
     ): Promise<void> {
         if (!this.pendingCommit) {
