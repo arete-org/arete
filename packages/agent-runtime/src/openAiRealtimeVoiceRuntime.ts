@@ -254,9 +254,10 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
     private pendingSpeaker: { label: string; id?: string } | null = null;
     private pendingBytes = 0;
     private pendingCommit = false;
-    // `session.ready` is emitted during session setup, before backend callers
-    // can attach listeners. Keep the first ready event so late listeners still
-    // learn that the session is usable without changing the public contract.
+    // `session.ready` is emitted after the upstream session ack, before backend
+    // callers can attach listeners. Keep the first ready event so late
+    // listeners still learn that the session is usable without changing the
+    // public contract.
     private sessionReadyEvent: Extract<
         InternalVoiceRealtimeServerEvent,
         { type: 'session.ready' }
@@ -279,14 +280,6 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
                     string,
                     unknown
                 >;
-                if (
-                    !this.sessionReadyEvent &&
-                    (parsed.type === 'session.created' ||
-                        parsed.type === 'session.updated')
-                ) {
-                    this.emitEvent({ type: 'session.ready' });
-                }
-
                 const mapped = mapServerEvent(parsed);
                 if (mapped) {
                     this.emitEvent(mapped);
@@ -493,7 +486,6 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
 
 // Apply base realtime settings plus VAD to the upstream provider session.
 const sendSessionConfig = (
-    session: OpenAiRealtimeVoiceSession,
     ws: WebSocket,
     instructions: string,
     model: NonNullable<InternalVoiceRealtimeOptions['model']>,
@@ -541,7 +533,6 @@ const sendSessionConfig = (
             },
         })
     );
-    session.emitEvent({ type: 'session.ready' });
 };
 
 const connectWebSocket = async (
@@ -583,6 +574,107 @@ const connectWebSocket = async (
     });
 };
 
+const waitForProviderSessionReady = (
+    ws: WebSocket,
+    signal?: AbortSignal
+): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+
+        const cleanup = () => {
+            ws.off('message', handleMessage);
+            ws.off('error', handleError);
+            ws.off('close', handleClose);
+            if (signal && handleAbort) {
+                signal.removeEventListener('abort', handleAbort);
+            }
+        };
+
+        const settle = (fn: () => void) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            cleanup();
+            fn();
+        };
+
+        const handleMessage = (data: WebSocket.RawData) => {
+            try {
+                const parsed = JSON.parse(data.toString()) as Record<
+                    string,
+                    unknown
+                >;
+                const type = parsed.type;
+                if (type === 'session.created' || type === 'session.updated') {
+                    settle(resolve);
+                    return;
+                }
+                if (type === 'error') {
+                    const errorPayload =
+                        parsed.error && typeof parsed.error === 'object'
+                            ? (parsed.error as Record<string, unknown>)
+                            : {};
+                    const message =
+                        typeof errorPayload.message === 'string'
+                            ? errorPayload.message
+                            : 'Realtime session setup failed.';
+                    settle(() => reject(new Error(message)));
+                }
+            } catch {
+                // Ignore parse failures and keep listening for readiness.
+            }
+        };
+
+        const handleError = (error: Error) => {
+            settle(() => reject(error));
+        };
+
+        const handleClose = (code: number, reason: Buffer) => {
+            const suffix = reason?.length
+                ? `: ${reason.toString()}`
+                : '';
+            settle(
+                () =>
+                    reject(
+                        new Error(
+                            `Realtime websocket closed before ready (${code})${suffix}`
+                        )
+                    )
+            );
+        };
+
+        const handleAbort = signal
+            ? () => {
+                  const abortError = new Error(
+                      'Realtime session setup aborted.'
+                  );
+                  abortError.name = 'AbortError';
+                  settle(() => reject(abortError));
+              }
+            : null;
+
+        if (signal) {
+            if (signal.aborted) {
+                handleAbort?.();
+                return;
+            }
+            signal.addEventListener('abort', handleAbort, { once: true });
+        }
+
+        ws.on('message', handleMessage);
+        ws.on('error', handleError);
+        ws.on('close', handleClose);
+    });
+};
+
+/**
+ * @description: Builds the realtime voice runtime adapter that connects to the OpenAI websocket API.
+ * @footnote-scope: core
+ * @footnote-module: OpenAiRealtimeVoiceRuntimeFactory
+ * @footnote-risk: high - Incorrect session setup can drop audio or leave realtime sockets open.
+ * @footnote-ethics: high - Realtime voice traffic carries sensitive user speech and must be handled carefully.
+ */
 export const createOpenAiRealtimeVoiceRuntime = ({
     apiKey,
     logger,
@@ -605,6 +697,7 @@ export const createOpenAiRealtimeVoiceRuntime = ({
                 request.signal,
                 requestTimeoutMs
             );
+            let session: OpenAiRealtimeVoiceSession | null = null;
 
             try {
                 const resolvedModel =
@@ -621,23 +714,29 @@ export const createOpenAiRealtimeVoiceRuntime = ({
                     abortContext.signal
                 );
 
-                const session = new OpenAiRealtimeVoiceSession(
+                session = new OpenAiRealtimeVoiceSession(
                     ws,
                     request.instructions,
                     request.options,
                     logger
                 );
 
+                const readyPromise = waitForProviderSessionReady(
+                    ws,
+                    abortContext.signal
+                );
                 sendSessionConfig(
-                    session,
                     ws,
                     request.instructions,
                     resolvedModel,
                     resolvedVoice
                 );
+                await readyPromise;
+                session.emitEvent({ type: 'session.ready' });
 
                 return session;
             } catch (error) {
+                session?.close('session_setup_failed');
                 if (
                     abortContext.didTimeout() &&
                     error instanceof Error &&

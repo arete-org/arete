@@ -26,6 +26,7 @@ import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 class FakeUpgradeSocket extends Duplex {
     public written = '';
     public destroyedByHandler = false;
+    public endedByHandler = false;
 
     public _read(): void {}
 
@@ -41,6 +42,15 @@ class FakeUpgradeSocket extends Duplex {
     public override destroy(error?: Error): this {
         this.destroyedByHandler = true;
         return super.destroy(error);
+    }
+
+    public override end(
+        chunk?: string | Buffer,
+        encoding?: BufferEncoding,
+        callback?: () => void
+    ): this {
+        this.endedByHandler = true;
+        return super.end(chunk, encoding, callback);
     }
 }
 
@@ -216,7 +226,7 @@ test('internal realtime handler rejects websocket upgrades without trusted auth'
 
     assert.match(socket.written, /401 Unauthorized/);
     assert.match(socket.written, /Missing trusted service credentials/);
-    assert.equal(socket.destroyedByHandler, true);
+    assert.equal(socket.endedByHandler, true);
 });
 
 test('internal realtime handler rejects invalid realtime payloads after websocket upgrade', async () => {

@@ -68,8 +68,7 @@ const rejectUpgrade = (
         '',
         body,
     ].join('\r\n');
-    socket.write(headers);
-    socket.destroy();
+    socket.end(headers);
 };
 
 const sendServerEvent = (
@@ -90,6 +89,11 @@ const sendServerEvent = (
 };
 
 /**
+ * @description: Creates the websocket upgrade handler for the internal realtime voice boundary.
+ * @footnote-scope: interface
+ * @footnote-module: InternalVoiceRealtimeHandlerFactory
+ * @footnote-risk: high - Incorrect auth or websocket handling can drop sessions or leak trusted traffic.
+ * @footnote-ethics: high - Realtime audio is privacy sensitive and must stay within trusted services.
  * @api.operationId: openInternalVoiceRealtime
  * @api.path: GET /api/internal/voice/realtime
  */

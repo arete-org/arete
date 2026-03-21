@@ -15,9 +15,26 @@ import { createOpenAiRealtimeVoiceRuntime } from '../src/index.js';
 class FakeRealtimeWebSocket extends EventEmitter {
     public readyState: number = WebSocket.CONNECTING;
     public readonly sentPayloads: string[] = [];
+    private didAckSession = false;
 
     public send(payload: string): void {
         this.sentPayloads.push(payload);
+
+        if (this.didAckSession) {
+            return;
+        }
+
+        try {
+            const parsed = JSON.parse(payload) as { type?: string };
+            if (parsed.type === 'session.update') {
+                this.didAckSession = true;
+                setImmediate(() => {
+                    this.emitJsonMessage({ type: 'session.updated' });
+                });
+            }
+        } catch {
+            // Ignore malformed client payloads in the fake socket.
+        }
     }
 
     public close(): void {
