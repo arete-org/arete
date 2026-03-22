@@ -89,6 +89,7 @@ type ClientWithCommands = Client & {
     commands?: Map<string, Command>;
 };
 
+// NOTE: @discordjs/voice requires Node.js 22.12.0+ to support DAVE (voice E2EE).
 // ====================
 // Environment Setup
 // ====================

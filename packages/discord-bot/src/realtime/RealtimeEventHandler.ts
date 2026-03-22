@@ -11,13 +11,15 @@ import {
     RealtimeEvent,
     RealtimeResponseTextDeltaEvent,
     RealtimeResponseAudioDeltaEvent,
-    RealtimeResponseCompletedEvent,
+    RealtimeResponseDoneEvent,
     RealtimeErrorEvent,
 } from '../utils/realtimeService.js';
 
 export class RealtimeEventHandler extends EventEmitter {
     private audioBuffer: Buffer[] = [];
     private isCollectingAudio = false;
+    private audioChunkCount = 0;
+    private totalAudioBytes = 0;
 
     constructor() {
         super();
@@ -30,7 +32,7 @@ export class RealtimeEventHandler extends EventEmitter {
         // This local handler just forwards them into the existing Discord
         // event flow.
         this.on(
-            'response.text.delta',
+            'response.output_text.delta',
             (event: RealtimeResponseTextDeltaEvent) => {
                 this.emit('text', event.delta);
             }
@@ -50,9 +52,6 @@ export class RealtimeEventHandler extends EventEmitter {
                     }
 
                     const audioData = Buffer.from(event.delta, 'base64');
-                    logger.debug(
-                        `[RealtimeEventHandler] Processing audio chunk: ${audioData.length} bytes`
-                    );
 
                     // Playback wants bytes, not protocol envelopes.
                     this.emit('audio', audioData);
@@ -71,7 +70,12 @@ export class RealtimeEventHandler extends EventEmitter {
                     if (!this.isCollectingAudio) {
                         this.isCollectingAudio = true;
                         this.audioBuffer = [];
+                        this.audioChunkCount = 0;
+                        this.totalAudioBytes = 0;
+                        logger.debug('[RealtimeEventHandler] Audio stream started');
                     }
+                    this.audioChunkCount += 1;
+                    this.totalAudioBytes += audioData.length;
                     this.audioBuffer.push(audioData);
                 } catch (error) {
                     logger.error(
@@ -86,25 +90,19 @@ export class RealtimeEventHandler extends EventEmitter {
         // response ends we clear local buffer state, but we do not emit a
         // second concatenated audio payload.
         this.on('response.output_audio.done', () => {
-            logger.debug('[RealtimeEventHandler] Audio stream completed');
-
-            if (this.isCollectingAudio) {
-                const bufferedChunks = this.audioBuffer.slice();
-                const totalBytes = bufferedChunks.reduce(
-                    (n, b) => n + b.length,
-                    0
-                );
-                logger.debug(
-                    `[RealtimeEventHandler] Final buffered length: ${totalBytes} bytes`
-                );
-            }
+            logger.debug('[RealtimeEventHandler] Audio stream completed', {
+                chunks: this.audioChunkCount,
+                totalBytes: this.totalAudioBytes,
+            });
             this.isCollectingAudio = false;
             this.audioBuffer = [];
+            this.audioChunkCount = 0;
+            this.totalAudioBytes = 0;
         });
 
         this.on(
-            'response.completed',
-            (event: RealtimeResponseCompletedEvent) => {
+            'response.done',
+            (event: RealtimeResponseDoneEvent) => {
                 this.emit('responseComplete', event);
             }
         );
@@ -115,7 +113,11 @@ export class RealtimeEventHandler extends EventEmitter {
     }
 
     public handleEvent(event: RealtimeEvent): void {
-        logger.debug(`[realtime] Handling event: ${event.type}`);
+        if (event.type === 'response.done' && 'response_id' in event) {
+            logger.debug('[realtime] Response completed', {
+                responseId: event.response_id,
+            });
+        }
 
         // Everything that reaches this point is already part of the
         // backend-owned realtime contract or a small local compatibility event
@@ -137,10 +139,10 @@ export class RealtimeEventHandler extends EventEmitter {
     public waitForResponseCompleted(): Promise<void> {
         return new Promise((resolve) => {
             const listener = () => {
-                this.off('response.completed', listener);
+                this.off('response.done', listener);
                 resolve();
             };
-            this.on('response.completed', listener);
+            this.on('response.done', listener);
         });
     }
 }

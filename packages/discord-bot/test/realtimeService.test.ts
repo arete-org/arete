@@ -33,9 +33,9 @@ test('RealtimeSession maps backend audio, text, and completion events into local
     session.on('response.output_audio.done', () => {
         seenEventTypes.push('response.output_audio.done');
     });
-    session.on('response.completed', (...args: unknown[]) => {
+    session.on('response.done', (...args: unknown[]) => {
         const event = args[0] as { usage?: InternalVoiceRealtimeUsage };
-        seenEventTypes.push('response.completed');
+        seenEventTypes.push('response.done');
         completionUsage = event.usage;
     });
 
@@ -53,7 +53,7 @@ test('RealtimeSession maps backend audio, text, and completion events into local
     );
     session.handleBackendEvent(
         JSON.stringify({
-            type: 'response.completed',
+            type: 'response.done',
             responseId: 'resp_123',
             usage: {
                 tokensPrompt: 12,
@@ -70,7 +70,7 @@ test('RealtimeSession maps backend audio, text, and completion events into local
     assert.deepEqual(seenText, ['hello there']);
     assert.deepEqual(seenEventTypes, [
         'response.output_audio.done',
-        'response.completed',
+        'response.done',
     ]);
     assert.deepEqual(completionUsage, {
         tokensPrompt: 12,

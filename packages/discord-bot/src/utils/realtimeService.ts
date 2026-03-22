@@ -50,6 +50,8 @@ export interface RealtimeSessionOptions {
     voice?: InternalVoiceRealtimeOptions['voice'];
     temperature?: number;
     maxResponseOutputTokens?: number;
+    turnDetection?: InternalVoiceRealtimeOptions['turnDetection'];
+    turnDetectionConfig?: InternalVoiceRealtimeOptions['turnDetectionConfig'];
 }
 
 /**
@@ -76,7 +78,7 @@ export interface AudioChunk {
  * orchestration code does not need to understand provider protocol details.
  */
 export interface RealtimeResponseTextDeltaEvent {
-    type: 'response.text.delta';
+    type: 'response.output_text.delta';
     delta: string;
 }
 
@@ -89,10 +91,10 @@ export interface RealtimeResponseAudioDeltaEvent {
 }
 
 /**
- * Event emitted when the backend marks the current realtime response as complete.
+ * Event emitted when the backend marks the current realtime response as done.
  */
-export interface RealtimeResponseCompletedEvent {
-    type: 'response.completed';
+export interface RealtimeResponseDoneEvent {
+    type: 'response.done';
     response_id: string;
     usage?: InternalVoiceRealtimeUsage;
     [key: string]: unknown;
@@ -240,6 +242,14 @@ export class RealtimeSession extends EventEmitter {
     }
 
     /**
+     * Commit the buffered audio as a user turn.
+     */
+    public async commitAudio(): Promise<void> {
+        await this.waitForSessionReady();
+        this.sendClientEvent({ type: 'input_audio.commit' });
+    }
+
+    /**
      * Start a new conversation turn after text or audio input has been queued.
      */
     public async createResponse(): Promise<void> {
@@ -256,8 +266,19 @@ export class RealtimeSession extends EventEmitter {
 
     public async sendGreeting(): Promise<void> {
         await this.waitForSessionReady();
-        this.sendClientEvent({ type: 'input_text.create', text: 'Hello!' });
+        const greeting = this.buildGreetingText();
+        this.sendClientEvent({ type: 'input_text.create', text: greeting });
         await this.createResponse();
+    }
+
+    private buildGreetingText(): string {
+        const template =
+            runtimeConfig.realtime.greetingTemplate ||
+            'Hey, {bot} here.';
+        const botName =
+            runtimeConfig.profile.displayName || 'the bot';
+
+        return template.replaceAll('{bot}', botName);
     }
 
     private buildBackendRealtimeUrl(baseUrl: string): string {
@@ -278,10 +299,12 @@ export class RealtimeSession extends EventEmitter {
             throw new Error('Session is not connected');
         }
 
-        realtimeLogger.debug(
-            'Sending realtime client event.',
-            buildClientEventMetadata(event)
-        );
+        if (event.type !== 'input_audio.append') {
+            realtimeLogger.debug(
+                'Sending realtime client event.',
+                buildClientEventMetadata(event)
+            );
+        }
         this.wsManager.send(JSON.stringify(event));
     }
 
@@ -435,7 +458,7 @@ export class RealtimeSession extends EventEmitter {
         // Locally we still emit one when the response completes so the playback
         // pipeline can reset per-response audio state without reassembling the
         // raw backend protocol itself.
-        if (event.type === 'response.completed') {
+        if (event.type === 'response.done') {
             this.eventHandler.handleEvent({
                 type: 'response.output_audio.done',
             });
@@ -486,6 +509,8 @@ const buildClientEventMetadata = (
                 speakerLabelLength: event.speakerLabel.length,
                 speakerId: event.speakerId,
             };
+        case 'input_audio.commit':
+            return { type: event.type };
         case 'input_text.create':
             return {
                 type: event.type,
@@ -511,12 +536,12 @@ const mapInternalEventToRealtimeEvent = (
             };
         case 'output_text.delta':
             return {
-                type: 'response.text.delta',
+                type: 'response.output_text.delta',
                 delta: event.text,
             };
-        case 'response.completed':
+        case 'response.done':
             return {
-                type: 'response.completed',
+                type: 'response.done',
                 response_id: event.responseId ?? '',
                 usage: event.usage,
             };

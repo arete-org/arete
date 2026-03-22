@@ -37,9 +37,6 @@ export class AudioPlaybackHandler {
         audioData: Buffer
     ): Promise<void> {
         const guildId = connection.joinConfig.guildId;
-        logger.debug(
-            `[AudioPlayback] Adding audio chunk to queue for guild ${guildId}`
-        );
 
         this.clearPipelineCleanupTimer(guildId);
 
@@ -49,9 +46,6 @@ export class AudioPlaybackHandler {
 
         const queue = this.audioQueues.get(guildId)!;
         queue.push(audioData);
-        logger.debug(
-            `[AudioPlayback] Added audio chunk to queue for guild ${guildId}, queue length: ${queue.length}`
-        );
 
         this.ensurePipeline(connection);
 
@@ -94,9 +88,6 @@ export class AudioPlaybackHandler {
         pipeline.getOpusEncoder().once('error', handleOpusEncoderError);
 
         player.on(AudioPlayerStatus.Idle, () => {
-            logger.debug(
-                `[AudioPlayback] Player idle for guild ${guildId}, checking for more audio`
-            );
             this.processAudioQueue(connection)
                 .catch((error: Error) => {
                     logger.error(
@@ -144,7 +135,6 @@ export class AudioPlaybackHandler {
         const queue = this.audioQueues.get(guildId);
 
         if (!queue || queue.length === 0) {
-            logger.debug(`[AudioPlayback] Queue is empty for guild ${guildId}`);
             return;
         }
 

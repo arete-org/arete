@@ -28,6 +28,10 @@ import {
     cleanupVoiceConnection,
 } from '../events/VoiceStateHandler.js';
 import { runtimeConfig } from '../config.js';
+import {
+    supportedOpenAITtsVoices,
+    type InternalTtsVoiceId,
+} from '@footnote/contracts/providers';
 
 /**
  * @name call
@@ -51,6 +55,18 @@ const callCommand: Command = {
                 .setRequired(true)
                 .addChannelTypes(ChannelType.GuildVoice)
         )
+        .addStringOption((option) => {
+            option
+                .setName('voice')
+                .setDescription(
+                    "Optional voice override for this call (defaults to the bot's configured voice)"
+                )
+                .setRequired(false);
+            supportedOpenAITtsVoices.forEach((voice) => {
+                option.addChoices({ name: voice, value: voice });
+            });
+            return option;
+        })
         .addStringOption((option) =>
             option // Debug options only available to the bot owner/superuser
                 .setName('debug_options')
@@ -72,6 +88,9 @@ const callCommand: Command = {
         let voiceConnection: VoiceConnection | null = null;
 
         const debugOption = interaction.options.getString('debug_options');
+        const voiceOption = interaction.options.getString(
+            'voice'
+        ) as InternalTtsVoiceId | null;
 
         // Check rate limit per user, channel, and guild
         // Bypass for developer user
@@ -222,6 +241,9 @@ const callCommand: Command = {
                 channelId: voiceChannel.id,
                 guildId: voiceChannel.guild.id,
                 adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+                // DAVE (E2EE) must remain enabled; Discord now requires it for
+                // non-stage voice calls, so do not disable encryption here.
+                daveEncryption: true,
                 selfDeaf: false,
                 selfMute: false,
             });
@@ -247,6 +269,12 @@ const callCommand: Command = {
                 voiceChannel.guild.id,
                 interaction.user.id
             );
+            if (voiceOption) {
+                voiceStateHandler.registerInitiatingVoice(
+                    voiceChannel.guild.id,
+                    voiceOption
+                );
+            }
             logger.debug(
                 `Registered initiating user ${interaction.user.id} for guild ${voiceChannel.guild.id}`
             );

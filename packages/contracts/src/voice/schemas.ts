@@ -11,6 +11,8 @@ import {
     internalTtsModels,
     internalTtsVoices,
     supportedOpenAIRealtimeModels,
+    supportedOpenAIRealtimeTurnDetections,
+    supportedOpenAIRealtimeVadEagerness,
 } from '../providers.js';
 
 /**
@@ -111,6 +113,34 @@ const InternalVoiceRealtimeOptionsSchema = z
         voice: z.enum(internalTtsVoices).optional(),
         temperature: z.number().min(0).max(2).optional(),
         maxResponseOutputTokens: z.number().int().min(1).max(4096).optional(),
+        turnDetection: z.enum(supportedOpenAIRealtimeTurnDetections).optional(),
+        turnDetectionConfig: z
+            .object({
+                createResponse: z.boolean().optional(),
+                interruptResponse: z.boolean().optional(),
+                serverVad: z
+                    .object({
+                        threshold: z.number().min(0).max(1).optional(),
+                        silenceDurationMs: z
+                            .number()
+                            .int()
+                            .min(0)
+                            .optional(),
+                        prefixPaddingMs: z.number().int().min(0).optional(),
+                    })
+                    .strict()
+                    .optional(),
+                semanticVad: z
+                    .object({
+                        eagerness: z
+                            .enum(supportedOpenAIRealtimeVadEagerness)
+                            .optional(),
+                    })
+                    .strict()
+                    .optional(),
+            })
+            .strict()
+            .optional(),
     })
     .strict();
 
@@ -150,6 +180,7 @@ export const InternalVoiceRealtimeClientEventSchema = z.discriminatedUnion(
                 speakerId: z.string().min(1).optional(),
             })
             .strict(),
+        z.object({ type: z.literal('input_audio.commit') }).strict(),
         z.object({ type: z.literal('input_audio.clear') }).strict(),
         z.object({ type: z.literal('response.create') }).strict(),
         z.object({ type: z.literal('session.close') }).strict(),
@@ -181,7 +212,7 @@ export const InternalVoiceRealtimeServerEventSchema = z.discriminatedUnion(
             .strict(),
         z
             .object({
-                type: z.literal('response.completed'),
+                type: z.literal('response.done'),
                 responseId: z.string().min(1).optional(),
                 usage: InternalVoiceRealtimeUsageSchema.optional(),
             })

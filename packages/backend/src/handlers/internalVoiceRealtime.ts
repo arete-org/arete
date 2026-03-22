@@ -59,14 +59,6 @@ const STATUS_MESSAGES: Record<number, string> = {
     503: 'Service Unavailable',
 };
 
-const estimateBase64Bytes = (value: string): number => {
-    if (!value) {
-        return 0;
-    }
-    const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
-    return Math.max(0, Math.floor((value.length * 3) / 4) - padding);
-};
-
 const rejectUpgrade = (
     socket: Duplex,
     statusCode: number,
@@ -146,7 +138,7 @@ export const createInternalVoiceRealtimeHandler = ({
         };
 
         const forwardRuntimeEvent = (event: InternalVoiceRealtimeServerEvent) => {
-            if (event.type === 'response.completed') {
+            if (event.type === 'response.done') {
                 const usage = event.usage;
                 const model = usage?.model ?? 'unknown';
                 const promptTokens = usage?.tokensPrompt ?? 0;
@@ -302,21 +294,23 @@ export const createInternalVoiceRealtimeHandler = ({
             }
 
             if (event.type === 'input_audio.append') {
-                realtimeLogger.debug('Internal voice realtime audio append.', {
-                    audioBytes: estimateBase64Bytes(event.audioBase64),
-                    speakerLabelLength: event.speakerLabel.length,
-                    speakerId: event.speakerId,
-                });
+                // Skip per-chunk logging to keep realtime logs readable.
+            } else if (event.type === 'input_audio.commit') {
+                realtimeLogger.debug('Internal voice realtime audio commit.');
+            } else if (event.type === 'input_audio.clear') {
+                realtimeLogger.debug('Internal voice realtime audio clear.');
             } else if (event.type === 'input_text.create') {
                 realtimeLogger.debug('Internal voice realtime input text.', {
                     textLength: event.text.length,
                     speakerLabelLength: event.speakerLabel?.length,
                     speakerId: event.speakerId,
                 });
+            } else if (event.type === 'response.create') {
+                realtimeLogger.debug('Internal voice realtime response create.');
             } else {
-                realtimeLogger.debug('Internal voice realtime client event.', {
-                    type: event.type,
-                });
+                realtimeLogger.debug(
+                    'Internal voice realtime client event.'
+                );
             }
 
             try {

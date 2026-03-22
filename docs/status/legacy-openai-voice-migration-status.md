@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-03-20
+2026-03-21
 
 ## Purpose
 
@@ -110,3 +110,14 @@ The deletion gate is satisfied for voice.
 Reflect TTS now uses the backend-owned internal voice route. Realtime voice now uses the backend-owned websocket boundary instead of a Discord-local provider socket. `pnpm review` is green, the realtime runtime replays `session.ready` for listeners that subscribe after session creation, the Discord realtime layer no longer carries the old `audio_collected` compatibility path or stale event typing, and the closeout validation confirmed that the active Discord voice product paths route through Footnote-owned backend boundaries instead of provider SDK or provider websocket calls.
 
 In short, the core cutover is in place, the realtime seam is cleaned up, and the branch has reached the intended end state for legacy OpenAI voice removal.
+
+## Addendum: Debugging Outcomes
+
+We hit a post-migration reliability issue where the bot would sometimes miss or delay realtime responses when users relied on Discord voice activity/noise suppression. The root cause was that Discord stops sending audio immediately at end-of-speech, which can prevent provider-side server VAD from observing enough silence to close a turn.
+
+### Changes Made
+
+- Added a silence-tail append on Discord speaking end so server VAD can reliably close a turn even when Discord cuts audio quickly.
+- Added explicit realtime VAD configuration in the Discord runtime config, including `REALTIME_TURN_DETECTION` and optional server/semantic VAD tuning knobs.
+- Added a `/call` voice override option so per-session voices can be selected without changing global config.
+- Standardized the realtime greeting with a configurable template (`REALTIME_GREETING`) using a single `{bot}` placeholder.

@@ -10,6 +10,8 @@ import type {
     InternalTtsModelId,
     InternalTtsVoiceId,
     SupportedOpenAIRealtimeModel,
+    SupportedOpenAIRealtimeTurnDetection,
+    SupportedOpenAIRealtimeVadEagerness,
 } from '../providers.js';
 
 /**
@@ -130,6 +132,36 @@ export type InternalVoiceSessionContext = {
 };
 
 /**
+ * Optional per-session turn detection tuning for realtime voice.
+ */
+export type InternalVoiceRealtimeTurnDetectionConfig = {
+    /**
+     * When true, the provider should automatically create a response after a
+     * detected turn. When false, callers must explicitly request a response.
+     */
+    createResponse?: boolean;
+    /**
+     * When true, the provider may interrupt a response when new user speech is
+     * detected.
+     */
+    interruptResponse?: boolean;
+    /**
+     * Tuning values specific to server-side VAD.
+     */
+    serverVad?: {
+        threshold?: number;
+        silenceDurationMs?: number;
+        prefixPaddingMs?: number;
+    };
+    /**
+     * Tuning values specific to semantic VAD.
+     */
+    semanticVad?: {
+        eagerness?: SupportedOpenAIRealtimeVadEagerness;
+    };
+};
+
+/**
  * @api.operationId: openInternalVoiceRealtime
  * @api.path: GET /api/internal/voice/realtime
  */
@@ -138,6 +170,8 @@ export type InternalVoiceRealtimeOptions = {
     voice?: InternalTtsVoice;
     temperature?: number;
     maxResponseOutputTokens?: number;
+    turnDetection?: SupportedOpenAIRealtimeTurnDetection;
+    turnDetectionConfig?: InternalVoiceRealtimeTurnDetectionConfig;
 };
 
 /**
@@ -173,6 +207,7 @@ export type InternalVoiceRealtimeClientEvent =
           speakerLabel: string;
           speakerId?: string;
       }
+    | { type: 'input_audio.commit' }
     | { type: 'input_audio.clear' }
     | { type: 'response.create' }
     | { type: 'session.close' };
@@ -197,7 +232,7 @@ export type InternalVoiceRealtimeServerEvent =
           text: string;
       }
     | {
-          type: 'response.completed';
+          type: 'response.done';
           responseId?: string;
           usage?: InternalVoiceRealtimeUsage;
       }

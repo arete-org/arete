@@ -15,6 +15,8 @@ import type {
     SupportedLogLevel,
     SupportedNodeEnv,
     SupportedOpenAIRealtimeModel,
+    SupportedOpenAIRealtimeTurnDetection,
+    SupportedOpenAIRealtimeVadEagerness,
     SupportedOpenAITtsVoice,
 } from '@footnote/contracts/providers';
 import { supportedLogLevels } from '@footnote/contracts/providers';
@@ -51,6 +53,16 @@ const VALID_REALTIME_VOICES = new Set<SupportedOpenAITtsVoice>(
     (envSpecByKey.REALTIME_DEFAULT_VOICE.allowedValues ??
         []) as readonly SupportedOpenAITtsVoice[]
 );
+const VALID_REALTIME_TURN_DETECTIONS =
+    new Set<SupportedOpenAIRealtimeTurnDetection>(
+        (envSpecByKey.REALTIME_TURN_DETECTION.allowedValues ??
+            []) as readonly SupportedOpenAIRealtimeTurnDetection[]
+    );
+const VALID_REALTIME_VAD_EAGERNESS =
+    new Set<SupportedOpenAIRealtimeVadEagerness>(
+        (envSpecByKey.REALTIME_VAD_EAGERNESS.allowedValues ??
+            []) as readonly SupportedOpenAIRealtimeVadEagerness[]
+    );
 
 const BOT_INTERACTION_ACTIONS = new Set<SupportedBotInteractionAction>(
     (envSpecByKey.BOT_BACK_AND_FORTH_ACTION.allowedValues ??
@@ -106,6 +118,40 @@ const getNumberEnv = (key: string, defaultValue: number): number => {
     return parsed;
 };
 
+const getOptionalNumberEnv = (
+    key: string,
+    options: { min?: number; max?: number } = {}
+): number | undefined => {
+    const value = process.env[key];
+    if (value === undefined) {
+        return undefined;
+    }
+
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+        bootstrapLogger.warn(
+            `Ignoring invalid numeric value for ${key}: "${value}". Expected a number.`
+        );
+        return undefined;
+    }
+
+    if (options.min !== undefined && parsed < options.min) {
+        bootstrapLogger.warn(
+            `Ignoring ${key} because ${parsed} is below the minimum (${options.min}).`
+        );
+        return undefined;
+    }
+
+    if (options.max !== undefined && parsed > options.max) {
+        bootstrapLogger.warn(
+            `Ignoring ${key} because ${parsed} exceeds the maximum (${options.max}).`
+        );
+        return undefined;
+    }
+
+    return parsed;
+};
+
 const getIntegerEnv = (key: string, defaultValue: number): number => {
     const value = process.env[key];
     if (value === undefined) {
@@ -118,6 +164,40 @@ const getIntegerEnv = (key: string, defaultValue: number): number => {
             `Ignoring invalid numeric value for ${key}: "${value}". Expected a non-negative integer; using default (${defaultValue}).`
         );
         return defaultValue;
+    }
+
+    return parsed;
+};
+
+const getOptionalIntegerEnv = (
+    key: string,
+    options: { min?: number; max?: number } = {}
+): number | undefined => {
+    const value = process.env[key];
+    if (value === undefined) {
+        return undefined;
+    }
+
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+        bootstrapLogger.warn(
+            `Ignoring invalid integer value for ${key}: "${value}".`
+        );
+        return undefined;
+    }
+
+    if (options.min !== undefined && parsed < options.min) {
+        bootstrapLogger.warn(
+            `Ignoring ${key} because ${parsed} is below the minimum (${options.min}).`
+        );
+        return undefined;
+    }
+
+    if (options.max !== undefined && parsed > options.max) {
+        bootstrapLogger.warn(
+            `Ignoring ${key} because ${parsed} exceeds the maximum (${options.max}).`
+        );
+        return undefined;
     }
 
     return parsed;
@@ -142,6 +222,44 @@ const getBooleanEnv = (key: string, defaultValue: boolean): boolean => {
         `Ignoring invalid boolean for ${key}: "${value}". Using default (${defaultValue}).`
     );
     return defaultValue;
+};
+
+const getOptionalStringEnv = (key: string): string | undefined => {
+    const value = process.env[key];
+    if (value === undefined) {
+        return undefined;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+        bootstrapLogger.warn(
+            `Ignoring ${key} because it was empty after trimming.`
+        );
+        return undefined;
+    }
+
+    return trimmed;
+};
+
+const getOptionalBooleanEnv = (key: string): boolean | undefined => {
+    const value = process.env[key];
+    if (value === undefined) {
+        return undefined;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+        return true;
+    }
+
+    if (normalized === 'false') {
+        return false;
+    }
+
+    bootstrapLogger.warn(
+        `Ignoring invalid boolean for ${key}: "${value}". Expected true or false.`
+    );
+    return undefined;
 };
 
 const getStringArrayEnv = (
@@ -279,6 +397,47 @@ const getRealtimeVoiceEnv = (
 
     bootstrapLogger.warn(
         `Ignoring invalid realtime voice for ${key}: "${value}".`
+    );
+    return undefined;
+};
+
+const getRealtimeTurnDetectionEnv = (
+    key: string,
+    defaultValue: SupportedOpenAIRealtimeTurnDetection
+): SupportedOpenAIRealtimeTurnDetection => {
+    const value = process.env[key];
+    if (!value) {
+        return defaultValue;
+    }
+
+    const normalizedValue =
+        value.trim() as SupportedOpenAIRealtimeTurnDetection;
+    if (VALID_REALTIME_TURN_DETECTIONS.has(normalizedValue)) {
+        return normalizedValue;
+    }
+
+    bootstrapLogger.warn(
+        `Ignoring invalid realtime turn detection for ${key}: "${value}".`
+    );
+    return defaultValue;
+};
+
+const getRealtimeVadEagernessEnv = (
+    key: string
+): SupportedOpenAIRealtimeVadEagerness | undefined => {
+    const value = process.env[key];
+    if (!value) {
+        return undefined;
+    }
+
+    const normalizedValue =
+        value.trim() as SupportedOpenAIRealtimeVadEagerness;
+    if (VALID_REALTIME_VAD_EAGERNESS.has(normalizedValue)) {
+        return normalizedValue;
+    }
+
+    bootstrapLogger.warn(
+        `Ignoring invalid realtime VAD eagerness for ${key}: "${value}".`
     );
     return undefined;
 };
@@ -532,6 +691,68 @@ export const runtimeConfig = {
     realtime: {
         defaultModel: getRealtimeModelEnv('REALTIME_DEFAULT_MODEL'),
         defaultVoice: getRealtimeVoiceEnv('REALTIME_DEFAULT_VOICE'),
+        turnDetection: getRealtimeTurnDetectionEnv(
+            'REALTIME_TURN_DETECTION',
+            envDefaultValues.REALTIME_TURN_DETECTION
+        ),
+        greetingTemplate:
+            getOptionalStringEnv('REALTIME_GREETING') ??
+            envDefaultValues.REALTIME_GREETING,
+        turnDetectionConfig: (() => {
+            const serverVad = {
+                threshold: getOptionalNumberEnv('REALTIME_VAD_THRESHOLD', {
+                    min: 0,
+                    max: 1,
+                }),
+                silenceDurationMs: getOptionalIntegerEnv(
+                    'REALTIME_VAD_SILENCE_MS',
+                    {
+                        min: 0,
+                    }
+                ),
+                prefixPaddingMs: getOptionalIntegerEnv(
+                    'REALTIME_VAD_PREFIX_MS',
+                    {
+                        min: 0,
+                    }
+                ),
+            };
+            const semanticVad = {
+                eagerness: getRealtimeVadEagernessEnv(
+                    'REALTIME_VAD_EAGERNESS'
+                ),
+            };
+            const config = {
+                createResponse: getOptionalBooleanEnv(
+                    'REALTIME_VAD_CREATE_RESPONSE'
+                ),
+                interruptResponse: getOptionalBooleanEnv(
+                    'REALTIME_VAD_INTERRUPT_RESPONSE'
+                ),
+                serverVad,
+                semanticVad,
+            };
+
+            const hasServerVad = Object.values(serverVad).some(
+                (value) => value !== undefined
+            );
+            const hasSemanticVad = Object.values(semanticVad).some(
+                (value) => value !== undefined
+            );
+            const hasTopLevel =
+                config.createResponse !== undefined ||
+                config.interruptResponse !== undefined;
+
+            if (!hasServerVad && !hasSemanticVad && !hasTopLevel) {
+                return undefined;
+            }
+
+            return {
+                ...config,
+                serverVad: hasServerVad ? serverVad : undefined,
+                semanticVad: hasSemanticVad ? semanticVad : undefined,
+            };
+        })(),
     },
     engagementWeights: {
         mention: getNumberEnv(

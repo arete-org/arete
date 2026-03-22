@@ -18,6 +18,7 @@ import { Event } from './Event.js';
 import { getVoiceConnection, VoiceConnection } from '@discordjs/voice';
 import { RealtimeSession } from '../utils/realtimeService.js';
 import { logger } from '../utils/logger.js';
+import { runtimeConfig } from '../config.js';
 import { VoiceSessionManager } from '../voice/VoiceSessionManager.js';
 import { AudioCaptureHandler } from '../voice/AudioCaptureHandler.js';
 import { AudioPlaybackHandler } from '../voice/AudioPlaybackHandler.js';
@@ -28,6 +29,7 @@ import {
     RealtimeContextParticipant,
 } from '../utils/prompting/RealtimeContextBuilder.js';
 import type { InternalVoiceRealtimeUsage } from '@footnote/contracts/voice';
+import type { InternalTtsVoiceId } from '@footnote/contracts/providers';
 
 type ClientWithHandlers = Client & {
     handlers?: {
@@ -47,6 +49,7 @@ export class VoiceStateHandler extends Event {
     private connectionManager: VoiceConnectionManager;
     private client: Client;
     private realtimeContextBuilder: RealtimeContextBuilder;
+    private initiatingVoices: Map<string, InternalTtsVoiceId> = new Map();
 
     constructor(client: Client) {
         super({
@@ -163,6 +166,13 @@ export class VoiceStateHandler extends Event {
         this.userVoiceStateHandler.registerInitiatingUser(guildId, userId);
     }
 
+    public registerInitiatingVoice(
+        guildId: string,
+        voice: InternalTtsVoiceId
+    ): void {
+        this.initiatingVoices.set(guildId, voice);
+    }
+
     public async createSession(
         guildId: string,
         channelId: string
@@ -213,6 +223,7 @@ export class VoiceStateHandler extends Event {
             guildId,
             ignoredUserIds
         );
+        this.initiatingVoices.delete(guildId);
 
         logger.info(
             `Voice session created for guild ${guildId} in channel ${channelId}`
@@ -230,6 +241,7 @@ export class VoiceStateHandler extends Event {
 
         this.sessionManager.removeSession(guildId);
         this.userVoiceStateHandler.clearInitiatingUser(guildId);
+        this.initiatingVoices.delete(guildId);
         this.audioCaptureHandler.cleanupGuild(guildId);
         this.audioPlaybackHandler.cleanupGuild(guildId);
     }
@@ -281,6 +293,7 @@ export class VoiceStateHandler extends Event {
                 guildId,
                 ignoredUserIds
             );
+            this.initiatingVoices.delete(guildId);
         }
 
         try {
@@ -304,8 +317,17 @@ export class VoiceStateHandler extends Event {
         const context = this.realtimeContextBuilder.buildContext({
             participants,
         });
+        const voiceOverride = this.initiatingVoices.get(guildId);
         const realtimeSession = new RealtimeSession({
             context: context.sessionContext,
+            model: runtimeConfig.realtime.defaultModel ?? undefined,
+            voice:
+                voiceOverride ??
+                runtimeConfig.realtime.defaultVoice ??
+                undefined,
+            turnDetection: runtimeConfig.realtime.turnDetection,
+            turnDetectionConfig:
+                runtimeConfig.realtime.turnDetectionConfig ?? undefined,
         });
 
         // Attach listeners only once
@@ -337,7 +359,7 @@ export class VoiceStateHandler extends Event {
                 logger.info(`[BOT GREETING] ${text}`)
             );
             realtimeSession.on(
-                'response.completed',
+                'response.done',
                 (event: {
                     response_id?: string;
                     usage?: InternalVoiceRealtimeUsage;

@@ -329,7 +329,7 @@ test('internal realtime handler starts a session and forwards session.ready to t
         assert.deepEqual(readyMessage, { type: 'session.ready' });
 
         session.emitServerEvent({
-            type: 'response.completed',
+            type: 'response.done',
             responseId: 'resp_123',
             usage: {
                 tokensPrompt: 50,

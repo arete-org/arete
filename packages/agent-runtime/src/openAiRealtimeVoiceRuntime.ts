@@ -10,6 +10,7 @@ import WebSocket from 'ws';
 import type {
     InternalVoiceRealtimeOptions,
     InternalVoiceRealtimeServerEvent,
+    InternalVoiceRealtimeTurnDetectionConfig,
     InternalVoiceRealtimeUsage,
 } from '@footnote/contracts/voice';
 import type {
@@ -45,6 +46,15 @@ const DEFAULT_MODEL = 'gpt-realtime-mini';
 const DEFAULT_VOICE = 'echo';
 // OpenAI realtime audio is 24kHz PCM16 mono.
 const REALTIME_SAMPLE_RATE = 24000;
+type TurnDetectionConfig = {
+    type: 'server_vad' | 'semantic_vad';
+    create_response?: boolean;
+    interrupt_response?: boolean;
+    eagerness?: 'low' | 'medium' | 'high' | 'auto';
+    threshold?: number;
+    silence_duration_ms?: number;
+    prefix_padding_ms?: number;
+};
 
 const createRequestAbortContext = (
     requestSignal: AbortSignal | undefined,
@@ -202,20 +212,23 @@ const mapServerEvent = (
         };
     }
 
-    if (type === 'response.text.delta') {
+    if (type === 'response.output_text.delta') {
         return {
             type: 'output_text.delta',
             text: typeof rawEvent.delta === 'string' ? rawEvent.delta : '',
         };
     }
 
-    if (type === 'response.completed') {
+    if (type === 'response.done') {
         const usage = extractRealtimeUsage(rawEvent);
+        const responsePayload = asRecord(rawEvent.response);
         return {
-            type: 'response.completed',
+            type: 'response.done',
             responseId:
                 typeof rawEvent.response_id === 'string'
                     ? rawEvent.response_id
+                    : typeof responsePayload?.id === 'string'
+                      ? responsePayload.id
                     : undefined,
             usage,
         };
@@ -277,20 +290,49 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
                 const rawType =
                     typeof parsed.type === 'string' ? parsed.type : 'unknown';
                 if (
-                    rawType !== 'response.output_audio.delta' &&
-                    rawType !== 'response.text.delta'
+                    rawType === 'input_audio_buffer.speech_started' ||
+                    rawType === 'input_audio_buffer.speech_stopped' ||
+                    rawType === 'input_audio_buffer.committed' ||
+                    rawType === 'input_audio_buffer.cleared'
                 ) {
                     this.logger?.debug?.(
-                        'OpenAI realtime event received.',
+                        `OpenAI realtime event: ${rawType}`,
                         {
                             type: rawType,
+                            eventId:
+                                typeof parsed.event_id === 'string'
+                                    ? parsed.event_id
+                                    : undefined,
+                            itemId:
+                                typeof parsed.item_id === 'string'
+                                    ? parsed.item_id
+                                    : undefined,
+                            audioStartMs:
+                                typeof parsed.audio_start_ms === 'number'
+                                    ? parsed.audio_start_ms
+                                    : undefined,
+                            audioEndMs:
+                                typeof parsed.audio_end_ms === 'number'
+                                    ? parsed.audio_end_ms
+                                    : undefined,
                         }
+                    );
+                } else if (rawType.endsWith('.delta')) {
+                    // Delta events are extremely chatty; skip logging to keep
+                    // voice sessions readable while streaming.
+                } else {
+                    this.logger?.debug?.(
+                        `OpenAI realtime event: ${rawType}`,
+                        { type: rawType }
                     );
                 }
                 const mapped = mapServerEvent(parsed);
                 if (mapped) {
                     this.emitEvent(mapped);
-                } else if (rawType !== 'unknown') {
+                } else if (
+                    rawType !== 'unknown' &&
+                    !rawType.endsWith('.delta')
+                ) {
                     this.logger?.debug?.(
                         'OpenAI realtime event ignored (unmapped).',
                         { type: rawType }
@@ -416,6 +458,9 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
                 });
                 return;
             }
+            case 'input_audio.commit':
+                this.sendPayload({ type: 'input_audio_buffer.commit' });
+                return;
             case 'input_audio.clear':
                 this.sendPayload({ type: 'input_audio_buffer.clear' });
                 return;
@@ -445,7 +490,8 @@ const sendSessionConfig = (
     ws: WebSocket,
     instructions: string,
     model: NonNullable<InternalVoiceRealtimeOptions['model']>,
-    voice: NonNullable<InternalVoiceRealtimeOptions['voice']>
+    voice: NonNullable<InternalVoiceRealtimeOptions['voice']>,
+    turnDetection: TurnDetectionConfig
 ): void => {
     const payload = {
         type: 'session.update',
@@ -460,12 +506,10 @@ const sendSessionConfig = (
                         type: 'audio/pcm',
                         rate: REALTIME_SAMPLE_RATE,
                     },
-                        turn_detection: {
-                            type: 'server_vad',
-                        },
-                    },
-                    output: {
-                        format: {
+                    turn_detection: turnDetection,
+                },
+                output: {
+                    format: {
                         type: 'audio/pcm',
                         rate: REALTIME_SAMPLE_RATE,
                     },
@@ -476,6 +520,35 @@ const sendSessionConfig = (
     };
 
     ws.send(JSON.stringify(payload));
+};
+
+const buildTurnDetectionConfig = (
+    mode: InternalVoiceRealtimeOptions['turnDetection'] | undefined,
+    config: InternalVoiceRealtimeTurnDetectionConfig | undefined
+): TurnDetectionConfig => {
+    const createResponse = config?.createResponse ?? true;
+    const interruptResponse =
+        typeof config?.interruptResponse === 'boolean'
+            ? config.interruptResponse
+            : undefined;
+
+    if (mode === 'semantic_vad') {
+        return {
+            type: 'semantic_vad',
+            eagerness: config?.semanticVad?.eagerness ?? 'auto',
+            create_response: createResponse,
+            interrupt_response: interruptResponse,
+        };
+    }
+
+    return {
+        type: 'server_vad',
+        create_response: createResponse,
+        interrupt_response: interruptResponse,
+        threshold: config?.serverVad?.threshold,
+        silence_duration_ms: config?.serverVad?.silenceDurationMs,
+        prefix_padding_ms: config?.serverVad?.prefixPaddingMs,
+    };
 };
 
 const connectWebSocket = async (
@@ -672,18 +745,23 @@ export const createOpenAiRealtimeVoiceRuntime = ({
                     ws,
                     abortContext.signal
                 );
+                const turnDetectionConfig = buildTurnDetectionConfig(
+                    request.options?.turnDetection,
+                    request.options?.turnDetectionConfig
+                );
                 logger?.debug?.('Sending OpenAI realtime session.update.', {
                     model: resolvedModel,
                     voice: resolvedVoice,
                     inputSampleRate: REALTIME_SAMPLE_RATE,
                     outputSampleRate: REALTIME_SAMPLE_RATE,
-                    turnDetection: 'server_vad',
+                    turnDetection: turnDetectionConfig.type,
                 });
                 sendSessionConfig(
                     ws,
                     request.instructions,
                     resolvedModel,
-                    resolvedVoice
+                    resolvedVoice,
+                    turnDetectionConfig
                 );
                 await readyPromise;
                 logger?.debug?.('OpenAI realtime session ready.', {

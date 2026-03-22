@@ -118,6 +118,40 @@ export type SupportedOpenAIRealtimeModel =
     (typeof supportedOpenAIRealtimeModels)[number];
 
 /**
+ * OpenAI realtime turn detection modes supported by the bot runtime.
+ */
+export const supportedOpenAIRealtimeTurnDetections = [
+    'server_vad',
+    'semantic_vad',
+] as const;
+
+/**
+ * One supported OpenAI realtime turn detection mode.
+ */
+export type SupportedOpenAIRealtimeTurnDetection =
+    (typeof supportedOpenAIRealtimeTurnDetections)[number];
+
+/**
+ * OpenAI realtime semantic VAD eagerness values supported by shared config.
+ */
+export const supportedOpenAIRealtimeVadEagerness = [
+    'low',
+    'medium',
+    'high',
+    'auto',
+] as const;
+
+/**
+ * One supported semantic VAD eagerness value.
+ */
+export type SupportedOpenAIRealtimeVadEagerness =
+    (typeof supportedOpenAIRealtimeVadEagerness)[number];
+
+// Legacy alias retained for any downstream imports during refactors.
+export type SupportedOpenAIRealtimeVadeagerness =
+    SupportedOpenAIRealtimeVadEagerness;
+
+/**
  * Curated text models accepted by the trusted internal image route.
  * This currently matches the shared OpenAI text registry exactly.
  */

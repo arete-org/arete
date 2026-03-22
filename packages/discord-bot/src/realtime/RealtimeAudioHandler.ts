@@ -23,8 +23,8 @@ const audioLogger =
 /**
  * Streams PCM audio to the backend realtime voice boundary.
  *
- * The backend session uses server VAD, so the provider owns turn boundaries
- * and the Discord client only appends audio bytes.
+ * The backend session uses server-managed turn detection, so Discord streams
+ * audio bytes and lets the provider decide when to commit/respond.
  */
 export class RealtimeAudioHandler {
     public async sendAudio(
@@ -44,10 +44,6 @@ export class RealtimeAudioHandler {
             speakerLabel,
             speakerId,
         });
-
-        audioLogger.debug(
-            `[realtime] Sent audio chunk (${audioBuffer.length} bytes) for ${speakerLabel}`
-        );
     }
 
     public clearAudio(

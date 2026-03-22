@@ -22,9 +22,11 @@
         "@footnote/config-spec": "workspace:*",
         "@footnote/contracts": "workspace:*",
         "@footnote/prompts": "workspace:*",
+        "@discordjs/opus": "catalog:",
         "@discordjs/voice": "catalog:",
         "@openai/agents": "catalog:",
         "@sapphire/shapeshift": "catalog:",
+        "bufferutil": "catalog:",
         "body-parser": "catalog:",
         "cloudinary": "catalog:",
         "date-fns": "catalog:",
@@ -45,6 +47,7 @@
         "unist-util-visit": "^5.1.0",
         "winston": "catalog:",
         "winston-daily-rotate-file": "catalog:",
+        "zlib-sync": "catalog:",
         "ws": "catalog:"
     },
     "devDependencies": {
