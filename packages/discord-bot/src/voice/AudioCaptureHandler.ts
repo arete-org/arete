@@ -402,8 +402,6 @@ export class AudioCaptureHandler extends EventEmitter {
             audioCaptureLogger.error(`[${captureKey}] Opus stream error:`, err);
             const shouldRetry = this.handleDecryptFailure(
                 captureKey,
-                guildId,
-                userId,
                 receiver,
                 err
             );
@@ -535,8 +533,6 @@ export class AudioCaptureHandler extends EventEmitter {
 
     private handleDecryptFailure(
         captureKey: string,
-        guildId: string,
-        userId: string,
         receiver: VoiceReceiver,
         error: Error
     ): boolean {

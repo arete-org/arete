@@ -8,6 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WebSocketServer } from 'ws';
+import type { Data } from 'ws';
 import type WebSocket from 'ws';
 
 import { RealtimeWebSocketManager } from '../src/realtime/RealtimeWebSocketManager.js';
@@ -42,7 +43,7 @@ test('RealtimeWebSocketManager connects, dispatches events, and resets on close'
     });
 
     const manager = new RealtimeWebSocketManager();
-    const rawMessagePromise = waitForEvent<WebSocket.RawData>((resolve) => {
+    const rawMessagePromise = waitForEvent<Data>((resolve) => {
         manager.onMessage((data) => resolve(data));
     });
     const eventPromise = waitForEvent<void>((resolve) => {
