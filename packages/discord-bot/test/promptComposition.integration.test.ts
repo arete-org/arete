@@ -15,7 +15,7 @@ import path from 'node:path';
 import { createDiscordPromptRegistry } from '../src/config/promptRegistryFactory.js';
 import {
     prependProfileOverlaySystemMessageToConversation,
-    renderPromptWithActivePersonaLayer,
+    renderPromptLayersWithActivePersona,
 } from '../src/config/promptComposition.js';
 import type { BotProfileConfig } from '../src/config/profile.js';
 
@@ -51,11 +51,11 @@ test('shared override + active persona layer preserve expected precedence', () =
         const registry = createDiscordPromptRegistry(overridePath);
         const profile = createProfile();
 
-        const composedPrompt = renderPromptWithActivePersonaLayer({
+        const composedPrompt = renderPromptLayersWithActivePersona({
             registry,
             profile,
             systemKeys: ['discord.image.system'],
-            defaultPersonaKeys: ['discord.image.persona.footnote'],
+            personaKeys: ['discord.image.persona.footnote'],
             usage: 'image.system',
             variables: {
                 botProfileDisplayName: profile.displayName,
@@ -104,11 +104,11 @@ test('malformed shared overrides fail open while active persona overlays still a
         );
 
         const registry = createDiscordPromptRegistry(overridePath);
-        const prompt = renderPromptWithActivePersonaLayer({
+        const prompt = renderPromptLayersWithActivePersona({
             registry,
             profile: createProfile(),
             systemKeys: ['discord.image.system'],
-            defaultPersonaKeys: ['discord.image.persona.footnote'],
+            personaKeys: ['discord.image.persona.footnote'],
             usage: 'image.system',
             variables: {
                 botProfileDisplayName: 'Footnote',

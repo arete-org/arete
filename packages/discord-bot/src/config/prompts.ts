@@ -14,7 +14,7 @@ import { promptConfigPath, runtimeConfig } from './runtime.js';
 import { createDiscordPromptRegistry } from './promptRegistryFactory.js';
 import {
     prependProfileOverlaySystemMessageToConversation,
-    renderPromptWithActivePersonaLayer,
+    renderPromptLayersWithActivePersona,
     type PromptConversationMessage,
     type PromptConversationOverlayResult,
 } from './promptComposition.js';
@@ -41,6 +41,31 @@ const REQUIRED_PROMPT_KEYS: PromptKey[] = [
     'discord.summarizer.system',
 ];
 
+const promptSystemKeysByUsage = {
+    'image.system': ['discord.image.system'],
+    'image.developer': ['discord.image.developer'],
+    realtime: ['conversation.shared.system', 'discord.realtime.system'],
+    reflect: ['conversation.shared.system', 'discord.chat.system'],
+    provenance: ['conversation.shared.system', 'discord.chat.system'],
+} as const satisfies Record<ProfilePromptOverlayUsage, readonly PromptKey[]>;
+
+const promptPersonaKeysByUsage = {
+    'image.system': ['discord.image.persona.footnote'],
+    'image.developer': ['discord.image.persona.footnote'],
+    realtime: [
+        'conversation.shared.persona.footnote',
+        'discord.realtime.persona.footnote',
+    ],
+    reflect: [
+        'conversation.shared.persona.footnote',
+        'discord.chat.persona.footnote',
+    ],
+    provenance: [
+        'conversation.shared.persona.footnote',
+        'discord.chat.persona.footnote',
+    ],
+} as const satisfies Record<ProfilePromptOverlayUsage, readonly PromptKey[]>;
+
 // Fail fast during startup so missing prompt definitions never surface mid-request.
 promptRegistry.assertKeys(REQUIRED_PROMPT_KEYS);
 
@@ -57,57 +82,6 @@ export const renderPrompt = (
     });
 
 /**
- * Resolves the system prompt layers for a given usage context.
- */
-const resolveSystemPromptKeys = (
-    key: PromptKey,
-    usage: ProfilePromptOverlayUsage
-): readonly PromptKey[] => {
-    switch (usage) {
-        case 'image.system':
-        case 'image.developer':
-            return [key];
-        case 'realtime':
-            return ['conversation.shared.system', key];
-        case 'reflect':
-        case 'provenance':
-            return ['conversation.shared.system', key];
-        default:
-            return ['conversation.shared.system', key];
-    }
-};
-
-/**
- * Resolves the default persona layers for a given usage context when no
- * runtime overlay is configured.
- */
-const resolveDefaultPersonaPromptKeys = (
-    usage: ProfilePromptOverlayUsage
-): readonly PromptKey[] => {
-    switch (usage) {
-        case 'image.system':
-        case 'image.developer':
-            return ['discord.image.persona.footnote'];
-        case 'realtime':
-            return [
-                'conversation.shared.persona.footnote',
-                'discord.realtime.persona.footnote',
-            ];
-        case 'reflect':
-        case 'provenance':
-            return [
-                'conversation.shared.persona.footnote',
-                'discord.chat.persona.footnote',
-            ];
-        default:
-            return [
-                'conversation.shared.persona.footnote',
-                'discord.chat.persona.footnote',
-            ];
-    }
-};
-
-/**
  * Prompt resolution order for Discord bot generation:
  * 1) shared defaults.yaml
  * 2) optional PROMPT_CONFIG_PATH override for the same key
@@ -116,15 +90,14 @@ const resolveDefaultPersonaPromptKeys = (
  * 5) one active persona layer (overlay when configured, otherwise shared + surface default persona)
  */
 export const renderPromptWithProfileOverlay = (
-    key: PromptKey,
     usage: ProfilePromptOverlayUsage,
     variables: PromptVariables = {}
 ): string =>
-    renderPromptWithActivePersonaLayer({
+    renderPromptLayersWithActivePersona({
         registry: promptRegistry,
         profile: runtimeConfig.profile,
-        systemKeys: resolveSystemPromptKeys(key, usage),
-        defaultPersonaKeys: resolveDefaultPersonaPromptKeys(usage),
+        systemKeys: promptSystemKeysByUsage[usage],
+        personaKeys: promptPersonaKeysByUsage[usage],
         usage,
         variables: {
             botProfileDisplayName: runtimeConfig.profile.displayName,

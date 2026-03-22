@@ -39,16 +39,16 @@ type ActivePersonaRenderInput = {
     registry: PromptRegistry;
     profile: BotProfileConfig;
     systemKeys: readonly PromptKey[];
-    defaultPersonaKeys: readonly PromptKey[];
+    personaKeys: readonly PromptKey[];
     usage: ProfilePromptOverlayUsage;
     variables?: PromptVariables;
 };
 
 /**
- * Renders one core prompt plus exactly one active persona layer.
+ * Renders the system prompt layers plus exactly one active persona layer.
  * If a profile overlay exists, it replaces the default persona layer.
  */
-export const renderPromptWithActivePersonaLayer = (
+export const renderPromptLayersWithActivePersona = (
     input: ActivePersonaRenderInput
 ): string => {
     const systemPrompt = renderPromptBundle(
@@ -64,7 +64,7 @@ export const renderPromptWithActivePersonaLayer = (
         overlayPersonaPrompt ??
         renderPromptBundle(
             input.registry,
-            input.defaultPersonaKeys,
+            input.personaKeys,
             input.variables
         );
 

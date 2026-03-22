@@ -7,8 +7,7 @@
  */
 import type { InternalVoiceSessionContext } from '@footnote/contracts/voice';
 import {
-    renderConversationSystemPrompt,
-    renderDefaultConversationPersonaPrompt,
+    renderConversationPromptLayers,
 } from './conversationPromptLayers.js';
 import { buildProfileOverlaySystemMessage } from './profilePromptOverlay.js';
 import { runtimeConfig } from '../../config.js';
@@ -64,9 +63,9 @@ const buildRealtimePersonaLayer = (): string => {
         return overlayMessage;
     }
 
-    return renderDefaultConversationPersonaPrompt('discord-realtime', {
+    return renderConversationPromptLayers('discord-realtime', {
         botProfileDisplayName: runtimeConfig.profile.displayName,
-    });
+    }).personaPrompt;
 };
 
 const formatParticipantRoster = (
@@ -113,12 +112,12 @@ const formatTranscriptBlock = (transcripts?: string[]): string => {
 export const buildRealtimeInstructions = (
     context: InternalVoiceSessionContext
 ): string => {
-    const basePrompt = renderConversationSystemPrompt('discord-realtime', {
+    const promptLayers = renderConversationPromptLayers('discord-realtime', {
         botProfileDisplayName: runtimeConfig.profile.displayName,
     });
     const personaLayer = buildRealtimePersonaLayer();
     const roster = formatParticipantRoster(context.participants);
     const transcriptBlock = formatTranscriptBlock(context.transcripts);
 
-    return `${basePrompt.trimEnd()}\n\n${personaLayer}\n\nParticipants currently in the voice channel:\n${roster}${transcriptBlock}`.trim();
+    return `${promptLayers.systemPrompt.trimEnd()}\n\n${personaLayer}\n\nParticipants currently in the voice channel:\n${roster}${transcriptBlock}`.trim();
 };

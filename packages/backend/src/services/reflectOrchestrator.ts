@@ -11,8 +11,7 @@ import type {
     ReflectConversationMessage,
 } from '@footnote/contracts/web';
 import {
-    renderConversationSystemPrompt,
-    renderDefaultConversationPersonaPrompt,
+    renderConversationPromptLayers,
 } from './prompts/conversationPromptLayers.js';
 import {
     createReflectService,
@@ -100,31 +99,6 @@ const coercePlanForSurface = (
         surfacePolicy: { coercedFrom: plan.action },
     };
 };
-
-/**
- * Resolves the core system prompt key by surface.
- */
-const buildSurfaceSystemPrompt = (
-    surface: PostReflectRequest['surface']
-): string =>
-    surface === 'discord'
-        ? renderConversationSystemPrompt('discord-chat')
-        : renderConversationSystemPrompt('reflect-chat');
-
-/**
- * Resolves the default Footnote persona prompt key by surface.
- */
-const buildSurfacePersonaPrompt = (
-    surface: PostReflectRequest['surface'],
-    botProfileDisplayName: string
-): string =>
-    surface === 'discord'
-        ? renderDefaultConversationPersonaPrompt('discord-chat', {
-              botProfileDisplayName,
-          })
-        : renderDefaultConversationPersonaPrompt('reflect-chat', {
-              botProfileDisplayName,
-          });
 
 const DISCORD_PROFILE_OVERLAY_HEADER = 'BEGIN Bot Profile Overlay';
 
@@ -267,16 +241,21 @@ export const createReflectOrchestrator = ({
                 'Reflect orchestrator applied Discord profile overlay as the active persona layer.'
             );
         }
+        const promptLayers = renderConversationPromptLayers(
+            request.surface === 'discord' ? 'discord-chat' : 'reflect-chat',
+            {
+                botProfileDisplayName,
+            }
+        );
         const personaPrompt =
-            extractedPersona.personaPrompt ??
-            buildSurfacePersonaPrompt(request.surface, botProfileDisplayName);
+            extractedPersona.personaPrompt ?? promptLayers.personaPrompt;
 
         const conversationMessages: Array<
             Pick<ReflectConversationMessage, 'role' | 'content'>
         > = [
             {
                 role: 'system',
-                content: buildSurfaceSystemPrompt(request.surface),
+                content: promptLayers.systemPrompt,
             },
             {
                 role: 'system',

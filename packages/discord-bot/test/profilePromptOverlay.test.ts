@@ -16,7 +16,7 @@ import {
 } from '../src/config/profilePromptOverlay.js';
 import {
     prependProfileOverlaySystemMessageToConversation,
-    renderPromptWithActivePersonaLayer,
+    renderPromptLayersWithActivePersona,
 } from '../src/config/promptComposition.js';
 import type { BotProfileConfig } from '../src/config/profile.js';
 
@@ -90,13 +90,13 @@ test('buildProfileOverlaySystemMessage is deterministic for file-based overlays'
     assert.match(first, /Usage Context: provenance/);
 });
 
-test('renderPromptWithActivePersonaLayer uses overlay as the active persona layer', () => {
+test('renderPromptLayersWithActivePersona uses overlay as the active persona layer', () => {
     const registry = createPromptRegistry();
-    const prompt = renderPromptWithActivePersonaLayer({
+    const prompt = renderPromptLayersWithActivePersona({
         registry,
         profile: createProfile(),
         systemKeys: ['discord.image.system'],
-        defaultPersonaKeys: ['discord.image.persona.footnote'],
+        personaKeys: ['discord.image.persona.footnote'],
         usage: 'image.system',
         variables: {
             botProfileDisplayName: 'Footnote',
@@ -115,9 +115,9 @@ test('renderPromptWithActivePersonaLayer uses overlay as the active persona laye
     );
 });
 
-test('renderPromptWithActivePersonaLayer falls back to default Footnote persona when no overlay exists', () => {
+test('renderPromptLayersWithActivePersona falls back to default Footnote persona when no overlay exists', () => {
     const registry = createPromptRegistry();
-    const prompt = renderPromptWithActivePersonaLayer({
+    const prompt = renderPromptLayersWithActivePersona({
         registry,
         profile: createProfile({
             promptOverlay: {
@@ -128,7 +128,7 @@ test('renderPromptWithActivePersonaLayer falls back to default Footnote persona 
             },
         }),
         systemKeys: ['discord.image.system'],
-        defaultPersonaKeys: ['discord.image.persona.footnote'],
+        personaKeys: ['discord.image.persona.footnote'],
         usage: 'image.system',
         variables: {
             botProfileDisplayName: 'Footnote',
@@ -139,9 +139,9 @@ test('renderPromptWithActivePersonaLayer falls back to default Footnote persona 
     assert.doesNotMatch(prompt, /BEGIN Bot Profile Overlay/);
 });
 
-test('renderPromptWithActivePersonaLayer supports shared and surface prompt layers', () => {
+test('renderPromptLayersWithActivePersona supports shared and surface prompt layers', () => {
     const registry = createPromptRegistry();
-    const prompt = renderPromptWithActivePersonaLayer({
+    const prompt = renderPromptLayersWithActivePersona({
         registry,
         profile: createProfile({
             promptOverlay: {
@@ -152,7 +152,7 @@ test('renderPromptWithActivePersonaLayer supports shared and surface prompt laye
             },
         }),
         systemKeys: ['conversation.shared.system', 'discord.realtime.system'],
-        defaultPersonaKeys: [
+        personaKeys: [
             'conversation.shared.persona.footnote',
             'discord.realtime.persona.footnote',
         ],

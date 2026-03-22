@@ -59,7 +59,6 @@ export class RealtimeContextBuilder {
                 : '';
 
         const basePrompt = renderPromptWithProfileOverlay(
-            'discord.realtime.system',
             'realtime'
         );
         const instructions = `${basePrompt}\n\nParticipants currently in the voice channel:\n${roster}${transcriptBlock}`;

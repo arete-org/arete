@@ -10,80 +10,54 @@
 import { renderPromptBundle } from '@footnote/prompts';
 import { promptRegistry } from './promptRegistry.js';
 
-export type ConversationSurface =
-    | 'discord-chat'
-    | 'discord-realtime'
-    | 'reflect-chat';
+const surfaceSystemKeys = {
+    'discord-chat': ['conversation.shared.system', 'discord.chat.system'],
+    'discord-realtime': [
+        'conversation.shared.system',
+        'discord.realtime.system',
+    ],
+    'reflect-chat': ['conversation.shared.system', 'reflect.chat.system'],
+} as const;
 
-const resolveSurfaceSystemKeys = (
-    surface: ConversationSurface
-): readonly (
-    | 'conversation.shared.system'
-    | 'discord.chat.system'
-    | 'discord.realtime.system'
-    | 'reflect.chat.system'
-)[] => {
-    switch (surface) {
-        case 'discord-chat':
-            return ['conversation.shared.system', 'discord.chat.system'];
-        case 'discord-realtime':
-            return ['conversation.shared.system', 'discord.realtime.system'];
-        case 'reflect-chat':
-            return ['conversation.shared.system', 'reflect.chat.system'];
-    }
-};
+const surfacePersonaKeys = {
+    'discord-chat': [
+        'conversation.shared.persona.footnote',
+        'discord.chat.persona.footnote',
+    ],
+    'discord-realtime': [
+        'conversation.shared.persona.footnote',
+        'discord.realtime.persona.footnote',
+    ],
+    'reflect-chat': [
+        'conversation.shared.persona.footnote',
+        'reflect.chat.persona.footnote',
+    ],
+} as const;
 
-const resolveSurfacePersonaKeys = (
-    surface: ConversationSurface
-): readonly (
-    | 'conversation.shared.persona.footnote'
-    | 'discord.chat.persona.footnote'
-    | 'discord.realtime.persona.footnote'
-    | 'reflect.chat.persona.footnote'
-)[] => {
-    switch (surface) {
-        case 'discord-chat':
-            return [
-                'conversation.shared.persona.footnote',
-                'discord.chat.persona.footnote',
-            ];
-        case 'discord-realtime':
-            return [
-                'conversation.shared.persona.footnote',
-                'discord.realtime.persona.footnote',
-            ];
-        case 'reflect-chat':
-            return [
-                'conversation.shared.persona.footnote',
-                'reflect.chat.persona.footnote',
-            ];
-    }
-};
+export type ConversationSurface = keyof typeof surfaceSystemKeys;
+
+export interface ConversationPromptLayers {
+    systemPrompt: string;
+    personaPrompt: string;
+}
 
 /**
- * Renders the shared behavioral system layer plus the surface-specific system
- * rules for a backend-owned conversation surface.
+ * Renders both prompt bundles for a backend-owned conversational surface.
+ * Callers keep the system bundle fixed and may replace the persona bundle with
+ * a profile overlay when needed.
  */
-export const renderConversationSystemPrompt = (
+export const renderConversationPromptLayers = (
     surface: ConversationSurface,
     variables: Record<string, string> = {}
-): string =>
-    renderPromptBundle(
+): ConversationPromptLayers => ({
+    systemPrompt: renderPromptBundle(
         promptRegistry,
-        resolveSurfaceSystemKeys(surface),
+        surfaceSystemKeys[surface],
         variables
-    );
-
-/**
- * Renders the default persona bundle for a backend-owned conversation surface.
- * Callers may replace this whole bundle with a profile overlay when needed.
- */
-export const renderDefaultConversationPersonaPrompt = (
-    surface: ConversationSurface,
-    variables: Record<string, string> = {}
-): string =>
-    renderPromptBundle(
+    ),
+    personaPrompt: renderPromptBundle(
         promptRegistry,
-        resolveSurfacePersonaKeys(surface),
+        surfacePersonaKeys[surface],
         variables
-    );
+    ),
+});

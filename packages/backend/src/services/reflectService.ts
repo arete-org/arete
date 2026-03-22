@@ -31,8 +31,7 @@ import {
 import { buildRepoExplainerResponseHint } from './reflectGenerationHints.js';
 import type { ReflectGenerationPlan } from './reflectGenerationTypes.js';
 import {
-    renderConversationSystemPrompt,
-    renderDefaultConversationPersonaPrompt,
+    renderConversationPromptLayers,
 } from './prompts/conversationPromptLayers.js';
 import { logger } from '../utils/logger.js';
 
@@ -295,17 +294,18 @@ export const createReflectService = ({
         question,
     }: RunReflectInput): Promise<PostReflectResponse> => {
         const botProfileDisplayName = resolveBotProfileDisplayName();
+        const promptLayers = renderConversationPromptLayers('reflect-chat', {
+            botProfileDisplayName,
+        });
         // Keep prompt assembly here so the public web reflect path stays stable.
         const messages: RuntimeMessage[] = [
             {
                 role: 'system',
-                content: renderConversationSystemPrompt('reflect-chat'),
+                content: promptLayers.systemPrompt,
             },
             {
                 role: 'system',
-                content: renderDefaultConversationPersonaPrompt('reflect-chat', {
-                    botProfileDisplayName,
-                }),
+                content: promptLayers.personaPrompt,
             },
             { role: 'user', content: question.trim() },
         ];
