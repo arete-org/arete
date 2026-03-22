@@ -20,6 +20,16 @@ test('discord prompt registry renders the same canonical base prompt as the shar
     const discordRegistry = createDiscordPromptRegistry(undefined);
 
     assert.equal(
+        discordRegistry.renderPrompt('conversation.shared.system').content,
+        sharedRegistry.renderPrompt('conversation.shared.system').content
+    );
+    assert.equal(
+        discordRegistry.renderPrompt('conversation.shared.persona.footnote')
+            .content,
+        sharedRegistry.renderPrompt('conversation.shared.persona.footnote')
+            .content
+    );
+    assert.equal(
         discordRegistry.renderPrompt('discord.chat.system').content,
         sharedRegistry.renderPrompt('discord.chat.system').content
     );

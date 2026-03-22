@@ -11,6 +11,8 @@
  * ownership explicit and prevents backend/bot drift.
  */
 export const promptKeys = [
+    'conversation.shared.system',
+    'conversation.shared.persona.footnote',
     'discord.chat.system',
     'discord.chat.persona.footnote',
     'discord.image.system',

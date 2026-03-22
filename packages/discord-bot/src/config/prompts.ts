@@ -27,6 +27,8 @@ import type { ProfilePromptOverlayUsage } from './profilePromptOverlay.js';
 export const promptRegistry = createDiscordPromptRegistry(promptConfigPath);
 
 const REQUIRED_PROMPT_KEYS: PromptKey[] = [
+    'conversation.shared.system',
+    'conversation.shared.persona.footnote',
     'discord.chat.system',
     'discord.chat.persona.footnote',
     'discord.image.system',
@@ -55,32 +57,63 @@ export const renderPrompt = (
     });
 
 /**
- * Resolves the default persona key for a given usage context when no runtime
- * overlay is configured.
+ * Resolves the system prompt layers for a given usage context.
  */
-const resolveDefaultPersonaPromptKey = (
+const resolveSystemPromptKeys = (
+    key: PromptKey,
     usage: ProfilePromptOverlayUsage
-): PromptKey => {
+): readonly PromptKey[] => {
     switch (usage) {
         case 'image.system':
         case 'image.developer':
-            return 'discord.image.persona.footnote';
+            return [key];
         case 'realtime':
-            return 'discord.realtime.persona.footnote';
+            return ['conversation.shared.system', key];
         case 'reflect':
         case 'provenance':
-            return 'discord.chat.persona.footnote';
+            return ['conversation.shared.system', key];
         default:
-            return 'discord.chat.persona.footnote';
+            return ['conversation.shared.system', key];
     }
 };
 
 /**
- * Prompt resolution order for Discord bot text generation:
+ * Resolves the default persona layers for a given usage context when no
+ * runtime overlay is configured.
+ */
+const resolveDefaultPersonaPromptKeys = (
+    usage: ProfilePromptOverlayUsage
+): readonly PromptKey[] => {
+    switch (usage) {
+        case 'image.system':
+        case 'image.developer':
+            return ['discord.image.persona.footnote'];
+        case 'realtime':
+            return [
+                'conversation.shared.persona.footnote',
+                'discord.realtime.persona.footnote',
+            ];
+        case 'reflect':
+        case 'provenance':
+            return [
+                'conversation.shared.persona.footnote',
+                'discord.chat.persona.footnote',
+            ];
+        default:
+            return [
+                'conversation.shared.persona.footnote',
+                'discord.chat.persona.footnote',
+            ];
+    }
+};
+
+/**
+ * Prompt resolution order for Discord bot generation:
  * 1) shared defaults.yaml
  * 2) optional PROMPT_CONFIG_PATH override for the same key
  * 3) variable interpolation
- * 4) one active persona layer (overlay when configured, otherwise default Footnote persona key)
+ * 4) system layers for the active surface
+ * 5) one active persona layer (overlay when configured, otherwise shared + surface default persona)
  */
 export const renderPromptWithProfileOverlay = (
     key: PromptKey,
@@ -90,8 +123,8 @@ export const renderPromptWithProfileOverlay = (
     renderPromptWithActivePersonaLayer({
         registry: promptRegistry,
         profile: runtimeConfig.profile,
-        coreKey: key,
-        defaultPersonaKey: resolveDefaultPersonaPromptKey(usage),
+        systemKeys: resolveSystemPromptKeys(key, usage),
+        defaultPersonaKeys: resolveDefaultPersonaPromptKeys(usage),
         usage,
         variables: {
             botProfileDisplayName: runtimeConfig.profile.displayName,

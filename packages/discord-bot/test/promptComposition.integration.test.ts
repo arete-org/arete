@@ -54,8 +54,8 @@ test('shared override + active persona layer preserve expected precedence', () =
         const composedPrompt = renderPromptWithActivePersonaLayer({
             registry,
             profile,
-            coreKey: 'discord.image.system',
-            defaultPersonaKey: 'discord.image.persona.footnote',
+            systemKeys: ['discord.image.system'],
+            defaultPersonaKeys: ['discord.image.persona.footnote'],
             usage: 'image.system',
             variables: {
                 botProfileDisplayName: profile.displayName,
@@ -107,8 +107,8 @@ test('malformed shared overrides fail open while active persona overlays still a
         const prompt = renderPromptWithActivePersonaLayer({
             registry,
             profile: createProfile(),
-            coreKey: 'discord.image.system',
-            defaultPersonaKey: 'discord.image.persona.footnote',
+            systemKeys: ['discord.image.system'],
+            defaultPersonaKeys: ['discord.image.persona.footnote'],
             usage: 'image.system',
             variables: {
                 botProfileDisplayName: 'Footnote',

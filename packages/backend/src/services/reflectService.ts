@@ -30,7 +30,10 @@ import {
 } from './llmCostRecorder.js';
 import { buildRepoExplainerResponseHint } from './reflectGenerationHints.js';
 import type { ReflectGenerationPlan } from './reflectGenerationTypes.js';
-import { renderPrompt } from './prompts/promptRegistry.js';
+import {
+    renderConversationSystemPrompt,
+    renderDefaultConversationPersonaPrompt,
+} from './prompts/conversationPromptLayers.js';
 import { logger } from '../utils/logger.js';
 
 const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
@@ -296,13 +299,13 @@ export const createReflectService = ({
         const messages: RuntimeMessage[] = [
             {
                 role: 'system',
-                content: renderPrompt('reflect.chat.system').content,
+                content: renderConversationSystemPrompt('reflect-chat'),
             },
             {
                 role: 'system',
-                content: renderPrompt('reflect.chat.persona.footnote', {
+                content: renderDefaultConversationPersonaPrompt('reflect-chat', {
                     botProfileDisplayName,
-                }).content,
+                }),
             },
             { role: 'user', content: question.trim() },
         ];

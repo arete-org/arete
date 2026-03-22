@@ -130,12 +130,13 @@ This is the main architectural seam. If the Discord bot needs realtime voice, it
 
 Realtime prompt composition lives in [realtimePromptComposer.ts](/Users/Jordan/Desktop/footnote/packages/backend/src/services/prompts/realtimePromptComposer.ts). The backend builds one instruction string for the provider session using:
 
-- the base realtime system prompt
-- the active bot profile overlay
+- the shared conversational system layer
+- the realtime voice surface layer
+- one active persona layer (profile overlay when present, otherwise shared Footnote persona plus the realtime persona supplement)
 - the current participant roster
 - optional recent transcript summary
 
-This keeps live voice behavior under backend-owned prompt composition rather than scattering prompt assembly across the Discord layer.
+That means realtime voice now follows the same prompt model as the rest of the project: shared behavioral rules first, surface-specific delivery rules second, and exactly one active persona layer on top.
 
 ## 6. Provider Runtime Adapter
 

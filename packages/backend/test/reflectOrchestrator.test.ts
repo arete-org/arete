@@ -12,7 +12,10 @@ import type { GenerationRuntime } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type { PostReflectRequest } from '@footnote/contracts/web';
 import { createReflectOrchestrator } from '../src/services/reflectOrchestrator.js';
-import { renderPrompt } from '../src/services/prompts/promptRegistry.js';
+import {
+    renderConversationSystemPrompt,
+    renderDefaultConversationPersonaPrompt,
+} from '../src/services/prompts/conversationPromptLayers.js';
 
 const createMetadata = (): ResponseMetadata => ({
     responseId: 'reflect_test_response',
@@ -105,11 +108,11 @@ test('web requests go through planner and are coerced to message when planner pi
     assert.equal(response.message, 'coerced web reply');
     assert.equal(
         finalMessages[0]?.content,
-        renderPrompt('reflect.chat.system').content
+        renderConversationSystemPrompt('reflect-chat')
     );
     assert.equal(
         finalMessages[1]?.content,
-        renderPrompt('reflect.chat.persona.footnote').content
+        renderDefaultConversationPersonaPrompt('reflect-chat')
     );
     assert.match(
         finalMessages[finalMessages.length - 1]?.content ?? '',
@@ -213,11 +216,11 @@ test('message plans pass planner generation options into reflectService', async 
     assert.equal(response.action, 'message');
     assert.equal(
         finalMessages[0]?.content,
-        renderPrompt('discord.chat.system').content
+        renderConversationSystemPrompt('discord-chat')
     );
     assert.equal(
         finalMessages[1]?.content,
-        renderPrompt('discord.chat.persona.footnote').content
+        renderDefaultConversationPersonaPrompt('discord-chat')
     );
 });
 
@@ -279,14 +282,14 @@ test('discord overlay replaces default persona layer in reflect generation', asy
     assert.equal(response.action, 'message');
     assert.equal(
         finalMessages[0]?.content,
-        renderPrompt('discord.chat.system').content
+        renderConversationSystemPrompt('discord-chat')
     );
     assert.match(finalMessages[1]?.content ?? '', /BEGIN Bot Profile Overlay/);
     assert.equal(
         finalMessages.some(
             (message) =>
                 message.content ===
-                renderPrompt('discord.chat.persona.footnote').content
+                renderDefaultConversationPersonaPrompt('discord-chat')
         ),
         false
     );

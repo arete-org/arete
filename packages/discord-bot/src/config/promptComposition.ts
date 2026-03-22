@@ -11,6 +11,7 @@ import type {
     PromptRegistry,
     PromptVariables,
 } from '@footnote/prompts';
+import { renderPromptBundle } from '@footnote/prompts';
 
 import {
     buildProfileOverlaySystemMessage,
@@ -37,8 +38,8 @@ export interface PromptConversationOverlayResult {
 type ActivePersonaRenderInput = {
     registry: PromptRegistry;
     profile: BotProfileConfig;
-    coreKey: PromptKey;
-    defaultPersonaKey: PromptKey;
+    systemKeys: readonly PromptKey[];
+    defaultPersonaKeys: readonly PromptKey[];
     usage: ProfilePromptOverlayUsage;
     variables?: PromptVariables;
 };
@@ -50,20 +51,24 @@ type ActivePersonaRenderInput = {
 export const renderPromptWithActivePersonaLayer = (
     input: ActivePersonaRenderInput
 ): string => {
-    const corePrompt = input.registry.renderPrompt(
-        input.coreKey,
+    const systemPrompt = renderPromptBundle(
+        input.registry,
+        input.systemKeys,
         input.variables
-    ).content;
+    );
     const overlayPersonaPrompt = buildProfileOverlaySystemMessage(
         input.profile,
         input.usage
     );
     const activePersonaPrompt =
         overlayPersonaPrompt ??
-        input.registry.renderPrompt(input.defaultPersonaKey, input.variables)
-            .content;
+        renderPromptBundle(
+            input.registry,
+            input.defaultPersonaKeys,
+            input.variables
+        );
 
-    return `${corePrompt.trimEnd()}\n\n${activePersonaPrompt}`.trim();
+    return `${systemPrompt.trimEnd()}\n\n${activePersonaPrompt}`.trim();
 };
 
 /**

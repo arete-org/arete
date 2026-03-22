@@ -10,7 +10,10 @@ import type {
     PostReflectResponse,
     ReflectConversationMessage,
 } from '@footnote/contracts/web';
-import { renderPrompt } from './prompts/promptRegistry.js';
+import {
+    renderConversationSystemPrompt,
+    renderDefaultConversationPersonaPrompt,
+} from './prompts/conversationPromptLayers.js';
 import {
     createReflectService,
     type CreateReflectServiceOptions,
@@ -105,8 +108,8 @@ const buildSurfaceSystemPrompt = (
     surface: PostReflectRequest['surface']
 ): string =>
     surface === 'discord'
-        ? renderPrompt('discord.chat.system').content
-        : renderPrompt('reflect.chat.system').content;
+        ? renderConversationSystemPrompt('discord-chat')
+        : renderConversationSystemPrompt('reflect-chat');
 
 /**
  * Resolves the default Footnote persona prompt key by surface.
@@ -116,12 +119,12 @@ const buildSurfacePersonaPrompt = (
     botProfileDisplayName: string
 ): string =>
     surface === 'discord'
-        ? renderPrompt('discord.chat.persona.footnote', {
+        ? renderDefaultConversationPersonaPrompt('discord-chat', {
               botProfileDisplayName,
-          }).content
-        : renderPrompt('reflect.chat.persona.footnote', {
+          })
+        : renderDefaultConversationPersonaPrompt('reflect-chat', {
               botProfileDisplayName,
-          }).content;
+          });
 
 const DISCORD_PROFILE_OVERLAY_HEADER = 'BEGIN Bot Profile Overlay';
 

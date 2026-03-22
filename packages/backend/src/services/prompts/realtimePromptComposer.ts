@@ -6,7 +6,10 @@
  * @footnote-ethics: high - Realtime prompt text shapes live voice behavior and user expectations.
  */
 import type { InternalVoiceSessionContext } from '@footnote/contracts/voice';
-import { renderPrompt } from './promptRegistry.js';
+import {
+    renderConversationSystemPrompt,
+    renderDefaultConversationPersonaPrompt,
+} from './conversationPromptLayers.js';
 import { buildProfileOverlaySystemMessage } from './profilePromptOverlay.js';
 import { runtimeConfig } from '../../config.js';
 
@@ -61,9 +64,9 @@ const buildRealtimePersonaLayer = (): string => {
         return overlayMessage;
     }
 
-    return renderPrompt('discord.realtime.persona.footnote', {
+    return renderDefaultConversationPersonaPrompt('discord-realtime', {
         botProfileDisplayName: runtimeConfig.profile.displayName,
-    }).content;
+    });
 };
 
 const formatParticipantRoster = (
@@ -110,9 +113,9 @@ const formatTranscriptBlock = (transcripts?: string[]): string => {
 export const buildRealtimeInstructions = (
     context: InternalVoiceSessionContext
 ): string => {
-    const basePrompt = renderPrompt('discord.realtime.system', {
+    const basePrompt = renderConversationSystemPrompt('discord-realtime', {
         botProfileDisplayName: runtimeConfig.profile.displayName,
-    }).content;
+    });
     const personaLayer = buildRealtimePersonaLayer();
     const roster = formatParticipantRoster(context.participants);
     const transcriptBlock = formatTranscriptBlock(context.transcripts);

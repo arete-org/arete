@@ -95,8 +95,8 @@ test('renderPromptWithActivePersonaLayer uses overlay as the active persona laye
     const prompt = renderPromptWithActivePersonaLayer({
         registry,
         profile: createProfile(),
-        coreKey: 'discord.image.system',
-        defaultPersonaKey: 'discord.image.persona.footnote',
+        systemKeys: ['discord.image.system'],
+        defaultPersonaKeys: ['discord.image.persona.footnote'],
         usage: 'image.system',
         variables: {
             botProfileDisplayName: 'Footnote',
@@ -127,8 +127,8 @@ test('renderPromptWithActivePersonaLayer falls back to default Footnote persona 
                 length: 0,
             },
         }),
-        coreKey: 'discord.image.system',
-        defaultPersonaKey: 'discord.image.persona.footnote',
+        systemKeys: ['discord.image.system'],
+        defaultPersonaKeys: ['discord.image.persona.footnote'],
         usage: 'image.system',
         variables: {
             botProfileDisplayName: 'Footnote',
@@ -137,6 +137,38 @@ test('renderPromptWithActivePersonaLayer falls back to default Footnote persona 
 
     assert.match(prompt, /You are Footnote, the Discord voice of the Footnote project\./);
     assert.doesNotMatch(prompt, /BEGIN Bot Profile Overlay/);
+});
+
+test('renderPromptWithActivePersonaLayer supports shared and surface prompt layers', () => {
+    const registry = createPromptRegistry();
+    const prompt = renderPromptWithActivePersonaLayer({
+        registry,
+        profile: createProfile({
+            promptOverlay: {
+                source: 'none',
+                text: null,
+                path: null,
+                length: 0,
+            },
+        }),
+        systemKeys: ['conversation.shared.system', 'discord.realtime.system'],
+        defaultPersonaKeys: [
+            'conversation.shared.persona.footnote',
+            'discord.realtime.persona.footnote',
+        ],
+        usage: 'realtime',
+        variables: {
+            botProfileDisplayName: 'Footnote',
+        },
+    });
+
+    assert.match(
+        prompt,
+        /You are the response engine for a configured Footnote assistant\./
+    );
+    assert.match(prompt, /VOICE FORMAT/);
+    assert.match(prompt, /You are Footnote, part of the Footnote project\./);
+    assert.match(prompt, /In voice, keep your cadence steady/);
 });
 
 test('prependProfileOverlaySystemMessageToConversation preserves reflect semantics', () => {
