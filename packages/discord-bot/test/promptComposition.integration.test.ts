@@ -64,7 +64,7 @@ test('shared override + active persona layer preserve expected precedence', () =
         const reflectConversation =
             prependProfileOverlaySystemMessageToConversation(
                 profile,
-                'reflect',
+                'chat',
                 [{ role: 'user', content: 'hello' }]
             );
 
@@ -79,7 +79,7 @@ test('shared override + active persona layer preserve expected precedence', () =
         assert.equal(reflectConversation.conversation[0].role, 'system');
         assert.match(
             reflectConversation.conversation[0].content,
-            /Usage Context: reflect/
+            /Usage Context: chat/
         );
         assert.equal(reflectConversation.conversation[1].content, 'hello');
     } finally {

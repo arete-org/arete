@@ -24,9 +24,9 @@ For routes with runtime validation, the current pattern is:
 - shared client response validation in `packages/contracts/src/web/client-core.ts`
 - backend request validation imports those same runtime schemas directly
 
-## Reflection Endpoint
+## Chat Endpoint
 
-Reflection is the shared backend action-routing endpoint for web and Discord surfaces.
+Chat is the shared backend action-routing endpoint for web and Discord surfaces.
 It accepts a transport-neutral conversation payload and returns an action union
 (`message`, `react`, `ignore`, or `image`). Web callers are constrained to
 `message` responses, while trusted internal callers can receive the broader action set.
@@ -35,5 +35,5 @@ Public browser traffic is protected by Turnstile + configured rate limits. When 
 send `X-Session-Id` and `X-Turnstile-Token` headers. `X-Session-Id` is a client-generated
 session identifier that scopes rate limits; if you omit it, the server falls back to IP-based limits.
 
-This endpoint is served at `POST /api/reflect` and is now the canonical backend decision point
-for reflect behavior across packages.
+This endpoint is served at `POST /api/chat` and is now the canonical backend decision point
+for chat behavior across packages.

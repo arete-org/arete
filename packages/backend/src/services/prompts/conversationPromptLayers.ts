@@ -16,7 +16,7 @@ const surfaceSystemKeys = {
         'conversation.shared.system',
         'discord.realtime.system',
     ],
-    'reflect-chat': ['conversation.shared.system', 'reflect.chat.system'],
+    'web-chat': ['conversation.shared.system', 'chat.web.system'],
 } as const;
 
 const surfacePersonaKeys = {
@@ -28,9 +28,9 @@ const surfacePersonaKeys = {
         'conversation.shared.persona.footnote',
         'discord.realtime.persona.footnote',
     ],
-    'reflect-chat': [
+    'web-chat': [
         'conversation.shared.persona.footnote',
-        'reflect.chat.persona.footnote',
+        'chat.web.persona.footnote',
     ],
 } as const;
 

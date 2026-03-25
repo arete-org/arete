@@ -3,7 +3,7 @@
  * @footnote-scope: utility
  * @footnote-module: BackendPromptRegistry
  * @footnote-risk: medium - Wrong binding here can desync backend prompt overrides from the canonical catalog.
- * @footnote-ethics: high - Backend prompt selection shapes canonical reflect behavior and provenance rules.
+ * @footnote-ethics: high - Backend prompt selection shapes canonical chat behavior and provenance rules.
  */
 
 import {

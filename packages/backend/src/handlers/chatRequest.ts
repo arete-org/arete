@@ -1,19 +1,19 @@
 /**
- * @description: Request parsing and client identity helpers for the reflect HTTP handler.
+ * @description: Request parsing and client identity helpers for the chat HTTP handler.
  * @footnote-scope: utility
- * @footnote-module: ReflectRequest
+ * @footnote-module: ChatRequest
  * @footnote-risk: medium - Parsing mistakes can reject valid requests or mis-handle client identity.
  * @footnote-ethics: medium - Accurate validation and identity handling support fair abuse controls.
  */
 import type { IncomingMessage } from 'node:http';
-import type { PostReflectRequest } from '@footnote/contracts/web';
-import { PostReflectRequestSchema } from '@footnote/contracts/web/schemas';
-import type { ReflectFailureResponse } from './reflectResponses.js';
+import type { PostChatRequest } from '@footnote/contracts/web';
+import { PostChatRequestSchema } from '@footnote/contracts/web/schemas';
+import type { ChatFailureResponse } from './chatResponses.js';
 
 /**
- * Parsed reflect request after JSON/body validation.
+ * Parsed chat request after JSON/body validation.
  */
-export type ParsedReflectRequest = PostReflectRequest;
+export type ParsedChatRequest = PostChatRequest;
 
 /**
  * Client identity used for abuse controls.
@@ -31,12 +31,12 @@ export type RequestIdentity = {
  * Parses the POST body, enforces the size cap, and validates the request schema.
  * The helper returns handler-ready failure payloads so the route can stay small.
  */
-export const parseReflectRequest = async (
+export const parseChatRequest = async (
     req: IncomingMessage,
-    maxReflectBodyBytes: number
+    maxChatBodyBytes: number
 ): Promise<
-    | { success: true; data: ParsedReflectRequest }
-    | { success: false; error: ReflectFailureResponse }
+    | { success: true; data: ParsedChatRequest }
+    | { success: false; error: ChatFailureResponse }
 > => {
     let parsedBody: unknown = {};
 
@@ -52,7 +52,7 @@ export const parseReflectRequest = async (
             const contentLength = Number(contentLengthHeader);
             if (
                 Number.isFinite(contentLength) &&
-                contentLength > maxReflectBodyBytes
+                contentLength > maxChatBodyBytes
             ) {
                 // Reject obviously oversized requests before buffering them in memory.
                 req.resume();
@@ -63,7 +63,7 @@ export const parseReflectRequest = async (
                         payload: {
                             error: 'Request payload too large',
                         },
-                        logLabel: `reflect payload-too-large contentLength=${contentLength}`,
+                        logLabel: `chat payload-too-large contentLength=${contentLength}`,
                     },
                 };
             }
@@ -78,7 +78,7 @@ export const parseReflectRequest = async (
             bodyBytes += Buffer.isBuffer(chunk)
                 ? chunk.length
                 : Buffer.byteLength(chunk);
-            if (bodyBytes > maxReflectBodyBytes) {
+            if (bodyBytes > maxChatBodyBytes) {
                 bodyTooLarge = true;
                 req.destroy();
                 return;
@@ -131,7 +131,7 @@ export const parseReflectRequest = async (
                     payload: {
                         error: 'Request payload too large',
                     },
-                    logLabel: 'reflect payload-too-large',
+                    logLabel: 'chat payload-too-large',
                 },
             };
         }
@@ -147,13 +147,13 @@ export const parseReflectRequest = async (
                 payload: {
                     error: 'Invalid JSON body',
                 },
-                logLabel: 'reflect invalid-json',
+                logLabel: 'chat invalid-json',
             },
         };
     }
 
     // Schema validation catches malformed request shapes before they reach the planner.
-    const parsedRequest = PostReflectRequestSchema.safeParse(parsedBody);
+    const parsedRequest = PostChatRequestSchema.safeParse(parsedBody);
     if (!parsedRequest.success) {
         const isLatestUserInputTooLong = parsedRequest.error.issues.some(
             (issue) =>
@@ -177,12 +177,12 @@ export const parseReflectRequest = async (
                 payload: {
                     error: isLatestUserInputTooLong
                         ? 'latestUserInput parameter too long'
-                        : 'Invalid reflect request payload',
+                        : 'Invalid chat request payload',
                     details: `${issuePath}: ${issueMessage}`,
                 },
                 logLabel: isLatestUserInputTooLong
-                    ? 'reflect latest-user-input-too-long'
-                    : 'reflect invalid-request',
+                    ? 'chat latest-user-input-too-long'
+                    : 'chat invalid-request',
             },
         };
     }
@@ -196,7 +196,7 @@ export const parseReflectRequest = async (
                 payload: {
                     error: 'latestUserInput parameter is required',
                 },
-                logLabel: 'reflect missing-latest-user-input',
+                logLabel: 'chat missing-latest-user-input',
             },
         };
     }
@@ -213,10 +213,10 @@ export const parseReflectRequest = async (
             error: {
                 statusCode: 400,
                 payload: {
-                    error: 'Invalid reflect request payload',
+                    error: 'Invalid chat request payload',
                     details: 'conversation.content: Message content must not be blank',
                 },
-                logLabel: 'reflect blank-conversation-message',
+                logLabel: 'chat blank-conversation-message',
             },
         };
     }

@@ -456,7 +456,7 @@ const AskMeAnything = (): JSX.Element => {
         setIsTypingComplete(false);
 
         try {
-            const payload = await api.reflectQuestion(
+            const payload = await api.chatQuestion(
                 {
                     surface: 'web',
                     trigger: { kind: 'submit' },
@@ -487,21 +487,21 @@ const AskMeAnything = (): JSX.Element => {
 
             if (payload.action !== 'message') {
                 throw new Error(
-                    `Reflect API returned unsupported action for web surface: ${payload.action}`
+                    `Chat API returned unsupported action for web surface: ${payload.action}`
                 );
             }
 
             // Clear timeout once we have a response
             clearTimeout(timeoutId);
 
-            const reflection = payload.message as string | undefined;
+            const chation = payload.message as string | undefined;
             // Trust the API contract: metadata is already normalized by the backend.
             const backendMetadata =
                 payload.metadata as ResponseMetadata | null | undefined;
 
-            setStatus('A brief reflection:');
+            setStatus('A brief chation:');
             setAnswer(
-                reflection?.trim() ||
+                chation?.trim() ||
                     'I would begin by examining the ethical principles involved, then consider what transparency and care require.'
             );
 

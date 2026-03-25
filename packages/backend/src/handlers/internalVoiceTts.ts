@@ -11,7 +11,7 @@ import { PostInternalVoiceTtsRequestSchema } from '@footnote/contracts/voice';
 import type { InternalVoiceTtsService } from '../services/internalVoiceTts.js';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { logger } from '../utils/logger.js';
-import { sendJson } from './reflectResponses.js';
+import { sendJson } from './chatResponses.js';
 import {
     parseTrustedBodyWithSchema,
     parseTrustedServiceAuth,

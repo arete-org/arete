@@ -1,7 +1,7 @@
 /**
- * @description: Covers surface policy and planner-to-generation plumbing in the reflect orchestrator.
+ * @description: Covers surface policy and planner-to-generation plumbing in the chat orchestrator.
  * @footnote-scope: test
- * @footnote-module: ReflectOrchestratorTests
+ * @footnote-module: ChatOrchestratorTests
  * @footnote-risk: medium - Missing tests here can let web/Discord routing drift again.
  * @footnote-ethics: medium - Surface policy decides whether users receive a reply, reaction, or silence.
  */
@@ -10,12 +10,12 @@ import assert from 'node:assert/strict';
 
 import type { GenerationRuntime } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
-import type { PostReflectRequest } from '@footnote/contracts/web';
-import { createReflectOrchestrator } from '../src/services/reflectOrchestrator.js';
+import type { PostChatRequest } from '@footnote/contracts/web';
+import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
 import { renderConversationPromptLayers } from '../src/services/prompts/conversationPromptLayers.js';
 
 const createMetadata = (): ResponseMetadata => ({
-    responseId: 'reflect_test_response',
+    responseId: 'chat_test_response',
     provenance: 'Inferred',
     riskTier: 'Low',
     tradeoffCount: 0,
@@ -26,9 +26,9 @@ const createMetadata = (): ResponseMetadata => ({
     citations: [],
 });
 
-const createReflectRequest = (
-    overrides: Partial<PostReflectRequest> = {}
-): PostReflectRequest => ({
+const createChatRequest = (
+    overrides: Partial<PostChatRequest> = {}
+): PostChatRequest => ({
     surface: 'discord',
     trigger: { kind: 'direct' },
     latestUserInput: 'What changed?',
@@ -54,7 +54,7 @@ test('web requests go through planner and are coerced to message when planner pi
     let callCount = 0;
     let finalMessages: Array<{ role: string; content: string }> = [];
 
-    const orchestrator = createReflectOrchestrator({
+    const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async ({ messages, maxOutputTokens }) => {
             callCount += 1;
             if (maxOutputTokens === 700) {
@@ -88,8 +88,8 @@ test('web requests go through planner and are coerced to message when planner pi
         recordUsage: () => undefined,
     });
 
-    const response = await orchestrator.runReflect(
-        createReflectRequest({
+    const response = await orchestrator.runChat(
+        createChatRequest({
             surface: 'web',
             trigger: { kind: 'submit' },
             capabilities: {
@@ -105,11 +105,11 @@ test('web requests go through planner and are coerced to message when planner pi
     assert.equal(response.message, 'coerced web reply');
     assert.equal(
         finalMessages[0]?.content,
-        renderConversationPromptLayers('reflect-chat').systemPrompt
+        renderConversationPromptLayers('web-chat').systemPrompt
     );
     assert.equal(
         finalMessages[1]?.content,
-        renderConversationPromptLayers('reflect-chat').personaPrompt
+        renderConversationPromptLayers('web-chat').personaPrompt
     );
     assert.match(
         finalMessages[finalMessages.length - 1]?.content ?? '',
@@ -120,7 +120,7 @@ test('web requests go through planner and are coerced to message when planner pi
 test('discord requests preserve non-message planner actions', async () => {
     let callCount = 0;
 
-    const orchestrator = createReflectOrchestrator({
+    const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async ({ maxOutputTokens }) => {
             callCount += 1;
             if (maxOutputTokens === 700) {
@@ -129,7 +129,7 @@ test('discord requests preserve non-message planner actions', async () => {
                         action: 'image',
                         modality: 'text',
                         imageRequest: {
-                            prompt: 'draw a reflective skyline',
+                            prompt: 'draw a chative skyline',
                         },
                         riskTier: 'Low',
                         reasoning: 'The user explicitly asked for an image.',
@@ -151,17 +151,17 @@ test('discord requests preserve non-message planner actions', async () => {
         recordUsage: () => undefined,
     });
 
-    const response = await orchestrator.runReflect(createReflectRequest());
+    const response = await orchestrator.runChat(createChatRequest());
 
     assert.equal(callCount, 1);
     assert.equal(response.action, 'image');
-    assert.equal(response.imageRequest.prompt, 'draw a reflective skyline');
+    assert.equal(response.imageRequest.prompt, 'draw a chative skyline');
 });
 
-test('message plans pass planner generation options into reflectService', async () => {
+test('message plans pass planner generation options into chatService', async () => {
     let finalMessages: Array<{ role: string; content: string }> = [];
 
-    const orchestrator = createReflectOrchestrator({
+    const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
             if (request.maxOutputTokens === 700) {
                 return {
@@ -208,7 +208,7 @@ test('message plans pass planner generation options into reflectService', async 
         recordUsage: () => undefined,
     });
 
-    const response = await orchestrator.runReflect(createReflectRequest());
+    const response = await orchestrator.runChat(createChatRequest());
 
     assert.equal(response.action, 'message');
     assert.equal(
@@ -221,10 +221,10 @@ test('message plans pass planner generation options into reflectService', async 
     );
 });
 
-test('discord overlay replaces default persona layer in reflect generation', async () => {
+test('discord overlay replaces default persona layer in chat generation', async () => {
     let finalMessages: Array<{ role: string; content: string }> = [];
 
-    const orchestrator = createReflectOrchestrator({
+    const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async ({ messages, maxOutputTokens }) => {
             if (maxOutputTokens === 700) {
                 return {
@@ -263,8 +263,8 @@ test('discord overlay replaces default persona layer in reflect generation', asy
         recordUsage: () => undefined,
     });
 
-    const response = await orchestrator.runReflect(
-        createReflectRequest({
+    const response = await orchestrator.runChat(
+        createChatRequest({
             conversation: [
                 {
                     role: 'system',

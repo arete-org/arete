@@ -10,22 +10,22 @@
 export type { ApiErrorResponse, NormalizedApiError } from './types.js';
 
 /**
- * @api.operationId: postReflect
- * @api.path: POST /api/reflect
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
  */
 export type {
-    ReflectSurface,
-    ReflectTriggerKind,
-    ReflectConversationMessage,
-    ReflectAttachment,
-    ReflectCapabilities,
-    ReflectImageRequest,
-    PostReflectRequest,
-    ReflectMessageActionResponse,
-    ReflectReactActionResponse,
-    ReflectIgnoreActionResponse,
-    ReflectImageActionResponse,
-    PostReflectResponse,
+    ChatSurface,
+    ChatTriggerKind,
+    ChatConversationMessage,
+    ChatAttachment,
+    ChatCapabilities,
+    ChatImageRequest,
+    PostChatRequest,
+    ChatMessageActionResponse,
+    ChatReactActionResponse,
+    ChatIgnoreActionResponse,
+    ChatImageActionResponse,
+    PostChatResponse,
 } from './types.js';
 
 /**
@@ -159,7 +159,7 @@ export type {
  */
 export type { BlogPost, GetBlogPostResponse } from './types.js';
 
-// Runtime validation schemas for reflect/traces contracts.
+// Runtime validation schemas for chat/traces contracts.
 export {
     ApiErrorResponseSchema,
     CitationSchema,
@@ -187,8 +187,8 @@ export {
     InternalImageStreamEventSchema,
     PostInternalTextRequestSchema,
     PostInternalTextResponseSchema,
-    PostReflectRequestSchema,
-    PostReflectResponseSchema,
+    PostChatRequestSchema,
+    PostChatResponseSchema,
     PostTraceCardFromTraceRequestSchema,
     PostTraceCardFromTraceResponseSchema,
     PostTraceCardRequestSchema,

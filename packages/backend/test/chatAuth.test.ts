@@ -1,14 +1,14 @@
 /**
- * @description: Covers Turnstile hostname validation for the reflect auth helper.
+ * @description: Covers Turnstile hostname validation for the chat auth helper.
  * @footnote-scope: test
- * @footnote-module: ReflectAuthTests
+ * @footnote-module: ChatAuthTests
  * @footnote-risk: medium - Missing tests could allow successful CAPTCHA responses for the wrong host.
- * @footnote-ethics: medium - Hostname checks protect the public reflect path from abuse and misconfiguration.
+ * @footnote-ethics: medium - Hostname checks protect the public chat path from abuse and misconfiguration.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { verifyTurnstileCaptcha } from '../src/handlers/reflectAuth.js';
+import { verifyTurnstileCaptcha } from '../src/handlers/chatAuth.js';
 
 type MutableEnv = NodeJS.ProcessEnv & {
     TURNSTILE_SECRET_KEY?: string;

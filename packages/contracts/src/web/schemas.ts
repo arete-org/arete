@@ -37,14 +37,14 @@ const IncidentRemediationStateSchema = z.enum([
     'skipped_not_assistant',
     'failed',
 ]);
-const ReflectSurfaceSchema = z.enum(['web', 'discord']);
-const ReflectTriggerKindSchema = z.enum([
+const ChatSurfaceSchema = z.enum(['web', 'discord']);
+const ChatTriggerKindSchema = z.enum([
     'submit',
     'direct',
     'invoked',
     'catchup',
 ]);
-const ReflectConversationMessageSchema = z
+const ChatConversationMessageSchema = z
     .object({
         role: z.enum(['system', 'user', 'assistant']),
         content: z.string().min(1),
@@ -54,21 +54,21 @@ const ReflectConversationMessageSchema = z
         createdAt: z.string().min(1).optional(),
     })
     .strict();
-const ReflectAttachmentSchema = z
+const ChatAttachmentSchema = z
     .object({
         kind: z.literal('image'),
         url: z.string().url(),
         contentType: z.string().min(1).optional(),
     })
     .strict();
-const ReflectCapabilitiesSchema = z
+const ChatCapabilitiesSchema = z
     .object({
         canReact: z.boolean(),
         canGenerateImages: z.boolean(),
         canUseTts: z.boolean(),
     })
     .strict();
-const ReflectImageRequestSchema = z
+const ChatImageRequestSchema = z
     .object({
         prompt: z.string().min(1),
         aspectRatio: z
@@ -167,22 +167,22 @@ export const ResponseMetadataSchema = z
     .passthrough();
 
 /**
- * @api.operationId: postReflect
- * @api.path: POST /api/reflect
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
  */
-export const PostReflectRequestSchema = z
+export const PostChatRequestSchema = z
     .object({
-        surface: ReflectSurfaceSchema,
+        surface: ChatSurfaceSchema,
         trigger: z
             .object({
-                kind: ReflectTriggerKindSchema,
+                kind: ChatTriggerKindSchema,
                 messageId: z.string().min(1).optional(),
             })
             .strict(),
         latestUserInput: z.string().min(1).max(3072),
-        conversation: z.array(ReflectConversationMessageSchema).min(1).max(64),
-        attachments: z.array(ReflectAttachmentSchema).max(8).optional(),
-        capabilities: ReflectCapabilitiesSchema.optional(),
+        conversation: z.array(ChatConversationMessageSchema).min(1).max(64),
+        attachments: z.array(ChatAttachmentSchema).max(8).optional(),
+        capabilities: ChatCapabilitiesSchema.optional(),
         sessionId: z.string().min(1).max(128).optional(),
         surfaceContext: z
             .object({
@@ -197,10 +197,10 @@ export const PostReflectRequestSchema = z
     .strict();
 
 /**
- * @api.operationId: postReflect
- * @api.path: POST /api/reflect
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
  */
-export const PostReflectResponseSchema = z.discriminatedUnion('action', [
+export const PostChatResponseSchema = z.discriminatedUnion('action', [
     z
         .object({
             action: z.literal('message'),
@@ -225,7 +225,7 @@ export const PostReflectResponseSchema = z.discriminatedUnion('action', [
     z
         .object({
             action: z.literal('image'),
-            imageRequest: ReflectImageRequestSchema,
+            imageRequest: ChatImageRequestSchema,
             metadata: z.null(),
         })
         .passthrough(),

@@ -2,7 +2,7 @@
  * @description: Centralizes how Discord prompt text is combined with profile overlays.
  * @footnote-scope: utility
  * @footnote-module: PromptComposition
- * @footnote-risk: medium - Inconsistent composition here can desync reflect/image/realtime prompt behavior.
+ * @footnote-risk: medium - Inconsistent composition here can desync chat/image/realtime prompt behavior.
  * @footnote-ethics: high - Overlay composition controls identity and safety-priority behavior.
  */
 
@@ -20,7 +20,7 @@ import {
 import type { BotProfileConfig } from './profile.js';
 
 /**
- * Minimal message shape used by reflect-request conversation assembly.
+ * Minimal message shape used by chat-request conversation assembly.
  */
 export interface PromptConversationMessage {
     role: 'system' | 'user' | 'assistant';
@@ -73,7 +73,7 @@ export const renderPromptLayersWithActivePersona = (
 
 /**
  * Prepends one system overlay message when an overlay exists.
- * Reflect keeps overlay text as a separate system message, and this helper
+ * Chat keeps overlay text as a separate system message, and this helper
  * centralizes that behavior in one place.
  */
 export const prependProfileOverlaySystemMessageToConversation = (

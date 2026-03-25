@@ -1,5 +1,5 @@
 /**
- * @description: Covers shared prompt registry loading, override behavior, and canonical reflect prompt availability.
+ * @description: Covers shared prompt registry loading, override behavior, and canonical chat prompt availability.
  * @footnote-scope: test
  * @footnote-module: SharedPromptRegistryTests
  * @footnote-risk: medium - Missing tests here can let backend and bot prompt ownership drift again.
@@ -26,8 +26,8 @@ test('loads shared conversational prompts plus surface supplements', () => {
         registry.hasPrompt('conversation.shared.persona.footnote'),
         true
     );
-    assert.equal(registry.hasPrompt('reflect.chat.system'), true);
-    assert.equal(registry.hasPrompt('reflect.chat.persona.footnote'), true);
+    assert.equal(registry.hasPrompt('chat.web.system'), true);
+    assert.equal(registry.hasPrompt('chat.web.persona.footnote'), true);
     assert.equal(registry.hasPrompt('discord.image.persona.footnote'), true);
     assert.equal(
         registry.hasPrompt('discord.realtime.persona.footnote'),
@@ -40,7 +40,7 @@ test('loads shared conversational prompts plus surface supplements', () => {
         /You are the response engine for a configured Footnote assistant\./
     );
     assert.match(
-        registry.renderPrompt('reflect.chat.system', {
+        registry.renderPrompt('chat.web.system', {
             botProfileDisplayName: 'Footnote',
         }).content,
         /CITATION STYLE/
@@ -76,10 +76,10 @@ test('merges override files over the canonical defaults', () => {
             'Override chat prompt.'
         );
         assert.match(
-            registry.renderPrompt('reflect.chat.persona.footnote', {
+            registry.renderPrompt('chat.web.persona.footnote', {
                 botProfileDisplayName: 'Footnote',
             }).content,
-            /In Reflect, favor explicit reasoning/
+            /In web chat, favor explicit reasoning/
         );
     } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
@@ -133,11 +133,11 @@ test('invalid override entries are warned and skipped while valid entries still 
                 '      template: |-',
                 '        Invalid cache override',
                 '      cache: not-an-object',
-                'reflect:',
-                '  chat:',
+                'chat:',
+                '  web:',
                 '    system:',
                 '      template: |-',
-                '        Reflect override prompt.',
+                '        Web chat override prompt.',
                 'unknown:',
                 '  chat:',
                 '    system:',
@@ -157,10 +157,10 @@ test('invalid override entries are warned and skipped while valid entries still 
         });
 
         assert.equal(
-            registry.renderPrompt('reflect.chat.system', {
+            registry.renderPrompt('chat.web.system', {
                 botProfileDisplayName: 'Footnote',
             }).content,
-            'Reflect override prompt.'
+            'Web chat override prompt.'
         );
         assert.match(
             registry.renderPrompt('discord.chat.system', {

@@ -195,7 +195,7 @@ If you're not using dynamic height, the embed route content typically requires a
 The embed route is configured to allow:
 
 - **Embedding from**: `https://ai.jordanmakes.dev`
-- **API requests**: The `/api/reflect` endpoint accepts cross-origin requests from `https://ai.jordanmakes.dev`
+- **API requests**: The `/api/chat` endpoint accepts cross-origin requests from `https://ai.jordanmakes.dev`
 - **CORS headers**: Configured for POST and OPTIONS requests
 
 ### Content Security Policy
@@ -233,7 +233,7 @@ If you see scrollbars in the iframe:
 
 2. **Navigation**: Links in the header may navigate within the iframe. Consider adding `target="_top"` or `target="_blank"` if you want links to open in the parent page or a new tab.
 
-3. **API Rate Limiting**: The `/api/reflect` endpoint has rate limiting per IP and session to prevent abuse.
+3. **API Rate Limiting**: The `/api/chat` endpoint has rate limiting per IP and session to prevent abuse.
 
 4. **CAPTCHA**: The interactive component requires Cloudflare Turnstile CAPTCHA verification. This must be configured on the Footnote instance.
 
@@ -291,7 +291,7 @@ and applied by the backend server in `packages/backend/src/server.ts`.
 Only do this if the environment variables are not enough.
 
 1. **Backend defaults**: Update the default origin/ancestor lists in `packages/backend/src/config.ts`
-2. **CORS behavior**: Update `setCorsHeaders` in `packages/backend/src/handlers/reflect.ts`
+2. **CORS behavior**: Update `setCorsHeaders` in `packages/backend/src/handlers/chat.ts`
 3. **CSP behavior**: Update the HTML response CSP handling in `packages/backend/src/server.ts`
 
 Note: The root `server.js` file is only a startup shim. It is not where backend CORS or CSP behavior lives.

@@ -1,5 +1,5 @@
 /**
- * @description: Core Discord message processing that delegates reflect decisions to the backend and executes the returned action locally.
+ * @description: Core Discord message processing that delegates chat decisions to the backend and executes the returned action locally.
  * @footnote-scope: core
  * @footnote-module: MessageProcessor
  * @footnote-risk: high - Processing failures can break user interactions or route the wrong action.
@@ -10,9 +10,9 @@ import fs from 'fs';
 import { Message } from 'discord.js';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type {
-    PostReflectRequest,
-    ReflectImageRequest,
-    ReflectTriggerKind,
+    PostChatRequest,
+    ChatImageRequest,
+    ChatTriggerKind,
 } from '@footnote/contracts/web';
 import {
     DEFAULT_INTERNAL_TTS_OPTIONS,
@@ -55,7 +55,7 @@ import {
     buildTraceCardRequest,
 } from './response/provenanceCgi.js';
 import { botApi, isDiscordApiClientError } from '../api/botApi.js';
-import type { DiscordReflectApiResponse } from '../api/index.js';
+import type { DiscordChatApiResponse } from '../api/index.js';
 import type {
     ImageBackgroundType,
     ImageRenderModel,
@@ -68,21 +68,21 @@ type MessageProcessorOptions = {
     systemPrompt?: string;
 };
 
-type ReflectMessageAction = {
+type ChatMessageAction = {
     action: 'message';
     message: string;
     modality: 'text' | 'tts';
     metadata: ResponseMetadata;
 };
 
-type ReflectReactAction = {
+type ChatReactAction = {
     action: 'react';
     reaction: string;
 };
 
-type ReflectImageAction = {
+type ChatImageAction = {
     action: 'image';
-    imageRequest: ReflectImageRequest;
+    imageRequest: ChatImageRequest;
 };
 
 /**
@@ -156,25 +156,25 @@ const hasResponseMetadata = (value: unknown): value is ResponseMetadata =>
         typeof (value as { responseId?: unknown }).responseId === 'string'
     );
 
-const isReflectMessageAction = (
-    value: DiscordReflectApiResponse
-): value is ReflectMessageAction =>
+const isChatMessageAction = (
+    value: DiscordChatApiResponse
+): value is ChatMessageAction =>
     value.action === 'message' &&
     typeof (value as { message?: unknown }).message === 'string' &&
     ((value as { modality?: unknown }).modality === 'text' ||
         (value as { modality?: unknown }).modality === 'tts') &&
     hasResponseMetadata((value as { metadata?: unknown }).metadata);
 
-const isReflectReactAction = (
-    value: DiscordReflectApiResponse
-): value is ReflectReactAction =>
+const isChatReactAction = (
+    value: DiscordChatApiResponse
+): value is ChatReactAction =>
     value.action === 'react' &&
     typeof (value as { reaction?: unknown }).reaction === 'string';
 
-const isReflectImageAction = (
-    value: DiscordReflectApiResponse
-): value is ReflectImageAction => {
-    const prompt = (value as { imageRequest?: ReflectImageRequest })
+const isChatImageAction = (
+    value: DiscordChatApiResponse
+): value is ChatImageAction => {
+    const prompt = (value as { imageRequest?: ChatImageRequest })
         .imageRequest?.prompt;
     return (
         value.action === 'image' &&
@@ -199,20 +199,20 @@ const hasImageEmbeds = (message: Message): boolean =>
 const sanitizeForDiscordCodeBlock = (value: string): string =>
     value.replace(/```/g, '` ` `').trim();
 
-const toReflectFailureReason = (error: unknown): string => {
+const toChatFailureReason = (error: unknown): string => {
     const apiError = isDiscordApiClientError(error) ? error : null;
     if (apiError) {
         switch (apiError.code) {
             case 'timeout_error':
-                return `Timed out while waiting for backend reflect response (${runtimeConfig.api.backendRequestTimeoutMs}ms budget).`;
+                return `Timed out while waiting for backend chat response (${runtimeConfig.api.backendRequestTimeoutMs}ms budget).`;
             case 'aborted_error':
-                return 'The reflect request was aborted before completion.';
+                return 'The chat request was aborted before completion.';
             case 'network_error':
-                return `Network error while calling backend reflect: ${apiError.message}`;
+                return `Network error while calling backend chat: ${apiError.message}`;
             case 'server_error':
-                return `Backend reflect returned a server error${apiError.status ? ` (${apiError.status})` : ''}.`;
+                return `Backend chat returned a server error${apiError.status ? ` (${apiError.status})` : ''}.`;
             default:
-                return `Backend reflect request failed (${apiError.code}): ${apiError.message}`;
+                return `Backend chat request failed (${apiError.code}): ${apiError.message}`;
         }
     }
 
@@ -220,12 +220,12 @@ const toReflectFailureReason = (error: unknown): string => {
         return error.message.trim();
     }
 
-    return 'Unknown error while calling backend reflect.';
+    return 'Unknown error while calling backend chat.';
 };
 
-const formatReflectFailureForDiscord = (error: unknown): string => {
+const formatChatFailureForDiscord = (error: unknown): string => {
     const baseMessage = sanitizeForDiscordCodeBlock(
-        `Reflect request failed: ${toReflectFailureReason(error)}`
+        `Chat request failed: ${toChatFailureReason(error)}`
     );
     const wrapped = `${ANSI_RED}${baseMessage}${ANSI_RESET}`;
     const maxContentLength =
@@ -242,7 +242,7 @@ const formatReflectFailureForDiscord = (error: unknown): string => {
 };
 
 /**
- * Discord-side executor for backend reflect decisions.
+ * Discord-side executor for backend chat decisions.
  */
 export class MessageProcessor {
     private readonly contextBuilder: ContextBuilder;
@@ -281,7 +281,7 @@ export class MessageProcessor {
 
     /**
      * The bot now acts as a surface adapter:
-     * 1. build a reflect request from Discord state
+     * 1. build a chat request from Discord state
      * 2. ask the backend what action to take
      * 3. execute that action locally in Discord
      */
@@ -310,50 +310,50 @@ export class MessageProcessor {
             return;
         }
 
-        const reflectContext = await this.buildReflectRequestFromMessage(
+        const chatContext = await this.buildChatRequestFromMessage(
             message,
             trigger
         );
-        if (!reflectContext) {
+        if (!chatContext) {
             return;
         }
 
         logger.debug(
-            `Dispatching backend reflect request for message ${message.id} with trigger=${reflectContext.request.trigger.kind}.`
+            `Dispatching backend chat request for message ${message.id} with trigger=${chatContext.request.trigger.kind}.`
         );
 
         await responseHandler.startTyping();
         try {
-            let reflectResponse: DiscordReflectApiResponse = {
+            let chatResponse: DiscordChatApiResponse = {
                 action: 'ignore',
                 metadata: null,
             };
             try {
-                reflectResponse = await botApi.reflectViaApi(
-                    reflectContext.request
+                chatResponse = await botApi.chatViaApi(
+                    chatContext.request
                 );
             } catch (error) {
                 logger.error(
-                    `Backend reflect request failed for message ${message.id}: ${
+                    `Backend chat request failed for message ${message.id}: ${
                         error instanceof Error ? error.message : String(error)
                     }`,
                     {
-                        triggerKind: reflectContext.request.trigger.kind,
+                        triggerKind: chatContext.request.trigger.kind,
                         contentLength:
-                            reflectContext.request.latestUserInput.length,
+                            chatContext.request.latestUserInput.length,
                         conversationLength:
-                            reflectContext.request.conversation.length,
+                            chatContext.request.conversation.length,
                     }
                 );
                 try {
                     await responseHandler.sendMessage(
-                        formatReflectFailureForDiscord(error),
+                        formatChatFailureForDiscord(error),
                         [],
                         directReply
                     );
                 } catch (replyError) {
                     logger.error(
-                        `Failed to send reflect failure reply for message ${message.id}: ${
+                        `Failed to send chat failure reply for message ${message.id}: ${
                             replyError instanceof Error
                                 ? replyError.message
                                 : String(replyError)
@@ -362,12 +362,12 @@ export class MessageProcessor {
                 }
                 return;
             }
-            await this.executeReflectAction(
+            await this.executeChatAction(
                 message,
                 responseHandler,
-                reflectResponse,
+                chatResponse,
                 directReply,
-                reflectContext.recoveredImageContext
+                chatContext.recoveredImageContext
             );
         } finally {
             responseHandler.stopTyping();
@@ -379,11 +379,11 @@ export class MessageProcessor {
      * preserving attachment grounding and follow-up hints from the Discord
      * surface.
      */
-    private async buildReflectRequestFromMessage(
+    private async buildChatRequestFromMessage(
         message: Message,
         trigger: string
     ): Promise<{
-        request: PostReflectRequest;
+        request: PostChatRequest;
         recoveredImageContext: RecoveredImageContext | null;
     } | null> {
         const { context } = await this.contextBuilder.buildMessageContext(
@@ -396,7 +396,7 @@ export class MessageProcessor {
 
         if (imageAttachments.size > 0) {
             logger.debug(
-                `Processing image attachment(s) for reflect request on message ${message.id}.`,
+                `Processing image attachment(s) for chat request on message ${message.id}.`,
                 {
                     attachmentCount: imageAttachments.size,
                     contentLength: message.content.length,
@@ -428,7 +428,7 @@ export class MessageProcessor {
                         );
                     } catch (error) {
                         logger.error(
-                            `Error generating image description for reflect attachment on message ${message.id}: ${
+                            `Error generating image description for chat attachment on message ${message.id}: ${
                                 error instanceof Error
                                     ? error.message
                                     : String(error)
@@ -480,12 +480,12 @@ export class MessageProcessor {
                         `outputId=${recoveredImageContext.responseId ?? 'n/a'} inputId=${recoveredImageContext.inputId ?? 'n/a'}`,
                 });
                 logger.debug(
-                    `Recovered image embed for backend reflect: outputId=${recoveredImageContext.responseId ?? 'n/a'}, inputId=${recoveredImageContext.inputId ?? 'n/a'}, promptLength=${recoveredContext.prompt.length}.`
+                    `Recovered image embed for backend chat: outputId=${recoveredImageContext.responseId ?? 'n/a'}, inputId=${recoveredImageContext.inputId ?? 'n/a'}, promptLength=${recoveredContext.prompt.length}.`
                 );
             }
         } catch (error) {
             logger.debug(
-                'Failed to recover image embed context for backend reflect:',
+                'Failed to recover image embed context for backend chat:',
                 error
             );
         }
@@ -517,11 +517,11 @@ export class MessageProcessor {
         }));
         const overlayResult = prependProfileOverlaySystemMessage(
             conversation,
-            'reflect'
+            'chat'
         );
         if (overlayResult.overlayAdded) {
             logger.debug(
-                `Injected profile overlay into reflect request for message ${message.id}.`,
+                `Injected profile overlay into chat request for message ${message.id}.`,
                 {
                     profileId: runtimeConfig.profile.id,
                     overlaySource: runtimeConfig.profile.promptOverlay.source,
@@ -537,7 +537,7 @@ export class MessageProcessor {
             request: {
                 surface: 'discord',
                 trigger: {
-                    kind: this.getReflectTriggerKind(message, trigger),
+                    kind: this.getChatTriggerKind(message, trigger),
                     messageId: message.id,
                 },
                 latestUserInput: message.content.trim(),
@@ -562,10 +562,10 @@ export class MessageProcessor {
         };
     }
 
-    private getReflectTriggerKind(
+    private getChatTriggerKind(
         message: Message,
         trigger?: string
-    ): ReflectTriggerKind {
+    ): ChatTriggerKind {
         if (message.reference?.messageId) {
             return 'direct';
         }
@@ -586,40 +586,40 @@ export class MessageProcessor {
      * Unknown actions intentionally warn and no-op so backend-first action
      * additions do not crash the bot before the executor learns about them.
      */
-    private async executeReflectAction(
+    private async executeChatAction(
         message: Message,
         responseHandler: ResponseHandler,
-        reflectResponse: DiscordReflectApiResponse,
+        chatResponse: DiscordChatApiResponse,
         directReply: boolean,
         recoveredImageContext: RecoveredImageContext | null
     ): Promise<void> {
-        switch (reflectResponse.action) {
+        switch (chatResponse.action) {
             case 'ignore':
                 logger.debug(
-                    `Backend reflect chose ignore for message ${message.id}.`
+                    `Backend chat chose ignore for message ${message.id}.`
                 );
                 return;
             case 'react':
-                if (!isReflectReactAction(reflectResponse)) {
+                if (!isChatReactAction(chatResponse)) {
                     logger.warn(
-                        'Backend reflect returned a malformed react action; ignoring.'
+                        'Backend chat returned a malformed react action; ignoring.'
                     );
                     return;
                 }
                 try {
-                    await responseHandler.addReaction(reflectResponse.reaction);
+                    await responseHandler.addReaction(chatResponse.reaction);
                     logger.debug(
-                        `Backend reflect added reaction(s) for message ${message.id}.`,
+                        `Backend chat added reaction(s) for message ${message.id}.`,
                         {
-                            reaction: reflectResponse.reaction,
+                            reaction: chatResponse.reaction,
                             contentLength: message.content.length,
                         }
                     );
                 } catch (error) {
                     logger.warn(
-                        `Backend reflect reaction failed for message ${message.id}.`,
+                        `Backend chat reaction failed for message ${message.id}.`,
                         {
-                            reaction: reflectResponse.reaction,
+                            reaction: chatResponse.reaction,
                             error:
                                 error instanceof Error
                                     ? error.message
@@ -629,57 +629,57 @@ export class MessageProcessor {
                 }
                 return;
             case 'image':
-                if (!isReflectImageAction(reflectResponse)) {
+                if (!isChatImageAction(chatResponse)) {
                     logger.warn(
-                        'Backend reflect returned a malformed image action; ignoring.'
+                        'Backend chat returned a malformed image action; ignoring.'
                     );
                     return;
                 }
-                await this.executeReflectImageAction(
+                await this.executeChatImageAction(
                     message,
                     responseHandler,
-                    reflectResponse.imageRequest,
+                    chatResponse.imageRequest,
                     directReply,
                     recoveredImageContext
                 );
                 return;
             case 'message':
-                if (!isReflectMessageAction(reflectResponse)) {
+                if (!isChatMessageAction(chatResponse)) {
                     logger.warn(
-                        'Backend reflect returned a malformed message action; ignoring.'
+                        'Backend chat returned a malformed message action; ignoring.'
                     );
                     return;
                 }
-                await this.executeReflectMessageAction(
+                await this.executeChatMessageAction(
                     message,
                     responseHandler,
-                    reflectResponse,
+                    chatResponse,
                     directReply
                 );
                 return;
             default:
                 logger.warn(
-                    `Backend reflect returned unsupported action "${reflectResponse.action}". Ignoring until the bot adds explicit support.`
+                    `Backend chat returned unsupported action "${chatResponse.action}". Ignoring until the bot adds explicit support.`
                 );
                 return;
         }
     }
 
-    private async executeReflectMessageAction(
+    private async executeChatMessageAction(
         message: Message,
         responseHandler: ResponseHandler,
-        reflectResponse: ReflectMessageAction,
+        chatResponse: ChatMessageAction,
         directReply: boolean
     ): Promise<void> {
-        if (!reflectResponse.message.trim()) {
+        if (!chatResponse.message.trim()) {
             logger.error(
-                `Backend reflect returned an empty message payload for message ${message.id}.`
+                `Backend chat returned an empty message payload for message ${message.id}.`
             );
             try {
                 await responseHandler.sendMessage(
-                    formatReflectFailureForDiscord(
+                    formatChatFailureForDiscord(
                         new Error(
-                            'Backend reflect returned an empty message payload.'
+                            'Backend chat returned an empty message payload.'
                         )
                     ),
                     [],
@@ -687,7 +687,7 @@ export class MessageProcessor {
                 );
             } catch (error) {
                 logger.error(
-                    `Failed to send empty-reflect-payload reply for message ${message.id}: ${
+                    `Failed to send empty-chat-payload reply for message ${message.id}: ${
                         error instanceof Error ? error.message : String(error)
                     }`
                 );
@@ -695,17 +695,17 @@ export class MessageProcessor {
             return;
         }
 
-        const finalResponseText = reflectResponse.message;
+        const finalResponseText = chatResponse.message;
         // Start provenance work immediately so the trace card can race the main
         // response generation instead of always happening strictly afterward.
         const provenancePayloadPromise = this.prepareProvenanceCgiPayload(
-            reflectResponse.metadata
+            chatResponse.metadata
         );
 
         let ttsResult:
             | Awaited<ReturnType<typeof botApi.runVoiceTtsViaApi>>['result']
             | null = null;
-        if (reflectResponse.modality === 'tts') {
+        if (chatResponse.modality === 'tts') {
             const ttsRequestId = Date.now().toString();
             try {
                 const response = await botApi.runVoiceTtsViaApi({
@@ -721,7 +721,7 @@ export class MessageProcessor {
                 ttsResult = response.result;
             } catch (error) {
                 logger.error(
-                    `Reflect TTS generation failed for message ${message.id}: ${
+                    `Chat TTS generation failed for message ${message.id}: ${
                         error instanceof Error ? error.message : String(error)
                     }`,
                     {
@@ -743,7 +743,7 @@ export class MessageProcessor {
                     .replace(/`/g, '');
                 const preparedProvenance = await this.awaitProvenancePayload(
                     provenancePayloadPromise,
-                    reflectResponse.metadata.responseId
+                    chatResponse.metadata.responseId
                 );
                 const sentMessages = await responseHandler.sendMessage(
                     `\`\`\`${cleanResponseText}\`\`\``,
@@ -767,19 +767,19 @@ export class MessageProcessor {
                     const provenanceReplyAnchor =
                         responseMessages[responseMessages.length - 1];
 
-                    // Intentional: backend reflect already persisted the canonical trace.
+                    // Intentional: backend chat already persisted the canonical trace.
                     // Skipping postTraces here prevents duplicate trace rows for one reply.
                     await this.sendPreparedProvenanceCgi(
                         provenanceReplyAnchor,
                         message,
                         await provenancePayloadPromise,
-                        reflectResponse.metadata.responseId
+                        chatResponse.metadata.responseId
                     );
                 }
                 return;
             } catch (error) {
                 logger.error(
-                    `Reflect TTS delivery failed for message ${message.id}: ${
+                    `Chat TTS delivery failed for message ${message.id}: ${
                         error instanceof Error ? error.message : String(error)
                     }`,
                     {
@@ -791,7 +791,7 @@ export class MessageProcessor {
 
         const preparedProvenance = await this.awaitProvenancePayload(
             provenancePayloadPromise,
-            reflectResponse.metadata.responseId
+            chatResponse.metadata.responseId
         );
         const sentMessages = await responseHandler.sendMessage(
             finalResponseText,
@@ -809,21 +809,21 @@ export class MessageProcessor {
             const provenanceReplyAnchor =
                 responseMessages[responseMessages.length - 1];
 
-            // Intentional: backend reflect already persisted the canonical trace.
+            // Intentional: backend chat already persisted the canonical trace.
             // Skipping postTraces here prevents duplicate trace rows for one reply.
             await this.sendPreparedProvenanceCgi(
                 provenanceReplyAnchor,
                 message,
                 await provenancePayloadPromise,
-                reflectResponse.metadata.responseId
+                chatResponse.metadata.responseId
             );
         }
         logger.debug(
-            `Backend reflect sent message response for message ${message.id}.`,
+            `Backend chat sent message response for message ${message.id}.`,
             {
                 responseLength: finalResponseText.length,
                 contentLength: message.content.length,
-                modality: reflectResponse.modality,
+                modality: chatResponse.modality,
             }
         );
     }
@@ -934,15 +934,15 @@ export class MessageProcessor {
         }
     }
 
-    private async executeReflectImageAction(
+    private async executeChatImageAction(
         message: Message,
         responseHandler: ResponseHandler,
-        request: ReflectImageRequest,
+        request: ChatImageRequest,
         directReply: boolean,
         recoveredImageContext: RecoveredImageContext | null
     ): Promise<void> {
         logger.debug(
-            `Backend reflect requested automated image generation for message ${message.id}.`,
+            `Backend chat requested automated image generation for message ${message.id}.`,
             {
                 contentLength: message.content.length,
                 hasRecoveredImageContext: Boolean(recoveredImageContext),
@@ -952,7 +952,7 @@ export class MessageProcessor {
         const trimmedPrompt = request.prompt.trim();
         if (!trimmedPrompt) {
             logger.warn(
-                'Backend reflect image action was missing a prompt; ignoring.'
+                'Backend chat image action was missing a prompt; ignoring.'
             );
             return;
         }
@@ -1007,7 +1007,7 @@ export class MessageProcessor {
                 followUpResponseId = followUpCandidate;
             } else {
                 logger.warn(
-                    `Backend reflect supplied follow-up response ID "${followUpCandidate}" that was not found in cache or recovery; ignoring.`
+                    `Backend chat supplied follow-up response ID "${followUpCandidate}" that was not found in cache or recovery; ignoring.`
                 );
             }
         }

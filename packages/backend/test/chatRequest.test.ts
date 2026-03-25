@@ -1,7 +1,7 @@
 /**
- * @description: Covers request-body edge cases for the reflect request parser.
+ * @description: Covers request-body edge cases for the chat request parser.
  * @footnote-scope: test
- * @footnote-module: ReflectRequestTests
+ * @footnote-module: ChatRequestTests
  * @footnote-risk: medium - Missing tests could leave oversized request handling hanging or leaking sockets.
  * @footnote-ethics: low - This is transport hardening rather than user-facing policy logic.
  */
@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
 
-import { parseReflectRequest } from '../src/handlers/reflectRequest.js';
+import { parseChatRequest } from '../src/handlers/chatRequest.js';
 
 type TestRequest = PassThrough &
     Partial<IncomingMessage> & {
@@ -23,7 +23,7 @@ const createRequest = (headers: IncomingMessage['headers']): TestRequest => {
     return request;
 };
 
-test('parseReflectRequest resumes oversized requests rejected by content-length', async () => {
+test('parseChatRequest resumes oversized requests rejected by content-length', async () => {
     const request = createRequest({
         'content-length': '999999',
     });
@@ -34,7 +34,7 @@ test('parseReflectRequest resumes oversized requests rejected by content-length'
         return originalResume();
     }) as typeof request.resume;
 
-    const result = await parseReflectRequest(
+    const result = await parseChatRequest(
         request as IncomingMessage,
         1024
     );
@@ -48,9 +48,9 @@ test('parseReflectRequest resumes oversized requests rejected by content-length'
     assert.equal(resumed, true);
 });
 
-test('parseReflectRequest resolves cleanly when an oversized streamed body destroys the request', async () => {
+test('parseChatRequest resolves cleanly when an oversized streamed body destroys the request', async () => {
     const request = createRequest({});
-    const resultPromise = parseReflectRequest(
+    const resultPromise = parseChatRequest(
         request as IncomingMessage,
         5
     );

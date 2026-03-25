@@ -63,7 +63,7 @@ export interface ReadBotProfileConfigOptions {
  * Places where Footnote may inject the active profile overlay.
  */
 export type ProfilePromptOverlayUsage =
-    | 'reflect'
+    | 'chat'
     | 'image.system'
     | 'image.developer'
     | 'realtime'

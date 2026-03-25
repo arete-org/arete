@@ -48,7 +48,7 @@ export const buildRateLimitsSection = (
             ),
         },
     },
-    reflectService: {
+    chatService: {
         limit: parsePositiveIntEnv(
             env.REFLECT_SERVICE_RATE_LIMIT,
             envDefaultValues.REFLECT_SERVICE_RATE_LIMIT,

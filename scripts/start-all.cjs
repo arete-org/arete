@@ -59,7 +59,7 @@ if (preflightStatus !== 0) {
 
 const configBuildStatus = run(
     pnpmBin,
-    ['--filter', '@footnote/config-spec', 'run', 'build:dev'],
+    ['backend:prepare'],
     withoutInspectorEnv
 );
 if (configBuildStatus !== 0) {

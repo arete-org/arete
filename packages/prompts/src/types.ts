@@ -20,10 +20,9 @@ export const promptKeys = [
     'discord.image.developer',
     'discord.realtime.system',
     'discord.realtime.persona.footnote',
-    'discord.planner.system',
-    'reflect.planner.system',
-    'reflect.chat.system',
-    'reflect.chat.persona.footnote',
+    'chat.planner.system',
+    'chat.web.system',
+    'chat.web.persona.footnote',
     'discord.summarizer.system',
     'text.news.system',
 ] as const;

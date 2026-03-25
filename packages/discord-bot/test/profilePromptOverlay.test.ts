@@ -45,7 +45,7 @@ test('buildProfileOverlaySystemMessage returns null when no overlay text exists'
                 length: 0,
             },
         }),
-        'reflect'
+        'chat'
     );
 
     assert.equal(message, null);
@@ -171,10 +171,10 @@ test('renderPromptLayersWithActivePersona supports shared and surface prompt lay
     assert.match(prompt, /In voice, keep your cadence steady/);
 });
 
-test('prependProfileOverlaySystemMessageToConversation preserves reflect semantics', () => {
+test('prependProfileOverlaySystemMessageToConversation preserves chat semantics', () => {
     const result = prependProfileOverlaySystemMessageToConversation(
         createProfile(),
-        'reflect',
+        'chat',
         [{ role: 'user', content: 'hello' }]
     );
 

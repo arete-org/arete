@@ -71,7 +71,7 @@ For routes with runtime validation:
 
 Current scope:
 
-- `POST /api/reflect`
+- `POST /api/chat`
 - `POST /api/traces`
 - `GET /api/traces/{responseId}`
 
@@ -98,7 +98,7 @@ That means:
 
 For route-specific payload types, derive names from `operationId`:
 
-- `postReflect` -> `PostReflectRequest`, `PostReflectResponse`
+- `postChat` -> `PostChatRequest`, `PostChatResponse`
 - `getTrace` -> `GetTraceResponse`, `GetTraceStaleResponse`
 - `getRuntimeConfig` -> `GetRuntimeConfigResponse`
 

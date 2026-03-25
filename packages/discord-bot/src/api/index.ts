@@ -17,10 +17,10 @@ import {
     type IncidentApi,
 } from './incidents.js';
 import {
-    createReflectApi,
-    type CreateReflectApiOptions,
-    type ReflectApi,
-} from './reflect.js';
+    createChatApi,
+    type CreateChatApiOptions,
+    type ChatApi,
+} from './chat.js';
 import {
     createInternalImageApi,
     type CreateInternalImageApiOptions,
@@ -45,7 +45,7 @@ import {
 export type CreateDiscordApiClientOptions = CreateApiTransportOptions &
     CreateIncidentApiOptions &
     CreateTraceApiOptions &
-    CreateReflectApiOptions &
+    CreateChatApiOptions &
     CreateInternalImageApiOptions &
     CreateInternalTextApiOptions &
     CreateInternalVoiceApiOptions;
@@ -53,7 +53,7 @@ export type CreateDiscordApiClientOptions = CreateApiTransportOptions &
 export type DiscordApiClient = {
     requestJson: ApiRequester;
 } & TraceApi &
-    ReflectApi &
+    ChatApi &
     IncidentApi &
     InternalImageApi &
     InternalTextApi &
@@ -85,7 +85,7 @@ export const createDiscordApiClient = ({
         }),
         ...createInternalTextApi(requestJson, { traceApiToken }),
         ...createInternalVoiceApi(requestJson, { traceApiToken }),
-        ...createReflectApi(requestJson, { traceApiToken }),
+        ...createChatApi(requestJson, { traceApiToken }),
         ...createTraceApi(requestJson, { traceApiToken }),
     };
 };
@@ -98,9 +98,9 @@ export type {
 } from './client.js';
 export { isDiscordApiClientError } from './client.js';
 export type {
-    DiscordReflectApiResponse,
-    UnknownReflectActionResponse,
-} from './reflect.js';
+    DiscordChatApiResponse,
+    UnknownChatActionResponse,
+} from './chat.js';
 export type { CreateIncidentApiOptions, IncidentApi } from './incidents.js';
 export type {
     CreateInternalImageApiOptions,

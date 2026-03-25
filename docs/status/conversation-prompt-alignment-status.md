@@ -2,52 +2,54 @@
 
 ## Last Updated
 
-2026-03-21
+2026-03-25
 
 ## Purpose
 
-This note tracks the prompt-alignment work underway across Discord chat, realtime voice, and Reflect. The goal of this branch is not to redesign every chat surface at once. The goal is to make the conversational behavior feel like one Footnote system instead of several separate prompt stacks that happen to share some wording.
+This note tracks a branch that started as prompt-alignment work and then widened into chat unification work. The original goal was to make Discord chat, realtime voice, and web chat feel like one Footnote assistant instead of three loosely related prompt stacks. That prompt work is now mostly in place. The branch is now moving into the next layer down: renaming and simplifying the shared text-chat path so Discord and web both use one backend `chat` capability.
 
-This document is written as an in-progress branch summary for someone joining the work later. It focuses on what has already landed, what direction the branch is moving in, and what still remains open.
+This is an in-progress status note. It is meant to help someone join the branch midstream and understand both what has already changed and what is still being cleaned up.
 
-## Current Status
+## Where The Branch Stands
 
-Status: In progress, with the shared conversational prompt foundation now in place but the broader chat unification work still unfinished.
+The prompt side is in much better shape than it was at the start of the branch. Footnote now has a shared conversational system layer and a shared Footnote persona layer that sit underneath Discord chat, realtime voice, and web chat. That means truthfulness rules, uncertainty handling, no-fake-retrieval behavior, and the general Footnote tone now come from one shared base. Surface-specific prompts still exist, but they are thinner and more focused on delivery style.
 
-Footnote now has a shared conversational prompt core that is used by Discord chat, realtime voice, and Reflect. That shared layer carries the cross-surface behavior we want to be consistent everywhere, such as truthfulness, uncertainty handling, no fake retrieval claims, and the general Footnote tone. Surface-specific prompts still exist, but they now sit on top of that shared base instead of duplicating the same ideas in three different places.
+At the same time, the branch has started the bigger rename from the old reflect-shaped backend text path to a general chat path. The active public route is now `POST /api/chat`. Shared request and response types are now named around `PostChatRequest` and `PostChatResponse`. The backend planner, orchestrator, handler, and service files have been renamed to `chat*` naming in the active path, and the Discord and web clients now call that shared chat route directly.
 
-In plain language, this means the bot should now sound more like the same assistant no matter where it is answering. Discord text, realtime voice, and Reflect can still format replies differently for their own surfaces, but they now start from the same behavioral rules.
+In plain language, the system is partway through a cleanup from "Reflect plus Discord adapter" toward "one backend chat system with Discord and web as surfaces."
 
-## What Changed
+## What Has Landed So Far
 
-The main structural change so far was the introduction of shared conversational prompt layers. The prompt catalog now includes a shared conversational system prompt and a shared Footnote persona prompt. Those layers are composed first, and then each surface adds its own delivery rules on top. Discord chat still has Discord-specific text behavior. Realtime voice still has voice-specific pacing and brevity rules. Reflect still has web-oriented citation and explanation behavior. The important change is that those differences now sit on top of a shared base instead of replacing it.
+The shared conversational prompt base is now real code, not just a plan. Discord chat, realtime voice, and web chat all resolve prompts through the same shared conversational layers first, then add their own surface-specific system rules and persona supplement. The one-active-persona rule also stayed intact. If a profile overlay is configured, that overlay still replaces the default persona bundle rather than stacking on top of it.
 
-The backend also now has a small prompt-layer helper that builds the system and persona bundles for a conversational surface in one place. That removed some duplication from the backend prompt assembly path and made the layering model easier to follow. On the Discord side, prompt composition was cleaned up in a similar way so the bot no longer has one composition path for chat and another unrelated path for realtime. This is useful groundwork for the larger chat unification work, but it is still groundwork rather than the end state.
+The backend now has a single helper for conversational prompt layers instead of separate helpers that drifted apart. That made the prompt assembly path easier to follow and removed duplication. Discord-side prompt composition was cleaned up in the same spirit so the text chat path is closer to the backend model.
 
-The active persona model was kept, but clarified. The system still uses exactly one active persona layer at runtime. If a profile overlay is configured, that overlay replaces the default persona bundle for the surface. If no overlay is configured, the default bundle is the shared Footnote persona plus the surface-specific persona supplement.
+The backend text route is also now actively moving under `chat` naming. The public API route is `/api/chat`, and the active contracts now use `Chat*` names instead of `Reflect*` names. Discord’s backend API client uses `chatViaApi`, the web client uses `chatQuestion`, and the backend route, planner, orchestrator, and service files have matching `chat` names in the active implementation.
 
-## Why This Matters
+The planner side is only partly unified so far. The prompt catalog now uses `chat.planner.system` as the active shared planner prompt for the text-chat path. That is a meaningful step because it stops Discord and web from drifting at the planning layer. The surrounding code still needs more cleanup, but the branch is no longer working from two different planner identities.
 
-Before this work, the surfaces were close in spirit but not fully aligned. Realtime voice was more focused on short spoken style. Discord chat and Reflect were stronger on reasoning discipline, attribution boundaries, and truthfulness rules. That made the product feel more fragmented than it needed to be. Small prompt changes also had to be copied into multiple places, which is the kind of branch drift that becomes expensive later.
+The prompt cleanup also now reflects the ownership boundary more clearly. Web-specific delivery rules still exist, but they now live under the shared `chat` prompt namespace instead of a separate top-level `web` prompt section. That makes it easier to see that web chat is a surface of the shared chat capability, not a separate conversation system.
 
-The new layering model fixes that by separating two concerns that were previously mixed together. First, there is the shared Footnote behavior that should be consistent everywhere. Second, there is the surface-specific delivery style that should stay different where it needs to. That separation is simpler to reason about and safer to maintain.
+## What Is Still In Progress
 
-This also makes future prompt work cheaper. If the project wants to tighten uncertainty language, adjust anti-bot-loop behavior, or improve how Footnote explains its reasoning boundaries, that work can now happen in one shared layer instead of being repeated across every surface prompt.
+The biggest remaining gap is consistency cleanup. A lot of the active runtime path has been renamed to `chat`, but some comments, docs, test file names, and config descriptions still use older reflect wording. Those are not all correctness bugs, but they do make the branch harder to read. Part of the current work is trimming that leftover naming drift so the codebase tells one coherent story.
 
-## What Did Not Change
+The orchestration model is also not fully simplified yet. Discord and web now hit the same backend chat route, but there is still some older surface-specific framing in nearby code and docs. The direction is clear: one backend chat core, one planner/orchestrator path, and surface policy on top. The branch is not fully at that finish line yet.
 
-This branch has not merged all chat execution paths into one backend `chat` capability yet. Reflect is still the main backend-owned text endpoint, and Discord still acts as a surface adapter that builds a request and sends it to that backend path. Realtime voice is still a separate voice-specific workflow because it has different transport, timing, and output constraints.
+The runtime config shape is also intentionally mixed right now. The active route and contracts have moved to `chat`, but some backend runtime config still lives under older `reflect` section names. That is deliberate for now so the branch can move without forcing a larger env/config break at the same time. It is a cleanup target, not an accident.
 
-This branch also did not force all surfaces to speak in the same style. Realtime voice is still shorter and more spoken. Reflect is still better suited for explicit reasoning and citations. Discord chat is still optimized for Discord interaction patterns. The change here was alignment of behavior, not flattening every surface into one generic prompt.
+The local startup path needed one correction during this pass. Because the prompt catalog is part of the branch surface now, `pnpm start:all` has to rebuild prompts before launching services. That has been fixed so local startup uses fresh generated prompt artifacts instead of depending on whatever was built last.
 
-## Next Direction
+## Why The Prompt Work Came First
 
-The likely next step is to finish the naming and orchestration cleanup so Discord chat and the current Reflect endpoint become one general backend `chat` capability used by both Discord and web. The prompt work in this branch is an important prerequisite for that direction. It gives the project one shared conversational base before trying to unify the surrounding planner, route, and request/response naming.
+The prompt alignment was the right first step because it solved a real product problem and also reduced risk for the larger rename. Before this branch, Discord chat, realtime voice, and web chat were similar in spirit but not truly aligned. Voice was optimized for spoken brevity. Web chat was stronger on explicit reasoning and citations. Discord chat sat somewhere between them. That made the assistant feel more fragmented than it needed to.
 
-That next step is larger than a prompt edit. The working plan is to replace the current `reflect`-named chat path with one general `chat` path, including a backend route rename from `/api/reflect` to `/api/chat`, shared request and response naming around `PostChatRequest` and `PostChatResponse`, and one backend planner contract used by both Discord and web. In that model, Discord and web would still stay as separate surfaces, but they would become thin adapters over the same backend chat core instead of feeling like two partly overlapping systems.
+By creating one shared conversational base first, the branch now has a stable behavioral core before it finishes the backend chat unification. That makes the route and contract cleanup safer. We are no longer trying to merge two execution paths while they still disagree on basic behavior.
 
-The planner work is also expected to become more explicit in the next phase. Right now, planner behavior is still framed around the current Reflect path. The planned direction is one shared backend planner prompt and one shared structured planner output schema for both Discord chat and web chat. Surface-specific behavior would still exist, but it would be handled as policy inside the shared orchestrator rather than by keeping separate planner identities.
+## Current Direction
 
-The expected shape after that work is simpler to describe. There would be one backend-owned chat capability, one planner/orchestrator path behind it, one shared conversational prompt base, and then surface policy on top for Discord and web. Discord would still be allowed to react, generate images, or use TTS when the returned action calls for it. Web would still be restricted to message-style responses. Realtime voice would remain separate because it has different transport and timing constraints, but it would continue to share the same conversational prompt discipline.
+The working target is one backend-owned chat capability for text conversation. Discord and web should both be thin adapters over that backend chat core. Discord can still support Discord-specific actions like reactions, images, and TTS. Web can still stay message-only. The difference is that those surface rules should sit on top of one planner and one orchestration path instead of growing as two partly overlapping systems.
 
-So this branch is best understood as the first half of a broader cleanup. The prompt alignment work has already landed. The planned route, contract, planner, and orchestrator unification work has not landed yet, but this branch is now structured around that direction instead of treating prompt cleanup as a self-contained end state.
+That means the next useful work is not more prompt restructuring. The next useful work is finishing the naming cleanup, tightening the shared planner/orchestrator path, and updating the remaining docs and API descriptions so they describe the system the code is actually becoming.
+
+Realtime voice is not part of this route merge. It should stay on its own voice-specific transport and session flow. The important connection is prompt discipline, not route identity. Voice now shares the conversational base, but it is still a separate product path for transport and timing reasons.

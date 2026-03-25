@@ -12,7 +12,7 @@ This is the canonical order Footnote uses to build runtime prompt text.
    - Else, if `BOT_PROFILE_PROMPT_OVERLAY_PATH` is set and readable, use that file.
    - Else, use the default persona bundle for that surface.
 5. Compose prompts by path:
-   - Discord chat / realtime / Reflect: `shared conversational system + surface system + exactly one active persona layer`.
+   - Discord chat / realtime voice / web chat: `shared conversational system + surface system + exactly one active persona layer`.
    - The default active persona layer for those paths is `shared Footnote persona + surface persona supplement`.
    - If an overlay is present, it replaces that whole default persona layer rather than stacking on top of it.
    - Image paths keep their existing `surface system + exactly one active persona layer` structure.
@@ -25,7 +25,7 @@ This is the canonical order Footnote uses to build runtime prompt text.
 - `BOT_PROFILE_*` overlay settings are Discord bot runtime specific.
 - If both `BOT_PROFILE_PROMPT_OVERLAY` and `BOT_PROFILE_PROMPT_OVERLAY_PATH` are set, inline text wins and the file path is ignored.
 - All bot paths now run with one active persona layer, not stacked personas.
-- The shared conversational prompt core is used by Discord chat, realtime voice, and Reflect.
+- The shared conversational prompt core is used by Discord chat, realtime voice, and web chat.
 - Copy/paste-ready persona overlay template paths:
   - `packages/prompts/src/profile-overlays/danny.md`
   - `packages/prompts/src/profile-overlays/myuri.md`

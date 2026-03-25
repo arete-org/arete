@@ -3,7 +3,7 @@
  * @footnote-scope: test
  * @footnote-module: BackendPromptRegistryTests
  * @footnote-risk: medium - Missing tests here can let backend prompt ownership drift or ignore overrides.
- * @footnote-ethics: high - Backend prompt selection sets canonical behavior for web reflect responses.
+ * @footnote-ethics: high - Backend prompt selection sets canonical behavior for web chat responses.
  */
 
 import test from 'node:test';
@@ -21,7 +21,7 @@ const canonicalPromptCatalogPath = path.resolve(
     '../../prompts/src/defaults.yaml'
 );
 
-test('backend prompt registry exposes canonical shared + reflect prompt layers', () => {
+test('backend prompt registry exposes canonical shared + chat prompt layers', () => {
     // Pass the shared canonical catalog directly so PROMPT_CONFIG_PATH and
     // runtimeConfig.runtime.promptConfigPath cannot change this assertion.
     const registry = createBackendPromptRegistry({
@@ -47,8 +47,8 @@ test('backend prompt registry applies PROMPT_CONFIG_PATH-style overrides', () =>
     fs.writeFileSync(
         overridePath,
         [
-            'reflect:',
-            '  chat:',
+            'chat:',
+            '  web:',
             '    system:',
             '      template: |-',
             '        Backend override prompt.',
@@ -59,7 +59,7 @@ test('backend prompt registry applies PROMPT_CONFIG_PATH-style overrides', () =>
     const registry = createBackendPromptRegistry({ overridePath });
 
     assert.equal(
-        registry.renderPrompt('reflect.chat.system').content,
+        registry.renderPrompt('chat.web.system').content,
         'Backend override prompt.'
     );
 });
@@ -69,12 +69,12 @@ test('backend renderPrompt keeps default variables when explicit undefined value
         overridePath: canonicalPromptCatalogPath,
     });
 
-    const rendered = registry.renderPrompt('reflect.chat.persona.footnote', {
+    const rendered = registry.renderPrompt('chat.web.persona.footnote', {
         botProfileDisplayName: undefined,
     }).content;
 
     assert.match(
         rendered,
-        /In Reflect, favor explicit reasoning/
+        /In web chat, favor explicit reasoning/
     );
 });

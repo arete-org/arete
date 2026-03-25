@@ -1,5 +1,5 @@
 /**
- * @description: Hosts the interactive ask panel for submitting questions and rendering reflective responses on the website.
+ * @description: Hosts the interactive ask panel for submitting questions and rendering chative responses on the website.
  * @footnote-scope: web
  * @footnote-module: AskPanel
  * @footnote-risk: medium - Submission or rendering bugs can break the public question-and-answer experience.
@@ -34,7 +34,7 @@ const FALLBACK_REFLECTION =
     'I was unable to generate a response - please try again later.';
 
 /**
- * Main website ask panel that manages prompt input, Turnstile, and reflective
+ * Main website ask panel that manages prompt input, Turnstile, and chative
  * response rendering.
  */
 const AskPanel = (): JSX.Element => {
@@ -385,7 +385,7 @@ const AskPanel = (): JSX.Element => {
         setIsTypingComplete(false);
 
         try {
-            const payload = await api.reflectQuestion(
+            const payload = await api.chatQuestion(
                 {
                     surface: 'web',
                     trigger: { kind: 'submit' },
@@ -416,18 +416,18 @@ const AskPanel = (): JSX.Element => {
 
             if (payload.action !== 'message') {
                 throw new Error(
-                    `Reflect API returned unsupported action for web surface: ${payload.action}`
+                    `Chat API returned unsupported action for web surface: ${payload.action}`
                 );
             }
 
-            const reflection = payload.message as string | undefined;
+            const chation = payload.message as string | undefined;
             // Trust the API contract: metadata is already normalized by the backend.
             const backendMetadata =
                 payload.metadata as ResponseMetadata | null | undefined;
 
-            setStatus('A brief reflection:');
+            setStatus('A brief chation:');
             setAnswer(
-                reflection?.trim() ||
+                chation?.trim() ||
                     'I would begin by examining the ethical principles involved, then consider what transparency and care require.'
             );
 

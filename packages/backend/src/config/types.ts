@@ -84,7 +84,7 @@ export type RuntimeConfig = {
             ip: RateLimitConfig;
             session: RateLimitConfig;
         };
-        reflectService: RateLimitConfig;
+        chatService: RateLimitConfig;
         traceApi: RateLimitConfig;
     };
     webhook: {

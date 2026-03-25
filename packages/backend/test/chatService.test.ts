@@ -1,8 +1,8 @@
 /**
- * @description: Covers backend cost recording in the shared reflect service.
+ * @description: Covers backend cost recording in the shared chat service.
  * @footnote-scope: test
- * @footnote-module: ReflectServiceTests
- * @footnote-risk: medium - Missing tests could let backend reflect stop recording usage silently.
+ * @footnote-module: ChatServiceTests
+ * @footnote-risk: medium - Missing tests could let backend chat stop recording usage silently.
  * @footnote-ethics: medium - Cost accounting is part of responsible backend AI operation.
  */
 import test from 'node:test';
@@ -18,11 +18,11 @@ import {
     buildResponseMetadata,
     type ResponseMetadataRetrievalContext,
 } from '../src/services/openaiService.js';
-import { createReflectService } from '../src/services/reflectService.js';
+import { createChatService } from '../src/services/chatService.js';
 import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
 
 const createMetadata = (): ResponseMetadata => ({
-    responseId: 'reflect_test_response',
+    responseId: 'chat_test_response',
     provenance: 'Inferred',
     riskTier: 'Low',
     tradeoffCount: 0,
@@ -39,7 +39,7 @@ const createRuntime = (
     kind: 'test-runtime',
     async generate() {
         return {
-            text: 'reflect response',
+            text: 'chat response',
             model: 'gpt-5-mini',
             usage: {
                 promptTokens: 120,
@@ -53,9 +53,9 @@ const createRuntime = (
     },
 });
 
-test('createReflectService records backend token usage and estimated cost', async () => {
+test('createChatService records backend token usage and estimated cost', async () => {
     const usageRecords: BackendLLMCostRecord[] = [];
-    const reflectService = createReflectService({
+    const chatService = createChatService({
         generationRuntime: createRuntime(),
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
@@ -65,14 +65,14 @@ test('createReflectService records backend token usage and estimated cost', asyn
         },
     });
 
-    const response = await reflectService.runReflect({
+    const response = await chatService.runChat({
         question: 'What changed?',
     });
 
     assert.equal(response.action, 'message');
-    assert.equal(response.message, 'reflect response');
+    assert.equal(response.message, 'chat response');
     assert.equal(usageRecords.length, 1);
-    assert.equal(usageRecords[0].feature, 'reflect');
+    assert.equal(usageRecords[0].feature, 'chat');
     assert.equal(usageRecords[0].model, 'gpt-5-mini');
     assert.equal(usageRecords[0].promptTokens, 120);
     assert.equal(usageRecords[0].completionTokens, 80);
@@ -82,10 +82,10 @@ test('createReflectService records backend token usage and estimated cost', asyn
     assert.equal(usageRecords[0].totalCostUsd, 0.00019);
 });
 
-test('createReflectService passes the effective model to response metadata building', async () => {
+test('createChatService passes the effective model to response metadata building', async () => {
     let capturedRuntimeContextModelVersion: string | null = null;
 
-    const reflectService = createReflectService({
+    const chatService = createChatService({
         generationRuntime: createRuntime({
             model: 'gpt-5.1',
             usage: {
@@ -103,18 +103,18 @@ test('createReflectService passes the effective model to response metadata build
         recordUsage: () => undefined,
     });
 
-    await reflectService.runReflect({
+    await chatService.runChat({
         question: 'What changed?',
     });
 
     assert.equal(capturedRuntimeContextModelVersion, 'gpt-5.1');
 });
 
-test('createReflectService preserves the caller-requested model when the runtime omits one', async () => {
+test('createChatService preserves the caller-requested model when the runtime omits one', async () => {
     const usageRecords: BackendLLMCostRecord[] = [];
     let capturedRuntimeContextModelVersion: string | null = null;
 
-    const reflectService = createReflectService({
+    const chatService = createChatService({
         generationRuntime: createRuntime({
             model: undefined,
             usage: {
@@ -134,7 +134,7 @@ test('createReflectService preserves the caller-requested model when the runtime
         },
     });
 
-    await reflectService.runReflectMessages({
+    await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'What changed?' }],
         conversationSnapshot: 'What changed?',
         model: 'gpt-5.1',
@@ -145,12 +145,12 @@ test('createReflectService preserves the caller-requested model when the runtime
     assert.equal(usageRecords[0].model, 'gpt-5.1');
 });
 
-test('runReflectMessages passes planner temperament into response metadata runtime context', async () => {
+test('runChatMessages passes planner temperament into response metadata runtime context', async () => {
     let capturedPlannerTemperament:
         | import('@footnote/contracts/ethics-core').PartialResponseTemperament
         | undefined;
 
-    const reflectService = createReflectService({
+    const chatService = createChatService({
         generationRuntime: createRuntime({
             usage: {
                 promptTokens: 12,
@@ -167,7 +167,7 @@ test('runReflectMessages passes planner temperament into response metadata runti
         recordUsage: () => undefined,
     });
 
-    await reflectService.runReflectMessages({
+    await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'What changed?' }],
         conversationSnapshot: 'What changed?',
         plannerTemperament: {
@@ -182,10 +182,10 @@ test('runReflectMessages passes planner temperament into response metadata runti
     });
 });
 
-test('runReflectMessages passes structured retrieval facts into response metadata runtime context', async () => {
+test('runChatMessages passes structured retrieval facts into response metadata runtime context', async () => {
     let capturedRetrieval: ResponseMetadataRetrievalContext | undefined;
 
-    const reflectService = createReflectService({
+    const chatService = createChatService({
         generationRuntime: createRuntime({
             usage: {
                 promptTokens: 12,
@@ -203,7 +203,7 @@ test('runReflectMessages passes structured retrieval facts into response metadat
         recordUsage: () => undefined,
     });
 
-    await reflectService.runReflectMessages({
+    await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'What changed today?' }],
         conversationSnapshot: 'What changed today?',
         generation: {
@@ -226,10 +226,10 @@ test('runReflectMessages passes structured retrieval facts into response metadat
     });
 });
 
-test('runReflectMessages passes non-retrieval facts for plain VoltAgent-backed runs', async () => {
+test('runChatMessages passes non-retrieval facts for plain VoltAgent-backed runs', async () => {
     let capturedRetrieval: ResponseMetadataRetrievalContext | undefined;
 
-    const reflectService = createReflectService({
+    const chatService = createChatService({
         generationRuntime: createRuntime({
             usage: {
                 promptTokens: 12,
@@ -248,7 +248,7 @@ test('runReflectMessages passes non-retrieval facts for plain VoltAgent-backed r
         recordUsage: () => undefined,
     });
 
-    await reflectService.runReflectMessages({
+    await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'Give me a quick summary.' }],
         conversationSnapshot: 'Give me a quick summary.',
         generation: {
@@ -265,8 +265,8 @@ test('runReflectMessages passes non-retrieval facts for plain VoltAgent-backed r
     });
 });
 
-test('createReflectService swallows usage recording failures', async () => {
-    const reflectService = createReflectService({
+test('createChatService swallows usage recording failures', async () => {
+    const chatService = createChatService({
         generationRuntime: createRuntime({
             usage: {
                 promptTokens: 20,
@@ -282,23 +282,23 @@ test('createReflectService swallows usage recording failures', async () => {
         },
     });
 
-    const response = await reflectService.runReflect({
+    const response = await chatService.runChat({
         question: 'What changed?',
     });
 
     assert.equal(response.action, 'message');
-    assert.equal(response.message, 'reflect response');
-    assert.equal(response.metadata.responseId, 'reflect_test_response');
+    assert.equal(response.message, 'chat response');
+    assert.equal(response.metadata.responseId, 'chat_test_response');
 });
 
-test('runReflectMessages adds a backend repo-explainer response hint', async () => {
+test('runChatMessages adds a backend repo-explainer response hint', async () => {
     let seenMessages: Array<{ role: string; content: string }> = [];
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
         async generate({ messages }) {
             seenMessages = messages;
             return {
-                text: 'reflect response',
+                text: 'chat response',
                 model: 'gpt-5-mini',
                 usage: {
                     promptTokens: 20,
@@ -311,7 +311,7 @@ test('runReflectMessages adds a backend repo-explainer response hint', async () 
         },
     };
 
-    const reflectService = createReflectService({
+    const chatService = createChatService({
         generationRuntime,
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
@@ -319,7 +319,7 @@ test('runReflectMessages adds a backend repo-explainer response hint', async () 
         recordUsage: () => undefined,
     });
 
-    await reflectService.runReflectMessages({
+    await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'Explain Footnote architecture.' }],
         conversationSnapshot: 'Explain Footnote architecture.',
         generation: {
@@ -344,7 +344,7 @@ test('runReflectMessages adds a backend repo-explainer response hint', async () 
     );
 });
 
-test('runReflectMessages forwards planner-selected generation settings to GenerationRuntime', async () => {
+test('runChatMessages forwards planner-selected generation settings to GenerationRuntime', async () => {
     let seenRequest:
         | import('@footnote/agent-runtime').GenerationRequest
         | undefined;
@@ -353,7 +353,7 @@ test('runReflectMessages forwards planner-selected generation settings to Genera
         async generate(request) {
             seenRequest = request;
             return {
-                text: 'reflect response',
+                text: 'chat response',
                 model: 'gpt-5-mini',
                 usage: {
                     promptTokens: 20,
@@ -366,7 +366,7 @@ test('runReflectMessages forwards planner-selected generation settings to Genera
         },
     };
 
-    const reflectService = createReflectService({
+    const chatService = createChatService({
         generationRuntime,
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
@@ -374,7 +374,7 @@ test('runReflectMessages forwards planner-selected generation settings to Genera
         recordUsage: () => undefined,
     });
 
-    await reflectService.runReflectMessages({
+    await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'What changed today?' }],
         conversationSnapshot: 'What changed today?',
         generation: {
@@ -396,7 +396,7 @@ test('runReflectMessages forwards planner-selected generation settings to Genera
     assert.equal(seenRequest?.search?.intent, 'current_facts');
 });
 
-test('runReflectMessages drops blank search queries before building the runtime request', async () => {
+test('runChatMessages drops blank search queries before building the runtime request', async () => {
     let seenRequest:
         | import('@footnote/agent-runtime').GenerationRequest
         | undefined;
@@ -406,7 +406,7 @@ test('runReflectMessages drops blank search queries before building the runtime 
         async generate(request) {
             seenRequest = request;
             return {
-                text: 'reflect response',
+                text: 'chat response',
                 model: 'gpt-5-mini',
                 usage: {
                     promptTokens: 20,
@@ -419,7 +419,7 @@ test('runReflectMessages drops blank search queries before building the runtime 
         },
     };
 
-    const reflectService = createReflectService({
+    const chatService = createChatService({
         generationRuntime,
         storeTrace: async () => undefined,
         buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
@@ -430,7 +430,7 @@ test('runReflectMessages drops blank search queries before building the runtime 
         recordUsage: () => undefined,
     });
 
-    await reflectService.runReflectMessages({
+    await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'Give me a quick summary.' }],
         conversationSnapshot: 'Give me a quick summary.',
         generation: {
@@ -453,10 +453,10 @@ test('runReflectMessages drops blank search queries before building the runtime 
     });
 });
 
-test('runReflectMessages records usage correctly when VoltAgent handles search directly', async () => {
+test('runChatMessages records usage correctly when VoltAgent handles search directly', async () => {
     const usageRecords: BackendLLMCostRecord[] = [];
     let executorCalled = false;
-    const reflectService = createReflectService({
+    const chatService = createChatService({
         generationRuntime: createVoltAgentRuntime({
             defaultModel: 'gpt-5-mini',
             fallbackRuntime: {
@@ -499,7 +499,7 @@ test('runReflectMessages records usage correctly when VoltAgent handles search d
         },
     });
 
-    await reflectService.runReflectMessages({
+    await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'What changed today?' }],
         conversationSnapshot: 'What changed today?',
         generation: {
@@ -521,10 +521,10 @@ test('runReflectMessages records usage correctly when VoltAgent handles search d
     assert.equal(usageRecords[0].totalTokens, 75);
 });
 
-test('runReflectMessages stores evidence and freshness chips for retrieved search replies', async () => {
+test('runChatMessages stores evidence and freshness chips for retrieved search replies', async () => {
     let storedMetadata: ResponseMetadata | undefined;
 
-    const reflectService = createReflectService({
+    const chatService = createChatService({
         generationRuntime: createVoltAgentRuntime({
             defaultModel: 'gpt-5-mini',
             fallbackRuntime: {
@@ -564,7 +564,7 @@ test('runReflectMessages stores evidence and freshness chips for retrieved searc
         recordUsage: () => undefined,
     });
 
-    const response = await reflectService.runReflectMessages({
+    const response = await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'What changed today?' }],
         conversationSnapshot: 'What changed today?',
         generation: {

@@ -1,7 +1,7 @@
 /**
- * @description: Chooses the next reflect action for transport-neutral reflect requests.
+ * @description: Chooses the next chat action for transport-neutral chat requests.
  * @footnote-scope: core
- * @footnote-module: ReflectPlanner
+ * @footnote-module: ChatPlanner
  * @footnote-risk: high - Planner mistakes can pick the wrong modality, skip retrieval, or suppress expected replies.
  * @footnote-ethics: high - Action selection directly affects responsiveness, grounding, and user trust.
  */
@@ -11,9 +11,9 @@ import type {
     RuntimeMessage,
 } from '@footnote/agent-runtime';
 import type {
-    PostReflectRequest,
-    ReflectCapabilities,
-    ReflectImageRequest,
+    PostChatRequest,
+    ChatCapabilities,
+    ChatImageRequest,
 } from '@footnote/contracts/web';
 import type {
     RiskTier,
@@ -27,14 +27,14 @@ import {
     type BackendLLMCostRecord,
 } from './llmCostRecorder.js';
 import type {
-    ReflectGenerationPlan,
-    ReflectGenerationSearch,
-    ReflectRepoSearchHint,
-} from './reflectGenerationTypes.js';
+    ChatGenerationPlan,
+    ChatGenerationSearch,
+    ChatRepoSearchHint,
+} from './chatGenerationTypes.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
-type ReflectPlannerAction = 'message' | 'react' | 'ignore' | 'image';
+type ChatPlannerAction = 'message' | 'react' | 'ignore' | 'image';
 
 const REPO_HINTS = [
     'architecture',
@@ -48,32 +48,32 @@ const REPO_HINTS = [
     'openapi',
     'prompts',
     'provenance',
-    'reflect',
+    'chat',
     'traces',
     'voice',
 ] as const;
 
-const REPO_HINT_SET = new Set<ReflectRepoSearchHint>(REPO_HINTS);
+const REPO_HINT_SET = new Set<ChatRepoSearchHint>(REPO_HINTS);
 const DISCORD_CUSTOM_EMOJI_PATTERN = /^<a?:[a-zA-Z0-9_]+:[0-9]{2,}>$/;
 const UNICODE_SINGLE_EMOJI_PATTERN =
     /^(?:\p{Regional_Indicator}{2}|[#*0-9]\uFE0F?\u20E3|\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?)*)$/u;
 
 /**
- * Planner decision consumed by the reflect orchestrator after the raw LLM
+ * Planner decision consumed by the chat orchestrator after the raw LLM
  * output has been normalized and safety-checked.
  */
-export type ReflectPlan = {
-    action: ReflectPlannerAction;
+export type ChatPlan = {
+    action: ChatPlannerAction;
     modality: 'text' | 'tts';
     reaction?: string;
-    imageRequest?: ReflectImageRequest;
+    imageRequest?: ChatImageRequest;
     riskTier: RiskTier;
     reasoning: string;
-    generation: ReflectGenerationPlan;
+    generation: ChatGenerationPlan;
 };
 
-type CreateReflectPlannerOptions = {
-    executePlanner: ReflectPlannerExecutor;
+type CreateChatPlannerOptions = {
+    executePlanner: ChatPlannerExecutor;
     defaultModel?: string;
     recordUsage?: (record: BackendLLMCostRecord) => void;
 };
@@ -83,32 +83,32 @@ type CreateReflectPlannerOptions = {
  * This stays backend-local so planner policy can move off legacy OpenAI
  * without creating a second shared runtime abstraction.
  */
-type ReflectPlannerExecutionRequest = {
+type ChatPlannerExecutionRequest = {
     messages: RuntimeMessage[];
     model: string;
     maxOutputTokens: number;
-    reasoningEffort: ReflectGenerationPlan['reasoningEffort'];
-    verbosity: ReflectGenerationPlan['verbosity'];
+    reasoningEffort: ChatGenerationPlan['reasoningEffort'];
+    verbosity: ChatGenerationPlan['verbosity'];
 };
 
 /**
  * Narrow planner-only execution output.
  * The planner only needs text plus enough runtime facts for logging/costs.
  */
-type ReflectPlannerExecutionResult = {
+type ChatPlannerExecutionResult = {
     text: string;
     model?: string;
     usage?: GenerationUsage;
 };
 
-type ReflectPlannerExecutor = (
-    request: ReflectPlannerExecutionRequest
-) => Promise<ReflectPlannerExecutionResult>;
+type ChatPlannerExecutor = (
+    request: ChatPlannerExecutionRequest
+) => Promise<ChatPlannerExecutionResult>;
 
-type PlannerCandidate = Partial<ReflectPlan> & {
+type PlannerCandidate = Partial<ChatPlan> & {
     reasoning?: unknown;
-    generation?: Partial<ReflectGenerationPlan> & {
-        search?: Partial<ReflectGenerationSearch> & {
+    generation?: Partial<ChatGenerationPlan> & {
+        search?: Partial<ChatGenerationSearch> & {
             repoHints?: unknown;
         };
         temperament?: unknown;
@@ -133,7 +133,7 @@ const normalizeRiskTier = (value: unknown): RiskTier => {
  */
 const normalizeModality = (
     value: unknown,
-    capabilities: ReflectCapabilities | undefined
+    capabilities: ChatCapabilities | undefined
 ): 'text' | 'tts' => {
     if (value === 'tts' && capabilities?.canUseTts) {
         return 'tts';
@@ -147,7 +147,7 @@ const normalizeModality = (
  */
 const normalizeReasoningEffort = (
     value: unknown
-): ReflectGenerationPlan['reasoningEffort'] => {
+): ChatGenerationPlan['reasoningEffort'] => {
     if (
         value === 'minimal' ||
         value === 'low' ||
@@ -165,7 +165,7 @@ const normalizeReasoningEffort = (
  */
 const normalizeVerbosity = (
     value: unknown
-): ReflectGenerationPlan['verbosity'] => {
+): ChatGenerationPlan['verbosity'] => {
     if (value === 'low' || value === 'medium' || value === 'high') {
         return value;
     }
@@ -185,7 +185,7 @@ const normalizeSearchIntent = (value: unknown): GenerationSearchIntent =>
 const normalizeSearchContextSize = (
     value: unknown,
     searchIntent: GenerationSearchIntent
-): ReflectGenerationSearch['contextSize'] => {
+): ChatGenerationSearch['contextSize'] => {
     if (searchIntent === 'repo_explainer') {
         return value === 'high' ? 'high' : 'medium';
     }
@@ -200,13 +200,13 @@ const normalizeSearchContextSize = (
 /**
  * Keeps only allowed repo hints and removes duplicates.
  */
-const normalizeRepoHints = (value: unknown): ReflectRepoSearchHint[] => {
+const normalizeRepoHints = (value: unknown): ChatRepoSearchHint[] => {
     if (!Array.isArray(value)) {
         return [];
     }
 
-    const seen = new Set<ReflectRepoSearchHint>();
-    const normalized: ReflectRepoSearchHint[] = [];
+    const seen = new Set<ChatRepoSearchHint>();
+    const normalized: ChatRepoSearchHint[] = [];
 
     for (const rawHint of value) {
         if (typeof rawHint !== 'string') {
@@ -215,7 +215,7 @@ const normalizeRepoHints = (value: unknown): ReflectRepoSearchHint[] => {
 
         const normalizedHint = rawHint
             .trim()
-            .toLowerCase() as ReflectRepoSearchHint;
+            .toLowerCase() as ChatRepoSearchHint;
         if (!REPO_HINT_SET.has(normalizedHint) || seen.has(normalizedHint)) {
             continue;
         }
@@ -293,9 +293,9 @@ const isValidReactionEmoji = (value: string): boolean =>
  * Builds a conservative fallback plan used when planner output is invalid.
  */
 const buildFallbackPlan = (
-    request: PostReflectRequest,
+    request: PostChatRequest,
     reason: string
-): ReflectPlan => {
+): ChatPlan => {
     const fallbackAction =
         request.trigger.kind === 'catchup' ? 'ignore' : 'message';
 
@@ -317,18 +317,15 @@ const buildFallbackPlan = (
 /**
  * Produces a bounded request summary string for planner context/logging.
  */
-const summarizeRequest = (request: PostReflectRequest): string =>
+const summarizeRequest = (request: PostChatRequest): string =>
     JSON.stringify({
         surface: request.surface,
         trigger: request.trigger.kind,
         latestUserInputLength: request.latestUserInput.length,
         conversationMessages: request.conversation.length,
         attachmentKinds: request.attachments?.map(
-            (
-                attachment: NonNullable<
-                    PostReflectRequest['attachments']
-                >[number]
-            ) => attachment.kind
+            (attachment: NonNullable<PostChatRequest['attachments']>[number]) =>
+                attachment.kind
         ),
         capabilities: request.capabilities,
     });
@@ -338,7 +335,7 @@ const summarizeRequest = (request: PostReflectRequest): string =>
  */
 const normalizeImageRequest = (
     value: unknown
-): ReflectImageRequest | undefined => {
+): ChatImageRequest | undefined => {
     if (!value || typeof value !== 'object') {
         return undefined;
     }
@@ -411,10 +408,10 @@ const normalizeGeneration = (
     candidate: PlannerCandidate['generation'],
     reasoning: string
 ): {
-    generation: ReflectGenerationPlan;
+    generation: ChatGenerationPlan;
     reasoningSuffix?: string;
 } => {
-    const baseGeneration: ReflectGenerationPlan = {
+    const baseGeneration: ChatGenerationPlan = {
         reasoningEffort: normalizeReasoningEffort(candidate?.reasoningEffort),
         verbosity: normalizeVerbosity(candidate?.verbosity),
     };
@@ -463,12 +460,12 @@ const normalizeGeneration = (
 };
 
 /**
- * Converts raw planner JSON into a fully validated internal ReflectPlan.
+ * Converts raw planner JSON into a fully validated internal ChatPlan.
  */
 const normalizePlan = (
-    request: PostReflectRequest,
+    request: PostChatRequest,
     candidate: PlannerCandidate
-): ReflectPlan => {
+): ChatPlan => {
     const fallbackPlan = buildFallbackPlan(
         request,
         'Planner returned an invalid or incomplete decision.'
@@ -482,7 +479,7 @@ const normalizePlan = (
             ? candidate.action
             : fallbackPlan.action;
 
-    const normalizedPlan: ReflectPlan = {
+    const normalizedPlan: ChatPlan = {
         action: actionCandidate,
         modality: normalizeModality(candidate.modality, capabilities),
         riskTier: normalizeRiskTier(candidate.riskTier),
@@ -597,19 +594,17 @@ const normalizePlan = (
 };
 
 /**
- * Builds the backend-native planner used by the universal reflect workflow.
+ * Builds the backend-native planner used by the universal chat workflow.
  * It returns an internal plan shape and logs its reasoning in development so
  * planner drift is visible during pre-production rollout.
  */
-export const createReflectPlanner = ({
+export const createChatPlanner = ({
     executePlanner,
     defaultModel = runtimeConfig.openai.defaultModel,
     recordUsage = recordBackendLLMUsage,
-}: CreateReflectPlannerOptions) => {
-    const planReflect = async (
-        request: PostReflectRequest
-    ): Promise<ReflectPlan> => {
-        const plannerPrompt = renderPrompt('reflect.planner.system').content;
+}: CreateChatPlannerOptions) => {
+    const planChat = async (request: PostChatRequest): Promise<ChatPlan> => {
+        const plannerPrompt = renderPrompt('chat.planner.system').content;
         const requestSummary = summarizeRequest(request);
         const plannerMessages: RuntimeMessage[] = [
             { role: 'system', content: plannerPrompt },
@@ -622,7 +617,7 @@ export const createReflectPlanner = ({
                 content: `This request was triggered because ${request.trigger.kind}.`,
             },
             ...request.conversation.map(
-                (message: PostReflectRequest['conversation'][number]) => ({
+                (message: PostChatRequest['conversation'][number]) => ({
                     role: message.role,
                     content: message.content,
                 })
@@ -647,7 +642,7 @@ export const createReflectPlanner = ({
             if (recordUsage) {
                 try {
                     recordUsage({
-                        feature: 'reflect_planner',
+                        feature: 'chat_planner',
                         model: usageModel,
                         promptTokens,
                         completionTokens,
@@ -661,7 +656,7 @@ export const createReflectPlanner = ({
                     });
                 } catch (error) {
                     logger.warn(
-                        `Reflect planner usage recording failed: ${error instanceof Error ? error.message : String(error)}`
+                        `Chat planner usage recording failed: ${error instanceof Error ? error.message : String(error)}`
                     );
                 }
             }
@@ -669,25 +664,27 @@ export const createReflectPlanner = ({
             const parsed = JSON.parse(rawPlan) as PlannerCandidate;
             const normalizedPlan = normalizePlan(request, parsed);
 
+            /*
             if (isDevelopment()) {
                 logger.debug(
-                    `Reflect planner decision summary: ${requestSummary}`
+                    `Chat planner decision summary: ${requestSummary}`
                 );
                 logger.debug(
-                    `Reflect planner chose action=${normalizedPlan.action} modality=${normalizedPlan.modality} riskTier=${normalizedPlan.riskTier}`
+                    `Chat planner chose action=${normalizedPlan.action} modality=${normalizedPlan.modality} riskTier=${normalizedPlan.riskTier}`
                 );
                 logger.debug(
-                    `Reflect planner generation search=${normalizedPlan.generation.search ? 'enabled' : 'disabled'} reasoningEffort=${normalizedPlan.generation.reasoningEffort} verbosity=${normalizedPlan.generation.verbosity}`
+                    `Chat planner generation search=${normalizedPlan.generation.search ? 'enabled' : 'disabled'} reasoningEffort=${normalizedPlan.generation.reasoningEffort} verbosity=${normalizedPlan.generation.verbosity}`
                 );
                 if (normalizedPlan.generation.search) {
                     logger.debug(
-                        `Reflect planner search intent=${normalizedPlan.generation.search.intent} query=${JSON.stringify(normalizedPlan.generation.search.query)} repoHints=${JSON.stringify(normalizedPlan.generation.search.repoHints ?? [])}`
+                        `Chat planner search intent=${normalizedPlan.generation.search.intent} query=${JSON.stringify(normalizedPlan.generation.search.query)} repoHints=${JSON.stringify(normalizedPlan.generation.search.repoHints ?? [])}`
                     );
                 }
                 logger.debug(
-                    `Reflect planner reasoning: ${normalizedPlan.reasoning}`
+                    `Chat planner reasoning: ${normalizedPlan.reasoning}`
                 );
             }
+            */
 
             return normalizedPlan;
         } catch (error) {
@@ -696,13 +693,13 @@ export const createReflectPlanner = ({
                 'Planner failed, so the backend used a safe fallback.'
             );
             logger.warn(
-                `Reflect planner failed; using fallback action=${fallbackPlan.action}. Error: ${error instanceof Error ? error.message : String(error)}`
+                `Chat planner failed; using fallback action=${fallbackPlan.action}. Error: ${error instanceof Error ? error.message : String(error)}`
             );
             return fallbackPlan;
         }
     };
 
     return {
-        planReflect,
+        planChat,
     };
 };

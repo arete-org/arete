@@ -250,21 +250,21 @@ export type NormalizedApiError = {
 };
 
 /**
- * @api.operationId: postReflect
- * @api.path: POST /api/reflect
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
  */
-export type ReflectSurface = 'web' | 'discord';
+export type ChatSurface = 'web' | 'discord';
 
 /**
- * @api.operationId: postReflect
- * @api.path: POST /api/reflect
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
  */
-export type ReflectTriggerKind = 'submit' | 'direct' | 'invoked' | 'catchup';
+export type ChatTriggerKind = 'submit' | 'direct' | 'invoked' | 'catchup';
 
 /**
- * Transport-neutral conversation entry sent to the backend reflect workflow.
+ * Transport-neutral conversation entry sent to the backend chat workflow.
  */
-export type ReflectConversationMessage = {
+export type ChatConversationMessage = {
     role: 'system' | 'user' | 'assistant';
     content: string;
     authorName?: string;
@@ -277,7 +277,7 @@ export type ReflectConversationMessage = {
  * Attachments provide lightweight modality hints without coupling the contract
  * to one surface's event model.
  */
-export type ReflectAttachment = {
+export type ChatAttachment = {
     kind: 'image';
     url: string;
     contentType?: string;
@@ -287,7 +287,7 @@ export type ReflectAttachment = {
  * Surface capabilities tell the backend which action types are actually usable
  * for this caller.
  */
-export type ReflectCapabilities = {
+export type ChatCapabilities = {
     canReact: boolean;
     canGenerateImages: boolean;
     canUseTts: boolean;
@@ -296,7 +296,7 @@ export type ReflectCapabilities = {
 /**
  * Shared image-generation instructions returned by reflect planning.
  */
-export type ReflectImageRequest = {
+export type ChatImageRequest = {
     prompt: string;
     aspectRatio?: 'auto' | 'square' | 'portrait' | 'landscape';
     background?: string;
@@ -309,19 +309,19 @@ export type ReflectImageRequest = {
 };
 
 /**
- * @api.operationId: postReflect
- * @api.path: POST /api/reflect
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
  */
-export type PostReflectRequest = {
-    surface: ReflectSurface;
+export type PostChatRequest = {
+    surface: ChatSurface;
     trigger: {
-        kind: ReflectTriggerKind;
+        kind: ChatTriggerKind;
         messageId?: string;
     };
     latestUserInput: string;
-    conversation: ReflectConversationMessage[];
-    attachments?: ReflectAttachment[];
-    capabilities?: ReflectCapabilities;
+    conversation: ChatConversationMessage[];
+    attachments?: ChatAttachment[];
+    capabilities?: ChatCapabilities;
     sessionId?: string;
     surfaceContext?: {
         channelId?: string;
@@ -332,10 +332,10 @@ export type PostReflectRequest = {
 };
 
 /**
- * @api.operationId: postReflect
- * @api.path: POST /api/reflect
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
  */
-export type ReflectMessageActionResponse = {
+export type ChatMessageActionResponse = {
     action: 'message';
     message: string;
     modality: 'text' | 'tts';
@@ -343,43 +343,43 @@ export type ReflectMessageActionResponse = {
 };
 
 /**
- * @api.operationId: postReflect
- * @api.path: POST /api/reflect
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
  */
-export type ReflectReactActionResponse = {
+export type ChatReactActionResponse = {
     action: 'react';
     reaction: string;
     metadata: null;
 };
 
 /**
- * @api.operationId: postReflect
- * @api.path: POST /api/reflect
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
  */
-export type ReflectIgnoreActionResponse = {
+export type ChatIgnoreActionResponse = {
     action: 'ignore';
     metadata: null;
 };
 
 /**
- * @api.operationId: postReflect
- * @api.path: POST /api/reflect
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
  */
-export type ReflectImageActionResponse = {
+export type ChatImageActionResponse = {
     action: 'image';
-    imageRequest: ReflectImageRequest;
+    imageRequest: ChatImageRequest;
     metadata: null;
 };
 
 /**
- * @api.operationId: postReflect
- * @api.path: POST /api/reflect
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
  */
-export type PostReflectResponse =
-    | ReflectMessageActionResponse
-    | ReflectReactActionResponse
-    | ReflectIgnoreActionResponse
-    | ReflectImageActionResponse;
+export type PostChatResponse =
+    | ChatMessageActionResponse
+    | ChatReactActionResponse
+    | ChatIgnoreActionResponse
+    | ChatImageActionResponse;
 
 /**
  * Curated text-model vocabulary accepted by the trusted internal image route.

@@ -35,7 +35,7 @@ const REQUIRED_PROMPT_KEYS: PromptKey[] = [
     'discord.image.persona.footnote',
     'discord.image.developer',
     'text.news.system',
-    'discord.planner.system',
+    'chat.planner.system',
     'discord.realtime.system',
     'discord.realtime.persona.footnote',
     'discord.summarizer.system',
@@ -45,7 +45,7 @@ const promptSystemKeysByUsage = {
     'image.system': ['discord.image.system'],
     'image.developer': ['discord.image.developer'],
     realtime: ['conversation.shared.system', 'discord.realtime.system'],
-    reflect: ['conversation.shared.system', 'discord.chat.system'],
+    chat: ['conversation.shared.system', 'discord.chat.system'],
     provenance: ['conversation.shared.system', 'discord.chat.system'],
 } as const satisfies Record<ProfilePromptOverlayUsage, readonly PromptKey[]>;
 
@@ -56,7 +56,7 @@ const promptPersonaKeysByUsage = {
         'conversation.shared.persona.footnote',
         'discord.realtime.persona.footnote',
     ],
-    reflect: [
+    chat: [
         'conversation.shared.persona.footnote',
         'discord.chat.persona.footnote',
     ],
@@ -107,8 +107,8 @@ export const renderPromptWithProfileOverlay = (
 
 /**
  * Adds the runtime profile overlay as a separate system message when present.
- * Reflect request building uses this so overlay behavior stays consistent while
- * still preserving existing reflect message ordering.
+ * Chat request building uses this so overlay behavior stays consistent while
+ * still preserving existing message ordering.
  */
 export const prependProfileOverlaySystemMessage = (
     conversation: readonly PromptConversationMessage[],
