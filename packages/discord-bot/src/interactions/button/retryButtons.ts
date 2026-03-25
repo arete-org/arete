@@ -75,18 +75,11 @@ export async function handleImageRetryButtonInteraction(
                           formatRetryCountdown(countdown)
                       )
                     : undefined;
-            try {
-                await interaction.update({
-                    content: message,
-                    components: retryRow ? [retryRow] : [],
-                });
-            } catch {
-                await interaction.reply({
-                    content: message,
-                    flags: [EPHEMERAL_FLAG],
-                    components: retryRow ? [retryRow] : [],
-                });
-            }
+            await interaction.reply({
+                content: message,
+                flags: [EPHEMERAL_FLAG],
+                components: retryRow ? [retryRow] : [],
+            });
             return true;
         }
 
