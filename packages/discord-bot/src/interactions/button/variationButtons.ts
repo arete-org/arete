@@ -176,7 +176,11 @@ async function handleGenerateVariationButton(
         if (tokenSpend) {
             refundImageTokens(interaction.user.id, tokenSpend.cost);
         }
-        if (!interaction.replied && !interaction.deferred) {
+        if (interaction.deferred) {
+            await interaction.editReply({
+                content: '⚠️ Something went wrong while generating that variation.',
+            });
+        } else {
             await interaction.reply({
                 content: '⚠️ Something went wrong while generating that variation.',
                 flags: [EPHEMERAL_FLAG],
