@@ -82,15 +82,17 @@ Example:
 
 ## Review Communication for Correctness/Safety-Critical Changes
 
-- When reviewing or summarizing changes that affect correctness or safety
-  (schemas, validators, CI gates, auth, provenance/audit logging, policy enforcement),
-  explicitly state:
-    - invariants (what must always be true)
-    - at least one realistic failure mode
-    - the test(s), validation(s), or CI check(s) that would catch that failure
-- If no such check exists, say so plainly as a gap.
-- Do not present correctness/safety-critical changes as review-ready unless those invariants,
-  failure modes, and checks can be explained concretely from the code and validation setup.
+- Default review/summarization structure should use three sections:
+    - `What Changed`: 2-4 concrete bullets describing behavior/boundary changes.
+    - `Risk Check`: one short paragraph naming the primary failure mode and any residual risk.
+    - `Validation`: exact tests/checks run and pass/fail outcome.
+- For correctness/safety-critical changes (schemas, validators, CI gates, auth, provenance/audit logging, policy enforcement),
+  include these details within that structure:
+    - in `Risk Check`, state key invariants (what must always be true) and at least one realistic failure mode
+    - in `Validation`, name the test(s), validation(s), or CI check(s) that would catch that failure
+- If no such check exists, say so plainly as a gap in `Validation`.
+- Do not present correctness/safety-critical changes as review-ready unless the invariants,
+  failure mode, and catching checks are explained concretely from code and validation setup.
 
 ## CodeRabbit CLI
 

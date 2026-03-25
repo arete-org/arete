@@ -242,15 +242,17 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 - Check that structured logging patterns are maintained.
 
 ### Correctness/Safety-Critical Review Output
+- Default review/summarization output should use three sections:
+  - `What Changed` (concise behavior/boundary summary)
+  - `Risk Check` (main failure mode and residual risk)
+  - `Validation` (exact checks run and outcome)
 - For changes affecting schemas, validators, CI gates, auth, provenance/audit logging,
-  policy enforcement, or other correctness/safety-critical behavior, the assistant must
-  include in its review or summary:
-  - 2-5 invariants the change relies on or enforces
-  - at least one realistic failure mode
-  - the tests, lint rules, validation steps, or CI checks that would catch that failure
-- If no such check exists, state that explicitly as a review gap.
+  policy enforcement, or other correctness/safety-critical behavior, include:
+  - in `Risk Check`: 2-5 invariants the change relies on or enforces, plus at least one realistic failure mode
+  - in `Validation`: the tests, lint rules, validation steps, or CI checks that would catch that failure
+- If no such check exists, state that explicitly as a review gap in `Validation`.
 - Do not describe a correctness/safety-critical change as ready to merge unless the
-  invariants, failure modes, and checks can be explained concretely from the code and
+  invariants, failure mode, and catching checks can be explained concretely from code and
   validation setup.
 
 ### Recommended Workflow
