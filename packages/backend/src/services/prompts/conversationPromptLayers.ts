@@ -35,6 +35,18 @@ const surfacePersonaKeys = {
     ],
 } as const;
 
+// Fail fast on missing required keys
+const requiredConversationPromptKeys = [
+    ...surfaceSystemKeys['discord-chat'],
+    ...surfaceSystemKeys['discord-realtime'],
+    ...surfaceSystemKeys['web-chat'],
+    ...surfacePersonaKeys['discord-chat'],
+    ...surfacePersonaKeys['discord-realtime'],
+    ...surfacePersonaKeys['web-chat'],
+] as const;
+
+promptRegistry.assertKeys(requiredConversationPromptKeys);
+
 export type ConversationSurface = keyof typeof surfaceSystemKeys;
 
 export interface ConversationPromptLayers {
