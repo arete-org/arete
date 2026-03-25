@@ -31,3 +31,4 @@ Footnote keeps docs in three buckets:
 - [Legacy OpenAI Text Migration Status](./status/2026-03-18-legacy-openai-text-migration-status.md): Records the completed text migration branch and its validation snapshot.
 - [Legacy OpenAI Image Migration Status](./status/2026-03-19-legacy-openai-image-migration-status.md): Records the completed image migration branch and the resulting ownership cleanup.
 - [Legacy OpenAI Voice Migration Status](./status/2026-03-21-legacy-openai-voice-migration-status.md): Records the completed voice migration branch and the final backend-owned voice boundary.
+- [Runtime Boundary Cleanup Status](./status/2026-03-25-runtime-boundary-cleanup-status.md): Audits current repo state for the runtime-boundary cleanup branch and records the remaining gaps.

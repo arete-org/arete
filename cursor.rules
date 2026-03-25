@@ -257,13 +257,15 @@ const <loggerName>Logger = logger.child({ module: '<loggerName>' });
 1. **Complete implementation**
 2. **Run ESLint by default** on the touched files when possible; otherwise run the broader repo lint command and note the wider scope
 3. **Run automated validation**: `pnpm review` (validates `@footnote-*` tags, OpenAPI code links, types, linting)
-4. **Use Cursor's Bugbot (Review PR)** for automated code quality analysis
-5. **Use inline chat (`Ctrl+K`)** with project-specific prompts (see `.cursor/footnote-prompts.md`)
-6. **Accept suggested simplifications or comments** in-place
-7. **Open human PR review** for logic, ethics, and integration focus
+4. **Run packaging validation when the change can affect deployable services**: `docker compose -f deploy/compose.yml build`
+5. **Use Cursor's Bugbot (Review PR)** for automated code quality analysis
+6. **Use inline chat (`Ctrl+K`)** with project-specific prompts (see `.cursor/footnote-prompts.md`)
+7. **Accept suggested simplifications or comments** in-place
+8. **Open human PR review** for logic, ethics, and integration focus
 
 ### Integration with Existing Tools
 - **Review pipeline**: `pnpm review`
+- **Packaging validation**: `docker compose -f deploy/compose.yml build`
 - **`@footnote-*` validation**: `pnpm validate-footnote-tags` (enforced by CI)
 - **OpenAPI linking validation**: `pnpm validate-openapi-links`
 - **Cursor tasks**: Use `.cursor/tasks.json` commands for quick access

@@ -76,6 +76,7 @@ Example:
 - Prefer linting only the touched files when the repo tooling supports it cleanly.
 - If the repo only exposes a broader lint command, run that broader command and note the wider validation scope.
 - Review: `pnpm review`
+- Packaging validation for deployable service changes or cleanup that can affect runtime packaging: `docker compose -f deploy/compose.yml build`
 - `@footnote-*` tags: `pnpm validate-footnote-tags`
 - OpenAPI linking: `pnpm validate-openapi-links`
 
