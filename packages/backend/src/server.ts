@@ -36,6 +36,7 @@ import { createAssetResolver } from './http/assets.js';
 import { verifyGitHubSignature } from './utils/github.js';
 import { logRequest } from './utils/requestLogger.js';
 import { logger } from './utils/logger.js';
+import { createVoltAgentLogger } from './utils/voltagentLogger.js';
 import { createChatHandler } from './handlers/chat.js';
 import { createTraceHandlers } from './handlers/trace.js';
 import { createBlogHandlers } from './handlers/blog.js';
@@ -72,6 +73,7 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(currentDirectory, '../../web/dist');
 const DATA_DIR = runtimeConfig.server.dataDir;
 const BLOG_POSTS_DIR = path.join(DATA_DIR, 'blog-posts');
+const VOLTAGENT_LOG_DIR = path.join(runtimeConfig.logging.directory, 'voltagent');
 
 // --- Storage and asset helpers ---
 const blogStore = createBlogStore(BLOG_POSTS_DIR);
@@ -100,6 +102,10 @@ let ipRateLimiter: SimpleRateLimiter | null = null;
 let sessionRateLimiter: SimpleRateLimiter | null = null;
 let serviceRateLimiter: SimpleRateLimiter | null = null;
 let traceWriteLimiter: SimpleRateLimiter | null = null;
+const voltAgentLogger = createVoltAgentLogger({
+    directory: VOLTAGENT_LOG_DIR,
+    level: runtimeConfig.logging.level,
+});
 
 // --- Service initialization ---
 const initializeServices = () => {
@@ -140,6 +146,7 @@ const initializeServices = () => {
         generationRuntime = createVoltAgentRuntime({
             fallbackRuntime: legacyRuntime,
             defaultModel: runtimeConfig.openai.defaultModel,
+            logger: voltAgentLogger,
         });
         imageGenerationRuntime = createOpenAiImageRuntime({
             apiKey: runtimeConfig.openai.apiKey,

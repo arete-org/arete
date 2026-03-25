@@ -115,8 +115,6 @@ type PlannerCandidate = Partial<ChatPlan> & {
     };
 };
 
-const isDevelopment = (): boolean => runtimeConfig.runtime.isDevelopment;
-
 /**
  * Coerces arbitrary planner output into the RiskTier contract.
  */
