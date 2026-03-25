@@ -149,17 +149,7 @@ function isProviderApiError(error: unknown): error is ProviderApiErrorShape {
         return false;
     }
 
-    const hasStatus = typeof candidate.status === 'number';
-    const hasCode = typeof candidate.code === 'string';
-    const nestedCode =
-        candidate.error &&
-        typeof candidate.error === 'object' &&
-        'code' in candidate.error
-            ? (candidate.error as { code?: unknown }).code
-            : undefined;
-    const hasNestedCode = typeof nestedCode === 'string';
-
-    return hasStatus || hasCode || hasNestedCode;
+    return true;
 }
 
 function extractApiErrorCode(error: ProviderApiErrorShape): string | undefined {
