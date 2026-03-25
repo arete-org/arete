@@ -6,7 +6,9 @@
  * @footnote-ethics: high - Realtime prompt text shapes live voice behavior and user expectations.
  */
 import type { InternalVoiceSessionContext } from '@footnote/contracts/voice';
-import { renderPrompt } from './promptRegistry.js';
+import {
+    renderConversationPromptLayers,
+} from './conversationPromptLayers.js';
 import { buildProfileOverlaySystemMessage } from './profilePromptOverlay.js';
 import { runtimeConfig } from '../../config.js';
 
@@ -61,9 +63,9 @@ const buildRealtimePersonaLayer = (): string => {
         return overlayMessage;
     }
 
-    return renderPrompt('discord.realtime.persona.footnote', {
+    return renderConversationPromptLayers('discord-realtime', {
         botProfileDisplayName: runtimeConfig.profile.displayName,
-    }).content;
+    }).personaPrompt;
 };
 
 const formatParticipantRoster = (
@@ -110,12 +112,12 @@ const formatTranscriptBlock = (transcripts?: string[]): string => {
 export const buildRealtimeInstructions = (
     context: InternalVoiceSessionContext
 ): string => {
-    const basePrompt = renderPrompt('discord.realtime.system', {
+    const promptLayers = renderConversationPromptLayers('discord-realtime', {
         botProfileDisplayName: runtimeConfig.profile.displayName,
-    }).content;
+    });
     const personaLayer = buildRealtimePersonaLayer();
     const roster = formatParticipantRoster(context.participants);
     const transcriptBlock = formatTranscriptBlock(context.transcripts);
 
-    return `${basePrompt.trimEnd()}\n\n${personaLayer}\n\nParticipants currently in the voice channel:\n${roster}${transcriptBlock}`.trim();
+    return `${promptLayers.systemPrompt.trimEnd()}\n\n${personaLayer}\n\nParticipants currently in the voice channel:\n${roster}${transcriptBlock}`.trim();
 };

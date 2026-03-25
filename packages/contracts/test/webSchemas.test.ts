@@ -34,8 +34,8 @@ import {
     PostIncidentReportRequestSchema,
     PostIncidentReportResponseSchema,
     PostIncidentStatusRequestSchema,
-    PostReflectRequestSchema,
-    PostReflectResponseSchema,
+    PostChatRequestSchema,
+    PostChatResponseSchema,
     PostTraceCardFromTraceRequestSchema,
     PostTraceCardFromTraceResponseSchema,
     PostTraceCardRequestSchema,
@@ -58,7 +58,7 @@ import type {
     GetTraceResponse,
     GetTraceStaleResponse,
     PostIncidentReportResponse,
-    PostReflectResponse,
+    PostChatResponse,
 } from '../src/web/types';
 import type { ApiResponseValidationResult } from '../src/web/client-core';
 
@@ -121,9 +121,9 @@ const baseIncidentDetail = {
     },
 } as const;
 
-test('PostReflectRequestSchema enforces strict request payload rules', () => {
+test('PostChatRequestSchema enforces strict request payload rules', () => {
     assert.equal(
-        PostReflectRequestSchema.safeParse({
+        PostChatRequestSchema.safeParse({
             surface: 'web',
             trigger: { kind: 'submit' },
             latestUserInput: 'What is Footnote?',
@@ -138,7 +138,7 @@ test('PostReflectRequestSchema enforces strict request payload rules', () => {
     );
 
     assert.equal(
-        PostReflectRequestSchema.safeParse({
+        PostChatRequestSchema.safeParse({
             surface: 'web',
             trigger: { kind: 'submit' },
             latestUserInput: 'What is Footnote?',
@@ -154,7 +154,7 @@ test('PostReflectRequestSchema enforces strict request payload rules', () => {
     );
 
     assert.equal(
-        PostReflectRequestSchema.safeParse({
+        PostChatRequestSchema.safeParse({
             surface: 'web',
             trigger: { kind: 'submit' },
             latestUserInput: 'x'.repeat(3073),
@@ -405,8 +405,8 @@ test('PostTraceCardFromTrace schemas require responseId and parse response envel
     );
 });
 
-test('PostReflectResponseSchema and GetTraceStaleResponseSchema accept extensible responses', () => {
-    const reflectParsed = PostReflectResponseSchema.safeParse({
+test('PostChatResponseSchema and GetTraceStaleResponseSchema accept extensible responses', () => {
+    const reflectParsed = PostChatResponseSchema.safeParse({
         action: 'message',
         message: 'Hello',
         modality: 'text',
@@ -418,7 +418,7 @@ test('PostReflectResponseSchema and GetTraceStaleResponseSchema accept extensibl
     });
     assert.equal(reflectParsed.success, true);
 
-    const imageParsed = PostReflectResponseSchema.safeParse({
+    const imageParsed = PostChatResponseSchema.safeParse({
         action: 'image',
         imageRequest: {
             prompt: 'a thoughtful robot reading under a tree',
@@ -457,7 +457,7 @@ test('GetTraceApiResponseSchema accepts both live and stale trace payloads', () 
 
 test('schema validator outputs stay assignable to shared response contract types', () => {
     const reflectValidator = createSchemaResponseValidator(
-        PostReflectResponseSchema
+        PostChatResponseSchema
     );
     const traceValidator = createSchemaResponseValidator(
         GetTraceApiResponseSchema
@@ -465,7 +465,7 @@ test('schema validator outputs stay assignable to shared response contract types
 
     const typedReflectValidator: (
         data: unknown
-    ) => ApiResponseValidationResult<PostReflectResponse> = reflectValidator;
+    ) => ApiResponseValidationResult<PostChatResponse> = reflectValidator;
     const typedTraceValidator: (
         data: unknown
     ) => ApiResponseValidationResult<GetTraceResponse | GetTraceStaleResponse> =

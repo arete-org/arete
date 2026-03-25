@@ -17,6 +17,7 @@ import {
     createDefaultVoltAgentExecutor,
     createVoltAgentRuntime,
     type VoltAgentGenerateTextOptions,
+    type VoltAgentLogger,
 } from '../src/voltagentRuntime.js';
 
 test('voltagent runtime maps transcript and generation settings into executor options', async () => {
@@ -370,4 +371,100 @@ test('default VoltAgent executor maps usage from the installed AI SDK token fiel
         completionTokens: 9,
         totalTokens: 30,
     });
+});
+
+test('default VoltAgent executor passes the configured logger into Agent creation', async () => {
+    const seenLoggers: VoltAgentLogger[] = [];
+    const logger: VoltAgentLogger = {
+        trace() {},
+        debug() {},
+        info() {},
+        warn() {},
+        error() {},
+        fatal() {},
+        child() {
+            return this;
+        },
+    };
+    const executor = createDefaultVoltAgentExecutor({
+        model: 'openai/gpt-5-mini',
+        logger,
+        agentFactory: ({ logger: agentLogger }) => {
+            if (agentLogger) {
+                seenLoggers.push(agentLogger);
+            }
+
+            const fakeAgent = {
+                generateText: async (
+                    ..._args: Parameters<Agent['generateText']>
+                ): Promise<Awaited<ReturnType<Agent['generateText']>>> => ({
+                    content: [],
+                    text: 'executor reply',
+                    reasoning: [],
+                    reasoningText: undefined,
+                    files: [],
+                    sources: [],
+                    toolCalls: [],
+                    staticToolCalls: [],
+                    dynamicToolCalls: [],
+                    toolResults: [],
+                    staticToolResults: [],
+                    dynamicToolResults: [],
+                    finishReason: 'stop',
+                    rawFinishReason: 'stop',
+                    usage: {
+                        inputTokens: 0,
+                        inputTokenDetails: {
+                            noCacheTokens: 0,
+                            cacheReadTokens: 0,
+                            cacheWriteTokens: 0,
+                        },
+                        outputTokens: 0,
+                        outputTokenDetails: {
+                            textTokens: 0,
+                            reasoningTokens: 0,
+                        },
+                        totalTokens: 0,
+                    },
+                    totalUsage: {
+                        inputTokens: 0,
+                        inputTokenDetails: {
+                            noCacheTokens: 0,
+                            cacheReadTokens: 0,
+                            cacheWriteTokens: 0,
+                        },
+                        outputTokens: 0,
+                        outputTokenDetails: {
+                            textTokens: 0,
+                            reasoningTokens: 0,
+                        },
+                        totalTokens: 0,
+                    },
+                    warnings: undefined,
+                    request: {},
+                    response: {
+                        modelId: 'openai/gpt-5-mini',
+                        id: 'response_1',
+                        timestamp: new Date(0),
+                        messages: [],
+                    },
+                    providerMetadata: undefined,
+                    steps: [],
+                    experimental_output: undefined,
+                    output: undefined,
+                    context: new Map(),
+                    feedback: null,
+                }),
+            } satisfies Pick<Agent, 'generateText'>;
+
+            return fakeAgent;
+        },
+    });
+
+    await executor.generateText(
+        [{ role: 'user', content: 'Ping' }],
+        {}
+    );
+
+    assert.deepEqual(seenLoggers, [logger]);
 });

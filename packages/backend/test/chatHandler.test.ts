@@ -1,9 +1,9 @@
 /**
- * @description: Validates trusted-service auth and public CAPTCHA enforcement for /api/reflect.
+ * @description: Validates trusted-service auth and public CAPTCHA enforcement for /api/chat.
  * @footnote-scope: test
- * @footnote-module: ReflectHandlerTests
+ * @footnote-module: ChatHandlerTests
  * @footnote-risk: medium - Missing tests could let internal auth bypass or public auth regress silently.
- * @footnote-ethics: medium - Reflect auth controls abuse prevention and trusted service access.
+ * @footnote-ethics: medium - Chat auth controls abuse prevention and trusted service access.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,8 +14,8 @@ import type {
     GenerationRuntime,
 } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
-import type { PostReflectRequest } from '@footnote/contracts/web';
-import { createReflectHandler } from '../src/handlers/reflect.js';
+import type { PostChatRequest } from '@footnote/contracts/web';
+import { createChatHandler } from '../src/handlers/chat.js';
 import { runtimeConfig } from '../src/config.js';
 import { parseBooleanEnv } from '../src/config/parsers.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
@@ -50,7 +50,7 @@ type CreateTestServerOptions = {
 };
 
 const createMetadata = (): ResponseMetadata => ({
-    responseId: 'reflect_test_response',
+    responseId: 'chat_test_response',
     provenance: 'Inferred',
     riskTier: 'Low',
     tradeoffCount: 0,
@@ -61,9 +61,9 @@ const createMetadata = (): ResponseMetadata => ({
     citations: [],
 });
 
-const createReflectRequest = (
-    overrides: Partial<PostReflectRequest> = {}
-): PostReflectRequest => ({
+const createChatRequest = (
+    overrides: Partial<PostChatRequest> = {}
+): PostChatRequest => ({
     surface: 'discord',
     trigger: { kind: 'direct' },
     latestUserInput: 'What changed?',
@@ -139,7 +139,7 @@ const createTestServer = (
                 },
             } satisfies GenerationRuntime);
 
-        const handler = createReflectHandler({
+        const handler = createChatHandler({
             generationRuntime,
             ipRateLimiter:
                 options.ipRateLimiter ??
@@ -159,7 +159,7 @@ const createTestServer = (
             storeTrace: async () => undefined,
             logRequest: options.logRequest ?? (() => undefined),
             buildResponseMetadata: () => createMetadata(),
-            maxReflectBodyBytes: 20000,
+            maxChatBodyBytes: 20000,
         });
 
         const server = http.createServer((req, res) => {
@@ -185,7 +185,7 @@ const createTestServer = (
         });
     });
 
-test('reflect accepts trusted service calls with x-trace-token and no turnstile token', async () => {
+test('chat accepts trusted service calls with x-trace-token and no turnstile token', async () => {
     const env = process.env as MutableEnv;
     const previousTraceToken = env.TRACE_API_TOKEN;
     const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
@@ -198,13 +198,13 @@ test('reflect accepts trusted service calls with x-trace-token and no turnstile 
     const server = await createTestServer();
 
     try {
-        const response = await fetch(`${server.url}/api/reflect`, {
+        const response = await fetch(`${server.url}/api/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Trace-Token': 'trace-secret',
             },
-            body: JSON.stringify(createReflectRequest()),
+            body: JSON.stringify(createChatRequest()),
         });
 
         assert.equal(response.status, 200);
@@ -216,7 +216,7 @@ test('reflect accepts trusted service calls with x-trace-token and no turnstile 
         };
         assert.equal(payload.action, 'message');
         assert.equal(payload.message, 'service response');
-        assert.equal(payload.metadata.responseId, 'reflect_test_response');
+        assert.equal(payload.metadata.responseId, 'chat_test_response');
     } finally {
         await server.close();
         env.TRACE_API_TOKEN = previousTraceToken;
@@ -225,7 +225,7 @@ test('reflect accepts trusted service calls with x-trace-token and no turnstile 
     }
 });
 
-test('reflect rejects public calls without service token or turnstile token', async () => {
+test('chat rejects public calls without service token or turnstile token', async () => {
     const env = process.env as MutableEnv;
     const previousTraceToken = env.TRACE_API_TOKEN;
     const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
@@ -238,12 +238,12 @@ test('reflect rejects public calls without service token or turnstile token', as
     const server = await createTestServer();
 
     try {
-        const response = await fetch(`${server.url}/api/reflect`, {
+        const response = await fetch(`${server.url}/api/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(createReflectRequest()),
+            body: JSON.stringify(createChatRequest()),
         });
 
         assert.equal(response.status, 403);
@@ -261,7 +261,7 @@ test('reflect rejects public calls without service token or turnstile token', as
     }
 });
 
-test('reflect constrains web requests to message actions', async () => {
+test('chat constrains web requests to message actions', async () => {
     const env = process.env as MutableEnv;
     const previousTraceToken = env.TRACE_API_TOKEN;
     const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
@@ -274,14 +274,14 @@ test('reflect constrains web requests to message actions', async () => {
     const server = await createTestServer();
 
     try {
-        const response = await fetch(`${server.url}/api/reflect`, {
+        const response = await fetch(`${server.url}/api/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Trace-Token': 'trace-secret',
             },
             body: JSON.stringify(
-                createReflectRequest({
+                createChatRequest({
                     surface: 'web',
                     trigger: { kind: 'submit' },
                     capabilities: {
@@ -299,7 +299,7 @@ test('reflect constrains web requests to message actions', async () => {
             metadata: ResponseMetadata;
         };
         assert.equal(payload.action, 'message');
-        assert.equal(payload.metadata.responseId, 'reflect_test_response');
+        assert.equal(payload.metadata.responseId, 'chat_test_response');
     } finally {
         await server.close();
         env.TRACE_API_TOKEN = previousTraceToken;
@@ -308,7 +308,7 @@ test('reflect constrains web requests to message actions', async () => {
     }
 });
 
-test('reflect service requests use a separate service rate limiter bucket', async () => {
+test('chat service requests use a separate service rate limiter bucket', async () => {
     const env = process.env as MutableEnv;
     const previousServiceToken = env.REFLECT_SERVICE_TOKEN;
     const previousServiceLimit = env.REFLECT_SERVICE_RATE_LIMIT;
@@ -325,14 +325,14 @@ test('reflect service requests use a separate service rate limiter bucket', asyn
     const server = await createTestServer();
 
     try {
-        const firstResponse = await fetch(`${server.url}/api/reflect`, {
+        const firstResponse = await fetch(`${server.url}/api/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Service-Token': 'service-secret',
             },
             body: JSON.stringify(
-                createReflectRequest({
+                createChatRequest({
                     latestUserInput: 'first request',
                     conversation: [{ role: 'user', content: 'first request' }],
                 })
@@ -340,14 +340,14 @@ test('reflect service requests use a separate service rate limiter bucket', asyn
         });
         assert.equal(firstResponse.status, 200);
 
-        const secondResponse = await fetch(`${server.url}/api/reflect`, {
+        const secondResponse = await fetch(`${server.url}/api/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Service-Token': 'service-secret',
             },
             body: JSON.stringify(
-                createReflectRequest({
+                createChatRequest({
                     latestUserInput: 'second request',
                     conversation: [{ role: 'user', content: 'second request' }],
                 })
@@ -368,7 +368,7 @@ test('reflect service requests use a separate service rate limiter bucket', asyn
     }
 });
 
-test('reflect trusted service requests stay in one bucket even if client IP changes', async () => {
+test('chat trusted service requests stay in one bucket even if client IP changes', async () => {
     const env = process.env as MutableEnv;
     const previousServiceToken = env.REFLECT_SERVICE_TOKEN;
     const previousServiceLimit = env.REFLECT_SERVICE_RATE_LIMIT;
@@ -387,7 +387,7 @@ test('reflect trusted service requests stay in one bucket even if client IP chan
     const server = await createTestServer();
 
     try {
-        const firstResponse = await fetch(`${server.url}/api/reflect`, {
+        const firstResponse = await fetch(`${server.url}/api/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -395,7 +395,7 @@ test('reflect trusted service requests stay in one bucket even if client IP chan
                 'X-Forwarded-For': '203.0.113.10',
             },
             body: JSON.stringify(
-                createReflectRequest({
+                createChatRequest({
                     latestUserInput: 'first request',
                     conversation: [{ role: 'user', content: 'first request' }],
                 })
@@ -403,7 +403,7 @@ test('reflect trusted service requests stay in one bucket even if client IP chan
         });
         assert.equal(firstResponse.status, 200);
 
-        const secondResponse = await fetch(`${server.url}/api/reflect`, {
+        const secondResponse = await fetch(`${server.url}/api/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -411,7 +411,7 @@ test('reflect trusted service requests stay in one bucket even if client IP chan
                 'X-Forwarded-For': '203.0.113.99',
             },
             body: JSON.stringify(
-                createReflectRequest({
+                createChatRequest({
                     latestUserInput: 'second request',
                     conversation: [{ role: 'user', content: 'second request' }],
                 })
@@ -433,7 +433,7 @@ test('reflect trusted service requests stay in one bucket even if client IP chan
     }
 });
 
-test('reflect does not expose raw upstream error details to clients', async () => {
+test('chat does not expose raw upstream error details to clients', async () => {
     const env = process.env as MutableEnv;
     const previousTraceToken = env.TRACE_API_TOKEN;
     const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
@@ -459,13 +459,13 @@ test('reflect does not expose raw upstream error details to clients', async () =
     });
 
     try {
-        const response = await fetch(`${server.url}/api/reflect`, {
+        const response = await fetch(`${server.url}/api/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Trace-Token': 'trace-secret',
             },
-            body: JSON.stringify(createReflectRequest()),
+            body: JSON.stringify(createChatRequest()),
         });
 
         assert.equal(response.status, 502);
@@ -489,7 +489,7 @@ test('reflect does not expose raw upstream error details to clients', async () =
     }
 });
 
-test('reflect accepts public calls when allowlist is unset and Turnstile hostname matches the request host', async () => {
+test('chat accepts public calls when allowlist is unset and Turnstile hostname matches the request host', async () => {
     const env = process.env as MutableEnv;
     const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
     const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
@@ -531,14 +531,14 @@ test('reflect accepts public calls when allowlist is unset and Turnstile hostnam
     const server = await createTestServer();
 
     try {
-        const response = await fetch(`${server.url}/api/reflect`, {
+        const response = await fetch(`${server.url}/api/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Turnstile-Token': 'captcha-token',
             },
             body: JSON.stringify(
-                createReflectRequest({
+                createChatRequest({
                     surface: 'web',
                     trigger: { kind: 'submit' },
                     latestUserInput: 'public request',
@@ -568,7 +568,7 @@ test('reflect accepts public calls when allowlist is unset and Turnstile hostnam
     }
 });
 
-test('reflect rate limits public callers before calling Turnstile', async () => {
+test('chat rate limits public callers before calling Turnstile', async () => {
     const env = process.env as MutableEnv;
     const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
     const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
@@ -615,14 +615,14 @@ test('reflect rate limits public callers before calling Turnstile', async () => 
     });
 
     try {
-        const firstResponse = await fetch(`${server.url}/api/reflect`, {
+        const firstResponse = await fetch(`${server.url}/api/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Turnstile-Token': 'captcha-token',
             },
             body: JSON.stringify(
-                createReflectRequest({
+                createChatRequest({
                     surface: 'web',
                     trigger: { kind: 'submit' },
                     latestUserInput: 'first public request',
@@ -640,14 +640,14 @@ test('reflect rate limits public callers before calling Turnstile', async () => 
         assert.equal(firstResponse.status, 200);
         assert.equal(turnstileCalls, 1);
 
-        const secondResponse = await fetch(`${server.url}/api/reflect`, {
+        const secondResponse = await fetch(`${server.url}/api/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Turnstile-Token': 'captcha-token',
             },
             body: JSON.stringify(
-                createReflectRequest({
+                createChatRequest({
                     surface: 'web',
                     trigger: { kind: 'submit' },
                     latestUserInput: 'second public request',

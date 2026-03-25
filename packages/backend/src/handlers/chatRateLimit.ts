@@ -1,7 +1,7 @@
 /**
- * @description: Rate-limit helpers for public and trusted-service reflect traffic.
+ * @description: Rate-limit helpers for public and trusted-service chat traffic.
  * @footnote-scope: utility
- * @footnote-module: ReflectRateLimit
+ * @footnote-module: ChatRateLimit
  * @footnote-risk: medium - Incorrect limiter routing can block legitimate traffic or weaken abuse controls.
  * @footnote-ethics: medium - Separate buckets support fair access across public and internal callers.
  */
@@ -9,9 +9,9 @@ import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import type { RateLimitConfig } from '../config/types.js';
-import type { ServiceAuth } from './reflectAuth.js';
-import type { RequestIdentity } from './reflectRequest.js';
-import type { ReflectFailureResponse } from './reflectResponses.js';
+import type { ServiceAuth } from './chatAuth.js';
+import type { RequestIdentity } from './chatRequest.js';
+import type { ChatFailureResponse } from './chatResponses.js';
 
 // Holds lazily-created fallback limiters so state survives across requests.
 type LimiterRef = {
@@ -22,7 +22,7 @@ type LimiterRef = {
  * Injected public limiters from the server. Service traffic uses its own
  * env-driven fallback limiter because there is no server-owned instance yet.
  */
-type CreateReflectRateLimitControllerOptions = {
+type CreateChatRateLimitControllerOptions = {
     ipRateLimiter: SimpleRateLimiter | null;
     sessionRateLimiter: SimpleRateLimiter | null;
     serviceRateLimiter: SimpleRateLimiter | null;
@@ -32,11 +32,11 @@ type CreateReflectRateLimitControllerOptions = {
  * Builds a rate-limit controller that preserves the current three-bucket model:
  * public IP, public session, and trusted service traffic.
  */
-export const createReflectRateLimitController = ({
+export const createChatRateLimitController = ({
     ipRateLimiter,
     sessionRateLimiter,
     serviceRateLimiter,
-}: CreateReflectRateLimitControllerOptions) => {
+}: CreateChatRateLimitControllerOptions) => {
     // These are created lazily so we only allocate fallback state if the caller did not inject a limiter.
     const fallbackIpLimiter: LimiterRef = { current: null };
     const fallbackSessionLimiter: LimiterRef = { current: null };
@@ -81,7 +81,7 @@ export const createReflectRateLimitController = ({
     const activeServiceRateLimiter = getLimiter(
         serviceRateLimiter,
         'service',
-        runtimeConfig.rateLimits.reflectService,
+        runtimeConfig.rateLimits.chatService,
         fallbackServiceLimiter
     );
 
@@ -89,7 +89,7 @@ export const createReflectRateLimitController = ({
         error: string,
         retryAfter: number,
         logLabel: string
-    ): ReflectFailureResponse => ({
+    ): ChatFailureResponse => ({
         // Retry-After is mirrored in both the header and JSON payload so browser and service
         // callers can both understand when to try again.
         statusCode: 429,
@@ -108,7 +108,7 @@ export const createReflectRateLimitController = ({
         identity: RequestIdentity
     ):
         | { success: true }
-        | { success: false; error: ReflectFailureResponse } => {
+        | { success: false; error: ChatFailureResponse } => {
         if (serviceAuth.isTrustedService) {
             // Keep service callers off the public IP/session buckets so bot traffic
             // cannot consume the browser allowance.
@@ -121,7 +121,7 @@ export const createReflectRateLimitController = ({
                     error: buildRateLimitFailure(
                         'Too many requests from this service',
                         serviceRateLimitResult.retryAfter,
-                        `reflect service-rate-limited source=${serviceAuth.authSource} retryAfter=${serviceRateLimitResult.retryAfter}`
+                        `chat service-rate-limited source=${serviceAuth.authSource} retryAfter=${serviceRateLimitResult.retryAfter}`
                     ),
                 };
             }
@@ -138,7 +138,7 @@ export const createReflectRateLimitController = ({
                 error: buildRateLimitFailure(
                     'Too many requests from this IP',
                     ipRateLimitResult.retryAfter,
-                    `reflect ip-rate-limited retryAfter=${ipRateLimitResult.retryAfter}`
+                    `chat ip-rate-limited retryAfter=${ipRateLimitResult.retryAfter}`
                 ),
             };
         }
@@ -152,7 +152,7 @@ export const createReflectRateLimitController = ({
                 error: buildRateLimitFailure(
                     'Too many requests for this session',
                     sessionRateLimitResult.retryAfter,
-                    `reflect session-rate-limited retryAfter=${sessionRateLimitResult.retryAfter}`
+                    `chat session-rate-limited retryAfter=${sessionRateLimitResult.retryAfter}`
                 ),
             };
         }

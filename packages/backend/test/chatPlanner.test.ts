@@ -1,19 +1,19 @@
 /**
- * @description: Covers backend reflect planner parsing and normalization behavior.
+ * @description: Covers backend chat planner parsing and normalization behavior.
  * @footnote-scope: test
- * @footnote-module: ReflectPlannerTests
+ * @footnote-module: ChatPlannerTests
  * @footnote-risk: medium - Missing tests here can let planner regressions hide behind safe fallbacks.
  * @footnote-ethics: medium - Planner normalization affects retrieval quality and response appropriateness.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { PostReflectRequest } from '@footnote/contracts/web';
-import { createReflectPlanner } from '../src/services/reflectPlanner.js';
+import type { PostChatRequest } from '@footnote/contracts/web';
+import { createChatPlanner } from '../src/services/chatPlanner.js';
 
-const createReflectRequest = (
-    overrides: Partial<PostReflectRequest> = {}
-): PostReflectRequest => ({
+const createChatRequest = (
+    overrides: Partial<PostChatRequest> = {}
+): PostChatRequest => ({
     surface: 'discord',
     trigger: { kind: 'direct' },
     latestUserInput: 'What changed?',
@@ -27,14 +27,14 @@ const createReflectRequest = (
 });
 
 const createPlanner = (normalizedText: string) =>
-    createReflectPlanner({
+    createChatPlanner({
         executePlanner: async () => ({
             text: normalizedText,
             model: 'gpt-5-mini',
         }),
     });
 
-test('reflectPlanner parses plain JSON output from the backend-native planner prompt', async () => {
+test('chatPlanner parses plain JSON output from the backend-native planner prompt', async () => {
     const planner = createPlanner(
         JSON.stringify({
             action: 'message',
@@ -59,7 +59,7 @@ test('reflectPlanner parses plain JSON output from the backend-native planner pr
             },
         })
     );
-    const plan = await planner.planReflect(createReflectRequest());
+    const plan = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
     assert.ok(plan.generation.search);
@@ -70,9 +70,9 @@ test('reflectPlanner parses plain JSON output from the backend-native planner pr
     assert.equal(plan.generation.search?.intent, 'current_facts');
 });
 
-test('reflectPlanner fails open to a valid fallback generation config when planner JSON is invalid', async () => {
+test('chatPlanner fails open to a valid fallback generation config when planner JSON is invalid', async () => {
     const planner = createPlanner('{not-valid-json');
-    const plan = await planner.planReflect(createReflectRequest());
+    const plan = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.generation.search, undefined);
@@ -111,7 +111,7 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
             },
         })
     );
-    const plan = await planner.planReflect(createReflectRequest());
+    const plan = await planner.planChat(createChatRequest());
 
     assert.ok(plan.generation.search);
     assert.equal(plan.generation.search?.intent, 'repo_explainer');
@@ -148,7 +148,7 @@ test('invalid web_search query downgrades safely to none', async () => {
             },
         })
     );
-    const plan = await planner.planReflect(createReflectRequest());
+    const plan = await planner.planChat(createChatRequest());
 
     assert.equal(plan.generation.search, undefined);
     assert.match(plan.reasoning, /search was disabled safely/i);
@@ -174,7 +174,7 @@ test('planner temperament is accepted when all TRACE axes are integer 1..5', asy
             },
         })
     );
-    const plan = await planner.planReflect(createReflectRequest());
+    const plan = await planner.planChat(createChatRequest());
 
     assert.deepEqual(plan.generation.temperament, {
         tightness: 5,
@@ -210,7 +210,7 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
             },
         })
     );
-    const plan = await planner.planReflect(createReflectRequest());
+    const plan = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.generation.search, undefined);
@@ -234,7 +234,7 @@ test('react plans with non-emoji payload fall back safely', async () => {
             },
         })
     );
-    const plan = await planner.planReflect(createReflectRequest());
+    const plan = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.reaction, undefined);

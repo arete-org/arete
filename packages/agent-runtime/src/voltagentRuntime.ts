@@ -84,6 +84,22 @@ export interface VoltAgentTextResult {
 }
 
 /**
+ * Minimal logger contract VoltAgent accepts.
+ *
+ * The backend can provide its own logger implementation so VoltAgent logs can
+ * be routed somewhere other than the main process console.
+ */
+export interface VoltAgentLogger {
+    trace(message: string, context?: object): void;
+    debug(message: string, context?: object): void;
+    info(message: string, context?: object): void;
+    warn(message: string, context?: object): void;
+    error(message: string, context?: object): void;
+    fatal(message: string, context?: object): void;
+    child(bindings: Record<string, unknown>): VoltAgentLogger;
+}
+
+/**
  * Small executor contract that keeps the adapter testable without depending on
  * VoltAgent internals in unit tests.
  */
@@ -99,6 +115,7 @@ export interface VoltAgentTextExecutor {
  */
 export type VoltAgentExecutorFactory = (input: {
     model: string;
+    logger?: VoltAgentLogger;
 }) => VoltAgentTextExecutor;
 
 type VoltAgentLike = Pick<Agent, 'generateText'>;
@@ -106,6 +123,7 @@ type VoltAgentLike = Pick<Agent, 'generateText'>;
 type CreateVoltAgentAgentFactoryInput = {
     model: string;
     tools?: NonNullable<AgentOptions['tools']>;
+    logger?: VoltAgentLogger;
 };
 
 /**
@@ -116,6 +134,7 @@ export interface CreateVoltAgentRuntimeOptions {
     defaultModel?: string;
     createExecutor?: VoltAgentExecutorFactory;
     kind?: string;
+    logger?: VoltAgentLogger;
 }
 
 type VoltAgentCallOptions = NonNullable<Parameters<Agent['generateText']>[1]>;
@@ -464,9 +483,11 @@ const normalizeVoltAgentResult = (
  */
 const createDefaultVoltAgentExecutor = ({
     model,
+    logger,
     agentFactory = ({
         model: agentModel,
         tools,
+        logger: agentLogger,
     }: CreateVoltAgentAgentFactoryInput): VoltAgentLike =>
         new Agent({
             name: 'footnote-generation-runtime',
@@ -474,16 +495,22 @@ const createDefaultVoltAgentExecutor = ({
                 'Continue the provided conversation transcript and follow any system messages included in it.',
             model: agentModel,
             memory: false,
+            ...(agentLogger !== undefined && { logger: agentLogger }),
             ...(tools !== undefined && { tools }),
         }),
 }: {
     model: string;
+    logger?: VoltAgentLogger;
     agentFactory?: (
         input: CreateVoltAgentAgentFactoryInput
     ) => VoltAgentLike;
 }): VoltAgentTextExecutor => {
     const createAgent = (tools?: NonNullable<AgentOptions['tools']>) =>
-        agentFactory({ model, ...(tools !== undefined && { tools }) });
+        agentFactory({
+            model,
+            ...(logger !== undefined && { logger }),
+            ...(tools !== undefined && { tools }),
+        });
 
     const agent = createAgent();
 
@@ -574,6 +601,7 @@ const createVoltAgentRuntime = ({
     defaultModel,
     createExecutor = createDefaultVoltAgentExecutor,
     kind = 'voltagent',
+    logger,
 }: CreateVoltAgentRuntimeOptions): GenerationRuntime => ({
     kind,
     async generate(request: GenerationRequest): Promise<GenerationResult> {
@@ -585,7 +613,10 @@ const createVoltAgentRuntime = ({
         }
 
         const executedModel = toVoltAgentModel(selectedModel);
-        const executor = createExecutor({ model: executedModel });
+        const executor = createExecutor({
+            model: executedModel,
+            ...(logger !== undefined && { logger }),
+        });
         const providerOptions = buildVoltAgentProviderOptions(request);
         const result = await executor.generateText(request.messages, {
             ...(request.maxOutputTokens !== undefined && {

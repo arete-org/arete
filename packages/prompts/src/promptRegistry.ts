@@ -62,14 +62,52 @@ const resolveBundledDefaultsPath = (): string => {
 const interpolateTemplate = (
     template: string,
     variables: PromptVariables
-): string =>
-    template.replace(/\{\{\s*([^}\s]+)\s*\}\}/g, (_match, key) => {
-        const raw = variables[key];
-        if (raw === undefined || raw === null) {
-            return '';
+): string => {
+    let index = 0;
+    let rendered = '';
+
+    while (index < template.length) {
+        const start = template.indexOf('{{', index);
+        if (start === -1) {
+            rendered += template.slice(index);
+            break;
         }
-        return typeof raw === 'string' ? raw : String(raw);
-    });
+
+        rendered += template.slice(index, start);
+
+        const end = template.indexOf('}}', start + 2);
+        if (end === -1) {
+            rendered += template.slice(start);
+            break;
+        }
+
+        const key = template.slice(start + 2, end).trim();
+        if (key.length === 0 || key.includes('{') || key.includes('}')) {
+            rendered += template.slice(start, end + 2);
+            index = end + 2;
+            continue;
+        }
+
+        // Differentiate missing variables from explicit `undefined`
+        // Check ownership before substituting
+        const hasVariable = Object.prototype.hasOwnProperty.call(
+            variables,
+            key
+        );
+        if (!hasVariable) {
+            rendered += template.slice(start, end + 2);
+        } else {
+            const raw = variables[key];
+            if (raw !== undefined && raw !== null) {
+                rendered += typeof raw === 'string' ? raw : String(raw);
+            }
+        }
+
+        index = end + 2;
+    }
+
+    return rendered;
+};
 
 const isPromptKey = (value: string): value is PromptKey =>
     knownPromptKeys.has(value as PromptKey);
@@ -84,9 +122,9 @@ const mergePromptCatalog = (
     overrideCatalog: PromptMap
 ): PromptMap => {
     const mergedCatalog: PromptMap = { ...baseCatalog };
-    for (const [key, definition] of Object.entries(
-        overrideCatalog
-    ) as Array<[PromptKey, PromptDefinition]>) {
+    for (const [key, definition] of Object.entries(overrideCatalog) as Array<
+        [PromptKey, PromptDefinition]
+    >) {
         mergedCatalog[key] = definition;
     }
     return mergedCatalog;
@@ -219,9 +257,7 @@ const loadPromptFile = (
         if (options.optional) {
             return {};
         }
-        throw new Error(
-            `Prompt configuration file not found: ${resolvedPath}`
-        );
+        throw new Error(`Prompt configuration file not found: ${resolvedPath}`);
     }
 
     const fileContents = fs.readFileSync(resolvedPath, 'utf-8');
@@ -232,14 +268,11 @@ const loadPromptFile = (
         );
     }
 
-    return flattenPromptTree(
-        parsed as Record<string, unknown>,
-        {
-            sourcePath: resolvedPath,
-            mode: options.mode,
-            logger: options.logger,
-        }
-    );
+    return flattenPromptTree(parsed as Record<string, unknown>, {
+        sourcePath: resolvedPath,
+        mode: options.mode,
+        logger: options.logger,
+    });
 };
 
 /**
@@ -286,8 +319,7 @@ const flattenPromptTree = (
                         'Ignoring unknown prompt override key.',
                         {
                             promptKey: key,
-                            reason:
-                                'prompt key is not part of the canonical prompt catalog',
+                            reason: 'prompt key is not part of the canonical prompt catalog',
                         }
                     );
                     continue;
@@ -303,8 +335,7 @@ const flattenPromptTree = (
                         'Ignoring invalid prompt override entry.',
                         {
                             promptKey: key,
-                            reason:
-                                'description must be a string when provided',
+                            reason: 'description must be a string when provided',
                             receivedType:
                                 rawDescription === null
                                     ? 'null'

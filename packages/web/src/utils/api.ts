@@ -13,12 +13,12 @@ import type {
     GetTraceResponse,
     GetTraceStaleResponse,
     ListBlogPostsResponse,
-    PostReflectRequest,
-    PostReflectResponse,
+    PostChatRequest,
+    PostChatResponse,
 } from '@footnote/contracts/web';
 import {
     GetTraceApiResponseSchema,
-    PostReflectResponseSchema,
+    PostChatResponseSchema,
     createSchemaResponseValidator,
 } from '@footnote/contracts/web/schemas';
 import {
@@ -49,13 +49,13 @@ export const createWebApiClient = ({
     });
 
     /**
-     * @api.operationId: postReflect
-     * @api.path: POST /api/reflect
+     * @api.operationId: postChat
+     * @api.path: POST /api/chat
      */
-    const reflectQuestion = async (
-        request: PostReflectRequest,
+    const chatQuestion = async (
+        request: PostChatRequest,
         options?: { turnstileToken?: string; signal?: AbortSignal }
-    ): Promise<PostReflectResponse> => {
+    ): Promise<PostChatResponse> => {
         const headers: Record<string, string> = {};
 
         if (options?.turnstileToken) {
@@ -65,15 +65,15 @@ export const createWebApiClient = ({
             headers['x-session-id'] = request.sessionId;
         }
 
-        const response = await requestJson<PostReflectResponse>(
-            '/api/reflect',
+        const response = await requestJson<PostChatResponse>(
+            '/api/chat',
             {
                 method: 'POST',
                 headers,
                 body: request,
                 signal: options?.signal,
                 validateResponse:
-                    createSchemaResponseValidator(PostReflectResponseSchema),
+                    createSchemaResponseValidator(PostChatResponseSchema),
             }
         );
 
@@ -160,7 +160,7 @@ export const createWebApiClient = ({
 
     return {
         requestJson,
-        reflectQuestion,
+        chatQuestion,
         getRuntimeConfig,
         getBlogIndex,
         getBlogPost,

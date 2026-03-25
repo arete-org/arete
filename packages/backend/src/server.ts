@@ -1,5 +1,5 @@
 /**
- * @description: Serves the web app and API endpoints for reflect, traces, and GitHub webhooks.
+ * @description: Serves the web app and API endpoints for chat, traces, and GitHub webhooks.
  * @footnote-scope: core
  * @footnote-module: WebServer
  * @footnote-risk: high - Server failures can break user access or data integrity.
@@ -36,7 +36,8 @@ import { createAssetResolver } from './http/assets.js';
 import { verifyGitHubSignature } from './utils/github.js';
 import { logRequest } from './utils/requestLogger.js';
 import { logger } from './utils/logger.js';
-import { createReflectHandler } from './handlers/reflect.js';
+import { createVoltAgentLogger } from './utils/voltagentLogger.js';
+import { createChatHandler } from './handlers/chat.js';
 import { createTraceHandlers } from './handlers/trace.js';
 import { createBlogHandlers } from './handlers/blog.js';
 import { createIncidentHandlers } from './handlers/incidents.js';
@@ -72,6 +73,7 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(currentDirectory, '../../web/dist');
 const DATA_DIR = runtimeConfig.server.dataDir;
 const BLOG_POSTS_DIR = path.join(DATA_DIR, 'blog-posts');
+const VOLTAGENT_LOG_DIR = path.join(runtimeConfig.logging.directory, 'voltagent');
 
 // --- Storage and asset helpers ---
 const blogStore = createBlogStore(BLOG_POSTS_DIR);
@@ -100,6 +102,10 @@ let ipRateLimiter: SimpleRateLimiter | null = null;
 let sessionRateLimiter: SimpleRateLimiter | null = null;
 let serviceRateLimiter: SimpleRateLimiter | null = null;
 let traceWriteLimiter: SimpleRateLimiter | null = null;
+const voltAgentLogger = createVoltAgentLogger({
+    directory: VOLTAGENT_LOG_DIR,
+    level: runtimeConfig.logging.level,
+});
 
 // --- Service initialization ---
 const initializeServices = () => {
@@ -140,6 +146,7 @@ const initializeServices = () => {
         generationRuntime = createVoltAgentRuntime({
             fallbackRuntime: legacyRuntime,
             defaultModel: runtimeConfig.openai.defaultModel,
+            logger: voltAgentLogger,
         });
         imageGenerationRuntime = createOpenAiImageRuntime({
             apiKey: runtimeConfig.openai.apiKey,
@@ -182,12 +189,12 @@ const initializeServices = () => {
         internalVoiceTtsService = null;
         realtimeVoiceRuntime = null;
         logger.warn(
-            'OPENAI_API_KEY is missing; /api/reflect and runtime-backed internal text/image/voice tasks will return 503 until configured.'
+            'OPENAI_API_KEY is missing; /api/chat and runtime-backed internal text/image/voice tasks will return 503 until configured.'
         );
     }
 
     // --- Rate limiter configuration ---
-    // Per-IP request limiter for /api/reflect.
+    // Per-IP request limiter for /api/chat.
     ipRateLimiter = new SimpleRateLimiter({
         limit: runtimeConfig.rateLimits.web.ip.limit,
         window: runtimeConfig.rateLimits.web.ip.windowMs,
@@ -201,8 +208,8 @@ const initializeServices = () => {
 
     // Trusted service calls get their own limiter so internal callers do not consume browser quota.
     serviceRateLimiter = new SimpleRateLimiter({
-        limit: runtimeConfig.rateLimits.reflectService.limit,
-        window: runtimeConfig.rateLimits.reflectService.windowMs,
+        limit: runtimeConfig.rateLimits.chatService.limit,
+        window: runtimeConfig.rateLimits.chatService.windowMs,
     });
 
     // Separate limiter for trace ingestion to avoid coupling to reflect limits.
@@ -297,8 +304,8 @@ const { handleInternalTextRequest } = createInternalTextHandler({
     serviceRateLimiter:
         serviceRateLimiter ??
         new SimpleRateLimiter({
-            limit: runtimeConfig.rateLimits.reflectService.limit,
-            window: runtimeConfig.rateLimits.reflectService.windowMs,
+            limit: runtimeConfig.rateLimits.chatService.limit,
+            window: runtimeConfig.rateLimits.chatService.windowMs,
         }),
 });
 const { handleInternalImageRequest } = createInternalImageHandler({
@@ -310,8 +317,8 @@ const { handleInternalImageRequest } = createInternalImageHandler({
     serviceRateLimiter:
         serviceRateLimiter ??
         new SimpleRateLimiter({
-            limit: runtimeConfig.rateLimits.reflectService.limit,
-            window: runtimeConfig.rateLimits.reflectService.windowMs,
+            limit: runtimeConfig.rateLimits.chatService.limit,
+            window: runtimeConfig.rateLimits.chatService.windowMs,
         }),
 });
 const { handleInternalVoiceTtsRequest } = createInternalVoiceTtsHandler({
@@ -323,8 +330,8 @@ const { handleInternalVoiceTtsRequest } = createInternalVoiceTtsHandler({
     serviceRateLimiter:
         serviceRateLimiter ??
         new SimpleRateLimiter({
-            limit: runtimeConfig.rateLimits.reflectService.limit,
-            window: runtimeConfig.rateLimits.reflectService.windowMs,
+            limit: runtimeConfig.rateLimits.chatService.limit,
+            window: runtimeConfig.rateLimits.chatService.windowMs,
         }),
 });
 const { handleUpgrade: handleInternalVoiceRealtimeUpgrade } =
@@ -335,8 +342,8 @@ const { handleUpgrade: handleInternalVoiceRealtimeUpgrade } =
         serviceRateLimiter:
             serviceRateLimiter ??
             new SimpleRateLimiter({
-                limit: runtimeConfig.rateLimits.reflectService.limit,
-                window: runtimeConfig.rateLimits.reflectService.windowMs,
+                limit: runtimeConfig.rateLimits.chatService.limit,
+                window: runtimeConfig.rateLimits.chatService.windowMs,
             }),
         buildInstructions: buildRealtimeInstructions,
     });
@@ -361,8 +368,8 @@ const wantsJsonResponse = (req: http.IncomingMessage): boolean => {
 
     return true;
 };
-// Reflection is the slim, web-facing chat interface (Turnstile + rate-limited).
-const handleReflectRequest = createReflectHandler({
+// Chat is the slim, web-facing conversation interface (Turnstile + rate-limited).
+const handleChatRequest = createChatHandler({
     generationRuntime,
     ipRateLimiter,
     sessionRateLimiter,
@@ -370,7 +377,7 @@ const handleReflectRequest = createReflectHandler({
     storeTrace: storeTraceWithStore,
     logRequest,
     buildResponseMetadata,
-    maxReflectBodyBytes: runtimeConfig.reflect.maxBodyBytes,
+    maxChatBodyBytes: runtimeConfig.reflect.maxBodyBytes,
 });
 
 // --- HTTP server ---
@@ -496,8 +503,8 @@ const server = http.createServer(async (req, res) => {
             // Fall through to the static asset resolver for the SPA.
         }
 
-        if (normalizedPathname === '/api/reflect') {
-            await handleReflectRequest(req, res);
+        if (normalizedPathname === '/api/chat') {
+            await handleChatRequest(req, res);
             return;
         }
 

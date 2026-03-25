@@ -17,8 +17,8 @@ import { formatUsd, logger, type LLMCostTotals } from '../utils/logger.js';
 
 export type BackendLLMCostRecord = {
     feature:
-        | 'reflect'
-        | 'reflect_planner'
+        | 'chat'
+        | 'chat_planner'
         | 'news'
     | 'image'
     | 'image_description'

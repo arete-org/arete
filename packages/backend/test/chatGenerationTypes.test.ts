@@ -1,7 +1,7 @@
 /**
- * @description: Verifies that Reflect generation settings stay aligned with the canonical runtime seam types.
+ * @description: Verifies that Chat generation settings stay aligned with the canonical runtime seam types.
  * @footnote-scope: test
- * @footnote-module: ReflectGenerationTypeAlignmentTests
+ * @footnote-module: ChatGenerationTypeAlignmentTests
  * @footnote-risk: medium - Missing tests here could let backend-only generation shapes drift away from the runtime boundary.
  * @footnote-ethics: medium - Type drift can weaken retrieval and provenance behavior by desynchronizing planner output from runtime execution.
  */
@@ -13,26 +13,26 @@ import type {
     GenerationSearchRequest,
 } from '@footnote/agent-runtime';
 import type {
-    ReflectGenerationPlan,
-    ReflectGenerationSearch,
-} from '../src/services/reflectGenerationTypes.js';
+    ChatGenerationPlan,
+    ChatGenerationSearch,
+} from '../src/services/chatGenerationTypes.js';
 
 const toRuntimeSettings = (
-    generation: ReflectGenerationPlan
+    generation: ChatGenerationPlan
 ): Pick<GenerationRequest, 'reasoningEffort' | 'verbosity' | 'search'> => ({
     reasoningEffort: generation.reasoningEffort,
     verbosity: generation.verbosity,
     search: generation.search,
 });
 
-test('reflect generation settings stay assignable to canonical runtime settings', () => {
-    const search: ReflectGenerationSearch = {
+test('chat generation settings stay assignable to canonical runtime settings', () => {
+    const search: ChatGenerationSearch = {
         query: 'Footnote architecture overview',
         contextSize: 'medium',
         intent: 'repo_explainer',
         repoHints: ['architecture', 'backend'],
     };
-    const generation: ReflectGenerationPlan = {
+    const generation: ChatGenerationPlan = {
         reasoningEffort: 'medium',
         verbosity: 'high',
         search,

@@ -15,7 +15,7 @@ import path from 'node:path';
 import { createDiscordPromptRegistry } from '../src/config/promptRegistryFactory.js';
 import {
     prependProfileOverlaySystemMessageToConversation,
-    renderPromptWithActivePersonaLayer,
+    renderPromptLayersWithActivePersona,
 } from '../src/config/promptComposition.js';
 import type { BotProfileConfig } from '../src/config/profile.js';
 
@@ -51,11 +51,11 @@ test('shared override + active persona layer preserve expected precedence', () =
         const registry = createDiscordPromptRegistry(overridePath);
         const profile = createProfile();
 
-        const composedPrompt = renderPromptWithActivePersonaLayer({
+        const composedPrompt = renderPromptLayersWithActivePersona({
             registry,
             profile,
-            coreKey: 'discord.image.system',
-            defaultPersonaKey: 'discord.image.persona.footnote',
+            systemKeys: ['discord.image.system'],
+            personaKeys: ['discord.image.persona.footnote'],
             usage: 'image.system',
             variables: {
                 botProfileDisplayName: profile.displayName,
@@ -64,7 +64,7 @@ test('shared override + active persona layer preserve expected precedence', () =
         const reflectConversation =
             prependProfileOverlaySystemMessageToConversation(
                 profile,
-                'reflect',
+                'chat',
                 [{ role: 'user', content: 'hello' }]
             );
 
@@ -79,7 +79,7 @@ test('shared override + active persona layer preserve expected precedence', () =
         assert.equal(reflectConversation.conversation[0].role, 'system');
         assert.match(
             reflectConversation.conversation[0].content,
-            /Usage Context: reflect/
+            /Usage Context: chat/
         );
         assert.equal(reflectConversation.conversation[1].content, 'hello');
     } finally {
@@ -104,11 +104,11 @@ test('malformed shared overrides fail open while active persona overlays still a
         );
 
         const registry = createDiscordPromptRegistry(overridePath);
-        const prompt = renderPromptWithActivePersonaLayer({
+        const prompt = renderPromptLayersWithActivePersona({
             registry,
             profile: createProfile(),
-            coreKey: 'discord.image.system',
-            defaultPersonaKey: 'discord.image.persona.footnote',
+            systemKeys: ['discord.image.system'],
+            personaKeys: ['discord.image.persona.footnote'],
             usage: 'image.system',
             variables: {
                 botProfileDisplayName: 'Footnote',

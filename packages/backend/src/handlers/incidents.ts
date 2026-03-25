@@ -20,7 +20,7 @@ import {
 } from '@footnote/contracts/web/schemas';
 import type { IncidentService } from '../services/incidents.js';
 import { IncidentNotFoundError } from '../services/incidents.js';
-import { sendJson } from './reflectResponses.js';
+import { sendJson } from './chatResponses.js';
 import {
     parseTrustedBodyWithSchema,
     parseTrustedServiceAuth,

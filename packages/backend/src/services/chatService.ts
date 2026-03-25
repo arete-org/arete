@@ -1,9 +1,9 @@
 /**
- * @description: Runs the shared reflect workflow: prompt assembly, model call,
+ * @description: Runs the shared chat workflow: prompt assembly, model call,
  * metadata generation, and background trace persistence.
  * @footnote-scope: core
- * @footnote-module: ReflectService
- * @footnote-risk: high - Mistakes here change the canonical reflect behavior used by multiple callers.
+ * @footnote-module: ChatService
+ * @footnote-risk: high - Mistakes here change the canonical chat behavior used by multiple callers.
  * @footnote-ethics: high - This workflow owns the AI response and provenance metadata users rely on.
  */
 import type {
@@ -17,7 +17,7 @@ import type {
     ResponseMetadata,
     RiskTier,
 } from '@footnote/contracts/ethics-core';
-import type { PostReflectResponse } from '@footnote/contracts/web';
+import type { PostChatResponse } from '@footnote/contracts/web';
 import type {
     AssistantResponseMetadata,
     AssistantUsage,
@@ -28,9 +28,9 @@ import {
     recordBackendLLMUsage,
     type BackendLLMCostRecord,
 } from './llmCostRecorder.js';
-import { buildRepoExplainerResponseHint } from './reflectGenerationHints.js';
-import type { ReflectGenerationPlan } from './reflectGenerationTypes.js';
-import { renderPrompt } from './prompts/promptRegistry.js';
+import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
+import type { ChatGenerationPlan } from './chatGenerationTypes.js';
+import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import { logger } from '../utils/logger.js';
 
 const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
@@ -40,8 +40,8 @@ const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
  * should fail open to normal generation instead of forcing retrieval tooling.
  */
 const normalizeGenerationPlan = (
-    generation: ReflectGenerationPlan | undefined
-): ReflectGenerationPlan | undefined => {
+    generation: ChatGenerationPlan | undefined
+): ChatGenerationPlan | undefined => {
     if (!generation?.search) {
         return generation;
     }
@@ -49,7 +49,7 @@ const normalizeGenerationPlan = (
     const normalizedQuery = generation.search.query.trim();
     if (normalizedQuery.length === 0) {
         logger.warn(
-            'Reflect generation requested search without a usable query; continuing without retrieval.'
+            'Chat generation requested search without a usable query; continuing without retrieval.'
         );
 
         return {
@@ -68,7 +68,7 @@ const normalizeGenerationPlan = (
 };
 
 /**
- * Keeps backend-only reflect persona rendering aligned with deployment naming.
+ * Keeps backend-only chat persona rendering aligned with deployment naming.
  */
 const resolveBotProfileDisplayName = (): string => {
     const envValue = process.env.BOT_PROFILE_DISPLAY_NAME;
@@ -80,10 +80,10 @@ const resolveBotProfileDisplayName = (): string => {
 };
 
 /**
- * Dependencies for the shared reflect workflow.
+ * Dependencies for the shared chat workflow.
  * The HTTP handler injects these so the core logic stays transport-agnostic.
  */
-export type CreateReflectServiceOptions = {
+export type CreateChatServiceOptions = {
     generationRuntime: GenerationRuntime;
     storeTrace: (metadata: ResponseMetadata) => Promise<void>;
     buildResponseMetadata: (
@@ -95,43 +95,43 @@ export type CreateReflectServiceOptions = {
 };
 
 /**
- * Minimal input required to run the canonical reflect flow.
+ * Minimal input required to run the canonical chat flow.
  */
-export type RunReflectInput = {
+export type RunChatInput = {
     question: string;
 };
 
 /**
  * Shared message-generation input used by the Discord/backend unified path.
  */
-export type RunReflectMessagesInput = {
+export type RunChatMessagesInput = {
     messages: RuntimeMessage[];
     conversationSnapshot: string;
     plannerTemperament?: PartialResponseTemperament;
     riskTier?: RiskTier;
     model?: string;
-    generation?: ReflectGenerationPlan;
+    generation?: ChatGenerationPlan;
 };
 
 /**
- * Builds the shared reflect workflow used by HTTP callers today and future
- * internal callers later. The output intentionally matches `PostReflectResponse`
+ * Builds the shared chat workflow used by HTTP callers today and future
+ * internal callers later. The output intentionally matches `PostChatResponse`
  * so transports do not need to reshape it.
  */
-export const createReflectService = ({
+export const createChatService = ({
     generationRuntime,
     storeTrace,
     buildResponseMetadata,
     defaultModel,
     recordUsage = recordBackendLLMUsage,
-}: CreateReflectServiceOptions) => {
+}: CreateChatServiceOptions) => {
     /**
      * Normalizes one runtime result into the metadata shape backend already
      * uses for provenance, trace storage, and cost accounting.
      */
     const buildAssistantMetadata = (
         generationResult: GenerationResult,
-        generation: ReflectGenerationPlan | undefined,
+        generation: ChatGenerationPlan | undefined,
         requestedModel: string | undefined
     ): AssistantResponseMetadata => {
         const usage: AssistantUsage | undefined = generationResult.usage
@@ -153,14 +153,14 @@ export const createReflectService = ({
         };
     };
 
-    const runReflectMessages = async ({
+    const runChatMessages = async ({
         messages,
         conversationSnapshot,
         plannerTemperament,
         riskTier,
         model,
         generation,
-    }: RunReflectMessagesInput): Promise<{
+    }: RunChatMessagesInput): Promise<{
         message: string;
         metadata: ResponseMetadata;
     }> => {
@@ -213,7 +213,7 @@ export const createReflectService = ({
         if (recordUsage) {
             try {
                 recordUsage({
-                    feature: 'reflect',
+                    feature: 'chat',
                     model: usageModel,
                     promptTokens,
                     completionTokens,
@@ -223,7 +223,7 @@ export const createReflectService = ({
                 });
             } catch (error) {
                 logger.warn(
-                    `Reflect usage recording failed: ${error instanceof Error ? error.message : String(error)}`
+                    `Chat usage recording failed: ${error instanceof Error ? error.message : String(error)}`
                 );
             }
         }
@@ -265,16 +265,6 @@ export const createReflectService = ({
               }
             : responseMetadata;
 
-        // These logs are intentionally verbose because metadata mismatches are hard to debug later.
-        logger.debug('=== Server Metadata Debug ===');
-        logger.debug(
-            `Assistant metadata: ${JSON.stringify(assistantMetadata, null, 2)}`
-        );
-        logger.debug(
-            `Built response metadata: ${JSON.stringify(normalizedResponseMetadata, null, 2)}`
-        );
-        logger.debug('================================');
-
         // Trace writes stay fire-and-forget so a storage hiccup does not block the user response.
         storeTrace(normalizedResponseMetadata).catch((error) => {
             logger.error(
@@ -288,25 +278,26 @@ export const createReflectService = ({
         };
     };
 
-    const runReflect = async ({
+    const runChat = async ({
         question,
-    }: RunReflectInput): Promise<PostReflectResponse> => {
+    }: RunChatInput): Promise<PostChatResponse> => {
         const botProfileDisplayName = resolveBotProfileDisplayName();
-        // Keep prompt assembly here so the public web reflect path stays stable.
+        const promptLayers = renderConversationPromptLayers('web-chat', {
+            botProfileDisplayName,
+        });
+        // Keep prompt assembly here so the public web chat path stays stable.
         const messages: RuntimeMessage[] = [
             {
                 role: 'system',
-                content: renderPrompt('reflect.chat.system').content,
+                content: promptLayers.systemPrompt,
             },
             {
                 role: 'system',
-                content: renderPrompt('reflect.chat.persona.footnote', {
-                    botProfileDisplayName,
-                }).content,
+                content: promptLayers.personaPrompt,
             },
             { role: 'user', content: question.trim() },
         ];
-        const response = await runReflectMessages({
+        const response = await runChatMessages({
             messages,
             conversationSnapshot: question.trim(),
         });
@@ -320,7 +311,7 @@ export const createReflectService = ({
     };
 
     return {
-        runReflect,
-        runReflectMessages,
+        runChat,
+        runChatMessages,
     };
 };

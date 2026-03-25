@@ -2,7 +2,7 @@
  * @description: Centralizes how Discord prompt text is combined with profile overlays.
  * @footnote-scope: utility
  * @footnote-module: PromptComposition
- * @footnote-risk: medium - Inconsistent composition here can desync reflect/image/realtime prompt behavior.
+ * @footnote-risk: medium - Inconsistent composition here can desync chat/image/realtime prompt behavior.
  * @footnote-ethics: high - Overlay composition controls identity and safety-priority behavior.
  */
 
@@ -11,6 +11,7 @@ import type {
     PromptRegistry,
     PromptVariables,
 } from '@footnote/prompts';
+import { renderPromptBundle } from '@footnote/prompts';
 
 import {
     buildProfileOverlaySystemMessage,
@@ -19,7 +20,7 @@ import {
 import type { BotProfileConfig } from './profile.js';
 
 /**
- * Minimal message shape used by reflect-request conversation assembly.
+ * Minimal message shape used by chat-request conversation assembly.
  */
 export interface PromptConversationMessage {
     role: 'system' | 'user' | 'assistant';
@@ -37,38 +38,42 @@ export interface PromptConversationOverlayResult {
 type ActivePersonaRenderInput = {
     registry: PromptRegistry;
     profile: BotProfileConfig;
-    coreKey: PromptKey;
-    defaultPersonaKey: PromptKey;
+    systemKeys: readonly PromptKey[];
+    personaKeys: readonly PromptKey[];
     usage: ProfilePromptOverlayUsage;
     variables?: PromptVariables;
 };
 
 /**
- * Renders one core prompt plus exactly one active persona layer.
+ * Renders the system prompt layers plus exactly one active persona layer.
  * If a profile overlay exists, it replaces the default persona layer.
  */
-export const renderPromptWithActivePersonaLayer = (
+export const renderPromptLayersWithActivePersona = (
     input: ActivePersonaRenderInput
 ): string => {
-    const corePrompt = input.registry.renderPrompt(
-        input.coreKey,
+    const systemPrompt = renderPromptBundle(
+        input.registry,
+        input.systemKeys,
         input.variables
-    ).content;
+    );
     const overlayPersonaPrompt = buildProfileOverlaySystemMessage(
         input.profile,
         input.usage
     );
     const activePersonaPrompt =
         overlayPersonaPrompt ??
-        input.registry.renderPrompt(input.defaultPersonaKey, input.variables)
-            .content;
+        renderPromptBundle(
+            input.registry,
+            input.personaKeys,
+            input.variables
+        );
 
-    return `${corePrompt.trimEnd()}\n\n${activePersonaPrompt}`.trim();
+    return `${systemPrompt.trimEnd()}\n\n${activePersonaPrompt}`.trim();
 };
 
 /**
  * Prepends one system overlay message when an overlay exists.
- * Reflect keeps overlay text as a separate system message, and this helper
+ * Chat keeps overlay text as a separate system message, and this helper
  * centralizes that behavior in one place.
  */
 export const prependProfileOverlaySystemMessageToConversation = (

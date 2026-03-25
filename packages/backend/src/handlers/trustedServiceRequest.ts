@@ -6,7 +6,7 @@
  * @footnote-ethics: medium - Consistent trusted-endpoint handling reduces accidental policy drift between internal workflows.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { sendJson } from './reflectResponses.js';
+import { sendJson } from './chatResponses.js';
 
 export type TrustedRouteLogRequest = (
     req: IncomingMessage,

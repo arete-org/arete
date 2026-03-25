@@ -1,7 +1,7 @@
 /**
- * @description: Shared JSON response helpers for the reflect HTTP handler.
+ * @description: Shared JSON response helpers for the chat HTTP handler.
  * @footnote-scope: utility
- * @footnote-module: ReflectResponses
+ * @footnote-module: ChatResponses
  * @footnote-risk: medium - Response formatting mistakes can change API status codes or payloads.
  * @footnote-ethics: medium - Consistent error payloads help clients interpret failures clearly.
  */
@@ -10,7 +10,7 @@ import type { ApiErrorResponse } from '@footnote/contracts/web';
 
 export type JsonHeaders = Record<string, string>;
 
-export type ReflectFailureResponse = {
+export type ChatFailureResponse = {
     statusCode: number;
     payload: ApiErrorResponse;
     logLabel: string;
@@ -18,7 +18,7 @@ export type ReflectFailureResponse = {
 };
 
 /**
- * Small shared helper so every reflect response uses the same JSON headers.
+ * Small shared helper so every chat response uses the same JSON headers.
  * Keeping this in one place makes later status/payload changes less error-prone.
  */
 export const sendJson = (

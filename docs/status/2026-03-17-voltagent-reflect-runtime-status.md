@@ -8,7 +8,7 @@
 
 Capture the completed Reflect runtime migration as a branch-level status snapshot.
 
-This file is a historical branch closeout snapshot, not a latest-state architecture summary. It captures what the Reflect runtime branch established, while later text-migration work continued beyond it. Durable guidance should come from `cursor.rules`, the VoltAgent decision record, and the later [Legacy OpenAI Text Migration Status](./legacy-openai-text-migration-status.md).
+This file is a historical branch closeout snapshot, not a latest-state architecture summary. It captures what the Reflect runtime branch established, while later text-migration work continued beyond it. Durable guidance should come from `cursor.rules`, the VoltAgent decision record, and the later [Legacy OpenAI Text Migration Status](./2026-03-18-legacy-openai-text-migration-status.md).
 
 ## Closeout State
 

@@ -20,9 +20,9 @@ function logRequest(
     const timestamp = new Date().toISOString();
 
     // --- URL sanitization ---
-    // Avoid logging full reflect query strings (can include user content).
+    // Avoid logging full chat query strings because they can include user content.
     let logUrl = req.url;
-    if (req.url && req.url.includes('/api/reflect')) {
+    if (req.url && req.url.includes('/api/chat')) {
         try {
             const parsedUrl = new URL(req.url, 'http://localhost');
             logUrl = parsedUrl.pathname;

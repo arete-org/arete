@@ -497,6 +497,7 @@ export {
     type CreateVoltAgentRuntimeOptions,
     type VoltAgentExecutorFactory,
     type VoltAgentGenerateTextOptions,
+    type VoltAgentLogger,
     type VoltAgentProviderOptions,
     type VoltAgentResponseMetadata,
     type VoltAgentTextExecutor,

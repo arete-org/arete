@@ -1,24 +1,24 @@
 /**
- * @description: Covers the Discord bot reflect API client wrapper.
+ * @description: Covers the Discord bot chat API client wrapper.
  * @footnote-scope: test
- * @footnote-module: DiscordReflectApiTests
+ * @footnote-module: DiscordChatApiTests
  * @footnote-risk: low - These tests validate transport wiring and error propagation only.
- * @footnote-ethics: medium - Stable backend reflect transport keeps shared reasoning paths predictable.
+ * @footnote-ethics: medium - Stable backend chat transport keeps shared reasoning paths predictable.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { PostReflectRequest } from '@footnote/contracts/web';
+import type { PostChatRequest } from '@footnote/contracts/web';
 import type {
     ApiJsonResult,
     ApiRequestOptions,
     ApiRequester,
 } from '../src/api/client.js';
-import { createReflectApi } from '../src/api/reflect.js';
+import { createChatApi } from '../src/api/chat.js';
 
-const createReflectRequest = (
-    overrides: Partial<PostReflectRequest> = {}
-): PostReflectRequest => ({
+const createChatRequest = (
+    overrides: Partial<PostChatRequest> = {}
+): PostChatRequest => ({
     surface: 'discord',
     trigger: { kind: 'direct', messageId: 'msg-1' },
     latestUserInput: 'What changed?',
@@ -36,8 +36,8 @@ const createReflectRequest = (
     ...overrides,
 });
 
-test('reflectViaApi posts to /api/reflect with X-Trace-Token and returns parsed data', async () => {
-    const request = createReflectRequest();
+test('chatViaApi posts to /api/chat with X-Trace-Token and returns parsed data', async () => {
+    const request = createChatRequest();
     let capturedEndpoint = '';
     let capturedHeaders: Record<string, string> | undefined;
     let capturedBody: unknown;
@@ -70,13 +70,13 @@ test('reflectViaApi posts to /api/reflect with X-Trace-Token and returns parsed 
         };
     };
 
-    const api = createReflectApi(requestJson, {
+    const api = createChatApi(requestJson, {
         traceApiToken: 'trace-secret',
     });
 
-    const response = await api.reflectViaApi(request);
+    const response = await api.chatViaApi(request);
 
-    assert.equal(capturedEndpoint, '/api/reflect');
+    assert.equal(capturedEndpoint, '/api/chat');
     assert.equal(capturedHeaders?.['X-Trace-Token'], 'trace-secret');
     assert.deepEqual(capturedBody, request);
     assert.equal(response.action, 'message');
@@ -86,19 +86,19 @@ test('reflectViaApi posts to /api/reflect with X-Trace-Token and returns parsed 
     );
 });
 
-test('reflectViaApi throws backend request errors so callers can handle them', async () => {
+test('chatViaApi throws backend request errors so callers can handle them', async () => {
     const requestJson: ApiRequester = async () => {
         throw new Error('backend exploded');
     };
-    const api = createReflectApi(requestJson);
+    const api = createChatApi(requestJson);
 
     await assert.rejects(
-        () => api.reflectViaApi(createReflectRequest()),
+        () => api.chatViaApi(createChatRequest()),
         /backend exploded/
     );
 });
 
-test('reflectViaApi tolerates unknown actions so the executor can fail safely', async () => {
+test('chatViaApi tolerates unknown actions so the executor can fail safely', async () => {
     const requestJson: ApiRequester = async <T>(): Promise<
         ApiJsonResult<T>
     > => ({
@@ -108,8 +108,8 @@ test('reflectViaApi tolerates unknown actions so the executor can fail safely', 
             clipRequest: { prompt: 'animate this' },
         } as T,
     });
-    const api = createReflectApi(requestJson);
+    const api = createChatApi(requestJson);
 
-    const response = await api.reflectViaApi(createReflectRequest());
+    const response = await api.chatViaApi(createChatRequest());
     assert.equal(response.action, 'video');
 });

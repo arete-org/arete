@@ -171,10 +171,10 @@ test('logContextIfVerbose only emits when high verbosity flag is enabled', () =>
     }
 });
 
-test('reflect overlay injection logs profile metadata without raw overlay body', async () => {
+test('chat overlay injection logs profile metadata without raw overlay body', async () => {
     const processor = new MessageProcessor();
     const processorAccess = processor as unknown as {
-        buildReflectRequestFromMessage: (
+        buildChatRequestFromMessage: (
             message: unknown,
             trigger: string
         ) => Promise<unknown>;
@@ -222,7 +222,7 @@ test('reflect overlay injection logs profile metadata without raw overlay body',
     }) as typeof logger.debug;
 
     try {
-        await processorAccess.buildReflectRequestFromMessage(
+        await processorAccess.buildChatRequestFromMessage(
             {
                 id: 'message-1',
                 content: 'What changed in the repo?',
@@ -260,7 +260,7 @@ test('reflect overlay injection logs profile metadata without raw overlay body',
     const overlayLog = debugCalls.find(
         ([firstArg]) =>
             typeof firstArg === 'string' &&
-            firstArg.includes('Injected profile overlay into reflect request')
+            firstArg.includes('Injected profile overlay into chat request')
     );
 
     assert.ok(overlayLog, 'Expected overlay injection debug log');

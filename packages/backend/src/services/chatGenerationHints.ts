@@ -1,22 +1,22 @@
 /**
- * @description: Backend reflect helpers for repo-aware search instructions and response hints.
+ * @description: Backend chat helpers for repo-aware search instructions and response hints.
  * @footnote-scope: core
- * @footnote-module: ReflectGenerationHints
+ * @footnote-module: ChatGenerationHints
  * @footnote-risk: medium - Bad hint construction can degrade retrieval quality or mislead the model.
  * @footnote-ethics: medium - Repo-aware hints affect how accurately Footnote explains itself.
  */
 import type { GenerationSearchRequest } from '@footnote/agent-runtime';
 import type {
-    ReflectGenerationPlan,
-    ReflectRepoSearchHint,
-} from './reflectGenerationTypes.js';
+    ChatGenerationPlan,
+    ChatRepoSearchHint,
+} from './chatGenerationTypes.js';
 
 const FOOTNOTE_REPO_OWNER = 'footnote-ai';
 const FOOTNOTE_REPO_NAME = 'footnote';
 const FOOTNOTE_REPO_SLUG = `${FOOTNOTE_REPO_OWNER}/${FOOTNOTE_REPO_NAME}`;
 const DEEPWIKI_FOOTNOTE_URL = 'https://deepwiki.com/footnote-ai/footnote';
 
-const REPO_HINT_QUERY_TERMS: Record<ReflectRepoSearchHint, string[]> = {
+const REPO_HINT_QUERY_TERMS: Record<ChatRepoSearchHint, string[]> = {
     architecture: ['architecture'],
     backend: ['backend'],
     contracts: ['contracts'],
@@ -28,12 +28,12 @@ const REPO_HINT_QUERY_TERMS: Record<ReflectRepoSearchHint, string[]> = {
     openapi: ['openapi'],
     prompts: ['prompts'],
     provenance: ['provenance'],
-    reflect: ['reflect'],
+    chat: ['chat'],
     traces: ['traces'],
     voice: ['voice'],
 };
 
-const isReflectRepoSearchHint = (hint: string): hint is ReflectRepoSearchHint =>
+const isChatRepoSearchHint = (hint: string): hint is ChatRepoSearchHint =>
     hint in REPO_HINT_QUERY_TERMS;
 
 const dedupeSearchTerms = (terms: string[]): string[] => {
@@ -62,7 +62,7 @@ export const buildRepoExplainerQuery = (
         FOOTNOTE_REPO_NAME,
         'DeepWiki',
         ...(search.repoHints?.flatMap((hint) =>
-            isReflectRepoSearchHint(hint) ? REPO_HINT_QUERY_TERMS[hint] : [hint]
+            isChatRepoSearchHint(hint) ? REPO_HINT_QUERY_TERMS[hint] : [hint]
         ) ?? []),
         search.query.trim(),
     ]).join(' ');
@@ -91,7 +91,7 @@ export const buildWebSearchInstruction = (
 };
 
 export const buildRepoExplainerResponseHint = (
-    generation: ReflectGenerationPlan
+    generation: ChatGenerationPlan
 ): string | null => {
     if (generation.search?.intent !== 'repo_explainer') {
         return null;

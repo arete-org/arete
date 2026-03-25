@@ -1,7 +1,7 @@
 /**
- * @description: Minimal OpenAI client wrapper and response metadata builder for reflect API.
+ * @description: Minimal OpenAI client wrapper and response metadata builder for the chat API.
  * @footnote-scope: utility
- * @footnote-module: ReflectOpenAIService
+ * @footnote-module: ChatOpenAIService
  * @footnote-risk: high - Incorrect handling can degrade responses, retrieval quality, or metadata integrity.
  * @footnote-ethics: high - Misreported provenance or dropped retrieval harms trust and transparency.
  */
@@ -22,7 +22,7 @@ import type {
 } from '@footnote/contracts/ethics-core';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
-import { buildWebSearchInstruction } from './reflectGenerationHints.js';
+import { buildWebSearchInstruction } from './chatGenerationHints.js';
 import {
     deriveRetrievedChips,
     resolveTradeoffCount,
@@ -422,7 +422,7 @@ class SimpleOpenAIService implements OpenAIService {
         const validMessages = messages.filter((message) => {
             if (!message.content || !message.content.trim()) {
                 logger.warn(
-                    `Filtering out invalid backend reflect message with role=${message.role}`
+                    `Filtering out invalid backend chat message with role=${message.role}`
                 );
                 return false;
             }
@@ -440,7 +440,7 @@ class SimpleOpenAIService implements OpenAIService {
 
         if (options.search && !hasSearchRequest) {
             logger.warn(
-                'Backend reflect requested search without a usable query; falling back to generation without retrieval.'
+                'Backend chat requested search without a usable query; falling back to generation without retrieval.'
             );
         }
 

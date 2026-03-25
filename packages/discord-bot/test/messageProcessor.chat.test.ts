@@ -1,7 +1,7 @@
 /**
- * @description: Covers backend-driven reflect action execution in the Discord message processor.
+ * @description: Covers backend-driven chat action execution in the Discord message processor.
  * @footnote-scope: test
- * @footnote-module: MessageProcessorReflectTests
+ * @footnote-module: MessageProcessorChatTests
  * @footnote-risk: medium - Missing tests could let backend action routing regress silently in the bot.
  * @footnote-ethics: medium - These checks protect provenance rendering and safe fallback behavior.
  */
@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type {
-    PostReflectRequest,
+    PostChatRequest,
     PostTraceCardRequest,
 } from '@footnote/contracts/web';
 import { botApi } from '../src/api/botApi.js';
@@ -48,7 +48,7 @@ const createMessage = () =>
         },
     }) as never;
 
-const createReflectBuildMessage = () =>
+const createChatBuildMessage = () =>
     ({
         id: 'message-1',
         content: 'What changed in the repo?',
@@ -101,20 +101,20 @@ type ProcessorPrivateAccess = {
         },
         responseId: string
     ) => Promise<void>;
-    executeReflectMessageAction: (
+    executeChatMessageAction: (
         message: unknown,
         responseHandler: unknown,
-        reflectResponse: unknown,
+        chatResponse: unknown,
         directReply: boolean
     ) => Promise<void>;
-    executeReflectAction: (
+    executeChatAction: (
         message: unknown,
         responseHandler: unknown,
-        reflectResponse: unknown,
+        chatResponse: unknown,
         directReply: boolean,
         recoveredImageContext: unknown
     ) => Promise<void>;
-    executeReflectImageAction: (
+    executeChatImageAction: (
         message: unknown,
         responseHandler: unknown,
         imageRequest: { prompt: string },
@@ -125,16 +125,16 @@ type ProcessorPrivateAccess = {
         allowed: boolean;
         error?: string;
     }>;
-    buildReflectRequestFromMessage: (
+    buildChatRequestFromMessage: (
         message: unknown,
         trigger: string
     ) => Promise<{
-        request: PostReflectRequest;
+        request: PostChatRequest;
         recoveredImageContext: null;
     } | null>;
 };
 
-test('executeReflectMessageAction sends text and provenance together when payload is ready', async () => {
+test('executeChatMessageAction sends text and provenance together when payload is ready', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const message = createMessage();
@@ -149,9 +149,7 @@ test('executeReflectMessageAction sends text and provenance together when payloa
     let delayedProvenanceCalls = 0;
 
     (botApi as { postTraces: unknown }).postTraces = async () => {
-        throw new Error(
-            'postTraces should not run for backend reflect messages'
-        );
+        throw new Error('postTraces should not run for backend chat messages');
     };
     processorAccess.prepareProvenanceCgiPayload = async () => ({
         files: [{ filename: 'trace-card.png', data: Buffer.from('card') }],
@@ -164,7 +162,7 @@ test('executeReflectMessageAction sends text and provenance together when payloa
     };
 
     try {
-        await processorAccess.executeReflectMessageAction(
+        await processorAccess.executeChatMessageAction(
             message,
             {
                 async sendMessage(
@@ -188,7 +186,7 @@ test('executeReflectMessageAction sends text and provenance together when payloa
             },
             {
                 action: 'message',
-                message: 'Backend reflection',
+                message: 'Backend chation',
                 modality: 'text',
                 metadata: createMetadata(),
             },
@@ -199,7 +197,7 @@ test('executeReflectMessageAction sends text and provenance together when payloa
     }
 
     assert.equal(sentMessages.length, 1);
-    assert.equal(sentMessages[0].content, 'Backend reflection');
+    assert.equal(sentMessages[0].content, 'Backend chation');
     assert.equal(sentMessages[0].directReply, true);
     assert.equal(sentMessages[0].files.length, 1);
     assert.equal(sentMessages[0].files[0].filename, 'trace-card.png');
@@ -207,7 +205,7 @@ test('executeReflectMessageAction sends text and provenance together when payloa
     assert.equal(delayedProvenanceCalls, 0);
 });
 
-test('executeReflectMessageAction falls back to a provenance follow-up when payload misses the wait window', async () => {
+test('executeChatMessageAction falls back to a provenance follow-up when payload misses the wait window', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const message = createMessage();
@@ -240,7 +238,7 @@ test('executeReflectMessageAction falls back to a provenance follow-up when payl
         delayedCalls.push({ preparedPayload, responseId });
     };
 
-    await processorAccess.executeReflectMessageAction(
+    await processorAccess.executeChatMessageAction(
         message,
         {
             async sendMessage(
@@ -264,7 +262,7 @@ test('executeReflectMessageAction falls back to a provenance follow-up when payl
         },
         {
             action: 'message',
-            message: 'Backend reflection',
+            message: 'Backend chat',
             modality: 'text',
             metadata: createMetadata(),
         },
@@ -272,7 +270,7 @@ test('executeReflectMessageAction falls back to a provenance follow-up when payl
     );
 
     assert.equal(sentMessages.length, 1);
-    assert.equal(sentMessages[0].content, 'Backend reflection');
+    assert.equal(sentMessages[0].content, 'Backend chat');
     assert.equal(sentMessages[0].files.length, 0);
     assert.equal(sentMessages[0].components.length, 0);
     assert.equal(delayedCalls.length, 1);
@@ -441,17 +439,17 @@ test('prepareProvenanceCgiPayload falls back to buttons-only when trace-card gen
     assert.deepEqual(customIds, ['details:resp_123', 'report_issue:resp_123']);
 });
 
-test('executeReflectAction routes react actions without falling back to message generation', async () => {
+test('executeChatAction routes react actions without falling back to message generation', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     let reactedWith = '';
     let messageActionCalls = 0;
 
-    processorAccess.executeReflectMessageAction = async () => {
+    processorAccess.executeChatMessageAction = async () => {
         messageActionCalls += 1;
     };
 
-    await processorAccess.executeReflectAction(
+    await processorAccess.executeChatAction(
         createMessage(),
         {
             async addReaction(reaction: string) {
@@ -471,12 +469,12 @@ test('executeReflectAction routes react actions without falling back to message 
     assert.equal(messageActionCalls, 0);
 });
 
-test('executeReflectAction routes image actions into the local image pipeline helper', async () => {
+test('executeChatAction routes image actions into the local image pipeline helper', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     let imagePrompt = '';
 
-    processorAccess.executeReflectImageAction = async (
+    processorAccess.executeChatImageAction = async (
         _message: unknown,
         _responseHandler: unknown,
         imageRequest: { prompt: string }
@@ -484,13 +482,13 @@ test('executeReflectAction routes image actions into the local image pipeline he
         imagePrompt = imageRequest.prompt;
     };
 
-    await processorAccess.executeReflectAction(
+    await processorAccess.executeChatAction(
         createMessage(),
         {},
         {
             action: 'image',
             imageRequest: {
-                prompt: 'draw a reflective skyline',
+                prompt: 'draw a skyline',
             },
             metadata: null,
         },
@@ -498,10 +496,10 @@ test('executeReflectAction routes image actions into the local image pipeline he
         null
     );
 
-    assert.equal(imagePrompt, 'draw a reflective skyline');
+    assert.equal(imagePrompt, 'draw a skyline');
 });
 
-test('executeReflectAction warns and no-ops for unknown actions', async () => {
+test('executeChatAction warns and no-ops for unknown actions', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const originalWarn = logger.warn;
@@ -512,7 +510,7 @@ test('executeReflectAction warns and no-ops for unknown actions', async () => {
     }) as typeof logger.warn;
 
     try {
-        await processorAccess.executeReflectAction(
+        await processorAccess.executeChatAction(
             createMessage(),
             {},
             {
@@ -529,7 +527,7 @@ test('executeReflectAction warns and no-ops for unknown actions', async () => {
     assert.match(warnings[0], /unsupported action "video"/i);
 });
 
-test('executeReflectMessageAction reports empty backend message payload as an error block', async () => {
+test('executeChatMessageAction reports empty backend message payload as an error block', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const sentMessages: string[] = [];
@@ -538,7 +536,7 @@ test('executeReflectMessageAction reports empty backend message payload as an er
         fallbackProvenanceCalls += 1;
     };
 
-    await processorAccess.executeReflectMessageAction(
+    await processorAccess.executeChatMessageAction(
         createMessage(),
         {
             async sendMessage(content: string) {
@@ -559,24 +557,24 @@ test('executeReflectMessageAction reports empty backend message payload as an er
     assert.equal(sentMessages.length, 1);
     assert.match(sentMessages[0], /^```ansi\n/);
     assert.equal(
-        sentMessages[0].includes('\u001b[31mReflect request failed:'),
+        sentMessages[0].includes('\u001b[31mChat request failed:'),
         true
     );
     assert.match(sentMessages[0], /empty message payload/i);
 });
 
-test('processMessage replies with a red code-block error when backend reflect request fails', async () => {
+test('processMessage replies with a red code-block error when backend chat request fails', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
-    const originalReflectViaApi = botApi.reflectViaApi;
+    const originalChatViaApi = botApi.chatViaApi;
     const originalSendMessage = ResponseHandler.prototype.sendMessage;
     const originalStartTyping = ResponseHandler.prototype.startTyping;
     const originalStopTyping = ResponseHandler.prototype.stopTyping;
     const sentMessages: string[] = [];
-    let executeReflectActionCalls = 0;
+    let executeChatActionCalls = 0;
 
     processorAccess.checkRateLimits = async () => ({ allowed: true });
-    processorAccess.buildReflectRequestFromMessage = async () => ({
+    processorAccess.buildChatRequestFromMessage = async () => ({
         request: {
             surface: 'discord',
             trigger: {
@@ -595,11 +593,11 @@ test('processMessage replies with a red code-block error when backend reflect re
         },
         recoveredImageContext: null,
     });
-    processorAccess.executeReflectAction = async () => {
-        executeReflectActionCalls += 1;
+    processorAccess.executeChatAction = async () => {
+        executeChatActionCalls += 1;
     };
 
-    (botApi as { reflectViaApi: typeof botApi.reflectViaApi }).reflectViaApi =
+    (botApi as { chatViaApi: typeof botApi.chatViaApi }).chatViaApi =
         (async () => {
             const timeoutError = new Error(
                 'Request timed out after 180000ms'
@@ -611,10 +609,10 @@ test('processMessage replies with a red code-block error when backend reflect re
             };
             timeoutError.name = 'DiscordApiClientError';
             timeoutError.code = 'timeout_error';
-            timeoutError.endpoint = '/api/reflect';
+            timeoutError.endpoint = '/api/chat';
             timeoutError.status = null;
             throw timeoutError;
-        }) as typeof botApi.reflectViaApi;
+        }) as typeof botApi.chatViaApi;
 
     ResponseHandler.prototype.sendMessage = (async (content: string) => {
         sentMessages.push(content);
@@ -644,28 +642,27 @@ test('processMessage replies with a red code-block error when backend reflect re
     try {
         await processor.processMessage(message, true, 'direct');
     } finally {
-        (
-            botApi as { reflectViaApi: typeof botApi.reflectViaApi }
-        ).reflectViaApi = originalReflectViaApi;
+        (botApi as { chatViaApi: typeof botApi.chatViaApi }).chatViaApi =
+            originalChatViaApi;
         ResponseHandler.prototype.sendMessage = originalSendMessage;
         ResponseHandler.prototype.startTyping = originalStartTyping;
         ResponseHandler.prototype.stopTyping = originalStopTyping;
     }
 
-    assert.equal(executeReflectActionCalls, 0);
+    assert.equal(executeChatActionCalls, 0);
     assert.equal(sentMessages.length, 1);
     assert.match(sentMessages[0], /^```ansi\n/);
     assert.equal(
-        sentMessages[0].includes('\u001b[31mReflect request failed:'),
+        sentMessages[0].includes('\u001b[31mChat request failed:'),
         true
     );
     assert.match(
         sentMessages[0],
-        /Timed out while waiting for backend reflect response/i
+        /Timed out while waiting for backend chat response/i
     );
 });
 
-test('buildReflectRequestFromMessage prepends one profile overlay system message when configured', async () => {
+test('buildChatRequestFromMessage prepends one profile overlay system message when configured', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const originalProfile = runtimeConfig.profile;
@@ -707,13 +704,13 @@ test('buildReflectRequestFromMessage prepends one profile overlay system message
     };
 
     try {
-        const built = await processorAccess.buildReflectRequestFromMessage(
-            createReflectBuildMessage(),
+        const built = await processorAccess.buildChatRequestFromMessage(
+            createChatBuildMessage(),
             ''
         );
 
         if (!built) {
-            throw new Error('Expected reflect request to be built');
+            throw new Error('Expected chat request to be built');
         }
 
         assert.equal(built.request.conversation[0].role, 'system');
@@ -731,7 +728,7 @@ test('buildReflectRequestFromMessage prepends one profile overlay system message
     }
 });
 
-test('buildReflectRequestFromMessage uses backend image-description tasks for attachment grounding', async () => {
+test('buildChatRequestFromMessage uses backend image-description tasks for attachment grounding', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const originalRunImageDescriptionTaskViaApi =
@@ -792,7 +789,7 @@ test('buildReflectRequestFromMessage uses backend image-description tasks for at
     }) as typeof botApi.runImageDescriptionTaskViaApi;
 
     try {
-        const built = await processorAccess.buildReflectRequestFromMessage(
+        const built = await processorAccess.buildChatRequestFromMessage(
             {
                 id: 'message-attach-1',
                 content: 'What changed in this image?',
@@ -828,7 +825,7 @@ test('buildReflectRequestFromMessage uses backend image-description tasks for at
         );
 
         if (!built) {
-            throw new Error('Expected reflect request to be built');
+            throw new Error('Expected chat request to be built');
         }
 
         assert.equal(capturedRequests.length, 1);
@@ -859,7 +856,7 @@ test('buildReflectRequestFromMessage uses backend image-description tasks for at
     }
 });
 
-test('buildReflectRequestFromMessage omits empty image-description context for image-only messages', async () => {
+test('buildChatRequestFromMessage omits empty image-description context for image-only messages', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const originalRunImageDescriptionTaskViaApi =
@@ -920,7 +917,7 @@ test('buildReflectRequestFromMessage omits empty image-description context for i
     }) as typeof botApi.runImageDescriptionTaskViaApi;
 
     try {
-        const built = await processorAccess.buildReflectRequestFromMessage(
+        const built = await processorAccess.buildChatRequestFromMessage(
             {
                 id: 'message-attach-2',
                 content: '   ',
@@ -956,12 +953,15 @@ test('buildReflectRequestFromMessage omits empty image-description context for i
         );
 
         if (!built) {
-            throw new Error('Expected reflect request to be built');
+            throw new Error('Expected chat request to be built');
         }
 
         assert.equal(capturedRequests.length, 1);
         assert.equal(
-            Object.prototype.hasOwnProperty.call(capturedRequests[0] ?? {}, 'context'),
+            Object.prototype.hasOwnProperty.call(
+                capturedRequests[0] ?? {},
+                'context'
+            ),
             false
         );
         const joinedConversation = built.request.conversation
@@ -978,7 +978,7 @@ test('buildReflectRequestFromMessage omits empty image-description context for i
     }
 });
 
-test('buildReflectRequestFromMessage leaves conversation unchanged when no profile overlay exists', async () => {
+test('buildChatRequestFromMessage leaves conversation unchanged when no profile overlay exists', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const originalProfile = runtimeConfig.profile;
@@ -1020,13 +1020,13 @@ test('buildReflectRequestFromMessage leaves conversation unchanged when no profi
     };
 
     try {
-        const built = await processorAccess.buildReflectRequestFromMessage(
-            createReflectBuildMessage(),
+        const built = await processorAccess.buildChatRequestFromMessage(
+            createChatBuildMessage(),
             ''
         );
 
         if (!built) {
-            throw new Error('Expected reflect request to be built');
+            throw new Error('Expected chat request to be built');
         }
 
         assert.equal(built.request.conversation.length, 2);
@@ -1045,7 +1045,7 @@ test('buildReflectRequestFromMessage leaves conversation unchanged when no profi
     }
 });
 
-test('buildReflectRequestFromMessage marks plaintext alias triggers as invoked', async () => {
+test('buildChatRequestFromMessage marks plaintext alias triggers as invoked', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     (
@@ -1071,13 +1071,13 @@ test('buildReflectRequestFromMessage marks plaintext alias triggers as invoked',
         }),
     };
 
-    const built = await processorAccess.buildReflectRequestFromMessage(
-        createReflectBuildMessage(),
+    const built = await processorAccess.buildChatRequestFromMessage(
+        createChatBuildMessage(),
         'Mentioned by plaintext alias: ari'
     );
 
     if (!built) {
-        throw new Error('Expected reflect request to be built');
+        throw new Error('Expected chat request to be built');
     }
 
     assert.equal(built.request.trigger.kind, 'invoked');

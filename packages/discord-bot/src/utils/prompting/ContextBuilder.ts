@@ -204,7 +204,10 @@ export class ContextBuilder {
         });
 
         // Build the final context
-        const systemPrompt = renderPrompt('discord.chat.system').content;
+        const systemPrompt = [
+            renderPrompt('conversation.shared.system').content,
+            renderPrompt('discord.chat.system').content,
+        ].join('\n\n');
         const context: PromptMessage[] = [
             { role: 'system', content: systemPrompt },
             ...contextHistory,

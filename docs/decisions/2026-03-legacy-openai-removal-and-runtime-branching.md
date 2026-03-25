@@ -7,7 +7,7 @@
 
 **How to read this document:** This is an architectural decision record. The context section explains the mixed state that motivated the decision, while the latest branch outcomes live in `docs/status/`.
 
-**Implementation context:** The motivating mixed state is summarized below and in [VoltAgent Reflect Runtime Status](../status/voltagent-reflect-runtime-status.md).
+**Implementation context:** The motivating mixed state is summarized below and in [VoltAgent Reflect Runtime Status](../status/2026-03-17-voltagent-reflect-runtime-status.md).
 
 ---
 
@@ -65,9 +65,9 @@ The remaining legacy OpenAI system should now be treated as transitional compati
 
 Those migration gaps have since been closed for the text, image, and voice branch scopes documented in:
 
-- [Legacy OpenAI Text Migration Status](../status/legacy-openai-text-migration-status.md)
-- [Legacy OpenAI Image Migration Status](../status/legacy-openai-image-migration-status.md)
-- [Legacy OpenAI Voice Migration Status](../status/legacy-openai-voice-migration-status.md)
+- [Legacy OpenAI Text Migration Status](../status/2026-03-18-legacy-openai-text-migration-status.md)
+- [Legacy OpenAI Image Migration Status](../status/2026-03-19-legacy-openai-image-migration-status.md)
+- [Legacy OpenAI Voice Migration Status](../status/2026-03-21-legacy-openai-voice-migration-status.md)
 
 ---
 
@@ -264,9 +264,9 @@ This decision intentionally separates "remove legacy OpenAI architecture" from "
 
 This decision record is architectural. Branch-level inventories, code hotspots, and rollout tracking should live in separate status docs:
 
-- [Legacy OpenAI Text Migration Status](../status/legacy-openai-text-migration-status.md)
-- [Legacy OpenAI Image Migration Status](../status/legacy-openai-image-migration-status.md)
-- [Legacy OpenAI Voice Migration Status](../status/legacy-openai-voice-migration-status.md)
+- [Legacy OpenAI Text Migration Status](../status/2026-03-18-legacy-openai-text-migration-status.md)
+- [Legacy OpenAI Image Migration Status](../status/2026-03-19-legacy-openai-image-migration-status.md)
+- [Legacy OpenAI Voice Migration Status](../status/2026-03-21-legacy-openai-voice-migration-status.md)
 
 The decision itself should remain aligned with:
 

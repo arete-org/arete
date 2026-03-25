@@ -14,7 +14,7 @@ import { promptConfigPath, runtimeConfig } from './runtime.js';
 import { createDiscordPromptRegistry } from './promptRegistryFactory.js';
 import {
     prependProfileOverlaySystemMessageToConversation,
-    renderPromptWithActivePersonaLayer,
+    renderPromptLayersWithActivePersona,
     type PromptConversationMessage,
     type PromptConversationOverlayResult,
 } from './promptComposition.js';
@@ -27,17 +27,44 @@ import type { ProfilePromptOverlayUsage } from './profilePromptOverlay.js';
 export const promptRegistry = createDiscordPromptRegistry(promptConfigPath);
 
 const REQUIRED_PROMPT_KEYS: PromptKey[] = [
+    'conversation.shared.system',
+    'conversation.shared.persona.footnote',
     'discord.chat.system',
     'discord.chat.persona.footnote',
     'discord.image.system',
     'discord.image.persona.footnote',
     'discord.image.developer',
     'text.news.system',
-    'discord.planner.system',
+    'chat.planner.system',
     'discord.realtime.system',
     'discord.realtime.persona.footnote',
     'discord.summarizer.system',
 ];
+
+const promptSystemKeysByUsage = {
+    'image.system': ['discord.image.system'],
+    'image.developer': ['discord.image.developer'],
+    realtime: ['conversation.shared.system', 'discord.realtime.system'],
+    chat: ['conversation.shared.system', 'discord.chat.system'],
+    provenance: ['conversation.shared.system', 'discord.chat.system'],
+} as const satisfies Record<ProfilePromptOverlayUsage, readonly PromptKey[]>;
+
+const promptPersonaKeysByUsage = {
+    'image.system': ['discord.image.persona.footnote'],
+    'image.developer': ['discord.image.persona.footnote'],
+    realtime: [
+        'conversation.shared.persona.footnote',
+        'discord.realtime.persona.footnote',
+    ],
+    chat: [
+        'conversation.shared.persona.footnote',
+        'discord.chat.persona.footnote',
+    ],
+    provenance: [
+        'conversation.shared.persona.footnote',
+        'discord.chat.persona.footnote',
+    ],
+} as const satisfies Record<ProfilePromptOverlayUsage, readonly PromptKey[]>;
 
 // Fail fast during startup so missing prompt definitions never surface mid-request.
 promptRegistry.assertKeys(REQUIRED_PROMPT_KEYS);
@@ -55,43 +82,22 @@ export const renderPrompt = (
     });
 
 /**
- * Resolves the default persona key for a given usage context when no runtime
- * overlay is configured.
- */
-const resolveDefaultPersonaPromptKey = (
-    usage: ProfilePromptOverlayUsage
-): PromptKey => {
-    switch (usage) {
-        case 'image.system':
-        case 'image.developer':
-            return 'discord.image.persona.footnote';
-        case 'realtime':
-            return 'discord.realtime.persona.footnote';
-        case 'reflect':
-        case 'provenance':
-            return 'discord.chat.persona.footnote';
-        default:
-            return 'discord.chat.persona.footnote';
-    }
-};
-
-/**
- * Prompt resolution order for Discord bot text generation:
+ * Prompt resolution order for Discord bot generation:
  * 1) shared defaults.yaml
  * 2) optional PROMPT_CONFIG_PATH override for the same key
  * 3) variable interpolation
- * 4) one active persona layer (overlay when configured, otherwise default Footnote persona key)
+ * 4) system layers for the active surface
+ * 5) one active persona layer (overlay when configured, otherwise shared + surface default persona)
  */
 export const renderPromptWithProfileOverlay = (
-    key: PromptKey,
     usage: ProfilePromptOverlayUsage,
     variables: PromptVariables = {}
 ): string =>
-    renderPromptWithActivePersonaLayer({
+    renderPromptLayersWithActivePersona({
         registry: promptRegistry,
         profile: runtimeConfig.profile,
-        coreKey: key,
-        defaultPersonaKey: resolveDefaultPersonaPromptKey(usage),
+        systemKeys: promptSystemKeysByUsage[usage],
+        personaKeys: promptPersonaKeysByUsage[usage],
         usage,
         variables: {
             botProfileDisplayName: runtimeConfig.profile.displayName,
@@ -101,8 +107,8 @@ export const renderPromptWithProfileOverlay = (
 
 /**
  * Adds the runtime profile overlay as a separate system message when present.
- * Reflect request building uses this so overlay behavior stays consistent while
- * still preserving existing reflect message ordering.
+ * Chat request building uses this so overlay behavior stays consistent while
+ * still preserving existing message ordering.
  */
 export const prependProfileOverlaySystemMessage = (
     conversation: readonly PromptConversationMessage[],

@@ -1,8 +1,8 @@
 /**
- * @description: Handles /api/reflect requests for the public web UI and trusted
+ * @description: Handles /api/chat requests for the public web UI and trusted
  * internal callers, then returns an AI response plus provenance metadata.
  * @footnote-scope: interface
- * @footnote-module: ReflectHandler
+ * @footnote-module: ChatHandler
  * @footnote-risk: high - Failures block AI responses and provenance capture.
  * @footnote-ethics: high - Incorrect metadata harms transparency and user trust.
  */
@@ -15,16 +15,16 @@ import type {
     ResponseMetadataRuntimeContext,
 } from '../services/openaiService.js';
 import { runtimeConfig } from '../config.js';
-import { createReflectOrchestrator } from '../services/reflectOrchestrator.js';
+import { createChatOrchestrator } from '../services/chatOrchestrator.js';
 import { logger } from '../utils/logger.js';
 import {
-    type ReflectAuthContext,
-    resolveReflectAuth,
+    type ChatAuthContext,
+    resolveChatAuth,
     verifyTurnstileCaptcha,
-} from './reflectAuth.js';
-import { getRequestIdentity, parseReflectRequest } from './reflectRequest.js';
-import { createReflectRateLimitController } from './reflectRateLimit.js';
-import { sendJson } from './reflectResponses.js';
+} from './chatAuth.js';
+import { getRequestIdentity, parseChatRequest } from './chatRequest.js';
+import { createChatRateLimitController } from './chatRateLimit.js';
+import { sendJson } from './chatResponses.js';
 
 type LogRequest = (
     req: IncomingMessage,
@@ -37,7 +37,7 @@ type BuildResponseMetadata = (
     runtimeContext: ResponseMetadataRuntimeContext
 ) => ResponseMetadata;
 
-type ReflectHandlerDeps = {
+type ChatHandlerDeps = {
     generationRuntime: GenerationRuntime | null;
     ipRateLimiter: SimpleRateLimiter | null;
     sessionRateLimiter: SimpleRateLimiter | null;
@@ -45,11 +45,11 @@ type ReflectHandlerDeps = {
     storeTrace: (metadata: ResponseMetadata) => Promise<void>;
     logRequest: LogRequest;
     buildResponseMetadata: BuildResponseMetadata;
-    maxReflectBodyBytes: number;
+    maxChatBodyBytes: number;
 };
 
 // The handler keeps transport concerns here and pushes business logic into helpers/services.
-// That split is what lets future callers reuse the reflect workflow without copying HTTP code.
+// That split is what lets future callers reuse the chat workflow without copying HTTP code.
 
 /**
  * Applies credentialed CORS headers only for explicitly allowed browser origins.
@@ -102,7 +102,7 @@ const logSuccessfulAuthStep = (
     req: IncomingMessage,
     res: ServerResponse,
     logRequest: LogRequest,
-    authContext: ReflectAuthContext
+    authContext: ChatAuthContext
 ): void => {
     if (authContext.skipCaptcha && authContext.skipReason) {
         logger.info(
@@ -111,7 +111,7 @@ const logSuccessfulAuthStep = (
         logRequest(
             req,
             res,
-            `reflect captcha-skipped-${authContext.skipReason}`
+            `chat captcha-skipped-${authContext.skipReason}`
         );
         return;
     }
@@ -119,20 +119,20 @@ const logSuccessfulAuthStep = (
     logRequest(
         req,
         res,
-        `reflect captcha-verified source=${authContext.tokenSource}`
+        `chat captcha-verified source=${authContext.tokenSource}`
     );
 };
 
 /**
- * Thin HTTP adapter for the reflect workflow.
+ * Thin HTTP adapter for the shared chat workflow.
  * High-level flow:
  * 1. CORS + method guard
  * 2. Request parsing
  * 3. Auth / CAPTCHA
  * 4. Rate limiting
- * 5. Shared reflect workflow
+ * 5. Shared chat workflow
  */
-const createReflectHandler = ({
+const createChatHandler = ({
     generationRuntime,
     ipRateLimiter,
     sessionRateLimiter,
@@ -140,11 +140,11 @@ const createReflectHandler = ({
     storeTrace,
     logRequest,
     buildResponseMetadata,
-    maxReflectBodyBytes,
-}: ReflectHandlerDeps) => {
-    const reflectOrchestrator =
+    maxChatBodyBytes,
+}: ChatHandlerDeps) => {
+    const chatOrchestrator =
         generationRuntime
-            ? createReflectOrchestrator({
+            ? createChatOrchestrator({
                   generationRuntime,
                   storeTrace,
                   buildResponseMetadata,
@@ -154,17 +154,17 @@ const createReflectHandler = ({
 
     // If the generation runtime is unavailable, we keep the handler alive and return 503 later instead of failing startup.
     // The controller keeps public and trusted-service limiter buckets separate.
-    const rateLimitController = createReflectRateLimitController({
+    const rateLimitController = createChatRateLimitController({
         ipRateLimiter,
         sessionRateLimiter,
         serviceRateLimiter,
     });
 
     /**
-     * @api.operationId: postReflect
-     * @api.path: POST /api/reflect
-     * @api.operationId: optionsReflect
-     * @api.path: OPTIONS /api/reflect
+     * @api.operationId: postChat
+     * @api.path: POST /api/chat
+     * @api.operationId: optionsChat
+     * @api.path: OPTIONS /api/chat
      */
     return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
         try {
@@ -184,33 +184,33 @@ const createReflectHandler = ({
 
                 if (!hasOrigin || !hasRequestedMethod) {
                     sendJson(res, 400, { error: 'Invalid CORS preflight' });
-                    logRequest(req, res, 'reflect preflight-invalid');
+                    logRequest(req, res, 'chat preflight-invalid');
                     return;
                 }
 
                 res.statusCode = 204;
                 res.end();
-                logRequest(req, res, 'reflect options-preflight');
+                logRequest(req, res, 'chat options-preflight');
                 return;
             }
 
             if (req.method !== 'POST') {
                 sendJson(res, 405, { error: 'Method not allowed' });
-                logRequest(req, res, 'reflect method-not-allowed');
+                logRequest(req, res, 'chat method-not-allowed');
                 return;
             }
 
             // Parse and validate the body before we do any expensive auth or model work.
-            const parsedRequestResult = await parseReflectRequest(
+            const parsedRequestResult = await parseChatRequest(
                 req,
-                maxReflectBodyBytes
+                maxChatBodyBytes
             );
             if (!parsedRequestResult.success) {
                 if (
                     parsedRequestResult.error.logLabel ===
-                    'reflect invalid-json'
+                    'chat invalid-json'
                 ) {
-                    logger.warn('Reflect handler received invalid JSON body.');
+                    logger.warn('Chat handler received invalid JSON body.');
                 }
 
                 sendJson(
@@ -230,7 +230,7 @@ const createReflectHandler = ({
             );
 
             // Auth decides whether this caller is a trusted service or a public browser/API caller.
-            const authResult = resolveReflectAuth(req);
+            const authResult = resolveChatAuth(req);
             if (!authResult.success) {
                 sendJson(
                     res,
@@ -291,23 +291,23 @@ const createReflectHandler = ({
 
             logSuccessfulAuthStep(req, res, logRequest, authResult.data);
 
-            if (!reflectOrchestrator) {
+            if (!chatOrchestrator) {
                 sendJson(res, 503, {
                     error: 'Service temporarily unavailable. Please try again later.',
                 });
-                logRequest(req, res, 'reflect service-unavailable');
+                logRequest(req, res, 'chat service-unavailable');
                 return;
             }
 
             // From here on, the request is fully normalized and can delegate to the shared workflow.
-            const reflectResponse = await reflectOrchestrator.runReflect(
+            const chatResponse = await chatOrchestrator.runChat(
                 parsedRequestResult.data
             );
-            sendJson(res, 200, reflectResponse);
+            sendJson(res, 200, chatResponse);
             logRequest(
                 req,
                 res,
-                `reflect success surface=${parsedRequestResult.data.surface} latestUserInputLength=${parsedRequestResult.data.latestUserInput.length}`
+                `chat success surface=${parsedRequestResult.data.surface} latestUserInputLength=${parsedRequestResult.data.latestUserInput.length}`
             );
         } catch (generationError) {
             const errorMessage =
@@ -318,9 +318,9 @@ const createReflectHandler = ({
             sendJson(res, 502, {
                 error: 'AI generation failed',
             });
-            logRequest(req, res, `reflect generation-error ${errorMessage}`);
+            logRequest(req, res, `chat generation-error ${errorMessage}`);
         }
     };
 };
 
-export { createReflectHandler };
+export { createChatHandler };

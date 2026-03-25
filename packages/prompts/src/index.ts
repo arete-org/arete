@@ -7,6 +7,7 @@
  */
 
 export { createPromptRegistry } from './promptRegistry.js';
+export { renderPromptBundle } from './composition.js';
 export {
     promptKeys,
     type CreatePromptRegistryOptions,

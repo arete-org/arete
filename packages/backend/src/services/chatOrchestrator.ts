@@ -1,25 +1,27 @@
 /**
- * @description: Orchestrates universal reflect requests across web and Discord surfaces.
+ * @description: Orchestrates universal chat requests across web and Discord surfaces.
  * @footnote-scope: core
- * @footnote-module: ReflectOrchestrator
- * @footnote-risk: high - Routing mistakes here can send the wrong action or break reflect across surfaces.
- * @footnote-ethics: high - This is the canonical action-selection boundary for user-facing reflect behavior.
+ * @footnote-module: ChatOrchestrator
+ * @footnote-risk: high - Routing mistakes here can send the wrong action or break chat across surfaces.
+ * @footnote-ethics: high - This is the canonical action-selection boundary for user-facing chat behavior.
  */
 import type {
-    PostReflectRequest,
-    PostReflectResponse,
-    ReflectConversationMessage,
+    PostChatRequest,
+    PostChatResponse,
+    ChatConversationMessage,
 } from '@footnote/contracts/web';
-import { renderPrompt } from './prompts/promptRegistry.js';
 import {
-    createReflectService,
-    type CreateReflectServiceOptions,
-} from './reflectService.js';
-import { createReflectPlanner, type ReflectPlan } from './reflectPlanner.js';
+    renderConversationPromptLayers,
+} from './prompts/conversationPromptLayers.js';
+import {
+    createChatService,
+    type CreateChatServiceOptions,
+} from './chatService.js';
+import { createChatPlanner, type ChatPlan } from './chatPlanner.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
-type CreateReflectOrchestratorOptions = CreateReflectServiceOptions;
+type CreateChatOrchestratorOptions = CreateChatServiceOptions;
 
 const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
 
@@ -40,8 +42,8 @@ const resolveBotProfileDisplayName = (): string => {
  * Packs the normalized planner decision into one structured system payload.
  */
 const buildPlannerPayload = (
-    plan: ReflectPlan,
-    surfacePolicy?: { coercedFrom: ReflectPlan['action'] }
+    plan: ChatPlan,
+    surfacePolicy?: { coercedFrom: ChatPlan['action'] }
 ): string =>
     JSON.stringify({
         action: plan.action,
@@ -59,11 +61,11 @@ const buildPlannerPayload = (
  * Web currently accepts message responses only.
  */
 const coercePlanForSurface = (
-    request: PostReflectRequest,
-    plan: ReflectPlan
+    request: PostChatRequest,
+    plan: ChatPlan
 ): {
-    plan: ReflectPlan;
-    surfacePolicy?: { coercedFrom: ReflectPlan['action'] };
+    plan: ChatPlan;
+    surfacePolicy?: { coercedFrom: ChatPlan['action'] };
 } => {
     if (request.surface !== 'web') {
         return { plan };
@@ -74,7 +76,7 @@ const coercePlanForSurface = (
     }
 
     const normalizedReasoning = plan.reasoning.trim();
-    const coercedPlan: ReflectPlan = {
+    const coercedPlan: ChatPlan = {
         ...plan,
         action: 'message',
         modality: 'text',
@@ -89,7 +91,7 @@ const coercePlanForSurface = (
     };
 
     logger.debug(
-        `Reflect surface policy coerced action ${plan.action} -> message for web request.`
+        `Chat surface policy coerced action ${plan.action} -> message for web request.`
     );
 
     return {
@@ -98,38 +100,13 @@ const coercePlanForSurface = (
     };
 };
 
-/**
- * Resolves the core system prompt key by surface.
- */
-const buildSurfaceSystemPrompt = (
-    surface: PostReflectRequest['surface']
-): string =>
-    surface === 'discord'
-        ? renderPrompt('discord.chat.system').content
-        : renderPrompt('reflect.chat.system').content;
-
-/**
- * Resolves the default Footnote persona prompt key by surface.
- */
-const buildSurfacePersonaPrompt = (
-    surface: PostReflectRequest['surface'],
-    botProfileDisplayName: string
-): string =>
-    surface === 'discord'
-        ? renderPrompt('discord.chat.persona.footnote', {
-              botProfileDisplayName,
-          }).content
-        : renderPrompt('reflect.chat.persona.footnote', {
-              botProfileDisplayName,
-          }).content;
-
 const DISCORD_PROFILE_OVERLAY_HEADER = 'BEGIN Bot Profile Overlay';
 
 /**
  * Detects a Discord vendor overlay system message injected by the bot runtime.
  */
 const isDiscordOverlaySystemMessage = (
-    message: Pick<ReflectConversationMessage, 'role' | 'content'>
+    message: Pick<ChatConversationMessage, 'role' | 'content'>
 ): boolean =>
     message.role === 'system' &&
     message.content.includes(DISCORD_PROFILE_OVERLAY_HEADER);
@@ -139,10 +116,10 @@ const isDiscordOverlaySystemMessage = (
  * The extracted overlay becomes the active persona layer for the request.
  */
 const extractDiscordPersonaOverlay = (
-    conversation: Array<Pick<ReflectConversationMessage, 'role' | 'content'>>
+    conversation: Array<Pick<ChatConversationMessage, 'role' | 'content'>>
 ): {
     personaPrompt: string | null;
-    conversation: Array<Pick<ReflectConversationMessage, 'role' | 'content'>>;
+    conversation: Array<Pick<ChatConversationMessage, 'role' | 'content'>>;
 } => {
     const firstOverlay = conversation.find(isDiscordOverlaySystemMessage);
     if (!firstOverlay) {
@@ -164,21 +141,21 @@ const extractDiscordPersonaOverlay = (
  * The orchestrator keeps surface-specific policy in one place while reusing the
  * shared message-generation service for any branch that ends in text output.
  */
-export const createReflectOrchestrator = ({
+export const createChatOrchestrator = ({
     generationRuntime,
     storeTrace,
     buildResponseMetadata,
     defaultModel = runtimeConfig.openai.defaultModel,
     recordUsage,
-}: CreateReflectOrchestratorOptions) => {
-    const reflectService = createReflectService({
+}: CreateChatOrchestratorOptions) => {
+    const chatService = createChatService({
         generationRuntime,
         storeTrace,
         buildResponseMetadata,
         defaultModel,
         recordUsage,
     });
-    const reflectPlanner = createReflectPlanner({
+    const chatPlanner = createChatPlanner({
         executePlanner: async ({
             messages,
             model,
@@ -204,11 +181,11 @@ export const createReflectOrchestrator = ({
         recordUsage,
     });
 
-    const runReflect = async (
-        request: PostReflectRequest
-    ): Promise<PostReflectResponse> => {
+    const runChat = async (
+        request: PostChatRequest
+    ): Promise<PostChatResponse> => {
         const botProfileDisplayName = resolveBotProfileDisplayName();
-        const planned = await reflectPlanner.planReflect(request);
+        const planned = await chatPlanner.planChat(request);
         const { plan, surfacePolicy } = coercePlanForSurface(request, planned);
 
         if (plan.action === 'ignore') {
@@ -236,7 +213,7 @@ export const createReflectOrchestrator = ({
 
         if (plan.action === 'image' && !plan.imageRequest) {
             logger.warn(
-                `Reflect planner returned image without imageRequest; falling back to ignore. surface=${request.surface} trigger=${request.trigger.kind} latestUserInputLength=${request.latestUserInput.length}`
+                `Chat planner returned image without imageRequest; falling back to ignore. surface=${request.surface} trigger=${request.trigger.kind} latestUserInputLength=${request.latestUserInput.length}`
             );
             return {
                 action: 'ignore',
@@ -245,9 +222,9 @@ export const createReflectOrchestrator = ({
         }
 
         const normalizedConversation: Array<
-            Pick<ReflectConversationMessage, 'role' | 'content'>
+            Pick<ChatConversationMessage, 'role' | 'content'>
         > = request.conversation.map(
-            (message: PostReflectRequest['conversation'][number]) => ({
+            (message: PostChatRequest['conversation'][number]) => ({
                 role: message.role,
                 content: message.content,
             })
@@ -261,19 +238,24 @@ export const createReflectOrchestrator = ({
                   };
         if (request.surface === 'discord' && extractedPersona.personaPrompt) {
             logger.debug(
-                'Reflect orchestrator applied Discord profile overlay as the active persona layer.'
+                'Chat orchestrator applied Discord profile overlay as the active persona layer.'
             );
         }
+        const promptLayers = renderConversationPromptLayers(
+            request.surface === 'discord' ? 'discord-chat' : 'web-chat',
+            {
+                botProfileDisplayName,
+            }
+        );
         const personaPrompt =
-            extractedPersona.personaPrompt ??
-            buildSurfacePersonaPrompt(request.surface, botProfileDisplayName);
+            extractedPersona.personaPrompt ?? promptLayers.personaPrompt;
 
         const conversationMessages: Array<
-            Pick<ReflectConversationMessage, 'role' | 'content'>
+            Pick<ChatConversationMessage, 'role' | 'content'>
         > = [
             {
                 role: 'system',
-                content: buildSurfaceSystemPrompt(request.surface),
+                content: promptLayers.systemPrompt,
             },
             {
                 role: 'system',
@@ -295,7 +277,7 @@ export const createReflectOrchestrator = ({
             },
         ];
 
-        const response = await reflectService.runReflectMessages({
+        const response = await chatService.runChatMessages({
             messages: conversationMessages,
             conversationSnapshot: JSON.stringify({
                 request,
@@ -321,6 +303,6 @@ export const createReflectOrchestrator = ({
     };
 
     return {
-        runReflect,
+        runChat,
     };
 };

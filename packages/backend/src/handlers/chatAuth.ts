@@ -1,14 +1,14 @@
 /**
- * @description: Trusted-service auth and Turnstile verification helpers for the reflect endpoint.
+ * @description: Trusted-service auth and Turnstile verification helpers for the chat endpoint.
  * @footnote-scope: utility
- * @footnote-module: ReflectAuth
+ * @footnote-module: ChatAuth
  * @footnote-risk: high - Auth or CAPTCHA mistakes can open the endpoint to abuse or block trusted callers.
  * @footnote-ethics: high - Abuse controls and trusted-service access affect fairness and reliability.
  */
 import type { IncomingMessage } from 'node:http';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
-import type { ReflectFailureResponse } from './reflectResponses.js';
+import type { ChatFailureResponse } from './chatResponses.js';
 
 /**
  * Result of checking whether a caller is one of our trusted internal services.
@@ -22,7 +22,7 @@ export type ServiceAuth = {
 /**
  * Auth context the handler needs after headers are inspected but before rate limiting.
  */
-export type ReflectAuthContext = {
+export type ChatAuthContext = {
     serviceAuth: ServiceAuth;
     turnstileToken: string | null;
     tokenSource: 'header' | 'none';
@@ -45,7 +45,7 @@ const readHeaderValue = (
 
 /**
  * Trusted server-side callers can authenticate with the shared trace token or
- * a reflect-specific service token. Public browser traffic never uses this path.
+ * a chat-specific service token. Public browser traffic never uses this path.
  */
 export const getServiceAuth = (req: IncomingMessage): ServiceAuth => {
     const traceHeaderValue = readHeaderValue(req.headers['x-trace-token']);
@@ -85,11 +85,11 @@ export const getServiceAuth = (req: IncomingMessage): ServiceAuth => {
  * - public caller with required Turnstile
  * - public caller with CAPTCHA skipped because Turnstile is disabled
  */
-export const resolveReflectAuth = (
+export const resolveChatAuth = (
     req: IncomingMessage
 ): 
-    | { success: true; data: ReflectAuthContext }
-    | { success: false; error: ReflectFailureResponse } => {
+    | { success: true; data: ChatAuthContext }
+    | { success: false; error: ChatFailureResponse } => {
     const serviceAuth = getServiceAuth(req);
     const hasTurnstileSecret = Boolean(runtimeConfig.turnstile.secretKey);
     const hasTurnstileSite = Boolean(runtimeConfig.turnstile.siteKey);
@@ -108,7 +108,7 @@ export const resolveReflectAuth = (
                     details:
                         'TURNSTILE_SECRET_KEY and TURNSTILE_SITE_KEY must both be set',
                 },
-                logLabel: 'reflect captcha-misconfigured',
+                logLabel: 'chat captcha-misconfigured',
             },
         };
     }
@@ -138,7 +138,7 @@ export const resolveReflectAuth = (
                     error: 'CAPTCHA verification failed',
                     details: 'Missing turnstile token',
                 },
-                logLabel: 'reflect missing-captcha-token',
+                logLabel: 'chat missing-captcha-token',
             },
         };
     }
@@ -227,7 +227,7 @@ const resolveTurnstileHostnameValidation = (
 
 /**
  * Verifies a public Turnstile token and converts provider/network failures into
- * the structured reflect error shape used by the handler.
+ * the structured chat error shape used by the handler.
  */
 export const verifyTurnstileCaptcha = async ({
     clientIp,
@@ -237,7 +237,7 @@ export const verifyTurnstileCaptcha = async ({
     tokenSource,
 }: VerifyTurnstileInput): Promise<
     | { success: true }
-    | { success: false; error: ReflectFailureResponse }
+    | { success: false; error: ChatFailureResponse }
 > => {
     try {
         // These logs help separate caller mistakes from upstream Turnstile failures.
@@ -258,7 +258,7 @@ export const verifyTurnstileCaptcha = async ({
                         error: 'CAPTCHA token is required',
                         details: 'Missing turnstile token',
                     },
-                    logLabel: 'reflect missing-captcha-token',
+                    logLabel: 'chat missing-captcha-token',
                 },
             };
         }
@@ -273,7 +273,7 @@ export const verifyTurnstileCaptcha = async ({
                         error: 'CAPTCHA verification not configured',
                         details: 'TURNSTILE_SECRET_KEY is not set',
                     },
-                    logLabel: 'reflect captcha-not-configured',
+                    logLabel: 'chat captcha-not-configured',
                 },
             };
         }
@@ -341,7 +341,7 @@ export const verifyTurnstileCaptcha = async ({
                             details:
                                 'Invalid CAPTCHA configuration. Secret key does not match site key.',
                         },
-                        logLabel: `reflect captcha-config-error codes=${errorCodes.join(',')}`,
+                        logLabel: `chat captcha-config-error codes=${errorCodes.join(',')}`,
                     },
                 };
             }
@@ -406,7 +406,7 @@ export const verifyTurnstileCaptcha = async ({
                         error: 'CAPTCHA verification failed',
                         details: errorCodesStr,
                     },
-                    logLabel: `reflect captcha-failed source=${tokenSource} errors=${errorCodesStr}`,
+                    logLabel: `chat captcha-failed source=${tokenSource} errors=${errorCodesStr}`,
                 },
             };
         }
@@ -449,7 +449,7 @@ export const verifyTurnstileCaptcha = async ({
                         error: 'CAPTCHA verification failed',
                         details: 'hostname mismatch',
                     },
-                    logLabel: `reflect captcha-hostname-mismatch source=${tokenSource}`,
+                    logLabel: `chat captcha-hostname-mismatch source=${tokenSource}`,
                 },
             };
         }
@@ -489,7 +489,7 @@ export const verifyTurnstileCaptcha = async ({
                     error: 'CAPTCHA verification service unavailable',
                     details: 'Please try again later.',
                 },
-                logLabel: 'reflect captcha-service-error',
+                logLabel: 'chat captcha-service-error',
             },
         };
     }

@@ -17,7 +17,7 @@ import type {
 } from '../services/internalText.js';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { logger } from '../utils/logger.js';
-import { sendJson } from './reflectResponses.js';
+import { sendJson } from './chatResponses.js';
 import {
     parseTrustedBodyWithSchema,
     parseTrustedServiceAuth,
