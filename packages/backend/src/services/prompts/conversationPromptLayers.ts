@@ -8,6 +8,7 @@
  */
 
 import { renderPromptBundle } from '@footnote/prompts';
+import type { PromptVariables } from '@footnote/prompts';
 import { promptRegistry } from './promptRegistry.js';
 
 const surfaceSystemKeys = {
@@ -48,7 +49,7 @@ export interface ConversationPromptLayers {
  */
 export const renderConversationPromptLayers = (
     surface: ConversationSurface,
-    variables: Record<string, string> = {}
+    variables: PromptVariables = {}
 ): ConversationPromptLayers => ({
     systemPrompt: renderPromptBundle(
         promptRegistry,
