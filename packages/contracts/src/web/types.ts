@@ -294,7 +294,7 @@ export type ChatCapabilities = {
 };
 
 /**
- * Shared image-generation instructions returned by reflect planning.
+ * Shared image-generation instructions returned by planning.
  */
 export type ChatImageRequest = {
     prompt: string;
@@ -713,7 +713,7 @@ export type InternalTextCosts = {
  * Trusted internal response for the image-description helper task.
  *
  * The `description` field carries the compact text payload that Discord uses
- * for reflect grounding today. It may contain structured JSON text when that
+ * for chat grounding today. It may contain structured JSON text when that
  * preserves more useful image details than a plain sentence would.
  *
  * @api.operationId: postInternalTextTask
