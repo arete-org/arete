@@ -494,14 +494,16 @@ const AskMeAnything = (): JSX.Element => {
             // Clear timeout once we have a response
             clearTimeout(timeoutId);
 
-            const chation = payload.message as string | undefined;
+            const chat = payload.message as string | undefined;
             // Trust the API contract: metadata is already normalized by the backend.
-            const backendMetadata =
-                payload.metadata as ResponseMetadata | null | undefined;
+            const backendMetadata = payload.metadata as
+                | ResponseMetadata
+                | null
+                | undefined;
 
-            setStatus('A brief chation:');
+            setStatus('A brief chat:');
             setAnswer(
-                chation?.trim() ||
+                chat?.trim() ||
                     'I would begin by examining the ethical principles involved, then consider what transparency and care require.'
             );
 
