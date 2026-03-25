@@ -32,11 +32,11 @@ This cleanup branch is not complete.
 
 Current repo state shows:
 
-- `1/4` cleanup-branch item is complete
+- `2/4` cleanup-branch items are complete
 - `1/4` is partial
-- `2/4` are not started
+- `1/4` is not started
 
-The largest remaining blocker is legacy OpenAI text fallback still being wired into backend startup and still being exported from `@footnote/agent-runtime`. The other open gaps are still structural cleanup work in the Discord bot plus the remaining provider-specific type/error imports there.
+The remaining blockers are concentrated in the Discord bot's provider-neutral cleanup: removing the last OpenAI SDK error/type imports and deciding whether to enable optional VoltOps tracing.
 
 ## Cleanup Branch Exit Gates And Evidence
 
@@ -57,20 +57,24 @@ Still needed:
 
 ### 2. Split `packages/discord-bot/src/index.ts`
 
-Status: Not Started
+Status: Complete
 
 Evidence:
 
-- [packages/discord-bot/src/index.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/index.ts) is still a large entrypoint file at roughly 42 KB.
-- Repo search shows provenance and incident interaction handling still living directly in that file, including `report_issue` and provenance action routing.
-- The cleanup target is not yet visible as separate interaction-specific modules owned by the entrypoint.
+- Interaction routing in [packages/discord-bot/src/index.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/index.ts) now delegates to dedicated interaction modules instead of owning select, modal, and button business logic directly.
+- Select menu handling was extracted to [packages/discord-bot/src/interactions/selectMenuHandlers.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/interactions/selectMenuHandlers.ts).
+- Modal submit handling was extracted to [packages/discord-bot/src/interactions/modalSubmitHandlers.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/interactions/modalSubmitHandlers.ts).
+- Button handling (provenance, incident, variation, retry) was extracted to [packages/discord-bot/src/interactions/buttonHandlers.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/interactions/buttonHandlers.ts), with shared variation status text in [packages/discord-bot/src/interactions/variationStatus.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/interactions/variationStatus.ts).
+- The button module is now further split so [packages/discord-bot/src/interactions/buttonHandlers.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/interactions/buttonHandlers.ts) acts as a thin dispatcher over focused modules:
+  [packages/discord-bot/src/interactions/button/provenanceButtons.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/interactions/button/provenanceButtons.ts),
+  [packages/discord-bot/src/interactions/button/incidentButtons.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/interactions/button/incidentButtons.ts),
+  [packages/discord-bot/src/interactions/button/variationButtons.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/interactions/button/variationButtons.ts),
+  [packages/discord-bot/src/interactions/button/retryButtons.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/interactions/button/retryButtons.ts), and
+  [packages/discord-bot/src/interactions/button/shared.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/interactions/button/shared.ts).
 
 Still needed:
 
-- move image interaction handling into dedicated modules
-- move incident modal/report interaction handling into dedicated modules
-- move provenance button/detail interaction handling into dedicated modules
-- leave `index.ts` as composition and wiring, not the long-term home for interaction logic
+- no further split is required for this item; future work should keep `index.ts` as routing/orchestration only
 
 ### 3. Move OpenAI Error Imports Out Of `discord-bot`
 
@@ -119,8 +123,6 @@ Primary inspection commands and checks:
 
 ## Remaining Gaps
 
-- legacy OpenAI text fallback still exists in the active backend wiring
-- `discord-bot` entrypoint cleanup is still pending
 - `discord-bot` still carries a small but real OpenAI SDK type/error dependency
 - optional VoltOps tracing has not been wired yet
 
