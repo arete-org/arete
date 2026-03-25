@@ -87,9 +87,31 @@ export type ImageStylePreset =
  */
 export interface ImageGenerationCallWithPrompt {
     type: 'image_generation_call';
+    finalImageBase64: string;
+    responseId: string | null;
+    annotations: AnnotationFields;
+    usage: {
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+        imageCount: number;
+    };
+    costs: {
+        text: number;
+        image: number;
+        total: number;
+        perImage: number;
+    };
+    textModel: ImageTextModel;
+    imageModel: ImageRenderModel;
+    outputFormat: ImageOutputFormat;
+    outputCompression: ImageOutputCompression;
+    generationTimeMs?: number;
+    revisedPrompt?: string | null;
+    finalStyle?: ImageStylePreset | null;
     revised_prompt?: string | null;
     style_preset?: ImageStylePreset | null;
-    [key: string]: unknown;
+    metadata?: Record<string, unknown>;
 }
 
 /**
