@@ -32,11 +32,10 @@ This cleanup branch is not complete.
 
 Current repo state shows:
 
-- `2/4` cleanup-branch items are complete
-- `1/4` is partial
+- `3/4` cleanup-branch items are complete
 - `1/4` is not started
 
-The remaining blockers are concentrated in the Discord bot's provider-neutral cleanup: removing the last OpenAI SDK error/type imports and deciding whether to enable optional VoltOps tracing.
+The remaining blocker is optional VoltOps tracing enablement.
 
 ## Cleanup Branch Exit Gates And Evidence
 
@@ -78,19 +77,17 @@ Still needed:
 
 ### 3. Move OpenAI Error Imports Out Of `discord-bot`
 
-Status: Partial
+Status: Complete
 
 Evidence:
 
-- [packages/discord-bot/src/commands/image/errors.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/commands/image/errors.ts) still imports `APIError` from `openai/error` and `Response` types from the OpenAI SDK.
-- [packages/discord-bot/src/commands/image/types.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/commands/image/types.ts) still imports `ResponseOutputItem` from the OpenAI SDK.
-- Repo search in `packages/discord-bot/src` found the remaining direct SDK imports concentrated in the image command area rather than spread across the whole bot, so this cleanup is narrower than it used to be.
+- [packages/discord-bot/src/commands/image/errors.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/commands/image/errors.ts) now uses provider-neutral local error interfaces and guards instead of importing `APIError`/`Response` types from the OpenAI SDK.
+- [packages/discord-bot/src/commands/image/types.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/commands/image/types.ts) now defines `ImageGenerationCallWithPrompt` as a local provider-neutral interface instead of extending OpenAI SDK types.
+- Repo search in `packages/discord-bot/src` no longer finds direct OpenAI SDK import paths (`openai/error`, `openai/resources/...`) in bot source files.
 
 Still needed:
 
-- replace OpenAI-specific error typing in the bot with Footnote-owned or provider-neutral shapes
-- remove OpenAI response-type imports from Discord image helpers
-- remove the `openai` package from `@footnote/discord-bot` if nothing else still needs it after the type cleanup
+- no further code cleanup is required for this item; keep new image error/type shapes provider-neutral going forward
 
 ### 4. Optional VoltOps Tracing Enablement
 
@@ -123,7 +120,6 @@ Primary inspection commands and checks:
 
 ## Remaining Gaps
 
-- `discord-bot` still carries a small but real OpenAI SDK type/error dependency
 - optional VoltOps tracing has not been wired yet
 
 ## Out Of Scope

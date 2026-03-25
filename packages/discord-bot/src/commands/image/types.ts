@@ -5,7 +5,6 @@
  * @footnote-risk: low - Type drift here can make the Discord image UI disagree with backend validation.
  * @footnote-ethics: low - These types document shape and ownership but do not change behavior by themselves.
  */
-import type { ResponseOutputItem } from 'openai/resources/responses/responses.js';
 import {
     internalImageRenderModels,
     internalImageTextModels,
@@ -82,10 +81,15 @@ export type ImageStylePreset =
     | 'isometric'
     | 'unspecified';
 
-export interface ImageGenerationCallWithPrompt
-    extends ResponseOutputItem.ImageGenerationCall {
+/**
+ * Provider-neutral shape for image-generation call records that may include
+ * prompt/style enrichment metadata.
+ */
+export interface ImageGenerationCallWithPrompt {
+    type: 'image_generation_call';
     revised_prompt?: string | null;
     style_preset?: ImageStylePreset | null;
+    [key: string]: unknown;
 }
 
 /**

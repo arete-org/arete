@@ -6,14 +6,19 @@
  * @footnote-ethics: low - Error copy affects transparency but not sensitive processing.
  */
 import { CombinedPropertyError } from '@sapphire/shapeshift';
-import { APIError } from 'openai/error';
-import type { Response } from 'openai/resources/responses/responses.js';
 import { logger } from '../../utils/logger.js';
 import { CloudinaryConfigurationError } from './cloudinary.js';
 
-export function mapResponseError(
-    error: NonNullable<Response['error']>
-): string {
+/**
+ * Provider-neutral error payload used when an upstream image API returns a
+ * structured error body.
+ */
+export interface ImageProviderResponseError {
+    code?: string | null;
+    message: string;
+}
+
+export function mapResponseError(error: ImageProviderResponseError): string {
     switch (error.code) {
         case 'image_content_policy_violation':
             return 'OpenAI safety filters blocked this prompt. Please modify your prompt and try again.';
@@ -74,27 +79,28 @@ export function resolveImageCommandError(error: unknown): string {
         return 'Discord rejected the response format. Please try again with a shorter or simpler prompt.';
     }
 
-    if (error instanceof APIError) {
+    if (isProviderApiError(error)) {
         const code = extractApiErrorCode(error);
+        const status = error.status;
         if (
             code === 'content_policy_violation' ||
             code === 'image_content_policy_violation'
         ) {
             return 'OpenAI safety filters blocked this prompt. Please modify your prompt and try again.';
         }
-        if (code === 'rate_limit_exceeded' || error.status === 429) {
+        if (code === 'rate_limit_exceeded' || status === 429) {
             return 'OpenAI rate limit hit. Please wait a few moments and try again.';
         }
-        if (error.status === 401 || error.status === 403) {
+        if (status === 401 || status === 403) {
             return 'OpenAI rejected our request. Please contact the administrator.';
         }
         if (
-            error.status === 400 &&
+            status === 400 &&
             /invalid[_\s-]*prompt/i.test(error.message ?? '')
         ) {
             return 'OpenAI reported that the prompt was invalid. Please try again with a simpler request.';
         }
-        if (error.status >= 500) {
+        if (typeof status === 'number' && status >= 500) {
             return 'OpenAI had a temporary issue generating the image. Please try again.';
         }
         return error.message || 'OpenAI returned an unexpected error.';
@@ -120,16 +126,54 @@ export function resolveImageCommandError(error: unknown): string {
     return 'An unknown error occurred while generating the image.';
 }
 
-function extractApiErrorCode(error: APIError): string | undefined {
+interface ProviderApiErrorShape {
+    message: string;
+    status?: number;
+    code?: unknown;
+    error?: unknown;
+}
+
+function isProviderApiError(error: unknown): error is ProviderApiErrorShape {
+    if (!error || typeof error !== 'object') {
+        return false;
+    }
+
+    const candidate = error as {
+        message?: unknown;
+        status?: unknown;
+        code?: unknown;
+        error?: unknown;
+    };
+
+    if (typeof candidate.message !== 'string') {
+        return false;
+    }
+
+    const hasStatus = typeof candidate.status === 'number';
+    const hasCode = typeof candidate.code === 'string';
+    const nestedCode =
+        candidate.error &&
+        typeof candidate.error === 'object' &&
+        'code' in candidate.error
+            ? (candidate.error as { code?: unknown }).code
+            : undefined;
+    const hasNestedCode = typeof nestedCode === 'string';
+
+    return hasStatus || hasCode || hasNestedCode;
+}
+
+function extractApiErrorCode(error: ProviderApiErrorShape): string | undefined {
     if (typeof error.code === 'string') {
         return error.code;
     }
 
-    const apiError = error.error as { code?: string } | undefined;
+    const apiError =
+        error.error && typeof error.error === 'object'
+            ? (error.error as { code?: string })
+            : undefined;
     if (apiError && typeof apiError.code === 'string') {
         return apiError.code;
     }
 
     return undefined;
 }
-
