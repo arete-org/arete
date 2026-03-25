@@ -59,13 +59,30 @@ INCIDENT_PSEUDONYMIZATION_SECRET=...
 
 > Current deployments rely on OpenAI-backed adapters. Broader runtime/provider support is planned.
 
-3. Start all services (backend/web/Discord bot)
+3. Start all services
 
 ```bash
 pnpm start:all
 ```
 
-## Vendoring and Multiple Discord Bots
+### Optional: Enable VoltOps Observability
+
+If you want VoltAgent runtime traces in VoltOps:
+
+1. Open `https://console.voltagent.dev`.
+2. Go to `Settings > Projects`.
+3. Open your project (or create one).
+4. Copy the project `Public Key` (`pk_...`) and `Secret Key` (`sk_...`).
+5. Add both keys to `.env`:
+
+```env
+VOLTAGENT_PUBLIC_KEY=pk_...
+VOLTAGENT_SECRET_KEY=sk_...
+```
+
+> If you deploy on Fly, set these on the **backend** Fly app
+
+### Optional: Vendoring & Multiple Discord Bots
 
 We treat `Footnote` as the default Discord persona, which is used if you do nothing beyond the base setup.
 

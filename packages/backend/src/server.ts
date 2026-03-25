@@ -116,6 +116,9 @@ const initializeServices = () => {
     logger.info(
         `TURNSTILE_SITE_KEY: ${runtimeConfig.turnstile.siteKey ? 'SET' : 'NOT SET'}`
     );
+    logger.info(
+        `VOLTOPS_TRACING: ${runtimeConfig.voltagent.observabilityEnabled ? 'ENABLED' : 'DISABLED'}`
+    );
     logger.info(`NODE_ENV: ${runtimeConfig.runtime.nodeEnv}`);
 
     // --- Trace store ---
@@ -138,6 +141,12 @@ const initializeServices = () => {
         generationRuntime = createVoltAgentRuntime({
             defaultModel: runtimeConfig.openai.defaultModel,
             logger: voltAgentLogger,
+            ...(runtimeConfig.voltagent.observabilityEnabled && {
+                voltOps: {
+                    publicKey: runtimeConfig.voltagent.publicKey!,
+                    secretKey: runtimeConfig.voltagent.secretKey!,
+                },
+            }),
         });
         imageGenerationRuntime = createOpenAiImageRuntime({
             apiKey: runtimeConfig.openai.apiKey,
