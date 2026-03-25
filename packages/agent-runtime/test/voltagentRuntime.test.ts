@@ -394,68 +394,70 @@ test('default VoltAgent executor passes the configured logger into Agent creatio
                 seenLoggers.push(agentLogger);
             }
 
-            return {
-                async generateText() {
-                    return {
-                        content: [],
-                        text: 'executor reply',
-                        reasoning: [],
-                        reasoningText: undefined,
-                        files: [],
-                        sources: [],
-                        toolCalls: [],
-                        staticToolCalls: [],
-                        dynamicToolCalls: [],
-                        toolResults: [],
-                        staticToolResults: [],
-                        dynamicToolResults: [],
-                        finishReason: 'stop',
-                        rawFinishReason: 'stop',
-                        usage: {
-                            inputTokens: 0,
-                            inputTokenDetails: {
-                                noCacheTokens: 0,
-                                cacheReadTokens: 0,
-                                cacheWriteTokens: 0,
-                            },
-                            outputTokens: 0,
-                            outputTokenDetails: {
-                                textTokens: 0,
-                                reasoningTokens: 0,
-                            },
-                            totalTokens: 0,
+            const fakeAgent = {
+                generateText: async (
+                    ..._args: Parameters<Agent['generateText']>
+                ): Promise<Awaited<ReturnType<Agent['generateText']>>> => ({
+                    content: [],
+                    text: 'executor reply',
+                    reasoning: [],
+                    reasoningText: undefined,
+                    files: [],
+                    sources: [],
+                    toolCalls: [],
+                    staticToolCalls: [],
+                    dynamicToolCalls: [],
+                    toolResults: [],
+                    staticToolResults: [],
+                    dynamicToolResults: [],
+                    finishReason: 'stop',
+                    rawFinishReason: 'stop',
+                    usage: {
+                        inputTokens: 0,
+                        inputTokenDetails: {
+                            noCacheTokens: 0,
+                            cacheReadTokens: 0,
+                            cacheWriteTokens: 0,
                         },
-                        totalUsage: {
-                            inputTokens: 0,
-                            inputTokenDetails: {
-                                noCacheTokens: 0,
-                                cacheReadTokens: 0,
-                                cacheWriteTokens: 0,
-                            },
-                            outputTokens: 0,
-                            outputTokenDetails: {
-                                textTokens: 0,
-                                reasoningTokens: 0,
-                            },
-                            totalTokens: 0,
+                        outputTokens: 0,
+                        outputTokenDetails: {
+                            textTokens: 0,
+                            reasoningTokens: 0,
                         },
-                        warnings: undefined,
-                        request: {},
-                        response: {
-                            modelId: 'openai/gpt-5-mini',
-                            id: 'response_1',
-                            timestamp: new Date(0),
-                            messages: [],
+                        totalTokens: 0,
+                    },
+                    totalUsage: {
+                        inputTokens: 0,
+                        inputTokenDetails: {
+                            noCacheTokens: 0,
+                            cacheReadTokens: 0,
+                            cacheWriteTokens: 0,
                         },
-                        providerMetadata: undefined,
-                        steps: [],
-                        experimental_output: undefined,
-                        output: undefined,
-                        context: new Map(),
-                        feedback: null,
-                    };
-                },
-            };
+                        outputTokens: 0,
+                        outputTokenDetails: {
+                            textTokens: 0,
+                            reasoningTokens: 0,
+                        },
+                        totalTokens: 0,
+                    },
+                    warnings: undefined,
+                    request: {},
+                    response: {
+                        modelId: 'openai/gpt-5-mini',
+                        id: 'response_1',
+                        timestamp: new Date(0),
+                        messages: [],
+                    },
+                    providerMetadata: undefined,
+                    steps: [],
+                    experimental_output: undefined,
+                    output: undefined,
+                    context: new Map(),
+                    feedback: null,
+                }),
+            } satisfies Pick<Agent, 'generateText'>;
+
+            return fakeAgent;
         },
     });
 

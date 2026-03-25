@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import type { VoltAgentLogger as VoltAgentLoggerContract } from '@footnote/agent-runtime';
 import type { SupportedLogLevel } from '@footnote/contracts/providers';
-import { createLogger, format, type Logger as WinstonLogger } from 'winston';
+import { createLogger, format } from 'winston';
 
 import { logger, sanitizeLogData } from './logger.js';
 
@@ -18,6 +18,7 @@ type DailyRotateFileConstructor =
 type DailyRotateFileModule = DailyRotateFileConstructor & {
     default?: DailyRotateFileConstructor;
 };
+type VoltAgentLogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
 let DailyRotateFile: DailyRotateFileConstructor | null = null;
 try {
@@ -40,15 +41,30 @@ const buildVoltAgentLoggerBindings = (
 });
 
 const createVoltAgentLoggerAdapter = (
-    target: Pick<WinstonLogger, 'log'>,
+    target: {
+        log(level: string, message: unknown, meta?: unknown): void;
+    },
     bindings: Record<string, unknown> = {}
 ): VoltAgentLoggerContract => {
     const mergedBindings = buildVoltAgentLoggerBindings(bindings);
+    const toWinstonLevel = (
+        level: VoltAgentLogLevel
+    ): string => {
+        if (level === 'trace') {
+            return 'debug';
+        }
+
+        if (level === 'fatal') {
+            return 'error';
+        }
+
+        return level;
+    };
 
     const write =
-        (level: SupportedLogLevel) =>
+        (level: VoltAgentLogLevel) =>
         (message: string, context?: object) => {
-            target.log(level, sanitizeLogData(message), {
+            target.log(toWinstonLevel(level), sanitizeLogData(message), {
                 ...mergedBindings,
                 ...(context ? sanitizeLogData(context) : {}),
             });
