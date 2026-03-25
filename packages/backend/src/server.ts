@@ -117,7 +117,7 @@ const initializeServices = () => {
         `TURNSTILE_SITE_KEY: ${runtimeConfig.turnstile.siteKey ? 'SET' : 'NOT SET'}`
     );
     logger.info(
-        `VOLTOPS_TRACING: ${runtimeConfig.voltagent.observabilityEnabled ? 'ENABLED' : 'DISABLED'}`
+        `VOLTOPS_TRACING_CONFIGURED: ${runtimeConfig.voltagent.observabilityEnabled ? 'ENABLED' : 'DISABLED'}`
     );
     logger.info(`NODE_ENV: ${runtimeConfig.runtime.nodeEnv}`);
 
