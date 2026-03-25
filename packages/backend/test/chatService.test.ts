@@ -459,12 +459,6 @@ test('runChatMessages records usage correctly when VoltAgent handles search dire
     const chatService = createChatService({
         generationRuntime: createVoltAgentRuntime({
             defaultModel: 'gpt-5-mini',
-            fallbackRuntime: {
-                kind: 'legacy-openai',
-                async generate() {
-                    throw new Error('fallback should not be used');
-                },
-            },
             createExecutor: () => ({
                 async generateText() {
                     executorCalled = true;
@@ -527,12 +521,6 @@ test('runChatMessages stores evidence and freshness chips for retrieved search r
     const chatService = createChatService({
         generationRuntime: createVoltAgentRuntime({
             defaultModel: 'gpt-5-mini',
-            fallbackRuntime: {
-                kind: 'legacy-openai',
-                async generate() {
-                    throw new Error('fallback should not be used');
-                },
-            },
             createExecutor: () => ({
                 async generateText() {
                     return {

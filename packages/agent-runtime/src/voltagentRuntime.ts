@@ -2,7 +2,7 @@
  * @description: VoltAgent-backed generation runtime used to prove the shared runtime seam can host a second implementation.
  * @footnote-scope: core
  * @footnote-module: VoltAgentRuntime
- * @footnote-risk: high - Incorrect request mapping or fallback behavior here can silently change model selection, retrieval handling, or usage facts.
+ * @footnote-risk: high - Incorrect request mapping here can silently change model selection, retrieval handling, or usage facts.
  * @footnote-ethics: high - This adapter must preserve Footnote's sourcing and transparency expectations even before VoltAgent becomes the active backend runtime.
  */
 import { Agent, type AgentOptions, type BaseMessage, type ProviderTool } from '@voltagent/core';
@@ -130,7 +130,6 @@ type CreateVoltAgentAgentFactoryInput = {
  * Constructor input for the VoltAgent runtime implementation.
  */
 export interface CreateVoltAgentRuntimeOptions {
-    fallbackRuntime: GenerationRuntime;
     defaultModel?: string;
     createExecutor?: VoltAgentExecutorFactory;
     kind?: string;
@@ -597,7 +596,6 @@ const createDefaultVoltAgentExecutor = ({
  * Creates the VoltAgent-backed runtime implementation.
  */
 const createVoltAgentRuntime = ({
-    fallbackRuntime: _fallbackRuntime,
     defaultModel,
     createExecutor = createDefaultVoltAgentExecutor,
     kind = 'voltagent',

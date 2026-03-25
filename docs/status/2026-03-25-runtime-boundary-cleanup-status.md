@@ -32,8 +32,9 @@ This cleanup branch is not complete.
 
 Current repo state shows:
 
-- `1/4` cleanup-branch items is partial
-- `3/4` are not started
+- `1/4` cleanup-branch item is complete
+- `1/4` is partial
+- `2/4` are not started
 
 The largest remaining blocker is legacy OpenAI text fallback still being wired into backend startup and still being exported from `@footnote/agent-runtime`. The other open gaps are still structural cleanup work in the Discord bot plus the remaining provider-specific type/error imports there.
 
@@ -41,21 +42,18 @@ The largest remaining blocker is legacy OpenAI text fallback still being wired i
 
 ### 1. Legacy OpenAI Runtime Deletion
 
-Status: Not Started
+Status: Complete
 
 Evidence:
 
-- [packages/backend/src/server.ts](/Users/Jordan/Desktop/footnote/packages/backend/src/server.ts) still imports `createLegacyOpenAiRuntime`, constructs `legacyRuntime`, and passes it as `fallbackRuntime` to `createVoltAgentRuntime()`.
-- [packages/agent-runtime/src/index.ts](/Users/Jordan/Desktop/footnote/packages/agent-runtime/src/index.ts) still exposes `createLegacyOpenAiRuntime`, still supports `kind: 'legacy-openai'`, and still re-exports the legacy adapter types.
-- [packages/agent-runtime/package.json](/Users/Jordan/Desktop/footnote/packages/agent-runtime/package.json) still exports `./legacyOpenAiRuntime`.
-- [packages/agent-runtime/test/legacyOpenAiRuntime.test.ts](/Users/Jordan/Desktop/footnote/packages/agent-runtime/test/legacyOpenAiRuntime.test.ts) is still present.
+- [packages/backend/src/server.ts](/Users/Jordan/Desktop/footnote/packages/backend/src/server.ts) now creates the text runtime directly with `createVoltAgentRuntime()` and no longer constructs a legacy fallback runtime.
+- [packages/agent-runtime/src/index.ts](/Users/Jordan/Desktop/footnote/packages/agent-runtime/src/index.ts) now exposes only the VoltAgent-backed text runtime factory for the shared generation seam.
+- [packages/agent-runtime/package.json](/Users/Jordan/Desktop/footnote/packages/agent-runtime/package.json) no longer exports `./legacyOpenAiRuntime`.
+- [packages/agent-runtime/src/legacyOpenAiRuntime.ts](/Users/Jordan/Desktop/footnote/packages/agent-runtime/src/legacyOpenAiRuntime.ts) and [packages/agent-runtime/test/legacyOpenAiRuntime.test.ts](/Users/Jordan/Desktop/footnote/packages/agent-runtime/test/legacyOpenAiRuntime.test.ts) have been removed.
 
 Still needed:
 
-- remove backend startup fallback wiring
-- remove the legacy adapter export surface from `@footnote/agent-runtime`
-- delete the legacy runtime implementation and its dedicated tests
-- re-run parity validation before calling the deletion complete
+- no further code cleanup is required for this item; future work only needs to keep the legacy runtime path from being reintroduced
 
 ### 2. Split `packages/discord-bot/src/index.ts`
 

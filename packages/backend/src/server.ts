@@ -11,7 +11,6 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-    createLegacyOpenAiRuntime,
     createOpenAiImageRuntime,
     createOpenAiRealtimeVoiceRuntime,
     createOpenAiTtsRuntime,
@@ -24,8 +23,6 @@ import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 
 import { runtimeConfig } from './config.js';
 import {
-    type OpenAIService,
-    SimpleOpenAIService,
     buildResponseMetadata,
 } from './services/openaiService.js';
 import { SimpleRateLimiter } from './services/rateLimiter.js';
@@ -82,7 +79,6 @@ const { resolveAsset, mimeMap } = createAssetResolver(DIST_DIR);
 // --- Service state ---
 let traceStore: ReturnType<typeof createTraceStore> | null = null;
 let incidentStore: ReturnType<typeof getDefaultIncidentStore> | null = null;
-let openaiService: OpenAIService | null = null;
 let generationRuntime: GenerationRuntime | null = null;
 let imageGenerationRuntime: ImageGenerationRuntime | null = null;
 let internalNewsTaskService: ReturnType<
@@ -139,12 +135,7 @@ const initializeServices = () => {
     // --- OpenAI service ---
     if (runtimeConfig.openai.apiKey) {
         // Only enable OpenAI when an API key is configured.
-        openaiService = new SimpleOpenAIService(runtimeConfig.openai.apiKey);
-        const legacyRuntime = createLegacyOpenAiRuntime({
-            client: openaiService,
-        });
         generationRuntime = createVoltAgentRuntime({
-            fallbackRuntime: legacyRuntime,
             defaultModel: runtimeConfig.openai.defaultModel,
             logger: voltAgentLogger,
         });
@@ -180,7 +171,6 @@ const initializeServices = () => {
             logger: openAiRealtimeLogger,
         });
     } else {
-        openaiService = null;
         generationRuntime = null;
         imageGenerationRuntime = null;
         internalNewsTaskService = null;
