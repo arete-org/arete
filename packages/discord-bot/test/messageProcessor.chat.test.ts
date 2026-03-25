@@ -149,9 +149,7 @@ test('executeChatMessageAction sends text and provenance together when payload i
     let delayedProvenanceCalls = 0;
 
     (botApi as { postTraces: unknown }).postTraces = async () => {
-        throw new Error(
-            'postTraces should not run for backend chat messages'
-        );
+        throw new Error('postTraces should not run for backend chat messages');
     };
     processorAccess.prepareProvenanceCgiPayload = async () => ({
         files: [{ filename: 'trace-card.png', data: Buffer.from('card') }],
@@ -264,7 +262,7 @@ test('executeChatMessageAction falls back to a provenance follow-up when payload
         },
         {
             action: 'message',
-            message: 'Backend chation',
+            message: 'Backend chat',
             modality: 'text',
             metadata: createMetadata(),
         },
@@ -272,7 +270,7 @@ test('executeChatMessageAction falls back to a provenance follow-up when payload
     );
 
     assert.equal(sentMessages.length, 1);
-    assert.equal(sentMessages[0].content, 'Backend chation');
+    assert.equal(sentMessages[0].content, 'Backend chat');
     assert.equal(sentMessages[0].files.length, 0);
     assert.equal(sentMessages[0].components.length, 0);
     assert.equal(delayedCalls.length, 1);
@@ -490,7 +488,7 @@ test('executeChatAction routes image actions into the local image pipeline helpe
         {
             action: 'image',
             imageRequest: {
-                prompt: 'draw a chative skyline',
+                prompt: 'draw a skyline',
             },
             metadata: null,
         },
@@ -498,7 +496,7 @@ test('executeChatAction routes image actions into the local image pipeline helpe
         null
     );
 
-    assert.equal(imagePrompt, 'draw a chative skyline');
+    assert.equal(imagePrompt, 'draw a skyline');
 });
 
 test('executeChatAction warns and no-ops for unknown actions', async () => {
@@ -644,9 +642,8 @@ test('processMessage replies with a red code-block error when backend chat reque
     try {
         await processor.processMessage(message, true, 'direct');
     } finally {
-        (
-            botApi as { chatViaApi: typeof botApi.chatViaApi }
-        ).chatViaApi = originalChatViaApi;
+        (botApi as { chatViaApi: typeof botApi.chatViaApi }).chatViaApi =
+            originalChatViaApi;
         ResponseHandler.prototype.sendMessage = originalSendMessage;
         ResponseHandler.prototype.startTyping = originalStartTyping;
         ResponseHandler.prototype.stopTyping = originalStopTyping;
@@ -961,7 +958,10 @@ test('buildChatRequestFromMessage omits empty image-description context for imag
 
         assert.equal(capturedRequests.length, 1);
         assert.equal(
-            Object.prototype.hasOwnProperty.call(capturedRequests[0] ?? {}, 'context'),
+            Object.prototype.hasOwnProperty.call(
+                capturedRequests[0] ?? {},
+                'context'
+            ),
             false
         );
         const joinedConversation = built.request.conversation
