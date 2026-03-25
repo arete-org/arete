@@ -14,6 +14,7 @@ import {
 } from '../commands/image/constants.js';
 import { resolveAspectRatioSettings } from '../commands/image/aspect.js';
 import {
+    IMAGE_MODEL_LABELS,
     buildVariationConfiguratorView,
     resetVariationCooldown,
     updateVariationSession,
@@ -31,6 +32,11 @@ import { buildVariationStatusMessage } from './variationStatus.js';
 
 // Shared ephemeral flag used for session-expiry notices.
 const EPHEMERAL_FLAG = 1 << 6;
+const ALLOWED_IMAGE_QUALITY_VALUES = new Set<ImageQualityType>([
+    'low',
+    'medium',
+    'high',
+]);
 
 /**
  * Routes string-select interactions for variation controls and incident views.
@@ -60,6 +66,11 @@ export async function handleStringSelectMenuInteraction(
     };
 
     if (customId.startsWith(IMAGE_VARIATION_QUALITY_SELECT_PREFIX)) {
+        if (!ALLOWED_IMAGE_QUALITY_VALUES.has(selected as ImageQualityType)) {
+            await interaction.deferUpdate();
+            return true;
+        }
+
         const responseId = customId.slice(
             IMAGE_VARIATION_QUALITY_SELECT_PREFIX.length
         );
@@ -121,6 +132,11 @@ export async function handleStringSelectMenuInteraction(
     }
 
     if (customId.startsWith(IMAGE_VARIATION_IMAGE_MODEL_SELECT_PREFIX)) {
+        if (!(selected in IMAGE_MODEL_LABELS)) {
+            await interaction.deferUpdate();
+            return true;
+        }
+
         const responseId = customId.slice(
             IMAGE_VARIATION_IMAGE_MODEL_SELECT_PREFIX.length
         );

@@ -110,7 +110,7 @@ const ASPECT_OPTIONS: Array<{
     { value: 'landscape', label: 'Landscape' },
 ];
 
-const IMAGE_MODEL_LABELS: Record<ImageRenderModel, string> = {
+export const IMAGE_MODEL_LABELS: Record<ImageRenderModel, string> = {
     'gpt-image-1-mini': 'GPT Image 1 Mini',
     'gpt-image-1.5': 'GPT Image 1.5',
     'gpt-image-1': 'GPT Image 1',
