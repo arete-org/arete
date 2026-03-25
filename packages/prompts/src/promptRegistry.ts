@@ -88,9 +88,19 @@ const interpolateTemplate = (
             continue;
         }
 
-        const raw = variables[key];
-        if (raw !== undefined && raw !== null) {
-            rendered += typeof raw === 'string' ? raw : String(raw);
+        // Differentiate missing variables from explicit `undefined`
+        // Check ownership before substituting
+        const hasVariable = Object.prototype.hasOwnProperty.call(
+            variables,
+            key
+        );
+        if (!hasVariable) {
+            rendered += template.slice(start, end + 2);
+        } else {
+            const raw = variables[key];
+            if (raw !== undefined && raw !== null) {
+                rendered += typeof raw === 'string' ? raw : String(raw);
+            }
         }
 
         index = end + 2;
@@ -112,9 +122,9 @@ const mergePromptCatalog = (
     overrideCatalog: PromptMap
 ): PromptMap => {
     const mergedCatalog: PromptMap = { ...baseCatalog };
-    for (const [key, definition] of Object.entries(
-        overrideCatalog
-    ) as Array<[PromptKey, PromptDefinition]>) {
+    for (const [key, definition] of Object.entries(overrideCatalog) as Array<
+        [PromptKey, PromptDefinition]
+    >) {
         mergedCatalog[key] = definition;
     }
     return mergedCatalog;
@@ -247,9 +257,7 @@ const loadPromptFile = (
         if (options.optional) {
             return {};
         }
-        throw new Error(
-            `Prompt configuration file not found: ${resolvedPath}`
-        );
+        throw new Error(`Prompt configuration file not found: ${resolvedPath}`);
     }
 
     const fileContents = fs.readFileSync(resolvedPath, 'utf-8');
@@ -260,14 +268,11 @@ const loadPromptFile = (
         );
     }
 
-    return flattenPromptTree(
-        parsed as Record<string, unknown>,
-        {
-            sourcePath: resolvedPath,
-            mode: options.mode,
-            logger: options.logger,
-        }
-    );
+    return flattenPromptTree(parsed as Record<string, unknown>, {
+        sourcePath: resolvedPath,
+        mode: options.mode,
+        logger: options.logger,
+    });
 };
 
 /**
@@ -314,8 +319,7 @@ const flattenPromptTree = (
                         'Ignoring unknown prompt override key.',
                         {
                             promptKey: key,
-                            reason:
-                                'prompt key is not part of the canonical prompt catalog',
+                            reason: 'prompt key is not part of the canonical prompt catalog',
                         }
                     );
                     continue;
@@ -331,8 +335,7 @@ const flattenPromptTree = (
                         'Ignoring invalid prompt override entry.',
                         {
                             promptKey: key,
-                            reason:
-                                'description must be a string when provided',
+                            reason: 'description must be a string when provided',
                             receivedType:
                                 rawDescription === null
                                     ? 'null'
