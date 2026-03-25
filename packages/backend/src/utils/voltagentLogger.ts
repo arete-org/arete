@@ -19,6 +19,19 @@ type DailyRotateFileModule = DailyRotateFileConstructor & {
     default?: DailyRotateFileConstructor;
 };
 
+let DailyRotateFile: DailyRotateFileConstructor | null = null;
+try {
+    const dailyRotateFileModule = (await import(
+        'winston-daily-rotate-file'
+    )) as DailyRotateFileModule;
+    DailyRotateFile =
+        dailyRotateFileModule.default ?? dailyRotateFileModule;
+} catch (error) {
+    logger.warn(
+        `VoltAgent logger could not load winston-daily-rotate-file. Dedicated VoltAgent file logging will fall back to the shared backend logger. Error: ${error instanceof Error ? error.message : String(error)}`
+    );
+}
+
 const buildVoltAgentLoggerBindings = (
     bindings: Record<string, unknown>
 ): Record<string, unknown> => ({
@@ -83,34 +96,9 @@ export const createVoltAgentLogger = ({
         );
     }
 
-    try {
-        const dailyRotateFileModule = (await import(
-            'winston-daily-rotate-file'
-        )) as DailyRotateFileModule;
-        const DailyRotateFile =
-            dailyRotateFileModule.default ?? dailyRotateFileModule;
-
-        const voltAgentFileLogger = createLogger({
-            level,
-            format: format.combine(
-                format.timestamp(),
-                format.json()
-            ),
-            transports: [
-                new DailyRotateFile({
-                    dirname: directory,
-                    filename: 'voltagent-%DATE%.log',
-                    datePattern: 'YYYY-MM-DD',
-                    maxFiles: '30d',
-                }),
-            ],
-            exitOnError: false,
-        });
-
-        return createVoltAgentLoggerAdapter(voltAgentFileLogger);
-    } catch (error) {
+    if (!DailyRotateFile) {
         logger.warn(
-            `VoltAgent logger could not load a dedicated rotating file transport. Falling back to the shared backend logger. Error: ${error instanceof Error ? error.message : String(error)}`
+            'VoltAgent logger could not create a dedicated rotating file transport. Falling back to the shared backend logger.'
         );
         return createVoltAgentLoggerAdapter(
             typeof logger.child === 'function'
@@ -118,4 +106,23 @@ export const createVoltAgentLogger = ({
                 : logger
         );
     }
+
+    const voltAgentFileLogger = createLogger({
+        level,
+        format: format.combine(
+            format.timestamp(),
+            format.json()
+        ),
+        transports: [
+            new DailyRotateFile({
+                dirname: directory,
+                filename: 'voltagent-%DATE%.log',
+                datePattern: 'YYYY-MM-DD',
+                maxFiles: '30d',
+            }),
+        ],
+        exitOnError: false,
+    });
+
+    return createVoltAgentLoggerAdapter(voltAgentFileLogger);
 };
