@@ -17,8 +17,6 @@ This note covers only the cleanup-branch items tracked in this status snapshot:
 - deletion of `createLegacyOpenAiRuntime` and its remaining test/export surface
 - splitting `packages/discord-bot/src/index.ts`
 - moving OpenAI SDK error imports out of `discord-bot`
-- `pnpm review` as the standard review gate for this cleanup branch
-- Docker image validation for the deployable services
 - optional VoltOps tracing enablement
 
 Out of scope:
@@ -34,9 +32,8 @@ This cleanup branch is not complete.
 
 Current repo state shows:
 
-- `2/6` cleanup-branch items are complete
-- `1/6` is partial
-- `3/6` are not started
+- `1/4` cleanup-branch items is partial
+- `3/4` are not started
 
 The largest remaining blocker is legacy OpenAI text fallback still being wired into backend startup and still being exported from `@footnote/agent-runtime`. The other open gaps are still structural cleanup work in the Discord bot plus the remaining provider-specific type/error imports there.
 
@@ -93,35 +90,7 @@ Still needed:
 - remove OpenAI response-type imports from Discord image helpers
 - remove the `openai` package from `@footnote/discord-bot` if nothing else still needs it after the type cleanup
 
-### 4. `pnpm review` Review Gate
-
-Status: Complete
-
-Evidence:
-
-- [AGENTS.md](/Users/Jordan/Desktop/footnote/AGENTS.md) already lists `pnpm review` under testing and validation guidance.
-- [cursor.rules](/Users/Jordan/Desktop/footnote/cursor.rules) already treats `pnpm review` as the standard automated validation step before Cursor review.
-- Multiple closeout status docs already use `pnpm review` as part of their validation snapshot, including [2026-03-18-legacy-openai-text-migration-status.md](/Users/Jordan/Desktop/footnote/docs/status/2026-03-18-legacy-openai-text-migration-status.md) and [2026-03-21-legacy-openai-voice-migration-status.md](/Users/Jordan/Desktop/footnote/docs/status/2026-03-21-legacy-openai-voice-migration-status.md).
-
-Still needed:
-
-- keep using `pnpm review` as a required gate on future cleanup-branch work, not just as a documented convention
-
-### 5. Docker Image Validation For Deployable Services
-
-Status: Complete
-
-Evidence:
-
-- [deploy/compose.yml](/Users/Jordan/Desktop/footnote/deploy/compose.yml) defines the backend, web, and bot images.
-- [deploy/README.md](/Users/Jordan/Desktop/footnote/deploy/README.md) documents `docker compose -f deploy/compose.yml up --build`.
-- `docker compose -f deploy/compose.yml build` was run on 2026-03-25 and completed successfully for `footnote-backend`, `footnote-web`, and `footnote-discord-bot`.
-
-Still needed:
-
-- keep recording image-build results alongside `pnpm review` in future cleanup-branch closeouts
-
-### 6. Optional VoltOps Tracing Enablement
+### 4. Optional VoltOps Tracing Enablement
 
 Status: Not Started
 
