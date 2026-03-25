@@ -7,6 +7,7 @@
  */
 import type { ButtonInteraction } from 'discord.js';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 import { botApi } from '../../api/botApi.js';
 import { logger } from '../../utils/logger.js';
 import { parseProvenanceActionCustomId } from '../../utils/response/provenanceCgi.js';
@@ -56,111 +57,18 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
     );
 }
 
-const PROVENANCE_VALUES = new Set(['Retrieved', 'Inferred', 'Speculative']);
-const RISK_TIER_VALUES = new Set(['Low', 'Medium', 'High']);
-
-/**
- * Ensures citations match the minimal shape the details formatter expects.
- */
-function isValidCitationList(value: unknown): boolean {
-    if (!Array.isArray(value)) {
-        return false;
-    }
-
-    return value.every((citation) => {
-        if (!isPlainObject(citation)) {
-            return false;
-        }
-
-        if (
-            typeof citation.title !== 'string' ||
-            typeof citation.url !== 'string'
-        ) {
-            return false;
-        }
-
-        if (
-            'snippet' in citation &&
-            citation.snippet !== undefined &&
-            typeof citation.snippet !== 'string'
-        ) {
-            return false;
-        }
-
-        return true;
-    });
-}
-
 /**
  * Validates unknown trace payloads before we render them in Discord.
  */
 function isValidResponseMetadataPayload(
     payload: unknown
-): payload is ResponseMetadata {
-    if (!isPlainObject(payload)) {
-        return false;
+): ResponseMetadata | null {
+    const parsed = ResponseMetadataSchema.safeParse(payload);
+    if (!parsed.success) {
+        return null;
     }
 
-    if (
-        typeof payload.responseId !== 'string' ||
-        payload.responseId.length < 1
-    ) {
-        return false;
-    }
-
-    if (
-        typeof payload.provenance !== 'string' ||
-        !PROVENANCE_VALUES.has(payload.provenance)
-    ) {
-        return false;
-    }
-
-    if (
-        typeof payload.riskTier !== 'string' ||
-        !RISK_TIER_VALUES.has(payload.riskTier)
-    ) {
-        return false;
-    }
-
-    if (
-        typeof payload.tradeoffCount !== 'number' ||
-        !Number.isFinite(payload.tradeoffCount) ||
-        payload.tradeoffCount < 0
-    ) {
-        return false;
-    }
-
-    if (
-        typeof payload.chainHash !== 'string' ||
-        payload.chainHash.trim().length === 0
-    ) {
-        return false;
-    }
-
-    if (
-        typeof payload.licenseContext !== 'string' ||
-        payload.licenseContext.trim().length === 0
-    ) {
-        return false;
-    }
-
-    if (
-        typeof payload.modelVersion !== 'string' ||
-        payload.modelVersion.trim().length === 0
-    ) {
-        return false;
-    }
-
-    if (typeof payload.staleAfter !== 'string') {
-        return false;
-    }
-
-    const staleAfterDate = new Date(payload.staleAfter);
-    if (Number.isNaN(staleAfterDate.getTime())) {
-        return false;
-    }
-
-    return isValidCitationList(payload.citations);
+    return parsed.data as ResponseMetadata;
 }
 
 /**
@@ -170,18 +78,15 @@ function isValidResponseMetadataPayload(
 function extractMetadataFromTraceResponse(
     payload: unknown
 ): ResponseMetadata | null {
-    if (isValidResponseMetadataPayload(payload)) {
-        return payload;
+    const directMetadata = isValidResponseMetadataPayload(payload);
+    if (directMetadata) {
+        return directMetadata;
     }
 
-    if (
-        isPlainObject(payload) &&
-        'metadata' in payload &&
-        isValidResponseMetadataPayload(
+    if (isPlainObject(payload) && 'metadata' in payload) {
+        return isValidResponseMetadataPayload(
             (payload as { metadata?: unknown }).metadata
-        )
-    ) {
-        return (payload as { metadata: ResponseMetadata }).metadata;
+        );
     }
 
     return null;
