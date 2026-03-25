@@ -10,8 +10,11 @@ import { parseOptionalTrimmedString } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
 /**
- * Builds VoltAgent observability configuration. Tracing is enabled only when
- * both keys are present so partial configuration does not fail runtime setup.
+ * @description: Builds VoltAgent observability configuration from environment variables. Tracing is enabled only when both keys are present so partial configuration does not fail runtime setup.
+ * @footnote-scope: utility
+ * @footnote-module: BuildVoltAgentSection
+ * @footnote-risk: low - Incorrect key parsing can silently disable optional tracing, reducing observability without impacting core runtime behavior.
+ * @footnote-ethics: medium - Tracing configuration influences auditability and transparency of model behavior in production.
  */
 export const buildVoltAgentSection = (
     env: NodeJS.ProcessEnv,
