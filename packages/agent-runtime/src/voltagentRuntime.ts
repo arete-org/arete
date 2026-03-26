@@ -2,10 +2,16 @@
  * @description: VoltAgent-backed generation runtime used to prove the shared runtime seam can host a second implementation.
  * @footnote-scope: core
  * @footnote-module: VoltAgentRuntime
- * @footnote-risk: high - Incorrect request mapping or fallback behavior here can silently change model selection, retrieval handling, or usage facts.
+ * @footnote-risk: high - Incorrect request mapping here can silently change model selection, retrieval handling, or usage facts.
  * @footnote-ethics: high - This adapter must preserve Footnote's sourcing and transparency expectations even before VoltAgent becomes the active backend runtime.
  */
-import { Agent, type AgentOptions, type BaseMessage, type ProviderTool } from '@voltagent/core';
+import {
+    Agent,
+    VoltOpsClient,
+    type AgentOptions,
+    type BaseMessage,
+    type ProviderTool,
+} from '@voltagent/core';
 import type {
     GenerationCitation,
     GenerationRequest,
@@ -116,6 +122,7 @@ export interface VoltAgentTextExecutor {
 export type VoltAgentExecutorFactory = (input: {
     model: string;
     logger?: VoltAgentLogger;
+    voltOpsClient?: VoltOpsClient;
 }) => VoltAgentTextExecutor;
 
 type VoltAgentLike = Pick<Agent, 'generateText'>;
@@ -124,17 +131,21 @@ type CreateVoltAgentAgentFactoryInput = {
     model: string;
     tools?: NonNullable<AgentOptions['tools']>;
     logger?: VoltAgentLogger;
+    voltOpsClient?: VoltOpsClient;
 };
 
 /**
  * Constructor input for the VoltAgent runtime implementation.
  */
 export interface CreateVoltAgentRuntimeOptions {
-    fallbackRuntime: GenerationRuntime;
     defaultModel?: string;
     createExecutor?: VoltAgentExecutorFactory;
     kind?: string;
     logger?: VoltAgentLogger;
+    voltOps?: {
+        publicKey: string;
+        secretKey: string;
+    };
 }
 
 type VoltAgentCallOptions = NonNullable<Parameters<Agent['generateText']>[1]>;
@@ -484,10 +495,12 @@ const normalizeVoltAgentResult = (
 const createDefaultVoltAgentExecutor = ({
     model,
     logger,
+    voltOpsClient,
     agentFactory = ({
         model: agentModel,
         tools,
         logger: agentLogger,
+        voltOpsClient: agentVoltOpsClient,
     }: CreateVoltAgentAgentFactoryInput): VoltAgentLike =>
         new Agent({
             name: 'footnote-generation-runtime',
@@ -496,11 +509,15 @@ const createDefaultVoltAgentExecutor = ({
             model: agentModel,
             memory: false,
             ...(agentLogger !== undefined && { logger: agentLogger }),
+            ...(agentVoltOpsClient !== undefined && {
+                voltOpsClient: agentVoltOpsClient,
+            }),
             ...(tools !== undefined && { tools }),
         }),
 }: {
     model: string;
     logger?: VoltAgentLogger;
+    voltOpsClient?: VoltOpsClient;
     agentFactory?: (
         input: CreateVoltAgentAgentFactoryInput
     ) => VoltAgentLike;
@@ -509,6 +526,7 @@ const createDefaultVoltAgentExecutor = ({
         agentFactory({
             model,
             ...(logger !== undefined && { logger }),
+            ...(voltOpsClient !== undefined && { voltOpsClient }),
             ...(tools !== undefined && { tools }),
         });
 
@@ -597,12 +615,21 @@ const createDefaultVoltAgentExecutor = ({
  * Creates the VoltAgent-backed runtime implementation.
  */
 const createVoltAgentRuntime = ({
-    fallbackRuntime: _fallbackRuntime,
     defaultModel,
     createExecutor = createDefaultVoltAgentExecutor,
     kind = 'voltagent',
     logger,
-}: CreateVoltAgentRuntimeOptions): GenerationRuntime => ({
+    voltOps,
+}: CreateVoltAgentRuntimeOptions): GenerationRuntime => {
+    const voltOpsClient =
+        voltOps !== undefined
+            ? new VoltOpsClient({
+                  publicKey: voltOps.publicKey,
+                  secretKey: voltOps.secretKey,
+              })
+            : undefined;
+
+    return ({
     kind,
     async generate(request: GenerationRequest): Promise<GenerationResult> {
         const selectedModel = request.model ?? defaultModel;
@@ -616,6 +643,7 @@ const createVoltAgentRuntime = ({
         const executor = createExecutor({
             model: executedModel,
             ...(logger !== undefined && { logger }),
+            ...(voltOpsClient !== undefined && { voltOpsClient }),
         });
         const providerOptions = buildVoltAgentProviderOptions(request);
         const result = await executor.generateText(request.messages, {
@@ -632,6 +660,7 @@ const createVoltAgentRuntime = ({
         return normalizeVoltAgentResult(executedModel, request, result);
     },
 });
+};
 
 export {
     buildVoltAgentProviderOptions,

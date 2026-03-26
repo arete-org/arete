@@ -59,6 +59,11 @@ export type RuntimeConfig = {
         defaultChannelContext: { channelId: string };
         requestTimeoutMs: number;
     };
+    voltagent: {
+        publicKey: string | null;
+        secretKey: string | null;
+        observabilityEnabled: boolean;
+    };
     cors: {
         allowedOrigins: string[];
     };

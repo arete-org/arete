@@ -27,12 +27,6 @@ test('voltagent runtime maps transcript and generation settings into executor op
     const signal = new AbortController().signal;
     const runtime = createVoltAgentRuntime({
         defaultModel: 'gpt-5-mini',
-        fallbackRuntime: {
-            kind: 'legacy-openai',
-            async generate() {
-                throw new Error('fallback should not be used');
-            },
-        },
         createExecutor: ({ model }) => {
             seenModel = model;
 
@@ -79,12 +73,6 @@ test('voltagent runtime maps transcript and generation settings into executor op
 test('voltagent runtime normalizes non-search output into GenerationResult', async () => {
     const runtime = createVoltAgentRuntime({
         defaultModel: 'gpt-5-mini',
-        fallbackRuntime: {
-            kind: 'legacy-openai',
-            async generate() {
-                throw new Error('fallback should not be used');
-            },
-        },
         createExecutor: () => ({
             async generateText() {
                 return {
@@ -130,12 +118,6 @@ test('voltagent runtime executes search requests through the VoltAgent executor'
     let seenOptions: VoltAgentGenerateTextOptions | undefined;
     const runtime = createVoltAgentRuntime({
         defaultModel: 'gpt-5-mini',
-        fallbackRuntime: {
-            kind: 'legacy-openai',
-            async generate() {
-                throw new Error('fallback should not be used');
-            },
-        },
         createExecutor: () => ({
             async generateText(_messages, options) {
                 seenOptions = options;
@@ -193,12 +175,6 @@ test('voltagent runtime executes search requests through the VoltAgent executor'
 test('voltagent runtime recovers markdown-link citations when retrieved output lacks structured sources', async () => {
     const runtime = createVoltAgentRuntime({
         defaultModel: 'gpt-5-mini',
-        fallbackRuntime: {
-            kind: 'legacy-openai',
-            async generate() {
-                throw new Error('fallback should not be used');
-            },
-        },
         createExecutor: () => ({
             async generateText() {
                 return {
@@ -233,12 +209,6 @@ test('voltagent runtime recovers markdown-link citations when retrieved output l
 test('voltagent runtime ignores malformed bracket-heavy markdown without falling back or hanging', async () => {
     const runtime = createVoltAgentRuntime({
         defaultModel: 'gpt-5-mini',
-        fallbackRuntime: {
-            kind: 'legacy-openai',
-            async generate() {
-                throw new Error('fallback should not be used');
-            },
-        },
         createExecutor: () => ({
             async generateText() {
                 return {
@@ -269,12 +239,6 @@ test('voltagent runtime ignores malformed bracket-heavy markdown without falling
 
 test('voltagent runtime requires a request model or configured default model', async () => {
     const runtime = createVoltAgentRuntime({
-        fallbackRuntime: {
-            kind: 'legacy-openai',
-            async generate() {
-                throw new Error('fallback should not be used');
-            },
-        },
         createExecutor: () => ({
             async generateText() {
                 return {

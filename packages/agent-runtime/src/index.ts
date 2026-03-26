@@ -423,10 +423,6 @@ export interface RealtimeVoiceRuntime {
 }
 
 import {
-    createLegacyOpenAiRuntime,
-    type LegacyOpenAiClient,
-} from './legacyOpenAiRuntime.js';
-import {
     createVoltAgentRuntime,
     type CreateVoltAgentRuntimeOptions,
 } from './voltagentRuntime.js';
@@ -437,17 +433,9 @@ import {
  * The factory is intentionally strict so callers have to provide the
  * dependencies each runtime needs instead of relying on hidden defaults.
  */
-export type CreateGenerationRuntimeOptions =
-    | {
-          kind: 'legacy-openai';
-          client: LegacyOpenAiClient;
-      }
-    | ({
-          kind: 'voltagent';
-      } & Pick<
-          CreateVoltAgentRuntimeOptions,
-          'fallbackRuntime' | 'defaultModel' | 'createExecutor'
-      >);
+export type CreateGenerationRuntimeOptions = {
+    kind: 'voltagent';
+} & Pick<CreateVoltAgentRuntimeOptions, 'defaultModel' | 'createExecutor'>;
 
 /**
  * Creates one configured generation runtime implementation.
@@ -455,26 +443,12 @@ export type CreateGenerationRuntimeOptions =
 export function createGenerationRuntime(
     options: CreateGenerationRuntimeOptions
 ): GenerationRuntime {
-    if (options.kind === 'legacy-openai') {
-        return createLegacyOpenAiRuntime({
-            client: options.client,
-        });
-    }
-
     return createVoltAgentRuntime({
-        fallbackRuntime: options.fallbackRuntime,
         defaultModel: options.defaultModel,
         createExecutor: options.createExecutor,
     });
 }
 
-export {
-    createLegacyOpenAiRuntime,
-    type LegacyOpenAiClient,
-    type LegacyOpenAiGenerateOptions,
-    type LegacyOpenAiMetadata,
-    type LegacyOpenAiResult,
-} from './legacyOpenAiRuntime.js';
 export {
     createOpenAiImageRuntime,
     type CreateOpenAiImageRuntimeOptions,

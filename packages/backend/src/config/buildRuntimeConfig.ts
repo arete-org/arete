@@ -14,6 +14,7 @@ import { buildRuntimeSections } from './sections/runtime.js';
 import { buildServiceSections } from './sections/services.js';
 import { buildStorageSection } from './sections/storage.js';
 import { buildTurnstileSection } from './sections/turnstile.js';
+import { buildVoltAgentSection } from './sections/voltagent.js';
 import { buildWebSection } from './sections/web.js';
 import { buildWebhookSection } from './sections/webhook.js';
 import type { RuntimeConfig, WarningSink } from './types.js';
@@ -29,6 +30,7 @@ export const buildRuntimeConfig = (
 ): RuntimeConfig => {
     const { runtime, server } = buildRuntimeSections(env, warn);
     const openai = buildOpenAISection(env, warn);
+    const voltagent = buildVoltAgentSection(env, warn);
     const web = buildWebSection(env, warn);
     const { reflect, trace } = buildServiceSections(env, warn);
     const turnstile = buildTurnstileSection(env, warn);
@@ -46,6 +48,7 @@ export const buildRuntimeConfig = (
         runtime,
         server,
         openai,
+        voltagent,
         cors: web.cors,
         csp: web.csp,
         reflect,
