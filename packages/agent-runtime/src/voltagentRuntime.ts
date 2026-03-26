@@ -28,14 +28,18 @@ type VoltAgentOpenAiProviderOptions = {
 };
 
 /**
- * Provider-specific OpenAI options passed through VoltAgent.
+ * Provider-agnostic options accepted at the GenerationRuntime seam.
  *
- * The runtime seam stays provider-agnostic, but VoltAgent still needs a small
- * OpenAI-specific option bag for the current text-only MVP.
+ * The adapter can translate these into provider-specific payloads internally.
  */
-export type VoltAgentProviderOptions = Record<string, unknown> & {
-    openai?: VoltAgentOpenAiProviderOptions;
+export type VoltAgentProviderOptions = {
+    reasoningEffort?: VoltAgentOpenAiProviderOptions['reasoningEffort'];
+    verbosity?: VoltAgentOpenAiProviderOptions['textVerbosity'];
+    searchContextSize?: GenerationSearchRequest['contextSize'];
+    providerHints?: Record<string, unknown>;
 };
+
+export type VoltAgentModelTier = 'text-fast' | 'text-quality';
 
 /**
  * Narrow execution options the VoltAgent adapter passes into one text call.
@@ -139,6 +143,11 @@ type CreateVoltAgentAgentFactoryInput = {
  */
 export interface CreateVoltAgentRuntimeOptions {
     defaultModel?: string;
+    /**
+     * Optional capability-tier aliases that resolve to concrete provider/model
+     * ids inside the runtime adapter (for example, "text-fast").
+     */
+    modelTiers?: Partial<Record<VoltAgentModelTier, string>>;
     createExecutor?: VoltAgentExecutorFactory;
     kind?: string;
     logger?: VoltAgentLogger;
@@ -165,6 +174,39 @@ const toVoltAgentMessages = (messages: RuntimeMessage[]): BaseMessage[] =>
  */
 const toVoltAgentModel = (model: string): string =>
     model.includes('/') ? model : `openai/${model}`;
+
+const VOLTAGENT_MODEL_TIER_VALUES: readonly VoltAgentModelTier[] = [
+    'text-fast',
+    'text-quality',
+] as const;
+
+const isVoltAgentModelTier = (value: string): value is VoltAgentModelTier =>
+    VOLTAGENT_MODEL_TIER_VALUES.includes(value as VoltAgentModelTier);
+
+const resolveVoltAgentModelId = ({
+    requestedModel,
+    defaultModel,
+    modelTiers,
+}: {
+    requestedModel?: string;
+    defaultModel?: string;
+    modelTiers?: Partial<Record<VoltAgentModelTier, string>>;
+}): string | undefined => {
+    if (requestedModel) {
+        const trimmedModel = requestedModel.trim();
+        if (trimmedModel.length === 0) {
+            return defaultModel;
+        }
+
+        if (isVoltAgentModelTier(trimmedModel)) {
+            return modelTiers?.[trimmedModel] ?? defaultModel;
+        }
+
+        return trimmedModel;
+    }
+
+    return defaultModel;
+};
 
 /**
  * Footnote still expects the plain model id in normalized runtime results.
@@ -200,18 +242,57 @@ const buildVoltAgentProviderOptions = (
     const reasoningEffort = normalizeVoltAgentReasoningEffort(
         request.reasoningEffort
     );
-    const textVerbosity = request.verbosity;
+    const verbosity = request.verbosity;
+    const searchContextSize = request.search?.contextSize;
 
-    if (!reasoningEffort && !textVerbosity) {
+    if (!reasoningEffort && !verbosity && !searchContextSize) {
         return undefined;
     }
 
     return {
-        openai: {
-            ...(reasoningEffort !== undefined && { reasoningEffort }),
-            ...(textVerbosity !== undefined && { textVerbosity }),
-        },
+        ...(reasoningEffort !== undefined && { reasoningEffort }),
+        ...(verbosity !== undefined && { verbosity }),
+        ...(searchContextSize !== undefined && { searchContextSize }),
     };
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const toVoltAgentCallProviderOptions = (
+    providerOptions: VoltAgentProviderOptions | undefined
+): Record<string, unknown> | undefined => {
+    if (!providerOptions) {
+        return undefined;
+    }
+
+    const providerHints = isRecord(providerOptions.providerHints)
+        ? { ...providerOptions.providerHints }
+        : {};
+    const openAiHints = isRecord(providerHints.openai)
+        ? { ...providerHints.openai }
+        : {};
+    const openAiOptions: Record<string, unknown> = {
+        ...openAiHints,
+    };
+
+    if (providerOptions.reasoningEffort !== undefined) {
+        openAiOptions.reasoningEffort = providerOptions.reasoningEffort;
+    }
+    if (providerOptions.verbosity !== undefined) {
+        openAiOptions.textVerbosity = providerOptions.verbosity;
+    }
+
+    const normalizedProviderOptions: Record<string, unknown> = {
+        ...providerHints,
+    };
+    if (Object.keys(openAiOptions).length > 0) {
+        normalizedProviderOptions.openai = openAiOptions;
+    }
+
+    return Object.keys(normalizedProviderOptions).length > 0
+        ? normalizedProviderOptions
+        : undefined;
 };
 
 const normalizeFallbackCitationTitle = (label: string): string => {
@@ -553,8 +634,9 @@ const createDefaultVoltAgentExecutor = ({
                     maxOutputTokens: options.maxOutputTokens,
                 }),
                 ...(options.providerOptions !== undefined && {
-                    providerOptions:
-                        options.providerOptions as VoltAgentCallOptions['providerOptions'],
+                    providerOptions: toVoltAgentCallProviderOptions(
+                        options.providerOptions
+                    ) as VoltAgentCallOptions['providerOptions'],
                 }),
                 ...(options.search !== undefined && {
                     toolChoice: 'required' as VoltAgentCallOptions['toolChoice'],
@@ -616,6 +698,7 @@ const createDefaultVoltAgentExecutor = ({
  */
 const createVoltAgentRuntime = ({
     defaultModel,
+    modelTiers,
     createExecutor = createDefaultVoltAgentExecutor,
     kind = 'voltagent',
     logger,
@@ -629,37 +712,41 @@ const createVoltAgentRuntime = ({
               })
             : undefined;
 
-    return ({
-    kind,
-    async generate(request: GenerationRequest): Promise<GenerationResult> {
-        const selectedModel = request.model ?? defaultModel;
-        if (!selectedModel) {
-            throw new Error(
-                'VoltAgent runtime requires request.model or a configured defaultModel.'
-            );
-        }
+    return {
+        kind,
+        async generate(request: GenerationRequest): Promise<GenerationResult> {
+            const selectedModel = resolveVoltAgentModelId({
+                requestedModel: request.model,
+                defaultModel,
+                modelTiers,
+            });
+            if (!selectedModel) {
+                throw new Error(
+                    'VoltAgent runtime requires request.model or a configured defaultModel.'
+                );
+            }
 
-        const executedModel = toVoltAgentModel(selectedModel);
-        const executor = createExecutor({
-            model: executedModel,
-            ...(logger !== undefined && { logger }),
-            ...(voltOpsClient !== undefined && { voltOpsClient }),
-        });
-        const providerOptions = buildVoltAgentProviderOptions(request);
-        const result = await executor.generateText(request.messages, {
-            ...(request.maxOutputTokens !== undefined && {
-                maxOutputTokens: request.maxOutputTokens,
-            }),
-            ...(request.search !== undefined && {
-                search: request.search,
-            }),
-            ...(request.signal !== undefined && { signal: request.signal }),
-            ...(providerOptions !== undefined && { providerOptions }),
-        });
+            const executedModel = toVoltAgentModel(selectedModel);
+            const executor = createExecutor({
+                model: executedModel,
+                ...(logger !== undefined && { logger }),
+                ...(voltOpsClient !== undefined && { voltOpsClient }),
+            });
+            const providerOptions = buildVoltAgentProviderOptions(request);
+            const result = await executor.generateText(request.messages, {
+                ...(request.maxOutputTokens !== undefined && {
+                    maxOutputTokens: request.maxOutputTokens,
+                }),
+                ...(request.search !== undefined && {
+                    search: request.search,
+                }),
+                ...(request.signal !== undefined && { signal: request.signal }),
+                ...(providerOptions !== undefined && { providerOptions }),
+            });
 
-        return normalizeVoltAgentResult(executedModel, request, result);
-    },
-});
+            return normalizeVoltAgentResult(executedModel, request, result);
+        },
+    };
 };
 
 export {

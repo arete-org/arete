@@ -61,12 +61,42 @@ test('voltagent runtime maps transcript and generation settings into executor op
     assert.equal(seenOptions?.maxOutputTokens, 800);
     assert.equal(seenOptions?.signal, signal);
     assert.deepEqual(seenOptions?.providerOptions, {
-        openai: {
-            reasoningEffort: 'low',
-            textVerbosity: 'high',
-        },
+        reasoningEffort: 'low',
+        verbosity: 'high',
     });
     assert.equal(result.text, 'voltagent reply');
+    assert.equal(result.model, 'gpt-5.1');
+});
+
+test('voltagent runtime resolves model tiers through adapter-owned configuration', async () => {
+    let seenModel: string | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'gpt-5-mini',
+        modelTiers: {
+            'text-fast': 'openai/gpt-5-mini',
+            'text-quality': 'openai/gpt-5.1',
+        },
+        createExecutor: ({ model }) => {
+            seenModel = model;
+            return {
+                async generateText() {
+                    return {
+                        text: 'tiered reply',
+                        response: {
+                            modelId: model,
+                        },
+                    };
+                },
+            };
+        },
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        model: 'text-quality',
+    });
+
+    assert.equal(seenModel, 'openai/gpt-5.1');
     assert.equal(result.model, 'gpt-5.1');
 });
 
