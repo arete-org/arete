@@ -17,16 +17,7 @@ export type { CreateInternalVoiceApiOptions, InternalVoiceApi };
 export const createInternalVoiceApi = (
     requestJson: ApiRequester,
     { traceApiToken }: CreateInternalVoiceApiOptions = {}
-): InternalVoiceApi => {
-    const shared = createSharedInternalVoiceApi(requestJson, {
+): InternalVoiceApi =>
+    createSharedInternalVoiceApi(requestJson, {
         traceApiToken,
     });
-
-    // Keep named local aliases so OpenAPI code-link tooling can resolve
-    // symbol references in this wrapper module.
-    const runVoiceTtsViaApi = shared.runVoiceTtsViaApi;
-
-    void runVoiceTtsViaApi;
-
-    return shared;
-};

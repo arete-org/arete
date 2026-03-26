@@ -17,18 +17,7 @@ export type { CreateInternalTextApiOptions, InternalTextApi };
 export const createInternalTextApi = (
     requestJson: ApiRequester,
     { traceApiToken }: CreateInternalTextApiOptions = {}
-): InternalTextApi => {
-    const shared = createSharedInternalTextApi(requestJson, {
+): InternalTextApi =>
+    createSharedInternalTextApi(requestJson, {
         traceApiToken,
     });
-
-    // Keep named local aliases so OpenAPI code-link tooling can resolve
-    // symbol references in this wrapper module.
-    const runNewsTaskViaApi = shared.runNewsTaskViaApi;
-    const runImageDescriptionTaskViaApi = shared.runImageDescriptionTaskViaApi;
-
-    void runNewsTaskViaApi;
-    void runImageDescriptionTaskViaApi;
-
-    return shared;
-};

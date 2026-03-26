@@ -144,8 +144,8 @@ paths:
                 - packages/backend/src/handlers/internalText.ts#handleInternalTextRequest
                 - packages/backend/src/services/internalText.ts#createInternalNewsTaskService
                 - packages/backend/src/services/internalText.ts#createInternalImageDescriptionTaskService
-                - packages/discord-bot/src/api/internalText.ts#runNewsTaskViaApi
-                - packages/discord-bot/src/api/internalText.ts#runImageDescriptionTaskViaApi
+                - packages/api-client/src/internalText.ts#runNewsTaskViaApi
+                - packages/api-client/src/internalText.ts#runImageDescriptionTaskViaApi
                 - packages/contracts/src/web/types.ts#PostInternalTextRequest
                 - packages/contracts/src/web/types.ts#PostInternalTextResponse
             summary: Run a trusted internal text task
@@ -191,8 +191,8 @@ paths:
             x-codeRefs:
                 - packages/backend/src/handlers/internalImage.ts#handleInternalImageRequest
                 - packages/backend/src/services/internalImage.ts#createInternalImageTaskService
-                - packages/discord-bot/src/api/internalImage.ts#runImageTaskViaApi
-                - packages/discord-bot/src/api/internalImage.ts#runImageTaskStreamViaApi
+                - packages/api-client/src/internalImage.ts#runImageTaskViaApi
+                - packages/api-client/src/internalImage.ts#runImageTaskStreamViaApi
                 - packages/contracts/src/web/types.ts#PostInternalImageGenerateRequest
                 - packages/contracts/src/web/types.ts#PostInternalImageGenerateResponse
             summary: Run a trusted internal image task
@@ -240,7 +240,7 @@ paths:
             x-codeRefs:
                 - packages/backend/src/handlers/internalVoiceTts.ts#handleInternalVoiceTtsRequest
                 - packages/backend/src/services/internalVoiceTts.ts#createInternalVoiceTtsService
-                - packages/discord-bot/src/api/internalVoice.ts#runVoiceTtsViaApi
+                - packages/api-client/src/internalVoice.ts#runVoiceTtsViaApi
                 - packages/contracts/src/voice/types.ts#PostInternalVoiceTtsRequest
                 - packages/contracts/src/voice/types.ts#PostInternalVoiceTtsResponse
             summary: Run a trusted internal voice TTS task
@@ -318,7 +318,7 @@ paths:
             operationId: postIncidentReport
             x-codeRefs:
                 - packages/backend/src/handlers/incidents.ts#handleIncidentReportRequest
-                - packages/discord-bot/src/api/incidents.ts#reportIncident
+                - packages/api-client/src/incidents.ts#reportIncident
                 - packages/contracts/src/web/types.ts#PostIncidentReportRequest
                 - packages/contracts/src/web/types.ts#PostIncidentReportResponse
             summary: Create an incident report
@@ -372,7 +372,7 @@ paths:
             operationId: listIncidents
             x-codeRefs:
                 - packages/backend/src/handlers/incidents.ts#handleIncidentListRequest
-                - packages/discord-bot/src/api/incidents.ts#listIncidents
+                - packages/api-client/src/incidents.ts#listIncidents
                 - packages/contracts/src/web/types.ts#GetIncidentsResponse
             summary: List incidents
             description: |
@@ -426,7 +426,7 @@ paths:
             operationId: getIncident
             x-codeRefs:
                 - packages/backend/src/handlers/incidents.ts#handleIncidentDetailRequest
-                - packages/discord-bot/src/api/incidents.ts#getIncident
+                - packages/api-client/src/incidents.ts#getIncident
                 - packages/contracts/src/web/types.ts#GetIncidentResponse
             summary: Fetch one incident
             description: |
@@ -461,7 +461,7 @@ paths:
             operationId: postIncidentStatus
             x-codeRefs:
                 - packages/backend/src/handlers/incidents.ts#handleIncidentStatusRequest
-                - packages/discord-bot/src/api/incidents.ts#updateIncidentStatus
+                - packages/api-client/src/incidents.ts#updateIncidentStatus
                 - packages/contracts/src/web/types.ts#PostIncidentStatusRequest
                 - packages/contracts/src/web/types.ts#PostIncidentStatusResponse
             summary: Update incident status
@@ -509,7 +509,7 @@ paths:
             operationId: postIncidentNotes
             x-codeRefs:
                 - packages/backend/src/handlers/incidents.ts#handleIncidentNotesRequest
-                - packages/discord-bot/src/api/incidents.ts#addIncidentNote
+                - packages/api-client/src/incidents.ts#addIncidentNote
                 - packages/contracts/src/web/types.ts#PostIncidentNotesRequest
                 - packages/contracts/src/web/types.ts#PostIncidentNotesResponse
             summary: Append an incident note
@@ -556,7 +556,7 @@ paths:
             operationId: postIncidentRemediation
             x-codeRefs:
                 - packages/backend/src/handlers/incidents.ts#handleIncidentRemediationRequest
-                - packages/discord-bot/src/api/incidents.ts#recordIncidentRemediation
+                - packages/api-client/src/incidents.ts#recordIncidentRemediation
                 - packages/contracts/src/web/types.ts#PostIncidentRemediationRequest
                 - packages/contracts/src/web/types.ts#PostIncidentRemediationResponse
             summary: Record incident remediation outcome
