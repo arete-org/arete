@@ -1,13 +1,19 @@
 /**
- * @description: Provides a package-local API client for web routes with shared transport and error parsing.
+ * @description: Web-facing wrapper over the shared @footnote/api-client package.
  * @footnote-scope: utility
  * @footnote-module: WebApiClient
- * @footnote-risk: medium - Incorrect request handling can break chat/blog/trace experiences.
+ * @footnote-risk: medium - Incorrect transport wiring can break chat/blog/trace experiences.
  * @footnote-ethics: medium - Consistent error handling helps keep fallback behavior transparent.
  */
-
+import {
+    createWebApiClient as createSharedWebApiClient,
+    isApiClientError,
+    type ApiJsonResult,
+    type ApiClientError,
+    type ApiErrorResponse,
+    type CreateWebApiClientOptions,
+} from '@footnote/api-client';
 import type {
-    ApiErrorResponse,
     GetBlogPostResponse,
     GetRuntimeConfigResponse,
     GetTraceResponse,
@@ -16,150 +22,22 @@ import type {
     PostChatRequest,
     PostChatResponse,
 } from '@footnote/contracts/web';
-import {
-    GetTraceApiResponseSchema,
-    PostChatResponseSchema,
-    createSchemaResponseValidator,
-} from '@footnote/contracts/web/schemas';
-import {
-    createApiTransport,
-    isApiClientError as isSharedApiClientError,
-    type ApiClientError,
-    type ApiJsonResult,
-    type CreateApiTransportOptions,
-} from '@footnote/contracts/web/client-core';
 
-type CreateWebApiClientOptions = CreateApiTransportOptions;
+export { isApiClientError };
 
-export const isApiClientError = (value: unknown): value is ApiClientError =>
-    isSharedApiClientError(value, 'ApiClientError');
+export const createWebApiClient = (
+    options: CreateWebApiClientOptions = {}
+) => {
+    const shared = createSharedWebApiClient(options);
 
-export const createWebApiClient = ({
-    baseUrl,
-    defaultHeaders,
-    defaultTimeoutMs,
-    fetchImpl = fetch,
-}: CreateWebApiClientOptions = {}) => {
-    const { requestJson } = createApiTransport({
-        baseUrl,
-        defaultHeaders,
-        defaultTimeoutMs,
-        fetchImpl,
-        clientErrorName: 'ApiClientError',
-    });
-
-    /**
-     * @api.operationId: postChat
-     * @api.path: POST /api/chat
-     */
-    const chatQuestion = async (
-        request: PostChatRequest,
-        options?: { turnstileToken?: string; signal?: AbortSignal }
-    ): Promise<PostChatResponse> => {
-        const headers: Record<string, string> = {};
-
-        if (options?.turnstileToken) {
-            headers['x-turnstile-token'] = options.turnstileToken;
-        }
-        if (request.sessionId) {
-            headers['x-session-id'] = request.sessionId;
-        }
-
-        const response = await requestJson<PostChatResponse>(
-            '/api/chat',
-            {
-                method: 'POST',
-                headers,
-                body: request,
-                signal: options?.signal,
-                validateResponse:
-                    createSchemaResponseValidator(PostChatResponseSchema),
-            }
-        );
-
-        return response.data;
-    };
-
-    /**
-     * @api.operationId: getRuntimeConfig
-     * @api.path: GET /config.json
-     */
-    const getRuntimeConfig = async (
-        signal?: AbortSignal
-    ): Promise<GetRuntimeConfigResponse> => {
-        const response = await requestJson<GetRuntimeConfigResponse>(
-            '/config.json',
-            {
-                method: 'GET',
-                signal,
-                cache: 'no-store',
-            }
-        );
-        return response.data;
-    };
-
-    /**
-     * @api.operationId: listBlogPosts
-     * @api.path: GET /api/blog-posts
-     */
-    const getBlogIndex = async (
-        signal?: AbortSignal
-    ): Promise<ListBlogPostsResponse> => {
-        const response = await requestJson<ListBlogPostsResponse>(
-            '/api/blog-posts',
-            {
-                method: 'GET',
-                signal,
-            }
-        );
-        return response.data;
-    };
-
-    /**
-     * @api.operationId: getBlogPost
-     * @api.path: GET /api/blog-posts/{postId}
-     */
-    const getBlogPost = async (
-        discussionNumber: number,
-        signal?: AbortSignal
-    ): Promise<GetBlogPostResponse> => {
-        const response = await requestJson<GetBlogPostResponse>(
-            `/api/blog-posts/${discussionNumber}`,
-            {
-                method: 'GET',
-                signal,
-            }
-        );
-        return response.data;
-    };
-
-    /**
-     * @api.operationId: getTrace
-     * @api.path: GET /api/traces/{responseId}
-     */
-    const getTrace = async (
-        responseId: string,
-        signal?: AbortSignal
-    ): Promise<ApiJsonResult<GetTraceResponse | GetTraceStaleResponse>> => {
-        const encodedResponseId = encodeURIComponent(responseId);
-        return requestJson<GetTraceResponse | GetTraceStaleResponse>(
-            `/api/traces/${encodedResponseId}`,
-            {
-                method: 'GET',
-                signal,
-                headers: {
-                    Accept: 'application/json',
-                },
-                acceptedStatusCodes: [410],
-                validateResponse: createSchemaResponseValidator(
-                    GetTraceApiResponseSchema
-                ),
-            }
-        );
-    };
+    const chatQuestion = shared.chatQuestion;
+    const getRuntimeConfig = shared.getRuntimeConfig;
+    const getBlogIndex = shared.getBlogIndex;
+    const getBlogPost = shared.getBlogPost;
+    const getTrace = shared.getTrace;
 
     return {
-        requestJson,
+        requestJson: shared.requestJson,
         chatQuestion,
         getRuntimeConfig,
         getBlogIndex,
@@ -169,5 +47,26 @@ export const createWebApiClient = ({
 };
 
 export const api = createWebApiClient();
+
+export const chatQuestion = (
+    request: PostChatRequest,
+    options?: { turnstileToken?: string; signal?: AbortSignal }
+): Promise<PostChatResponse> => api.chatQuestion(request, options);
+export const getRuntimeConfig = (
+    signal?: AbortSignal
+): Promise<GetRuntimeConfigResponse> => api.getRuntimeConfig(signal);
+export const getBlogIndex = (
+    signal?: AbortSignal
+): Promise<ListBlogPostsResponse> => api.getBlogIndex(signal);
+export const getBlogPost = (
+    discussionNumber: number,
+    signal?: AbortSignal
+): Promise<GetBlogPostResponse> => api.getBlogPost(discussionNumber, signal);
+export const getTrace = (
+    responseId: string,
+    signal?: AbortSignal
+): Promise<ApiJsonResult<GetTraceResponse | GetTraceStaleResponse>> =>
+    api.getTrace(responseId, signal);
+
 export type { ApiClientError, ApiErrorResponse };
 

@@ -19,6 +19,7 @@
         "watch": "tsc -b -w"
     },
     "dependencies": {
+        "@footnote/api-client": "workspace:*",
         "@footnote/config-spec": "workspace:*",
         "@footnote/contracts": "workspace:*",
         "@footnote/prompts": "workspace:*",

@@ -10,6 +10,8 @@
             "@pages/*": ["pages/*"],
             "@footnote/config-spec": ["../../config-spec/src/index.ts"],
             "@footnote/config-spec/*": ["../../config-spec/src/*"],
+            "@footnote/api-client": ["../../api-client/src/index.ts"],
+            "@footnote/api-client/*": ["../../api-client/src/*"],
             "@footnote/contracts": ["../../contracts/src/index.ts"],
             "@footnote/contracts/ethics-core": [
                 "../../contracts/src/ethics-core/index.ts"
@@ -25,5 +27,5 @@
         }
     },
     "include": ["src", "src/types"],
-    "references": [{ "path": "../contracts" }]
+    "references": [{ "path": "../contracts" }, { "path": "../api-client" }]
 }

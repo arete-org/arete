@@ -27,6 +27,8 @@
                 "./packages/agent-runtime/src/index.ts"
             ],
             "@footnote/agent-runtime/*": ["./packages/agent-runtime/src/*"],
+            "@footnote/api-client": ["./packages/api-client/src/index.ts"],
+            "@footnote/api-client/*": ["./packages/api-client/src/*"],
             "@footnote/config-spec": ["./packages/config-spec/src/index.ts"],
             "@footnote/config-spec/*": ["./packages/config-spec/src/*"],
             "@footnote/contracts": ["./packages/contracts/src/index.ts"],

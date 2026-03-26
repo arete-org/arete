@@ -1,21 +1,20 @@
 /**
- * @description: Provides shared HTTP transport utilities for Discord bot backend API calls.
+ * @description: Thin compatibility wrapper around the shared @footnote/api-client transport exports.
  * @footnote-scope: utility
  * @footnote-module: DiscordApiTransport
  * @footnote-risk: medium - Transport mistakes can break bot-side backend communication.
  * @footnote-ethics: medium - Normalized error handling supports transparent fail-open behavior.
  */
-
 import {
     createApiTransport as createSharedApiTransport,
     isApiClientError as isSharedApiClientError,
     type ApiClientError,
+    type ApiErrorResponse,
     type ApiJsonResult,
     type ApiRequestOptions,
     type ApiRequester,
     type CreateApiTransportOptions as SharedCreateApiTransportOptions,
-} from '@footnote/contracts/web/client-core';
-import type { ApiErrorResponse } from '@footnote/contracts/web';
+} from '@footnote/api-client';
 
 export type DiscordApiClientError = ApiClientError;
 
@@ -35,19 +34,14 @@ export const createApiTransport = ({
     fetchImpl = fetch,
 }: CreateApiTransportOptions): {
     requestJson: ApiRequester;
-} => {
-    if (!baseUrl.trim()) {
-        throw new Error('Discord API client requires a non-empty baseUrl.');
-    }
-
-    return createSharedApiTransport({
+} =>
+    createSharedApiTransport({
         baseUrl,
         defaultHeaders,
         defaultTimeoutMs,
         fetchImpl,
         clientErrorName: 'DiscordApiClientError',
     });
-};
 
 export type { ApiErrorResponse, ApiJsonResult, ApiRequestOptions, ApiRequester };
 
