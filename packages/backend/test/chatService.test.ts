@@ -406,8 +406,28 @@ test('runChatMessages forwards planner-selected generation settings to Generatio
     assert.equal(seenRequest?.verbosity, 'medium');
     assert.equal(seenRequest?.provider, 'openai');
     assert.equal(seenRequest?.capabilities?.canUseSearch, true);
+    assert.equal(seenRequest?.userId, undefined);
     assert.equal(seenRequest?.search?.query, 'latest OpenAI policy update');
     assert.equal(seenRequest?.search?.intent, 'current_facts');
+});
+
+test('runChatMessages tolerates optional memory retrievals field on runtime results', async () => {
+    const chatService = createChatService({
+        generationRuntime: createRuntime({
+            memoryRetrievals: [],
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'What changed?' }],
+        conversationSnapshot: 'What changed?',
+    });
+
+    assert.equal(response.message, 'chat response');
 });
 
 test('runChatMessages drops blank search queries before building the runtime request', async () => {

@@ -58,33 +58,35 @@ test('web requests go through planner and are coerced to message when planner pi
     let finalMessages: Array<{ role: string; content: string }> = [];
 
     const orchestrator = createChatOrchestrator({
-        generationRuntime: createGenerationRuntime(async ({ messages, maxOutputTokens }) => {
-            callCount += 1;
-            if (maxOutputTokens === 700) {
+        generationRuntime: createGenerationRuntime(
+            async ({ messages, maxOutputTokens }) => {
+                callCount += 1;
+                if (maxOutputTokens === 700) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'react',
+                            modality: 'text',
+                            reaction: '👍',
+                            riskTier: 'Low',
+                            reasoning: 'A reaction would normally be enough.',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+
+                finalMessages = messages;
                 return {
-                    text: JSON.stringify({
-                        action: 'react',
-                        modality: 'text',
-                        reaction: '👍',
-                        riskTier: 'Low',
-                        reasoning: 'A reaction would normally be enough.',
-                        generation: {
-                            reasoningEffort: 'low',
-                            verbosity: 'low',
-                        },
-                    }),
+                    text: 'coerced web reply',
                     model: 'gpt-5-mini',
+                    provenance: 'Inferred',
+                    citations: [],
                 };
             }
-
-            finalMessages = messages;
-            return {
-                text: 'coerced web reply',
-                model: 'gpt-5-mini',
-                provenance: 'Inferred',
-                citations: [],
-            };
-        }),
+        ),
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
@@ -124,30 +126,33 @@ test('discord requests preserve non-message planner actions', async () => {
     let callCount = 0;
 
     const orchestrator = createChatOrchestrator({
-        generationRuntime: createGenerationRuntime(async ({ maxOutputTokens }) => {
-            callCount += 1;
-            if (maxOutputTokens === 700) {
-                return {
-                    text: JSON.stringify({
-                        action: 'image',
-                        modality: 'text',
-                        imageRequest: {
-                            prompt: 'draw a chative skyline',
-                        },
-                        riskTier: 'Low',
-                        reasoning: 'The user explicitly asked for an image.',
-                        generation: {
-                            reasoningEffort: 'low',
-                            verbosity: 'low',
-                        },
-                    }),
-                    model: 'gpt-5-mini',
-                };
+        generationRuntime: createGenerationRuntime(
+            async ({ maxOutputTokens }) => {
+                callCount += 1;
+                if (maxOutputTokens === 700) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'image',
+                            modality: 'text',
+                            imageRequest: {
+                                prompt: 'draw a chative skyline',
+                            },
+                            riskTier: 'Low',
+                            reasoning:
+                                'The user explicitly asked for an image.',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+                throw new Error(
+                    'message generation should not run for image actions'
+                );
             }
-            throw new Error(
-                'message generation should not run for image actions'
-            );
-        }),
+        ),
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
@@ -163,18 +168,31 @@ test('discord requests preserve non-message planner actions', async () => {
 
 test('message plans pass planner generation options into chatService', async () => {
     let finalMessages: Array<{ role: string; content: string }> = [];
-    const plannerProfile =
+    const expectedResponseProfile =
         runtimeConfig.modelProfiles.catalog.find(
             (profile) =>
                 profile.id === runtimeConfig.modelProfiles.defaultProfileId &&
                 profile.enabled
         ) ??
         runtimeConfig.modelProfiles.catalog.find((profile) => profile.enabled);
-    assert.ok(plannerProfile);
+    const expectedPlannerProfile =
+        runtimeConfig.modelProfiles.catalog.find(
+            (profile) =>
+                profile.id === runtimeConfig.modelProfiles.plannerProfileId &&
+                profile.enabled
+        ) ??
+        runtimeConfig.modelProfiles.catalog.find((profile) => profile.enabled);
+    assert.ok(expectedResponseProfile);
+    assert.ok(expectedPlannerProfile);
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
             if (request.maxOutputTokens === 700) {
+                assert.equal(request.provider, expectedPlannerProfile.provider);
+                assert.equal(
+                    request.model,
+                    expectedPlannerProfile.providerModel
+                );
                 return {
                     text: JSON.stringify({
                         action: 'message',
@@ -206,7 +224,7 @@ test('message plans pass planner generation options into chatService', async () 
             assert.equal(request.search.intent, 'current_facts');
             assert.equal(request.reasoningEffort, 'medium');
             assert.equal(request.verbosity, 'medium');
-            assert.equal(request.provider, plannerProfile.provider);
+            assert.equal(request.provider, expectedResponseProfile.provider);
             assert.equal(request.capabilities?.canUseSearch, true);
             return {
                 text: 'message with retrieval',
@@ -234,6 +252,222 @@ test('message plans pass planner generation options into chatService', async () 
     );
 });
 
+test('planner-selected profile id controls response model selection', async () => {
+    let observedResponseModel: string | undefined;
+    const selectedProfile =
+        runtimeConfig.modelProfiles.catalog.find(
+            (profile) => profile.id === 'openai-text-quality' && profile.enabled
+        ) ??
+        runtimeConfig.modelProfiles.catalog.find((profile) => profile.enabled);
+    assert.ok(selectedProfile);
+
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === 700) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        profileId: selectedProfile.id,
+                        riskTier: 'Low',
+                        reasoning:
+                            'Use a richer response profile for this request.',
+                        generation: {
+                            reasoningEffort: 'medium',
+                            verbosity: 'medium',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            observedResponseModel = request.model;
+            return {
+                text: 'profile-specific reply',
+                model: request.model,
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(createChatRequest());
+
+    assert.equal(response.action, 'message');
+    assert.equal(observedResponseModel, selectedProfile.providerModel);
+});
+
+test('invalid planner-selected profile id falls back to default response profile', async () => {
+    let observedResponseModel: string | undefined;
+    const warnings: Array<{ message: string; meta?: unknown }> = [];
+    const originalWarn = logger.warn;
+    logger.warn = ((message: string, meta?: unknown) => {
+        warnings.push({ message, meta });
+        return logger;
+    }) as typeof logger.warn;
+
+    const defaultProfile =
+        runtimeConfig.modelProfiles.catalog.find(
+            (profile) =>
+                profile.id === runtimeConfig.modelProfiles.defaultProfileId &&
+                profile.enabled
+        ) ??
+        runtimeConfig.modelProfiles.catalog.find((profile) => profile.enabled);
+    assert.ok(defaultProfile);
+
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async (request) => {
+                if (request.maxOutputTokens === 700) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            profileId: 'missing-profile-id',
+                            riskTier: 'Low',
+                            reasoning: 'Try a profile that does not exist.',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                                temperament: {
+                                    tightness: 4,
+                                    rationale: 3,
+                                    attribution: 4,
+                                    caution: 3,
+                                    extent: 4,
+                                },
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+                observedResponseModel = request.model;
+                return {
+                    text: 'fallback profile reply',
+                    model: request.model,
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: () => createMetadata(),
+            defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+            recordUsage: () => undefined,
+        });
+
+        await orchestrator.runChat(createChatRequest());
+    } finally {
+        logger.warn = originalWarn;
+    }
+
+    assert.equal(observedResponseModel, defaultProfile.providerModel);
+    const fallbackWarning = warnings.find((warning) =>
+        /planner selected invalid or disabled profile id/i.test(warning.message)
+    );
+    assert.ok(fallbackWarning);
+});
+
+test('search is dropped when selected profile does not support search', async () => {
+    let observedSearch: unknown;
+    const warnings: Array<{ message: string; meta?: unknown }> = [];
+    const originalWarn = logger.warn;
+    const originalModelProfiles = runtimeConfig.modelProfiles;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        modelProfiles: typeof runtimeConfig.modelProfiles;
+    };
+    runtimeConfigMutable.modelProfiles = {
+        ...runtimeConfig.modelProfiles,
+        defaultProfileId: 'openai-text-fast',
+        plannerProfileId: runtimeConfig.modelProfiles.plannerProfileId,
+        catalog: runtimeConfig.modelProfiles.catalog.map((profile) =>
+            profile.id === 'openai-text-fast'
+                ? {
+                      ...profile,
+                      capabilities: {
+                          ...profile.capabilities,
+                          canUseSearch: false,
+                      },
+                  }
+                : profile
+        ),
+    };
+
+    logger.warn = ((message: string, meta?: unknown) => {
+        warnings.push({ message, meta });
+        return logger;
+    }) as typeof logger.warn;
+
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async (request) => {
+                if (request.maxOutputTokens === 700) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            profileId: 'openai-text-fast',
+                            riskTier: 'Low',
+                            reasoning:
+                                'Use search even though selected profile cannot search.',
+                            generation: {
+                                reasoningEffort: 'medium',
+                                verbosity: 'medium',
+                                temperament: {
+                                    tightness: 4,
+                                    rationale: 3,
+                                    attribution: 4,
+                                    caution: 3,
+                                    extent: 4,
+                                },
+                                search: {
+                                    query: 'latest OpenAI policy update',
+                                    contextSize: 'low',
+                                    intent: 'current_facts',
+                                },
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+
+                observedSearch = request.search;
+                return {
+                    text: 'search-disabled reply',
+                    model: request.model,
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: () => createMetadata(),
+            defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+            recordUsage: () => undefined,
+        });
+
+        await orchestrator.runChat(createChatRequest());
+    } finally {
+        logger.warn = originalWarn;
+        runtimeConfigMutable.modelProfiles = originalModelProfiles;
+    }
+
+    assert.equal(observedSearch, undefined);
+    const mismatchWarning = warnings.find((warning) =>
+        /selected profile does not support search/i.test(warning.message)
+    );
+    assert.ok(mismatchWarning);
+});
+
 test('discord requests use backend profile overlay when runtime overlay is configured', async () => {
     let finalMessages: Array<{ role: string; content: string }> = [];
     const originalProfile = runtimeConfig.profile;
@@ -254,38 +488,41 @@ test('discord requests use backend profile overlay when runtime overlay is confi
 
     try {
         const orchestrator = createChatOrchestrator({
-            generationRuntime: createGenerationRuntime(async ({ messages, maxOutputTokens }) => {
-                if (maxOutputTokens === 700) {
-                    return {
-                        text: JSON.stringify({
-                            action: 'message',
-                            modality: 'text',
-                            riskTier: 'Low',
-                            reasoning: 'A normal text response is appropriate.',
-                            generation: {
-                                reasoningEffort: 'low',
-                                verbosity: 'low',
-                                temperament: {
-                                    tightness: 4,
-                                    rationale: 3,
-                                    attribution: 4,
-                                    caution: 3,
-                                    extent: 3,
+            generationRuntime: createGenerationRuntime(
+                async ({ messages, maxOutputTokens }) => {
+                    if (maxOutputTokens === 700) {
+                        return {
+                            text: JSON.stringify({
+                                action: 'message',
+                                modality: 'text',
+                                riskTier: 'Low',
+                                reasoning:
+                                    'A normal text response is appropriate.',
+                                generation: {
+                                    reasoningEffort: 'low',
+                                    verbosity: 'low',
+                                    temperament: {
+                                        tightness: 4,
+                                        rationale: 3,
+                                        attribution: 4,
+                                        caution: 3,
+                                        extent: 3,
+                                    },
                                 },
-                            },
-                        }),
+                            }),
+                            model: 'gpt-5-mini',
+                        };
+                    }
+
+                    finalMessages = messages;
+                    return {
+                        text: 'overlay persona reply',
                         model: 'gpt-5-mini',
+                        provenance: 'Inferred',
+                        citations: [],
                     };
                 }
-
-                finalMessages = messages;
-                return {
-                    text: 'overlay persona reply',
-                    model: 'gpt-5-mini',
-                    provenance: 'Inferred',
-                    citations: [],
-                };
-            }),
+            ),
             storeTrace: async () => undefined,
             buildResponseMetadata: () => createMetadata(),
             defaultModel: 'gpt-5-mini',
@@ -306,7 +543,10 @@ test('discord requests use backend profile overlay when runtime overlay is confi
             finalMessages[0]?.content,
             renderConversationPromptLayers('discord-chat').systemPrompt
         );
-        assert.match(finalMessages[1]?.content ?? '', /BEGIN Bot Profile Overlay/);
+        assert.match(
+            finalMessages[1]?.content ?? '',
+            /BEGIN Bot Profile Overlay/
+        );
         assert.match(finalMessages[1]?.content ?? '', /Profile ID: ari-vendor/);
     } finally {
         runtimeConfigMutable.profile = originalProfile;
@@ -339,31 +579,34 @@ test('discord profileId mismatch warns and falls back to backend runtime profile
 
     try {
         const orchestrator = createChatOrchestrator({
-            generationRuntime: createGenerationRuntime(async ({ messages, maxOutputTokens }) => {
-                if (maxOutputTokens === 700) {
+            generationRuntime: createGenerationRuntime(
+                async ({ messages, maxOutputTokens }) => {
+                    if (maxOutputTokens === 700) {
+                        return {
+                            text: JSON.stringify({
+                                action: 'message',
+                                modality: 'text',
+                                riskTier: 'Low',
+                                reasoning:
+                                    'A normal text response is appropriate.',
+                                generation: {
+                                    reasoningEffort: 'low',
+                                    verbosity: 'low',
+                                },
+                            }),
+                            model: 'gpt-5-mini',
+                        };
+                    }
+
+                    finalMessages = messages;
                     return {
-                        text: JSON.stringify({
-                            action: 'message',
-                            modality: 'text',
-                            riskTier: 'Low',
-                            reasoning: 'A normal text response is appropriate.',
-                            generation: {
-                                reasoningEffort: 'low',
-                                verbosity: 'low',
-                            },
-                        }),
+                        text: 'mismatch fallback reply',
                         model: 'gpt-5-mini',
+                        provenance: 'Inferred',
+                        citations: [],
                     };
                 }
-
-                finalMessages = messages;
-                return {
-                    text: 'mismatch fallback reply',
-                    model: 'gpt-5-mini',
-                    provenance: 'Inferred',
-                    citations: [],
-                };
-            }),
+            ),
             storeTrace: async () => undefined,
             buildResponseMetadata: () => createMetadata(),
             defaultModel: 'gpt-5-mini',
@@ -391,9 +634,7 @@ test('discord requests are trimmed/formatted in backend before planner and gener
     let generationConversation: Array<{ role: string; content: string }> = [];
 
     const conversation = Array.from({ length: 30 }, (_, index) => ({
-        role: (index % 2 === 0 ? 'user' : 'assistant') as
-            | 'user'
-            | 'assistant',
+        role: (index % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
         content: `raw message ${index + 1}`,
         authorName: index % 2 === 0 ? 'Jordan' : 'Footnote',
         authorId: index % 2 === 0 ? 'user-1' : 'bot-1',
@@ -402,39 +643,41 @@ test('discord requests are trimmed/formatted in backend before planner and gener
     }));
 
     const orchestrator = createChatOrchestrator({
-        generationRuntime: createGenerationRuntime(async ({ messages, maxOutputTokens }) => {
-            if (maxOutputTokens === 700) {
-                plannerConversation = messages;
-                return {
-                    text: JSON.stringify({
-                        action: 'message',
-                        modality: 'text',
-                        riskTier: 'Low',
-                        reasoning: 'Answer with a normal message.',
-                        generation: {
-                            reasoningEffort: 'low',
-                            verbosity: 'low',
-                            temperament: {
-                                tightness: 4,
-                                rationale: 3,
-                                attribution: 4,
-                                caution: 3,
-                                extent: 3,
+        generationRuntime: createGenerationRuntime(
+            async ({ messages, maxOutputTokens }) => {
+                if (maxOutputTokens === 700) {
+                    plannerConversation = messages;
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            riskTier: 'Low',
+                            reasoning: 'Answer with a normal message.',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                                temperament: {
+                                    tightness: 4,
+                                    rationale: 3,
+                                    attribution: 4,
+                                    caution: 3,
+                                    extent: 3,
+                                },
                             },
-                        },
-                    }),
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+
+                generationConversation = messages;
+                return {
+                    text: 'backend-normalized reply',
                     model: 'gpt-5-mini',
+                    provenance: 'Inferred',
+                    citations: [],
                 };
             }
-
-            generationConversation = messages;
-            return {
-                text: 'backend-normalized reply',
-                model: 'gpt-5-mini',
-                provenance: 'Inferred',
-                citations: [],
-            };
-        }),
+        ),
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
@@ -452,12 +695,13 @@ test('discord requests are trimmed/formatted in backend before planner and gener
     assert.equal(response.action, 'message');
     assert.equal(response.message, 'backend-normalized reply');
     assert.equal(
-        plannerConversation.filter((message) => message.role !== 'system').length,
+        plannerConversation.filter((message) => message.role !== 'system')
+            .length,
         24
     );
     assert.match(
-        plannerConversation.find((message) => message.role !== 'system')?.content ??
-            '',
+        plannerConversation.find((message) => message.role !== 'system')
+            ?.content ?? '',
         /^\[0\] At \d{4}-\d{2}-\d{2} \d{2}:\d{2} Jordan said:/
     );
     assert.match(

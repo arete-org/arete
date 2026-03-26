@@ -1167,6 +1167,19 @@ export const envEntries = [
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
+        key: 'PLANNER_PROFILE_ID',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Model profile ID used for planner calls so planner and response profiles can differ.',
+        defaultValue: literal('openai-text-fast'),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
         key: 'REALTIME_DEFAULT_MODEL',
         owner: 'shared',
         stage: 'runtime',

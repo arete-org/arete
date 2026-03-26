@@ -9,7 +9,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { PostChatRequest } from '@footnote/contracts/web';
-import { createChatPlanner } from '../src/services/chatPlanner.js';
+import {
+    createChatPlanner,
+    type ChatPlannerProfileOption,
+} from '../src/services/chatPlanner.js';
 
 const createChatRequest = (
     overrides: Partial<PostChatRequest> = {}
@@ -26,12 +29,16 @@ const createChatRequest = (
     ...overrides,
 });
 
-const createPlanner = (normalizedText: string) =>
+const createPlanner = (
+    normalizedText: string,
+    availableProfiles: ChatPlannerProfileOption[] = []
+) =>
     createChatPlanner({
         executePlanner: async () => ({
             text: normalizedText,
             model: 'gpt-5-mini',
         }),
+        availableProfiles,
     });
 
 test('chatPlanner parses plain JSON output from the backend-native planner prompt', async () => {
@@ -39,6 +46,7 @@ test('chatPlanner parses plain JSON output from the backend-native planner promp
         JSON.stringify({
             action: 'message',
             modality: 'text',
+            profileId: 'openai-text-medium',
             riskTier: 'Low',
             reasoning: 'The user is asking a question that needs a reply.',
             generation: {
@@ -62,12 +70,81 @@ test('chatPlanner parses plain JSON output from the backend-native planner promp
     const plan = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
+    assert.equal(plan.profileId, 'openai-text-medium');
     assert.ok(plan.generation.search);
     assert.equal(
         plan.generation.search?.query,
         'latest Footnote release notes'
     );
     assert.equal(plan.generation.search?.intent, 'current_facts');
+});
+
+test('chatPlanner forwards bounded profile options context and normalizes blank profileId', async () => {
+    let capturedMessages: Array<{ role: string; content: string }> = [];
+    const availableProfiles: ChatPlannerProfileOption[] = [
+        {
+            id: 'openai-text-fast',
+            description: 'Fast profile for short planner tasks.',
+            costClass: 'low',
+            latencyClass: 'low',
+            capabilities: { canUseSearch: false },
+        },
+        {
+            id: 'openai-text-medium',
+            description: 'Balanced profile for chat responses.',
+            costClass: 'medium',
+            latencyClass: 'medium',
+            capabilities: { canUseSearch: true },
+        },
+    ];
+
+    const planner = createChatPlanner({
+        availableProfiles,
+        executePlanner: async ({ messages }) => {
+            capturedMessages = messages;
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    profileId: '   ',
+                    riskTier: 'Low',
+                    reasoning: 'Use safe defaults.',
+                    generation: {
+                        reasoningEffort: 'low',
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 4,
+                            rationale: 3,
+                            attribution: 4,
+                            caution: 3,
+                            extent: 4,
+                        },
+                    },
+                }),
+                model: 'gpt-5-mini',
+            };
+        },
+    });
+
+    const plan = await planner.planChat(createChatRequest());
+
+    assert.equal(plan.profileId, undefined);
+    const profileContextMessage =
+        capturedMessages.find((message) =>
+            message.content.startsWith('Planner profile options (bounded): ')
+        )?.content ?? '';
+    assert.match(
+        profileContextMessage,
+        /^Planner profile options \(bounded\): \[/
+    );
+    const encodedProfiles = profileContextMessage.replace(
+        'Planner profile options (bounded): ',
+        ''
+    );
+    const parsedProfiles = JSON.parse(
+        encodedProfiles
+    ) as ChatPlannerProfileOption[];
+    assert.deepEqual(parsedProfiles, availableProfiles);
 });
 
 test('chatPlanner fails open to a valid fallback generation config when planner JSON is invalid', async () => {
@@ -101,12 +178,7 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
                     query: 'How does Discord provenance work in Footnote?',
                     contextSize: 'low',
                     intent: 'repo_explainer',
-                    repoHints: [
-                        'Discord',
-                        'provenance',
-                        'discord',
-                        'wiki',
-                    ],
+                    repoHints: ['Discord', 'provenance', 'discord', 'wiki'],
                 },
             },
         })

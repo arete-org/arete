@@ -116,6 +116,13 @@ export const buildModelProfilesSection = (
     const defaultProfileId =
         parseOptionalTrimmedString(env.DEFAULT_PROFILE_ID) ||
         envDefaultValues.DEFAULT_PROFILE_ID;
+    // Response generation fallback profile.
+    // Used when callers provide no selector or an invalid/disabled selector.
+    const plannerProfileId =
+        parseOptionalTrimmedString(env.PLANNER_PROFILE_ID) ||
+        envDefaultValues.PLANNER_PROFILE_ID;
+    // Planner execution profile.
+    // Kept separate so planner cost/latency can be tuned independently.
 
     let effectiveCatalogPath = preferredCatalogPath;
     let entries: unknown[] | null = null;
@@ -167,6 +174,7 @@ export const buildModelProfilesSection = (
 
     return {
         defaultProfileId,
+        plannerProfileId,
         catalogPath: effectiveCatalogPath,
         catalog,
     };

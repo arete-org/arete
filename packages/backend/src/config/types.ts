@@ -62,6 +62,7 @@ export type RuntimeConfig = {
     };
     modelProfiles: {
         defaultProfileId: string;
+        plannerProfileId: string;
         catalogPath: string;
         catalog: ModelProfile[];
     };

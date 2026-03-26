@@ -65,6 +65,7 @@ const UNICODE_SINGLE_EMOJI_PATTERN =
 export type ChatPlan = {
     action: ChatPlannerAction;
     modality: 'text' | 'tts';
+    profileId?: string;
     reaction?: string;
     imageRequest?: ChatImageRequest;
     riskTier: RiskTier;
@@ -72,9 +73,25 @@ export type ChatPlan = {
     generation: ChatGenerationPlan;
 };
 
+export type ChatPlannerProfileOption = {
+    // Stable profile key the planner can return in `profileId`.
+    id: string;
+    // Human-readable intent hint shown to planner; not used for matching.
+    description: string;
+    // Coarse planning hint only; runtime does not enforce cost from this field.
+    costClass?: 'low' | 'medium' | 'high';
+    // Coarse planning hint only; runtime does not enforce latency from this field.
+    latencyClass?: 'low' | 'medium' | 'high';
+    capabilities: {
+        // Planner hint about whether search is feasible for this profile.
+        canUseSearch: boolean;
+    };
+};
+
 type CreateChatPlannerOptions = {
     executePlanner: ChatPlannerExecutor;
     defaultModel?: string;
+    availableProfiles?: ChatPlannerProfileOption[];
     recordUsage?: (record: BackendLLMCostRecord) => void;
 };
 
@@ -106,6 +123,7 @@ type ChatPlannerExecutor = (
 ) => Promise<ChatPlannerExecutionResult>;
 
 type PlannerCandidate = Partial<ChatPlan> & {
+    profileId?: unknown;
     reasoning?: unknown;
     generation?: Partial<ChatGenerationPlan> & {
         search?: Partial<ChatGenerationSearch> & {
@@ -278,6 +296,17 @@ const stripJsonFences = (content: string): string =>
         .replace(/^```(?:json)?/i, '')
         .replace(/```$/i, '')
         .trim();
+
+const normalizeProfileId = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') {
+        return undefined;
+    }
+
+    // Blank ids are treated as "no planner preference" so orchestrator can
+    // fail open to its default response profile.
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : undefined;
+};
 
 /**
  * Keeps react actions strict so downstream transport never receives plain text
@@ -480,6 +509,7 @@ const normalizePlan = (
     const normalizedPlan: ChatPlan = {
         action: actionCandidate,
         modality: normalizeModality(candidate.modality, capabilities),
+        profileId: normalizeProfileId(candidate.profileId),
         riskTier: normalizeRiskTier(candidate.riskTier),
         reasoning:
             typeof candidate.reasoning === 'string' &&
@@ -599,13 +629,35 @@ const normalizePlan = (
 export const createChatPlanner = ({
     executePlanner,
     defaultModel = runtimeConfig.openai.defaultModel,
+    availableProfiles = [],
     recordUsage = recordBackendLLMUsage,
 }: CreateChatPlannerOptions) => {
+    // Keep planner context intentionally narrow.
+    // We expose only decision-relevant fields, not full raw catalog config.
+    const plannerProfileContext =
+        availableProfiles.length > 0
+            ? JSON.stringify(
+                  availableProfiles.map((profile) => ({
+                      id: profile.id,
+                      description: profile.description,
+                      costClass: profile.costClass,
+                      latencyClass: profile.latencyClass,
+                      capabilities: profile.capabilities,
+                  }))
+              )
+            : '[]';
+
     const planChat = async (request: PostChatRequest): Promise<ChatPlan> => {
         const plannerPrompt = renderPrompt('chat.planner.system').content;
         const requestSummary = summarizeRequest(request);
         const plannerMessages: RuntimeMessage[] = [
             { role: 'system', content: plannerPrompt },
+            {
+                // The prompt instructs planner to choose one id from this list.
+                // The orchestrator still validates the chosen id before use.
+                role: 'system',
+                content: `Planner profile options (bounded): ${plannerProfileContext}`,
+            },
             {
                 role: 'system',
                 content: `Planner request summary: ${requestSummary}`,

@@ -72,11 +72,16 @@ Example:
 
 ## Testing & Validation
 
-- Run ESLint by default after any file edit.
+- Run `pnpm lint:fix` by default after any file edit (robot/local workflow).
+- Use `pnpm lint` as non-mutating verification (CI and final gate checks).
+- `pnpm format:check` and `pnpm format:write` are changed-file aware by default.
+  Optional CI override: set `FORMAT_BASE_REF` to check/write against a base branch range.
+- If a file type is intentionally outside prettier/eslint globs (for example `.env.example`), keep formatting consistent manually and call that out in the summary.
 - Prefer linting only the touched files when the repo tooling supports it cleanly.
 - If the repo only exposes a broader lint command, run that broader command and note the wider validation scope.
 - Review: `pnpm review`
 - Packaging validation for deployable service changes or cleanup that can affect runtime packaging: `docker compose -f deploy/compose.yml build`
+- PR readiness gate for large or cross-cutting changes: run both `pnpm review` and `docker compose -f deploy/compose.yml build` before marking the change review-ready.
 - `@footnote-*` tags: `pnpm validate-footnote-tags`
 - OpenAPI linking: `pnpm validate-openapi-links`
 
