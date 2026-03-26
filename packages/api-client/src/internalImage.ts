@@ -47,6 +47,8 @@ export type InternalImageApi = {
 };
 
 const DEFAULT_TIMEOUT_MS = 60_000;
+const MAX_STREAM_ITERATIONS = 10_000;
+const MAX_STREAM_BYTES = 10 * 1024 * 1024;
 
 const buildTrustedHeaders = (
     traceApiToken?: string
@@ -197,6 +199,8 @@ export const createInternalImageApi = (
             const decoder = new globalThis.TextDecoder();
             let buffered = '';
             let finalResponse: PostInternalImageGenerateResponse | null = null;
+            let streamIterations = 0;
+            let streamBytesRead = 0;
             const processEventLine = async (line: string): Promise<void> => {
                 const trimmed = line.trim();
                 if (!trimmed) {
@@ -232,22 +236,47 @@ export const createInternalImageApi = (
                 };
             };
 
-            while (true) {
-                const { done, value } = await reader.read();
-                buffered += decoder.decode(value ?? new Uint8Array(), {
-                    stream: !done,
-                });
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    const chunk = value ?? new Uint8Array();
+                    streamIterations += 1;
+                    streamBytesRead += chunk.byteLength;
 
-                const lines = buffered.split('\n');
-                buffered = lines.pop() ?? '';
+                    if (streamIterations > MAX_STREAM_ITERATIONS) {
+                        await reader.cancel('Internal image stream iteration limit exceeded').catch(
+                            () => undefined
+                        );
+                        throw new Error(
+                            `Internal image stream exceeded the iteration safety limit (${MAX_STREAM_ITERATIONS}).`
+                        );
+                    }
+                    if (streamBytesRead > MAX_STREAM_BYTES) {
+                        await reader.cancel('Internal image stream byte limit exceeded').catch(
+                            () => undefined
+                        );
+                        throw new Error(
+                            `Internal image stream exceeded the byte safety limit (${MAX_STREAM_BYTES}).`
+                        );
+                    }
 
-                for (const line of lines) {
-                    await processEventLine(line);
+                    buffered += decoder.decode(chunk, {
+                        stream: !done,
+                    });
+
+                    const lines = buffered.split('\n');
+                    buffered = lines.pop() ?? '';
+
+                    for (const line of lines) {
+                        await processEventLine(line);
+                    }
+
+                    if (done) {
+                        break;
+                    }
                 }
-
-                if (done) {
-                    break;
-                }
+            } finally {
+                reader.releaseLock();
             }
 
             if (buffered.trim()) {
