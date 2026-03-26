@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* eslint-env node */
+/* global process, console */
 /**
  * @description: Runs Prettier on changed files only, with optional base-ref support for CI.
  * @footnote-scope: utility
@@ -73,6 +75,33 @@ const listChangedFiles = () => {
 
 const uniqueSorted = (values) => [...new Set(values)].sort();
 
+const runPrettier = (modeArg, files) => {
+    const pnpmBinary = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+    let prettierResult = spawnSync(
+        pnpmBinary,
+        ['exec', 'prettier', `--${modeArg}`, ...files],
+        { stdio: 'inherit' }
+    );
+
+    // On Windows, direct `pnpm.cmd` spawn can fail in some environments.
+    // Fall back to invoking the active pnpm CLI entrypoint through Node.
+    if (prettierResult.error && process.env.npm_execpath) {
+        prettierResult = spawnSync(
+            process.execPath,
+            [
+                process.env.npm_execpath,
+                'exec',
+                'prettier',
+                `--${modeArg}`,
+                ...files,
+            ],
+            { stdio: 'inherit' }
+        );
+    }
+
+    return prettierResult;
+};
+
 try {
     const changedFiles =
         uniqueSorted(listChangedFiles()).filter(isSupportedFile);
@@ -84,14 +113,7 @@ try {
     console.log(
         `Running Prettier (${mode}) on ${changedFiles.length} changed file(s).`
     );
-    const prettierResult = spawnSync(
-        'pnpm',
-        ['exec', 'prettier', `--${mode}`, ...changedFiles],
-        {
-            stdio: 'inherit',
-            shell: true,
-        }
-    );
+    const prettierResult = runPrettier(mode, changedFiles);
     if (prettierResult.error) {
         console.error(
             `format-changed failed to start prettier: ${prettierResult.error.message}`
