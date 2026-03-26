@@ -473,7 +473,7 @@
             ]
         },
         {
-            "title": "Provenance",
+            "title": "Discord Provenance",
             "purpose": "Document how the Discord bot exposes transparency features such as TRACE cards, interactions, and trace links to end users.",
             "parent": "Discord",
             "entrypoints": [
