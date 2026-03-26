@@ -89,7 +89,9 @@ const ProvenanceFooter = ({
     }
     const executionSummary =
         metadata.execution && metadata.execution.length > 0
-            ? metadata.execution.map(formatExecutionEvent).join(' -> ')
+            ? // execution[] is canonical for modern traces.
+              // modelVersion remains a fallback for legacy traces.
+              metadata.execution.map(formatExecutionEvent).join(' -> ')
             : null;
 
     return (

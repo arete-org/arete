@@ -59,6 +59,10 @@ export type PartialResponseTemperament = Partial<ResponseTemperament>;
 
 export type ExecutionStatus = 'executed' | 'skipped' | 'failed';
 
+/**
+ * Stable execution reason codes emitted by backend orchestration/runtime.
+ * Keep this list narrow so logs/UI/tests can rely on deterministic values.
+ */
 export type ExecutionReasonCode =
     | 'planner_runtime_error'
     | 'planner_invalid_output'

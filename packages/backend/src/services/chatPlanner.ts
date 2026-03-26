@@ -39,13 +39,19 @@ import { logger } from '../utils/logger.js';
 type ChatPlannerAction = 'message' | 'react' | 'ignore' | 'image';
 
 export type ChatPlannerExecution = {
+    // "executed" means we parsed/normalized planner output successfully.
+    // "failed" means we fell back to a backend-safe default plan.
     status: ExecutionStatus;
+    // Required when status is failed/skipped by contract-level validation.
     reasonCode?: ExecutionReasonCode;
+    // Planner call + parse/normalize duration in milliseconds.
     durationMs: number;
 };
 
 export type ChatPlannerResult = {
+    // Always populated: either planner-derived or fail-open fallback plan.
     plan: ChatPlan;
+    // Execution telemetry used by orchestrator metadata emission.
     execution: ChatPlannerExecution;
 };
 
@@ -764,6 +770,9 @@ export const createChatPlanner = ({
                 request,
                 'Planner failed, so the backend used a safe fallback.'
             );
+            // Parse failures are explicitly separated from runtime failures so
+            // downstream metadata and logs can distinguish prompt/schema drift
+            // from upstream service instability.
             const reasonCode: ExecutionReasonCode =
                 error instanceof SyntaxError
                     ? 'planner_invalid_output'

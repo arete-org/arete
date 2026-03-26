@@ -731,6 +731,9 @@ const buildResponseMetadata = (
     const execution: ExecutionEvent[] = [];
     const plannerExecution = runtimeContext.executionContext?.planner;
     if (plannerExecution) {
+        // Contract invariant: executed events omit reasonCode; failed/skipped
+        // must include one. We normalize here so downstream storage/UI never
+        // receives ambiguous planner failure semantics.
         const normalizedPlannerReasonCode =
             plannerExecution.status === 'executed'
                 ? undefined
@@ -751,6 +754,8 @@ const buildResponseMetadata = (
     }
     const toolExecution = runtimeContext.executionContext?.tool;
     if (toolExecution) {
+        // Tool skips/failures are normalized to a stable code so analytics and
+        // UI can query outcomes without parsing log strings.
         const normalizedToolReasonCode =
             toolExecution.status === 'executed'
                 ? undefined
@@ -769,6 +774,8 @@ const buildResponseMetadata = (
     }
     const generationExecution = runtimeContext.executionContext?.generation;
     if (generationExecution) {
+        // Generation defaults are defensive: if non-executed reaches this path
+        // without a code, mark it as a generation runtime error.
         const normalizedGenerationReasonCode =
             generationExecution.status === 'executed'
                 ? undefined
@@ -804,6 +811,8 @@ const buildResponseMetadata = (
         licenseContext,
         // TODO(workflow-execution-metadata): Remove modelVersion once all
         // metadata consumers have migrated to execution[] as canonical.
+        // Compatibility mirror for legacy consumers that still read only a
+        // single model string.
         modelVersion:
             generationEventModel ??
             runtimeContext.modelVersion ??

@@ -145,6 +145,10 @@ const ExecutionReasonCodeSchema = z.enum([
     'search_not_supported_by_selected_profile',
     'unspecified_tool_outcome',
 ]);
+// Cross-field execution invariants:
+// - skipped/failed must explain why (reasonCode required)
+// - executed must not include reasonCode
+// This keeps telemetry queryable and avoids ambiguous event payloads.
 const ExecutionEventSchema = z
     .object({
         kind: z.enum(['planner', 'tool', 'generation']),

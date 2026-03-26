@@ -40,6 +40,7 @@ type ServerMetadata = GetTraceResponse & {
 type SerializableResponseMetadata = ServerMetadata;
 
 const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
+    // Prefer canonical generation event model first, then legacy mirrors.
     const generationEventModel = traceData.execution
         ?.filter((event) => event.kind === 'generation')
         .at(-1)?.model;
@@ -56,6 +57,8 @@ const resolveExecutionSummary = (traceData: ServerMetadata): string | null => {
         return null;
     }
 
+    // Canonical v1 timeline formatter:
+    // planner/tool/generation with status and optional per-step duration.
     return traceData.execution
         .map((event) => {
             const durationSuffix =

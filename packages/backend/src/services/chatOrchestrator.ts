@@ -159,6 +159,8 @@ export const createChatOrchestrator = ({
     const runChat = async (
         request: PostChatRequest
     ): Promise<PostChatResponse> => {
+        // Total wall-clock budget for this request from planner entry to
+        // final response payload. This is exposed as telemetry only.
         const orchestrationStartedAt = Date.now();
         const normalizedConversation =
             request.surface === 'discord'
@@ -184,7 +186,8 @@ export const createChatOrchestrator = ({
             chatOrchestratorLogger
         );
         // Planner-selected profile is advisory.
-        // Runtime resolution here is authoritative and fail-open.
+        // Runtime resolution here is authoritative and fail-open:
+        // unknown/disabled profile ids never hard-fail the request.
         let selectedResponseProfile = defaultResponseProfile;
         if (plan.profileId) {
             const selectedProfile = enabledProfilesById.get(plan.profileId);
@@ -202,8 +205,9 @@ export const createChatOrchestrator = ({
             }
         }
 
-        // Keep selected profile, but drop search when profile capabilities do
-        // not allow it. This avoids silently forcing a different model.
+        // Capability policy for this branch:
+        // keep the selected profile, but drop search when capabilities disallow
+        // it, instead of silently switching to a different profile/model.
         let generationForExecution: ChatGenerationPlan = plan.generation;
         let toolExecutionContext:
             | {
@@ -351,6 +355,8 @@ export const createChatOrchestrator = ({
             capabilities: selectedResponseProfile.capabilities,
             generation: executionPlan.generation,
             executionContext: {
+                // Planner execution metadata is sourced from ChatPlannerResult
+                // so traces can distinguish successful planning from fallback.
                 planner: {
                     status: plannerExecution.status,
                     ...(plannerExecution.reasonCode !== undefined && {
@@ -362,6 +368,8 @@ export const createChatOrchestrator = ({
                     durationMs: plannerExecution.durationMs,
                 },
                 generation: {
+                    // Generation starts as "executed" at orchestration level.
+                    // ChatService injects runtime-resolved model + duration.
                     status: 'executed',
                     profileId: selectedResponseProfile.id,
                     provider: selectedResponseProfile.provider,
@@ -376,6 +384,8 @@ export const createChatOrchestrator = ({
             0,
             Date.now() - orchestrationStartedAt
         );
+        // Total duration is persisted to metadata for UI visibility and
+        // troubleshooting; it is not used to alter request behavior.
         response.metadata.totalDurationMs = totalDurationMs;
         chatOrchestratorLogger.info('chat.orchestration.timing', {
             surface: normalizedRequest.surface,

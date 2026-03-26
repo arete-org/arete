@@ -225,6 +225,8 @@ export const createChatService = ({
         // One runtime call produces both user-visible text and metadata inputs.
         const generationResult =
             await generationRuntime.generate(generationRequest);
+        // Generation duration is measured at the runtime boundary only.
+        // It intentionally excludes planner time and pre/post processing.
         const generationDurationMs = Date.now() - generationStartedAt;
         const totalDurationMs =
             orchestrationStartedAtMs !== undefined
@@ -245,10 +247,13 @@ export const createChatService = ({
                   ResponseMetadataRuntimeContext['executionContext']
               >['tool']
             | undefined =
+            // Respect an explicit upstream skip reason from orchestrator first.
             executionContext?.tool?.status === 'skipped'
                 ? executionContext.tool
                 : hasSearchIntent
                   ? {
+                        // When search was requested, infer tool execution from
+                        // retrieval usage signals reported by the runtime.
                         toolName: 'web_search',
                         status: retrievalUsed ? 'executed' : 'skipped',
                         ...(retrievalUsed
@@ -302,6 +307,8 @@ export const createChatService = ({
             ...(totalDurationMs !== undefined && { totalDurationMs }),
             plannerTemperament,
             executionContext: {
+                // Preserve upstream execution context and overlay runtime facts
+                // (for example, generation duration + final resolved model).
                 ...executionContext,
                 ...(effectiveGenerationExecutionContext !== undefined && {
                     generation: effectiveGenerationExecutionContext,
