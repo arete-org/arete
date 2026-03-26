@@ -45,7 +45,8 @@ const isChatApiResponse = (
     Boolean(
         value &&
             typeof value === 'object' &&
-            typeof (value as { action?: unknown }).action === 'string'
+            typeof (value as { action?: unknown }).action === 'string' &&
+            (value as { action: string }).action.trim().length > 0
     );
 
 export const createChatApi = (
