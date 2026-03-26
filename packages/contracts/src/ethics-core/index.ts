@@ -16,5 +16,6 @@ export type {
     TraceAxisScore,
     ResponseTemperament,
     PartialResponseTemperament,
+    ExecutionEvent,
     ResponseMetadata,
 } from './types.js';

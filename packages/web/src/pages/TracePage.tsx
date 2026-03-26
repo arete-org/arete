@@ -39,6 +39,33 @@ type ServerMetadata = GetTraceResponse & {
 // React page can consume the JSON payload without re-defining the entire schema.
 type SerializableResponseMetadata = ServerMetadata;
 
+const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
+    const generationEventModel = traceData.execution
+        ?.filter((event) => event.kind === 'generation')
+        .at(-1)?.model;
+    return (
+        generationEventModel ||
+        traceData.model ||
+        traceData.modelVersion ||
+        'Unspecified'
+    );
+};
+
+const resolveExecutionSummary = (traceData: ServerMetadata): string | null => {
+    if (!traceData.execution || traceData.execution.length === 0) {
+        return null;
+    }
+
+    return traceData.execution
+        .map((event) => {
+            if (event.kind === 'tool') {
+                return `${event.kind}:${event.toolName ?? 'tool'}(${event.status})`;
+            }
+            return `${event.kind}:${event.model ?? event.profileId ?? event.provider ?? 'unknown'}(${event.status})`;
+        })
+        .join(' -> ');
+};
+
 const tracePageLogger = createScopedLogger('TracePage');
 
 // Helper to extract payload from 410 (stale) responses
@@ -327,7 +354,8 @@ const TracePage = (): JSX.Element => {
     const riskColor = RISK_TIER_COLORS[normalizedRiskTier] ?? '#6b7280';
     const provenance =
         traceData?.provenance || traceData?.reasoningEffort || 'Unknown';
-    const model = traceData?.model || traceData?.modelVersion || 'Unspecified';
+    const model = resolveTraceModelLabel(traceData);
+    const executionSummary = resolveExecutionSummary(traceData);
     const riskLabel = riskTier || 'Unspecified';
     const chainHash =
         traceData?.chainHash || traceData?.chainHash === ''
@@ -385,6 +413,11 @@ const TracePage = (): JSX.Element => {
                 <p>
                     <strong>Model:</strong> {model}
                 </p>
+                {executionSummary && (
+                    <p>
+                        <strong>Execution:</strong> {executionSummary}
+                    </p>
+                )}
             </article>
 
             <article className="card" aria-label="Citations">

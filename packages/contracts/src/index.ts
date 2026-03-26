@@ -15,6 +15,7 @@ export type {
     Provenance,
     RiskTier,
     Citation,
+    ExecutionEvent,
     TraceAxisScore,
     PartialResponseTemperament,
     ResponseTemperament,

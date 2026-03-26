@@ -12,6 +12,7 @@ import type {
     ResponseMetadata,
     RiskTier,
     Citation,
+    ExecutionEvent,
 } from '@footnote/contracts/ethics-core';
 
 interface ProvenanceFooterProps {
@@ -23,6 +24,17 @@ const RISK_TIER_COLORS: Record<RiskTier, string> = {
     Low: '#7FDCA4', // Sage green
     Medium: '#F8E37C', // Warm gold
     High: '#E27C7C', // Soft coral
+};
+
+const formatExecutionEvent = (event: ExecutionEvent): string => {
+    if (event.kind === 'tool') {
+        const tool = event.toolName ?? 'tool';
+        return `${event.kind}:${tool}(${event.status})`;
+    }
+
+    const modelOrProfile =
+        event.model ?? event.profileId ?? event.provider ?? 'unknown';
+    return `${event.kind}:${modelOrProfile}(${event.status})`;
 };
 
 const ProvenanceFooter = ({
@@ -73,6 +85,10 @@ const ProvenanceFooter = ({
             }
         });
     }
+    const executionSummary =
+        metadata.execution && metadata.execution.length > 0
+            ? metadata.execution.map(formatExecutionEvent).join(' -> ')
+            : null;
 
     return (
         <aside
@@ -120,7 +136,15 @@ const ProvenanceFooter = ({
             </div>
 
             <div className="provenance-meta">
-                {metadata.modelVersion &&
+                {executionSummary ? (
+                    <>
+                        <span className="provenance-model">
+                            {executionSummary}
+                        </span>
+                        <span className="provenance-separator"> • </span>
+                    </>
+                ) : (
+                    metadata.modelVersion &&
                     metadata.modelVersion.trim() !== '' && (
                         <>
                             <span className="provenance-model">
@@ -128,7 +152,8 @@ const ProvenanceFooter = ({
                             </span>
                             <span className="provenance-separator"> • </span>
                         </>
-                    )}
+                    )
+                )}
                 {metadata.chainHash && metadata.chainHash.trim() !== '' && (
                     <>
                         <span className="provenance-hash">

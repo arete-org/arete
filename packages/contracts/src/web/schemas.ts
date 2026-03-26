@@ -136,6 +136,29 @@ const ResponseTemperamentSchema = z
     })
     .strict();
 const PartialResponseTemperamentSchema = ResponseTemperamentSchema.partial();
+const ExecutionEventSchema = z
+    .object({
+        kind: z.enum(['planner', 'tool', 'generation']),
+        status: z.enum(['executed', 'skipped', 'failed']),
+        profileId: z.string().min(1).optional(),
+        provider: z.string().min(1).optional(),
+        model: z.string().min(1).optional(),
+        toolName: z.string().min(1).optional(),
+        reasonCode: z.string().min(1).optional(),
+    })
+    .superRefine((value, context) => {
+        if (
+            (value.status === 'skipped' || value.status === 'failed') &&
+            !value.reasonCode
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message:
+                    'reasonCode is required when execution status is skipped or failed.',
+            });
+        }
+    })
+    .strict();
 
 const responseMetadataShape = {
     responseId: z.string().min(1),
@@ -147,6 +170,7 @@ const responseMetadataShape = {
     modelVersion: z.string(),
     staleAfter: z.string(),
     citations: z.array(CitationSchema),
+    execution: z.array(ExecutionEventSchema).optional(),
     imageDescriptions: z.array(z.string()).optional(),
     evidenceScore: TraceAxisScoreSchema.optional(),
     freshnessScore: TraceAxisScoreSchema.optional(),

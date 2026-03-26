@@ -14,6 +14,7 @@ import type { PostChatRequest } from '@footnote/contracts/web';
 import type { BotProfileConfig } from '../src/config/profile.js';
 import { runtimeConfig } from '../src/config.js';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
+import type { ResponseMetadataRuntimeContext } from '../src/services/openaiService.js';
 import { renderConversationPromptLayers } from '../src/services/prompts/conversationPromptLayers.js';
 import { logger } from '../src/utils/logger.js';
 
@@ -254,6 +255,9 @@ test('message plans pass planner generation options into chatService', async () 
 
 test('planner-selected profile id controls response model selection', async () => {
     let observedResponseModel: string | undefined;
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
     const selectedProfile =
         runtimeConfig.modelProfiles.catalog.find(
             (profile) => profile.id === 'openai-text-quality' && profile.enabled
@@ -297,7 +301,10 @@ test('planner-selected profile id controls response model selection', async () =
             };
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: () => createMetadata(),
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedExecutionContext = runtimeContext.executionContext;
+            return createMetadata();
+        },
         defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
         recordUsage: () => undefined,
     });
@@ -306,6 +313,14 @@ test('planner-selected profile id controls response model selection', async () =
 
     assert.equal(response.action, 'message');
     assert.equal(observedResponseModel, selectedProfile.providerModel);
+    assert.equal(
+        capturedExecutionContext?.planner?.profileId,
+        'openai-text-fast'
+    );
+    assert.equal(
+        capturedExecutionContext?.generation?.profileId,
+        selectedProfile.id
+    );
 });
 
 test('invalid planner-selected profile id falls back to default response profile', async () => {
@@ -380,6 +395,9 @@ test('invalid planner-selected profile id falls back to default response profile
 
 test('search is dropped when selected profile does not support search', async () => {
     let observedSearch: unknown;
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
     const warnings: Array<{ message: string; meta?: unknown }> = [];
     const originalWarn = logger.warn;
     const originalModelProfiles = runtimeConfig.modelProfiles;
@@ -450,7 +468,10 @@ test('search is dropped when selected profile does not support search', async ()
                 };
             }),
             storeTrace: async () => undefined,
-            buildResponseMetadata: () => createMetadata(),
+            buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+                capturedExecutionContext = runtimeContext.executionContext;
+                return createMetadata();
+            },
             defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
             recordUsage: () => undefined,
         });
@@ -466,6 +487,11 @@ test('search is dropped when selected profile does not support search', async ()
         /selected profile does not support search/i.test(warning.message)
     );
     assert.ok(mismatchWarning);
+    assert.deepEqual(capturedExecutionContext?.tool, {
+        toolName: 'web_search',
+        status: 'skipped',
+        reasonCode: 'search_not_supported_by_selected_profile',
+    });
 });
 
 test('discord requests use backend profile overlay when runtime overlay is configured', async () => {

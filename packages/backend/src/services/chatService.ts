@@ -122,6 +122,7 @@ export type RunChatMessagesInput = {
     provider?: SupportedProvider;
     capabilities?: ModelProfileCapabilities;
     generation?: ChatGenerationPlan;
+    executionContext?: ResponseMetadataRuntimeContext['executionContext'];
 };
 
 /**
@@ -177,6 +178,7 @@ export const createChatService = ({
         provider,
         capabilities,
         generation,
+        executionContext,
     }: RunChatMessagesInput): Promise<{
         message: string;
         metadata: ResponseMetadata;
@@ -224,8 +226,35 @@ export const createChatService = ({
             normalizedGeneration,
             generationRequest.model
         );
+        const retrievalUsed =
+            generationResult.retrieval?.used === true ||
+            generationResult.provenance === 'Retrieved' ||
+            (generationResult.citations?.length ?? 0) > 0;
+        const hasSearchIntent = normalizedGeneration?.search !== undefined;
+        const effectiveToolExecutionContext =
+            executionContext?.tool?.status === 'skipped'
+                ? executionContext.tool
+                : hasSearchIntent
+                  ? {
+                        toolName: 'web_search',
+                        status: (retrievalUsed ? 'executed' : 'skipped') as
+                            | 'executed'
+                            | 'skipped',
+                        ...(retrievalUsed
+                            ? {}
+                            : {
+                                  reasonCode: 'tool_not_used',
+                              }),
+                    }
+                  : undefined;
 
         const usageModel = assistantMetadata.model || defaultModel;
+        const effectiveGenerationExecutionContext = executionContext?.generation
+            ? {
+                  ...executionContext.generation,
+                  model: usageModel,
+              }
+            : undefined;
         const promptTokens = assistantMetadata.usage?.promptTokens ?? 0;
         const completionTokens = assistantMetadata.usage?.completionTokens ?? 0;
         const totalTokens =
@@ -259,12 +288,18 @@ export const createChatService = ({
             modelVersion: usageModel,
             conversationSnapshot: `${conversationSnapshot}\n\n${generationResult.text}`,
             plannerTemperament,
+            executionContext: {
+                ...executionContext,
+                ...(effectiveGenerationExecutionContext !== undefined && {
+                    generation: effectiveGenerationExecutionContext,
+                }),
+                ...(effectiveToolExecutionContext !== undefined && {
+                    tool: effectiveToolExecutionContext,
+                }),
+            },
             retrieval: {
-                requested: normalizedGeneration?.search !== undefined,
-                used:
-                    generationResult.retrieval?.used === true ||
-                    generationResult.provenance === 'Retrieved' ||
-                    (generationResult.citations?.length ?? 0) > 0,
+                requested: hasSearchIntent,
+                used: retrievalUsed,
                 intent: normalizedGeneration?.search?.intent,
                 contextSize: normalizedGeneration?.search?.contextSize,
             },

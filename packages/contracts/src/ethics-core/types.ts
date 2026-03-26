@@ -58,6 +58,22 @@ export type ResponseTemperament = {
 export type PartialResponseTemperament = Partial<ResponseTemperament>;
 
 /**
+ * One backend-owned execution timeline entry for this response.
+ *
+ * This v1 shape is intentionally compact and is expected to grow once
+ * workflow-based execution is enabled (lineage, timing, and per-step usage).
+ */
+export type ExecutionEvent = {
+    kind: 'planner' | 'tool' | 'generation';
+    status: 'executed' | 'skipped' | 'failed';
+    profileId?: string;
+    provider?: string;
+    model?: string;
+    toolName?: string;
+    reasonCode?: string;
+};
+
+/**
  * ResponseMetadata is the compact record attached to a model response.
  */
 export type ResponseMetadata = {
@@ -67,9 +83,10 @@ export type ResponseMetadata = {
     tradeoffCount: number; // Number of trade-offs the model surfaced.
     chainHash: string; // Short hash to help detect tampering.
     licenseContext: string; // Human-readable license label.
-    modelVersion: string; // The model id or version string.
+    modelVersion: string; // Compatibility mirror of the final generation model.
     staleAfter: string; // ISO timestamp after which the data is stale.
     citations: Citation[]; // Sources used for the answer.
+    execution?: ExecutionEvent[]; // Canonical execution timeline for model/tool visibility.
     imageDescriptions?: string[]; // Optional captions for any images used.
     evidenceScore?: TraceAxisScore; // Optional TRACE evidence chip score (1..5).
     freshnessScore?: TraceAxisScore; // Optional TRACE freshness chip score (1..5).

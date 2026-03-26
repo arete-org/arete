@@ -180,3 +180,90 @@ test('buildResponseMetadata defaults tradeoffCount to 0 when assistant and plann
 
     assert.equal(metadata.tradeoffCount, 0);
 });
+
+test('buildResponseMetadata writes execution timeline from runtime context', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                planner: {
+                    profileId: 'openai-text-fast',
+                    provider: 'openai',
+                    model: 'gpt-5-nano',
+                },
+                tool: {
+                    toolName: 'web_search',
+                    status: 'executed',
+                },
+                generation: {
+                    profileId: 'openai-text-medium',
+                    provider: 'openai',
+                    model: 'gpt-5-mini',
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'planner',
+            status: 'executed',
+            profileId: 'openai-text-fast',
+            provider: 'openai',
+            model: 'gpt-5-nano',
+        },
+        {
+            kind: 'tool',
+            status: 'executed',
+            toolName: 'web_search',
+        },
+        {
+            kind: 'generation',
+            status: 'executed',
+            profileId: 'openai-text-medium',
+            provider: 'openai',
+            model: 'gpt-5-mini',
+        },
+    ]);
+});
+
+test('buildResponseMetadata mirrors modelVersion from final generation execution model', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata({ model: 'fallback-model' }),
+        baseRuntimeContext({
+            modelVersion: 'runtime-fallback-model',
+            executionContext: {
+                generation: {
+                    profileId: 'openai-text-quality',
+                    provider: 'openai',
+                    model: 'gpt-5.4-mini',
+                },
+            },
+        })
+    );
+
+    assert.equal(metadata.modelVersion, 'gpt-5.4-mini');
+});
+
+test('buildResponseMetadata normalizes skipped tool event with fallback reasonCode', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                tool: {
+                    toolName: 'web_search',
+                    status: 'skipped',
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'tool',
+            status: 'skipped',
+            toolName: 'web_search',
+            reasonCode: 'unspecified_tool_outcome',
+        },
+    ]);
+});

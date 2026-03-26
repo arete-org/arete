@@ -14,6 +14,7 @@ import type {
 } from '@footnote/agent-runtime';
 import type {
     Citation,
+    ExecutionEvent,
     PartialResponseTemperament,
     Provenance,
     ResponseMetadata,
@@ -626,6 +627,23 @@ type ResponseMetadataRuntimeContext = {
     conversationSnapshot: string;
     plannerTemperament?: PartialResponseTemperament;
     retrieval?: ResponseMetadataRetrievalContext;
+    executionContext?: {
+        planner?: {
+            profileId: string;
+            provider: string;
+            model: string;
+        };
+        generation?: {
+            profileId: string;
+            provider: string;
+            model: string;
+        };
+        tool?: {
+            toolName: string;
+            status: 'executed' | 'skipped' | 'failed';
+            reasonCode?: string;
+        };
+    };
 };
 
 /**
@@ -700,6 +718,48 @@ const buildResponseMetadata = (
 
     const riskTier: RiskTier = 'Low';
     const licenseContext = 'MIT + HL3';
+    const execution: ExecutionEvent[] = [];
+    const plannerExecution = runtimeContext.executionContext?.planner;
+    if (plannerExecution) {
+        execution.push({
+            kind: 'planner',
+            status: 'executed',
+            profileId: plannerExecution.profileId,
+            provider: plannerExecution.provider,
+            model: plannerExecution.model,
+        });
+    }
+    const toolExecution = runtimeContext.executionContext?.tool;
+    if (toolExecution) {
+        const normalizedToolReasonCode =
+            toolExecution.status === 'executed'
+                ? undefined
+                : (toolExecution.reasonCode ?? 'unspecified_tool_outcome');
+        execution.push({
+            kind: 'tool',
+            status: toolExecution.status,
+            toolName: toolExecution.toolName,
+            ...(normalizedToolReasonCode !== undefined && {
+                reasonCode: normalizedToolReasonCode,
+            }),
+        });
+    }
+    const generationExecution = runtimeContext.executionContext?.generation;
+    if (generationExecution) {
+        execution.push({
+            kind: 'generation',
+            status: 'executed',
+            profileId: generationExecution.profileId,
+            provider: generationExecution.provider,
+            model: generationExecution.model,
+        });
+    }
+    // TODO(workflow-execution-metadata): Extend execution events with lineage
+    // (id/parentId), timing (startedAt/finishedAt), and per-step usage/cost
+    // once multi-step workflow execution is enabled.
+    const generationEventModel = execution
+        .filter((event) => event.kind === 'generation')
+        .at(-1)?.model;
 
     return {
         responseId,
@@ -708,10 +768,15 @@ const buildResponseMetadata = (
         tradeoffCount,
         chainHash,
         licenseContext,
+        // TODO(workflow-execution-metadata): Remove modelVersion once all
+        // metadata consumers have migrated to execution[] as canonical.
         modelVersion:
-            runtimeContext.modelVersion || runtimeConfig.openai.defaultModel,
+            generationEventModel ??
+            runtimeContext.modelVersion ??
+            runtimeConfig.openai.defaultModel,
         staleAfter: new Date(Date.now() + ninetyDaysMs).toISOString(),
         citations,
+        ...(execution.length > 0 && { execution }),
         ...(temperament && { temperament }),
         ...(finalEvidenceScore !== undefined && {
             evidenceScore: finalEvidenceScore,

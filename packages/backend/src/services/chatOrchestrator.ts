@@ -199,6 +199,13 @@ export const createChatOrchestrator = ({
         // Keep selected profile, but drop search when profile capabilities do
         // not allow it. This avoids silently forcing a different model.
         let generationForExecution: ChatGenerationPlan = plan.generation;
+        let toolExecutionContext:
+            | {
+                  toolName: 'web_search';
+                  status: 'executed' | 'skipped' | 'failed';
+                  reasonCode?: string;
+              }
+            | undefined;
         if (
             generationForExecution.search &&
             !selectedResponseProfile.capabilities.canUseSearch
@@ -210,6 +217,11 @@ export const createChatOrchestrator = ({
             generationForExecution = {
                 ...generationForExecution,
                 search: undefined,
+            };
+            toolExecutionContext = {
+                toolName: 'web_search',
+                status: 'skipped',
+                reasonCode: 'search_not_supported_by_selected_profile',
             };
             chatOrchestratorLogger.warn(
                 'planner requested search but selected profile does not support search; running without search',
@@ -331,6 +343,21 @@ export const createChatOrchestrator = ({
             provider: selectedResponseProfile.provider,
             capabilities: selectedResponseProfile.capabilities,
             generation: executionPlan.generation,
+            executionContext: {
+                planner: {
+                    profileId: plannerProfile.id,
+                    provider: plannerProfile.provider,
+                    model: plannerProfile.providerModel,
+                },
+                generation: {
+                    profileId: selectedResponseProfile.id,
+                    provider: selectedResponseProfile.provider,
+                    model: selectedResponseProfile.providerModel,
+                },
+                ...(toolExecutionContext !== undefined && {
+                    tool: toolExecutionContext,
+                }),
+            },
         });
 
         // Message action is the only branch that returns provenance metadata.

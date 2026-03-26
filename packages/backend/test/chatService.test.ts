@@ -17,6 +17,7 @@ import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import {
     buildResponseMetadata,
     type ResponseMetadataRetrievalContext,
+    type ResponseMetadataRuntimeContext,
 } from '../src/services/openaiService.js';
 import { createChatService } from '../src/services/chatService.js';
 import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
@@ -266,6 +267,89 @@ test('runChatMessages passes non-retrieval facts for plain VoltAgent-backed runs
         used: false,
         intent: undefined,
         contextSize: undefined,
+    });
+});
+
+test('runChatMessages forwards execution context into metadata runtime context', async () => {
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
+
+    const chatService = createChatService({
+        generationRuntime: createRuntime(),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedExecutionContext = runtimeContext.executionContext;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'What changed?' }],
+        conversationSnapshot: 'What changed?',
+        executionContext: {
+            planner: {
+                profileId: 'openai-text-fast',
+                provider: 'openai',
+                model: 'gpt-5-nano',
+            },
+            generation: {
+                profileId: 'openai-text-medium',
+                provider: 'openai',
+                model: 'gpt-5-mini',
+            },
+        },
+    });
+
+    assert.deepEqual(capturedExecutionContext?.planner, {
+        profileId: 'openai-text-fast',
+        provider: 'openai',
+        model: 'gpt-5-nano',
+    });
+    assert.deepEqual(capturedExecutionContext?.generation, {
+        profileId: 'openai-text-medium',
+        provider: 'openai',
+        model: 'gpt-5-mini',
+    });
+});
+
+test('runChatMessages marks tool execution as executed when retrieval was used', async () => {
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
+
+    const chatService = createChatService({
+        generationRuntime: createRuntime({
+            provenance: 'Retrieved',
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedExecutionContext = runtimeContext.executionContext;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Search this.' }],
+        conversationSnapshot: 'Search this.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            search: {
+                query: 'latest updates',
+                contextSize: 'low',
+                intent: 'current_facts',
+            },
+        },
+    });
+
+    assert.deepEqual(capturedExecutionContext?.tool, {
+        toolName: 'web_search',
+        status: 'executed',
     });
 });
 
