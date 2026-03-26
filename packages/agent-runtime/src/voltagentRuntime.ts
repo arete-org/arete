@@ -770,6 +770,18 @@ const createVoltAgentRuntime = ({
             });
             const selectedModel = modelResolution.selectedModel;
             if (!selectedModel) {
+                const trimmedRequestedModel = request.model?.trim();
+                if (
+                    trimmedRequestedModel !== undefined &&
+                    trimmedRequestedModel.length > 0 &&
+                    isVoltAgentModelTier(trimmedRequestedModel) &&
+                    modelResolution.missingTierAlias !== undefined
+                ) {
+                    throw new Error(
+                        `VoltAgent runtime could not resolve tier alias "${trimmedRequestedModel}". Cause: requested model is a tier alias with no mapping or defaultModel configured. Fix: configure a mapping for this tier alias in modelTiers, set a non-empty defaultModel, or pass a concrete model name in request.model.`
+                    );
+                }
+
                 throw new Error(
                     'VoltAgent runtime requires request.model or a configured defaultModel.'
                 );
