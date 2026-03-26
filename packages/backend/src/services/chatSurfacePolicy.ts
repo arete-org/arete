@@ -44,6 +44,7 @@ export const coercePlanForSurface = (
         reaction: undefined,
         imageRequest: undefined,
         generation: {
+            ...plan.generation,
             reasoningEffort: 'low',
             verbosity: 'low',
         },
