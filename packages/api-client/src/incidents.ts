@@ -86,17 +86,17 @@ const toIncidentQueryString = (filters?: {
     }
 
     const params = new URLSearchParams();
-    if (filters.status) {
-        params.set('status', filters.status);
-    }
-    if (filters.tag) {
-        params.set('tag', filters.tag);
-    }
-    if (filters.createdFrom) {
-        params.set('createdFrom', filters.createdFrom);
-    }
-    if (filters.createdTo) {
-        params.set('createdTo', filters.createdTo);
+    for (const [key, value] of Object.entries(filters)) {
+        if (value === undefined || value === null) {
+            continue;
+        }
+
+        const normalizedValue = String(value).trim();
+        if (normalizedValue.length === 0) {
+            continue;
+        }
+
+        params.set(key, normalizedValue);
     }
 
     const query = params.toString();
