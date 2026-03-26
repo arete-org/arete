@@ -17,15 +17,7 @@ export type { CreateInternalVoiceApiOptions, InternalVoiceApi };
 export const createInternalVoiceApi = (
     requestJson: ApiRequester,
     { traceApiToken }: CreateInternalVoiceApiOptions = {}
-): InternalVoiceApi => {
-    const shared = createSharedInternalVoiceApi(requestJson, { traceApiToken });
-
-    const runVoiceTtsViaApi: InternalVoiceApi['runVoiceTtsViaApi'] = (
-        request,
-        options
-    ) => shared.runVoiceTtsViaApi(request, options);
-
-    return {
-        runVoiceTtsViaApi,
-    };
-};
+): InternalVoiceApi =>
+    createSharedInternalVoiceApi(requestJson, {
+        traceApiToken,
+    });
