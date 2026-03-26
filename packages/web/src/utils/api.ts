@@ -7,7 +7,7 @@
  */
 import {
     createWebApiClient as createSharedWebApiClient,
-    isApiClientError,
+    isApiClientError as isSharedApiClientError,
     type ApiJsonResult,
     type ApiClientError,
     type ApiErrorResponse,
@@ -23,7 +23,9 @@ import type {
     PostChatResponse,
 } from '@footnote/contracts/web';
 
-export { isApiClientError };
+export const isApiClientError = (
+    value: unknown
+): value is ApiClientError => isSharedApiClientError(value, 'ApiClientError');
 
 // Keep this thin local wrapper so web can add surface-specific behavior later
 // (telemetry, headers, retries, or method overrides) without changing imports.
