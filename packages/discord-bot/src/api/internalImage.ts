@@ -10,13 +10,13 @@ import {
     type CreateInternalImageApiOptions,
     type InternalImageApi,
 } from '@footnote/api-client';
-import type { ApiRequester } from './client.js';
+import type { ApiRequester, CreateApiTransportOptions } from './client.js';
 
 export type { CreateInternalImageApiOptions, InternalImageApi };
 
 export const createInternalImageApi = (
     requestJson: ApiRequester,
-    options: CreateInternalImageApiOptions
+    options: CreateInternalImageApiOptions & CreateApiTransportOptions
 ): InternalImageApi => {
     const shared = createSharedInternalImageApi(requestJson, options);
 

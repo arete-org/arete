@@ -15,15 +15,19 @@ import {
     PostInternalImageGenerateResponseSchema,
     createSchemaResponseValidator,
 } from '@footnote/contracts/web/schemas';
-import type { ApiRequester } from './client.js';
+import type {
+    ApiRequester,
+    CreateApiTransportOptions,
+} from './client.js';
 
 export type CreateInternalImageApiOptions = {
     traceApiToken?: string;
-    baseUrl: string;
-    defaultHeaders?: Record<string, string>;
-    defaultTimeoutMs?: number;
-    fetchImpl?: typeof fetch;
 };
+
+type CreateInternalImageApiFactoryOptions = CreateInternalImageApiOptions &
+    CreateApiTransportOptions & {
+        baseUrl: string;
+    };
 
 export type InternalImageApi = {
     runImageTaskViaApi: (
@@ -94,7 +98,7 @@ export const createInternalImageApi = (
         defaultHeaders,
         defaultTimeoutMs = DEFAULT_TIMEOUT_MS,
         fetchImpl = fetch,
-    }: CreateInternalImageApiOptions
+    }: CreateInternalImageApiFactoryOptions
 ): InternalImageApi => {
     const headers = buildTrustedHeaders(traceApiToken);
     const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
