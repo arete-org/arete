@@ -1,0 +1,42 @@
+profiles:
+    - id: openai-text-fast
+      description: Fast text profile for simple tasks.
+      provider: openai
+      providerModel: gpt-5-nano
+      enabled: true
+      tierBindings:
+          - text-fast
+      capabilities:
+          canUseSearch: true
+      # maxInputTokens:
+      maxOutputTokens: 128000
+      costClass: low
+      latencyClass: low
+
+    - id: openai-text-medium
+      description: Medium-quality text profile for regular conversation.
+      provider: openai
+      providerModel: gpt-5-mini
+      enabled: true
+      tierBindings:
+          - text-medium
+      capabilities:
+          canUseSearch: true
+      # maxInputTokens:
+      maxOutputTokens: 128000
+      costClass: medium
+      latencyClass: medium
+
+    - id: openai-text-quality
+      description: Higher-quality text profile for deeper responses.
+      provider: openai
+      providerModel: gpt-5.4-mini
+      enabled: true
+      tierBindings:
+          - text-quality
+      capabilities:
+          canUseSearch: true
+      # maxInputTokens:
+      maxOutputTokens: 128000
+      costClass: high
+      latencyClass: high

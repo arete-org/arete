@@ -206,6 +206,10 @@ test('runChatMessages passes structured retrieval facts into response metadata r
     await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'What changed today?' }],
         conversationSnapshot: 'What changed today?',
+        provider: 'openai',
+        capabilities: {
+            canUseSearch: true,
+        },
         generation: {
             reasoningEffort: 'medium',
             verbosity: 'medium',
@@ -316,6 +320,10 @@ test('runChatMessages adds a backend repo-explainer response hint', async () => 
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
+        defaultProvider: 'openai',
+        defaultCapabilities: {
+            canUseSearch: true,
+        },
         recordUsage: () => undefined,
     });
 
@@ -371,6 +379,10 @@ test('runChatMessages forwards planner-selected generation settings to Generatio
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
+        defaultProvider: 'openai',
+        defaultCapabilities: {
+            canUseSearch: true,
+        },
         recordUsage: () => undefined,
     });
 
@@ -392,6 +404,8 @@ test('runChatMessages forwards planner-selected generation settings to Generatio
     assert.ok(seenRequest?.search);
     assert.equal(seenRequest?.reasoningEffort, 'medium');
     assert.equal(seenRequest?.verbosity, 'medium');
+    assert.equal(seenRequest?.provider, 'openai');
+    assert.equal(seenRequest?.capabilities?.canUseSearch, true);
     assert.equal(seenRequest?.search?.query, 'latest OpenAI policy update');
     assert.equal(seenRequest?.search?.intent, 'current_facts');
 });
@@ -549,6 +563,9 @@ test('runChatMessages stores evidence and freshness chips for retrieved search r
         },
         buildResponseMetadata,
         defaultModel: 'gpt-5-mini',
+        defaultCapabilities: {
+            canUseSearch: true,
+        },
         recordUsage: () => undefined,
     });
 

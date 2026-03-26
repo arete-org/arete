@@ -68,6 +68,35 @@ test('voltagent runtime maps transcript and generation settings into executor op
     assert.equal(result.model, 'gpt-5.1');
 });
 
+test('voltagent runtime prefixes model with requested provider when model id is provider-local', async () => {
+    let seenModel: string | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'gpt-5-mini',
+        createExecutor: ({ model }) => {
+            seenModel = model;
+            return {
+                async generateText() {
+                    return {
+                        text: 'provider-routed reply',
+                        response: {
+                            modelId: model,
+                        },
+                    };
+                },
+            };
+        },
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        model: 'claude-3-5-sonnet',
+        provider: 'openai',
+    });
+
+    assert.equal(seenModel, 'openai/claude-3-5-sonnet');
+    assert.equal(result.model, 'claude-3-5-sonnet');
+});
+
 test('voltagent runtime resolves model tiers through adapter-owned configuration', async () => {
     let seenModel: string | undefined;
     const runtime = createVoltAgentRuntime({
@@ -235,6 +264,9 @@ test('voltagent runtime executes search requests through the VoltAgent executor'
         messages: [
             { role: 'user', content: 'Find the latest policy changes.' },
         ],
+        capabilities: {
+            canUseSearch: true,
+        },
         search: {
             query: 'latest policy changes',
             contextSize: 'low',
@@ -296,6 +328,39 @@ test('voltagent runtime omits openai-only options for non-openai models', async 
     assert.equal(seenOptions?.search, undefined);
 });
 
+test('voltagent runtime does not forward search for providers without a mapped search tool', async () => {
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'anthropic/claude-3-5-sonnet',
+        createExecutor: () => ({
+            async generateText(_messages, options) {
+                seenOptions = options;
+                return {
+                    text: 'capability-enabled search reply',
+                    response: {
+                        modelId: 'anthropic/claude-3-5-sonnet',
+                    },
+                };
+            },
+        }),
+    });
+
+    await runtime.generate({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        model: 'anthropic/claude-3-5-sonnet',
+        search: {
+            query: 'latest release notes',
+            contextSize: 'high',
+            intent: 'current_facts',
+        },
+        capabilities: {
+            canUseSearch: true,
+        },
+    });
+
+    assert.equal(seenOptions?.search, undefined);
+});
+
 test('voltagent runtime recovers markdown-link citations when retrieved output lacks structured sources', async () => {
     const runtime = createVoltAgentRuntime({
         defaultModel: 'gpt-5-mini',
@@ -316,6 +381,9 @@ test('voltagent runtime recovers markdown-link citations when retrieved output l
 
     const result = await runtime.generate({
         messages: [{ role: 'user', content: 'What changed today?' }],
+        capabilities: {
+            canUseSearch: true,
+        },
         search: {
             query: 'latest changes today',
             contextSize: 'low',
@@ -350,6 +418,9 @@ test('voltagent runtime ignores malformed bracket-heavy markdown without falling
 
     const result = await runtime.generate({
         messages: [{ role: 'user', content: 'What changed today?' }],
+        capabilities: {
+            canUseSearch: true,
+        },
         search: {
             query: 'latest changes today',
             contextSize: 'low',

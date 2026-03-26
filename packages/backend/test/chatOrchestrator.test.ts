@@ -163,6 +163,14 @@ test('discord requests preserve non-message planner actions', async () => {
 
 test('message plans pass planner generation options into chatService', async () => {
     let finalMessages: Array<{ role: string; content: string }> = [];
+    const plannerProfile =
+        runtimeConfig.modelProfiles.catalog.find(
+            (profile) =>
+                profile.id === runtimeConfig.modelProfiles.defaultProfileId &&
+                profile.enabled
+        ) ??
+        runtimeConfig.modelProfiles.catalog.find((profile) => profile.enabled);
+    assert.ok(plannerProfile);
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
@@ -198,6 +206,8 @@ test('message plans pass planner generation options into chatService', async () 
             assert.equal(request.search.intent, 'current_facts');
             assert.equal(request.reasoningEffort, 'medium');
             assert.equal(request.verbosity, 'medium');
+            assert.equal(request.provider, plannerProfile.provider);
+            assert.equal(request.capabilities?.canUseSearch, true);
             return {
                 text: 'message with retrieval',
                 model: 'gpt-5-mini',
@@ -368,7 +378,7 @@ test('discord profileId mismatch warns and falls back to backend runtime profile
         );
 
         assert.equal(warnings.length, 1);
-        assert.match(warnings[0] ?? '', /does not match backend runtime profile/i);
+        assert.equal(warnings[0], 'profile id mismatch');
         assert.match(finalMessages[1]?.content ?? '', /Profile ID: ari-vendor/);
     } finally {
         logger.warn = originalWarn;

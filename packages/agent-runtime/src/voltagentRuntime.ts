@@ -146,6 +146,8 @@ export interface CreateVoltAgentRuntimeOptions {
     /**
      * Optional capability-tier aliases that resolve to concrete provider/model
      * ids inside the runtime adapter (for example, "text-fast").
+     * @deprecated Backend model-profile catalog resolution now owns tier
+     * mapping. This field is retained temporarily for compatibility.
      */
     modelTiers?: Partial<Record<VoltAgentModelTier, string>>;
     createExecutor?: VoltAgentExecutorFactory;
@@ -172,8 +174,17 @@ const toVoltAgentMessages = (messages: RuntimeMessage[]): BaseMessage[] =>
 /**
  * VoltAgent's model router expects provider-prefixed model ids.
  */
-const toVoltAgentModel = (model: string): string =>
-    model.includes('/') ? model : `openai/${model}`;
+const toVoltAgentModel = (
+    model: string,
+    provider?: GenerationRequest['provider']
+): string => {
+    if (model.includes('/')) {
+        return model;
+    }
+
+    const normalizedProvider = provider?.trim().toLowerCase();
+    return normalizedProvider ? `${normalizedProvider}/${model}` : `openai/${model}`;
+};
 
 const getVoltAgentProvider = (model: string): string => {
     const slashIndex = model.indexOf('/');
@@ -183,6 +194,9 @@ const getVoltAgentProvider = (model: string): string => {
 
     return model.slice(0, slashIndex).toLowerCase();
 };
+
+const supportsSearchToolsForProvider = (provider: string): boolean =>
+    provider === 'openai';
 
 const VOLTAGENT_MODEL_TIER_VALUES: readonly VoltAgentModelTier[] = [
     'text-fast',
@@ -798,9 +812,39 @@ const createVoltAgentRuntime = ({
                 );
             }
 
-            const executedModel = toVoltAgentModel(selectedModel);
+            const executedModel = toVoltAgentModel(
+                selectedModel,
+                request.provider
+            );
             const provider = getVoltAgentProvider(executedModel);
-            const isOpenAiProvider = provider === 'openai';
+            const canUseSearch = request.capabilities?.canUseSearch === true;
+            const canProviderUseSearchTools =
+                supportsSearchToolsForProvider(provider);
+            const shouldForwardSearch =
+                canUseSearch &&
+                request.search !== undefined &&
+                canProviderUseSearchTools;
+            const requestForResult: GenerationRequest =
+                shouldForwardSearch || request.search === undefined
+                    ? request
+                    : {
+                          ...request,
+                          search: undefined,
+                      };
+            if (
+                canUseSearch &&
+                request.search !== undefined &&
+                !canProviderUseSearchTools &&
+                logger
+            ) {
+                logger.warn(
+                    'VoltAgent search was requested but provider tooling is unsupported; continuing without search.',
+                    {
+                        provider,
+                        model: executedModel,
+                    }
+                );
+            }
             const executor = createExecutor({
                 model: executedModel,
                 ...(logger !== undefined && { logger }),
@@ -814,14 +858,18 @@ const createVoltAgentRuntime = ({
                 ...(request.maxOutputTokens !== undefined && {
                     maxOutputTokens: request.maxOutputTokens,
                 }),
-                ...(isOpenAiProvider && request.search !== undefined && {
+                ...(shouldForwardSearch && {
                     search: request.search,
                 }),
                 ...(request.signal !== undefined && { signal: request.signal }),
                 ...(providerOptions !== undefined && { providerOptions }),
             });
 
-            return normalizeVoltAgentResult(executedModel, request, result);
+            return normalizeVoltAgentResult(
+                executedModel,
+                requestForResult,
+                result
+            );
         },
     };
 };

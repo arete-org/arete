@@ -107,6 +107,21 @@ export type {
     SupportedReasoningEffort,
     SupportedVerbosity,
 } from './providers.js';
+export type {
+    ModelCostClass,
+    ModelLatencyClass,
+    ModelProfile,
+    ModelProfileCapabilities,
+    ModelTierAlias,
+} from './model-profiles.js';
+export {
+    ModelProfileCapabilitiesSchema,
+    ModelProfileCatalogSchema,
+    ModelProfileSchema,
+    modelCostClasses,
+    modelLatencyClasses,
+    modelTierAliases,
+} from './model-profiles.js';
 
 // Shared pricing vocabulary and pure cost helpers
 export type {

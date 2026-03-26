@@ -15,6 +15,7 @@ import type {
     SupportedReasoningEffort,
     SupportedVerbosity,
 } from '@footnote/contracts/providers';
+import type { ModelProfile } from '@footnote/contracts';
 import type { BotProfileConfig } from './profile.js';
 
 /**
@@ -58,6 +59,11 @@ export type RuntimeConfig = {
         defaultVerbosity: SupportedVerbosity;
         defaultChannelContext: { channelId: string };
         requestTimeoutMs: number;
+    };
+    modelProfiles: {
+        defaultProfileId: string;
+        catalogPath: string;
+        catalog: ModelProfile[];
     };
     voltagent: {
         publicKey: string | null;

@@ -148,7 +148,7 @@ const createChatHandler = ({
                   generationRuntime,
                   storeTrace,
                   buildResponseMetadata,
-                  defaultModel: runtimeConfig.openai.defaultModel,
+                  defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
               })
             : null;
 
