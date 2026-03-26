@@ -156,7 +156,19 @@ const formatTimestampForConversation = (isoTimestamp?: string): string | null =>
     if (Number.isNaN(date.getTime())) {
         return null;
     }
-    return date.toISOString().replace('T', ' ').replace(/\..+/, '').slice(0, -3);
+    const iso = date.toISOString();
+    const [datePart, timePart] = iso.split('T');
+    if (!datePart || !timePart) {
+        return null;
+    }
+
+    const wholeTime = timePart.split('.')[0];
+    if (!wholeTime) {
+        return null;
+    }
+
+    const hhmm = wholeTime.slice(0, 5);
+    return `${datePart} ${hhmm}`;
 };
 
 const formatDiscordConversationMessage = (
