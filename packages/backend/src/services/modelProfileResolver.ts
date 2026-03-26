@@ -32,7 +32,7 @@ const tierAliasSet = new Set<string>(modelTierAliases);
 const supportedProviderSet = new Set<string>(supportedProviders);
 
 type ParsedRawModel = {
-    provider: SupportedProvider;
+    provider?: SupportedProvider;
     providerModel: string;
 };
 
@@ -63,7 +63,6 @@ const parseRawModel = (selector: string): ParsedRawModel | null => {
 
     if (!selector.includes('/')) {
         return {
-            provider: 'openai',
             providerModel: selector,
         };
     }
@@ -111,15 +110,18 @@ const buildRawModelProfile = (
     selector: string,
     parsed: ParsedRawModel,
     capabilities: ModelProfile['capabilities']
-): ModelProfile => ({
-    id: `raw-${parsed.provider}-${parsed.providerModel.replace(/[^a-zA-Z0-9-]+/g, '-')}`.toLowerCase(),
-    description: `Raw model selector passthrough for "${selector}".`,
-    provider: parsed.provider,
-    providerModel: parsed.providerModel,
-    enabled: true,
-    tierBindings: [],
-    capabilities,
-});
+): ModelProfile => {
+    const provider = parsed.provider ?? 'openai';
+    return {
+        id: `raw-${provider}-${parsed.providerModel.replace(/[^a-zA-Z0-9-]+/g, '-')}`.toLowerCase(),
+        description: `Raw model selector passthrough for "${selector}".`,
+        provider,
+        providerModel: parsed.providerModel,
+        enabled: true,
+        tierBindings: [],
+        capabilities,
+    };
+};
 
 /**
  * Creates a deterministic, fail-open model profile resolver.
@@ -219,19 +221,26 @@ export const createModelProfileResolver = ({
      * reuse that profile. Otherwise we synthesize a raw passthrough profile.
      */
     const resolveByRawModel = (selector: string): ModelProfile | null => {
+        const parsedRawModel = parseRawModel(selector);
         const existingExact = catalog.find(
             (profile) =>
                 profile.enabled &&
                 (profile.providerModel === selector ||
                     `${profile.provider}/${profile.providerModel}` === selector)
         );
-        if (existingExact) {
-            return existingExact;
+        if (!parsedRawModel) {
+            return existingExact ?? null;
         }
 
-        const parsedRawModel = parseRawModel(selector);
-        if (!parsedRawModel) {
-            return null;
+        if (parsedRawModel.provider) {
+            if (existingExact) {
+                return existingExact;
+            }
+            return buildRawModelProfile(
+                selector,
+                parsedRawModel,
+                defaultProfile.capabilities
+            );
         }
 
         return buildRawModelProfile(
