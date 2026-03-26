@@ -16,6 +16,8 @@ type ChatProfileOverlayLogger = {
     warn: (
         message: string,
         meta?: {
+            requestedProfileId?: string;
+            runtimeProfileId: string;
             surface: PostChatRequest['surface'];
         }
     ) => void;
@@ -46,12 +48,11 @@ export const resolveActiveProfileOverlayPrompt = (
     const runtimeProfileId = runtimeConfig.profile.id;
 
     if (requestedProfileId && requestedProfileId !== runtimeProfileId) {
-        logger.warn(
-            `Chat request profileId "${requestedProfileId}" does not match backend runtime profile "${runtimeProfileId}". Using runtime profile.`,
-            {
-                surface: request.surface,
-            }
-        );
+        logger.warn('profile id mismatch', {
+            requestedProfileId,
+            runtimeProfileId,
+            surface: request.surface,
+        });
     }
 
     // Runtime profile config stays authoritative even when callers include a
