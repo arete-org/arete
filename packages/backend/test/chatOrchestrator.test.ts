@@ -253,6 +253,64 @@ test('message plans pass planner generation options into chatService', async () 
     );
 });
 
+test('request-level generation overrides replace planner reasoning effort and verbosity', async () => {
+    let observedReasoningEffort: string | undefined;
+    let observedVerbosity: string | undefined;
+
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === 700) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        riskTier: 'Low',
+                        reasoning: 'Planner default generation choices.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            observedReasoningEffort = request.reasoningEffort;
+            observedVerbosity = request.verbosity;
+            return {
+                text: 'override test reply',
+                model: request.model,
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            generation: {
+                reasoningEffort: 'high',
+                verbosity: 'medium',
+            },
+        })
+    );
+
+    assert.equal(response.action, 'message');
+    assert.equal(observedReasoningEffort, 'high');
+    assert.equal(observedVerbosity, 'medium');
+});
+
 test('planner-selected profile id controls response model selection', async () => {
     let observedResponseModel: string | undefined;
     let capturedExecutionContext:

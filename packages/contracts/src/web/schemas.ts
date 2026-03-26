@@ -222,6 +222,15 @@ export const PostChatRequestSchema = z
     .object({
         surface: ChatSurfaceSchema,
         profileId: ChatProfileIdSchema.optional(),
+        generation: z
+            .object({
+                reasoningEffort: z
+                    .enum(['minimal', 'low', 'medium', 'high'])
+                    .optional(),
+                verbosity: z.enum(['low', 'medium', 'high']).optional(),
+            })
+            .strict()
+            .optional(),
         trigger: z
             .object({
                 kind: ChatTriggerKindSchema,
@@ -279,6 +288,25 @@ export const PostChatResponseSchema = z.discriminatedUnion('action', [
         })
         .passthrough(),
 ]);
+
+/**
+ * @api.operationId: getChatProfiles
+ * @api.path: GET /api/chat/profiles
+ */
+export const GetChatProfilesResponseSchema = z
+    .object({
+        profiles: z
+            .array(
+                z
+                    .object({
+                        id: z.string().min(1),
+                        description: z.string().min(1).optional(),
+                    })
+                    .strict()
+            )
+            .max(100),
+    })
+    .strict();
 
 /**
  * @api.operationId: postInternalTextTask

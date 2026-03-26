@@ -51,6 +51,7 @@ import { createInternalVoiceTtsService } from './services/internalVoiceTts.js';
 import { createInternalVoiceTtsHandler } from './handlers/internalVoiceTts.js';
 import { createInternalVoiceRealtimeHandler } from './handlers/internalVoiceRealtime.js';
 import { buildRealtimeInstructions } from './services/prompts/realtimePromptComposer.js';
+import { createChatProfilesHandler } from './handlers/chatProfiles.js';
 
 /**
  * @footnote-logger: openAiRealtimeVoiceRuntime
@@ -332,6 +333,7 @@ const {
     serviceToken: runtimeConfig.reflect.serviceToken,
 });
 const handleRuntimeConfigRequest = createRuntimeConfigHandler({ logRequest });
+const handleChatProfilesRequest = createChatProfilesHandler({ logRequest });
 const handleWebhookRequest = createWebhookHandler({
     writeBlogPost: blogStore.writeBlogPost,
     verifyGitHubSignature,
@@ -548,6 +550,11 @@ const server = http.createServer(async (req, res) => {
 
         if (normalizedPathname === '/api/chat') {
             await handleChatRequest(req, res);
+            return;
+        }
+
+        if (normalizedPathname === '/api/chat/profiles') {
+            await handleChatProfilesRequest(req, res);
             return;
         }
 

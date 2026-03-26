@@ -208,7 +208,19 @@ export const createChatOrchestrator = ({
         // Capability policy for this branch:
         // keep the selected profile, but drop search when capabilities disallow
         // it, instead of silently switching to a different profile/model.
-        let generationForExecution: ChatGenerationPlan = plan.generation;
+        // Request-level generation overrides are advisory knobs from callers
+        // like `/chat` that want quick side-by-side runs without changing
+        // planner prompt semantics.
+        const requestGeneration = normalizedRequest.generation;
+        let generationForExecution: ChatGenerationPlan = {
+            ...plan.generation,
+            ...(requestGeneration?.reasoningEffort
+                ? { reasoningEffort: requestGeneration.reasoningEffort }
+                : {}),
+            ...(requestGeneration?.verbosity
+                ? { verbosity: requestGeneration.verbosity }
+                : {}),
+        };
         let toolExecutionContext:
             | {
                   toolName: 'web_search';

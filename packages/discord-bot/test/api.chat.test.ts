@@ -113,3 +113,46 @@ test('chatViaApi tolerates unknown actions so the executor can fail safely', asy
     const response = await api.chatViaApi(createChatRequest());
     assert.equal(response.action, 'video');
 });
+
+test('getChatProfiles calls /api/chat/profiles and validates response shape', async () => {
+    let capturedEndpoint = '';
+    let capturedMethod = '';
+
+    const requestJson: ApiRequester = async <T>(
+        endpoint: string,
+        options: ApiRequestOptions<T> = {}
+    ): Promise<ApiJsonResult<T>> => {
+        capturedEndpoint = endpoint;
+        capturedMethod = options.method ?? 'GET';
+        return {
+            status: 200,
+            data: {
+                profiles: [
+                    { id: 'openai-text-fast', description: 'Fast chat model' },
+                    { id: 'openai-text-medium' },
+                ],
+            } as T,
+        };
+    };
+
+    const api = createChatApi(requestJson);
+    const response = await api.getChatProfiles();
+
+    assert.equal(capturedEndpoint, '/api/chat/profiles');
+    assert.equal(capturedMethod, 'GET');
+    assert.deepEqual(response, {
+        profiles: [
+            { id: 'openai-text-fast', description: 'Fast chat model' },
+            { id: 'openai-text-medium' },
+        ],
+    });
+});
+
+test('getChatProfiles surfaces transport errors', async () => {
+    const requestJson: ApiRequester = async () => {
+        throw new Error('profiles fetch failed');
+    };
+    const api = createChatApi(requestJson);
+
+    await assert.rejects(() => api.getChatProfiles(), /profiles fetch failed/);
+});

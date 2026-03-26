@@ -15,6 +15,7 @@ import { logger } from './utils/logger.js';
 import { runtimeConfig } from './config.js';
 import type { Command } from './commands/BaseCommand.js';
 import { ChannelContextManager } from './state/ChannelContextManager.js';
+import { applyChatCommandProfileChoices } from './utils/chatCommandProfiles.js';
 import { handleButtonInteraction } from './interactions/buttonHandlers.js';
 import { handleModalSubmitInteraction } from './interactions/modalSubmitHandlers.js';
 import { handleStringSelectMenuInteraction } from './interactions/selectMenuHandlers.js';
@@ -35,7 +36,8 @@ const __dirname = path.dirname(__filename);
 const sharedContextManager = runtimeConfig.contextManager.enabled
     ? new ChannelContextManager({
           enabled: true,
-          maxMessagesPerChannel: runtimeConfig.contextManager.maxMessagesPerChannel,
+          maxMessagesPerChannel:
+              runtimeConfig.contextManager.maxMessagesPerChannel,
           messageRetentionMs: runtimeConfig.contextManager.messageRetentionMs,
           evictionIntervalMs: runtimeConfig.contextManager.evictionIntervalMs,
       })
@@ -79,6 +81,7 @@ client.handlers = new Collection();
     try {
         // Load commands first
         const commands = await commandHandler.loadCommands();
+        await applyChatCommandProfileChoices(commands);
 
         // Deploy commands to Discord
         logger.debug('Deploying commands to Discord...');
