@@ -183,6 +183,11 @@ const VOLTAGENT_MODEL_TIER_VALUES: readonly VoltAgentModelTier[] = [
 const isVoltAgentModelTier = (value: string): value is VoltAgentModelTier =>
     VOLTAGENT_MODEL_TIER_VALUES.includes(value as VoltAgentModelTier);
 
+type VoltAgentModelResolution = {
+    selectedModel: string | undefined;
+    missingTierAlias?: VoltAgentModelTier;
+};
+
 const resolveVoltAgentModelId = ({
     requestedModel,
     defaultModel,
@@ -191,21 +196,37 @@ const resolveVoltAgentModelId = ({
     requestedModel?: string;
     defaultModel?: string;
     modelTiers?: Partial<Record<VoltAgentModelTier, string>>;
-}): string | undefined => {
+}): VoltAgentModelResolution => {
     if (requestedModel) {
         const trimmedModel = requestedModel.trim();
         if (trimmedModel.length === 0) {
-            return defaultModel;
+            return {
+                selectedModel: defaultModel,
+            };
         }
 
         if (isVoltAgentModelTier(trimmedModel)) {
-            return modelTiers?.[trimmedModel] ?? defaultModel;
+            const resolvedTierModel = modelTiers?.[trimmedModel];
+            if (resolvedTierModel !== undefined) {
+                return {
+                    selectedModel: resolvedTierModel,
+                };
+            }
+
+            return {
+                selectedModel: defaultModel,
+                missingTierAlias: trimmedModel,
+            };
         }
 
-        return trimmedModel;
+        return {
+            selectedModel: trimmedModel,
+        };
     }
 
-    return defaultModel;
+    return {
+        selectedModel: defaultModel,
+    };
 };
 
 /**
@@ -715,14 +736,26 @@ const createVoltAgentRuntime = ({
     return {
         kind,
         async generate(request: GenerationRequest): Promise<GenerationResult> {
-            const selectedModel = resolveVoltAgentModelId({
+            const modelResolution = resolveVoltAgentModelId({
                 requestedModel: request.model,
                 defaultModel,
                 modelTiers,
             });
+            const selectedModel = modelResolution.selectedModel;
             if (!selectedModel) {
                 throw new Error(
                     'VoltAgent runtime requires request.model or a configured defaultModel.'
+                );
+            }
+            if (modelResolution.missingTierAlias !== undefined && logger) {
+                logger.warn(
+                    'VoltAgent tier alias was not configured; falling back to defaultModel.',
+                    {
+                        requestedModel: request.model,
+                        resolvedModel: selectedModel,
+                        missingTierAlias: modelResolution.missingTierAlias,
+                        configuredTierAliases: Object.keys(modelTiers ?? {}),
+                    }
                 );
             }
 

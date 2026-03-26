@@ -100,6 +100,67 @@ test('voltagent runtime resolves model tiers through adapter-owned configuration
     assert.equal(result.model, 'gpt-5.1');
 });
 
+test('voltagent runtime logs tier fallback when requested alias is not configured', async () => {
+    let seenModel: string | undefined;
+    let seenWarning:
+        | {
+              message: string;
+              context: object | undefined;
+          }
+        | undefined;
+    const logger: VoltAgentLogger = {
+        trace() {},
+        debug() {},
+        info() {},
+        warn(message, context) {
+            seenWarning = { message, context };
+        },
+        error() {},
+        fatal() {},
+        child() {
+            return this;
+        },
+    };
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'gpt-5-mini',
+        modelTiers: {
+            'text-fast': 'openai/gpt-5-mini',
+        },
+        logger,
+        createExecutor: ({ model }) => {
+            seenModel = model;
+            return {
+                async generateText() {
+                    return {
+                        text: 'fallback reply',
+                        response: {
+                            modelId: model,
+                        },
+                    };
+                },
+            };
+        },
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        model: 'text-quality',
+    });
+
+    assert.equal(seenModel, 'openai/gpt-5-mini');
+    assert.equal(result.model, 'gpt-5-mini');
+    assert.equal(
+        seenWarning?.message,
+        'VoltAgent tier alias was not configured; falling back to defaultModel.'
+    );
+    assert.deepEqual(seenWarning?.context, {
+        requestedModel: 'text-quality',
+        resolvedModel: 'gpt-5-mini',
+        missingTierAlias: 'text-quality',
+        configuredTierAliases: ['text-fast'],
+    });
+});
+
 test('voltagent runtime normalizes non-search output into GenerationResult', async () => {
     const runtime = createVoltAgentRuntime({
         defaultModel: 'gpt-5-mini',
