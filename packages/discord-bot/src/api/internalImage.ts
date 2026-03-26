@@ -17,19 +17,4 @@ export type { CreateInternalImageApiOptions, InternalImageApi };
 export const createInternalImageApi = (
     requestJson: ApiRequester,
     options: CreateInternalImageApiOptions & CreateApiTransportOptions
-): InternalImageApi => {
-    const shared = createSharedInternalImageApi(requestJson, options);
-
-    const runImageTaskViaApi: InternalImageApi['runImageTaskViaApi'] = (
-        request,
-        runOptions
-    ) => shared.runImageTaskViaApi(request, runOptions);
-    const runImageTaskStreamViaApi: InternalImageApi['runImageTaskStreamViaApi'] =
-        (request, runOptions) =>
-            shared.runImageTaskStreamViaApi(request, runOptions);
-
-    return {
-        runImageTaskViaApi,
-        runImageTaskStreamViaApi,
-    };
-};
+): InternalImageApi => createSharedInternalImageApi(requestJson, options);
