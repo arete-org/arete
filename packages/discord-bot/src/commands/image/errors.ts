@@ -134,7 +134,7 @@ interface ProviderApiErrorShape {
 }
 
 function isProviderApiError(error: unknown): error is ProviderApiErrorShape {
-    if (!error || typeof error !== 'object') {
+    if (!error || typeof error !== 'object' || error instanceof Error) {
         return false;
     }
 
@@ -149,7 +149,24 @@ function isProviderApiError(error: unknown): error is ProviderApiErrorShape {
         return false;
     }
 
-    return true;
+    if (
+        candidate.status !== undefined &&
+        typeof candidate.status !== 'number'
+    ) {
+        return false;
+    }
+
+    const hasProviderSpecificProperty =
+        candidate.status !== undefined ||
+        candidate.code !== undefined ||
+        candidate.error !== undefined;
+
+    if (hasProviderSpecificProperty) {
+        return true;
+    }
+
+    const keys = Object.keys(candidate);
+    return keys.length === 1 && keys[0] === 'message';
 }
 
 function extractApiErrorCode(error: ProviderApiErrorShape): string | undefined {
