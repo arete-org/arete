@@ -18,16 +18,21 @@ export interface ImageProviderResponseError {
     message: string;
 }
 
-export function mapResponseError(error: ImageProviderResponseError): string {
+export function mapResponseError(
+    error: ImageProviderResponseError,
+    providerName = 'image provider'
+): string {
+    const providerLabel = providerName.trim() || 'image provider';
+
     switch (error.code) {
         case 'image_content_policy_violation':
-            return 'OpenAI safety filters blocked this prompt. Please modify your prompt and try again.';
+            return `${providerLabel} safety filters blocked this prompt. Please modify your prompt and try again.`;
         case 'rate_limit_exceeded':
-            return 'OpenAI rate limit hit. Please wait a few moments and try again.';
+            return `${providerLabel} rate limit hit. Please wait a few moments and try again.`;
         case 'invalid_prompt':
-            return `OpenAI could not process the prompt: ${error.message}`;
+            return `${providerLabel} could not process the prompt: ${error.message}`;
         case 'server_error':
-            return 'OpenAI had a temporary issue generating the image. Please try again.';
+            return `${providerLabel} had a temporary issue generating the image. Please try again.`;
         case 'invalid_image':
         case 'invalid_image_format':
         case 'invalid_base64_image':
@@ -43,7 +48,7 @@ export function mapResponseError(error: ImageProviderResponseError): string {
         case 'image_file_not_found':
             return `Image processing error: ${error.message}`;
         default:
-            return `OpenAI error: ${error.message}`;
+            return `${providerLabel} error: ${error.message}`;
     }
 }
 
