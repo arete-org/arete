@@ -176,6 +176,7 @@
             "entrypoints": [
                 "packages/backend/src/handlers/chat.ts",
                 "packages/backend/src/handlers/trace.ts",
+                "packages/api-client/src",
                 "packages/web/src/utils/api.ts",
                 "packages/web/src/pages/TracePage.tsx",
                 "packages/discord-bot/src/api/traces.ts"
@@ -419,9 +420,13 @@
                 "packages/discord-bot/src/utils/MessageProcessor.ts",
                 "packages/discord-bot/src/utils/response/ResponseHandler.ts",
                 "packages/discord-bot/src/api/botApi.ts",
-                "packages/discord-bot/src/config/promptComposition.ts",
-                "packages/discord-bot/src/config/profilePromptOverlay.ts",
-                "docs/architecture/prompt-resolution.md"
+                "packages/backend/src/services/chatOrchestrator.ts",
+                "packages/backend/src/services/chatPlanner.ts",
+                "packages/backend/src/services/chatService.ts",
+                "packages/backend/src/services/responseMetadataHeuristics.ts",
+                "packages/agent-runtime/src",
+                "packages/contracts/src/web/types.ts",
+                "packages/contracts/src/web/schemas.ts"
             ],
             "page_notes": [
                 {
@@ -429,7 +434,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Document persona behavior as `core + one active persona layer` across bot paths (chat/image/realtime/provenance interactions). Overlay personas replace default Footnote persona when configured.",
+                    "content": "Describe prompt/profile composition as a backend-owned concern. Discord should gather context and call backend APIs, while backend orchestration plus `@footnote/agent-runtime` own planning and model execution.",
                     "author": "Maintainer"
                 }
             ]
