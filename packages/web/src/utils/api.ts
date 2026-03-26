@@ -25,6 +25,8 @@ import type {
 
 export { isApiClientError };
 
+// Keep this thin local wrapper so web can add surface-specific behavior later
+// (telemetry, headers, retries, or method overrides) without changing imports.
 export const createWebApiClient = (
     options: CreateWebApiClientOptions = {}
 ) => {
