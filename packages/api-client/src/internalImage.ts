@@ -172,10 +172,10 @@ export const createInternalImageApi = (
                 {
                     method: 'POST',
                     headers: {
-                        Accept: 'application/x-ndjson, application/json',
-                        'Content-Type': 'application/json',
                         ...defaultHeaders,
                         ...headers,
+                        Accept: 'application/x-ndjson, application/json',
+                        'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
                         ...request,
@@ -201,10 +201,10 @@ export const createInternalImageApi = (
             let finalResponse: PostInternalImageGenerateResponse | null = null;
             let streamIterations = 0;
             let streamBytesRead = 0;
-            const processEventLine = async (line: string): Promise<void> => {
+            const processEventLine = async (line: string): Promise<boolean> => {
                 const trimmed = line.trim();
                 if (!trimmed) {
-                    return;
+                    return false;
                 }
 
                 let parsedEvent: InternalImageStreamEvent;
@@ -234,7 +234,7 @@ export const createInternalImageApi = (
                         index: event.index,
                         base64: event.base64,
                     });
-                    return;
+                    return false;
                 }
 
                 if (event.type === 'error') {
@@ -245,6 +245,7 @@ export const createInternalImageApi = (
                     task: event.task,
                     result: event.result,
                 };
+                return true;
             };
 
             try {
@@ -277,12 +278,17 @@ export const createInternalImageApi = (
 
                     const lines = buffered.split('\n');
                     buffered = lines.pop() ?? '';
+                    let reachedFinalResult = false;
 
                     for (const line of lines) {
-                        await processEventLine(line);
+                        const isTerminalResult = await processEventLine(line);
+                        if (isTerminalResult) {
+                            reachedFinalResult = true;
+                            break;
+                        }
                     }
 
-                    if (done) {
+                    if (done || reachedFinalResult) {
                         break;
                     }
                 }
@@ -290,7 +296,7 @@ export const createInternalImageApi = (
                 reader.releaseLock();
             }
 
-            if (buffered.trim()) {
+            if (!finalResponse && buffered.trim()) {
                 await processEventLine(buffered);
             }
 
