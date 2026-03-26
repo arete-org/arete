@@ -5,7 +5,6 @@
  * @footnote-risk: medium - Transport mistakes can break backend-owned image tasks.
  * @footnote-ethics: medium - Narrow task transport keeps backend-owned image policy explicit.
  */
-import { TextDecoder } from 'node:util';
 import type {
     InternalImageStreamEvent,
     PostInternalImageGenerateRequest,
@@ -191,7 +190,7 @@ export const createInternalImageApi = (
             }
 
             const reader = response.body.getReader();
-            const decoder = new TextDecoder();
+            const decoder = new globalThis.TextDecoder();
             let buffered = '';
             let finalResponse: PostInternalImageGenerateResponse | null = null;
             const processEventLine = async (line: string): Promise<void> => {
