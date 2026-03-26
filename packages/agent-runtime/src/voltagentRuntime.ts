@@ -175,6 +175,15 @@ const toVoltAgentMessages = (messages: RuntimeMessage[]): BaseMessage[] =>
 const toVoltAgentModel = (model: string): string =>
     model.includes('/') ? model : `openai/${model}`;
 
+const getVoltAgentProvider = (model: string): string => {
+    const slashIndex = model.indexOf('/');
+    if (slashIndex === -1) {
+        return 'openai';
+    }
+
+    return model.slice(0, slashIndex).toLowerCase();
+};
+
 const VOLTAGENT_MODEL_TIER_VALUES: readonly VoltAgentModelTier[] = [
     'text-fast',
     'text-quality',
@@ -258,8 +267,13 @@ const normalizeVoltAgentReasoningEffort = (
  * Builds the provider option bag for one VoltAgent text call.
  */
 const buildVoltAgentProviderOptions = (
-    request: GenerationRequest
+    request: GenerationRequest,
+    provider: string
 ): VoltAgentProviderOptions | undefined => {
+    if (provider !== 'openai') {
+        return undefined;
+    }
+
     const reasoningEffort = normalizeVoltAgentReasoningEffort(
         request.reasoningEffort
     );
@@ -760,17 +774,22 @@ const createVoltAgentRuntime = ({
             }
 
             const executedModel = toVoltAgentModel(selectedModel);
+            const provider = getVoltAgentProvider(executedModel);
+            const isOpenAiProvider = provider === 'openai';
             const executor = createExecutor({
                 model: executedModel,
                 ...(logger !== undefined && { logger }),
                 ...(voltOpsClient !== undefined && { voltOpsClient }),
             });
-            const providerOptions = buildVoltAgentProviderOptions(request);
+            const providerOptions = buildVoltAgentProviderOptions(
+                request,
+                provider
+            );
             const result = await executor.generateText(request.messages, {
                 ...(request.maxOutputTokens !== undefined && {
                     maxOutputTokens: request.maxOutputTokens,
                 }),
-                ...(request.search !== undefined && {
+                ...(isOpenAiProvider && request.search !== undefined && {
                     search: request.search,
                 }),
                 ...(request.signal !== undefined && { signal: request.signal }),

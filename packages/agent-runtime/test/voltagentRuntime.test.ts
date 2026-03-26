@@ -263,6 +263,39 @@ test('voltagent runtime executes search requests through the VoltAgent executor'
     assert.equal(result.provenance, 'Retrieved');
 });
 
+test('voltagent runtime omits openai-only options for non-openai models', async () => {
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'anthropic/claude-3-5-sonnet',
+        createExecutor: () => ({
+            async generateText(_messages, options) {
+                seenOptions = options;
+                return {
+                    text: 'non-openai reply',
+                    response: {
+                        modelId: 'anthropic/claude-3-5-sonnet',
+                    },
+                };
+            },
+        }),
+    });
+
+    await runtime.generate({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        model: 'anthropic/claude-3-5-sonnet',
+        reasoningEffort: 'high',
+        verbosity: 'high',
+        search: {
+            query: 'latest release notes',
+            contextSize: 'high',
+            intent: 'current_facts',
+        },
+    });
+
+    assert.equal(seenOptions?.providerOptions, undefined);
+    assert.equal(seenOptions?.search, undefined);
+});
+
 test('voltagent runtime recovers markdown-link citations when retrieved output lacks structured sources', async () => {
     const runtime = createVoltAgentRuntime({
         defaultModel: 'gpt-5-mini',
