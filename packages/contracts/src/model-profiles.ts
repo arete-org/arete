@@ -69,4 +69,24 @@ export const ModelProfileSchema: z.ZodType<ModelProfile> = z
     })
     .strict();
 
-export const ModelProfileCatalogSchema = z.array(ModelProfileSchema);
+export const ModelProfileCatalogSchema = z
+    .array(ModelProfileSchema)
+    .superRefine((profiles, context) => {
+        const seen = new Set<string>();
+        const duplicates = new Set<string>();
+
+        for (const profile of profiles) {
+            if (seen.has(profile.id)) {
+                duplicates.add(profile.id);
+                continue;
+            }
+            seen.add(profile.id);
+        }
+
+        if (duplicates.size > 0) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `Duplicate model profile id(s): ${Array.from(duplicates).sort().join(', ')}`,
+            });
+        }
+    });
