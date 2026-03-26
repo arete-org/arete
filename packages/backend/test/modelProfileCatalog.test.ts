@@ -66,6 +66,7 @@ test('buildModelProfilesSection loads valid catalog YAML with profile defaults',
         {
             MODEL_PROFILE_CATALOG_PATH: yamlPath,
             DEFAULT_PROFILE_ID: 'openai-text-fast',
+            OPENAI_API_KEY: 'test-key',
         },
         process.cwd(),
         (message) => warnings.push(message)
@@ -109,6 +110,7 @@ test('buildModelProfilesSection warns and skips invalid profile entries', () => 
             MODEL_PROFILE_CATALOG_PATH: yamlPath,
             DEFAULT_PROFILE_ID: 'openai-text-fast',
             PLANNER_PROFILE_ID: 'openai-text-quality',
+            OPENAI_API_KEY: 'test-key',
         },
         process.cwd(),
         (message) => warnings.push(message)
@@ -153,6 +155,7 @@ test('buildModelProfilesSection falls back to bundled defaults when custom catal
         {
             MODEL_PROFILE_CATALOG_PATH: customPath,
             DEFAULT_PROFILE_ID: 'openai-text-fast',
+            OPENAI_API_KEY: 'test-key',
         },
         tempDir,
         (message) => warnings.push(message)
@@ -199,12 +202,85 @@ test('buildModelProfilesSection reports catalogPath from the source that produce
         {
             MODEL_PROFILE_CATALOG_PATH: customPath,
             DEFAULT_PROFILE_ID: 'openai-text-fast',
+            OPENAI_API_KEY: 'test-key',
         },
         tempDir,
         () => undefined
     );
 
     assert.equal(section.catalogPath, bundledPath);
+});
+
+test('buildModelProfilesSection disables local ollama profiles when local inference flag is off', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'model-catalog-'));
+    const yamlPath = path.join(tempDir, 'catalog.yaml');
+    fs.writeFileSync(
+        yamlPath,
+        [
+            'profiles:',
+            '  - id: ollama-text-fast',
+            '    description: Local ollama profile',
+            '    provider: ollama',
+            '    providerModel: llama3.2:3b',
+            '    enabled: true',
+            '    tierBindings: [text-fast]',
+            '    capabilities:',
+            '      canUseSearch: false',
+        ].join('\n')
+    );
+
+    const warnings: string[] = [];
+    const section = buildModelProfilesSection(
+        {
+            MODEL_PROFILE_CATALOG_PATH: yamlPath,
+            DEFAULT_PROFILE_ID: 'ollama-text-fast',
+            OLLAMA_BASE_URL: 'http://localhost:11434',
+            OLLAMA_LOCAL_INFERENCE_ENABLED: 'false',
+        },
+        process.cwd(),
+        (message) => warnings.push(message)
+    );
+
+    assert.equal(section.catalog.length, 1);
+    assert.equal(section.catalog[0]?.enabled, false);
+    assert.match(
+        warnings.join('\n'),
+        /OLLAMA_LOCAL_INFERENCE_ENABLED|Disabling model profile/i
+    );
+});
+
+test('buildModelProfilesSection keeps ollama profiles enabled for cloud ollama endpoints', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'model-catalog-'));
+    const yamlPath = path.join(tempDir, 'catalog.yaml');
+    fs.writeFileSync(
+        yamlPath,
+        [
+            'profiles:',
+            '  - id: ollama-text-fast',
+            '    description: Cloud ollama profile',
+            '    provider: ollama',
+            '    providerModel: llama3.2:3b',
+            '    enabled: true',
+            '    tierBindings: [text-fast]',
+            '    capabilities:',
+            '      canUseSearch: false',
+        ].join('\n')
+    );
+
+    const warnings: string[] = [];
+    const section = buildModelProfilesSection(
+        {
+            MODEL_PROFILE_CATALOG_PATH: yamlPath,
+            DEFAULT_PROFILE_ID: 'ollama-text-fast',
+            OLLAMA_BASE_URL: 'https://api.ollama.com',
+        },
+        process.cwd(),
+        (message) => warnings.push(message)
+    );
+
+    assert.equal(section.catalog.length, 1);
+    assert.equal(section.catalog[0]?.enabled, true);
+    assert.equal(warnings.length, 0);
 });
 
 test('model profile resolver handles id, tier, and raw selectors with fail-open fallback', () => {

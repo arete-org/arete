@@ -78,11 +78,9 @@ export interface VoltAgentSource {
 
 type VoltAgentProviderTool = ProviderTool & {
     type: 'provider';
-    id: 'openai.web_search';
-    name: 'web_search';
-    args: {
-        searchContextSize?: GenerationSearchRequest['contextSize'];
-    };
+    id: string;
+    name: string;
+    args?: Record<string, unknown>;
 };
 
 export interface VoltAgentTextResult {
@@ -183,7 +181,9 @@ const toVoltAgentModel = (
     }
 
     const normalizedProvider = provider?.trim().toLowerCase();
-    return normalizedProvider ? `${normalizedProvider}/${model}` : `openai/${model}`;
+    return normalizedProvider
+        ? `${normalizedProvider}/${model}`
+        : `openai/${model}`;
 };
 
 const getVoltAgentProvider = (model: string): string => {
@@ -195,8 +195,28 @@ const getVoltAgentProvider = (model: string): string => {
     return model.slice(0, slashIndex).toLowerCase();
 };
 
+type ProviderSearchToolFactory = (search: GenerationSearchRequest) => {
+    type: 'provider';
+    id: string;
+    name: string;
+    args?: Record<string, unknown>;
+};
+
+const providerSearchToolRegistry: Record<string, ProviderSearchToolFactory> = {
+    // Provider-neutral registry entry for search forwarding. Providers without
+    // a mapping simply do not receive search tools.
+    openai: (search) => ({
+        type: 'provider',
+        id: 'openai.web_search',
+        name: 'web_search',
+        args: {
+            searchContextSize: search.contextSize,
+        },
+    }),
+};
+
 const supportsSearchToolsForProvider = (provider: string): boolean =>
-    provider === 'openai';
+    provider in providerSearchToolRegistry;
 
 const VOLTAGENT_MODEL_TIER_VALUES: readonly VoltAgentModelTier[] = [
     'text-fast',
@@ -297,6 +317,9 @@ const buildVoltAgentProviderOptions = (
     request: GenerationRequest,
     provider: string
 ): VoltAgentProviderOptions | undefined => {
+    if (provider === 'ollama') {
+        return undefined;
+    }
     if (provider !== 'openai') {
         return undefined;
     }
@@ -366,10 +389,7 @@ const normalizeFallbackCitationTitle = (label: string): string => {
 const normalizeCitationUrl = (rawUrl: string): string | null => {
     try {
         const parsedUrl = new URL(rawUrl);
-        if (
-            parsedUrl.protocol !== 'http:' &&
-            parsedUrl.protocol !== 'https:'
-        ) {
+        if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
             return null;
         }
 
@@ -483,35 +503,28 @@ const buildVoltAgentSearchInstruction = (
 };
 
 const createVoltAgentSearchTool = (
+    provider: string,
     search: GenerationSearchRequest
-): {
-    type: 'provider';
-    id: 'openai.web_search';
-    name: 'web_search';
-    args: {
-        searchContextSize?: GenerationSearchRequest['contextSize'];
-    };
-} => ({
-    type: 'provider',
-    id: 'openai.web_search',
-    name: 'web_search',
-    args: {
-        searchContextSize: search.contextSize,
-    },
-});
+): ReturnType<ProviderSearchToolFactory> => {
+    const factory = providerSearchToolRegistry[provider];
+    if (!factory) {
+        throw new Error(
+            `Provider "${provider}" does not have a registered web_search tool mapping.`
+        );
+    }
+
+    return factory(search);
+};
 
 const toVoltAgentProviderTool = (
     tool: ReturnType<typeof createVoltAgentSearchTool>
 ): VoltAgentProviderTool => {
     if (
         tool.type !== 'provider' ||
-        tool.id !== 'openai.web_search' ||
-        tool.name !== 'web_search' ||
-        !tool.args ||
-        (tool.args.searchContextSize !== undefined &&
-            tool.args.searchContextSize !== 'low' &&
-            tool.args.searchContextSize !== 'medium' &&
-            tool.args.searchContextSize !== 'high')
+        typeof tool.id !== 'string' ||
+        tool.id.trim().length === 0 ||
+        typeof tool.name !== 'string' ||
+        tool.name.trim().length === 0
     ) {
         throw new Error('Invalid VoltAgent search tool payload.');
     }
@@ -604,7 +617,9 @@ const normalizeVoltAgentResult = (
           }
         : undefined;
     const hasSearchRequest = request.search !== undefined;
-    const hasWebSearchCall = hasWebSearchCallInResponseBody(result.response?.body);
+    const hasWebSearchCall = hasWebSearchCallInResponseBody(
+        result.response?.body
+    );
     const citationsFromSources = extractCitationsFromSources(result.sources);
     const citations =
         citationsFromSources.length === 0 &&
@@ -661,9 +676,7 @@ const createDefaultVoltAgentExecutor = ({
     model: string;
     logger?: VoltAgentLogger;
     voltOpsClient?: VoltOpsClient;
-    agentFactory?: (
-        input: CreateVoltAgentAgentFactoryInput
-    ) => VoltAgentLike;
+    agentFactory?: (input: CreateVoltAgentAgentFactoryInput) => VoltAgentLike;
 }): VoltAgentTextExecutor => {
     const createAgent = (tools?: NonNullable<AgentOptions['tools']>) =>
         agentFactory({
@@ -701,7 +714,8 @@ const createDefaultVoltAgentExecutor = ({
                     ) as VoltAgentCallOptions['providerOptions'],
                 }),
                 ...(options.search !== undefined && {
-                    toolChoice: 'required' as VoltAgentCallOptions['toolChoice'],
+                    toolChoice:
+                        'required' as VoltAgentCallOptions['toolChoice'],
                 }),
                 ...(options.signal !== undefined && {
                     signal: options.signal,
@@ -712,7 +726,10 @@ const createDefaultVoltAgentExecutor = ({
                     ? createAgent(
                           toVoltAgentAgentTools(
                               toVoltAgentProviderTool(
-                                  createVoltAgentSearchTool(options.search)
+                                  createVoltAgentSearchTool(
+                                      getVoltAgentProvider(model),
+                                      options.search
+                                  )
                               )
                           )
                       )

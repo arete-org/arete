@@ -9,7 +9,7 @@
 /**
  * Provider backends currently recognized by shared Footnote packages.
  */
-export const supportedProviders = ['openai'] as const;
+export const supportedProviders = ['openai', 'ollama'] as const;
 
 /**
  * One known provider identifier.
@@ -78,8 +78,7 @@ export const supportedOpenAITtsModels = [
 /**
  * One known OpenAI TTS model identifier.
  */
-export type SupportedOpenAITtsModel =
-    (typeof supportedOpenAITtsModels)[number];
+export type SupportedOpenAITtsModel = (typeof supportedOpenAITtsModels)[number];
 
 /**
  * OpenAI TTS voices Footnote knows how to validate today.
@@ -100,8 +99,7 @@ export const supportedOpenAITtsVoices = [
 /**
  * One known OpenAI TTS voice identifier.
  */
-export type SupportedOpenAITtsVoice =
-    (typeof supportedOpenAITtsVoices)[number];
+export type SupportedOpenAITtsVoice = (typeof supportedOpenAITtsVoices)[number];
 
 /**
  * OpenAI realtime models Footnote knows how to validate today.

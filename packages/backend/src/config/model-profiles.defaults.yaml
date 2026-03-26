@@ -40,3 +40,31 @@ profiles:
       maxOutputTokens: 128000
       costClass: high
       latencyClass: high
+
+    - id: ollama-text-fast
+      description: Fast Ollama profile for local/private inference.
+      provider: ollama
+      providerModel: llama3.2:3b
+      enabled: true
+      tierBindings:
+          - text-fast
+      capabilities:
+          canUseSearch: false
+      # maxInputTokens:
+      maxOutputTokens: 32768
+      costClass: low
+      latencyClass: medium
+
+    - id: ollama-text-quality
+      description: Higher-quality Ollama profile for detailed responses.
+      provider: ollama
+      providerModel: qwen2.5:14b
+      enabled: true
+      tierBindings:
+          - text-quality
+      capabilities:
+          canUseSearch: false
+      # maxInputTokens:
+      maxOutputTokens: 32768
+      costClass: medium
+      latencyClass: high

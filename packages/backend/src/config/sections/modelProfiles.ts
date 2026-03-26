@@ -59,6 +59,89 @@ const tryExtractCatalogEntries = (payload: unknown): unknown[] | null => {
     return null;
 };
 
+const parseBooleanFlag = (value: string | undefined): boolean => {
+    if (typeof value !== 'string') {
+        return false;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes';
+};
+
+const parseUrlHostname = (value: string): string | null => {
+    try {
+        return new URL(value).hostname.toLowerCase();
+    } catch {
+        return null;
+    }
+};
+
+const isLocalOllamaHost = (hostname: string): boolean =>
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === 'host.docker.internal';
+
+const buildProviderAvailability = (
+    env: NodeJS.ProcessEnv,
+    warn: WarningSink
+): Record<'openai' | 'ollama', boolean> => {
+    const openAiEnabled = Boolean(
+        parseOptionalTrimmedString(env.OPENAI_API_KEY)
+    );
+    const ollamaBaseUrl = parseOptionalTrimmedString(env.OLLAMA_BASE_URL);
+    const ollamaLocalInferenceEnabled = parseBooleanFlag(
+        env.OLLAMA_LOCAL_INFERENCE_ENABLED
+    );
+
+    let ollamaEnabled = false;
+    if (ollamaBaseUrl) {
+        const hostname = parseUrlHostname(ollamaBaseUrl);
+        if (!hostname) {
+            warn(
+                `Ignoring OLLAMA_BASE_URL "${ollamaBaseUrl}" because it is not a valid URL.`
+            );
+        } else if (
+            isLocalOllamaHost(hostname) &&
+            !ollamaLocalInferenceEnabled
+        ) {
+            warn(
+                `OLLAMA_BASE_URL points to local inference host "${hostname}" but OLLAMA_LOCAL_INFERENCE_ENABLED is not true. Ollama profiles will be disabled.`
+            );
+        } else {
+            ollamaEnabled = true;
+        }
+    }
+
+    return {
+        openai: openAiEnabled,
+        ollama: ollamaEnabled,
+    };
+};
+
+const applyProviderAvailability = (
+    catalog: RuntimeConfig['modelProfiles']['catalog'],
+    providerAvailability: Record<'openai' | 'ollama', boolean>,
+    warn: WarningSink
+): RuntimeConfig['modelProfiles']['catalog'] =>
+    catalog.map((profile) => {
+        if (!profile.enabled) {
+            return profile;
+        }
+
+        if (!providerAvailability[profile.provider]) {
+            warn(
+                `Disabling model profile "${profile.id}" because provider "${profile.provider}" is not configured.`
+            );
+            return {
+                ...profile,
+                enabled: false,
+            };
+        }
+
+        return profile;
+    });
+
 const parseCatalogEntries = (
     entries: unknown[],
     sourcePath: string,
@@ -170,7 +253,17 @@ export const buildModelProfilesSection = (
         );
     }
 
-    const catalog = parseCatalogEntries(entries, effectiveCatalogPath, warn);
+    const parsedCatalog = parseCatalogEntries(
+        entries,
+        effectiveCatalogPath,
+        warn
+    );
+    const providerAvailability = buildProviderAvailability(env, warn);
+    const catalog = applyProviderAvailability(
+        parsedCatalog,
+        providerAvailability,
+        warn
+    );
 
     return {
         defaultProfileId,
