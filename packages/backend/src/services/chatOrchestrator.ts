@@ -13,6 +13,7 @@ import type {
 import {
     renderConversationPromptLayers,
 } from './prompts/conversationPromptLayers.js';
+import { buildProfileOverlaySystemMessage } from './prompts/profilePromptOverlay.js';
 import {
     createChatService,
     type CreateChatServiceOptions,
@@ -24,6 +25,7 @@ import { logger } from '../utils/logger.js';
 type CreateChatOrchestratorOptions = CreateChatServiceOptions;
 
 const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
+const DISCORD_CONTEXT_WINDOW_SIZE = 24;
 
 /**
  * Uses the shared profile display-name env so non-overlay persona templates
@@ -100,41 +102,126 @@ const coercePlanForSurface = (
     };
 };
 
-const DISCORD_PROFILE_OVERLAY_HEADER = 'BEGIN Bot Profile Overlay';
-
 /**
- * Detects a Discord vendor overlay system message injected by the bot runtime.
+ * Chat profile selection is backend-owned. The bot may suggest a profile ID,
+ * but the backend only honors the active runtime profile and warns on mismatch.
  */
-const isDiscordOverlaySystemMessage = (
-    message: Pick<ChatConversationMessage, 'role' | 'content'>
-): boolean =>
-    message.role === 'system' &&
-    message.content.includes(DISCORD_PROFILE_OVERLAY_HEADER);
+const resolveActiveProfileOverlayPrompt = (
+    request: Pick<PostChatRequest, 'profileId' | 'surface'>
+): string | null => {
+    const requestedProfileId = request.profileId?.trim();
+    const runtimeProfileId = runtimeConfig.profile.id;
 
-/**
- * Extracts one overlay message and returns the remaining conversation.
- * The extracted overlay becomes the active persona layer for the request.
- */
-const extractDiscordPersonaOverlay = (
-    conversation: Array<Pick<ChatConversationMessage, 'role' | 'content'>>
-): {
-    personaPrompt: string | null;
-    conversation: Array<Pick<ChatConversationMessage, 'role' | 'content'>>;
-} => {
-    const firstOverlay = conversation.find(isDiscordOverlaySystemMessage);
-    if (!firstOverlay) {
-        return {
-            personaPrompt: null,
-            conversation,
-        };
+    if (requestedProfileId && requestedProfileId !== runtimeProfileId) {
+        logger.warn(
+            `Chat request profileId "${requestedProfileId}" does not match backend runtime profile "${runtimeProfileId}". Using runtime profile.`,
+            {
+                surface: request.surface,
+            }
+        );
     }
 
-    return {
-        personaPrompt: firstOverlay.content,
-        conversation: conversation.filter(
-            (message) => !isDiscordOverlaySystemMessage(message)
-        ),
-    };
+    return buildProfileOverlaySystemMessage(runtimeConfig.profile, 'chat');
+};
+
+const trimDiscordConversationWindow = (
+    conversation: PostChatRequest['conversation']
+): PostChatRequest['conversation'] => {
+    const retainedReverse: PostChatRequest['conversation'] = [];
+    let nonSystemCount = 0;
+    for (let index = conversation.length - 1; index >= 0; index -= 1) {
+        const message = conversation[index];
+        if (!message) {
+            continue;
+        }
+        if (message.role === 'system') {
+            retainedReverse.push(message);
+            continue;
+        }
+        if (nonSystemCount >= DISCORD_CONTEXT_WINDOW_SIZE) {
+            continue;
+        }
+        retainedReverse.push(message);
+        nonSystemCount += 1;
+    }
+
+    return retainedReverse.reverse();
+};
+
+const formatTimestampForConversation = (isoTimestamp?: string): string | null => {
+    if (!isoTimestamp) {
+        return null;
+    }
+    const date = new Date(isoTimestamp);
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+    const iso = date.toISOString();
+    const [datePart, timePart] = iso.split('T');
+    if (!datePart || !timePart) {
+        return null;
+    }
+
+    const wholeTime = timePart.split('.')[0];
+    if (!wholeTime) {
+        return null;
+    }
+
+    const hhmm = wholeTime.slice(0, 5);
+    return `${datePart} ${hhmm}`;
+};
+
+const formatDiscordConversationMessage = (
+    message: PostChatRequest['conversation'][number],
+    messageIndex: number
+): string => {
+    const trimmedContent = message.content.trim();
+    const timestamp = formatTimestampForConversation(message.createdAt);
+    const authorLabel = (message.authorName ?? message.authorId ?? 'Unknown').trim();
+
+    if (!timestamp || authorLabel.length === 0) {
+        return trimmedContent;
+    }
+
+    const roleLabel = message.role === 'assistant' ? ' (bot)' : '';
+    const preamble = `[${messageIndex}] At ${timestamp} ${authorLabel}${roleLabel} said:`;
+    if (message.role === 'assistant') {
+        return trimmedContent
+            ? `${preamble} ${trimmedContent}`
+            : `${preamble} Assistant response contained only non-text content.`;
+    }
+    return `${preamble} "${trimmedContent}"`;
+};
+
+const normalizeDiscordConversation = (
+    request: PostChatRequest
+): Array<Pick<ChatConversationMessage, 'role' | 'content'>> => {
+    const trimmedConversation = trimDiscordConversationWindow(request.conversation);
+    let nonSystemIndex = 0;
+
+    const normalized = trimmedConversation.map((message) => {
+        if (message.role === 'system') {
+            return {
+                role: 'system' as const,
+                content: message.content,
+            };
+        }
+
+        const content = formatDiscordConversationMessage(message, nonSystemIndex);
+        nonSystemIndex += 1;
+        return {
+            role: message.role,
+            content,
+        };
+    });
+
+    if (request.conversation.length > trimmedConversation.length) {
+        logger.debug(
+            `Discord chat conversation was trimmed from ${request.conversation.length} to ${trimmedConversation.length} entries before orchestration.`
+        );
+    }
+
+    return normalized;
 };
 
 /**
@@ -184,9 +271,26 @@ export const createChatOrchestrator = ({
     const runChat = async (
         request: PostChatRequest
     ): Promise<PostChatResponse> => {
+        const normalizedConversation =
+            request.surface === 'discord'
+                ? normalizeDiscordConversation(request)
+                : request.conversation.map(
+                      (message: PostChatRequest['conversation'][number]) => ({
+                          role: message.role,
+                          content: message.content,
+                      })
+                  );
+        const normalizedRequest: PostChatRequest = {
+            ...request,
+            conversation: normalizedConversation,
+        };
+
         const botProfileDisplayName = resolveBotProfileDisplayName();
-        const planned = await chatPlanner.planChat(request);
-        const { plan, surfacePolicy } = coercePlanForSurface(request, planned);
+        const planned = await chatPlanner.planChat(normalizedRequest);
+        const { plan, surfacePolicy } = coercePlanForSurface(
+            normalizedRequest,
+            planned
+        );
 
         if (plan.action === 'ignore') {
             return {
@@ -213,42 +317,25 @@ export const createChatOrchestrator = ({
 
         if (plan.action === 'image' && !plan.imageRequest) {
             logger.warn(
-                `Chat planner returned image without imageRequest; falling back to ignore. surface=${request.surface} trigger=${request.trigger.kind} latestUserInputLength=${request.latestUserInput.length}`
+                `Chat planner returned image without imageRequest; falling back to ignore. surface=${normalizedRequest.surface} trigger=${normalizedRequest.trigger.kind} latestUserInputLength=${normalizedRequest.latestUserInput.length}`
             );
             return {
                 action: 'ignore',
                 metadata: null,
             };
         }
-
-        const normalizedConversation: Array<
-            Pick<ChatConversationMessage, 'role' | 'content'>
-        > = request.conversation.map(
-            (message: PostChatRequest['conversation'][number]) => ({
-                role: message.role,
-                content: message.content,
-            })
-        );
-        const extractedPersona =
-            request.surface === 'discord'
-                ? extractDiscordPersonaOverlay(normalizedConversation)
-                : {
-                      personaPrompt: null,
-                      conversation: normalizedConversation,
-                  };
-        if (request.surface === 'discord' && extractedPersona.personaPrompt) {
-            logger.debug(
-                'Chat orchestrator applied Discord profile overlay as the active persona layer.'
-            );
-        }
         const promptLayers = renderConversationPromptLayers(
-            request.surface === 'discord' ? 'discord-chat' : 'web-chat',
+            normalizedRequest.surface === 'discord' ? 'discord-chat' : 'web-chat',
             {
                 botProfileDisplayName,
             }
         );
+        const backendOwnedProfileOverlay =
+            normalizedRequest.surface === 'discord'
+                ? resolveActiveProfileOverlayPrompt(normalizedRequest)
+                : null;
         const personaPrompt =
-            extractedPersona.personaPrompt ?? promptLayers.personaPrompt;
+            backendOwnedProfileOverlay ?? promptLayers.personaPrompt;
 
         const conversationMessages: Array<
             Pick<ChatConversationMessage, 'role' | 'content'>
@@ -261,7 +348,7 @@ export const createChatOrchestrator = ({
                 role: 'system',
                 content: personaPrompt,
             },
-            ...extractedPersona.conversation,
+            ...normalizedConversation,
             {
                 role: 'system',
                 content: [
@@ -280,7 +367,7 @@ export const createChatOrchestrator = ({
         const response = await chatService.runChatMessages({
             messages: conversationMessages,
             conversationSnapshot: JSON.stringify({
-                request,
+                request: normalizedRequest,
                 planner: {
                     action: plan.action,
                     modality: plan.modality,

@@ -61,13 +61,104 @@ test('voltagent runtime maps transcript and generation settings into executor op
     assert.equal(seenOptions?.maxOutputTokens, 800);
     assert.equal(seenOptions?.signal, signal);
     assert.deepEqual(seenOptions?.providerOptions, {
-        openai: {
-            reasoningEffort: 'low',
-            textVerbosity: 'high',
-        },
+        reasoningEffort: 'low',
+        verbosity: 'high',
     });
     assert.equal(result.text, 'voltagent reply');
     assert.equal(result.model, 'gpt-5.1');
+});
+
+test('voltagent runtime resolves model tiers through adapter-owned configuration', async () => {
+    let seenModel: string | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'gpt-5-mini',
+        modelTiers: {
+            'text-fast': 'openai/gpt-5-mini',
+            'text-quality': 'openai/gpt-5.1',
+        },
+        createExecutor: ({ model }) => {
+            seenModel = model;
+            return {
+                async generateText() {
+                    return {
+                        text: 'tiered reply',
+                        response: {
+                            modelId: model,
+                        },
+                    };
+                },
+            };
+        },
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        model: 'text-quality',
+    });
+
+    assert.equal(seenModel, 'openai/gpt-5.1');
+    assert.equal(result.model, 'gpt-5.1');
+});
+
+test('voltagent runtime logs tier fallback when requested alias is not configured', async () => {
+    let seenModel: string | undefined;
+    let seenWarning:
+        | {
+              message: string;
+              context: object | undefined;
+          }
+        | undefined;
+    const logger: VoltAgentLogger = {
+        trace() {},
+        debug() {},
+        info() {},
+        warn(message, context) {
+            seenWarning = { message, context };
+        },
+        error() {},
+        fatal() {},
+        child() {
+            return this;
+        },
+    };
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'gpt-5-mini',
+        modelTiers: {
+            'text-fast': 'openai/gpt-5-mini',
+        },
+        logger,
+        createExecutor: ({ model }) => {
+            seenModel = model;
+            return {
+                async generateText() {
+                    return {
+                        text: 'fallback reply',
+                        response: {
+                            modelId: model,
+                        },
+                    };
+                },
+            };
+        },
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        model: 'text-quality',
+    });
+
+    assert.equal(seenModel, 'openai/gpt-5-mini');
+    assert.equal(result.model, 'gpt-5-mini');
+    assert.equal(
+        seenWarning?.message,
+        'VoltAgent tier alias was not configured; falling back to defaultModel.'
+    );
+    assert.deepEqual(seenWarning?.context, {
+        requestedModel: 'text-quality',
+        resolvedModel: 'gpt-5-mini',
+        missingTierAlias: 'text-quality',
+        configuredTierAliases: ['text-fast'],
+    });
 });
 
 test('voltagent runtime normalizes non-search output into GenerationResult', async () => {
@@ -170,6 +261,39 @@ test('voltagent runtime executes search requests through the VoltAgent executor'
         used: true,
     });
     assert.equal(result.provenance, 'Retrieved');
+});
+
+test('voltagent runtime omits openai-only options for non-openai models', async () => {
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'anthropic/claude-3-5-sonnet',
+        createExecutor: () => ({
+            async generateText(_messages, options) {
+                seenOptions = options;
+                return {
+                    text: 'non-openai reply',
+                    response: {
+                        modelId: 'anthropic/claude-3-5-sonnet',
+                    },
+                };
+            },
+        }),
+    });
+
+    await runtime.generate({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        model: 'anthropic/claude-3-5-sonnet',
+        reasoningEffort: 'high',
+        verbosity: 'high',
+        search: {
+            query: 'latest release notes',
+            contextSize: 'high',
+            intent: 'current_facts',
+        },
+    });
+
+    assert.equal(seenOptions?.providerOptions, undefined);
+    assert.equal(seenOptions?.search, undefined);
 });
 
 test('voltagent runtime recovers markdown-link citations when retrieved output lacks structured sources', async () => {

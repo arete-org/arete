@@ -12,6 +12,7 @@ COPY tsconfig.json ./tsconfig.json
 COPY package.json pnpm-workspace.yaml ./
 COPY packages/agent-runtime/package.json packages/agent-runtime/tsconfig.json packages/agent-runtime/
 COPY packages/web/package.json packages/web/package.json
+COPY packages/api-client/package.json packages/api-client/tsconfig.json packages/api-client/
 COPY packages/backend/package.json packages/backend/tsconfig.json packages/backend/
 COPY packages/config-spec/package.json packages/config-spec/tsconfig.json packages/config-spec/
 COPY packages/contracts/package.json packages/contracts/tsconfig.json packages/contracts/
@@ -24,6 +25,7 @@ RUN pnpm install --frozen-lockfile --prod=false --filter @footnote/web...
 
 # --- Sources ---
 COPY packages/web/ packages/web/
+COPY packages/api-client/src/ packages/api-client/src/
 COPY packages/backend/src/ packages/backend/src/
 COPY packages/contracts/src/ packages/contracts/src/
 

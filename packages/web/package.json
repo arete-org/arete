@@ -10,6 +10,7 @@
         "type-check": "tsc --noEmit"
     },
     "dependencies": {
+        "@footnote/api-client": "workspace:*",
         "@footnote/contracts": "workspace:*",
         "@marsidev/react-turnstile": "catalog:",
         "react": "catalog:",

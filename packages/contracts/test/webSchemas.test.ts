@@ -125,6 +125,7 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
     assert.equal(
         PostChatRequestSchema.safeParse({
             surface: 'web',
+            profileId: 'footnote',
             trigger: { kind: 'submit' },
             latestUserInput: 'What is Footnote?',
             conversation: [
@@ -165,6 +166,40 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
                 },
             ],
         }).success,
+        false
+    );
+
+    assert.equal(
+        PostChatRequestSchema.safeParse({
+            surface: 'discord',
+            profileId: 'INVALID_UPPERCASE_WITH_UNDERSCORE',
+            trigger: { kind: 'direct' },
+            latestUserInput: 'What is Footnote?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'What is Footnote?',
+                },
+            ],
+        }).success,
+        false
+    );
+});
+
+test('openapi ChatRequest documents optional profileId with matching constraints', () => {
+    const chatRequestSectionMatch = openApiSource.match(
+        /ChatRequest:[\s\S]*?ChatResponse:/m
+    );
+    assert.ok(chatRequestSectionMatch);
+
+    const chatRequestSection = chatRequestSectionMatch[0];
+    assert.match(chatRequestSection, /profileId:\s*\n\s*type:\s*string/);
+    assert.match(
+        chatRequestSection,
+        /pattern:\s*'\^\[a-z0-9\]\[a-z0-9-\]\{0,31\}\$'/
+    );
+    assert.equal(
+        /required:\s*[\s\S]*-\s*profileId/.test(chatRequestSection),
         false
     );
 });

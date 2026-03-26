@@ -132,6 +132,10 @@ type ProcessorPrivateAccess = {
         request: PostChatRequest;
         recoveredImageContext: null;
     } | null>;
+    buildRawConversationHistory: (
+        message: unknown,
+        maxContextMessages: number
+    ) => Promise<PostChatRequest['conversation']>;
 };
 
 test('executeChatMessageAction sends text and provenance together when payload is ready', async () => {
@@ -662,7 +666,7 @@ test('processMessage replies with a red code-block error when backend chat reque
     );
 });
 
-test('buildChatRequestFromMessage prepends one profile overlay system message when configured', async () => {
+test('buildChatRequestFromMessage includes profileId and leaves overlay composition to backend', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const originalProfile = runtimeConfig.profile;
@@ -680,28 +684,9 @@ test('buildChatRequestFromMessage prepends one profile overlay system message wh
             length: 61,
         },
     };
-    (
-        processor as unknown as {
-            contextBuilder: {
-                buildMessageContext: (
-                    message: unknown,
-                    maxMessages: number
-                ) => Promise<{
-                    context: Array<{
-                        role: 'system' | 'user' | 'assistant';
-                        content: string;
-                    }>;
-                }>;
-            };
-        }
-    ).contextBuilder = {
-        buildMessageContext: async () => ({
-            context: [
-                { role: 'system', content: 'Base prompt.' },
-                { role: 'user', content: 'Jordan said: "What changed?"' },
-            ],
-        }),
-    };
+    processorAccess.buildRawConversationHistory = async () => [
+        { role: 'user', content: 'Jordan said: "What changed?"' },
+    ];
 
     try {
         const built = await processorAccess.buildChatRequestFromMessage(
@@ -713,16 +698,12 @@ test('buildChatRequestFromMessage prepends one profile overlay system message wh
             throw new Error('Expected chat request to be built');
         }
 
-        assert.equal(built.request.conversation[0].role, 'system');
-        assert.match(
+        assert.equal(built.request.profileId, 'ari-vendor');
+        assert.equal(built.request.conversation[0].role, 'user');
+        assert.doesNotMatch(
             built.request.conversation[0].content,
             /BEGIN Bot Profile Overlay/
         );
-        assert.match(
-            built.request.conversation[0].content,
-            /Profile ID: ari-vendor/
-        );
-        assert.equal(built.request.conversation[1].role, 'user');
     } finally {
         profileMutable.profile = originalProfile;
     }
@@ -740,28 +721,9 @@ test('buildChatRequestFromMessage uses backend image-description tasks for attac
         channelContext?: { channelId?: string; guildId?: string };
     }> = [];
 
-    (
-        processor as unknown as {
-            contextBuilder: {
-                buildMessageContext: (
-                    message: unknown,
-                    maxMessages: number
-                ) => Promise<{
-                    context: Array<{
-                        role: 'system' | 'user' | 'assistant';
-                        content: string;
-                    }>;
-                }>;
-            };
-        }
-    ).contextBuilder = {
-        buildMessageContext: async () => ({
-            context: [
-                { role: 'system', content: 'Base prompt.' },
-                { role: 'user', content: 'Jordan uploaded a screenshot.' },
-            ],
-        }),
-    };
+    processorAccess.buildRawConversationHistory = async () => [
+        { role: 'user', content: 'Jordan uploaded a screenshot.' },
+    ];
 
     (
         botApi as {
@@ -868,28 +830,9 @@ test('buildChatRequestFromMessage omits empty image-description context for imag
         channelContext?: { channelId?: string; guildId?: string };
     }> = [];
 
-    (
-        processor as unknown as {
-            contextBuilder: {
-                buildMessageContext: (
-                    message: unknown,
-                    maxMessages: number
-                ) => Promise<{
-                    context: Array<{
-                        role: 'system' | 'user' | 'assistant';
-                        content: string;
-                    }>;
-                }>;
-            };
-        }
-    ).contextBuilder = {
-        buildMessageContext: async () => ({
-            context: [
-                { role: 'system', content: 'Base prompt.' },
-                { role: 'user', content: 'Jordan uploaded an image.' },
-            ],
-        }),
-    };
+    processorAccess.buildRawConversationHistory = async () => [
+        { role: 'user', content: 'Jordan uploaded an image.' },
+    ];
 
     (
         botApi as {
@@ -978,7 +921,7 @@ test('buildChatRequestFromMessage omits empty image-description context for imag
     }
 });
 
-test('buildChatRequestFromMessage leaves conversation unchanged when no profile overlay exists', async () => {
+test('buildChatRequestFromMessage sends raw conversation without bot-side identity guard', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const originalProfile = runtimeConfig.profile;
@@ -996,28 +939,9 @@ test('buildChatRequestFromMessage leaves conversation unchanged when no profile 
             length: 0,
         },
     };
-    (
-        processor as unknown as {
-            contextBuilder: {
-                buildMessageContext: (
-                    message: unknown,
-                    maxMessages: number
-                ) => Promise<{
-                    context: Array<{
-                        role: 'system' | 'user' | 'assistant';
-                        content: string;
-                    }>;
-                }>;
-            };
-        }
-    ).contextBuilder = {
-        buildMessageContext: async () => ({
-            context: [
-                { role: 'system', content: 'Base prompt.' },
-                { role: 'user', content: 'Jordan said: "What changed?"' },
-            ],
-        }),
-    };
+    processorAccess.buildRawConversationHistory = async () => [
+        { role: 'user', content: 'Jordan said: "What changed?"' },
+    ];
 
     try {
         const built = await processorAccess.buildChatRequestFromMessage(
@@ -1029,16 +953,12 @@ test('buildChatRequestFromMessage leaves conversation unchanged when no profile 
             throw new Error('Expected chat request to be built');
         }
 
-        assert.equal(built.request.conversation.length, 2);
+        assert.equal(built.request.profileId, 'footnote');
+        assert.equal(built.request.conversation.length, 1);
         assert.equal(built.request.conversation[0].role, 'user');
         assert.doesNotMatch(
             built.request.conversation[0].content,
             /BEGIN Bot Profile Overlay/
-        );
-        assert.equal(built.request.conversation[1].role, 'system');
-        assert.match(
-            built.request.conversation[1].content,
-            /Runtime Bot Identity Guard/
         );
     } finally {
         profileMutable.profile = originalProfile;
@@ -1048,28 +968,9 @@ test('buildChatRequestFromMessage leaves conversation unchanged when no profile 
 test('buildChatRequestFromMessage marks plaintext alias triggers as invoked', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
-    (
-        processor as unknown as {
-            contextBuilder: {
-                buildMessageContext: (
-                    message: unknown,
-                    maxMessages: number
-                ) => Promise<{
-                    context: Array<{
-                        role: 'system' | 'user' | 'assistant';
-                        content: string;
-                    }>;
-                }>;
-            };
-        }
-    ).contextBuilder = {
-        buildMessageContext: async () => ({
-            context: [
-                { role: 'system', content: 'Base prompt.' },
-                { role: 'user', content: 'Jordan said: "What changed?"' },
-            ],
-        }),
-    };
+    processorAccess.buildRawConversationHistory = async () => [
+        { role: 'user', content: 'Jordan said: "What changed?"' },
+    ];
 
     const built = await processorAccess.buildChatRequestFromMessage(
         createChatBuildMessage(),

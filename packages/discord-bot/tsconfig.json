@@ -12,6 +12,8 @@
         "baseUrl": ".",
         "paths": {
             "@/*": ["./src/*"],
+            "@footnote/api-client": ["../api-client/src/index.ts"],
+            "@footnote/api-client/*": ["../api-client/src/*"],
             "@footnote/prompts": ["../prompts/dist/index.d.ts"],
             "@footnote/prompts/*": ["../prompts/dist/*"]
         },
@@ -21,6 +23,7 @@
         "resolveJsonModule": true
     },
     "references": [
+        { "path": "../api-client" },
         { "path": "../contracts" },
         { "path": "../config-spec" },
         { "path": "../prompts" }

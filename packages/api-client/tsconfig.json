@@ -1,0 +1,13 @@
+{
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "rootDir": "src",
+        "outDir": "dist",
+        "noEmitOnError": true
+    },
+    "include": ["src/**/*.ts"],
+    "exclude": ["node_modules", "dist"],
+    "references": [{ "path": "../contracts" }]
+}

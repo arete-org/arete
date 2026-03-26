@@ -44,6 +44,7 @@ const ChatTriggerKindSchema = z.enum([
     'invoked',
     'catchup',
 ]);
+const ChatProfileIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
 const ChatConversationMessageSchema = z
     .object({
         role: z.enum(['system', 'user', 'assistant']),
@@ -173,6 +174,7 @@ export const ResponseMetadataSchema = z
 export const PostChatRequestSchema = z
     .object({
         surface: ChatSurfaceSchema,
+        profileId: ChatProfileIdSchema.optional(),
         trigger: z
             .object({
                 kind: ChatTriggerKindSchema,

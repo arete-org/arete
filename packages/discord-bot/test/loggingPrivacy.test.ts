@@ -171,24 +171,17 @@ test('logContextIfVerbose only emits when high verbosity flag is enabled', () =>
     }
 });
 
-test('chat overlay injection logs profile metadata without raw overlay body', async () => {
+test('chat request build does not log profile overlay injection details', async () => {
     const processor = new MessageProcessor();
     const processorAccess = processor as unknown as {
         buildChatRequestFromMessage: (
             message: unknown,
             trigger: string
         ) => Promise<unknown>;
-        contextBuilder: {
-            buildMessageContext: (
-                message: unknown,
-                maxMessages: number
-            ) => Promise<{
-                context: Array<{
-                    role: 'system' | 'user' | 'assistant';
-                    content: string;
-                }>;
-            }>;
-        };
+        buildRawConversationHistory: (
+            message: unknown,
+            maxMessages: number
+        ) => Promise<Array<{ role: 'user' | 'assistant'; content: string }>>;
     };
     const originalDebug = logger.debug;
     const originalProfile = runtimeConfig.profile;
@@ -208,14 +201,9 @@ test('chat overlay injection logs profile metadata without raw overlay body', as
             length: 48,
         },
     };
-    processorAccess.contextBuilder = {
-        buildMessageContext: async () => ({
-            context: [
-                { role: 'system', content: 'Base prompt.' },
-                { role: 'user', content: 'Jordan said: "What changed?"' },
-            ],
-        }),
-    };
+    processorAccess.buildRawConversationHistory = async () => [
+        { role: 'user', content: 'Jordan said: "What changed?"' },
+    ];
     logger.debug = ((...args: unknown[]) => {
         debugCalls.push(args);
         return logger;
@@ -257,24 +245,20 @@ test('chat overlay injection logs profile metadata without raw overlay body', as
         mutableRuntimeConfig.profile = originalProfile;
     }
 
-    const overlayLog = debugCalls.find(
-        ([firstArg]) =>
-            typeof firstArg === 'string' &&
-            firstArg.includes('Injected profile overlay into chat request')
-    );
-
-    assert.ok(overlayLog, 'Expected overlay injection debug log');
-
-    const flattened = overlayLog
-        .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+    const flattenedLogs = debugCalls
+        .flatMap((call) =>
+            call.map((arg) =>
+                typeof arg === 'string' ? arg : JSON.stringify(arg)
+            )
+        )
         .join(' ');
 
     assert.ok(
-        !flattened.includes('secret overlay body that must not appear in logs'),
-        'Overlay body should never appear in debug logs'
+        !flattenedLogs.includes('Injected profile overlay into chat request'),
+        'Bot should not perform overlay injection logging after backend ownership migration'
     );
     assert.ok(
-        flattened.includes('ari-vendor'),
-        'Profile metadata should still be present in debug logs'
+        !flattenedLogs.includes('secret overlay body that must not appear in logs'),
+        'Overlay body should never appear in debug logs'
     );
 });

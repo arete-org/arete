@@ -11,8 +11,11 @@ import assert from 'node:assert/strict';
 import type { GenerationRuntime } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type { PostChatRequest } from '@footnote/contracts/web';
+import type { BotProfileConfig } from '../src/config/profile.js';
+import { runtimeConfig } from '../src/config.js';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
 import { renderConversationPromptLayers } from '../src/services/prompts/conversationPromptLayers.js';
+import { logger } from '../src/utils/logger.js';
 
 const createMetadata = (): ResponseMetadata => ({
     responseId: 'chat_test_response',
@@ -221,18 +224,183 @@ test('message plans pass planner generation options into chatService', async () 
     );
 });
 
-test('discord overlay replaces default persona layer in chat generation', async () => {
+test('discord requests use backend profile overlay when runtime overlay is configured', async () => {
     let finalMessages: Array<{ role: string; content: string }> = [];
+    const originalProfile = runtimeConfig.profile;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        profile: BotProfileConfig;
+    };
+    runtimeConfigMutable.profile = {
+        id: 'ari-vendor',
+        displayName: 'Ari',
+        mentionAliases: [],
+        promptOverlay: {
+            source: 'inline',
+            text: 'You are Ari. Speak with clear structure and practical focus.',
+            path: null,
+            length: 58,
+        },
+    };
+
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async ({ messages, maxOutputTokens }) => {
+                if (maxOutputTokens === 700) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            riskTier: 'Low',
+                            reasoning: 'A normal text response is appropriate.',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                                temperament: {
+                                    tightness: 4,
+                                    rationale: 3,
+                                    attribution: 4,
+                                    caution: 3,
+                                    extent: 3,
+                                },
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+
+                finalMessages = messages;
+                return {
+                    text: 'overlay persona reply',
+                    model: 'gpt-5-mini',
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: () => createMetadata(),
+            defaultModel: 'gpt-5-mini',
+            recordUsage: () => undefined,
+        });
+
+        const response = await orchestrator.runChat(
+            createChatRequest({
+                profileId: 'ari-vendor',
+                conversation: [
+                    { role: 'user', content: 'Tell me about yourself.' },
+                ],
+            })
+        );
+
+        assert.equal(response.action, 'message');
+        assert.equal(
+            finalMessages[0]?.content,
+            renderConversationPromptLayers('discord-chat').systemPrompt
+        );
+        assert.match(finalMessages[1]?.content ?? '', /BEGIN Bot Profile Overlay/);
+        assert.match(finalMessages[1]?.content ?? '', /Profile ID: ari-vendor/);
+    } finally {
+        runtimeConfigMutable.profile = originalProfile;
+    }
+});
+
+test('discord profileId mismatch warns and falls back to backend runtime profile overlay', async () => {
+    let finalMessages: Array<{ role: string; content: string }> = [];
+    const warnings: string[] = [];
+    const originalWarn = logger.warn;
+    const originalProfile = runtimeConfig.profile;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        profile: BotProfileConfig;
+    };
+    runtimeConfigMutable.profile = {
+        id: 'ari-vendor',
+        displayName: 'Ari',
+        mentionAliases: [],
+        promptOverlay: {
+            source: 'inline',
+            text: 'Use Ari profile behavior.',
+            path: null,
+            length: 25,
+        },
+    };
+    logger.warn = ((message: string) => {
+        warnings.push(message);
+        return logger;
+    }) as typeof logger.warn;
+
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async ({ messages, maxOutputTokens }) => {
+                if (maxOutputTokens === 700) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            riskTier: 'Low',
+                            reasoning: 'A normal text response is appropriate.',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+
+                finalMessages = messages;
+                return {
+                    text: 'mismatch fallback reply',
+                    model: 'gpt-5-mini',
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: () => createMetadata(),
+            defaultModel: 'gpt-5-mini',
+            recordUsage: () => undefined,
+        });
+
+        await orchestrator.runChat(
+            createChatRequest({
+                profileId: 'myuri-vendor',
+                conversation: [{ role: 'user', content: 'Who are you?' }],
+            })
+        );
+
+        assert.equal(warnings.length, 1);
+        assert.match(warnings[0] ?? '', /does not match backend runtime profile/i);
+        assert.match(finalMessages[1]?.content ?? '', /Profile ID: ari-vendor/);
+    } finally {
+        logger.warn = originalWarn;
+        runtimeConfigMutable.profile = originalProfile;
+    }
+});
+
+test('discord requests are trimmed/formatted in backend before planner and generation', async () => {
+    let plannerConversation: Array<{ role: string; content: string }> = [];
+    let generationConversation: Array<{ role: string; content: string }> = [];
+
+    const conversation = Array.from({ length: 30 }, (_, index) => ({
+        role: (index % 2 === 0 ? 'user' : 'assistant') as
+            | 'user'
+            | 'assistant',
+        content: `raw message ${index + 1}`,
+        authorName: index % 2 === 0 ? 'Jordan' : 'Footnote',
+        authorId: index % 2 === 0 ? 'user-1' : 'bot-1',
+        messageId: `msg-${index + 1}`,
+        createdAt: new Date(Date.UTC(2026, 2, 25, 12, index, 0)).toISOString(),
+    }));
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async ({ messages, maxOutputTokens }) => {
             if (maxOutputTokens === 700) {
+                plannerConversation = messages;
                 return {
                     text: JSON.stringify({
                         action: 'message',
                         modality: 'text',
                         riskTier: 'Low',
-                        reasoning: 'A normal text response is appropriate.',
+                        reasoning: 'Answer with a normal message.',
                         generation: {
                             reasoningEffort: 'low',
                             verbosity: 'low',
@@ -249,9 +417,9 @@ test('discord overlay replaces default persona layer in chat generation', async 
                 };
             }
 
-            finalMessages = messages;
+            generationConversation = messages;
             return {
-                text: 'overlay persona reply',
+                text: 'backend-normalized reply',
                 model: 'gpt-5-mini',
                 provenance: 'Inferred',
                 citations: [],
@@ -265,29 +433,26 @@ test('discord overlay replaces default persona layer in chat generation', async 
 
     const response = await orchestrator.runChat(
         createChatRequest({
-            conversation: [
-                {
-                    role: 'system',
-                    content:
-                        '// BEGIN Bot Profile Overlay\nYou are Myuri.\n// END Bot Profile Overlay',
-                },
-                { role: 'user', content: 'Tell me about yourself.' },
-            ],
+            surface: 'discord',
+            profileId: runtimeConfig.profile.id,
+            conversation,
         })
     );
 
     assert.equal(response.action, 'message');
+    assert.equal(response.message, 'backend-normalized reply');
     assert.equal(
-        finalMessages[0]?.content,
-        renderConversationPromptLayers('discord-chat').systemPrompt
+        plannerConversation.filter((message) => message.role !== 'system').length,
+        24
     );
-    assert.match(finalMessages[1]?.content ?? '', /BEGIN Bot Profile Overlay/);
-    assert.equal(
-        finalMessages.some(
-            (message) =>
-                message.content ===
-                renderConversationPromptLayers('discord-chat').personaPrompt
-        ),
-        false
+    assert.match(
+        plannerConversation.find((message) => message.role !== 'system')?.content ??
+            '',
+        /^\[0\] At \d{4}-\d{2}-\d{2} \d{2}:\d{2} Jordan said:/
+    );
+    assert.match(
+        generationConversation.find((message) => message.role === 'assistant')
+            ?.content ?? '',
+        /\(bot\) said:/
     );
 });
