@@ -216,10 +216,20 @@ export async function handleProvenanceButtonInteraction(
         try {
             const traceResponse = await botApi.getTrace(provenanceAction.responseId);
             metadata = extractMetadataFromTraceResponse(traceResponse.data);
+            if (!metadata) {
+                logger.warn(
+                    'Trace payload did not contain valid response metadata; using fallback details payload.',
+                    {
+                        responseId: provenanceAction.responseId,
+                        reason: 'metadata_extraction_failed',
+                    }
+                );
+            }
         } catch (error) {
             logger.warn('Failed to load provenance metadata for details action', {
                 responseId: provenanceAction.responseId,
-                error: error instanceof Error ? error.message : String(error),
+                reason: 'metadata_unavailable',
+                error,
             });
         }
 
