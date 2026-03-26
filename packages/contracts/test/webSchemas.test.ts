@@ -172,7 +172,7 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
     assert.equal(
         PostChatRequestSchema.safeParse({
             surface: 'discord',
-            profileId: 'INVALID_PROFILE_ID',
+            profileId: 'INVALID_UPPERCASE_WITH_UNDERSCORE',
             trigger: { kind: 'direct' },
             latestUserInput: 'What is Footnote?',
             conversation: [
