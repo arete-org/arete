@@ -1,5 +1,9 @@
 # Model Profile Catalog + Staged Planner Selection
 
+**Version:** 1.0.0  
+**Last Updated:** 2026-03-25T00:00:00Z  
+**Maintainer:** Footnote Maintainers (https://github.com/footnote-ai/footnote)  
+
 **Decision:** Introduce a backend-owned model profile catalog first, then layer planner-driven profile selection in a separate follow-up branch.  
 **Date:** 2026-03-25
 
@@ -140,4 +144,3 @@ Use the profile catalog for planner-selected response routing, while keeping pla
   - planner chooses intent/profile target,
   - runtime enforces concrete feasibility and fallbacks.
 - Branch-by-branch rollout reduces blast radius and improves review clarity.
-
