@@ -45,7 +45,7 @@
             "author": "Maintainer"
         },
         {
-            "content": "Document the runtime boundary clearly: backend owns the public Reflect contract, provenance, and traces, while `@footnote/agent-runtime` owns the replaceable execution layer. VoltAgent is the active Reflect text runtime.",
+            "content": "Document the runtime boundary clearly: backend owns the public chat contract, provenance, and traces, while `@footnote/agent-runtime` owns the replaceable execution layer. VoltAgent is the active text runtime.",
             "author": "Maintainer"
         }
     ],
@@ -71,7 +71,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Include a simple first-run path: start the backend, open the web app, trigger one reflect request, and inspect the resulting trace.",
+                    "content": "Include a simple first-run path: start the backend, open the web app, trigger one chat request, and inspect the resulting trace.",
                     "author": "Maintainer"
                 }
             ]
@@ -107,6 +107,7 @@
                 "packages/backend/src",
                 "packages/web/src",
                 "packages/discord-bot/src",
+                "packages/api-client/src",
                 "packages/contracts/src",
                 "docs/api/openapi.yaml",
                 "docs/architecture/prompt-resolution.md"
@@ -117,7 +118,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Call out the runtime seam explicitly: backend composes `@footnote/agent-runtime`, rather than letting framework code leak into handlers. Mention that VoltAgent is the active Reflect text runtime.",
+                    "content": "Call out the runtime seam explicitly: backend composes `@footnote/agent-runtime`, rather than letting framework code leak into handlers. Mention that VoltAgent is the active chat text runtime.",
                     "author": "Maintainer"
                 },
                 {
@@ -152,7 +153,7 @@
             "parent": "Foundations",
             "entrypoints": [
                 "packages/contracts/src/ethics-core",
-                "packages/backend/src/handlers/reflect.ts",
+                "packages/backend/src/handlers/chat.ts",
                 "packages/backend/src/handlers/trace.ts",
                 "packages/web/src/pages/TracePage.tsx",
                 "packages/discord-bot/src/utils/response"
@@ -170,10 +171,10 @@
         },
         {
             "title": "Trace Flow",
-            "purpose": "Walk through one reflect request from start to finish: request handling, trace creation, storage, retrieval, and display in the web app and Discord bot.",
+            "purpose": "Walk through one chat request from start to finish: request handling, trace creation, storage, retrieval, and display in the web app and Discord bot.",
             "parent": "Foundations",
             "entrypoints": [
-                "packages/backend/src/handlers/reflect.ts",
+                "packages/backend/src/handlers/chat.ts",
                 "packages/backend/src/handlers/trace.ts",
                 "packages/web/src/utils/api.ts",
                 "packages/web/src/pages/TracePage.tsx",
@@ -185,7 +186,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "After this page, branch into the package-specific pages for Backend Reflect, Backend Traces, Discord Provenance, Web Reflect, and Web Traces.",
+                    "content": "After this page, branch into the package-specific pages for Backend Chat, Backend Traces, Discord Provenance, Web Chat, and Web Traces.",
                     "author": "Maintainer"
                 }
             ]
@@ -239,11 +240,11 @@
         },
         {
             "title": "Agent Runtime",
-            "purpose": "Explain the internal runtime package that sits behind backend Reflect, owns the replaceable generation seam, and currently hosts the active VoltAgent text runtime, modality-specific image and voice adapters, and the transitional legacy text adapter.",
+            "purpose": "Explain the internal runtime package that sits behind backend chat orchestration, owns the replaceable generation seam, and currently hosts the active VoltAgent text runtime plus modality-specific image and voice adapters.",
             "parent": "Packages",
             "entrypoints": [
                 "packages/agent-runtime/src",
-                "packages/backend/src/services/reflectService.ts",
+                "packages/backend/src/services/chatService.ts",
                 "docs/decisions/2026-03-voltagent-runtime-adoption.md"
             ],
             "page_notes": [
@@ -252,7 +253,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Document the current state plainly: VoltAgent is the active Reflect text runtime. The package also hosts image and voice adapters behind backend-owned boundaries. The legacy OpenAI text adapter remains transitional compatibility code, not the active product path.",
+                    "content": "Document the current state plainly: VoltAgent is the active chat text runtime. The package also hosts image and voice adapters behind backend-owned boundaries.",
                     "author": "Maintainer"
                 }
             ]
@@ -272,20 +273,20 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Describe runtime composition as a backend responsibility. The backend builds and selects the generation runtime, but it still owns the public Reflect contract and all user-facing provenance semantics.",
+                    "content": "Describe runtime composition as a backend responsibility. The backend builds and selects the generation runtime, but it still owns the public chat contract and all user-facing provenance semantics.",
                     "author": "Maintainer"
                 }
             ]
         },
         {
-            "title": "Backend Reflect",
-            "purpose": "Document the POST /api/reflect flow from request validation to model execution, metadata creation, and response formatting.",
+            "title": "Backend Chat",
+            "purpose": "Document the POST /api/chat flow from request validation to planning, model execution, metadata creation, and response formatting.",
             "parent": "Backend",
             "entrypoints": [
-                "packages/backend/src/handlers/reflect.ts",
-                "packages/backend/src/services/reflectService.ts",
-                "packages/backend/src/services/reflectOrchestrator.ts",
-                "packages/backend/src/services/reflectPlanner.ts",
+                "packages/backend/src/handlers/chat.ts",
+                "packages/backend/src/services/chatOrchestrator.ts",
+                "packages/backend/src/services/chatService.ts",
+                "packages/backend/src/services/chatPlanner.ts",
                 "packages/agent-runtime/src",
                 "packages/backend/src/services/responseMetadataHeuristics.ts",
                 "packages/contracts/src/web/types.ts",
@@ -293,15 +294,15 @@
             ],
             "page_notes": [
                 {
-                    "content": "Use one worked example to show how a reflect request becomes an answer plus provenance metadata.",
+                    "content": "Use one worked example to show how a chat request becomes an answer plus provenance metadata.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Explain how reflect metadata is built from backend request context and API annotations.",
+                    "content": "Explain how response metadata is built from backend request context and API annotations.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Update this page for the runtime seam: planner decisions stay in backend, generation runs through `@footnote/agent-runtime`, and VoltAgent handles Reflect text generation.",
+                    "content": "Update this page for the runtime seam: planner decisions stay in backend, generation runs through `@footnote/agent-runtime`, and VoltAgent handles chat text generation.",
                     "author": "Maintainer"
                 }
             ]
@@ -489,8 +490,8 @@
             ]
         },
         {
-            "title": "Web Reflect",
-            "purpose": "Document the web ask flow: how the UI sends reflect requests, displays answers, and exposes provenance cues in the browser.",
+            "title": "Web Chat",
+            "purpose": "Document the web ask flow: how the UI sends chat requests, displays answers, and exposes provenance cues in the browser.",
             "parent": "Web",
             "entrypoints": [
                 "packages/web/src/components/AskMeAnything.tsx",
@@ -533,7 +534,7 @@
             ],
             "page_notes": [
                 {
-                    "content": "Keep this page lightweight. The blog is a secondary surface, so explain it clearly without letting it overshadow reflect, traces, and provenance.",
+                    "content": "Keep this page lightweight. The blog is a secondary surface, so explain it clearly without letting it overshadow chat, traces, and provenance.",
                     "author": "Maintainer"
                 }
             ]
