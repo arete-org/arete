@@ -194,7 +194,11 @@ function formatDetailsPayloadForDiscord(
 }
 
 /**
- * Handles provenance custom IDs for details and "report issue" actions.
+ * @description: Routes provenance button interactions for details lookup and incident report actions.
+ * @footnote-scope: core
+ * @footnote-module: HandleProvenanceButtonInteraction
+ * @footnote-risk: high - Incorrect routing or reply handling can hide trace details or break report workflows.
+ * @footnote-ethics: high - Provenance and reporting controls directly affect transparency and accountability for users.
  */
 export async function handleProvenanceButtonInteraction(
     interaction: ButtonInteraction
