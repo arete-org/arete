@@ -83,13 +83,16 @@ client.handlers = new Collection();
         const commands = await commandHandler.loadCommands();
         await applyChatCommandProfileChoices(commands);
 
-        // Deploy commands to Discord
+        // Deploy commands to Discord across all configured guilds.
+        // This keeps command rollout explicit and predictable for each guild.
         logger.debug('Deploying commands to Discord...');
-        await commandHandler.deployCommands(
-            runtimeConfig.token,
-            runtimeConfig.clientId,
-            runtimeConfig.guildId
-        );
+        for (const guildId of runtimeConfig.guildIds) {
+            await commandHandler.deployCommands(
+                runtimeConfig.token,
+                runtimeConfig.clientId,
+                guildId
+            );
+        }
 
         // Store commands in memory for execution
         commands.forEach((cmd, name) => {

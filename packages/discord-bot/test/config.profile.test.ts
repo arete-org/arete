@@ -289,3 +289,57 @@ test('runtimeConfig no longer exposes botMentionNames', async () => {
         restoreProcessEnv(originalEnv);
     }
 });
+
+test('runtimeConfig uses comma-delimited DISCORD_GUILD_IDS for command deployment', async () => {
+    const originalEnv = { ...process.env };
+    process.env.DISCORD_TOKEN = 'token';
+    process.env.DISCORD_CLIENT_ID = 'client-id';
+    process.env.DISCORD_GUILD_IDS = 'guild-a, guild-b, guild-a';
+    delete process.env.DISCORD_GUILD_ID;
+    process.env.OPENAI_API_KEY = 'openai-key';
+    process.env.DISCORD_USER_ID = 'user-id';
+    process.env.INCIDENT_PSEUDONYMIZATION_SECRET = 'secret';
+
+    try {
+        const runtimeModuleUrl = new URL(
+            '../src/config/runtime.js',
+            import.meta.url
+        );
+        runtimeModuleUrl.searchParams.set('test', String(Date.now()));
+        const { runtimeConfig } = (await import(
+            runtimeModuleUrl.href
+        )) as typeof import('../src/config/runtime.js');
+
+        assert.equal(runtimeConfig.guildId, 'guild-a');
+        assert.deepEqual(runtimeConfig.guildIds, ['guild-a', 'guild-b']);
+    } finally {
+        restoreProcessEnv(originalEnv);
+    }
+});
+
+test('runtimeConfig falls back to DISCORD_GUILD_ID when DISCORD_GUILD_IDS is unset', async () => {
+    const originalEnv = { ...process.env };
+    process.env.DISCORD_TOKEN = 'token';
+    process.env.DISCORD_CLIENT_ID = 'client-id';
+    delete process.env.DISCORD_GUILD_IDS;
+    process.env.DISCORD_GUILD_ID = 'legacy-guild';
+    process.env.OPENAI_API_KEY = 'openai-key';
+    process.env.DISCORD_USER_ID = 'user-id';
+    process.env.INCIDENT_PSEUDONYMIZATION_SECRET = 'secret';
+
+    try {
+        const runtimeModuleUrl = new URL(
+            '../src/config/runtime.js',
+            import.meta.url
+        );
+        runtimeModuleUrl.searchParams.set('test', String(Date.now()));
+        const { runtimeConfig } = (await import(
+            runtimeModuleUrl.href
+        )) as typeof import('../src/config/runtime.js');
+
+        assert.equal(runtimeConfig.guildId, 'legacy-guild');
+        assert.deepEqual(runtimeConfig.guildIds, ['legacy-guild']);
+    } finally {
+        restoreProcessEnv(originalEnv);
+    }
+});
