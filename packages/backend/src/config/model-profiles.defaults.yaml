@@ -1,6 +1,10 @@
 profiles:
+    # ==========
+    # OpenAI
+    # ==========
+    # https://platform.openai.com/docs/models/gpt-5
     - id: openai-text-fast
-      description: Fast text profile for simple tasks.
+      description: Lower-latency profile for quick replies and lightweight tasks.
       provider: openai
       providerModel: gpt-5-nano
       enabled: true
@@ -8,13 +12,14 @@ profiles:
           - text-fast
       capabilities:
           canUseSearch: true
-      # maxInputTokens:
+      maxInputTokens: 400000
       maxOutputTokens: 128000
       costClass: low
       latencyClass: low
 
+    # https://platform.openai.com/docs/models/gpt-5-mini
     - id: openai-text-medium
-      description: Medium-quality text profile for regular conversation.
+      description: Balanced profile for everyday conversation and general reasoning.
       provider: openai
       providerModel: gpt-5-mini
       enabled: true
@@ -22,13 +27,14 @@ profiles:
           - text-medium
       capabilities:
           canUseSearch: true
-      # maxInputTokens:
+      maxInputTokens: 400000
       maxOutputTokens: 128000
       costClass: medium
       latencyClass: medium
 
+    # https://developers.openai.com/api/docs/models/gpt-5.4
     - id: openai-text-quality
-      description: Higher-quality text profile for deeper responses.
+      description: Higher-capability profile for deeper reasoning and more complex prompts.
       provider: openai
       providerModel: gpt-5.4-mini
       enabled: true
@@ -36,35 +42,55 @@ profiles:
           - text-quality
       capabilities:
           canUseSearch: true
-      # maxInputTokens:
+      maxInputTokens: 1050000
       maxOutputTokens: 128000
       costClass: high
       latencyClass: high
 
-    - id: ollama-text-fast
-      description: Fast Ollama profile for local/private inference.
+    # ==========
+    # Ollama Cloud
+    # ==========
+    # https://ollama.com/library/qwen3.5
+    - id: ollama-text-qwen
+      description: Very long-context profile for mixed coding and analysis workloads.
       provider: ollama
-      providerModel: llama3.2:3b
-      enabled: true
-      tierBindings:
-          - text-fast
-      capabilities:
-          canUseSearch: false
-      # maxInputTokens:
-      maxOutputTokens: 32768
-      costClass: low
-      latencyClass: medium
-
-    - id: ollama-text-quality
-      description: Higher-quality Ollama profile for detailed responses.
-      provider: ollama
-      providerModel: qwen2.5:14b
+      providerModel: qwen3.5:cloud
       enabled: true
       tierBindings:
           - text-quality
       capabilities:
           canUseSearch: false
-      # maxInputTokens:
-      maxOutputTokens: 32768
-      costClass: medium
+      maxInputTokens: 262144
+      # maxOutputTokens:
+      costClass: high
       latencyClass: high
+
+    # https://ollama.com/library/deepseek-v3.2
+    - id: ollama-text-deepseek
+      description: Deep-reasoning profile for complex multi-step problem solving.
+      provider: ollama
+      providerModel: deepseek-v3.2:cloud
+      enabled: true
+      tierBindings:
+          - text-quality
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 163840
+      # maxOutputTokens:
+      costClass: high
+      latencyClass: high
+
+    # https://ollama.com/library/gpt-oss:20b-cloud
+    - id: ollama-text-gptoss
+      description: Faster-response profile with solid everyday quality for general chat.
+      provider: ollama
+      providerModel: gpt-oss:20b-cloud
+      enabled: true
+      tierBindings:
+          - text-medium
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 131072
+      # maxOutputTokens:
+      costClass: medium
+      latencyClass: medium
