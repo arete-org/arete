@@ -17,19 +17,7 @@ export type { CreateInternalTextApiOptions, InternalTextApi };
 export const createInternalTextApi = (
     requestJson: ApiRequester,
     { traceApiToken }: CreateInternalTextApiOptions = {}
-): InternalTextApi => {
-    const shared = createSharedInternalTextApi(requestJson, { traceApiToken });
-
-    const runNewsTaskViaApi: InternalTextApi['runNewsTaskViaApi'] = (
-        request,
-        options
-    ) => shared.runNewsTaskViaApi(request, options);
-    const runImageDescriptionTaskViaApi: InternalTextApi['runImageDescriptionTaskViaApi'] =
-        (request, options) =>
-            shared.runImageDescriptionTaskViaApi(request, options);
-
-    return {
-        runNewsTaskViaApi,
-        runImageDescriptionTaskViaApi,
-    };
-};
+): InternalTextApi =>
+    createSharedInternalTextApi(requestJson, {
+        traceApiToken,
+    });
