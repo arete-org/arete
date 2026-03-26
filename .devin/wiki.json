@@ -240,20 +240,35 @@
         },
         {
             "title": "Agent Runtime",
-            "purpose": "Explain the internal runtime package that sits behind backend chat orchestration, owns the replaceable generation seam, and currently hosts the active VoltAgent text runtime plus modality-specific image and voice adapters.",
+            "purpose": "Explain the internal runtime package that sits behind backend orchestration, owns the provider-agnostic execution seam, and hosts modality-specific adapters for text, image, and voice tasks.",
             "parent": "Packages",
             "entrypoints": [
-                "packages/agent-runtime/src",
-                "packages/backend/src/services/chatService.ts",
-                "docs/decisions/2026-03-voltagent-runtime-adoption.md"
+                "packages/agent-runtime/src/index.ts",
+                "packages/agent-runtime/src/voltagentRuntime.ts",
+                "packages/agent-runtime/src/openAiImageRuntime.ts",
+                "packages/agent-runtime/src/openAiTtsRuntime.ts",
+                "packages/agent-runtime/src/openAiRealtimeVoiceRuntime.ts",
+                "packages/backend/src/server.ts",
+                "packages/backend/src/services/chatOrchestrator.ts",
+                "docs/decisions/2026-03-voltagent-runtime-adoption.md",
+                "docs/decisions/2026-03-legacy-openai-removal-and-runtime-branching.md",
+                "docs/decisions/2026-03-model-profile-catalog-and-staged-planner-selection.md"
             ],
             "page_notes": [
                 {
-                    "content": "Make the ownership split explicit: this package owns generation runtime implementations and runtime-facing types, while backend still owns planner logic, provenance metadata, traces, and API behavior.",
+                    "content": "Make the ownership split explicit: this package owns runtime-facing interfaces plus adapter implementations, while backend owns orchestration policy, provenance metadata, traces, auth, and public API behavior.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Document the current state plainly: VoltAgent is the active chat text runtime. The package also hosts image and voice adapters behind backend-owned boundaries.",
+                    "content": "Document the seam-first model: backend code should depend on `GenerationRuntime` and other runtime interfaces, not provider SDKs or framework-native request types.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Document current modality coverage plainly: VoltAgent-backed text generation is active; image and voice run through dedicated runtime adapters in this package family.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Call out forward direction: this package is not limited to chat. It is the execution substrate for multiple backend-owned task types as provider capability expands.",
                     "author": "Maintainer"
                 }
             ]
