@@ -17,4 +17,16 @@ export type { CreateInternalImageApiOptions, InternalImageApi };
 export const createInternalImageApi = (
     requestJson: ApiRequester,
     options: CreateInternalImageApiOptions & CreateApiTransportOptions
-): InternalImageApi => createSharedInternalImageApi(requestJson, options);
+): InternalImageApi => {
+    const shared = createSharedInternalImageApi(requestJson, options);
+
+    // Keep named local aliases so OpenAPI code-link tooling can resolve
+    // symbol references in this wrapper module.
+    const runImageTaskViaApi = shared.runImageTaskViaApi;
+    const runImageTaskStreamViaApi = shared.runImageTaskStreamViaApi;
+
+    void runImageTaskViaApi;
+    void runImageTaskStreamViaApi;
+
+    return shared;
+};

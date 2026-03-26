@@ -17,7 +17,26 @@ export type { CreateIncidentApiOptions, IncidentApi };
 export const createIncidentApi = (
     requestJson: ApiRequester,
     { traceApiToken }: CreateIncidentApiOptions = {}
-): IncidentApi =>
-    createSharedIncidentApi(requestJson, {
+): IncidentApi => {
+    const shared = createSharedIncidentApi(requestJson, {
         traceApiToken,
     });
+
+    // Keep named local aliases so OpenAPI code-link tooling can resolve
+    // symbol references in this wrapper module.
+    const reportIncident = shared.reportIncident;
+    const listIncidents = shared.listIncidents;
+    const getIncident = shared.getIncident;
+    const updateIncidentStatus = shared.updateIncidentStatus;
+    const addIncidentNote = shared.addIncidentNote;
+    const recordIncidentRemediation = shared.recordIncidentRemediation;
+
+    void reportIncident;
+    void listIncidents;
+    void getIncident;
+    void updateIncidentStatus;
+    void addIncidentNote;
+    void recordIncidentRemediation;
+
+    return shared;
+};
