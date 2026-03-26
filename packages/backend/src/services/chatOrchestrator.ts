@@ -10,38 +10,29 @@ import type {
     PostChatResponse,
     ChatConversationMessage,
 } from '@footnote/contracts/web';
-import {
-    renderConversationPromptLayers,
-} from './prompts/conversationPromptLayers.js';
-import { buildProfileOverlaySystemMessage } from './prompts/profilePromptOverlay.js';
+import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
     createChatService,
     type CreateChatServiceOptions,
 } from './chatService.js';
 import { createChatPlanner, type ChatPlan } from './chatPlanner.js';
+import { normalizeDiscordConversation } from './chatConversationNormalization.js';
+import {
+    resolveActiveProfileOverlayPrompt,
+    resolveBotProfileDisplayName,
+} from './chatProfileOverlay.js';
+import { coercePlanForSurface } from './chatSurfacePolicy.js';
+import { createModelProfileResolver } from './modelProfileResolver.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions;
 
-const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
-const DISCORD_CONTEXT_WINDOW_SIZE = 24;
-
-/**
- * Uses the shared profile display-name env so non-overlay persona templates
- * resolve to the same name operators configured for the deployment.
- */
-const resolveBotProfileDisplayName = (): string => {
-    const envValue = process.env.BOT_PROFILE_DISPLAY_NAME;
-    if (typeof envValue === 'string' && envValue.trim().length > 0) {
-        return envValue.trim();
-    }
-
-    return DEFAULT_BOT_PROFILE_DISPLAY_NAME;
-};
-
 /**
  * Packs the normalized planner decision into one structured system payload.
+ *
+ * JSON keeps this payload machine-stable so generation can treat planner output
+ * as data, not as ambiguous free-form text.
  */
 const buildPlannerPayload = (
     plan: ChatPlan,
@@ -59,172 +50,6 @@ const buildPlannerPayload = (
     });
 
 /**
- * Enforces surface policy constraints after planning.
- * Web currently accepts message responses only.
- */
-const coercePlanForSurface = (
-    request: PostChatRequest,
-    plan: ChatPlan
-): {
-    plan: ChatPlan;
-    surfacePolicy?: { coercedFrom: ChatPlan['action'] };
-} => {
-    if (request.surface !== 'web') {
-        return { plan };
-    }
-
-    if (plan.action === 'message') {
-        return { plan };
-    }
-
-    const normalizedReasoning = plan.reasoning.trim();
-    const coercedPlan: ChatPlan = {
-        ...plan,
-        action: 'message',
-        modality: 'text',
-        reaction: undefined,
-        imageRequest: undefined,
-        generation: {
-            reasoningEffort: 'low',
-            verbosity: 'low',
-        },
-        reasoning:
-            `${normalizedReasoning ? `${normalizedReasoning} ` : ''}Web surface requires a message response, so the planner output was coerced to a text message.`.trim(),
-    };
-
-    logger.debug(
-        `Chat surface policy coerced action ${plan.action} -> message for web request.`
-    );
-
-    return {
-        plan: coercedPlan,
-        surfacePolicy: { coercedFrom: plan.action },
-    };
-};
-
-/**
- * Chat profile selection is backend-owned. The bot may suggest a profile ID,
- * but the backend only honors the active runtime profile and warns on mismatch.
- */
-const resolveActiveProfileOverlayPrompt = (
-    request: Pick<PostChatRequest, 'profileId' | 'surface'>
-): string | null => {
-    const requestedProfileId = request.profileId?.trim();
-    const runtimeProfileId = runtimeConfig.profile.id;
-
-    if (requestedProfileId && requestedProfileId !== runtimeProfileId) {
-        logger.warn(
-            `Chat request profileId "${requestedProfileId}" does not match backend runtime profile "${runtimeProfileId}". Using runtime profile.`,
-            {
-                surface: request.surface,
-            }
-        );
-    }
-
-    return buildProfileOverlaySystemMessage(runtimeConfig.profile, 'chat');
-};
-
-const trimDiscordConversationWindow = (
-    conversation: PostChatRequest['conversation']
-): PostChatRequest['conversation'] => {
-    const retainedReverse: PostChatRequest['conversation'] = [];
-    let nonSystemCount = 0;
-    for (let index = conversation.length - 1; index >= 0; index -= 1) {
-        const message = conversation[index];
-        if (!message) {
-            continue;
-        }
-        if (message.role === 'system') {
-            retainedReverse.push(message);
-            continue;
-        }
-        if (nonSystemCount >= DISCORD_CONTEXT_WINDOW_SIZE) {
-            continue;
-        }
-        retainedReverse.push(message);
-        nonSystemCount += 1;
-    }
-
-    return retainedReverse.reverse();
-};
-
-const formatTimestampForConversation = (isoTimestamp?: string): string | null => {
-    if (!isoTimestamp) {
-        return null;
-    }
-    const date = new Date(isoTimestamp);
-    if (Number.isNaN(date.getTime())) {
-        return null;
-    }
-    const iso = date.toISOString();
-    const [datePart, timePart] = iso.split('T');
-    if (!datePart || !timePart) {
-        return null;
-    }
-
-    const wholeTime = timePart.split('.')[0];
-    if (!wholeTime) {
-        return null;
-    }
-
-    const hhmm = wholeTime.slice(0, 5);
-    return `${datePart} ${hhmm}`;
-};
-
-const formatDiscordConversationMessage = (
-    message: PostChatRequest['conversation'][number],
-    messageIndex: number
-): string => {
-    const trimmedContent = message.content.trim();
-    const timestamp = formatTimestampForConversation(message.createdAt);
-    const authorLabel = (message.authorName ?? message.authorId ?? 'Unknown').trim();
-
-    if (!timestamp || authorLabel.length === 0) {
-        return trimmedContent;
-    }
-
-    const roleLabel = message.role === 'assistant' ? ' (bot)' : '';
-    const preamble = `[${messageIndex}] At ${timestamp} ${authorLabel}${roleLabel} said:`;
-    if (message.role === 'assistant') {
-        return trimmedContent
-            ? `${preamble} ${trimmedContent}`
-            : `${preamble} Assistant response contained only non-text content.`;
-    }
-    return `${preamble} "${trimmedContent}"`;
-};
-
-const normalizeDiscordConversation = (
-    request: PostChatRequest
-): Array<Pick<ChatConversationMessage, 'role' | 'content'>> => {
-    const trimmedConversation = trimDiscordConversationWindow(request.conversation);
-    let nonSystemIndex = 0;
-
-    const normalized = trimmedConversation.map((message) => {
-        if (message.role === 'system') {
-            return {
-                role: 'system' as const,
-                content: message.content,
-            };
-        }
-
-        const content = formatDiscordConversationMessage(message, nonSystemIndex);
-        nonSystemIndex += 1;
-        return {
-            role: message.role,
-            content,
-        };
-    });
-
-    if (request.conversation.length > trimmedConversation.length) {
-        logger.debug(
-            `Discord chat conversation was trimmed from ${request.conversation.length} to ${trimmedConversation.length} entries before orchestration.`
-        );
-    }
-
-    return normalized;
-};
-
-/**
  * The orchestrator keeps surface-specific policy in one place while reusing the
  * shared message-generation service for any branch that ends in text output.
  */
@@ -232,14 +57,35 @@ export const createChatOrchestrator = ({
     generationRuntime,
     storeTrace,
     buildResponseMetadata,
-    defaultModel = runtimeConfig.openai.defaultModel,
+    defaultModel = runtimeConfig.modelProfiles.defaultProfileId,
     recordUsage,
 }: CreateChatOrchestratorOptions) => {
+    const chatOrchestratorLogger =
+        typeof logger.child === 'function'
+            ? logger.child({ module: 'chatOrchestrator' })
+            : logger;
+
+    // Resolve one startup default profile that drives both planner and response
+    // generation. This keeps routing deterministic unless a future planner
+    // branch chooses profile ids explicitly.
+    const modelProfileResolver = createModelProfileResolver({
+        catalog: runtimeConfig.modelProfiles.catalog,
+        defaultProfileId: runtimeConfig.modelProfiles.defaultProfileId,
+        legacyDefaultModel: runtimeConfig.openai.defaultModel,
+        warn: (message) => chatOrchestratorLogger.warn(message),
+    });
+    const defaultGenerationProfile = modelProfileResolver.resolve(defaultModel);
+    // One resolved profile is reused for planner + generation so both paths
+    // target the same provider/model/capability defaults.
+
+    // ChatService handles final message generation and trace/cost wiring.
     const chatService = createChatService({
         generationRuntime,
         storeTrace,
         buildResponseMetadata,
-        defaultModel,
+        defaultModel: defaultGenerationProfile.providerModel,
+        defaultProvider: defaultGenerationProfile.provider,
+        defaultCapabilities: defaultGenerationProfile.capabilities,
         recordUsage,
     });
     const chatPlanner = createChatPlanner({
@@ -250,9 +96,13 @@ export const createChatOrchestrator = ({
             reasoningEffort,
             verbosity,
         }) => {
+            // Planner calls go through the same runtime seam so model usage and
+            // behavior stay aligned with normal generation calls.
             const plannerResult = await generationRuntime.generate({
                 messages,
                 model,
+                provider: defaultGenerationProfile.provider,
+                capabilities: defaultGenerationProfile.capabilities,
                 maxOutputTokens,
                 reasoningEffort,
                 verbosity,
@@ -264,16 +114,23 @@ export const createChatOrchestrator = ({
                 usage: plannerResult.usage,
             };
         },
-        defaultModel,
+        defaultModel: defaultGenerationProfile.providerModel,
         recordUsage,
     });
 
+    /**
+     * Runs one chat request end-to-end:
+     * 1) normalize conversation shape by surface
+     * 2) plan action/modality
+     * 3) apply surface policy guardrails
+     * 4) execute message generation when action requires text output
+     */
     const runChat = async (
         request: PostChatRequest
     ): Promise<PostChatResponse> => {
         const normalizedConversation =
             request.surface === 'discord'
-                ? normalizeDiscordConversation(request)
+                ? normalizeDiscordConversation(request, chatOrchestratorLogger)
                 : request.conversation.map(
                       (message: PostChatRequest['conversation'][number]) => ({
                           role: message.role,
@@ -284,14 +141,17 @@ export const createChatOrchestrator = ({
             ...request,
             conversation: normalizedConversation,
         };
+        // Planner and generation both consume this normalized request shape.
 
         const botProfileDisplayName = resolveBotProfileDisplayName();
         const planned = await chatPlanner.planChat(normalizedRequest);
         const { plan, surfacePolicy } = coercePlanForSurface(
             normalizedRequest,
-            planned
+            planned,
+            chatOrchestratorLogger
         );
 
+        // Non-message actions return early and skip model generation.
         if (plan.action === 'ignore') {
             return {
                 action: 'ignore',
@@ -316,7 +176,8 @@ export const createChatOrchestrator = ({
         }
 
         if (plan.action === 'image' && !plan.imageRequest) {
-            logger.warn(
+            // Invalid image action should not block response flow.
+            chatOrchestratorLogger.warn(
                 `Chat planner returned image without imageRequest; falling back to ignore. surface=${normalizedRequest.surface} trigger=${normalizedRequest.trigger.kind} latestUserInputLength=${normalizedRequest.latestUserInput.length}`
             );
             return {
@@ -325,18 +186,27 @@ export const createChatOrchestrator = ({
             };
         }
         const promptLayers = renderConversationPromptLayers(
-            normalizedRequest.surface === 'discord' ? 'discord-chat' : 'web-chat',
+            normalizedRequest.surface === 'discord'
+                ? 'discord-chat'
+                : 'web-chat',
             {
                 botProfileDisplayName,
             }
         );
         const backendOwnedProfileOverlay =
             normalizedRequest.surface === 'discord'
-                ? resolveActiveProfileOverlayPrompt(normalizedRequest)
+                ? resolveActiveProfileOverlayPrompt(
+                      normalizedRequest,
+                      chatOrchestratorLogger
+                  )
                 : null;
+        // Discord can inject backend-owned runtime overlay text.
+        // Web keeps default prompt persona layers.
         const personaPrompt =
             backendOwnedProfileOverlay ?? promptLayers.personaPrompt;
 
+        // Planner output is injected as a final system message so generation
+        // can follow one backend-owned decision payload.
         const conversationMessages: Array<
             Pick<ChatConversationMessage, 'role' | 'content'>
         > = [
@@ -364,6 +234,8 @@ export const createChatOrchestrator = ({
             },
         ];
 
+        // Generation receives resolved provider/capabilities from the active
+        // default model profile instead of relying on provider-name checks.
         const response = await chatService.runChatMessages({
             messages: conversationMessages,
             conversationSnapshot: JSON.stringify({
@@ -378,9 +250,13 @@ export const createChatOrchestrator = ({
             }),
             plannerTemperament: plan.generation.temperament,
             riskTier: plan.riskTier,
+            model: defaultGenerationProfile.providerModel,
+            provider: defaultGenerationProfile.provider,
+            capabilities: defaultGenerationProfile.capabilities,
             generation: plan.generation,
         });
 
+        // Message action is the only branch that returns provenance metadata.
         return {
             action: 'message',
             message: response.message,

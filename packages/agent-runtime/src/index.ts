@@ -9,9 +9,11 @@
 import type {
     ImageGenerationQuality as ContractImageGenerationQuality,
     ImageGenerationSize as ContractImageGenerationSize,
+    ModelProfileCapabilities,
     SupportedImageOutputFormat,
     SupportedOpenAIImageModel,
     SupportedOpenAITextModel,
+    SupportedProvider,
 } from '@footnote/contracts';
 import type {
     InternalTtsCosts,
@@ -112,6 +114,14 @@ export interface GenerationRequest {
      * selection without coupling to one provider implementation.
      */
     model?: string;
+    /**
+     * Preferred provider identifier resolved by backend model routing.
+     */
+    provider?: SupportedProvider;
+    /**
+     * Runtime capability flags resolved from the active model profile.
+     */
+    capabilities?: ModelProfileCapabilities;
     /**
      * Optional max token/output budget hint for the runtime.
      */
@@ -437,6 +447,8 @@ export type CreateGenerationRuntimeOptions = {
     kind: 'voltagent';
 } & Pick<
     CreateVoltAgentRuntimeOptions,
+    // modelTiers is still surfaced for compatibility, but backend catalog
+    // resolution should be preferred for new routing behavior.
     'defaultModel' | 'modelTiers' | 'createExecutor'
 >;
 

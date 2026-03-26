@@ -17,6 +17,10 @@ import type {
     ResponseMetadata,
     RiskTier,
 } from '@footnote/contracts/ethics-core';
+import type {
+    ModelProfileCapabilities,
+    SupportedProvider,
+} from '@footnote/contracts';
 import type { PostChatResponse } from '@footnote/contracts/web';
 import type {
     AssistantResponseMetadata,
@@ -90,7 +94,12 @@ export type CreateChatServiceOptions = {
         assistantMetadata: AssistantResponseMetadata,
         runtimeContext: ResponseMetadataRuntimeContext
     ) => ResponseMetadata;
+    // Fallback model used when callers do not specify one and runtime output
+    // does not report a concrete model id.
     defaultModel: string;
+    // Optional provider/capability defaults from model profile resolution.
+    defaultProvider?: SupportedProvider;
+    defaultCapabilities?: ModelProfileCapabilities;
     recordUsage?: (record: BackendLLMCostRecord) => void;
 };
 
@@ -110,6 +119,8 @@ export type RunChatMessagesInput = {
     plannerTemperament?: PartialResponseTemperament;
     riskTier?: RiskTier;
     model?: string;
+    provider?: SupportedProvider;
+    capabilities?: ModelProfileCapabilities;
     generation?: ChatGenerationPlan;
 };
 
@@ -123,6 +134,8 @@ export const createChatService = ({
     storeTrace,
     buildResponseMetadata,
     defaultModel,
+    defaultProvider,
+    defaultCapabilities,
     recordUsage = recordBackendLLMUsage,
 }: CreateChatServiceOptions) => {
     /**
@@ -143,6 +156,8 @@ export const createChatService = ({
             : undefined;
 
         return {
+            // Prefer runtime-reported model first (actual execution target),
+            // then request-level choice, then startup default.
             model: generationResult.model ?? requestedModel ?? defaultModel,
             usage,
             finishReason: generationResult.finishReason,
@@ -159,12 +174,16 @@ export const createChatService = ({
         plannerTemperament,
         riskTier,
         model,
+        provider,
+        capabilities,
         generation,
     }: RunChatMessagesInput): Promise<{
         message: string;
         metadata: ResponseMetadata;
     }> => {
         const normalizedGeneration = normalizeGenerationPlan(generation);
+        // Repo-explainer mode appends one helper system hint so responses stay
+        // aligned with Footnote repository-explanation expectations.
         const repoExplainerHint = normalizedGeneration
             ? buildRepoExplainerResponseHint(normalizedGeneration)
             : null;
@@ -180,6 +199,12 @@ export const createChatService = ({
         const generationRequest: GenerationRequest = {
             messages: messagesWithHints,
             model: model ?? defaultModel,
+            ...((provider ?? defaultProvider) !== undefined && {
+                provider: provider ?? defaultProvider,
+            }),
+            ...((capabilities ?? defaultCapabilities) !== undefined && {
+                capabilities: capabilities ?? defaultCapabilities,
+            }),
             ...(normalizedGeneration?.reasoningEffort !== undefined && {
                 reasoningEffort: normalizedGeneration.reasoningEffort,
             }),
@@ -191,6 +216,7 @@ export const createChatService = ({
             }),
         };
 
+        // One runtime call produces both user-visible text and metadata inputs.
         const generationResult =
             await generationRuntime.generate(generationRequest);
         const assistantMetadata = buildAssistantMetadata(
@@ -222,6 +248,7 @@ export const createChatService = ({
                     timestamp: Date.now(),
                 });
             } catch (error) {
+                // Cost telemetry should never block user responses.
                 logger.warn(
                     `Chat usage recording failed: ${error instanceof Error ? error.message : String(error)}`
                 );
@@ -258,6 +285,8 @@ export const createChatService = ({
             (!responseMetadata.riskTier ||
                 riskTierRank[riskTier] >
                     riskTierRank[responseMetadata.riskTier]);
+        // Planner may raise risk posture for this response, but we do not
+        // downgrade a higher metadata risk tier that was already derived.
         const normalizedResponseMetadata: ResponseMetadata = shouldRaiseRiskTier
             ? {
                   ...responseMetadata,

@@ -1141,6 +1141,32 @@ export const envEntries = [
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
+        key: 'MODEL_PROFILE_CATALOG_PATH',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Optional path to a YAML model profile catalog used for backend model routing.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
+        key: 'DEFAULT_PROFILE_ID',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Default model profile ID used when backend model selection input is empty or invalid.',
+        defaultValue: literal('openai-text-medium'),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
         key: 'REALTIME_DEFAULT_MODEL',
         owner: 'shared',
         stage: 'runtime',

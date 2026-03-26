@@ -14,6 +14,7 @@
         "@resvg/resvg-js": "catalog:",
         "better-sqlite3": "catalog:",
         "dotenv": "catalog:",
+        "js-yaml": "catalog:",
         "ws": "catalog:",
         "winston-daily-rotate-file": "catalog:",
         "zod": "catalog:",

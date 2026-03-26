@@ -7,6 +7,7 @@
  */
 
 import { buildLoggingSection } from './sections/logging.js';
+import { buildModelProfilesSection } from './sections/modelProfiles.js';
 import { buildOpenAISection } from './sections/openai.js';
 import { readBotProfileConfig } from './profile.js';
 import { buildRateLimitsSection } from './sections/rateLimits.js';
@@ -30,6 +31,11 @@ export const buildRuntimeConfig = (
 ): RuntimeConfig => {
     const { runtime, server } = buildRuntimeSections(env, warn);
     const openai = buildOpenAISection(env, warn);
+    const modelProfiles = buildModelProfilesSection(
+        env,
+        runtime.projectRoot,
+        warn
+    );
     const voltagent = buildVoltAgentSection(env, warn);
     const web = buildWebSection(env, warn);
     const { reflect, trace } = buildServiceSections(env, warn);
@@ -48,6 +54,7 @@ export const buildRuntimeConfig = (
         runtime,
         server,
         openai,
+        modelProfiles,
         voltagent,
         cors: web.cors,
         csp: web.csp,

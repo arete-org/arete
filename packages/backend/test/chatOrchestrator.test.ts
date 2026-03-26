@@ -198,6 +198,8 @@ test('message plans pass planner generation options into chatService', async () 
             assert.equal(request.search.intent, 'current_facts');
             assert.equal(request.reasoningEffort, 'medium');
             assert.equal(request.verbosity, 'medium');
+            assert.equal(request.provider, 'openai');
+            assert.equal(request.capabilities?.canUseSearch, true);
             return {
                 text: 'message with retrieval',
                 model: 'gpt-5-mini',
