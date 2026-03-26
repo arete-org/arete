@@ -47,6 +47,16 @@ export type TraceApi = {
     ) => Promise<PostTraceCardFromTraceResponse>;
 };
 
+const buildTraceHeaders = (
+    traceApiToken: string | undefined
+): Record<string, string> => {
+    const headers: Record<string, string> = {};
+    if (traceApiToken) {
+        headers['X-Trace-Token'] = traceApiToken;
+    }
+    return headers;
+};
+
 export const createTraceApi = (
     requestJson: ApiRequester,
     { traceApiToken }: CreateTraceApiOptions = {}
@@ -59,11 +69,7 @@ export const createTraceApi = (
         request: PostTracesRequest,
         options?: { signal?: AbortSignal }
     ): Promise<PostTracesResponse> => {
-        const headers: Record<string, string> = {};
-
-        if (traceApiToken) {
-            headers['X-Trace-Token'] = traceApiToken;
-        }
+        const headers = buildTraceHeaders(traceApiToken);
 
         const response = await requestJson<PostTracesResponse>('/api/traces', {
             method: 'POST',
@@ -108,11 +114,7 @@ export const createTraceApi = (
         request: PostTraceCardRequest,
         options?: { signal?: AbortSignal }
     ): Promise<PostTraceCardResponse> => {
-        const headers: Record<string, string> = {};
-
-        if (traceApiToken) {
-            headers['X-Trace-Token'] = traceApiToken;
-        }
+        const headers = buildTraceHeaders(traceApiToken);
 
         const response = await requestJson<PostTraceCardResponse>(
             '/api/trace-cards',
@@ -138,11 +140,7 @@ export const createTraceApi = (
         request: PostTraceCardFromTraceRequest,
         options?: { signal?: AbortSignal }
     ): Promise<PostTraceCardFromTraceResponse> => {
-        const headers: Record<string, string> = {};
-
-        if (traceApiToken) {
-            headers['X-Trace-Token'] = traceApiToken;
-        }
+        const headers = buildTraceHeaders(traceApiToken);
 
         const response = await requestJson<PostTraceCardFromTraceResponse>(
             '/api/trace-cards/from-trace',
