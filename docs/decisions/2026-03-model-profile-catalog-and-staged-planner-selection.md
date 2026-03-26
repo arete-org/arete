@@ -1,9 +1,5 @@
 # Model Profile Catalog + Staged Planner Selection
 
-**Version:** 1.0.0  
-**Last Updated:** 2026-03-25T00:00:00Z  
-**Maintainer:** Footnote Maintainers (https://github.com/footnote-ai/footnote)  
-
 **Decision:** Introduce a backend-owned model profile catalog first, then layer planner-driven profile selection in a separate follow-up branch.  
 **Date:** 2026-03-25
 
@@ -22,9 +18,9 @@ We want a stable model-selection foundation before expanding planner behavior. W
 Adopt a two-branch execution model:
 
 1. **Branch A: Profile Catalog Foundation**
-  Build the model profile catalog and runtime resolution path without changing planner selection behavior.
+   Build the model profile catalog and runtime resolution path without changing planner selection behavior.
 2. **Branch B: Planner Selection Integration**
-  Teach the planner to choose response profiles using the new catalog metadata.
+   Teach the planner to choose response profiles using the new catalog metadata.
 
 This keeps foundational routing changes and planner behavior changes isolated for safer review and rollback.
 
@@ -48,8 +44,9 @@ Create a data-driven profile catalog and deterministic runtime resolver, while k
 ### 4.2 Substeps
 
 1. **Define profile schema and validation**
-  - Add a backend-owned catalog schema with warn-and-skip validation.
-  - Required profile attributes:
+
+- Add a backend-owned catalog schema with warn-and-skip validation.
+- Required profile attributes:
     - `id`
     - `description`
     - `provider`
@@ -57,29 +54,39 @@ Create a data-driven profile catalog and deterministic runtime resolver, while k
     - `enabled`
     - `tierBindings` (current vocabulary: `text-fast`, `text-quality`)
     - `capabilities`
-  - Optional profile attributes:
+- Optional profile attributes:
     - operational limits (`maxInputTokens`, `maxOutputTokens`)
     - bounded planner metadata (`costClass`, `latencyClass`)
+
 2. **Add catalog storage and loading**
-  - Store catalog in backend config as YAML.
-  - Parse and validate at backend startup.
-  - Keep fail-open semantics: invalid entries are skipped with warnings.
+
+- Store catalog in backend config as YAML.
+- Parse and validate at backend startup.
+- Keep fail-open semantics: invalid entries are skipped with warnings.
+
 3. **Add default selector config**
-  - Introduce `DEFAULT_PROFILE_ID`.
-  - Use hard cutover semantics for this path (no compatibility bridge from legacy default selector behavior inside this branch plan).
+
+- Introduce `DEFAULT_PROFILE_ID`.
+- Use hard cutover semantics for this path (no compatibility bridge from legacy default selector behavior inside this branch plan).
+
 4. **Implement runtime resolution**
-  - Resolver accepts `GenerationRequest.model` as:
+
+- Resolver accepts `GenerationRequest.model` as:
     - profile ID,
     - tier alias,
     - raw model string (fallback path).
-  - Resolution fails open to default profile with warning on unknown/disabled/unusable targets.
+- Resolution fails open to default profile with warning on unknown/disabled/unusable targets.
+
 5. **Integrate with existing runtime adapter seam**
-  - Keep tier vocabulary stable (`text-fast`, `text-quality`).
-  - Ensure adapter still resolves to a concrete runtime model string deterministically.
+
+- Keep tier vocabulary stable (`text-fast`, `text-quality`).
+- Ensure adapter still resolves to a concrete runtime model string deterministically.
+
 6. **Validate with targeted tests**
-  - catalog parsing/validation tests
-  - resolver behavior tests (profile/tier/raw/fallback)
-  - regression tests for current tier behavior
+
+- catalog parsing/validation tests
+- resolver behavior tests (profile/tier/raw/fallback)
+- regression tests for current tier behavior
 
 ### 4.3 Out of Scope for Branch A
 
@@ -98,27 +105,36 @@ Use the profile catalog for planner-selected response routing, while keeping pla
 ### 5.2 Substeps
 
 1. **Add planner selector config**
-  - Introduce `PLANNER_PROFILE_ID` for the planner model path.
-  - Keep planner execution model stable and explicit.
+
+- Introduce `PLANNER_PROFILE_ID` for the planner model path.
+- Keep planner execution model stable and explicit.
+
 2. **Extend planner prompt contract**
-  - Add response profile selection output (profile ID).
-  - Provide bounded profile context in prompt input:
+
+- Add response profile selection output (profile ID).
+- Provide bounded profile context in prompt input:
     - `id`
     - `description`
     - `costClass`
     - `latencyClass`
     - capability hints
+
 3. **Update planner normalization/validation**
-  - Validate selected profile ID.
-  - On invalid/unsupported selection, fail open to default profile and log warning.
+
+- Validate selected profile ID.
+- On invalid/unsupported selection, fail open to default profile and log warning.
+
 4. **Enforce runtime guardrails**
-  - Runtime remains authoritative for capability checks.
-  - Planner hints do not bypass runtime validation or fallbacks.
+
+- Runtime remains authoritative for capability checks.
+- Planner hints do not bypass runtime validation or fallbacks.
+
 5. **Add planner-focused tests**
-  - planner output parsing with selected profile
-  - invalid selection fallback behavior
-  - capability mismatch handling
-  - full chat flow regression with profile-selected routing
+
+- planner output parsing with selected profile
+- invalid selection fallback behavior
+- capability mismatch handling
+- full chat flow regression with profile-selected routing
 
 ### 5.3 Out of Scope for Branch B
 
@@ -141,6 +157,6 @@ Use the profile catalog for planner-selected response routing, while keeping pla
 
 - Model routing becomes data-driven and easier to audit.
 - Planner and runtime responsibilities become clearer:
-  - planner chooses intent/profile target,
-  - runtime enforces concrete feasibility and fallbacks.
+    - planner chooses intent/profile target,
+    - runtime enforces concrete feasibility and fallbacks.
 - Branch-by-branch rollout reduces blast radius and improves review clarity.
