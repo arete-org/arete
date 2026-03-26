@@ -72,7 +72,7 @@ export const createChatOrchestrator = ({
         catalog: runtimeConfig.modelProfiles.catalog,
         defaultProfileId: runtimeConfig.modelProfiles.defaultProfileId,
         legacyDefaultModel: runtimeConfig.openai.defaultModel,
-        warn: (message) => chatOrchestratorLogger.warn(message),
+        warn: chatOrchestratorLogger,
     });
     const defaultGenerationProfile = modelProfileResolver.resolve(defaultModel);
     // One resolved profile is reused for planner + generation so both paths

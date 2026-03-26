@@ -19,7 +19,18 @@ import {
 const MODEL_SELECTOR_PATTERN =
     /^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?:\/[a-zA-Z0-9][a-zA-Z0-9._:-]*)?$/;
 
-type ModelProfileResolverWarningSink = (message: string) => void;
+type ModelProfileResolverWarning = {
+    message: string;
+    meta?: Record<string, unknown>;
+};
+
+type ModelProfileResolverWarningLogger = {
+    warn: (message: string, meta?: Record<string, unknown>) => void;
+};
+
+type ModelProfileResolverWarningSink =
+    | ((warning: ModelProfileResolverWarning) => void)
+    | ModelProfileResolverWarningLogger;
 
 export interface CreateModelProfileResolverOptions {
     catalog: ModelProfile[];
@@ -34,6 +45,22 @@ const supportedProviderSet = new Set<string>(supportedProviders);
 type ParsedRawModel = {
     provider?: SupportedProvider;
     providerModel: string;
+};
+
+const RAW_MODEL_PROFILE_CAPABILITIES: ModelProfile['capabilities'] = {
+    canUseSearch: false,
+};
+
+const emitWarning = (
+    warn: ModelProfileResolverWarningSink,
+    warning: ModelProfileResolverWarning
+): void => {
+    if (typeof warn === 'function') {
+        warn(warning);
+        return;
+    }
+
+    warn.warn(warning.message, warning.meta);
 };
 
 /**
@@ -108,8 +135,7 @@ const buildLegacyDefaultProfile = (legacyDefaultModel: string): ModelProfile => 
  */
 const buildRawModelProfile = (
     selector: string,
-    parsed: ParsedRawModel,
-    capabilities: ModelProfile['capabilities']
+    parsed: ParsedRawModel
 ): ModelProfile => {
     const provider = parsed.provider ?? 'openai';
     return {
@@ -119,7 +145,7 @@ const buildRawModelProfile = (
         providerModel: parsed.providerModel,
         enabled: true,
         tierBindings: [],
-        capabilities,
+        capabilities: RAW_MODEL_PROFILE_CAPABILITIES,
     };
 };
 
@@ -150,22 +176,34 @@ export const createModelProfileResolver = ({
         }
 
         if (configuredDefault && !configuredDefault.enabled) {
-            warn(
-                `Configured DEFAULT_PROFILE_ID "${defaultProfileId}" is disabled. Falling back to first enabled catalog profile.`
-            );
+            emitWarning(warn, {
+                message:
+                    'Configured DEFAULT_PROFILE_ID is disabled. Falling back to first enabled catalog profile.',
+                meta: {
+                    defaultProfileId,
+                },
+            });
         } else {
-            warn(
-                `Configured DEFAULT_PROFILE_ID "${defaultProfileId}" was not found. Falling back to first enabled catalog profile.`
-            );
+            emitWarning(warn, {
+                message:
+                    'Configured DEFAULT_PROFILE_ID was not found. Falling back to first enabled catalog profile.',
+                meta: {
+                    defaultProfileId,
+                },
+            });
         }
 
         if (enabledCatalog.length > 0) {
             return enabledCatalog[0];
         }
 
-        warn(
-            'Model profile catalog has no enabled entries. Falling back to legacy DEFAULT_MODEL compatibility profile.'
-        );
+        emitWarning(warn, {
+            message:
+                'Model profile catalog has no enabled entries. Falling back to legacy DEFAULT_MODEL compatibility profile.',
+            meta: {
+                legacyDefaultModel,
+            },
+        });
         return buildLegacyDefaultProfile(legacyDefaultModel);
     };
 
@@ -181,9 +219,14 @@ export const createModelProfileResolver = ({
         }
 
         if (!matchedProfile.enabled) {
-            warn(
-                `Requested model profile "${selector}" is disabled. Falling back to default profile "${defaultProfile.id}".`
-            );
+            emitWarning(warn, {
+                message:
+                    'Requested model profile is disabled. Falling back to default profile.',
+                meta: {
+                    selector,
+                    defaultProfileId: defaultProfile.id,
+                },
+            });
             return defaultProfile;
         }
 
@@ -208,9 +251,14 @@ export const createModelProfileResolver = ({
             return tierMatch;
         }
 
-        warn(
-            `Requested model tier "${selector}" has no enabled profile binding. Falling back to default profile "${defaultProfile.id}".`
-        );
+        emitWarning(warn, {
+            message:
+                'Requested model tier has no enabled profile binding. Falling back to default profile.',
+            meta: {
+                selector,
+                defaultProfileId: defaultProfile.id,
+            },
+        });
         return defaultProfile;
     };
 
@@ -222,32 +270,39 @@ export const createModelProfileResolver = ({
      */
     const resolveByRawModel = (selector: string): ModelProfile | null => {
         const parsedRawModel = parseRawModel(selector);
-        const existingExact = catalog.find(
+        if (!parsedRawModel) {
+            return null;
+        }
+
+        const resolvedProvider = parsedRawModel.provider ?? 'openai';
+        const exactMatches = catalog.filter(
             (profile) =>
                 profile.enabled &&
-                (profile.providerModel === selector ||
-                    `${profile.provider}/${profile.providerModel}` === selector)
+                profile.provider === resolvedProvider &&
+                profile.providerModel === parsedRawModel.providerModel
         );
-        if (!parsedRawModel) {
-            return existingExact ?? null;
+        const existingExact =
+            exactMatches.length === 1 ? exactMatches[0] : null;
+
+        if (existingExact) {
+            return existingExact;
         }
 
-        if (parsedRawModel.provider) {
-            if (existingExact) {
-                return existingExact;
-            }
-            return buildRawModelProfile(
-                selector,
-                parsedRawModel,
-                defaultProfile.capabilities
-            );
+        if (exactMatches.length > 1) {
+            emitWarning(warn, {
+                message:
+                    'Multiple enabled catalog profiles matched raw selector. Falling back to synthetic passthrough profile.',
+                meta: {
+                    selector,
+                    provider: resolvedProvider,
+                    providerModel: parsedRawModel.providerModel,
+                    matchCount: exactMatches.length,
+                    defaultProfileId: defaultProfile.id,
+                },
+            });
         }
 
-        return buildRawModelProfile(
-            selector,
-            parsedRawModel,
-            defaultProfile.capabilities
-        );
+        return buildRawModelProfile(selector, parsedRawModel);
     };
 
     /**
@@ -280,9 +335,14 @@ export const createModelProfileResolver = ({
             return byRawModel;
         }
 
-        warn(
-            `Requested model selector "${normalizedSelector}" could not be resolved. Falling back to default profile "${defaultProfile.id}".`
-        );
+        emitWarning(warn, {
+            message:
+                'Requested model selector could not be resolved. Falling back to default profile.',
+            meta: {
+                selector: normalizedSelector,
+                defaultProfileId: defaultProfile.id,
+            },
+        });
         return defaultProfile;
     };
 

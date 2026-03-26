@@ -202,12 +202,12 @@ test('buildModelProfilesSection reports catalogPath from the source that produce
 });
 
 test('model profile resolver handles id, tier, and raw selectors with fail-open fallback', () => {
-    const warnings: string[] = [];
+    const warnings: Array<{ message: string; meta?: Record<string, unknown> }> = [];
     const resolver = createModelProfileResolver({
         catalog: createCatalog(),
         defaultProfileId: 'openai-text-fast',
         legacyDefaultModel: 'gpt-5-mini',
-        warn: (message) => warnings.push(message),
+        warn: (warning) => warnings.push(warning),
     });
 
     assert.equal(
@@ -217,15 +217,16 @@ test('model profile resolver handles id, tier, and raw selectors with fail-open 
     assert.equal(resolver.resolve('text-fast').id, 'openai-text-fast');
     assert.equal(resolver.resolve('openai/gpt-5.2').providerModel, 'gpt-5.2');
     assert.equal(resolver.resolve('gpt-5-nano').providerModel, 'gpt-5-nano');
+    assert.equal(resolver.resolve('gpt-5-nano').capabilities.canUseSearch, false);
     assert.equal(resolver.resolve('%%%').id, 'openai-text-fast');
     assert.match(
-        warnings.join('\n'),
+        warnings.map((warning) => warning.message).join('\n'),
         /could not be resolved|falling back/i
     );
 });
 
 test('model profile resolver falls back to legacy DEFAULT_MODEL when catalog has no enabled profiles', () => {
-    const warnings: string[] = [];
+    const warnings: Array<{ message: string; meta?: Record<string, unknown> }> = [];
     const resolver = createModelProfileResolver({
         catalog: [
             {
@@ -235,11 +236,49 @@ test('model profile resolver falls back to legacy DEFAULT_MODEL when catalog has
         ],
         defaultProfileId: 'openai-text-fast',
         legacyDefaultModel: 'gpt-5-mini',
-        warn: (message) => warnings.push(message),
+        warn: (warning) => warnings.push(warning),
     });
 
     const resolved = resolver.resolve();
     assert.equal(resolved.id, 'legacy-default-model');
     assert.equal(resolved.providerModel, 'gpt-5-mini');
-    assert.match(warnings.join('\n'), /legacy DEFAULT_MODEL/i);
+    assert.match(
+        warnings.map((warning) => warning.message).join('\n'),
+        /legacy DEFAULT_MODEL/i
+    );
+});
+
+test('model profile resolver synthesizes raw profile when multiple enabled catalog entries share provider/model', () => {
+    const warnings: Array<{ message: string; meta?: Record<string, unknown> }> = [];
+    const duplicateCatalog: ModelProfile[] = [
+        ...createCatalog(),
+        {
+            id: 'openai-text-fast-duplicate',
+            description: 'Duplicate provider/model profile.',
+            provider: 'openai',
+            providerModel: 'gpt-5-mini',
+            enabled: true,
+            tierBindings: [],
+            capabilities: {
+                canUseSearch: true,
+            },
+        },
+    ];
+
+    const resolver = createModelProfileResolver({
+        catalog: duplicateCatalog,
+        defaultProfileId: 'openai-text-fast',
+        legacyDefaultModel: 'gpt-5-mini',
+        warn: (warning) => warnings.push(warning),
+    });
+
+    const resolved = resolver.resolve('openai/gpt-5-mini');
+    assert.equal(resolved.id, 'raw-openai-gpt-5-mini');
+    assert.equal(resolved.provider, 'openai');
+    assert.equal(resolved.providerModel, 'gpt-5-mini');
+    assert.equal(resolved.capabilities.canUseSearch, false);
+    assert.match(
+        warnings.map((warning) => warning.message).join('\n'),
+        /multiple enabled catalog profiles matched raw selector/i
+    );
 });
