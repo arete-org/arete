@@ -11,7 +11,7 @@ import type { PostChatRequest, ChatConversationMessage } from '@footnote/contrac
 const DISCORD_CONTEXT_WINDOW_SIZE = 24;
 
 type ChatConversationLogger = {
-    debug: (message: string) => void;
+    debug: (message: string, meta?: Record<string, unknown>) => void;
 };
 
 const trimDiscordConversationWindow = (
@@ -77,11 +77,15 @@ const formatDiscordConversationMessage = (
 ): string => {
     const trimmedContent = message.content.trim();
     const timestamp = formatTimestampForConversation(message.createdAt);
-    const authorLabel = (
-        message.authorName ??
-        message.authorId ??
-        'Unknown'
-    ).trim();
+    const trimmedAuthorName = message.authorName?.trim();
+    const trimmedAuthorId = message.authorId?.trim();
+    const authorLabel =
+        (trimmedAuthorName && trimmedAuthorName.length > 0
+            ? trimmedAuthorName
+            : trimmedAuthorId && trimmedAuthorId.length > 0
+              ? trimmedAuthorId
+              : 'Unknown'
+        ).trim();
 
     if (!timestamp || authorLabel.length === 0) {
         // Fail open: keep original content if we cannot build metadata preamble.
@@ -129,9 +133,10 @@ export const normalizeDiscordConversation = (
     });
 
     if (request.conversation.length > trimmedConversation.length) {
-        logger.debug(
-            `Discord chat conversation was trimmed from ${request.conversation.length} to ${trimmedConversation.length} entries before orchestration.`
-        );
+        logger.debug('conversation.trimmed', {
+            originalLength: request.conversation.length,
+            trimmedLength: trimmedConversation.length,
+        });
     }
 
     return normalized;
