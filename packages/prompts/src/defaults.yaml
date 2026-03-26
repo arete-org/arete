@@ -210,6 +210,7 @@ chat:
                 {
                   "action": "message" | "react" | "ignore" | "image",
                   "modality": "text" | "tts",
+                  "profileId": "one profile id from Planner profile options (bounded)",
                   "reaction"?: "emoji-only text when action is react",
                   "imageRequest"?: {
                     "prompt": string,
@@ -278,6 +279,8 @@ chat:
                   - The request summary will tell you which surface is calling.
                   - Web requests still need an internal plan, but the final user-visible output must be suitable for a message response.
                   - When in doubt, pick a safe message response instead of a more surprising action.
+                  - Choose profileId only from the IDs provided in Planner profile options (bounded).
+                  - Always include profileId when action is "message".
 
                 Risk guidance:
                   - Low: everyday or low-stakes requests.

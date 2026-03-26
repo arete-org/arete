@@ -139,6 +139,10 @@ export interface GenerationRequest {
      */
     search?: GenerationSearchRequest;
     /**
+     * Optional stable caller/user identifier reserved for future memory flows.
+     */
+    userId?: string;
+    /**
      * Optional cancellation signal forwarded from backend orchestration.
      */
     signal?: AbortSignal;
@@ -235,6 +239,11 @@ export interface GenerationResult {
      * Runtime-reported provenance classification, when available.
      */
     provenance?: GenerationProvenance;
+    /**
+     * Placeholder memory retrieval payload reserved for future memory features.
+     * Current flows should leave this undefined.
+     */
+    memoryRetrievals?: [];
 }
 
 /**

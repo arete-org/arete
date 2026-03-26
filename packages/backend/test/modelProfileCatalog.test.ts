@@ -72,6 +72,7 @@ test('buildModelProfilesSection loads valid catalog YAML with profile defaults',
     );
 
     assert.equal(section.defaultProfileId, 'openai-text-fast');
+    assert.equal(section.plannerProfileId, 'openai-text-fast');
     assert.equal(section.catalog.length, 1);
     assert.equal(section.catalog[0]?.providerModel, 'gpt-5-mini');
     assert.equal(section.catalog[0]?.capabilities.canUseSearch, true);
@@ -107,12 +108,14 @@ test('buildModelProfilesSection warns and skips invalid profile entries', () => 
         {
             MODEL_PROFILE_CATALOG_PATH: yamlPath,
             DEFAULT_PROFILE_ID: 'openai-text-fast',
+            PLANNER_PROFILE_ID: 'openai-text-quality',
         },
         process.cwd(),
         (message) => warnings.push(message)
     );
 
     assert.equal(section.catalog.length, 1);
+    assert.equal(section.plannerProfileId, 'openai-text-quality');
     assert.match(warnings.join('\n'), /Ignoring invalid model profile/i);
 });
 
@@ -157,7 +160,10 @@ test('buildModelProfilesSection falls back to bundled defaults when custom catal
 
     assert.equal(section.catalog.length, 1);
     assert.equal(section.catalog[0]?.id, 'openai-text-fast');
-    assert.match(warnings.join('\n'), /Using bundled model profile catalog fallback/i);
+    assert.match(
+        warnings.join('\n'),
+        /Using bundled model profile catalog fallback/i
+    );
 });
 
 test('buildModelProfilesSection reports catalogPath from the source that produced the final catalog', () => {
@@ -202,7 +208,8 @@ test('buildModelProfilesSection reports catalogPath from the source that produce
 });
 
 test('model profile resolver handles id, tier, and raw selectors with fail-open fallback', () => {
-    const warnings: Array<{ message: string; meta?: Record<string, unknown> }> = [];
+    const warnings: Array<{ message: string; meta?: Record<string, unknown> }> =
+        [];
     const resolver = createModelProfileResolver({
         catalog: createCatalog(),
         defaultProfileId: 'openai-text-fast',
@@ -217,7 +224,10 @@ test('model profile resolver handles id, tier, and raw selectors with fail-open 
     assert.equal(resolver.resolve('text-fast').id, 'openai-text-fast');
     assert.equal(resolver.resolve('openai/gpt-5.2').providerModel, 'gpt-5.2');
     assert.equal(resolver.resolve('gpt-5-nano').providerModel, 'gpt-5-nano');
-    assert.equal(resolver.resolve('gpt-5-nano').capabilities.canUseSearch, false);
+    assert.equal(
+        resolver.resolve('gpt-5-nano').capabilities.canUseSearch,
+        false
+    );
     assert.equal(resolver.resolve('%%%').id, 'openai-text-fast');
     assert.match(
         warnings.map((warning) => warning.message).join('\n'),
@@ -226,7 +236,8 @@ test('model profile resolver handles id, tier, and raw selectors with fail-open 
 });
 
 test('model profile resolver falls back to legacy DEFAULT_MODEL when catalog has no enabled profiles', () => {
-    const warnings: Array<{ message: string; meta?: Record<string, unknown> }> = [];
+    const warnings: Array<{ message: string; meta?: Record<string, unknown> }> =
+        [];
     const resolver = createModelProfileResolver({
         catalog: [
             {
@@ -249,7 +260,8 @@ test('model profile resolver falls back to legacy DEFAULT_MODEL when catalog has
 });
 
 test('model profile resolver synthesizes raw profile when multiple enabled catalog entries share provider/model', () => {
-    const warnings: Array<{ message: string; meta?: Record<string, unknown> }> = [];
+    const warnings: Array<{ message: string; meta?: Record<string, unknown> }> =
+        [];
     const duplicateCatalog: ModelProfile[] = [
         ...createCatalog(),
         {

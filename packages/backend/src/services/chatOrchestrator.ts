@@ -16,6 +16,7 @@ import {
     type CreateChatServiceOptions,
 } from './chatService.js';
 import { createChatPlanner, type ChatPlan } from './chatPlanner.js';
+import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import { normalizeDiscordConversation } from './chatConversationNormalization.js';
 import {
     resolveActiveProfileOverlayPrompt,
@@ -41,6 +42,7 @@ const buildPlannerPayload = (
     JSON.stringify({
         action: plan.action,
         modality: plan.modality,
+        profileId: plan.profileId,
         reaction: plan.reaction,
         imageRequest: plan.imageRequest,
         riskTier: plan.riskTier,
@@ -64,31 +66,56 @@ export const createChatOrchestrator = ({
         typeof logger.child === 'function'
             ? logger.child({ module: 'chatOrchestrator' })
             : logger;
+    const catalogProfiles = runtimeConfig.modelProfiles.catalog;
+    const enabledProfiles = catalogProfiles.filter(
+        (profile) => profile.enabled
+    );
+    const enabledProfilesById = new Map(
+        enabledProfiles.map((profile) => [profile.id, profile])
+    );
 
-    // Resolve one startup default profile that drives both planner and response
-    // generation. This keeps routing deterministic unless a future planner
-    // branch chooses profile ids explicitly.
+    // Resolver remains authoritative for all profile-id/tier/raw selector
+    // resolution and fail-open behavior.
     const modelProfileResolver = createModelProfileResolver({
-        catalog: runtimeConfig.modelProfiles.catalog,
+        catalog: catalogProfiles,
         defaultProfileId: runtimeConfig.modelProfiles.defaultProfileId,
         legacyDefaultModel: runtimeConfig.openai.defaultModel,
         warn: chatOrchestratorLogger,
     });
-    const defaultGenerationProfile = modelProfileResolver.resolve(defaultModel);
-    // One resolved profile is reused for planner + generation so both paths
-    // target the same provider/model/capability defaults.
+    const plannerProfile = modelProfileResolver.resolve(
+        runtimeConfig.modelProfiles.plannerProfileId
+    );
+    // Startup fallback profile for end-user response generation.
+    // Planner may override this per-request with one catalog profile id.
+    const defaultResponseProfile = modelProfileResolver.resolve(defaultModel);
+
+    // Bounded profile payload sent to planner prompt context.
+    // Description is trimmed to keep planner context predictable.
+    const plannerProfileOptions = enabledProfiles.map((profile) => ({
+        id: profile.id,
+        description: profile.description.slice(0, 180),
+        costClass: profile.costClass,
+        latencyClass: profile.latencyClass,
+        capabilities: {
+            canUseSearch: profile.capabilities.canUseSearch,
+        },
+    }));
+    // TODO(phase-5-provider-tool-registry): Add deterministic fallback ranking
+    // metadata for planner/executor handoff (for example, preferred
+    // search-capable backup profile ids by policy).
 
     // ChatService handles final message generation and trace/cost wiring.
     const chatService = createChatService({
         generationRuntime,
         storeTrace,
         buildResponseMetadata,
-        defaultModel: defaultGenerationProfile.providerModel,
-        defaultProvider: defaultGenerationProfile.provider,
-        defaultCapabilities: defaultGenerationProfile.capabilities,
+        defaultModel: defaultResponseProfile.providerModel,
+        defaultProvider: defaultResponseProfile.provider,
+        defaultCapabilities: defaultResponseProfile.capabilities,
         recordUsage,
     });
     const chatPlanner = createChatPlanner({
+        availableProfiles: plannerProfileOptions,
         executePlanner: async ({
             messages,
             model,
@@ -101,8 +128,8 @@ export const createChatOrchestrator = ({
             const plannerResult = await generationRuntime.generate({
                 messages,
                 model,
-                provider: defaultGenerationProfile.provider,
-                capabilities: defaultGenerationProfile.capabilities,
+                provider: plannerProfile.provider,
+                capabilities: plannerProfile.capabilities,
                 maxOutputTokens,
                 reasoningEffort,
                 verbosity,
@@ -114,7 +141,7 @@ export const createChatOrchestrator = ({
                 usage: plannerResult.usage,
             };
         },
-        defaultModel: defaultGenerationProfile.providerModel,
+        defaultModel: plannerProfile.providerModel,
         recordUsage,
     });
 
@@ -150,32 +177,81 @@ export const createChatOrchestrator = ({
             planned,
             chatOrchestratorLogger
         );
+        // Planner-selected profile is advisory.
+        // Runtime resolution here is authoritative and fail-open.
+        let selectedResponseProfile = defaultResponseProfile;
+        if (plan.profileId) {
+            const selectedProfile = enabledProfilesById.get(plan.profileId);
+            if (selectedProfile) {
+                selectedResponseProfile = selectedProfile;
+            } else {
+                chatOrchestratorLogger.warn(
+                    'planner selected invalid or disabled profile id; falling back to default profile',
+                    {
+                        selectedProfileId: plan.profileId,
+                        defaultProfileId: defaultResponseProfile.id,
+                        surface: normalizedRequest.surface,
+                    }
+                );
+            }
+        }
+
+        // Keep selected profile, but drop search when profile capabilities do
+        // not allow it. This avoids silently forcing a different model.
+        let generationForExecution: ChatGenerationPlan = plan.generation;
+        if (
+            generationForExecution.search &&
+            !selectedResponseProfile.capabilities.canUseSearch
+        ) {
+            // TODO: Before dropping search, attempt rerouting to a search-capable profile. Emit structured fields for observability, maybe:
+            // - searchFallbackApplied
+            // - originalProfileId
+            // - effectiveProfileId
+            generationForExecution = {
+                ...generationForExecution,
+                search: undefined,
+            };
+            chatOrchestratorLogger.warn(
+                'planner requested search but selected profile does not support search; running without search',
+                {
+                    selectedProfileId: selectedResponseProfile.id,
+                    surface: normalizedRequest.surface,
+                }
+            );
+        }
+        // Persist the effective profile id in planner payload/snapshot so traces
+        // reflect what was actually executed.
+        const executionPlan: ChatPlan = {
+            ...plan,
+            generation: generationForExecution,
+            profileId: selectedResponseProfile.id,
+        };
 
         // Non-message actions return early and skip model generation.
-        if (plan.action === 'ignore') {
+        if (executionPlan.action === 'ignore') {
             return {
                 action: 'ignore',
                 metadata: null,
             };
         }
 
-        if (plan.action === 'react') {
+        if (executionPlan.action === 'react') {
             return {
                 action: 'react',
-                reaction: plan.reaction ?? '👍',
+                reaction: executionPlan.reaction ?? '👍',
                 metadata: null,
             };
         }
 
-        if (plan.action === 'image' && plan.imageRequest) {
+        if (executionPlan.action === 'image' && executionPlan.imageRequest) {
             return {
                 action: 'image',
-                imageRequest: plan.imageRequest,
+                imageRequest: executionPlan.imageRequest,
                 metadata: null,
             };
         }
 
-        if (plan.action === 'image' && !plan.imageRequest) {
+        if (executionPlan.action === 'image' && !executionPlan.imageRequest) {
             // Invalid image action should not block response flow.
             chatOrchestratorLogger.warn(
                 `Chat planner returned image without imageRequest; falling back to ignore. surface=${normalizedRequest.surface} trigger=${normalizedRequest.trigger.kind} latestUserInputLength=${normalizedRequest.latestUserInput.length}`
@@ -226,7 +302,7 @@ export const createChatOrchestrator = ({
                     '// BEGIN Planner Output',
                     '// This planner decision was made by the backend and should be treated as authoritative for this response.',
                     '// ==========',
-                    buildPlannerPayload(plan, surfacePolicy),
+                    buildPlannerPayload(executionPlan, surfacePolicy),
                     '// ==========',
                     '// END Planner Output',
                     '// ==========',
@@ -241,26 +317,27 @@ export const createChatOrchestrator = ({
             conversationSnapshot: JSON.stringify({
                 request: normalizedRequest,
                 planner: {
-                    action: plan.action,
-                    modality: plan.modality,
-                    riskTier: plan.riskTier,
-                    generation: plan.generation,
+                    action: executionPlan.action,
+                    modality: executionPlan.modality,
+                    profileId: executionPlan.profileId,
+                    riskTier: executionPlan.riskTier,
+                    generation: executionPlan.generation,
                     ...(surfacePolicy && { surfacePolicy }),
                 },
             }),
-            plannerTemperament: plan.generation.temperament,
-            riskTier: plan.riskTier,
-            model: defaultGenerationProfile.providerModel,
-            provider: defaultGenerationProfile.provider,
-            capabilities: defaultGenerationProfile.capabilities,
-            generation: plan.generation,
+            plannerTemperament: executionPlan.generation.temperament,
+            riskTier: executionPlan.riskTier,
+            model: selectedResponseProfile.providerModel,
+            provider: selectedResponseProfile.provider,
+            capabilities: selectedResponseProfile.capabilities,
+            generation: executionPlan.generation,
         });
 
         // Message action is the only branch that returns provenance metadata.
         return {
             action: 'message',
             message: response.message,
-            modality: plan.modality,
+            modality: executionPlan.modality,
             metadata: response.metadata,
         };
     };
