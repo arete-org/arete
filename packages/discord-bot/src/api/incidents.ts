@@ -17,37 +17,7 @@ export type { CreateIncidentApiOptions, IncidentApi };
 export const createIncidentApi = (
     requestJson: ApiRequester,
     { traceApiToken }: CreateIncidentApiOptions = {}
-): IncidentApi => {
-    const shared = createSharedIncidentApi(requestJson, { traceApiToken });
-
-    const reportIncident: IncidentApi['reportIncident'] = (
-        request,
-        options
-    ) => shared.reportIncident(request, options);
-    const listIncidents: IncidentApi['listIncidents'] = (filters, options) =>
-        shared.listIncidents(filters, options);
-    const getIncident: IncidentApi['getIncident'] = (incidentId, options) =>
-        shared.getIncident(incidentId, options);
-    const updateIncidentStatus: IncidentApi['updateIncidentStatus'] = (
-        incidentId,
-        request,
-        options
-    ) => shared.updateIncidentStatus(incidentId, request, options);
-    const addIncidentNote: IncidentApi['addIncidentNote'] = (
-        incidentId,
-        request,
-        options
-    ) => shared.addIncidentNote(incidentId, request, options);
-    const recordIncidentRemediation: IncidentApi['recordIncidentRemediation'] =
-        (incidentId, request, options) =>
-            shared.recordIncidentRemediation(incidentId, request, options);
-
-    return {
-        reportIncident,
-        listIncidents,
-        getIncident,
-        updateIncidentStatus,
-        addIncidentNote,
-        recordIncidentRemediation,
-    };
-};
+): IncidentApi =>
+    createSharedIncidentApi(requestJson, {
+        traceApiToken,
+    });
