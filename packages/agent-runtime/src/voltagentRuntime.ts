@@ -197,6 +197,15 @@ type VoltAgentModelResolution = {
     missingTierAlias?: VoltAgentModelTier;
 };
 
+const normalizeConfiguredModel = (value?: string): string | undefined => {
+    if (value === undefined) {
+        return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+};
+
 const resolveVoltAgentModelId = ({
     requestedModel,
     defaultModel,
@@ -206,24 +215,28 @@ const resolveVoltAgentModelId = ({
     defaultModel?: string;
     modelTiers?: Partial<Record<VoltAgentModelTier, string>>;
 }): VoltAgentModelResolution => {
+    const normalizedDefaultModel = normalizeConfiguredModel(defaultModel);
+
     if (requestedModel) {
         const trimmedModel = requestedModel.trim();
         if (trimmedModel.length === 0) {
             return {
-                selectedModel: defaultModel,
+                selectedModel: normalizedDefaultModel,
             };
         }
 
         if (isVoltAgentModelTier(trimmedModel)) {
             const resolvedTierModel = modelTiers?.[trimmedModel];
-            if (resolvedTierModel !== undefined) {
+            const normalizedTierModel =
+                normalizeConfiguredModel(resolvedTierModel);
+            if (normalizedTierModel !== undefined) {
                 return {
-                    selectedModel: resolvedTierModel,
+                    selectedModel: normalizedTierModel,
                 };
             }
 
             return {
-                selectedModel: defaultModel,
+                selectedModel: normalizedDefaultModel,
                 missingTierAlias: trimmedModel,
             };
         }
@@ -234,7 +247,7 @@ const resolveVoltAgentModelId = ({
     }
 
     return {
-        selectedModel: defaultModel,
+        selectedModel: normalizedDefaultModel,
     };
 };
 
