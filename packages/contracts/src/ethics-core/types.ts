@@ -57,6 +57,16 @@ export type ResponseTemperament = {
  */
 export type PartialResponseTemperament = Partial<ResponseTemperament>;
 
+export type ExecutionStatus = 'executed' | 'skipped' | 'failed';
+
+export type ExecutionReasonCode =
+    | 'planner_runtime_error'
+    | 'planner_invalid_output'
+    | 'generation_runtime_error'
+    | 'tool_not_used'
+    | 'search_not_supported_by_selected_profile'
+    | 'unspecified_tool_outcome';
+
 /**
  * One backend-owned execution timeline entry for this response.
  *
@@ -65,12 +75,13 @@ export type PartialResponseTemperament = Partial<ResponseTemperament>;
  */
 export type ExecutionEvent = {
     kind: 'planner' | 'tool' | 'generation';
-    status: 'executed' | 'skipped' | 'failed';
+    status: ExecutionStatus;
     profileId?: string;
     provider?: string;
     model?: string;
     toolName?: string;
-    reasonCode?: string;
+    reasonCode?: ExecutionReasonCode;
+    durationMs?: number;
 };
 
 /**
@@ -85,6 +96,7 @@ export type ResponseMetadata = {
     licenseContext: string; // Human-readable license label.
     modelVersion: string; // Compatibility mirror of the final generation model.
     staleAfter: string; // ISO timestamp after which the data is stale.
+    totalDurationMs?: number; // End-to-end orchestration duration when available.
     citations: Citation[]; // Sources used for the answer.
     execution?: ExecutionEvent[]; // Canonical execution timeline for model/tool visibility.
     imageDescriptions?: string[]; // Optional captions for any images used.

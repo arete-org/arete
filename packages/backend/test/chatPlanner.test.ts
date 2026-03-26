@@ -67,7 +67,7 @@ test('chatPlanner parses plain JSON output from the backend-native planner promp
             },
         })
     );
-    const plan = await planner.planChat(createChatRequest());
+    const { plan, execution } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.profileId, 'openai-text-medium');
@@ -77,6 +77,8 @@ test('chatPlanner parses plain JSON output from the backend-native planner promp
         'latest Footnote release notes'
     );
     assert.equal(plan.generation.search?.intent, 'current_facts');
+    assert.equal(execution.status, 'executed');
+    assert.ok(execution.durationMs >= 0);
 });
 
 test('chatPlanner forwards bounded profile options context and normalizes blank profileId', async () => {
@@ -126,7 +128,7 @@ test('chatPlanner forwards bounded profile options context and normalizes blank 
         },
     });
 
-    const plan = await planner.planChat(createChatRequest());
+    const { plan } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.profileId, undefined);
     const profileContextMessage =
@@ -149,12 +151,14 @@ test('chatPlanner forwards bounded profile options context and normalizes blank 
 
 test('chatPlanner fails open to a valid fallback generation config when planner JSON is invalid', async () => {
     const planner = createPlanner('{not-valid-json');
-    const plan = await planner.planChat(createChatRequest());
+    const { plan, execution } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.generation.search, undefined);
     assert.equal(plan.generation.reasoningEffort, 'low');
     assert.equal(plan.generation.verbosity, 'low');
+    assert.equal(execution.status, 'failed');
+    assert.equal(execution.reasonCode, 'planner_invalid_output');
 });
 
 test('repo_explainer search plans normalize repo hints and medium context', async () => {
@@ -183,7 +187,7 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
             },
         })
     );
-    const plan = await planner.planChat(createChatRequest());
+    const { plan } = await planner.planChat(createChatRequest());
 
     assert.ok(plan.generation.search);
     assert.equal(plan.generation.search?.intent, 'repo_explainer');
@@ -220,7 +224,7 @@ test('invalid web_search query downgrades safely to none', async () => {
             },
         })
     );
-    const plan = await planner.planChat(createChatRequest());
+    const { plan } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.generation.search, undefined);
     assert.match(plan.reasoning, /search was disabled safely/i);
@@ -246,7 +250,7 @@ test('planner temperament is accepted when all TRACE axes are integer 1..5', asy
             },
         })
     );
-    const plan = await planner.planChat(createChatRequest());
+    const { plan } = await planner.planChat(createChatRequest());
 
     assert.deepEqual(plan.generation.temperament, {
         tightness: 5,
@@ -282,7 +286,7 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
             },
         })
     );
-    const plan = await planner.planChat(createChatRequest());
+    const { plan } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.generation.search, undefined);
@@ -306,7 +310,7 @@ test('react plans with non-emoji payload fall back safely', async () => {
             },
         })
     );
-    const plan = await planner.planChat(createChatRequest());
+    const { plan } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.reaction, undefined);

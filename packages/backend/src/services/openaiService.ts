@@ -15,6 +15,8 @@ import type {
 import type {
     Citation,
     ExecutionEvent,
+    ExecutionReasonCode,
+    ExecutionStatus,
     PartialResponseTemperament,
     Provenance,
     ResponseMetadata,
@@ -625,23 +627,31 @@ type ResponseMetadataRetrievalContext = {
 type ResponseMetadataRuntimeContext = {
     modelVersion: string;
     conversationSnapshot: string;
+    totalDurationMs?: number;
     plannerTemperament?: PartialResponseTemperament;
     retrieval?: ResponseMetadataRetrievalContext;
     executionContext?: {
         planner?: {
+            status: ExecutionStatus;
+            reasonCode?: ExecutionReasonCode;
             profileId: string;
             provider: string;
             model: string;
+            durationMs?: number;
         };
         generation?: {
+            status: ExecutionStatus;
+            reasonCode?: ExecutionReasonCode;
             profileId: string;
             provider: string;
             model: string;
+            durationMs?: number;
         };
         tool?: {
             toolName: string;
-            status: 'executed' | 'skipped' | 'failed';
-            reasonCode?: string;
+            status: ExecutionStatus;
+            reasonCode?: ExecutionReasonCode;
+            durationMs?: number;
         };
     };
 };
@@ -721,12 +731,22 @@ const buildResponseMetadata = (
     const execution: ExecutionEvent[] = [];
     const plannerExecution = runtimeContext.executionContext?.planner;
     if (plannerExecution) {
+        const normalizedPlannerReasonCode =
+            plannerExecution.status === 'executed'
+                ? undefined
+                : (plannerExecution.reasonCode ?? 'planner_runtime_error');
         execution.push({
             kind: 'planner',
-            status: 'executed',
+            status: plannerExecution.status,
             profileId: plannerExecution.profileId,
             provider: plannerExecution.provider,
             model: plannerExecution.model,
+            ...(normalizedPlannerReasonCode !== undefined && {
+                reasonCode: normalizedPlannerReasonCode,
+            }),
+            ...(plannerExecution.durationMs !== undefined && {
+                durationMs: plannerExecution.durationMs,
+            }),
         });
     }
     const toolExecution = runtimeContext.executionContext?.tool;
@@ -742,16 +762,30 @@ const buildResponseMetadata = (
             ...(normalizedToolReasonCode !== undefined && {
                 reasonCode: normalizedToolReasonCode,
             }),
+            ...(toolExecution.durationMs !== undefined && {
+                durationMs: toolExecution.durationMs,
+            }),
         });
     }
     const generationExecution = runtimeContext.executionContext?.generation;
     if (generationExecution) {
+        const normalizedGenerationReasonCode =
+            generationExecution.status === 'executed'
+                ? undefined
+                : (generationExecution.reasonCode ??
+                  'generation_runtime_error');
         execution.push({
             kind: 'generation',
-            status: 'executed',
+            status: generationExecution.status,
             profileId: generationExecution.profileId,
             provider: generationExecution.provider,
             model: generationExecution.model,
+            ...(normalizedGenerationReasonCode !== undefined && {
+                reasonCode: normalizedGenerationReasonCode,
+            }),
+            ...(generationExecution.durationMs !== undefined && {
+                durationMs: generationExecution.durationMs,
+            }),
         });
     }
     // TODO(workflow-execution-metadata): Extend execution events with lineage
@@ -776,6 +810,9 @@ const buildResponseMetadata = (
             runtimeConfig.openai.defaultModel,
         staleAfter: new Date(Date.now() + ninetyDaysMs).toISOString(),
         citations,
+        ...(runtimeContext.totalDurationMs !== undefined && {
+            totalDurationMs: runtimeContext.totalDurationMs,
+        }),
         ...(execution.length > 0 && { execution }),
         ...(temperament && { temperament }),
         ...(finalEvidenceScore !== undefined && {

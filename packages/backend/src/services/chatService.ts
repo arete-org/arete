@@ -116,6 +116,7 @@ export type RunChatInput = {
 export type RunChatMessagesInput = {
     messages: RuntimeMessage[];
     conversationSnapshot: string;
+    orchestrationStartedAtMs?: number;
     plannerTemperament?: PartialResponseTemperament;
     riskTier?: RiskTier;
     model?: string;
@@ -172,6 +173,7 @@ export const createChatService = ({
     const runChatMessages = async ({
         messages,
         conversationSnapshot,
+        orchestrationStartedAtMs,
         plannerTemperament,
         riskTier,
         model,
@@ -182,7 +184,9 @@ export const createChatService = ({
     }: RunChatMessagesInput): Promise<{
         message: string;
         metadata: ResponseMetadata;
+        generationDurationMs: number;
     }> => {
+        const generationStartedAt = Date.now();
         const normalizedGeneration = normalizeGenerationPlan(generation);
         // Repo-explainer mode appends one helper system hint so responses stay
         // aligned with Footnote repository-explanation expectations.
@@ -221,6 +225,11 @@ export const createChatService = ({
         // One runtime call produces both user-visible text and metadata inputs.
         const generationResult =
             await generationRuntime.generate(generationRequest);
+        const generationDurationMs = Date.now() - generationStartedAt;
+        const totalDurationMs =
+            orchestrationStartedAtMs !== undefined
+                ? Math.max(0, Date.now() - orchestrationStartedAtMs)
+                : undefined;
         const assistantMetadata = buildAssistantMetadata(
             generationResult,
             normalizedGeneration,
@@ -231,15 +240,17 @@ export const createChatService = ({
             generationResult.provenance === 'Retrieved' ||
             (generationResult.citations?.length ?? 0) > 0;
         const hasSearchIntent = normalizedGeneration?.search !== undefined;
-        const effectiveToolExecutionContext =
+        const effectiveToolExecutionContext:
+            | NonNullable<
+                  ResponseMetadataRuntimeContext['executionContext']
+              >['tool']
+            | undefined =
             executionContext?.tool?.status === 'skipped'
                 ? executionContext.tool
                 : hasSearchIntent
                   ? {
                         toolName: 'web_search',
-                        status: (retrievalUsed ? 'executed' : 'skipped') as
-                            | 'executed'
-                            | 'skipped',
+                        status: retrievalUsed ? 'executed' : 'skipped',
                         ...(retrievalUsed
                             ? {}
                             : {
@@ -253,6 +264,7 @@ export const createChatService = ({
             ? {
                   ...executionContext.generation,
                   model: usageModel,
+                  durationMs: generationDurationMs,
               }
             : undefined;
         const promptTokens = assistantMetadata.usage?.promptTokens ?? 0;
@@ -287,6 +299,7 @@ export const createChatService = ({
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
             conversationSnapshot: `${conversationSnapshot}\n\n${generationResult.text}`,
+            ...(totalDurationMs !== undefined && { totalDurationMs }),
             plannerTemperament,
             executionContext: {
                 ...executionContext,
@@ -339,6 +352,7 @@ export const createChatService = ({
         return {
             message: generationResult.text,
             metadata: normalizedResponseMetadata,
+            generationDurationMs,
         };
     };
 

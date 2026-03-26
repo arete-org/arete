@@ -16,6 +16,8 @@ import type {
     ChatImageRequest,
 } from '@footnote/contracts/web';
 import type {
+    ExecutionReasonCode,
+    ExecutionStatus,
     RiskTier,
     ResponseTemperament,
     TraceAxisScore,
@@ -35,6 +37,17 @@ import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 type ChatPlannerAction = 'message' | 'react' | 'ignore' | 'image';
+
+export type ChatPlannerExecution = {
+    status: ExecutionStatus;
+    reasonCode?: ExecutionReasonCode;
+    durationMs: number;
+};
+
+export type ChatPlannerResult = {
+    plan: ChatPlan;
+    execution: ChatPlannerExecution;
+};
 
 const REPO_HINTS = [
     'architecture',
@@ -647,7 +660,10 @@ export const createChatPlanner = ({
               )
             : '[]';
 
-    const planChat = async (request: PostChatRequest): Promise<ChatPlan> => {
+    const planChat = async (
+        request: PostChatRequest
+    ): Promise<ChatPlannerResult> => {
+        const plannerStartedAt = Date.now();
         const plannerPrompt = renderPrompt('chat.planner.system').content;
         const requestSummary = summarizeRequest(request);
         const plannerMessages: RuntimeMessage[] = [
@@ -736,16 +752,33 @@ export const createChatPlanner = ({
             }
             */
 
-            return normalizedPlan;
+            return {
+                plan: normalizedPlan,
+                execution: {
+                    status: 'executed',
+                    durationMs: Date.now() - plannerStartedAt,
+                },
+            };
         } catch (error) {
             const fallbackPlan = buildFallbackPlan(
                 request,
                 'Planner failed, so the backend used a safe fallback.'
             );
+            const reasonCode: ExecutionReasonCode =
+                error instanceof SyntaxError
+                    ? 'planner_invalid_output'
+                    : 'planner_runtime_error';
             logger.warn(
                 `Chat planner failed; using fallback action=${fallbackPlan.action}. Error: ${error instanceof Error ? error.message : String(error)}`
             );
-            return fallbackPlan;
+            return {
+                plan: fallbackPlan,
+                execution: {
+                    status: 'failed',
+                    reasonCode,
+                    durationMs: Date.now() - plannerStartedAt,
+                },
+            };
         }
     };
 

@@ -58,10 +58,12 @@ const resolveExecutionSummary = (traceData: ServerMetadata): string | null => {
 
     return traceData.execution
         .map((event) => {
+            const durationSuffix =
+                event.durationMs !== undefined ? `,${event.durationMs}ms` : '';
             if (event.kind === 'tool') {
-                return `${event.kind}:${event.toolName ?? 'tool'}(${event.status})`;
+                return `${event.kind}:${event.toolName ?? 'tool'}(${event.status}${durationSuffix})`;
             }
-            return `${event.kind}:${event.model ?? event.profileId ?? event.provider ?? 'unknown'}(${event.status})`;
+            return `${event.kind}:${event.model ?? event.profileId ?? event.provider ?? 'unknown'}(${event.status}${durationSuffix})`;
         })
         .join(' -> ');
 };
@@ -416,6 +418,12 @@ const TracePage = (): JSX.Element => {
                 {executionSummary && (
                     <p>
                         <strong>Execution:</strong> {executionSummary}
+                    </p>
+                )}
+                {traceData.totalDurationMs !== undefined && (
+                    <p>
+                        <strong>Total Duration:</strong>{' '}
+                        {traceData.totalDurationMs}ms
                     </p>
                 )}
             </article>

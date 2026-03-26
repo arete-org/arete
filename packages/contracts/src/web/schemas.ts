@@ -136,15 +136,25 @@ const ResponseTemperamentSchema = z
     })
     .strict();
 const PartialResponseTemperamentSchema = ResponseTemperamentSchema.partial();
+const ExecutionStatusSchema = z.enum(['executed', 'skipped', 'failed']);
+const ExecutionReasonCodeSchema = z.enum([
+    'planner_runtime_error',
+    'planner_invalid_output',
+    'generation_runtime_error',
+    'tool_not_used',
+    'search_not_supported_by_selected_profile',
+    'unspecified_tool_outcome',
+]);
 const ExecutionEventSchema = z
     .object({
         kind: z.enum(['planner', 'tool', 'generation']),
-        status: z.enum(['executed', 'skipped', 'failed']),
+        status: ExecutionStatusSchema,
         profileId: z.string().min(1).optional(),
         provider: z.string().min(1).optional(),
         model: z.string().min(1).optional(),
         toolName: z.string().min(1).optional(),
-        reasonCode: z.string().min(1).optional(),
+        reasonCode: ExecutionReasonCodeSchema.optional(),
+        durationMs: z.number().int().nonnegative().optional(),
     })
     .superRefine((value, context) => {
         if (
@@ -155,6 +165,14 @@ const ExecutionEventSchema = z
                 code: z.ZodIssueCode.custom,
                 message:
                     'reasonCode is required when execution status is skipped or failed.',
+            });
+        }
+
+        if (value.status === 'executed' && value.reasonCode) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message:
+                    'reasonCode must be omitted when execution status is executed.',
             });
         }
     })
@@ -169,6 +187,7 @@ const responseMetadataShape = {
     licenseContext: z.string(),
     modelVersion: z.string(),
     staleAfter: z.string(),
+    totalDurationMs: z.number().int().nonnegative().optional(),
     citations: z.array(CitationSchema),
     execution: z.array(ExecutionEventSchema).optional(),
     imageDescriptions: z.array(z.string()).optional(),

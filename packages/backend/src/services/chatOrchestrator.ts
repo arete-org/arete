@@ -10,6 +10,10 @@ import type {
     PostChatResponse,
     ChatConversationMessage,
 } from '@footnote/contracts/web';
+import type {
+    ExecutionReasonCode,
+    ExecutionStatus,
+} from '@footnote/contracts/ethics-core';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
     createChatService,
@@ -155,6 +159,7 @@ export const createChatOrchestrator = ({
     const runChat = async (
         request: PostChatRequest
     ): Promise<PostChatResponse> => {
+        const orchestrationStartedAt = Date.now();
         const normalizedConversation =
             request.surface === 'discord'
                 ? normalizeDiscordConversation(request, chatOrchestratorLogger)
@@ -172,9 +177,10 @@ export const createChatOrchestrator = ({
 
         const botProfileDisplayName = resolveBotProfileDisplayName();
         const planned = await chatPlanner.planChat(normalizedRequest);
+        const plannerExecution = planned.execution;
         const { plan, surfacePolicy } = coercePlanForSurface(
             normalizedRequest,
-            planned,
+            planned.plan,
             chatOrchestratorLogger
         );
         // Planner-selected profile is advisory.
@@ -202,8 +208,8 @@ export const createChatOrchestrator = ({
         let toolExecutionContext:
             | {
                   toolName: 'web_search';
-                  status: 'executed' | 'skipped' | 'failed';
-                  reasonCode?: string;
+                  status: ExecutionStatus;
+                  reasonCode?: ExecutionReasonCode;
               }
             | undefined;
         if (
@@ -337,6 +343,7 @@ export const createChatOrchestrator = ({
                     ...(surfacePolicy && { surfacePolicy }),
                 },
             }),
+            orchestrationStartedAtMs: orchestrationStartedAt,
             plannerTemperament: executionPlan.generation.temperament,
             riskTier: executionPlan.riskTier,
             model: selectedResponseProfile.providerModel,
@@ -345,11 +352,17 @@ export const createChatOrchestrator = ({
             generation: executionPlan.generation,
             executionContext: {
                 planner: {
+                    status: plannerExecution.status,
+                    ...(plannerExecution.reasonCode !== undefined && {
+                        reasonCode: plannerExecution.reasonCode,
+                    }),
                     profileId: plannerProfile.id,
                     provider: plannerProfile.provider,
                     model: plannerProfile.providerModel,
+                    durationMs: plannerExecution.durationMs,
                 },
                 generation: {
+                    status: 'executed',
                     profileId: selectedResponseProfile.id,
                     provider: selectedResponseProfile.provider,
                     model: selectedResponseProfile.providerModel,
@@ -358,6 +371,24 @@ export const createChatOrchestrator = ({
                     tool: toolExecutionContext,
                 }),
             },
+        });
+        const totalDurationMs = Math.max(
+            0,
+            Date.now() - orchestrationStartedAt
+        );
+        response.metadata.totalDurationMs = totalDurationMs;
+        chatOrchestratorLogger.info('chat.orchestration.timing', {
+            surface: normalizedRequest.surface,
+            plannerStatus: plannerExecution.status,
+            plannerReasonCode: plannerExecution.reasonCode,
+            plannerDurationMs: plannerExecution.durationMs,
+            generationDurationMs: response.generationDurationMs,
+            totalDurationMs,
+            plannerProfileId: plannerProfile.id,
+            responseProfileId: selectedResponseProfile.id,
+            searchRequested: generationForExecution.search !== undefined,
+            toolStatus: toolExecutionContext?.status,
+            fallbackApplied: plannerExecution.status === 'failed',
         });
 
         // Message action is the only branch that returns provenance metadata.

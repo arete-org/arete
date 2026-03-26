@@ -317,10 +317,14 @@ test('planner-selected profile id controls response model selection', async () =
         capturedExecutionContext?.planner?.profileId,
         'openai-text-fast'
     );
+    assert.equal(capturedExecutionContext?.planner?.status, 'executed');
+    assert.ok((capturedExecutionContext?.planner?.durationMs ?? -1) >= 0);
     assert.equal(
         capturedExecutionContext?.generation?.profileId,
         selectedProfile.id
     );
+    assert.equal(capturedExecutionContext?.generation?.status, 'executed');
+    assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
 });
 
 test('invalid planner-selected profile id falls back to default response profile', async () => {
@@ -735,4 +739,45 @@ test('discord requests are trimmed/formatted in backend before planner and gener
             ?.content ?? '',
         /\(bot\) said:/
     );
+});
+
+test('planner runtime failures emit failed planner execution metadata and still generate a message', async () => {
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
+
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === 700) {
+                throw new Error('planner upstream unavailable');
+            }
+
+            return {
+                text: 'fallback-generated reply',
+                model: request.model,
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedExecutionContext = runtimeContext.executionContext;
+            return createMetadata();
+        },
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(createChatRequest());
+
+    assert.equal(response.action, 'message');
+    assert.equal(response.message, 'fallback-generated reply');
+    assert.equal(capturedExecutionContext?.planner?.status, 'failed');
+    assert.equal(
+        capturedExecutionContext?.planner?.reasonCode,
+        'planner_runtime_error'
+    );
+    assert.ok((capturedExecutionContext?.planner?.durationMs ?? -1) >= 0);
+    assert.equal(capturedExecutionContext?.generation?.status, 'executed');
+    assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
 });

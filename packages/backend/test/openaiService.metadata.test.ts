@@ -187,18 +187,23 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
         baseRuntimeContext({
             executionContext: {
                 planner: {
+                    status: 'executed',
                     profileId: 'openai-text-fast',
                     provider: 'openai',
                     model: 'gpt-5-nano',
+                    durationMs: 12,
                 },
                 tool: {
                     toolName: 'web_search',
                     status: 'executed',
+                    durationMs: 8,
                 },
                 generation: {
+                    status: 'executed',
                     profileId: 'openai-text-medium',
                     provider: 'openai',
                     model: 'gpt-5-mini',
+                    durationMs: 34,
                 },
             },
         })
@@ -211,11 +216,13 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
             profileId: 'openai-text-fast',
             provider: 'openai',
             model: 'gpt-5-nano',
+            durationMs: 12,
         },
         {
             kind: 'tool',
             status: 'executed',
             toolName: 'web_search',
+            durationMs: 8,
         },
         {
             kind: 'generation',
@@ -223,6 +230,7 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
             profileId: 'openai-text-medium',
             provider: 'openai',
             model: 'gpt-5-mini',
+            durationMs: 34,
         },
     ]);
 });
@@ -234,6 +242,7 @@ test('buildResponseMetadata mirrors modelVersion from final generation execution
             modelVersion: 'runtime-fallback-model',
             executionContext: {
                 generation: {
+                    status: 'executed',
                     profileId: 'openai-text-quality',
                     provider: 'openai',
                     model: 'gpt-5.4-mini',
@@ -266,4 +275,43 @@ test('buildResponseMetadata normalizes skipped tool event with fallback reasonCo
             reasonCode: 'unspecified_tool_outcome',
         },
     ]);
+});
+
+test('buildResponseMetadata keeps failed planner reasonCode in execution timeline', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                planner: {
+                    status: 'failed',
+                    reasonCode: 'planner_runtime_error',
+                    profileId: 'openai-text-fast',
+                    provider: 'openai',
+                    model: 'gpt-5-nano',
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'planner',
+            status: 'failed',
+            reasonCode: 'planner_runtime_error',
+            profileId: 'openai-text-fast',
+            provider: 'openai',
+            model: 'gpt-5-nano',
+        },
+    ]);
+});
+
+test('buildResponseMetadata includes totalDurationMs when runtime context provides it', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            totalDurationMs: 1234,
+        })
+    );
+
+    assert.equal(metadata.totalDurationMs, 1234);
 });

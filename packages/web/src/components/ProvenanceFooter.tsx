@@ -27,14 +27,16 @@ const RISK_TIER_COLORS: Record<RiskTier, string> = {
 };
 
 const formatExecutionEvent = (event: ExecutionEvent): string => {
+    const durationSuffix =
+        event.durationMs !== undefined ? `, ${event.durationMs}ms` : '';
     if (event.kind === 'tool') {
         const tool = event.toolName ?? 'tool';
-        return `${event.kind}:${tool}(${event.status})`;
+        return `${event.kind}:${tool}(${event.status}${durationSuffix})`;
     }
 
     const modelOrProfile =
         event.model ?? event.profileId ?? event.provider ?? 'unknown';
-    return `${event.kind}:${modelOrProfile}(${event.status})`;
+    return `${event.kind}:${modelOrProfile}(${event.status}${durationSuffix})`;
 };
 
 const ProvenanceFooter = ({
@@ -158,6 +160,14 @@ const ProvenanceFooter = ({
                     <>
                         <span className="provenance-hash">
                             {metadata.chainHash}
+                        </span>
+                        <span className="provenance-separator"> • </span>
+                    </>
+                )}
+                {metadata.totalDurationMs !== undefined && (
+                    <>
+                        <span className="provenance-duration">
+                            {metadata.totalDurationMs}ms total
                         </span>
                         <span className="provenance-separator"> • </span>
                     </>
