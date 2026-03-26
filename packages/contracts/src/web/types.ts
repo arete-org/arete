@@ -314,6 +314,7 @@ export type ChatImageRequest = {
  */
 export type PostChatRequest = {
     surface: ChatSurface;
+    profileId?: string;
     trigger: {
         kind: ChatTriggerKind;
         messageId?: string;

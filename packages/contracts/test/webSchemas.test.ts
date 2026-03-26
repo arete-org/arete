@@ -125,6 +125,7 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
     assert.equal(
         PostChatRequestSchema.safeParse({
             surface: 'web',
+            profileId: 'footnote',
             trigger: { kind: 'submit' },
             latestUserInput: 'What is Footnote?',
             conversation: [
@@ -158,6 +159,22 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
             surface: 'web',
             trigger: { kind: 'submit' },
             latestUserInput: 'x'.repeat(3073),
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'What is Footnote?',
+                },
+            ],
+        }).success,
+        false
+    );
+
+    assert.equal(
+        PostChatRequestSchema.safeParse({
+            surface: 'discord',
+            profileId: 'INVALID_PROFILE_ID',
+            trigger: { kind: 'direct' },
+            latestUserInput: 'What is Footnote?',
             conversation: [
                 {
                     role: 'user',

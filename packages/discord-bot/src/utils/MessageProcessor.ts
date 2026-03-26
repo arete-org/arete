@@ -21,11 +21,7 @@ import {
 import { logger } from './logger.js';
 import { ResponseHandler } from './response/ResponseHandler.js';
 import { RateLimiter } from './RateLimiter.js';
-import {
-    prependProfileOverlaySystemMessage,
-    runtimeConfig,
-} from '../config.js';
-import { ContextBuilder } from './prompting/ContextBuilder.js';
+import { runtimeConfig } from '../config.js';
 import {
     DEFAULT_IMAGE_MODEL,
     DEFAULT_IMAGE_OUTPUT_COMPRESSION,
@@ -96,6 +92,7 @@ type PreparedProvenancePayload = {
 };
 
 const RESPONSE_CONTEXT_SIZE = 24;
+const RAW_CHAT_HISTORY_LIMIT = 63;
 const DISCORD_MAX_MESSAGE_LENGTH = 2000;
 // Give provenance a short head start so we can usually send one combined
 // response, but still fall back before the user waits indefinitely.
@@ -196,6 +193,36 @@ const hasImageEmbeds = (message: Message): boolean =>
             Boolean(embed.thumbnail?.url)
     );
 
+const buildEmbedSummary = (message: Message): string | null => {
+    if (!message.embeds?.length) {
+        return null;
+    }
+
+    const lines: string[] = [];
+    let embedIndex = 1;
+
+    for (const embed of message.embeds) {
+        lines.push(`[Embed ${embedIndex}]`);
+        if (embed.title) lines.push(`Title: ${embed.title}`);
+        if (embed.description) lines.push(`Description: ${embed.description}`);
+        if (embed.author?.name) lines.push(`Author: ${embed.author.name}`);
+        if (embed.url) lines.push(`URL: ${embed.url}`);
+        if (embed.image?.url) lines.push(`Image: ${embed.image.url}`);
+        if (embed.thumbnail?.url)
+            lines.push(`Thumbnail: ${embed.thumbnail.url}`);
+        if (embed.footer?.text) lines.push(`Footer: ${embed.footer.text}`);
+        if (embed.provider?.name) lines.push(`Provider: ${embed.provider.name}`);
+        if (embed.fields?.length) {
+            for (const field of embed.fields) {
+                lines.push(`${field.name}: ${field.value ?? ''}`);
+            }
+        }
+        embedIndex += 1;
+    }
+
+    return lines.join('\n');
+};
+
 const sanitizeForDiscordCodeBlock = (value: string): string =>
     value.replace(/```/g, '` ` `').trim();
 
@@ -245,7 +272,6 @@ const formatChatFailureForDiscord = (error: unknown): string => {
  * Discord-side executor for backend chat decisions.
  */
 export class MessageProcessor {
-    private readonly contextBuilder: ContextBuilder;
     private readonly rateLimiters: {
         user?: RateLimiter;
         channel?: RateLimiter;
@@ -253,8 +279,6 @@ export class MessageProcessor {
     };
 
     constructor(_options: MessageProcessorOptions = {}) {
-        this.contextBuilder = new ContextBuilder();
-
         this.rateLimiters = {};
         if (runtimeConfig.rateLimits.user.enabled) {
             this.rateLimiters.user = new RateLimiter({
@@ -386,7 +410,7 @@ export class MessageProcessor {
         request: PostChatRequest;
         recoveredImageContext: RecoveredImageContext | null;
     } | null> {
-        const { context } = await this.contextBuilder.buildMessageContext(
+        const conversation = await this.buildRawConversationHistory(
             message,
             RESPONSE_CONTEXT_SIZE
         );
@@ -443,7 +467,7 @@ export class MessageProcessor {
                 })
             );
 
-            context.push({
+            conversation.push({
                 role: 'system',
                 content: [
                     '// ==========',
@@ -469,7 +493,7 @@ export class MessageProcessor {
                 await recoverContextDetailsFromMessage(message);
             if (recoveredImageContext) {
                 const recoveredContext = recoveredImageContext.context;
-                context.push({
+                conversation.push({
                     role: 'system',
                     content:
                         `Recovered image embed context for follow-ups:\n` +
@@ -491,57 +515,25 @@ export class MessageProcessor {
         }
 
         if (trigger.trim()) {
-            context.push({
+            conversation.push({
                 role: 'system',
                 content: `Trigger context: ${trigger.trim()}`,
             });
         }
-
-        // Reinforce runtime identity so cross-bot channel history does not cause
-        // the model to self-identify as a different profile.
-        context.push({
-            role: 'system',
-            content: [
-                '// Runtime Bot Identity Guard',
-                `Profile ID: ${runtimeConfig.profile.id}`,
-                `Profile Display Name: ${runtimeConfig.profile.displayName}`,
-                `Never claim to be any profile other than "${runtimeConfig.profile.displayName}".`,
-                `If asked identity questions (for example "who are you?" or "tell me about yourself"), identify yourself as "${runtimeConfig.profile.displayName}".`,
-                `For normal replies, answer directly and do not prepend with "I'm ${runtimeConfig.profile.displayName}." unless identity was requested.`,
-            ].join('\n'),
-        });
-
-        const conversation = context.slice(1).map((entry) => ({
-            role: entry.role === 'developer' ? 'system' : entry.role,
-            content: entry.content,
-        }));
-        const overlayResult = prependProfileOverlaySystemMessage(
-            conversation,
-            'chat'
-        );
-        if (overlayResult.overlayAdded) {
-            logger.debug(
-                `Injected profile overlay into chat request for message ${message.id}.`,
-                {
-                    profileId: runtimeConfig.profile.id,
-                    overlaySource: runtimeConfig.profile.promptOverlay.source,
-                    overlayLength: runtimeConfig.profile.promptOverlay.length,
-                }
-            );
-        }
-        if (overlayResult.conversation.length === 0) {
+        if (conversation.length === 0) {
             return null;
         }
 
         return {
             request: {
                 surface: 'discord',
+                profileId: runtimeConfig.profile.id,
                 trigger: {
                     kind: this.getChatTriggerKind(message, trigger),
                     messageId: message.id,
                 },
                 latestUserInput: message.content.trim(),
-                conversation: overlayResult.conversation,
+                conversation,
                 attachments: imageAttachments.map((attachment) => ({
                     kind: 'image' as const,
                     url: attachment.url,
@@ -560,6 +552,97 @@ export class MessageProcessor {
             },
             recoveredImageContext,
         };
+    }
+
+    /**
+     * Collects raw Discord chat history (including author/timestamp metadata)
+     * and leaves window trimming plus final text formatting to the backend.
+     */
+    private async buildRawConversationHistory(
+        message: Message,
+        maxContextMessages: number
+    ): Promise<PostChatRequest['conversation']> {
+        const repliedMessage = message.reference?.messageId
+            ? await message.channel.messages
+                  .fetch(message.reference.messageId)
+                  .catch((error) => {
+                      logger.debug(
+                          `Failed to fetch replied message ${message.reference?.messageId}: ${error.message}`
+                      );
+                      return null;
+                  })
+            : null;
+
+        const historyLimit = Math.max(
+            0,
+            Math.min(maxContextMessages, RAW_CHAT_HISTORY_LIMIT)
+        );
+        const recentMessages = await message.channel.messages.fetch({
+            limit: repliedMessage ? Math.floor(historyLimit / 2) : historyLimit,
+            before: message.id,
+        });
+
+        const contextMessages = new Map(recentMessages);
+        if (repliedMessage) {
+            const messagesBeforeReply = await message.channel.messages.fetch({
+                limit: historyLimit,
+                before: repliedMessage.id,
+            });
+            messagesBeforeReply.forEach((contextMessage, id) => {
+                if (!contextMessages.has(id)) {
+                    contextMessages.set(id, contextMessage);
+                }
+            });
+
+            if (!contextMessages.has(repliedMessage.id)) {
+                contextMessages.set(repliedMessage.id, repliedMessage);
+            }
+        }
+
+        const sortedMessages = Array.from(contextMessages.values()).sort(
+            (left, right) => left.createdTimestamp - right.createdTimestamp
+        );
+
+        const historyConversation = sortedMessages.map((contextMessage) => {
+            const isBotMessage =
+                contextMessage.author.id === message.client.user?.id;
+            const content =
+                contextMessage.content.trim() ||
+                buildEmbedSummary(contextMessage) ||
+                (isBotMessage
+                    ? 'Assistant response contained only non-text content.'
+                    : 'User message contained only non-text content.');
+
+            return {
+                role: isBotMessage ? ('assistant' as const) : ('user' as const),
+                content,
+                authorName:
+                    contextMessage.member?.displayName ??
+                    contextMessage.author.username,
+                authorId: contextMessage.author.id,
+                messageId: contextMessage.id,
+                createdAt: new Date(
+                    contextMessage.createdTimestamp
+                ).toISOString(),
+            };
+        });
+
+        const currentMessageContent =
+            message.content.trim() ||
+            buildEmbedSummary(message) ||
+            (hasImageAttachments(message)
+                ? '[User uploaded one or more images.]'
+                : 'User sent a non-text message.');
+        historyConversation.push({
+            role: 'user',
+            content: currentMessageContent,
+            authorName: message.member?.displayName ?? message.author.username,
+            authorId: message.author.id,
+            messageId: message.id,
+            createdAt: new Date(message.createdTimestamp).toISOString(),
+        });
+
+        return historyConversation;
     }
 
     private getChatTriggerKind(
