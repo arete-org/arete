@@ -207,8 +207,19 @@ export const createInternalImageApi = (
                     return;
                 }
 
+                let parsedEvent: InternalImageStreamEvent;
+                try {
+                    parsedEvent = JSON.parse(trimmed) as InternalImageStreamEvent;
+                } catch (error) {
+                    const message =
+                        error instanceof Error ? error.message : String(error);
+                    throw new Error(
+                        `Internal image stream payload was invalid: body Malformed JSON (${message})`
+                    );
+                }
+
                 const parsed = InternalImageStreamEventSchema.safeParse(
-                    JSON.parse(trimmed) as InternalImageStreamEvent
+                    parsedEvent
                 );
                 if (!parsed.success) {
                     const firstIssue = parsed.error.issues[0];
