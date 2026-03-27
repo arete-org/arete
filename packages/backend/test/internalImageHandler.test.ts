@@ -357,7 +357,8 @@ test('internal image task service rejects unsupported runtime model identifiers'
             async generateImage(request) {
                 return {
                     responseId: 'resp_123',
-                    textModel: 'future-text-model' as ImageGenerationRequest['textModel'],
+                    textModel:
+                        'future-text-model' as ImageGenerationRequest['textModel'],
                     imageModel:
                         'future-image-model' as ImageGenerationRequest['imageModel'],
                     revisedPrompt: null,

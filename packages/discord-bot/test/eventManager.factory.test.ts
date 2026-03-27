@@ -21,7 +21,7 @@ test('EventManager loads events through createEvent factories', async () => {
     await writeFile(
         eventFile,
         [
-            "exports.createEvent = (client, dependencies) => {",
+            'exports.createEvent = (client, dependencies) => {',
             "  client.handlers.set('voiceState', { source: 'factory', dependencyCount: Object.keys(dependencies || {}).length });",
             '  return {',
             "    name: 'ready',",

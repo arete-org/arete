@@ -42,4 +42,3 @@ export const RECONNECTION_CONSTANTS = {
     // Exponential backoff multiplier
     RECONNECT_BACKOFF_MULTIPLIER: 2,
 } as const;
-

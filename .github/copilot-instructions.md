@@ -25,4 +25,3 @@ This project follows strict project framework principles for ethical AI developm
 5. Include comprehensive error handling
 
 See `cursor.rules` for complete guidelines.
-

@@ -18,7 +18,10 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const runtimeSchemaPath = path.join(__dirname, 'annotation-schema.runtime.json');
+const runtimeSchemaPath = path.join(
+    __dirname,
+    'annotation-schema.runtime.json'
+);
 const expectedSchema = JSON.parse(serializeAnnotationSchema(annotationSchema));
 
 let actualSchema: unknown;

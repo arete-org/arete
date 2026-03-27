@@ -15,4 +15,3 @@ export interface InboundFilterResult {
 export const runInboundFilters = (content: string): InboundFilterResult => {
     return { content, changes: [] };
 };
-

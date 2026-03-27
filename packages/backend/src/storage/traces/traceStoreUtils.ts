@@ -37,4 +37,3 @@ export function assertValidResponseMetadata(
         `Trace record "${source}" for response "${responseId}" is invalid (${issuePath}: ${issueMessage}).`
     );
 }
-

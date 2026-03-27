@@ -78,4 +78,3 @@ export function createTraceStoreFromConfig(): TraceStore {
  * Eager default trace store used by the backend HTTP handlers.
  */
 export const defaultTraceStore = createTraceStoreFromConfig();
-

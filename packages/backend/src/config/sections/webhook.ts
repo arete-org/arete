@@ -7,10 +7,7 @@
  */
 
 import { envDefaultValues } from '@footnote/config-spec';
-import {
-    parseOptionalTrimmedString,
-    parsePositiveIntEnv,
-} from '../parsers.js';
+import { parseOptionalTrimmedString, parsePositiveIntEnv } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
 /**

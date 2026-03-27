@@ -411,7 +411,9 @@ const safeFetchImageResponse = async (
 
         const location = response.headers.get('location');
         if (!location) {
-            throw new Error('Image URL redirect response did not include a Location header.');
+            throw new Error(
+                'Image URL redirect response did not include a Location header.'
+            );
         }
 
         currentUrl = await validateSafeImageUrl(
@@ -446,12 +448,11 @@ const fetchImageAsDataUrl = async (
         ?.split(';', 1)[0]
         ?.trim()
         ?.toLowerCase();
-    const detectedContentType = detectContentTypeFromUrl(resolvedUrl.toString());
+    const detectedContentType = detectContentTypeFromUrl(
+        resolvedUrl.toString()
+    );
 
-    if (
-        !normalizedContentType ||
-        !normalizedContentType.startsWith('image/')
-    ) {
+    if (!normalizedContentType || !normalizedContentType.startsWith('image/')) {
         const hintedType =
             detectedContentType ?? IMAGE_DESCRIPTION_DEFAULT_CONTENT_TYPE;
         throw new Error(
@@ -471,7 +472,9 @@ const fetchImageAsDataUrl = async (
     }
 
     if (!response.body) {
-        throw new Error('Downloaded image response did not include a readable body.');
+        throw new Error(
+            'Downloaded image response did not include a readable body.'
+        );
     }
 
     const reader = response.body.getReader();

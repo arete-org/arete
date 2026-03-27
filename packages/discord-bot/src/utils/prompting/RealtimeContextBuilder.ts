@@ -58,9 +58,7 @@ export class RealtimeContextBuilder {
                 ? `\nRecent conversation summary:\n${transcripts.map((line) => `- ${line}`).join('\n')}`
                 : '';
 
-        const basePrompt = renderPromptWithProfileOverlay(
-            'realtime'
-        );
+        const basePrompt = renderPromptWithProfileOverlay('realtime');
         const instructions = `${basePrompt}\n\nParticipants currently in the voice channel:\n${roster}${transcriptBlock}`;
 
         return {
@@ -76,4 +74,3 @@ export class RealtimeContextBuilder {
         };
     }
 }
-

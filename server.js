@@ -30,4 +30,3 @@ import(pathToFileURL(entryPath).href).catch((error) => {
     );
     process.exit(1);
 });
-

@@ -14,10 +14,7 @@ import {
     detectContentTypeFromUrl,
 } from '../src/services/internalImageDescription.js';
 
-const publicLookup = (async (
-    _hostname: string,
-    options?: unknown
-) => {
+const publicLookup = (async (_hostname: string, options?: unknown) => {
     const resolvedAddress = {
         address: '93.184.216.34',
         family: 4 as const,

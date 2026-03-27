@@ -41,4 +41,3 @@ function verifyGitHubSignature(
 }
 
 export { verifyGitHubSignature };
-

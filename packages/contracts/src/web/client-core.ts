@@ -192,7 +192,9 @@ const validateApiResponsePayload = <T>(
         }
 
         const errorMessage =
-            error instanceof Error ? error.message : 'Response validation failed';
+            error instanceof Error
+                ? error.message
+                : 'Response validation failed';
         throw createApiClientError(
             {
                 status,
@@ -268,7 +270,10 @@ export const createApiTransport = ({
             ...headers,
         };
 
-        if (body !== undefined && requestHeaders['Content-Type'] === undefined) {
+        if (
+            body !== undefined &&
+            requestHeaders['Content-Type'] === undefined
+        ) {
             requestHeaders['Content-Type'] = 'application/json';
         }
 
@@ -397,4 +402,3 @@ export const createApiTransport = ({
         requestJson,
     };
 };
-

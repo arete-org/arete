@@ -71,13 +71,17 @@ export const createIncidentHandlers = ({
         req: IncomingMessage,
         res: ServerResponse
     ): boolean => {
-        const auth = parseTrustedServiceAuth(req, {
-            traceApiToken,
-            serviceToken,
-        }, {
-            missing: 'incidents missing-trusted-auth',
-            invalid: 'incidents invalid-trusted-auth',
-        });
+        const auth = parseTrustedServiceAuth(
+            req,
+            {
+                traceApiToken,
+                serviceToken,
+            },
+            {
+                missing: 'incidents missing-trusted-auth',
+                invalid: 'incidents invalid-trusted-auth',
+            }
+        );
         if (auth.ok) {
             return true;
         }
@@ -126,12 +130,13 @@ export const createIncidentHandlers = ({
                 return;
             }
 
-            const payload = await parseBodyWithSchema<PostIncidentReportRequest>(
-                req,
-                res,
-                'incident report',
-                (value) => PostIncidentReportRequestSchema.safeParse(value)
-            );
+            const payload =
+                await parseBodyWithSchema<PostIncidentReportRequest>(
+                    req,
+                    res,
+                    'incident report',
+                    (value) => PostIncidentReportRequestSchema.safeParse(value)
+                );
             if (!payload) {
                 return;
             }
@@ -193,10 +198,7 @@ export const createIncidentHandlers = ({
             const createdTo = parseOptionalDate(
                 parsedUrl.searchParams.get('createdTo')
             );
-            if (
-                parsedUrl.searchParams.get('createdFrom') &&
-                !createdFrom
-            ) {
+            if (parsedUrl.searchParams.get('createdFrom') && !createdFrom) {
                 sendJson(res, 400, {
                     error: 'Invalid request payload',
                     details: 'createdFrom: Expected a valid ISO date string',
@@ -223,7 +225,11 @@ export const createIncidentHandlers = ({
             });
 
             sendJson(res, 200, response);
-            logRequest(req, res, `incident list success count=${response.incidents.length}`);
+            logRequest(
+                req,
+                res,
+                `incident list success count=${response.incidents.length}`
+            );
         } catch (error) {
             sendJson(res, 500, { error: 'Failed to list incidents' });
             logRequest(
@@ -278,7 +284,9 @@ export const createIncidentHandlers = ({
 
             const incidentIdResult = readIncidentIdFromPath(parsedUrl.pathname);
             if (!incidentIdResult.ok) {
-                sendJson(res, 400, { error: 'Invalid incident request format' });
+                sendJson(res, 400, {
+                    error: 'Invalid incident request format',
+                });
                 logRequest(
                     req,
                     res,
@@ -333,7 +341,9 @@ export const createIncidentHandlers = ({
                 'status'
             );
             if (!incidentIdResult.ok) {
-                sendJson(res, 400, { error: 'Invalid incident request format' });
+                sendJson(res, 400, {
+                    error: 'Invalid incident request format',
+                });
                 logRequest(
                     req,
                     res,
@@ -345,12 +355,13 @@ export const createIncidentHandlers = ({
             }
             const incidentId = incidentIdResult.incidentId;
 
-            const payload = await parseBodyWithSchema<PostIncidentStatusRequest>(
-                req,
-                res,
-                'incident status',
-                (value) => PostIncidentStatusRequestSchema.safeParse(value)
-            );
+            const payload =
+                await parseBodyWithSchema<PostIncidentStatusRequest>(
+                    req,
+                    res,
+                    'incident status',
+                    (value) => PostIncidentStatusRequestSchema.safeParse(value)
+                );
             if (!payload) {
                 return;
             }
@@ -401,7 +412,9 @@ export const createIncidentHandlers = ({
                 'notes'
             );
             if (!incidentIdResult.ok) {
-                sendJson(res, 400, { error: 'Invalid incident request format' });
+                sendJson(res, 400, {
+                    error: 'Invalid incident request format',
+                });
                 logRequest(
                     req,
                     res,
@@ -469,7 +482,9 @@ export const createIncidentHandlers = ({
                 'remediation'
             );
             if (!incidentIdResult.ok) {
-                sendJson(res, 400, { error: 'Invalid incident request format' });
+                sendJson(res, 400, {
+                    error: 'Invalid incident request format',
+                });
                 logRequest(
                     req,
                     res,
@@ -486,7 +501,8 @@ export const createIncidentHandlers = ({
                     req,
                     res,
                     'incident remediation',
-                    (value) => PostIncidentRemediationRequestSchema.safeParse(value)
+                    (value) =>
+                        PostIncidentRemediationRequestSchema.safeParse(value)
                 );
             if (!payload) {
                 return;
@@ -497,7 +513,11 @@ export const createIncidentHandlers = ({
                 payload
             );
             sendJson(res, 200, response);
-            logRequest(req, res, `incident remediation success id=${incidentId}`);
+            logRequest(
+                req,
+                res,
+                `incident remediation success id=${incidentId}`
+            );
         } catch (error) {
             if (error instanceof IncidentNotFoundError) {
                 sendJson(res, 404, { error: 'Incident not found' });
@@ -505,7 +525,9 @@ export const createIncidentHandlers = ({
                 return;
             }
 
-            sendJson(res, 500, { error: 'Failed to record incident remediation' });
+            sendJson(res, 500, {
+                error: 'Failed to record incident remediation',
+            });
             logRequest(
                 req,
                 res,

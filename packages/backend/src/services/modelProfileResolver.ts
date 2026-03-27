@@ -116,7 +116,9 @@ const parseRawModel = (selector: string): ParsedRawModel | null => {
  * This keeps routing fail-open for existing deployments that still rely on
  * `DEFAULT_MODEL` while catalog migration completes.
  */
-const buildLegacyDefaultProfile = (legacyDefaultModel: string): ModelProfile => ({
+const buildLegacyDefaultProfile = (
+    legacyDefaultModel: string
+): ModelProfile => ({
     id: 'legacy-default-model',
     description:
         'Compatibility profile synthesized from DEFAULT_MODEL fallback behavior.',
@@ -159,7 +161,9 @@ export const createModelProfileResolver = ({
     warn,
 }: CreateModelProfileResolverOptions) => {
     // Fast lookup by id for explicit profile-id selectors.
-    const catalogById = new Map(catalog.map((profile) => [profile.id, profile]));
+    const catalogById = new Map(
+        catalog.map((profile) => [profile.id, profile])
+    );
     // Ordered enabled list powers default fallback behavior.
     const enabledCatalog = catalog.filter((profile) => profile.enabled);
 

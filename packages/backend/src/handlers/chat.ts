@@ -108,11 +108,7 @@ const logSuccessfulAuthStep = (
         logger.info(
             `Skipping CAPTCHA verification (${authContext.skipReason})`
         );
-        logRequest(
-            req,
-            res,
-            `chat captcha-skipped-${authContext.skipReason}`
-        );
+        logRequest(req, res, `chat captcha-skipped-${authContext.skipReason}`);
         return;
     }
 
@@ -142,15 +138,14 @@ const createChatHandler = ({
     buildResponseMetadata,
     maxChatBodyBytes,
 }: ChatHandlerDeps) => {
-    const chatOrchestrator =
-        generationRuntime
-            ? createChatOrchestrator({
-                  generationRuntime,
-                  storeTrace,
-                  buildResponseMetadata,
-                  defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
-              })
-            : null;
+    const chatOrchestrator = generationRuntime
+        ? createChatOrchestrator({
+              generationRuntime,
+              storeTrace,
+              buildResponseMetadata,
+              defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+          })
+        : null;
 
     // If the generation runtime is unavailable, we keep the handler alive and return 503 later instead of failing startup.
     // The controller keeps public and trusted-service limiter buckets separate.
@@ -207,8 +202,7 @@ const createChatHandler = ({
             );
             if (!parsedRequestResult.success) {
                 if (
-                    parsedRequestResult.error.logLabel ===
-                    'chat invalid-json'
+                    parsedRequestResult.error.logLabel === 'chat invalid-json'
                 ) {
                     logger.warn('Chat handler received invalid JSON body.');
                 }

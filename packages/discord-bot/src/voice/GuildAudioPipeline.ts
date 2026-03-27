@@ -135,4 +135,3 @@ export class GuildAudioPipeline {
         this.resourceCreated = true;
     }
 }
-

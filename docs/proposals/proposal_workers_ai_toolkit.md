@@ -76,11 +76,11 @@ This architecture allows Footnote to:
 
 ## Implementation Plan
 
-| Phase                           | Description                                                                         | Output                                           |
-| ------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------ |
-| **1. Prototype**                | Connect AI Toolkit to a local Ollama or ONNX model; log provenance metadata.        | Local prototype showing reasoning trace.         |
-| **2. Edge Deployment**          | Deploy a simple inference Worker using Cloudflare’s AI runtime.                     | Public endpoint running open model inference.    |
-| **3. Integration with MCP**     | Register ethics-core and provenance loggers as MCP tools in AI Toolkit.             | Cross-tool context sharing and trace visibility. |
+| Phase                           | Description                                                                                 | Output                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **1. Prototype**                | Connect AI Toolkit to a local Ollama or ONNX model; log provenance metadata.                | Local prototype showing reasoning trace.         |
+| **2. Edge Deployment**          | Deploy a simple inference Worker using Cloudflare’s AI runtime.                             | Public endpoint running open model inference.    |
+| **3. Integration with MCP**     | Register ethics-core and provenance loggers as MCP tools in AI Toolkit.                     | Cross-tool context sharing and trace visibility. |
 | **4. Unified Provenance Layer** | Standardize metadata format between AI Toolkit traces and the project's ethics-core schema. | End-to-end verifiable reasoning chain.           |
 
 ---

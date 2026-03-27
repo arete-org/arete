@@ -64,11 +64,21 @@ test('RealtimeAudioHandler keeps append-only turns stable across repeated calls'
         sent.push(payload);
     };
 
-    await handler.sendAudio(sendEvent, Buffer.from([1, 2, 3, 4]), 'Alice', 'user-1');
+    await handler.sendAudio(
+        sendEvent,
+        Buffer.from([1, 2, 3, 4]),
+        'Alice',
+        'user-1'
+    );
     assert.equal(sent.length, 1);
     assert.equal(sent[0].type, 'input_audio.append');
 
-    await handler.sendAudio(sendEvent, Buffer.from([5, 6, 7, 8]), 'Alice', 'user-1');
+    await handler.sendAudio(
+        sendEvent,
+        Buffer.from([5, 6, 7, 8]),
+        'Alice',
+        'user-1'
+    );
     assert.equal(sent.length, 2);
     assert.deepEqual(
         sent.map((payload) => payload.type),
@@ -142,4 +152,3 @@ test('VoiceSessionManager forwards multi-speaker audio with display names', asyn
 
     manager.removeSession('guild-1');
 });
-

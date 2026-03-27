@@ -138,4 +138,3 @@ export function chunkString(value: string, chunkSize: number): string[] {
     }
     return chunks;
 }
-

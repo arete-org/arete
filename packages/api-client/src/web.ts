@@ -19,7 +19,9 @@ import {
 import type { ApiJsonResult, ApiRequester } from './client.js';
 
 export type WebReadApi = {
-    getRuntimeConfig: (signal?: AbortSignal) => Promise<GetRuntimeConfigResponse>;
+    getRuntimeConfig: (
+        signal?: AbortSignal
+    ) => Promise<GetRuntimeConfigResponse>;
     getBlogIndex: (signal?: AbortSignal) => Promise<ListBlogPostsResponse>;
     getBlogPost: (
         discussionNumber: number,

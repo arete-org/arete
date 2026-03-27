@@ -43,4 +43,3 @@ export function computeRiskTier(content: string, context: string[]): RiskTier {
     logger.debug(`[computeRiskTier] Context length: ${context.length}`);
     return 'Low';
 }
-

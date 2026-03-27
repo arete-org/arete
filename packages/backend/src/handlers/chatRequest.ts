@@ -207,14 +207,17 @@ export const parseChatRequest = async (
             content: message.content.trim(),
         })
     );
-    if (normalizedConversation.some((message) => message.content.length === 0)) {
+    if (
+        normalizedConversation.some((message) => message.content.length === 0)
+    ) {
         return {
             success: false,
             error: {
                 statusCode: 400,
                 payload: {
                     error: 'Invalid chat request payload',
-                    details: 'conversation.content: Message content must not be blank',
+                    details:
+                        'conversation.content: Message content must not be blank',
                 },
                 logLabel: 'chat blank-conversation-message',
             },

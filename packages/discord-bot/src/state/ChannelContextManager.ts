@@ -433,8 +433,7 @@ export class ChannelContextManager {
                 totalTokensIn:
                     this.llmCostTotals.totalTokensIn + record.promptTokens,
                 totalTokensOut:
-                    this.llmCostTotals.totalTokensOut +
-                    record.completionTokens,
+                    this.llmCostTotals.totalTokensOut + record.completionTokens,
             };
 
             logger.debug(

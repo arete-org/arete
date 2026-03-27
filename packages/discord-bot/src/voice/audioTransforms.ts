@@ -186,4 +186,3 @@ export const upsampleToDiscord = (buffer: Buffer): Buffer =>
         AUDIO_CONSTANTS.REALTIME_SAMPLE_RATE,
         AUDIO_CONSTANTS.DISCORD_SAMPLE_RATE
     );
-

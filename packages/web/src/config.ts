@@ -69,4 +69,3 @@ export const loadRuntimeConfig = async (): Promise<RuntimeConfig> => {
 export const runtimeConfig = {
     load: loadRuntimeConfig,
 };
-

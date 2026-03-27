@@ -258,7 +258,9 @@ test('chat request build does not log profile overlay injection details', async 
         'Bot should not perform overlay injection logging after backend ownership migration'
     );
     assert.ok(
-        !flattenedLogs.includes('secret overlay body that must not appear in logs'),
+        !flattenedLogs.includes(
+            'secret overlay body that must not appear in logs'
+        ),
         'Overlay body should never appear in debug logs'
     );
 });

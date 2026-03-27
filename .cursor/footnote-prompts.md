@@ -223,4 +223,3 @@ Analyze this ethics core code for:
 6. **Ethics review**: "Perform an ethical safety review of this code"
 
 This systematic approach ensures comprehensive analysis while leveraging Cursor's capabilities effectively.
-

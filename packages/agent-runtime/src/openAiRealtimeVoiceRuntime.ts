@@ -118,9 +118,7 @@ const escapeSpeakerLabel = (label: string): string => {
         .replace(/'/g, '&apos;');
 };
 
-const buildSpeakerAnnotation = (
-    speakerLabel?: string
-): string | null => {
+const buildSpeakerAnnotation = (speakerLabel?: string): string | null => {
     if (!speakerLabel) {
         return null;
     }
@@ -194,9 +192,7 @@ const extractRealtimeUsage = (
         ),
     };
 
-    const hasUsage = Object.values(usage).some(
-        (value) => value !== undefined
-    );
+    const hasUsage = Object.values(usage).some((value) => value !== undefined);
     return hasUsage ? usage : undefined;
 };
 
@@ -208,7 +204,8 @@ const mapServerEvent = (
     if (type === 'response.output_audio.delta') {
         return {
             type: 'output_audio.delta',
-            audioBase64: typeof rawEvent.delta === 'string' ? rawEvent.delta : '',
+            audioBase64:
+                typeof rawEvent.delta === 'string' ? rawEvent.delta : '',
         };
     }
 
@@ -229,7 +226,7 @@ const mapServerEvent = (
                     ? rawEvent.response_id
                     : typeof responsePayload?.id === 'string'
                       ? responsePayload.id
-                    : undefined,
+                      : undefined,
             usage,
         };
     }
@@ -295,36 +292,32 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
                     rawType === 'input_audio_buffer.committed' ||
                     rawType === 'input_audio_buffer.cleared'
                 ) {
-                    this.logger?.debug?.(
-                        `OpenAI realtime event: ${rawType}`,
-                        {
-                            type: rawType,
-                            eventId:
-                                typeof parsed.event_id === 'string'
-                                    ? parsed.event_id
-                                    : undefined,
-                            itemId:
-                                typeof parsed.item_id === 'string'
-                                    ? parsed.item_id
-                                    : undefined,
-                            audioStartMs:
-                                typeof parsed.audio_start_ms === 'number'
-                                    ? parsed.audio_start_ms
-                                    : undefined,
-                            audioEndMs:
-                                typeof parsed.audio_end_ms === 'number'
-                                    ? parsed.audio_end_ms
-                                    : undefined,
-                        }
-                    );
+                    this.logger?.debug?.(`OpenAI realtime event: ${rawType}`, {
+                        type: rawType,
+                        eventId:
+                            typeof parsed.event_id === 'string'
+                                ? parsed.event_id
+                                : undefined,
+                        itemId:
+                            typeof parsed.item_id === 'string'
+                                ? parsed.item_id
+                                : undefined,
+                        audioStartMs:
+                            typeof parsed.audio_start_ms === 'number'
+                                ? parsed.audio_start_ms
+                                : undefined,
+                        audioEndMs:
+                            typeof parsed.audio_end_ms === 'number'
+                                ? parsed.audio_end_ms
+                                : undefined,
+                    });
                 } else if (rawType.endsWith('.delta')) {
                     // Delta events are extremely chatty; skip logging to keep
                     // voice sessions readable while streaming.
                 } else {
-                    this.logger?.debug?.(
-                        `OpenAI realtime event: ${rawType}`,
-                        { type: rawType }
-                    );
+                    this.logger?.debug?.(`OpenAI realtime event: ${rawType}`, {
+                        type: rawType,
+                    });
                 }
                 const mapped = mapServerEvent(parsed);
                 if (mapped) {
@@ -405,7 +398,10 @@ class OpenAiRealtimeVoiceSession implements RealtimeVoiceSession {
     // Used for greeting/bootstrap turns or explicit text messages during a
     // realtime session.
     private sendTextCreate(
-        event: Extract<RealtimeVoiceClientCommand, { type: 'input_text.create' }>
+        event: Extract<
+            RealtimeVoiceClientCommand,
+            { type: 'input_text.create' }
+        >
     ): void {
         const annotation = buildSpeakerAnnotation(event.speakerLabel);
         const content = annotation
@@ -554,7 +550,10 @@ const buildTurnDetectionConfig = (
 const connectWebSocket = async (
     url: string,
     headers: Record<string, string>,
-    createWebSocket: (url: string, headers: Record<string, string>) => WebSocket,
+    createWebSocket: (
+        url: string,
+        headers: Record<string, string>
+    ) => WebSocket,
     signal: AbortSignal | undefined
 ): Promise<WebSocket> => {
     const ws = createWebSocket(url, headers);
@@ -647,25 +646,20 @@ const waitForProviderSessionReady = (
         };
 
         const handleClose = (code: number, reason: Buffer) => {
-            const suffix = reason?.length
-                ? `: ${reason.toString()}`
-                : '';
-            settle(
-                () =>
-                    reject(
-                        new Error(
-                            `Realtime websocket closed before ready (${code})${suffix}`
-                        )
+            const suffix = reason?.length ? `: ${reason.toString()}` : '';
+            settle(() =>
+                reject(
+                    new Error(
+                        `Realtime websocket closed before ready (${code})${suffix}`
                     )
+                )
             );
         };
 
         let handleAbort: (() => void) | undefined;
         if (signal) {
             handleAbort = () => {
-                const abortError = new Error(
-                    'Realtime session setup aborted.'
-                );
+                const abortError = new Error('Realtime session setup aborted.');
                 abortError.name = 'AbortError';
                 settle(() => reject(abortError));
             };
@@ -783,7 +777,8 @@ export const createOpenAiRealtimeVoiceRuntime = ({
                     );
                 }
                 logger?.error?.('Realtime session creation failed.', {
-                    error: error instanceof Error ? error.message : String(error),
+                    error:
+                        error instanceof Error ? error.message : String(error),
                 });
                 throw error;
             } finally {

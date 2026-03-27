@@ -151,11 +151,14 @@ export const createInternalVoiceTtsHandler = ({
                 outputFormat: ttsRequest.outputFormat,
                 textLength: ttsRequest.text.length,
             });
-            const response = await internalVoiceTtsService.runTtsTask(
-                ttsRequest
-            );
+            const response =
+                await internalVoiceTtsService.runTtsTask(ttsRequest);
             sendJson(res, 200, response);
-            logRequest(req, res, `internal voice tts success task=${response.task}`);
+            logRequest(
+                req,
+                res,
+                `internal voice tts success task=${response.task}`
+            );
         } catch (error) {
             ttsLogger.error('Internal voice TTS execution failed.', {
                 error: error instanceof Error ? error.message : String(error),

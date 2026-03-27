@@ -261,7 +261,9 @@ const validateBidirectionalLinks = (
             continue;
         }
 
-        const locations = refs.map((ref) => `${ref.file}:${ref.line}`).join(', ');
+        const locations = refs
+            .map((ref) => `${ref.file}:${ref.line}`)
+            .join(', ');
         pushError(
             `Code annotations reference unknown operationId "${annotatedOperationId}" at ${locations}`
         );
@@ -284,7 +286,9 @@ const validateBidirectionalLinks = (
 
 const main = (): void => {
     if (!fs.existsSync(openApiPath)) {
-        console.error(`OpenAPI spec not found at ${toRepoRelative(openApiPath)}`);
+        console.error(
+            `OpenAPI spec not found at ${toRepoRelative(openApiPath)}`
+        );
         process.exit(1);
     }
 
@@ -323,4 +327,3 @@ const main = (): void => {
 };
 
 main();
-

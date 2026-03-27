@@ -122,7 +122,9 @@ test('getMetrics matches the retained buffer after mixed human and bot traffic',
 
     const metrics = manager.getMetrics('guild-1:channel-1');
     const recentMessages = manager.getRecentMessages('guild-1:channel-1');
-    const botMessages = recentMessages.filter((message) => message.isBot).length;
+    const botMessages = recentMessages.filter(
+        (message) => message.isBot
+    ).length;
     const humanMessages = recentMessages.length - botMessages;
 
     assert.ok(metrics);

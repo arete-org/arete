@@ -239,7 +239,7 @@ If you see scrollbars in the iframe:
 
 5. **Focus behavior**: CAPTCHA verification/reset should not auto-focus the ask input. This avoids scroll jumps in embedded iframes after the widget refreshes.
 
-5. **Responsive Behavior**: The embed is designed to work well on desktop and tablet devices. Mobile responsiveness is optimized but may require additional styling considerations.
+6. **Responsive Behavior**: The embed is designed to work well on desktop and tablet devices. Mobile responsiveness is optimized but may require additional styling considerations.
 
 ## Embed-Specific Considerations
 

@@ -52,7 +52,9 @@ async function handleGenerateVariationButton(
         return false;
     }
 
-    const responseId = customId.slice(IMAGE_VARIATION_GENERATE_CUSTOM_ID_PREFIX.length);
+    const responseId = customId.slice(
+        IMAGE_VARIATION_GENERATE_CUSTOM_ID_PREFIX.length
+    );
     const session = getVariationSession(interaction.user.id, responseId);
     if (!session) {
         await interaction.reply({
@@ -73,7 +75,8 @@ async function handleGenerateVariationButton(
         return true;
     }
 
-    const developerBypass = interaction.user.id === runtimeConfig.developerUserId;
+    const developerBypass =
+        interaction.user.id === runtimeConfig.developerUserId;
     let tokenSpend = null as ReturnType<typeof consumeImageTokens> | null;
 
     // Token accounting here mirrors slash-command image generation behavior.
@@ -94,14 +97,17 @@ async function handleGenerateVariationButton(
             );
 
             const updatedSession =
-                spendResult.remainingTokens === 0 && spendResult.refreshInSeconds > 0
+                spendResult.remainingTokens === 0 &&
+                spendResult.refreshInSeconds > 0
                     ? (applyVariationCooldown(
                           interaction.user.id,
                           responseId,
                           spendResult.refreshInSeconds
                       ) ?? session)
-                    : (resetVariationCooldown(interaction.user.id, responseId) ??
-                      session);
+                    : (resetVariationCooldown(
+                          interaction.user.id,
+                          responseId
+                      ) ?? session);
 
             if (session.messageUpdater) {
                 try {
@@ -178,11 +184,13 @@ async function handleGenerateVariationButton(
         }
         if (interaction.deferred) {
             await interaction.editReply({
-                content: '⚠️ Something went wrong while generating that variation.',
+                content:
+                    '⚠️ Something went wrong while generating that variation.',
             });
         } else {
             await interaction.reply({
-                content: '⚠️ Something went wrong while generating that variation.',
+                content:
+                    '⚠️ Something went wrong while generating that variation.',
                 flags: [EPHEMERAL_FLAG],
             });
         }
@@ -204,7 +212,9 @@ async function handleResetVariationPromptButton(
         return false;
     }
 
-    const responseId = customId.slice(IMAGE_VARIATION_RESET_PROMPT_CUSTOM_ID_PREFIX.length);
+    const responseId = customId.slice(
+        IMAGE_VARIATION_RESET_PROMPT_CUSTOM_ID_PREFIX.length
+    );
     const session = updateVariationSession(
         interaction.user.id,
         responseId,
@@ -222,7 +232,8 @@ async function handleResetVariationPromptButton(
         return true;
     }
 
-    const refreshed = resetVariationCooldown(interaction.user.id, responseId) ?? session;
+    const refreshed =
+        resetVariationCooldown(interaction.user.id, responseId) ?? session;
     await interaction.update(
         buildVariationConfiguratorView(refreshed, {
             statusMessage: buildVariationStatusMessage(interaction.user.id),
@@ -242,7 +253,9 @@ async function handleCancelVariationButton(
         return false;
     }
 
-    const responseId = customId.slice(IMAGE_VARIATION_CANCEL_CUSTOM_ID_PREFIX.length);
+    const responseId = customId.slice(
+        IMAGE_VARIATION_CANCEL_CUSTOM_ID_PREFIX.length
+    );
     disposeVariationSession(`${interaction.user.id}:${responseId}`);
     await interaction.update({
         content: '❎ Variation cancelled.',
@@ -263,7 +276,9 @@ async function handleVariationPromptModalButton(
         return false;
     }
 
-    const responseId = customId.slice(IMAGE_VARIATION_PROMPT_MODAL_ID_PREFIX.length);
+    const responseId = customId.slice(
+        IMAGE_VARIATION_PROMPT_MODAL_ID_PREFIX.length
+    );
     const session = getVariationSession(interaction.user.id, responseId);
     if (!session) {
         await interaction.reply({
@@ -288,7 +303,9 @@ async function handleVariationEntryButton(
         return false;
     }
 
-    const followUpResponseId = customId.slice(IMAGE_VARIATION_CUSTOM_ID_PREFIX.length);
+    const followUpResponseId = customId.slice(
+        IMAGE_VARIATION_CUSTOM_ID_PREFIX.length
+    );
     if (!followUpResponseId) {
         await interaction.reply({
             content: '⚠️ I could not determine which image to vary.',
@@ -302,7 +319,9 @@ async function handleVariationEntryButton(
     // Recover from message metadata when cache entries have aged out.
     if (!cachedContext) {
         try {
-            const recovered = await recoverContextFromMessage(interaction.message);
+            const recovered = await recoverContextFromMessage(
+                interaction.message
+            );
             if (recovered) {
                 cachedContext = recovered;
                 saveFollowUpContext(followUpResponseId, recovered);
@@ -323,7 +342,8 @@ async function handleVariationEntryButton(
         return true;
     }
 
-    cachedContext.originalPrompt = cachedContext.originalPrompt ?? cachedContext.prompt;
+    cachedContext.originalPrompt =
+        cachedContext.originalPrompt ?? cachedContext.prompt;
     cachedContext.refinedPrompt = cachedContext.refinedPrompt ?? null;
     saveFollowUpContext(followUpResponseId, cachedContext);
 

@@ -56,7 +56,9 @@ const createIncidentServer = async (
             void handlers.handleIncidentNotesRequest(req, res, parsedUrl);
             return;
         }
-        if (/^\/api\/incidents\/[^/]+\/remediation\/?$/.test(parsedUrl.pathname)) {
+        if (
+            /^\/api\/incidents\/[^/]+\/remediation\/?$/.test(parsedUrl.pathname)
+        ) {
             void handlers.handleIncidentRemediationRequest(req, res, parsedUrl);
             return;
         }
@@ -104,27 +106,30 @@ test('incident report/list/detail flow stores pseudonymized pointers and omits j
     });
 
     try {
-        const reportResponse = await fetch(`${server.url}/api/incidents/report`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Trace-Token': 'trace-secret',
-            },
-            body: JSON.stringify({
-                reporterUserId: '123456789012345678',
-                guildId: '234567890123456789',
-                channelId: '345678901234567890',
-                messageId: '456789012345678901',
-                jumpUrl: 'https://discord.com/channels/234/345/456',
-                responseId: 'response_123',
-                chainHash: 'hash_abc',
-                modelVersion: 'gpt-5-mini',
-                tags: ['safety'],
-                description: 'Please review this reply',
-                contact: 'contact@example.com',
-                consentedAt: new Date().toISOString(),
-            }),
-        });
+        const reportResponse = await fetch(
+            `${server.url}/api/incidents/report`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Trace-Token': 'trace-secret',
+                },
+                body: JSON.stringify({
+                    reporterUserId: '123456789012345678',
+                    guildId: '234567890123456789',
+                    channelId: '345678901234567890',
+                    messageId: '456789012345678901',
+                    jumpUrl: 'https://discord.com/channels/234/345/456',
+                    responseId: 'response_123',
+                    chainHash: 'hash_abc',
+                    modelVersion: 'gpt-5-mini',
+                    tags: ['safety'],
+                    description: 'Please review this reply',
+                    contact: 'contact@example.com',
+                    consentedAt: new Date().toISOString(),
+                }),
+            }
+        );
 
         assert.equal(reportResponse.status, 200);
         const reportPayload = (await reportResponse.json()) as {
@@ -164,8 +169,14 @@ test('incident report/list/detail flow stores pseudonymized pointers and omits j
                 auditEvents: Array<{ action: string }>;
             };
         };
-        assert.equal(detailPayload.incident.auditEvents[0]?.action, 'incident.created');
-        assert.equal(detailPayload.incident.pointers.responseId, 'response_123');
+        assert.equal(
+            detailPayload.incident.auditEvents[0]?.action,
+            'incident.created'
+        );
+        assert.equal(
+            detailPayload.incident.pointers.responseId,
+            'response_123'
+        );
         assert.equal(detailPayload.incident.pointers.guildId.length, 64);
 
         const db = new Database(dbPath);
@@ -183,7 +194,10 @@ test('incident report/list/detail flow stores pseudonymized pointers and omits j
                   }
                 | undefined;
             assert.ok(storedIncident);
-            assert.equal(storedIncident?.description, 'Please review this reply');
+            assert.equal(
+                storedIncident?.description,
+                'Please review this reply'
+            );
             assert.equal(storedIncident?.contact, 'contact@example.com');
             assert.equal(storedIncident?.reporter_hash?.length, 64);
             const storedPointers = JSON.parse(storedIncident.pointers_json) as {
@@ -228,18 +242,21 @@ test('incident status, note, and remediation endpoints update durable state and 
     });
 
     try {
-        const reportResponse = await fetch(`${server.url}/api/incidents/report`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Service-Token': 'service-secret',
-            },
-            body: JSON.stringify({
-                reporterUserId: '123456789012345678',
-                responseId: 'response_123',
-                consentedAt: new Date().toISOString(),
-            }),
-        });
+        const reportResponse = await fetch(
+            `${server.url}/api/incidents/report`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Service-Token': 'service-secret',
+                },
+                body: JSON.stringify({
+                    reporterUserId: '123456789012345678',
+                    responseId: 'response_123',
+                    consentedAt: new Date().toISOString(),
+                }),
+            }
+        );
         const reportPayload = (await reportResponse.json()) as {
             incident: { incidentId: string };
         };
@@ -305,7 +322,9 @@ test('incident status, note, and remediation endpoints update durable state and 
         assert.equal(remediationPayload.incident.remediation.state, 'applied');
         assert.equal(remediationPayload.incident.remediation.applied, true);
         assert.deepEqual(
-            remediationPayload.incident.auditEvents.map((event) => event.action),
+            remediationPayload.incident.auditEvents.map(
+                (event) => event.action
+            ),
             [
                 'incident.created',
                 'incident.status_changed',
@@ -404,17 +423,20 @@ test('incident notes endpoint rejects whitespace-only notes with 400', async () 
     });
 
     try {
-        const reportResponse = await fetch(`${server.url}/api/incidents/report`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Service-Token': 'service-secret',
-            },
-            body: JSON.stringify({
-                reporterUserId: '123456789012345678',
-                consentedAt: new Date().toISOString(),
-            }),
-        });
+        const reportResponse = await fetch(
+            `${server.url}/api/incidents/report`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Service-Token': 'service-secret',
+                },
+                body: JSON.stringify({
+                    reporterUserId: '123456789012345678',
+                    consentedAt: new Date().toISOString(),
+                }),
+            }
+        );
         assert.equal(reportResponse.status, 200);
         const reportPayload = (await reportResponse.json()) as {
             incident: { incidentId: string };

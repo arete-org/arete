@@ -135,7 +135,10 @@ test('renderPromptLayersWithActivePersona falls back to default Footnote persona
         },
     });
 
-    assert.match(prompt, /You are Footnote, the Discord voice of the Footnote project\./);
+    assert.match(
+        prompt,
+        /You are Footnote, the Discord voice of the Footnote project\./
+    );
     assert.doesNotMatch(prompt, /BEGIN Bot Profile Overlay/);
 });
 

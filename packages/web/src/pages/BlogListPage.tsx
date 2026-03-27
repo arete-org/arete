@@ -182,7 +182,8 @@ const BlogListPage = (): JSX.Element => {
                 <article className="card">
                     <h2>No Blog Posts Yet</h2>
                     <p>
-                        Check back soon for new posts from the Footnote community.
+                        Check back soon for new posts from the Footnote
+                        community.
                     </p>
                     <Link to="/" className="cta-button primary">
                         Back to home

@@ -1,20 +1,20 @@
 {
-  "version": 1,
-  "skills": {
-    "create-voltagent": {
-      "source": "VoltAgent/skills",
-      "sourceType": "github",
-      "computedHash": "c128fdcdf93d5e40fe87e044ba4ca6b78b0251cf4c51b6179699c282906e5a8a"
-    },
-    "voltagent-best-practices": {
-      "source": "VoltAgent/skills",
-      "sourceType": "github",
-      "computedHash": "25b89b5fb67aa54bdc900f4ea188ac7b87042fafd5a0dcbae1ee0ea5a3c23140"
-    },
-    "voltagent-docs-bundle": {
-      "source": "VoltAgent/skills",
-      "sourceType": "github",
-      "computedHash": "ac3ec8239897928883fb7451066796bb4e46903ee77558fb51621c1680617e25"
+    "version": 1,
+    "skills": {
+        "create-voltagent": {
+            "source": "VoltAgent/skills",
+            "sourceType": "github",
+            "computedHash": "c128fdcdf93d5e40fe87e044ba4ca6b78b0251cf4c51b6179699c282906e5a8a"
+        },
+        "voltagent-best-practices": {
+            "source": "VoltAgent/skills",
+            "sourceType": "github",
+            "computedHash": "25b89b5fb67aa54bdc900f4ea188ac7b87042fafd5a0dcbae1ee0ea5a3c23140"
+        },
+        "voltagent-docs-bundle": {
+            "source": "VoltAgent/skills",
+            "sourceType": "github",
+            "computedHash": "ac3ec8239897928883fb7451066796bb4e46903ee77558fb51621c1680617e25"
+        }
     }
-  }
 }

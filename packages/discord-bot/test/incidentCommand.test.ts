@@ -178,10 +178,12 @@ test('incident command view truncates overlong replies instead of exceeding Disc
             deferReply: async () => undefined,
             editReply: async (payload: unknown) => {
                 editReplyPayloads.push(payload);
-            }
+            },
         } as never);
 
-        const content = String((editReplyPayloads[0] as { content?: string }).content);
+        const content = String(
+            (editReplyPayloads[0] as { content?: string }).content
+        );
         assert.ok(content.length <= 2000);
         assert.match(content, /\.\.\. \(truncated\)$/);
     } finally {
@@ -260,14 +262,17 @@ test('incident command view without an ID shows a picker for unprocessed inciden
             deferReply: async () => undefined,
             editReply: async (payload: unknown) => {
                 editReplyPayloads.push(payload);
-            }
+            },
         } as never);
 
         const payload = editReplyPayloads[0] as {
             content?: string;
             components?: Array<{
                 components?: Array<{
-                    options?: Array<{ data?: { value?: string }; value?: string }>;
+                    options?: Array<{
+                        data?: { value?: string };
+                        value?: string;
+                    }>;
                     data?: {
                         custom_id?: string;
                         options?: Array<{
@@ -278,7 +283,10 @@ test('incident command view without an ID shows a picker for unprocessed inciden
                 }>;
             }>;
         };
-        assert.match(String(payload.content), /select an unprocessed incident/i);
+        assert.match(
+            String(payload.content),
+            /select an unprocessed incident/i
+        );
         const menu = payload.components?.[0]?.components?.[0];
         const menuData = menu?.data;
         const menuOptions = menuData?.options ?? menu?.options ?? [];
@@ -339,7 +347,10 @@ test('incident picker selection updates the ephemeral view with incident detail'
         } as never);
 
         assert.equal(deferred, true);
-        const payload = editReplyPayloads[0] as { content?: string; components?: unknown[] };
+        const payload = editReplyPayloads[0] as {
+            content?: string;
+            components?: unknown[];
+        };
         assert.match(String(payload.content), /Incident 1a2b3c4d/i);
         assert.deepEqual(payload.components, []);
     } finally {

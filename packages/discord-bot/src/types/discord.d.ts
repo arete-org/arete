@@ -28,4 +28,3 @@ declare module 'discord.js' {
         handlers: Collection<string, unknown>;
     }
 }
-

@@ -4,9 +4,9 @@ name: voltagent-best-practices
 description: VoltAgent architectural patterns and conventions. Covers agents vs workflows, project layout, memory, servers, and observability.
 license: MIT
 metadata:
-  author: VoltAgent
-  version: "1.0.0"
-  repository: https://github.com/VoltAgent/skills
+    author: VoltAgent
+    version: '1.0.0'
+    repository: https://github.com/VoltAgent/skills
 ---
 
 # VoltAgent Best Practices
@@ -17,10 +17,10 @@ Quick reference for VoltAgent conventions and patterns.
 
 ## Choosing Agent or Workflow
 
-| Use | When |
-| --- | --- |
-| Agent | Open-ended tasks that require tool selection and adaptive reasoning |
-| Workflow | Multi-step pipelines with explicit control flow and suspend/resume |
+| Use      | When                                                                |
+| -------- | ------------------------------------------------------------------- |
+| Agent    | Open-ended tasks that require tool selection and adaptive reasoning |
+| Workflow | Multi-step pipelines with explicit control flow and suspend/resume  |
 
 ---
 
@@ -41,12 +41,12 @@ src/
 ### Basic Agent
 
 ```typescript
-import { Agent } from "@voltagent/core";
+import { Agent } from '@voltagent/core';
 
 const agent = new Agent({
-  name: "assistant",
-  instructions: "You are helpful.",
-  model: "openai/gpt-4o-mini",
+    name: 'assistant',
+    instructions: 'You are helpful.',
+    model: 'openai/gpt-4o-mini',
 });
 ```
 
@@ -55,29 +55,29 @@ Model format is `provider/model` (for example `openai/gpt-4o-mini` or `anthropic
 ### Basic Workflow
 
 ```typescript
-import { createWorkflowChain } from "@voltagent/core";
-import { z } from "zod";
+import { createWorkflowChain } from '@voltagent/core';
+import { z } from 'zod';
 
 const workflow = createWorkflowChain({
-  id: "example",
-  input: z.object({ text: z.string() }),
-  result: z.object({ summary: z.string() }),
+    id: 'example',
+    input: z.object({ text: z.string() }),
+    result: z.object({ summary: z.string() }),
 }).andThen({
-  id: "summarize",
-  execute: async ({ data }) => ({ summary: data.text }),
+    id: 'summarize',
+    execute: async ({ data }) => ({ summary: data.text }),
 });
 ```
 
 ### VoltAgent Bootstrap
 
 ```typescript
-import { VoltAgent } from "@voltagent/core";
-import { honoServer } from "@voltagent/server-hono";
+import { VoltAgent } from '@voltagent/core';
+import { honoServer } from '@voltagent/server-hono';
 
 new VoltAgent({
-  agents: { agent },
-  workflows: { workflow },
-  server: honoServer(),
+    agents: { agent },
+    workflows: { workflow },
+    server: honoServer(),
 });
 ```
 

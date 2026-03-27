@@ -46,9 +46,8 @@ test('discord prompt registry renders the same canonical base prompt as the shar
         sharedRegistry.renderPrompt('discord.image.persona.footnote').content
     );
     assert.equal(
-        discordRegistry.renderPrompt(
-            'discord.realtime.persona.footnote'
-        ).content,
+        discordRegistry.renderPrompt('discord.realtime.persona.footnote')
+            .content,
         sharedRegistry.renderPrompt('discord.realtime.persona.footnote').content
     );
 });

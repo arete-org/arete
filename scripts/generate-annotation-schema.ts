@@ -17,7 +17,13 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const runtimeSchemaPath = path.join(__dirname, 'annotation-schema.runtime.json');
+const runtimeSchemaPath = path.join(
+    __dirname,
+    'annotation-schema.runtime.json'
+);
 
-fs.writeFileSync(runtimeSchemaPath, serializeAnnotationSchema(annotationSchema));
+fs.writeFileSync(
+    runtimeSchemaPath,
+    serializeAnnotationSchema(annotationSchema)
+);
 console.log(`Generated ${path.relative(process.cwd(), runtimeSchemaPath)}.`);

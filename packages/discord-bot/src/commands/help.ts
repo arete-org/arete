@@ -60,4 +60,3 @@ const helpCommand: Command = {
 };
 
 export default helpCommand;
-

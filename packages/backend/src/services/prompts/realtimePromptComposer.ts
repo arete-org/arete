@@ -6,9 +6,7 @@
  * @footnote-ethics: high - Realtime prompt text shapes live voice behavior and user expectations.
  */
 import type { InternalVoiceSessionContext } from '@footnote/contracts/voice';
-import {
-    renderConversationPromptLayers,
-} from './conversationPromptLayers.js';
+import { renderConversationPromptLayers } from './conversationPromptLayers.js';
 import { buildProfileOverlaySystemMessage } from './profilePromptOverlay.js';
 import { runtimeConfig } from '../../config.js';
 
@@ -76,16 +74,14 @@ const formatParticipantRoster = (
     }
 
     return participants
-        .map(
-            (participant) => {
-                const label = sanitizePromptLine(
-                    participant.displayName,
-                    MAX_PARTICIPANT_LABEL_LENGTH,
-                    'Unknown participant'
-                );
-                return `- ${label}${participant.isBot ? ' (bot)' : ''}`;
-            }
-        )
+        .map((participant) => {
+            const label = sanitizePromptLine(
+                participant.displayName,
+                MAX_PARTICIPANT_LABEL_LENGTH,
+                'Unknown participant'
+            );
+            return `- ${label}${participant.isBot ? ' (bot)' : ''}`;
+        })
         .join('\n');
 };
 
@@ -95,12 +91,13 @@ const formatTranscriptBlock = (transcripts?: string[]): string => {
     }
 
     return `\nRecent conversation summary:\n${transcripts
-        .map((line) =>
-            `- ${sanitizePromptLine(
-                line,
-                MAX_TRANSCRIPT_LINE_LENGTH,
-                '(redacted)'
-            )}`
+        .map(
+            (line) =>
+                `- ${sanitizePromptLine(
+                    line,
+                    MAX_TRANSCRIPT_LINE_LENGTH,
+                    '(redacted)'
+                )}`
         )
         .join('\n')}`;
 };

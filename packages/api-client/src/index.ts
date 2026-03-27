@@ -49,11 +49,9 @@ import {
 } from './traces.js';
 import { createWebReadApi, type WebReadApi } from './web.js';
 
-export type CreateDiscordApiClientOptions = CreateApiTransportOptions &
-    {
-        baseUrl: string;
-    } &
-    CreateIncidentApiOptions &
+export type CreateDiscordApiClientOptions = CreateApiTransportOptions & {
+    baseUrl: string;
+} & CreateIncidentApiOptions &
     CreateTraceApiOptions &
     CreateChatApiOptions &
     CreateInternalImageApiOptions &
@@ -145,7 +143,12 @@ export {
     createTraceApi,
     createWebReadApi,
 };
-export type { ApiClientError, ApiErrorResponse, ApiJsonResult, ApiRequestOptions };
+export type {
+    ApiClientError,
+    ApiErrorResponse,
+    ApiJsonResult,
+    ApiRequestOptions,
+};
 export type {
     ApiRequester,
     ChatApi,

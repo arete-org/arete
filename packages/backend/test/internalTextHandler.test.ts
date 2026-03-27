@@ -353,7 +353,8 @@ test('internal text endpoint still serves image-description tasks when the news 
                 return {
                     task: 'image_description',
                     result: {
-                        description: '{"summary":"Screenshot of a policy update"}',
+                        description:
+                            '{"summary":"Screenshot of a policy update"}',
                         model: 'gpt-4o-mini',
                         usage: {
                             inputTokens: 10,

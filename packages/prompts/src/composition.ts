@@ -7,11 +7,7 @@
  * @footnote-ethics: high - Prompt composition order controls which safety and identity rules the model sees.
  */
 
-import type {
-    PromptKey,
-    PromptRegistry,
-    PromptVariables,
-} from './types.js';
+import type { PromptKey, PromptRegistry, PromptVariables } from './types.js';
 
 /**
  * Renders a list of prompt keys and joins the non-empty results with blank

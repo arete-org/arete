@@ -424,4 +424,3 @@ const safeReply = async (
  * Default export for Discord command registration.
  */
 export default callCommand;
-

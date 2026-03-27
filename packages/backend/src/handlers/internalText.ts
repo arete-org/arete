@@ -159,7 +159,9 @@ export const createInternalTextHandler = ({
 
             if (parsedRequest.task === 'image_description') {
                 if (!internalImageDescriptionTaskService) {
-                    textLogger.warn('Internal text image-description task unavailable.');
+                    textLogger.warn(
+                        'Internal text image-description task unavailable.'
+                    );
                     sendJson(res, 503, {
                         error: 'Internal text service unavailable',
                     });
@@ -171,15 +173,20 @@ export const createInternalTextHandler = ({
                     parsedRequest;
                 let imageHost: string | null = null;
                 try {
-                    imageHost = new URL(imageDescriptionRequest.imageUrl).hostname;
+                    imageHost = new URL(imageDescriptionRequest.imageUrl)
+                        .hostname;
                 } catch {
                     imageHost = null;
                 }
-                textLogger.info('Internal text image-description task accepted.', {
-                    source: auth.source,
-                    imageHost,
-                    contextLength: imageDescriptionRequest.context?.length ?? 0,
-                });
+                textLogger.info(
+                    'Internal text image-description task accepted.',
+                    {
+                        source: auth.source,
+                        imageHost,
+                        contextLength:
+                            imageDescriptionRequest.context?.length ?? 0,
+                    }
+                );
                 const response =
                     await internalImageDescriptionTaskService.runImageDescriptionTask(
                         imageDescriptionRequest

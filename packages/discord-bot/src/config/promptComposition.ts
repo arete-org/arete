@@ -62,11 +62,7 @@ export const renderPromptLayersWithActivePersona = (
     );
     const activePersonaPrompt =
         overlayPersonaPrompt ??
-        renderPromptBundle(
-            input.registry,
-            input.personaKeys,
-            input.variables
-        );
+        renderPromptBundle(input.registry, input.personaKeys, input.variables);
 
     return `${systemPrompt.trimEnd()}\n\n${activePersonaPrompt}`.trim();
 };

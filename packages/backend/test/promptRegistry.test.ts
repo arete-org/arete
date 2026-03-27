@@ -73,8 +73,5 @@ test('backend renderPrompt keeps default variables when explicit undefined value
         botProfileDisplayName: undefined,
     }).content;
 
-    assert.match(
-        rendered,
-        /In web chat, favor explicit reasoning/
-    );
+    assert.match(rendered, /In web chat, favor explicit reasoning/);
 });

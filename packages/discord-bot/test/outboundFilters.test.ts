@@ -210,4 +210,3 @@ test('normalizeOutboundLinks skips raw HTML blocks', () => {
     );
     assert.deepEqual(result.changes, ['wrapped_urls:1']);
 });
-

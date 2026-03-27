@@ -287,10 +287,10 @@ test('openai image runtime emits partial-image callbacks when streaming is enabl
     ]);
     assert.equal(
         (
-            (streamedPayload?.tools as Array<{
+            streamedPayload?.tools as Array<{
                 partial_images?: number;
-            }>)?.[0]?.partial_images ?? null
-        ),
+            }>
+        )?.[0]?.partial_images ?? null,
         1
     );
     assert.equal(result.finalImageBase64, 'final-base64-image');

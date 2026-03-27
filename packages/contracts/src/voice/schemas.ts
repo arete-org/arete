@@ -121,11 +121,7 @@ const InternalVoiceRealtimeOptionsSchema = z
                 serverVad: z
                     .object({
                         threshold: z.number().min(0).max(1).optional(),
-                        silenceDurationMs: z
-                            .number()
-                            .int()
-                            .min(0)
-                            .optional(),
+                        silenceDurationMs: z.number().int().min(0).optional(),
                         prefixPaddingMs: z.number().int().min(0).optional(),
                     })
                     .strict()

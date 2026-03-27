@@ -174,4 +174,3 @@ const createBlogStore = (blogPostsDir: string) => {
 };
 
 export { createBlogStore };
-

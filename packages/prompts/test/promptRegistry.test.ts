@@ -29,10 +29,7 @@ test('loads shared conversational prompts plus surface supplements', () => {
     assert.equal(registry.hasPrompt('chat.web.system'), true);
     assert.equal(registry.hasPrompt('chat.web.persona.footnote'), true);
     assert.equal(registry.hasPrompt('discord.image.persona.footnote'), true);
-    assert.equal(
-        registry.hasPrompt('discord.realtime.persona.footnote'),
-        true
-    );
+    assert.equal(registry.hasPrompt('discord.realtime.persona.footnote'), true);
     assert.match(
         registry.renderPrompt('conversation.shared.system', {
             botProfileDisplayName: 'Footnote',
@@ -222,12 +219,6 @@ test('legacy backend and discord default prompt files are gone', () => {
         'defaults.yaml'
     );
 
-    assert.equal(
-        fs.existsSync(legacyBackendDefaultsPath),
-        false
-    );
-    assert.equal(
-        fs.existsSync(legacyDiscordDefaultsPath),
-        false
-    );
+    assert.equal(fs.existsSync(legacyBackendDefaultsPath), false);
+    assert.equal(fs.existsSync(legacyDiscordDefaultsPath), false);
 });

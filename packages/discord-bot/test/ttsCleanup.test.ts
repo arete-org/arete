@@ -37,4 +37,3 @@ test('cleanupTTSFile removes generated speech files without throwing on missing 
         await fsp.rm(tmpDir, { recursive: true, force: true });
     }
 });
-

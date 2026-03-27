@@ -21,4 +21,3 @@ export interface Command {
     data: SlashCommand;
     execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
 }
-

@@ -6,7 +6,10 @@
  * @footnote-ethics: medium - Conversation shaping affects what the assistant sees and how it responds.
  */
 
-import type { PostChatRequest, ChatConversationMessage } from '@footnote/contracts/web';
+import type {
+    PostChatRequest,
+    ChatConversationMessage,
+} from '@footnote/contracts/web';
 
 const DISCORD_CONTEXT_WINDOW_SIZE = 24;
 
@@ -44,7 +47,9 @@ const trimDiscordConversationWindow = (
  * Formats ISO timestamps into a short planner-friendly token (`YYYY-MM-DD HH:mm`).
  * Returns null when parsing fails so callers can fail open to plain message text.
  */
-const formatTimestampForConversation = (isoTimestamp?: string): string | null => {
+const formatTimestampForConversation = (
+    isoTimestamp?: string
+): string | null => {
     if (!isoTimestamp) {
         return null;
     }
@@ -79,13 +84,13 @@ const formatDiscordConversationMessage = (
     const timestamp = formatTimestampForConversation(message.createdAt);
     const trimmedAuthorName = message.authorName?.trim();
     const trimmedAuthorId = message.authorId?.trim();
-    const authorLabel =
-        (trimmedAuthorName && trimmedAuthorName.length > 0
+    const authorLabel = (
+        trimmedAuthorName && trimmedAuthorName.length > 0
             ? trimmedAuthorName
             : trimmedAuthorId && trimmedAuthorId.length > 0
               ? trimmedAuthorId
               : 'Unknown'
-        ).trim();
+    ).trim();
 
     if (!timestamp || authorLabel.length === 0) {
         // Fail open: keep original content if we cannot build metadata preamble.

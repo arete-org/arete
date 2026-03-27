@@ -47,4 +47,3 @@ export const IMAGE_VARIATION_CANCEL_CUSTOM_ID_PREFIX =
 // When the prompt is already near the embed field budget, skip prompt
 // enlargement to avoid duplicate/truncated fields.
 export const PROMPT_ADJUSTMENT_MIN_REMAINING_RATIO = 0.2;
-

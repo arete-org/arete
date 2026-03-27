@@ -181,4 +181,3 @@ test('SqliteIncidentStore rolls back status changes when the audit append fails'
         await fs.rm(tempRoot, { recursive: true, force: true });
     }
 });
-

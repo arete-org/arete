@@ -95,7 +95,10 @@ export class EventManager {
                         | EventFactory
                         | undefined;
                     if (typeof createEvent === 'function') {
-                        const event = createEvent(this.client, this.dependencies);
+                        const event = createEvent(
+                            this.client,
+                            this.dependencies
+                        );
                         this.events.push(event);
                         logger.debug(
                             `Successfully loaded event (factory): ${file}`
@@ -217,4 +220,3 @@ export class EventManager {
         return this.events.length;
     }
 }
-

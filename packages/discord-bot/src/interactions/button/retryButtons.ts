@@ -39,7 +39,9 @@ export async function handleImageRetryButtonInteraction(
         return false;
     }
 
-    const retryKey = interaction.customId.slice(IMAGE_RETRY_CUSTOM_ID_PREFIX.length);
+    const retryKey = interaction.customId.slice(
+        IMAGE_RETRY_CUSTOM_ID_PREFIX.length
+    );
     if (!retryKey) {
         await interaction.reply({
             content: '⚠️ I could not find that image request to retry.',
@@ -51,7 +53,8 @@ export async function handleImageRetryButtonInteraction(
     const cachedContext = readFollowUpContext(retryKey);
     if (!cachedContext) {
         await interaction.reply({
-            content: '⚠️ Sorry, that retry expired. Please ask me to generate a new image.',
+            content:
+                '⚠️ Sorry, that retry expired. Please ask me to generate a new image.',
             flags: [EPHEMERAL_FLAG],
         });
         return true;
@@ -90,7 +93,9 @@ export async function handleImageRetryButtonInteraction(
 
     try {
         // Remove stale retry controls before posting the fresh result.
-        await interaction.message.edit({ components: [] }).catch(() => undefined);
+        await interaction.message
+            .edit({ components: [] })
+            .catch(() => undefined);
 
         const artifacts = await executeImageGeneration(cachedContext, {
             user: {
@@ -109,10 +114,16 @@ export async function handleImageRetryButtonInteraction(
             },
         });
 
-        const presentation = buildImageResultPresentation(cachedContext, artifacts);
+        const presentation = buildImageResultPresentation(
+            cachedContext,
+            artifacts
+        );
 
         if (artifacts.responseId) {
-            saveFollowUpContext(artifacts.responseId, presentation.followUpContext);
+            saveFollowUpContext(
+                artifacts.responseId,
+                presentation.followUpContext
+            );
         }
         evictFollowUpContext(retryKey);
 
@@ -127,10 +138,13 @@ export async function handleImageRetryButtonInteraction(
         if (retrySpend) {
             refundImageTokens(interaction.user.id, retrySpend.cost);
         }
-        logger.error('Unexpected error while handling image retry button: ' + error);
+        logger.error(
+            'Unexpected error while handling image retry button: ' + error
+        );
         try {
             await interaction.editReply({
-                content: '⚠️ I was unable to generate that image. Please try again later.',
+                content:
+                    '⚠️ I was unable to generate that image. Please try again later.',
                 components: [],
             });
         } catch (replyError) {

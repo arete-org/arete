@@ -70,4 +70,3 @@ Cursor will automatically use these configurations when working in the Footnote 
 - Use appropriate logging and error handling with scoped loggers
 - Respect the domain-specific vocabulary
 - Apply the current module-header and scoped-logger documentation formats
-

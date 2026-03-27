@@ -369,7 +369,9 @@ export class SqliteIncidentStore {
     /**
      * Guards the store against unexpected status values before writing.
      */
-    private assertValidStatus(status: string): asserts status is IncidentStatus {
+    private assertValidStatus(
+        status: string
+    ): asserts status is IncidentStatus {
         const allowed: IncidentStatus[] = [
             'new',
             'under_review',
@@ -439,11 +441,13 @@ export class SqliteIncidentStore {
             return [];
         }
 
-        return [...new Set(
-            tags
-                .map((tag) => String(tag).trim())
-                .filter((tag) => tag.length > 0)
-        )];
+        return [
+            ...new Set(
+                tags
+                    .map((tag) => String(tag).trim())
+                    .filter((tag) => tag.length > 0)
+            ),
+        ];
     }
 
     private generateShortId(): string {
@@ -519,7 +523,9 @@ export class SqliteIncidentStore {
         };
     }
 
-    private insertIncidentWithUniqueShortIdSync(values: Record<string, unknown>): number {
+    private insertIncidentWithUniqueShortIdSync(
+        values: Record<string, unknown>
+    ): number {
         for (let attempt = 0; attempt < 10; attempt += 1) {
             try {
                 const runResult = this.insertIncident.run({
@@ -559,7 +565,9 @@ export class SqliteIncidentStore {
             ).catch((error) => {
                 if (
                     error instanceof Error &&
-                    error.message.includes('UNIQUE constraint failed: incidents.short_id')
+                    error.message.includes(
+                        'UNIQUE constraint failed: incidents.short_id'
+                    )
                 ) {
                     return null;
                 }
@@ -628,7 +636,9 @@ export class SqliteIncidentStore {
 
         const incident = await this.getIncident(id);
         if (!incident) {
-            throw new Error(`Incident ${id} was created but could not be read back`);
+            throw new Error(
+                `Incident ${id} was created but could not be read back`
+            );
         }
 
         return incident;
@@ -734,7 +744,9 @@ export class SqliteIncidentStore {
      * Reads one incident by the short ID exposed to operators and Discord
      * command handlers.
      */
-    async getIncidentByShortId(shortId: string): Promise<IncidentRecord | null> {
+    async getIncidentByShortId(
+        shortId: string
+    ): Promise<IncidentRecord | null> {
         const row = (await this.withRetry(() =>
             this.getIncidentByShortIdStatement.get(shortId)
         )) as IncidentRow | undefined;
@@ -745,7 +757,9 @@ export class SqliteIncidentStore {
      * Lists incidents newest-first and applies the simple Wave 1 filters. Tag
      * filtering happens after load because tags are stored as JSON.
      */
-    async listIncidents(filter: ListIncidentsInput = {}): Promise<IncidentRecord[]> {
+    async listIncidents(
+        filter: ListIncidentsInput = {}
+    ): Promise<IncidentRecord[]> {
         const conditions: string[] = [];
         const values: Record<string, unknown> = {};
 
@@ -787,7 +801,9 @@ export class SqliteIncidentStore {
       ORDER BY created_at DESC, id DESC
     `);
 
-        const rows = (await this.withRetry(() => statement.all(values))) as IncidentRow[];
+        const rows = (await this.withRetry(() =>
+            statement.all(values)
+        )) as IncidentRow[];
         const incidents = rows.map((row) => this.mapIncidentRow(row));
         if (!filter.tag) {
             return incidents;
@@ -803,7 +819,10 @@ export class SqliteIncidentStore {
      * Updates the review status and returns the fresh row for response
      * building.
      */
-    async updateStatus(id: number, status: IncidentStatus): Promise<IncidentRecord> {
+    async updateStatus(
+        id: number,
+        status: IncidentStatus
+    ): Promise<IncidentRecord> {
         this.assertValidStatus(status);
         const updatedAt = new Date().toISOString();
         const result = await this.withRetry(() =>
@@ -820,7 +839,9 @@ export class SqliteIncidentStore {
 
         const incident = await this.getIncident(id);
         if (!incident) {
-            throw new Error(`Incident ${id} was updated but could not be read back`);
+            throw new Error(
+                `Incident ${id} was updated but could not be read back`
+            );
         }
         return incident;
     }
@@ -906,7 +927,9 @@ export class SqliteIncidentStore {
 
         const incident = await this.getIncident(id);
         if (!incident) {
-            throw new Error(`Incident ${id} was updated but could not be read back`);
+            throw new Error(
+                `Incident ${id} was updated but could not be read back`
+            );
         }
         return incident;
     }

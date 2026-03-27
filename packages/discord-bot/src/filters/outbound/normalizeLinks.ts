@@ -212,4 +212,3 @@ const linkifySegment = (segment: string): { text: string; count: number } => {
     result += segment.slice(cursor);
     return { text: result, count };
 };
-

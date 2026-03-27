@@ -1,6 +1,6 @@
 # History
 
-_Written by the project creator._ 
+_Written by the project creator._
 
 > TL;DR: Footnote started as a hobby genAI project which grew into an assistant you can inspect, review, and steer.
 
@@ -31,7 +31,7 @@ So I started asking different questions:
 
 That’s the through-line to Footnote: make assistant behavior something you can inspect, discuss, and tighten over time. The details live in [Philosophy.md](Philosophy.md).
 
-### Why "Footnote"?  
+### Why "Footnote"?
 
 I wanted a name that describes a behavior. “Footnote” points to the idea that an answer shouldn’t be a dead end. If you care, you should be able to click through and see what it relied on—sources, assumptions, active rules, tool use, and so on.
 

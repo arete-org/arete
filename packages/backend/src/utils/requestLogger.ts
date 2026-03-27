@@ -39,4 +39,3 @@ function logRequest(
 }
 
 export { logRequest };
-

@@ -133,7 +133,9 @@ export const createIncidentService = ({
     /**
      * Resolves one incident by short ID and centralizes the not-found path.
      */
-    const getIncidentRecord = async (incidentId: string): Promise<IncidentRecord> => {
+    const getIncidentRecord = async (
+        incidentId: string
+    ): Promise<IncidentRecord> => {
         const incident = await incidentStore.getIncidentByShortId(incidentId);
         if (!incident) {
             throw new IncidentNotFoundError(incidentId);
@@ -156,9 +158,7 @@ export const createIncidentService = ({
     };
 
     return {
-        async reportIncident(
-            request: PostIncidentReportRequest
-        ): Promise<{
+        async reportIncident(request: PostIncidentReportRequest): Promise<{
             incident: IncidentDetail;
             remediation: { state: 'pending' };
         }> {

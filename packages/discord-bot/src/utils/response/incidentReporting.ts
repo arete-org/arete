@@ -81,7 +81,8 @@ const buildIncidentReportSessionKey = (
     sourceMessageId: string
 ): string => `${userId}:${sourceMessageId}`;
 
-const getSessionExpiry = (): number => Date.now() + INCIDENT_REPORT_SESSION_TTL_MS;
+const getSessionExpiry = (): number =>
+    Date.now() + INCIDENT_REPORT_SESSION_TTL_MS;
 
 const clearIncidentReportSession = (sessionKey: string): void => {
     sessions.delete(sessionKey);
@@ -165,20 +166,23 @@ const wait = (ms: number): Promise<void> =>
  * Parses free-form comma-separated tags from the modal into a clean unique list
  * before sending them to the backend.
  */
-const parseTagInput = (value: string): string[] =>
-    [...new Set(
+const parseTagInput = (value: string): string[] => [
+    ...new Set(
         value
             .split(',')
             .map((tag) => tag.trim())
             .filter((tag) => tag.length > 0)
-    )];
+    ),
+];
 
 /**
  * Keeps API errors readable in ephemeral replies and structured logs.
  */
 const formatApiError = (error: unknown): string => {
     if (isDiscordApiClientError(error)) {
-        return error.details ? `${error.message} (${error.details})` : error.message;
+        return error.details
+            ? `${error.message} (${error.details})`
+            : error.message;
     }
     return error instanceof Error ? error.message : String(error);
 };
@@ -235,9 +239,10 @@ const buildLogContext = (
     userId: interaction.user.id,
     guildId: interaction.guildId ?? null,
     channelId: interaction.channelId ?? null,
-    messageId: 'message' in interaction && interaction.message
-        ? interaction.message.id
-        : null,
+    messageId:
+        'message' in interaction && interaction.message
+            ? interaction.message.id
+            : null,
     ...extra,
 });
 
@@ -295,10 +300,9 @@ export const handleIncidentReportButton = async (
             Boolean(existingSession.remediationOutcome);
 
         await interaction.editReply({
-            content:
-                isResumingRemediationPersist
-                    ? `An incident record already exists for this message. Continue to retry saving its remediation outcome.${warningSuffix}`
-                    : `Reporting this message will create a durable incident record for maintainers to review.${warningSuffix}`,
+            content: isResumingRemediationPersist
+                ? `An incident record already exists for this message. Continue to retry saving its remediation outcome.${warningSuffix}`
+                : `Reporting this message will create a durable incident record for maintainers to review.${warningSuffix}`,
             components: [
                 new ActionRowBuilder<ButtonBuilder>().addComponents(
                     new ButtonBuilder()
@@ -317,10 +321,13 @@ export const handleIncidentReportButton = async (
             ],
         });
     } catch (error) {
-        incidentReportLogger.error('Failed to open incident report consent flow', {
-            ...logContext,
-            error: formatApiError(error),
-        });
+        incidentReportLogger.error(
+            'Failed to open incident report consent flow',
+            {
+                ...logContext,
+                error: formatApiError(error),
+            }
+        );
         await interaction.editReply({
             content:
                 'I could not open the incident report form for this message. Please try again.',
@@ -361,7 +368,8 @@ export const handleIncidentReportConsent = async (
     );
     if (!session) {
         await interaction.reply({
-            content: 'That report session expired. Please click Report Issue again.',
+            content:
+                'That report session expired. Please click Report Issue again.',
             flags: [EPHEMERAL_FLAG],
         });
         return;
@@ -417,7 +425,8 @@ export const handleIncidentReportModal = async (
     const session = getIncidentReportSession(sessionKey);
     if (!session) {
         await interaction.reply({
-            content: 'That report session expired. Please click Report Issue again.',
+            content:
+                'That report session expired. Please click Report Issue again.',
             flags: [EPHEMERAL_FLAG],
         });
         return;
@@ -484,8 +493,7 @@ export const handleIncidentReportModal = async (
                     if (!isMessageLike(fetchedTargetMessage)) {
                         remediationOutcome = {
                             state: 'failed',
-                            notes:
-                                'Could not remediate the target message because it was missing or was not a Discord message.',
+                            notes: 'Could not remediate the target message because it was missing or was not a Discord message.',
                         };
                     } else {
                         remediationOutcome =

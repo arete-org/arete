@@ -45,17 +45,18 @@ const removeUndefinedPromptVariables = (
     return cleanedVariables;
 };
 
-const promptRegistryLogger: NonNullable<CreatePromptRegistryOptions['logger']> = {
-    info(message: string, meta?: PromptRegistryLogMeta) {
-        promptLogger.info(message, meta);
-    },
-    warn(message: string, meta?: PromptRegistryLogMeta) {
-        promptLogger.warn(message, meta);
-    },
-    error(message: string, meta?: PromptRegistryLogMeta) {
-        promptLogger.error(message, meta);
-    },
-};
+const promptRegistryLogger: NonNullable<CreatePromptRegistryOptions['logger']> =
+    {
+        info(message: string, meta?: PromptRegistryLogMeta) {
+            promptLogger.info(message, meta);
+        },
+        warn(message: string, meta?: PromptRegistryLogMeta) {
+            promptLogger.warn(message, meta);
+        },
+        error(message: string, meta?: PromptRegistryLogMeta) {
+            promptLogger.error(message, meta);
+        },
+    };
 
 export const createBackendPromptRegistry = (
     options: Partial<CreatePromptRegistryOptions> = {}

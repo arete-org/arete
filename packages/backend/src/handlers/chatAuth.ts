@@ -87,7 +87,7 @@ export const getServiceAuth = (req: IncomingMessage): ServiceAuth => {
  */
 export const resolveChatAuth = (
     req: IncomingMessage
-): 
+):
     | { success: true; data: ChatAuthContext }
     | { success: false; error: ChatFailureResponse } => {
     const serviceAuth = getServiceAuth(req);
@@ -236,8 +236,7 @@ export const verifyTurnstileCaptcha = async ({
     turnstileToken,
     tokenSource,
 }: VerifyTurnstileInput): Promise<
-    | { success: true }
-    | { success: false; error: ChatFailureResponse }
+    { success: true } | { success: false; error: ChatFailureResponse }
 > => {
     try {
         // These logs help separate caller mistakes from upstream Turnstile failures.
@@ -394,9 +393,15 @@ export const verifyTurnstileCaptcha = async ({
             logger.error(
                 `  Challenge timestamp: ${verificationData['challenge-ts'] || 'N/A'}`
             );
-            logger.error(`  Hostname from response: ${normalizedResponseHostname || 'N/A'}`);
-            logger.error(`  Request hostname: ${normalizedRequestHost || 'N/A'}`);
-            logger.error(`  Request origin: ${normalizedRequestOrigin || 'N/A'}`);
+            logger.error(
+                `  Hostname from response: ${normalizedResponseHostname || 'N/A'}`
+            );
+            logger.error(
+                `  Request hostname: ${normalizedRequestHost || 'N/A'}`
+            );
+            logger.error(
+                `  Request origin: ${normalizedRequestOrigin || 'N/A'}`
+            );
 
             return {
                 success: false,
@@ -413,9 +418,9 @@ export const verifyTurnstileCaptcha = async ({
 
         const hostnameMatches = Boolean(
             normalizedResponseHostname &&
-                hostnameValidation.effectiveHostnames.includes(
-                    normalizedResponseHostname
-                )
+            hostnameValidation.effectiveHostnames.includes(
+                normalizedResponseHostname
+            )
         );
         if (!hostnameMatches) {
             logger.error('CAPTCHA verification FAILED:');
@@ -425,9 +430,15 @@ export const verifyTurnstileCaptcha = async ({
             logger.error(
                 `  Challenge timestamp: ${verificationData['challenge-ts'] || 'N/A'}`
             );
-            logger.error(`  Hostname from response: ${normalizedResponseHostname || 'N/A'}`);
-            logger.error(`  Request hostname: ${normalizedRequestHost || 'N/A'}`);
-            logger.error(`  Request origin: ${normalizedRequestOrigin || 'N/A'}`);
+            logger.error(
+                `  Hostname from response: ${normalizedResponseHostname || 'N/A'}`
+            );
+            logger.error(
+                `  Request hostname: ${normalizedRequestHost || 'N/A'}`
+            );
+            logger.error(
+                `  Request origin: ${normalizedRequestOrigin || 'N/A'}`
+            );
             logger.error(
                 `  Validation mode: ${hostnameValidation.validationMode}`
             );
@@ -457,7 +468,9 @@ export const verifyTurnstileCaptcha = async ({
         logger.info(
             `CAPTCHA verification SUCCESS for token from ${tokenSource}`
         );
-        logger.info(`  Hostname verified: ${normalizedResponseHostname || 'N/A'}`);
+        logger.info(
+            `  Hostname verified: ${normalizedResponseHostname || 'N/A'}`
+        );
         logger.info(`  Expected hostname: ${normalizedRequestHost || 'N/A'}`);
         logger.info(
             `  Challenge timestamp: ${verificationData['challenge-ts'] || 'N/A'}`

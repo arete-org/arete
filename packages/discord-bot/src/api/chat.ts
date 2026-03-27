@@ -25,4 +25,3 @@ export const createChatApi = (
     requestJson: ApiRequester,
     options: CreateChatApiOptions = {}
 ): ChatApi => createSharedChatApi(requestJson, options);
-

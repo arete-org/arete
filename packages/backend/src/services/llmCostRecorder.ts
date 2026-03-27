@@ -20,10 +20,10 @@ export type BackendLLMCostRecord = {
         | 'chat'
         | 'chat_planner'
         | 'news'
-    | 'image'
-    | 'image_description'
-    | 'tts'
-    | 'voice_realtime';
+        | 'image'
+        | 'image_description'
+        | 'tts'
+        | 'voice_realtime';
     model: string;
     promptTokens: number;
     completionTokens: number;

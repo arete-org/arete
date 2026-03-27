@@ -62,11 +62,9 @@ test('shared override + active persona layer preserve expected precedence', () =
             },
         });
         const reflectConversation =
-            prependProfileOverlaySystemMessageToConversation(
-                profile,
-                'chat',
-                [{ role: 'user', content: 'hello' }]
-            );
+            prependProfileOverlaySystemMessageToConversation(profile, 'chat', [
+                { role: 'user', content: 'hello' },
+            ]);
 
         assert.match(composedPrompt, /Override image prompt for Vendor Bot\./);
         assert.match(composedPrompt, /BEGIN Bot Profile Overlay/);
@@ -94,12 +92,9 @@ test('malformed shared overrides fail open while active persona overlays still a
     try {
         fs.writeFileSync(
             overridePath,
-            [
-                'discord:',
-                '  image:',
-                '    system:',
-                '      template: 123',
-            ].join('\n'),
+            ['discord:', '  image:', '    system:', '      template: 123'].join(
+                '\n'
+            ),
             'utf8'
         );
 

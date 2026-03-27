@@ -156,4 +156,3 @@ export async function cleanupVoiceConnection(
     const manager = new VoiceConnectionManager();
     return manager.cleanupVoiceConnection(connection, client);
 }
-

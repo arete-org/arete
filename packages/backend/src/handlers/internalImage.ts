@@ -263,12 +263,15 @@ export const createInternalImageHandler = ({
                         error: 'Failed to execute internal image task',
                     });
                 } catch (streamWriteError) {
-                    imageLogger.error('Internal image stream error write failed.', {
-                        error:
-                            streamWriteError instanceof Error
-                                ? streamWriteError.message
-                                : String(streamWriteError),
-                    });
+                    imageLogger.error(
+                        'Internal image stream error write failed.',
+                        {
+                            error:
+                                streamWriteError instanceof Error
+                                    ? streamWriteError.message
+                                    : String(streamWriteError),
+                        }
+                    );
                 }
                 res.end();
                 logRequest(req, res, 'internal image stream-error');

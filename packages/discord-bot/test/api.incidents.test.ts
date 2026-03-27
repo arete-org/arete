@@ -141,16 +141,14 @@ test('incident API methods send trusted headers and parse response payloads', as
         traceApiToken: 'trace-secret',
     });
 
-    const reportResponse: PostIncidentReportResponse = await api.reportIncident(
-        reportRequest
-    );
+    const reportResponse: PostIncidentReportResponse =
+        await api.reportIncident(reportRequest);
     const listResponse: GetIncidentsResponse = await api.listIncidents({
         status: 'new',
         tag: 'safety',
     });
-    const detailResponse: GetIncidentResponse = await api.getIncident(
-        '1a2b3c4d'
-    );
+    const detailResponse: GetIncidentResponse =
+        await api.getIncident('1a2b3c4d');
     const statusResponse: PostIncidentStatusResponse =
         await api.updateIncidentStatus('1a2b3c4d', {
             status: 'under_review',
@@ -175,10 +173,7 @@ test('incident API methods send trusted headers and parse response payloads', as
     assert.deepEqual(calls[0]?.body, reportRequest);
     assert.equal(reportResponse.incident.incidentId, '1a2b3c4d');
 
-    assert.equal(
-        calls[1]?.endpoint,
-        '/api/incidents?status=new&tag=safety'
-    );
+    assert.equal(calls[1]?.endpoint, '/api/incidents?status=new&tag=safety');
     assert.equal(listResponse.incidents[0]?.incidentId, '1a2b3c4d');
 
     assert.equal(calls[2]?.endpoint, '/api/incidents/1a2b3c4d');
@@ -200,5 +195,8 @@ test('incident API methods propagate backend errors', async () => {
     };
     const api = createIncidentApi(requestJson);
 
-    await assert.rejects(() => api.getIncident('1a2b3c4d'), /incident backend exploded/);
+    await assert.rejects(
+        () => api.getIncident('1a2b3c4d'),
+        /incident backend exploded/
+    );
 });

@@ -176,4 +176,3 @@ export async function uploadToCloudinary(
         throw error;
     }
 }
-

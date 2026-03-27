@@ -45,4 +45,9 @@ export const createApiTransport = ({
     });
 };
 
-export type { ApiErrorResponse, ApiJsonResult, ApiRequestOptions, ApiRequester };
+export type {
+    ApiErrorResponse,
+    ApiJsonResult,
+    ApiRequestOptions,
+    ApiRequester,
+};

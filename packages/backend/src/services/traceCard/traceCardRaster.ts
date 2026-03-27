@@ -6,7 +6,10 @@
  * @footnote-ethics: low - Rasterization changes image format only; provenance semantics stay in canonical SVG.
  */
 import { Resvg } from '@resvg/resvg-js';
-import { renderTraceCardSvg, type TraceCardRenderInput } from './traceCardSvg.js';
+import {
+    renderTraceCardSvg,
+    type TraceCardRenderInput,
+} from './traceCardSvg.js';
 
 /**
  * Renders a trace-card PNG from the canonical SVG source.
@@ -21,4 +24,3 @@ export const renderTraceCardPng = (
 
     return { svg, png };
 };
-

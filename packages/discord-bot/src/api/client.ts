@@ -43,5 +43,9 @@ export const createApiTransport = ({
         clientErrorName: 'DiscordApiClientError',
     });
 
-export type { ApiErrorResponse, ApiJsonResult, ApiRequestOptions, ApiRequester };
-
+export type {
+    ApiErrorResponse,
+    ApiJsonResult,
+    ApiRequestOptions,
+    ApiRequester,
+};

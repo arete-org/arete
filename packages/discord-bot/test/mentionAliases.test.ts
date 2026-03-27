@@ -79,12 +79,17 @@ test('resolveBotMentionAliases dedupes normalized username and profile aliases',
 test('containsPlaintextBotAlias matches whole words and blocks substring false positives', () => {
     assert.equal(containsPlaintextBotAlias('hey ari', ['ari']), true);
     assert.equal(containsPlaintextBotAlias('variable naming', ['ari']), false);
-    assert.equal(containsPlaintextBotAlias('footnotebook setup', ['footnote']), false);
+    assert.equal(
+        containsPlaintextBotAlias('footnotebook setup', ['footnote']),
+        false
+    );
 });
 
 test('containsPlaintextBotAlias matches multi-word aliases with flexible whitespace', () => {
     assert.equal(
-        containsPlaintextBotAlias('hey foot   note can you help?', ['foot note']),
+        containsPlaintextBotAlias('hey foot   note can you help?', [
+            'foot note',
+        ]),
         true
     );
 });

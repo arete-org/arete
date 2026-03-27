@@ -575,4 +575,3 @@ export function buildPromptModal(
         new ActionRowBuilder<TextInputBuilder>().addComponents(promptInput)
     );
 }
-

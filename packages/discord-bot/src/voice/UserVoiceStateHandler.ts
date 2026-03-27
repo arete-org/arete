@@ -181,4 +181,3 @@ export class UserVoiceStateHandler {
         this.initiatingUsers.delete(guildId);
     }
 }
-

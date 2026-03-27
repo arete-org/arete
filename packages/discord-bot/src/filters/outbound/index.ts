@@ -56,4 +56,3 @@ export const runOutboundFilters = (content: string): OutboundFilterResult => {
 };
 
 export type { OutboundFilter, OutboundFilterResult } from './types.js';
-

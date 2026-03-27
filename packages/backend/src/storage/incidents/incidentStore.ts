@@ -104,8 +104,4 @@ export type {
     IncidentAuditEvent,
     IncidentRecord,
 } from './sqliteIncidentStore.js';
-export type {
-    IncidentPointers,
-    IncidentStatus,
-} from '@footnote/contracts/web';
-
+export type { IncidentPointers, IncidentStatus } from '@footnote/contracts/web';

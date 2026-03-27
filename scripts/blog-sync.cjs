@@ -295,4 +295,3 @@ if (require.main === module) {
 }
 
 module.exports = { syncBlog, fetchDiscussions, writeBlogPost };
-

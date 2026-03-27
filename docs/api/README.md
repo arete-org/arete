@@ -14,6 +14,7 @@ Update `info.version` manually when the wire contract changes.
 ## Validation
 
 Run `pnpm validate-openapi-links` to verify:
+
 - spec -> code (`x-codeRefs` point to real files/symbols)
 - code -> spec (`@api.operationId` tags map to real OpenAPI operationIds)
 

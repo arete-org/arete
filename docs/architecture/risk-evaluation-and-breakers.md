@@ -17,13 +17,18 @@ Planner output may provide hints, but planner output must not be the sole safety
 The intended evaluation contract is:
 
 ```ts
-type BreakerAction = 'allow' | 'block' | 'redirect' | 'safe_partial' | 'human_review';
+type BreakerAction =
+    | 'allow'
+    | 'block'
+    | 'redirect'
+    | 'safe_partial'
+    | 'human_review';
 
 type RiskEvaluationResult = {
-  riskTier: 'Low' | 'Medium' | 'High';
-  action: BreakerAction;
-  ruleId: string | null;
-  notes: string[];
+    riskTier: 'Low' | 'Medium' | 'High';
+    action: BreakerAction;
+    ruleId: string | null;
+    notes: string[];
 };
 ```
 

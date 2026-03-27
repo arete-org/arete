@@ -106,9 +106,7 @@ export const createChatRateLimitController = ({
     const checkRateLimit = (
         serviceAuth: ServiceAuth,
         identity: RequestIdentity
-    ):
-        | { success: true }
-        | { success: false; error: ChatFailureResponse } => {
+    ): { success: true } | { success: false; error: ChatFailureResponse } => {
         if (serviceAuth.isTrustedService) {
             // Keep service callers off the public IP/session buckets so bot traffic
             // cannot consume the browser allowance.

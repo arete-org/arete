@@ -3,6 +3,7 @@
 These SVGs are generated snapshots of repo dependencies.
 
 Current files:
+
 - `backend-dependency-graph.svg`
 - `web-dependency-graph.svg`
 - `discord-bot-dependency-graph.svg`

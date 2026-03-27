@@ -59,4 +59,3 @@ Example:
 - `@footnote-module` is currently freeform but must be stable and descriptive.
 - Use PascalCase, avoid abbreviations, and keep names unique within the repo.
 - If you want a hard allowlist, add it here and extend the schema/validator tooling in `scripts/`.
-

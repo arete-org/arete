@@ -107,10 +107,7 @@ export class VoiceSessionManager {
                 return;
             }
             this.enqueueAudioTask(guildId, async () => {
-                await this.appendSilenceTail(
-                    guildId,
-                    event.userId
-                );
+                await this.appendSilenceTail(guildId, event.userId);
             });
         };
 
@@ -128,9 +125,9 @@ export class VoiceSessionManager {
 
     private enqueueAudioTask(guildId: string, task: () => Promise<void>): void {
         const session = this.activeSessions.get(guildId);
-            if (!session) return;
+        if (!session) return;
 
-            session.audioPipeline = session.audioPipeline
+        session.audioPipeline = session.audioPipeline
             .catch((error) => {
                 voiceSessionLogger.error(
                     `Audio pipeline error for guild ${guildId}:`,
@@ -298,4 +295,3 @@ export class VoiceSessionManager {
         return this.activeSessions.has(guildId);
     }
 }
-

@@ -38,7 +38,8 @@ const FEATURES: ServiceFeature[] = [
     {
         id: 'image-understanding',
         title: 'Image understanding',
-        description: 'I can analyze images for meaning and context to support richer responses.',
+        description:
+            'I can analyze images for meaning and context to support richer responses.',
     },
     {
         id: 'image',

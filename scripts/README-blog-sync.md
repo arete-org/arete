@@ -11,6 +11,7 @@ This utility allows you to manually synchronize blog posts from GitHub Discussio
     - Download the private key (.pem file)
 
 2. **Set Environment Variables**:
+
     ```bash
     export GITHUB_APP_ID=your_app_id_here
     export GITHUB_APP_PRIVATE_KEY_PATH=./keys/github-app-key.pem

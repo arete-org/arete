@@ -187,16 +187,23 @@ function readGitLines(args) {
  * @returns {string[]}
  */
 function getChangedFiles() {
-    const hasHead = runCommand('git', ['rev-parse', '--verify', 'HEAD']).status === 0;
+    const hasHead =
+        runCommand('git', ['rev-parse', '--verify', 'HEAD']).status === 0;
     const diffLines = hasHead
         ? readGitLines(['diff', '--name-only', '--relative', 'HEAD', '--'])
-        : readGitLines(['ls-files', '--cached', '--modified', '--others', '--exclude-standard']);
+        : readGitLines([
+              'ls-files',
+              '--cached',
+              '--modified',
+              '--others',
+              '--exclude-standard',
+          ]);
     const untrackedLines = hasHead
         ? readGitLines(['ls-files', '--others', '--exclude-standard'])
         : [];
 
-    return Array.from(new Set([...diffLines, ...untrackedLines])).map((filePath) =>
-        filePath.split(path.sep).join('/')
+    return Array.from(new Set([...diffLines, ...untrackedLines])).map(
+        (filePath) => filePath.split(path.sep).join('/')
     );
 }
 
@@ -214,7 +221,10 @@ function createChangedOnlyTsconfig(files) {
     const config = {
         extends: '../tsconfig.json',
         files: files.map((filePath) =>
-            path.relative(tempDirectory, path.resolve(repoRoot, filePath)).split(path.sep).join('/')
+            path
+                .relative(tempDirectory, path.resolve(repoRoot, filePath))
+                .split(path.sep)
+                .join('/')
         ),
     };
 
@@ -356,7 +366,9 @@ function parseOpenApiDiagnostics(result) {
             continue;
         }
 
-        const missingSpecMatch = message.match(/^OpenAPI spec not found at (.+)$/);
+        const missingSpecMatch = message.match(
+            /^OpenAPI spec not found at (.+)$/
+        );
         if (missingSpecMatch) {
             diagnostics.push({
                 file: normalizePath(missingSpecMatch[1]),
@@ -367,7 +379,9 @@ function parseOpenApiDiagnostics(result) {
             continue;
         }
 
-        const noOperationIdsMatch = message.match(/^No operationIds found in (.+)$/);
+        const noOperationIdsMatch = message.match(
+            /^No operationIds found in (.+)$/
+        );
         if (noOperationIdsMatch) {
             diagnostics.push({
                 file: normalizePath(noOperationIdsMatch[1]),
@@ -420,7 +434,9 @@ function parseTypeScriptDiagnostics(result) {
             continue;
         }
 
-        const match = line.match(/^(.*)\((\d+),(\d+)\): (error|warning) TS\d+: (.+)$/);
+        const match = line.match(
+            /^(.*)\((\d+),(\d+)\): (error|warning) TS\d+: (.+)$/
+        );
         if (!match) {
             continue;
         }
@@ -470,7 +486,8 @@ function parseEslintDiagnostics(result) {
                 for (const message of entry.messages) {
                     diagnostics.push({
                         file,
-                        line: message.line && message.line > 0 ? message.line : 1,
+                        line:
+                            message.line && message.line > 0 ? message.line : 1,
                         message: message.message,
                         severity: message.severity === 1 ? 'warning' : 'error',
                     });
@@ -591,7 +608,9 @@ function isTrackedTypeScriptSource(value) {
  * @returns {Diagnostic[]}
  */
 function filterDiagnosticsToChangedFiles(diagnostics, changedFiles) {
-    return diagnostics.filter((diagnostic) => changedFiles.has(diagnostic.file));
+    return diagnostics.filter((diagnostic) =>
+        changedFiles.has(diagnostic.file)
+    );
 }
 
 /**
@@ -649,10 +668,14 @@ function main() {
     const existingChangedFiles = changedFiles.filter((filePath) =>
         fs.existsSync(path.resolve(repoRoot, filePath))
     );
-    const changedTypeScriptFiles = existingChangedFiles.filter(isTypeScriptSource);
-    const changedTrackedTypeScriptFiles =
-        existingChangedFiles.filter(isTrackedTypeScriptSource);
-    const changedLintableFiles = existingChangedFiles.filter(isLintablePackageSource);
+    const changedTypeScriptFiles =
+        existingChangedFiles.filter(isTypeScriptSource);
+    const changedTrackedTypeScriptFiles = existingChangedFiles.filter(
+        isTrackedTypeScriptSource
+    );
+    const changedLintableFiles = existingChangedFiles.filter(
+        isLintablePackageSource
+    );
     // OpenAPI link validation is cross-file by nature. We still limit when it runs, but once
     // it does run it needs the full repo and spec view to catch broken references correctly.
     const shouldRunOpenApiInChangedMode = changedFiles.some(
@@ -722,7 +745,8 @@ function main() {
         },
         {
             name: 'tsc --noEmit',
-            shouldRun: () => !changedOnly || changedTrackedTypeScriptFiles.length > 0,
+            shouldRun: () =>
+                !changedOnly || changedTrackedTypeScriptFiles.length > 0,
             run: () => {
                 if (!changedOnly) {
                     return runCommand(pnpmBinary, [
@@ -734,7 +758,9 @@ function main() {
                     ]);
                 }
 
-                const tempConfig = createChangedOnlyTsconfig(changedTrackedTypeScriptFiles);
+                const tempConfig = createChangedOnlyTsconfig(
+                    changedTrackedTypeScriptFiles
+                );
                 cleanupTasks.push(tempConfig.cleanup);
                 return runCommand(pnpmBinary, [
                     'exec',

@@ -85,4 +85,3 @@ export abstract class Event {
         }
     }
 }
-

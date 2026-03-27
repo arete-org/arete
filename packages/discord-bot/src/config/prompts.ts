@@ -6,10 +6,7 @@
  * @footnote-ethics: high - Prompt setup shapes bot behavior, safety, and disclosure.
  */
 
-import {
-    type PromptKey,
-    type PromptVariables,
-} from '@footnote/prompts';
+import { type PromptKey, type PromptVariables } from '@footnote/prompts';
 import { promptConfigPath, runtimeConfig } from './runtime.js';
 import { createDiscordPromptRegistry } from './promptRegistryFactory.js';
 import {
@@ -72,10 +69,7 @@ promptRegistry.assertKeys(REQUIRED_PROMPT_KEYS);
 /**
  * Shared prompt render helper bound to the active Discord prompt registry.
  */
-export const renderPrompt = (
-    key: PromptKey,
-    variables: PromptVariables = {}
-) =>
+export const renderPrompt = (key: PromptKey, variables: PromptVariables = {}) =>
     promptRegistry.renderPrompt(key, {
         botProfileDisplayName: runtimeConfig.profile.displayName,
         ...variables,

@@ -6,10 +6,7 @@
  * @footnote-ethics: high - Bot-local prompts must stay aligned with shared Footnote safety and provenance rules.
  */
 
-import {
-    createPromptRegistry,
-    type PromptRegistry,
-} from '@footnote/prompts';
+import { createPromptRegistry, type PromptRegistry } from '@footnote/prompts';
 
 export const createDiscordPromptRegistry = (
     overridePath?: string

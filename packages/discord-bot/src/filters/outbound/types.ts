@@ -13,4 +13,3 @@ export interface OutboundFilterResult {
 
 // Outbound filters operate on plain text and describe their edits for logging.
 export type OutboundFilter = (content: string) => OutboundFilterResult;
-

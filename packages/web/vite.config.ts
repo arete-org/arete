@@ -85,7 +85,8 @@ const cspPlugin = () => ({
     },
 });
 
-const trimTrailingSlashes = (value: string): string => value.replace(/\/+$/, '');
+const trimTrailingSlashes = (value: string): string =>
+    value.replace(/\/+$/, '');
 
 const backendBaseUrl = trimTrailingSlashes(
     process.env.BACKEND_BASE_URL?.trim() || 'http://localhost:3000'
@@ -117,7 +118,10 @@ export default defineConfig({
             ),
             '@pages': fileURLToPath(new URL('./src/pages', import.meta.url)),
             '@footnote/contracts/ethics-core': fileURLToPath(
-                new URL('../contracts/src/ethics-core/index.ts', import.meta.url)
+                new URL(
+                    '../contracts/src/ethics-core/index.ts',
+                    import.meta.url
+                )
             ),
             '@styles': fileURLToPath(new URL('./src/styles', import.meta.url)),
             '@theme': fileURLToPath(new URL('./src/theme', import.meta.url)),
@@ -125,4 +129,3 @@ export default defineConfig({
         dedupe: ['react', 'react-dom'],
     },
 });
-

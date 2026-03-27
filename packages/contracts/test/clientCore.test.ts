@@ -116,4 +116,3 @@ test('requestJson throws invalid_payload when response validator throws', async 
         }
     );
 });
-

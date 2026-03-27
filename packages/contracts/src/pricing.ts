@@ -459,8 +459,7 @@ export const estimateOpenAIImageGenerationCost = (
     const partialImageCount = Math.max(
         0,
         Math.round(
-            options.partialImageCount ??
-                (options.allowPartialImages ? 1 : 0)
+            options.partialImageCount ?? (options.allowPartialImages ? 1 : 0)
         )
     );
     const effectiveQuality = resolveEffectiveImageGenerationQuality(

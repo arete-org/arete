@@ -606,4 +606,3 @@ export async function recoverContextDetailsFromMessage(
 
     return null;
 }
-

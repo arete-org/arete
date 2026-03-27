@@ -4,9 +4,9 @@ name: voltagent-docs-bundle
 description: Look up VoltAgent documentation embedded in node_modules/@voltagent/core/docs for version-matched docs. Use for API signatures, guides, and examples.
 license: MIT
 metadata:
-  author: VoltAgent
-  version: "1.0.0"
-  repository: https://github.com/VoltAgent/skills
+    author: VoltAgent
+    version: '1.0.0'
+    repository: https://github.com/VoltAgent/skills
 ---
 
 # VoltAgent Embedded Docs Lookup
@@ -53,22 +53,24 @@ If you are inside the VoltAgent monorepo, the same content exists at:
 packages/core/docs/
 ```
 
-
 ---
 
 ## Lookup Flow
 
-1) List available sections:
+1. List available sections:
+
 ```bash
 ls node_modules/@voltagent/core/docs
 ```
 
-2) Search for a topic:
+2. Search for a topic:
+
 ```bash
 rg -n "workflow" node_modules/@voltagent/core/docs -g"*.md"
 ```
 
-3) Read the file:
+3. Read the file:
+
 ```bash
 cat node_modules/@voltagent/core/docs/workflows/overview.md
 ```

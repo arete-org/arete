@@ -14,9 +14,9 @@ Use this only for refactoring work. Keep feature work in a separate change.
 - **Smell(s)**: <Refactoring.Guru smell name(s)> (and smell group if known)
 - **Technique(s)**: <Refactoring.Guru technique name(s)>
 - **Steps**: 2-6 small steps, each with:
-  - technique name
-  - intended improvement
-  - verification (tests/commands to run; keep tests green)
+    - technique name
+    - intended improvement
+    - verification (tests/commands to run; keep tests green)
 - **Behavior change**: `none` (default) or explicitly described
 - **Pattern gate**: default `no pattern`; if `yes`, justify vs a simpler refactor or language feature
 

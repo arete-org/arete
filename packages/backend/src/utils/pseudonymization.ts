@@ -91,4 +91,3 @@ export function pseudonymizeIncidentPointers(
 
     return clone;
 }
-

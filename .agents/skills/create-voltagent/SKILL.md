@@ -4,9 +4,9 @@ name: create-voltagent
 description: Skill for creating AI agent projects using the VoltAgent framework. Guide for CLI setup and manual bootstrapping.
 license: MIT
 metadata:
-  author: VoltAgent
-  version: "1.0.0"
-  repository: https://github.com/VoltAgent/skills
+    author: VoltAgent
+    version: '1.0.0'
+    repository: https://github.com/VoltAgent/skills
 ---
 
 # Create VoltAgent Skill
@@ -28,6 +28,7 @@ When a user wants to create a VoltAgent project, ask:
 3. Manual Installation - set up dependencies and a full working example
 
 Based on their choice:
+
 - Option 1: run the CLI, capture server and provider choices, and finish setup
 - Option 2: gather server, provider, and API key, then run the CLI
 - Option 3: follow the manual steps below
@@ -63,6 +64,7 @@ bun create voltagent-app@latest
 ## CLI Flow
 
 The create-voltagent-app command:
+
 1. Asks for a project name (default: `my-voltagent-app`)
 2. Prompts for a server framework (Hono or Elysia)
 3. Prompts for an AI provider (OpenAI, Anthropic, Google, Groq, Mistral, Ollama)
@@ -76,25 +78,27 @@ The create-voltagent-app command:
 ## CLI Walkthrough
 
 1. Run:
-   ```bash
-   npm create voltagent-app@latest
-   ```
+
+    ```bash
+    npm create voltagent-app@latest
+    ```
 
 2. When prompted:
-   - Choose a server (Hono recommended or Elysia)
-   - Choose an AI provider
-   - Enter your API key (skip if using Ollama)
+    - Choose a server (Hono recommended or Elysia)
+    - Choose an AI provider
+    - Enter your API key (skip if using Ollama)
 
 3. Start the dev server:
-   ```bash
-   cd <your-project-directory>
-   npm run dev
-   ```
+
+    ```bash
+    cd <your-project-directory>
+    npm run dev
+    ```
 
 4. If you chose Ollama:
-   ```bash
-   ollama pull llama3.2
-   ```
+    ```bash
+    ollama pull llama3.2
+    ```
 
 ---
 
@@ -121,6 +125,7 @@ bun create voltagent-app@latest -- --example with-workflow
 ```
 
 Notes:
+
 - Examples are pulled from https://github.com/voltagent/voltagent/tree/main/examples
 - Some package managers require `--` before `--example`.
 - After an example download, run `npm install` and `npm run dev`.
@@ -207,15 +212,15 @@ npm install -D typescript tsx tsdown @types/node @biomejs/biome
 
 ```json
 {
-  "scripts": {
-    "dev": "tsx watch --env-file=.env ./src",
-    "build": "tsdown",
-    "start": "node dist/index.js",
-    "lint": "biome check ./src",
-    "lint:fix": "biome check --write ./src",
-    "typecheck": "tsc --noEmit",
-    "volt": "volt"
-  }
+    "scripts": {
+        "dev": "tsx watch --env-file=.env ./src",
+        "build": "tsdown",
+        "start": "node dist/index.js",
+        "lint": "biome check ./src",
+        "lint:fix": "biome check --write ./src",
+        "typecheck": "tsc --noEmit",
+        "volt": "volt"
+    }
 }
 ```
 
@@ -227,18 +232,18 @@ Create `tsconfig.json`:
 
 ```json
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "outDir": "dist",
-    "skipLibCheck": true
-  },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+    "compilerOptions": {
+        "target": "ES2022",
+        "module": "ES2022",
+        "moduleResolution": "bundler",
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "strict": true,
+        "outDir": "dist",
+        "skipLibCheck": true
+    },
+    "include": ["src"],
+    "exclude": ["node_modules", "dist"]
 }
 ```
 
@@ -247,12 +252,12 @@ Create `tsconfig.json`:
 Create `tsdown.config.ts`:
 
 ```typescript
-import { defineConfig } from "tsdown";
+import { defineConfig } from 'tsdown';
 
 export default defineConfig({
-  entry: ["./src/index.ts"],
-  sourcemap: true,
-  outDir: "dist",
+    entry: ['./src/index.ts'],
+    sourcemap: true,
+    outDir: 'dist',
 });
 ```
 
@@ -276,34 +281,34 @@ OLLAMA_HOST=http://localhost:11434
 Create `src/tools/weather.ts`:
 
 ```typescript
-import { createTool } from "@voltagent/core";
-import { z } from "zod";
+import { createTool } from '@voltagent/core';
+import { z } from 'zod';
 
 export const weatherTool = createTool({
-  name: "getWeather",
-  description: "Get the current weather for a specific location",
-  parameters: z.object({
-    location: z.string().describe("City or location to get weather for"),
-  }),
-  execute: async ({ location }) => {
-    return {
-      weather: {
-        location,
-        temperature: 21,
-        condition: "Sunny",
-        humidity: 45,
-        windSpeed: 8,
-      },
-      message: `Current weather in ${location}: 21 C and sunny.`,
-    };
-  },
+    name: 'getWeather',
+    description: 'Get the current weather for a specific location',
+    parameters: z.object({
+        location: z.string().describe('City or location to get weather for'),
+    }),
+    execute: async ({ location }) => {
+        return {
+            weather: {
+                location,
+                temperature: 21,
+                condition: 'Sunny',
+                humidity: 45,
+                windSpeed: 8,
+            },
+            message: `Current weather in ${location}: 21 C and sunny.`,
+        };
+    },
 });
 ```
 
 Create `src/tools/index.ts`:
 
 ```typescript
-export { weatherTool } from "./weather";
+export { weatherTool } from './weather';
 ```
 
 ### Step 8: Create a workflow
@@ -311,70 +316,70 @@ export { weatherTool } from "./weather";
 Create `src/workflows/index.ts`:
 
 ```typescript
-import { createWorkflowChain } from "@voltagent/core";
-import { z } from "zod";
+import { createWorkflowChain } from '@voltagent/core';
+import { z } from 'zod';
 
 export const expenseApprovalWorkflow = createWorkflowChain({
-  id: "expense-approval",
-  name: "Expense Approval Workflow",
-  purpose: "Process expense reports with manager approval for high amounts",
-  input: z.object({
-    employeeId: z.string(),
-    amount: z.number(),
-    category: z.string(),
-    description: z.string(),
-  }),
-  result: z.object({
-    status: z.enum(["approved", "rejected"]),
-    approvedBy: z.string(),
-    finalAmount: z.number(),
-  }),
-})
-  .andThen({
-    id: "check-approval-needed",
-    resumeSchema: z.object({
-      approved: z.boolean(),
-      managerId: z.string(),
-      comments: z.string().optional(),
-      adjustedAmount: z.number().optional(),
+    id: 'expense-approval',
+    name: 'Expense Approval Workflow',
+    purpose: 'Process expense reports with manager approval for high amounts',
+    input: z.object({
+        employeeId: z.string(),
+        amount: z.number(),
+        category: z.string(),
+        description: z.string(),
     }),
-    execute: async ({ data, suspend, resumeData }) => {
-      if (resumeData) {
-        return {
-          ...data,
-          approved: resumeData.approved,
-          approvedBy: resumeData.managerId,
-          finalAmount: resumeData.adjustedAmount || data.amount,
-          managerComments: resumeData.comments,
-        };
-      }
+    result: z.object({
+        status: z.enum(['approved', 'rejected']),
+        approvedBy: z.string(),
+        finalAmount: z.number(),
+    }),
+})
+    .andThen({
+        id: 'check-approval-needed',
+        resumeSchema: z.object({
+            approved: z.boolean(),
+            managerId: z.string(),
+            comments: z.string().optional(),
+            adjustedAmount: z.number().optional(),
+        }),
+        execute: async ({ data, suspend, resumeData }) => {
+            if (resumeData) {
+                return {
+                    ...data,
+                    approved: resumeData.approved,
+                    approvedBy: resumeData.managerId,
+                    finalAmount: resumeData.adjustedAmount || data.amount,
+                    managerComments: resumeData.comments,
+                };
+            }
 
-      if (data.amount > 500) {
-        await suspend("Manager approval required", {
-          employeeId: data.employeeId,
-          requestedAmount: data.amount,
-          category: data.category,
-        });
-      }
+            if (data.amount > 500) {
+                await suspend('Manager approval required', {
+                    employeeId: data.employeeId,
+                    requestedAmount: data.amount,
+                    category: data.category,
+                });
+            }
 
-      return {
-        ...data,
-        approved: true,
-        approvedBy: "system",
-        finalAmount: data.amount,
-      };
-    },
-  })
-  .andThen({
-    id: "process-decision",
-    execute: async ({ data }) => {
-      return {
-        status: data.approved ? "approved" : "rejected",
-        approvedBy: data.approvedBy,
-        finalAmount: data.finalAmount,
-      };
-    },
-  });
+            return {
+                ...data,
+                approved: true,
+                approvedBy: 'system',
+                finalAmount: data.amount,
+            };
+        },
+    })
+    .andThen({
+        id: 'process-decision',
+        execute: async ({ data }) => {
+            return {
+                status: data.approved ? 'approved' : 'rejected',
+                approvedBy: data.approvedBy,
+                finalAmount: data.finalAmount,
+            };
+        },
+    });
 ```
 
 ### Step 9: Create the entry point
@@ -382,57 +387,62 @@ export const expenseApprovalWorkflow = createWorkflowChain({
 Create `src/index.ts`:
 
 ```typescript
-import "dotenv/config";
+import 'dotenv/config';
 import {
-  Agent,
-  Memory,
-  VoltAgent,
-  VoltAgentObservability,
-  VoltOpsClient,
-} from "@voltagent/core";
-import { LibSQLMemoryAdapter, LibSQLObservabilityAdapter } from "@voltagent/libsql";
-import { createPinoLogger } from "@voltagent/logger";
-import { honoServer } from "@voltagent/server-hono";
-import { expenseApprovalWorkflow } from "./workflows";
-import { weatherTool } from "./tools";
+    Agent,
+    Memory,
+    VoltAgent,
+    VoltAgentObservability,
+    VoltOpsClient,
+} from '@voltagent/core';
+import {
+    LibSQLMemoryAdapter,
+    LibSQLObservabilityAdapter,
+} from '@voltagent/libsql';
+import { createPinoLogger } from '@voltagent/logger';
+import { honoServer } from '@voltagent/server-hono';
+import { expenseApprovalWorkflow } from './workflows';
+import { weatherTool } from './tools';
 
-const logger = createPinoLogger({ name: "my-voltagent-app", level: "info" });
+const logger = createPinoLogger({ name: 'my-voltagent-app', level: 'info' });
 
 const memory = new Memory({
-  storage: new LibSQLMemoryAdapter({
-    url: "file:./.voltagent/memory.db",
-    logger: logger.child({ component: "libsql" }),
-  }),
+    storage: new LibSQLMemoryAdapter({
+        url: 'file:./.voltagent/memory.db',
+        logger: logger.child({ component: 'libsql' }),
+    }),
 });
 
 const observability = new VoltAgentObservability({
-  storage: new LibSQLObservabilityAdapter({
-    url: "file:./.voltagent/observability.db",
-  }),
+    storage: new LibSQLObservabilityAdapter({
+        url: 'file:./.voltagent/observability.db',
+    }),
 });
 
 const agent = new Agent({
-  name: "my-voltagent-app",
-  instructions: "A helpful assistant that can check weather and help with various tasks",
-  model: "openai/gpt-4o-mini",
-  tools: [weatherTool],
-  memory,
+    name: 'my-voltagent-app',
+    instructions:
+        'A helpful assistant that can check weather and help with various tasks',
+    model: 'openai/gpt-4o-mini',
+    tools: [weatherTool],
+    memory,
 });
 
 new VoltAgent({
-  agents: { agent },
-  workflows: { expenseApprovalWorkflow },
-  server: honoServer(),
-  logger,
-  observability,
-  voltOpsClient: new VoltOpsClient({
-    publicKey: process.env.VOLTAGENT_PUBLIC_KEY || "",
-    secretKey: process.env.VOLTAGENT_SECRET_KEY || "",
-  }),
+    agents: { agent },
+    workflows: { expenseApprovalWorkflow },
+    server: honoServer(),
+    logger,
+    observability,
+    voltOpsClient: new VoltOpsClient({
+        publicKey: process.env.VOLTAGENT_PUBLIC_KEY || '',
+        secretKey: process.env.VOLTAGENT_SECRET_KEY || '',
+    }),
 });
 ```
 
 Model format is `provider/model`. Examples:
+
 - `openai/gpt-4o-mini`
 - `anthropic/claude-3-5-sonnet`
 - `google/gemini-2.0-flash`

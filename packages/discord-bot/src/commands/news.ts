@@ -137,13 +137,10 @@ const newsCommand: Command = {
         const controller = new AbortController();
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
         const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutId = setTimeout(
-                () => {
-                    controller.abort();
-                    reject(new Error('Operation timed out after 2 minutes'));
-                },
-                timeoutMs
-            );
+            timeoutId = setTimeout(() => {
+                controller.abort();
+                reject(new Error('Operation timed out after 2 minutes'));
+            }, timeoutMs);
             timeoutId.unref?.();
         });
 
@@ -161,22 +158,25 @@ const newsCommand: Command = {
             // `/news` now delegates generation to the backend-owned task path,
             // so the bot stays out of provider selection and prompt assembly.
             const response = await Promise.race([
-                botApi.runNewsTaskViaApi({
-                    task: 'news',
-                    query: query || undefined,
-                    category: category || undefined,
-                    maxResults,
-                    reasoningEffort: reasoningEffort as
-                        | 'minimal'
-                        | 'low'
-                        | 'medium'
-                        | 'high',
-                    verbosity: verbosity as 'low' | 'medium' | 'high',
-                    channelContext: {
-                        channelId: interaction.channelId ?? undefined,
-                        guildId: interaction.guildId ?? undefined,
+                botApi.runNewsTaskViaApi(
+                    {
+                        task: 'news',
+                        query: query || undefined,
+                        category: category || undefined,
+                        maxResults,
+                        reasoningEffort: reasoningEffort as
+                            | 'minimal'
+                            | 'low'
+                            | 'medium'
+                            | 'high',
+                        verbosity: verbosity as 'low' | 'medium' | 'high',
+                        channelContext: {
+                            channelId: interaction.channelId ?? undefined,
+                            guildId: interaction.guildId ?? undefined,
+                        },
                     },
-                }, { signal: controller.signal }),
+                    { signal: controller.signal }
+                ),
                 timeoutPromise,
             ]);
 
@@ -188,8 +188,8 @@ const newsCommand: Command = {
             if (logger.isLevelEnabled?.('debug')) {
                 logger.debug('News response received', {
                     articleCount: newsResponse.news.length,
-                    articlesWithThumbnails: newsResponse.news.filter(
-                        (item) => Boolean(item.thumbnail)
+                    articlesWithThumbnails: newsResponse.news.filter((item) =>
+                        Boolean(item.thumbnail)
                     ).length,
                     articlesWithImages: newsResponse.news.filter((item) =>
                         Boolean(item.image)
@@ -263,4 +263,3 @@ const newsCommand: Command = {
  * Default export for Discord command registration.
  */
 export default newsCommand;
-

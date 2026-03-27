@@ -19,7 +19,10 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const runtimeSchemaPath = path.join(__dirname, 'annotation-schema.runtime.json');
+const runtimeSchemaPath = path.join(
+    __dirname,
+    'annotation-schema.runtime.json'
+);
 
 test('runtime annotation schema matches the source schema exactly', () => {
     const runtimeSchemaText = fs.readFileSync(runtimeSchemaPath, 'utf8');

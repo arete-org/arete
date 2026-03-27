@@ -108,4 +108,3 @@ Your code is ready for human review when:
 ---
 
 **Remember**: This checklist ensures Cursor can focus on architectural and complexity analysis while human reviewers focus on logic, ethics, and integration decisions.
-

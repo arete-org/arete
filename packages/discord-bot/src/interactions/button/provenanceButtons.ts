@@ -203,7 +203,9 @@ function formatDetailsPayloadForDiscord(
 export async function handleProvenanceButtonInteraction(
     interaction: ButtonInteraction
 ): Promise<boolean> {
-    const provenanceAction = parseProvenanceActionCustomId(interaction.customId);
+    const provenanceAction = parseProvenanceActionCustomId(
+        interaction.customId
+    );
     if (!provenanceAction) {
         return false;
     }
@@ -214,7 +216,9 @@ export async function handleProvenanceButtonInteraction(
         });
         let metadata: ResponseMetadata | null = null;
         try {
-            const traceResponse = await botApi.getTrace(provenanceAction.responseId);
+            const traceResponse = await botApi.getTrace(
+                provenanceAction.responseId
+            );
             metadata = extractMetadataFromTraceResponse(traceResponse.data);
             if (!metadata) {
                 logger.warn(
@@ -226,11 +230,14 @@ export async function handleProvenanceButtonInteraction(
                 );
             }
         } catch (error) {
-            logger.warn('Failed to load provenance metadata for details action', {
-                responseId: provenanceAction.responseId,
-                reason: 'metadata_unavailable',
-                error,
-            });
+            logger.warn(
+                'Failed to load provenance metadata for details action',
+                {
+                    responseId: provenanceAction.responseId,
+                    reason: 'metadata_unavailable',
+                    error,
+                }
+            );
         }
 
         const detailsPayload = buildDetailsPayload(

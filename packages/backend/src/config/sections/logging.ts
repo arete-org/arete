@@ -18,6 +18,7 @@ export const buildLoggingSection = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink
 ): RuntimeConfig['logging'] => ({
-    directory: parseOptionalTrimmedString(env.LOG_DIR) || envDefaultValues.LOG_DIR,
+    directory:
+        parseOptionalTrimmedString(env.LOG_DIR) || envDefaultValues.LOG_DIR,
     level: parseLogLevelEnv(env.LOG_LEVEL, envDefaultValues.LOG_LEVEL, warn),
 });

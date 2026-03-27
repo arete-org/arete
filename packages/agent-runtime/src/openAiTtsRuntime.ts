@@ -52,7 +52,10 @@ export interface CreateOpenAiTtsRuntimeOptions {
 
 // Defaults ensure a stable voice style even when callers omit optional fields.
 const DEFAULT_TTS_OPTIONS: Required<
-    Pick<InternalTtsOptions, 'speed' | 'pitch' | 'emphasis' | 'style' | 'styleDegree'>
+    Pick<
+        InternalTtsOptions,
+        'speed' | 'pitch' | 'emphasis' | 'style' | 'styleDegree'
+    >
 > = {
     speed: 'normal',
     pitch: 'normal',
@@ -193,7 +196,9 @@ export const createOpenAiTtsRuntime = ({
 
     return {
         kind,
-        async synthesize(request: TextToSpeechRequest): Promise<TextToSpeechResult> {
+        async synthesize(
+            request: TextToSpeechRequest
+        ): Promise<TextToSpeechResult> {
             const startedAt = Date.now();
             const instructionsText = buildInstructionsText(request.options);
             const abortContext = createRequestAbortContext(

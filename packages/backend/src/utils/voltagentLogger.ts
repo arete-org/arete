@@ -13,20 +13,23 @@ import { createLogger, format } from 'winston';
 
 import { logger, sanitizeLogData } from './logger.js';
 
-type DailyRotateFileConstructor =
-    typeof import('winston-daily-rotate-file');
+type DailyRotateFileConstructor = typeof import('winston-daily-rotate-file');
 type DailyRotateFileModule = DailyRotateFileConstructor & {
     default?: DailyRotateFileConstructor;
 };
-type VoltAgentLogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+type VoltAgentLogLevel =
+    | 'trace'
+    | 'debug'
+    | 'info'
+    | 'warn'
+    | 'error'
+    | 'fatal';
 
 let DailyRotateFile: DailyRotateFileConstructor | null = null;
 try {
-    const dailyRotateFileModule = (await import(
-        'winston-daily-rotate-file'
-    )) as DailyRotateFileModule;
-    DailyRotateFile =
-        dailyRotateFileModule.default ?? dailyRotateFileModule;
+    const dailyRotateFileModule =
+        (await import('winston-daily-rotate-file')) as DailyRotateFileModule;
+    DailyRotateFile = dailyRotateFileModule.default ?? dailyRotateFileModule;
 } catch (error) {
     logger.warn(
         `VoltAgent logger could not load winston-daily-rotate-file. Dedicated VoltAgent file logging will fall back to the shared backend logger. Error: ${error instanceof Error ? error.message : String(error)}`
@@ -47,9 +50,7 @@ const createVoltAgentLoggerAdapter = (
     bindings: Record<string, unknown> = {}
 ): VoltAgentLoggerContract => {
     const mergedBindings = buildVoltAgentLoggerBindings(bindings);
-    const toWinstonLevel = (
-        level: VoltAgentLogLevel
-    ): string => {
+    const toWinstonLevel = (level: VoltAgentLogLevel): string => {
         if (level === 'trace') {
             return 'debug';
         }
@@ -62,8 +63,7 @@ const createVoltAgentLoggerAdapter = (
     };
 
     const write =
-        (level: VoltAgentLogLevel) =>
-        (message: string, context?: object) => {
+        (level: VoltAgentLogLevel) => (message: string, context?: object) => {
             target.log(toWinstonLevel(level), sanitizeLogData(message), {
                 ...mergedBindings,
                 ...(context ? sanitizeLogData(context) : {}),
@@ -125,10 +125,7 @@ export const createVoltAgentLogger = ({
 
     const voltAgentFileLogger = createLogger({
         level,
-        format: format.combine(
-            format.timestamp(),
-            format.json()
-        ),
+        format: format.combine(format.timestamp(), format.json()),
         transports: [
             new DailyRotateFile({
                 dirname: directory,

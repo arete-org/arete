@@ -100,4 +100,3 @@ const createAssetResolver = (distDir: string) => {
 };
 
 export { MIME_MAP, createAssetResolver };
-

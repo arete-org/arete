@@ -98,14 +98,14 @@ test('news command calls the backend-owned news task and renders the returned su
                 };
             }>;
         };
-        assert.match(String(reply.content), /\*\*News\*\* for query: "latest ai policy"/i);
+        assert.match(
+            String(reply.content),
+            /\*\*News\*\* for query: "latest ai policy"/i
+        );
         assert.match(String(reply.content), /One important headline today\./);
         assert.equal(reply.embeds?.length, 1);
         assert.equal(reply.embeds?.[0]?.data?.title, 'Policy update');
-        assert.equal(
-            reply.embeds?.[0]?.data?.description,
-            'A concise summary'
-        );
+        assert.equal(reply.embeds?.[0]?.data?.description, 'A concise summary');
         assert.match(
             String(reply.embeds?.[0]?.data?.footer?.text),
             /Example News •/
@@ -126,7 +126,8 @@ test('news command omits publish time when the backend does not provide one', as
                 news: [
                     {
                         title: 'Date-only article',
-                        summary: 'The backend kept the article but stripped the fake time.',
+                        summary:
+                            'The backend kept the article but stripped the fake time.',
                         url: 'https://example.com/news',
                         source: 'Example News',
                     },
@@ -160,10 +161,7 @@ test('news command omits publish time when the backend does not provide one', as
         const reply = editReplyPayloads[0] as {
             embeds?: Array<{ data?: { footer?: { text?: string } } }>;
         };
-        assert.equal(
-            reply.embeds?.[0]?.data?.footer?.text,
-            'Example News'
-        );
+        assert.equal(reply.embeds?.[0]?.data?.footer?.text, 'Example News');
     } finally {
         botApi.runNewsTaskViaApi = originalRunNewsTaskViaApi;
     }

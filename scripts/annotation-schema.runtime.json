@@ -1,16 +1,6 @@
 {
-    "allowedScopes": [
-        "core",
-        "utility",
-        "interface",
-        "web",
-        "test"
-    ],
-    "allowedLevels": [
-        "low",
-        "medium",
-        "high"
-    ],
+    "allowedScopes": ["core", "utility", "interface", "web", "test"],
+    "allowedLevels": ["low", "medium", "high"],
     "requiredTags": [
         "@description",
         "@footnote-scope",

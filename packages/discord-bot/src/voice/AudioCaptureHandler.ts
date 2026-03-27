@@ -45,7 +45,10 @@ interface ActiveReceiver {
 
 interface SsrcMapListenerSet {
     onCreate: (newData: VoiceUserData) => void;
-    onUpdate: (oldData: VoiceUserData | undefined, newData: VoiceUserData) => void;
+    onUpdate: (
+        oldData: VoiceUserData | undefined,
+        newData: VoiceUserData
+    ) => void;
     onDelete: (deletedData: VoiceUserData) => void;
 }
 
@@ -83,7 +86,8 @@ export class AudioCaptureHandler extends EventEmitter {
     private readonly activeReceivers: Map<string, ActiveReceiver> = new Map();
     private readonly ignoredUserIdsByGuild: Map<string, Set<string>> =
         new Map();
-    private readonly connectionByGuild: Map<string, VoiceConnection> = new Map();
+    private readonly connectionByGuild: Map<string, VoiceConnection> =
+        new Map();
     private readonly connectionStateListeners: Map<
         string,
         (oldState: VoiceConnectionState, newState: VoiceConnectionState) => void
@@ -195,7 +199,9 @@ export class AudioCaptureHandler extends EventEmitter {
         });
 
         this.captureInitialized.add(guildId);
-        audioCaptureLogger.debug(`Audio capture setup completed for guild ${guildId}`);
+        audioCaptureLogger.debug(
+            `Audio capture setup completed for guild ${guildId}`
+        );
     }
 
     public isCaptureInitialized(guildId: string): boolean {
@@ -214,7 +220,11 @@ export class AudioCaptureHandler extends EventEmitter {
         guildId: string,
         userId: string,
         receiver: VoiceReceiver,
-        options: { isRetry?: boolean; reason?: string; forceStart?: boolean } = {}
+        options: {
+            isRetry?: boolean;
+            reason?: string;
+            forceStart?: boolean;
+        } = {}
     ): void {
         const captureKey = this.getCaptureKey(guildId, userId);
         if (this.activeReceivers.has(captureKey)) {
@@ -296,10 +306,12 @@ export class AudioCaptureHandler extends EventEmitter {
             }
             cleanedUp = true;
             const durationMs = Date.now() - captureStartedAt;
-            audioCaptureLogger.debug(
-                `[${captureKey}] PCM capture summary`,
-                { durationMs, chunkCount, totalBytes, reason }
-            );
+            audioCaptureLogger.debug(`[${captureKey}] PCM capture summary`, {
+                durationMs,
+                chunkCount,
+                totalBytes,
+                reason,
+            });
             this.emitSpeakerSilence({
                 guildId,
                 userId,
@@ -407,7 +419,12 @@ export class AudioCaptureHandler extends EventEmitter {
             );
             cleanup('opus_error');
             if (shouldRetry) {
-                this.scheduleDecryptRetry(captureKey, guildId, userId, receiver);
+                this.scheduleDecryptRetry(
+                    captureKey,
+                    guildId,
+                    userId,
+                    receiver
+                );
             }
         });
         this.activeReceivers.set(captureKey, { cleanup });
@@ -443,8 +460,7 @@ export class AudioCaptureHandler extends EventEmitter {
                         oldNetworkingStatus: oldSummary.networkingStatus,
                         newNetworkingStatus: newSummary.networkingStatus,
                         encryptionMode:
-                            connection.receiver.connectionData
-                                ?.encryptionMode,
+                            connection.receiver.connectionData?.encryptionMode,
                     }
                 );
 
@@ -462,7 +478,10 @@ export class AudioCaptureHandler extends EventEmitter {
                     newState.status === VoiceConnectionStatus.Ready &&
                     oldState.status !== VoiceConnectionStatus.Ready
                 ) {
-                    this.resubscribeActiveSpeakers(guildId, connection.receiver);
+                    this.resubscribeActiveSpeakers(
+                        guildId,
+                        connection.receiver
+                    );
                 }
             };
 
@@ -490,7 +509,11 @@ export class AudioCaptureHandler extends EventEmitter {
             connection.receiver.ssrcMap.on('create', onCreate);
             connection.receiver.ssrcMap.on('update', onUpdate);
             connection.receiver.ssrcMap.on('delete', onDelete);
-            this.ssrcMapListeners.set(guildId, { onCreate, onUpdate, onDelete });
+            this.ssrcMapListeners.set(guildId, {
+                onCreate,
+                onUpdate,
+                onDelete,
+            });
         }
     }
 
@@ -586,7 +609,10 @@ export class AudioCaptureHandler extends EventEmitter {
             if (this.shouldIgnoreUser(guildId, userId)) {
                 return;
             }
-            if (receiver.voiceConnection.state.status !== VoiceConnectionStatus.Ready) {
+            if (
+                receiver.voiceConnection.state.status !==
+                VoiceConnectionStatus.Ready
+            ) {
                 audioCaptureLogger.debug(
                     `[${captureKey}] Skipping decrypt retry because connection is not ready`
                 );
@@ -739,7 +765,9 @@ export class AudioCaptureHandler extends EventEmitter {
 
         this.captureInitialized.delete(guildId);
         this.ignoredUserIdsByGuild.delete(guildId);
-        audioCaptureLogger.debug(`Cleaned up audio capture for guild ${guildId}`);
+        audioCaptureLogger.debug(
+            `Cleaned up audio capture for guild ${guildId}`
+        );
     }
 
     public getDebugInfo(): AudioCaptureDebugInfo {
@@ -754,4 +782,3 @@ export class AudioCaptureHandler extends EventEmitter {
 }
 
 export type { AudioChunkEvent, SpeakerStartEvent, SpeakerSilenceEvent };
-

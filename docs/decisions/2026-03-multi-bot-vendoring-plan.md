@@ -107,20 +107,20 @@ Status as of 2026-03-06:
 - Default prompt posture is Footnote-first instead of Ari-first.
 - Canonical base prompt ownership now lives in the shared `@footnote/prompts` package instead of separate backend/bot catalogs.
 - Bot runtime profile config exists for:
-  - profile id
-  - profile display name
-  - inline or file-based prompt overlay
-  - profile-scoped mention aliases
+    - profile id
+    - profile display name
+    - inline or file-based prompt overlay
+    - profile-scoped mention aliases
 - Prompt overlay injection is wired through:
-  - Discord reflect request construction
-  - image prompt paths
-  - realtime prompt paths
-  - provenance interaction prompt paths
+    - Discord reflect request construction
+    - image prompt paths
+    - realtime prompt paths
+    - provenance interaction prompt paths
 - Overlay logging is metadata-only and tested to avoid leaking raw overlay text.
 - Plaintext mention alias resolution is centralized and shared across:
-  - `MessageCreate` catchup threshold routing
-  - `CatchupFilter` no-mention detection
-  - `RealtimeEngagementFilter` mention scoring
+    - `MessageCreate` catchup threshold routing
+    - `CatchupFilter` no-mention detection
+    - `RealtimeEngagementFilter` mention scoring
 - Root onboarding docs and DeepWiki-facing vendoring notes now describe the Footnote-default model.
 
 ### Remaining implementation work

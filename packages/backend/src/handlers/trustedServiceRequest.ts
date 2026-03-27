@@ -74,7 +74,9 @@ export const parseTrustedServiceAuth = (
         };
     }
 
-    const traceHeaderValue = readTrustedHeaderValue(req.headers['x-trace-token']);
+    const traceHeaderValue = readTrustedHeaderValue(
+        req.headers['x-trace-token']
+    );
     if (tokens.traceApiToken && traceHeaderValue === tokens.traceApiToken) {
         return {
             ok: true,
@@ -134,9 +136,7 @@ export const parseTrustedJsonBody = async (
             return;
         }
 
-        const chunkBuffer = Buffer.isBuffer(chunk)
-            ? chunk
-            : Buffer.from(chunk);
+        const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         bodyBytes += chunkBuffer.length;
         if (bodyBytes > maxBodyBytes) {
             bodyTooLarge = true;
@@ -174,7 +174,9 @@ export const parseTrustedJsonBody = async (
                 resolve();
                 return;
             }
-            reject(new Error(`${routeLabel} request closed before body completed`));
+            reject(
+                new Error(`${routeLabel} request closed before body completed`)
+            );
         };
         const onAborted = () => {
             cleanup();
@@ -182,7 +184,9 @@ export const parseTrustedJsonBody = async (
                 resolve();
                 return;
             }
-            reject(new Error(`${routeLabel} request aborted before body completed`));
+            reject(
+                new Error(`${routeLabel} request aborted before body completed`)
+            );
         };
         req.on('end', onEnd);
         req.on('error', onError);
@@ -226,9 +230,7 @@ export const parseTrustedBodyWithSchema = async <T>(
         logRequest: TrustedRouteLogRequest;
         routeLabel: string;
         maxBodyBytes: number;
-        safeParse: (
-            value: unknown
-        ) =>
+        safeParse: (value: unknown) =>
             | { success: true; data: T }
             | {
                   success: false;

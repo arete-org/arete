@@ -50,8 +50,7 @@ test('ContextBuilder includes shared conversational system prompt before Discord
     assert.ok(
         (context[0]?.content ?? '').indexOf(
             'You are the response engine for a configured Footnote assistant.'
-        ) <
-            (context[0]?.content ?? '').indexOf('Formatting and citations:'),
+        ) < (context[0]?.content ?? '').indexOf('Formatting and citations:'),
         'Shared conversational rules should appear before Discord chat rules'
     );
 });

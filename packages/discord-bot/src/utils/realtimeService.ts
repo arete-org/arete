@@ -273,10 +273,8 @@ export class RealtimeSession extends EventEmitter {
 
     private buildGreetingText(): string {
         const template =
-            runtimeConfig.realtime.greetingTemplate ||
-            'Hey, {bot} here.';
-        const botName =
-            runtimeConfig.profile.displayName || 'the bot';
+            runtimeConfig.realtime.greetingTemplate || 'Hey, {bot} here.';
+        const botName = runtimeConfig.profile.displayName || 'the bot';
 
         return template.replaceAll('{bot}', botName);
     }
@@ -378,13 +376,11 @@ export class RealtimeSession extends EventEmitter {
             };
 
             const handleClose = (code: number, reason: Buffer) => {
-                const suffix = reason?.length
-                    ? `: ${reason.toString()}`
-                    : '';
-                realtimeLogger.warn(
-                    'Realtime websocket closed before ready.',
-                    { code, reason: reason?.toString() || undefined }
-                );
+                const suffix = reason?.length ? `: ${reason.toString()}` : '';
+                realtimeLogger.warn('Realtime websocket closed before ready.', {
+                    code,
+                    reason: reason?.toString() || undefined,
+                });
                 rejectReady(
                     new Error(
                         `Realtime websocket closed before ready (${code})${suffix}`
@@ -557,4 +553,3 @@ const mapInternalEventToRealtimeEvent = (
             return null;
     }
 };
-

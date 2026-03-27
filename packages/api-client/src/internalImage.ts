@@ -15,10 +15,7 @@ import {
     PostInternalImageGenerateResponseSchema,
     createSchemaResponseValidator,
 } from '@footnote/contracts/web/schemas';
-import type {
-    ApiRequester,
-    CreateApiTransportOptions,
-} from './client.js';
+import type { ApiRequester, CreateApiTransportOptions } from './client.js';
 
 export type CreateInternalImageApiOptions = {
     traceApiToken?: string;
@@ -209,7 +206,9 @@ export const createInternalImageApi = (
 
                 let parsedEvent: InternalImageStreamEvent;
                 try {
-                    parsedEvent = JSON.parse(trimmed) as InternalImageStreamEvent;
+                    parsedEvent = JSON.parse(
+                        trimmed
+                    ) as InternalImageStreamEvent;
                 } catch (error) {
                     const message =
                         error instanceof Error ? error.message : String(error);
@@ -218,9 +217,8 @@ export const createInternalImageApi = (
                     );
                 }
 
-                const parsed = InternalImageStreamEventSchema.safeParse(
-                    parsedEvent
-                );
+                const parsed =
+                    InternalImageStreamEventSchema.safeParse(parsedEvent);
                 if (!parsed.success) {
                     const firstIssue = parsed.error.issues[0];
                     throw new Error(
@@ -256,17 +254,19 @@ export const createInternalImageApi = (
                     streamBytesRead += chunk.byteLength;
 
                     if (streamIterations > MAX_STREAM_ITERATIONS) {
-                        await reader.cancel('Internal image stream iteration limit exceeded').catch(
-                            () => undefined
-                        );
+                        await reader
+                            .cancel(
+                                'Internal image stream iteration limit exceeded'
+                            )
+                            .catch(() => undefined);
                         throw new Error(
                             `Internal image stream exceeded the iteration safety limit (${MAX_STREAM_ITERATIONS}).`
                         );
                     }
                     if (streamBytesRead > MAX_STREAM_BYTES) {
-                        await reader.cancel('Internal image stream byte limit exceeded').catch(
-                            () => undefined
-                        );
+                        await reader
+                            .cancel('Internal image stream byte limit exceeded')
+                            .catch(() => undefined);
                         throw new Error(
                             `Internal image stream exceeded the byte safety limit (${MAX_STREAM_BYTES}).`
                         );

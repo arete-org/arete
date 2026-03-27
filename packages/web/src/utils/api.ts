@@ -23,15 +23,12 @@ import type {
     PostChatResponse,
 } from '@footnote/contracts/web';
 
-export const isApiClientError = (
-    value: unknown
-): value is ApiClientError => isSharedApiClientError(value, 'ApiClientError');
+export const isApiClientError = (value: unknown): value is ApiClientError =>
+    isSharedApiClientError(value, 'ApiClientError');
 
 // Keep this thin local wrapper so web can add surface-specific behavior later
 // (telemetry, headers, retries, or method overrides) without changing imports.
-export const createWebApiClient = (
-    options: CreateWebApiClientOptions = {}
-) => {
+export const createWebApiClient = (options: CreateWebApiClientOptions = {}) => {
     const shared = createSharedWebApiClient(options);
 
     const chatQuestion = shared.chatQuestion;
@@ -73,4 +70,3 @@ export const getTrace = (
     api.getTrace(responseId, signal);
 
 export type { ApiClientError, ApiErrorResponse };
-

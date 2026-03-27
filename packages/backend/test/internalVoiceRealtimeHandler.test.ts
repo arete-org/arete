@@ -113,85 +113,89 @@ type RealtimeHandlerHarness = {
     }>;
 };
 
-const createRealtimeHandlerHarness = async (): Promise<RealtimeHandlerHarness> => {
-    const requests: RealtimeHandlerHarness['requests'] = [];
-    const recordedUsage: BackendLLMCostRecord[] = [];
-    let currentSession: StubRealtimeSession | null = null;
-    let lastContext: InternalVoiceSessionContext = {
-        participants: [],
-    };
-    const runtime: RealtimeVoiceRuntime = {
-        kind: 'stub-realtime-runtime',
-        async createSession(request) {
-            currentSession = new StubRealtimeSession();
-            requests.push({
-                instructions: request.instructions,
-                context: lastContext,
-                options: request.options,
-            });
-            return currentSession;
-        },
-    };
-
-    const { handleUpgrade } = createInternalVoiceRealtimeHandler({
-        realtimeVoiceRuntime: runtime,
-        traceApiToken: 'trace-token',
-        serviceToken: 'service-token',
-        serviceRateLimiter: new SimpleRateLimiter({ limit: 10, window: 60000 }),
-        buildInstructions: (context) => {
-            lastContext = context;
-            return `participants=${context.participants.length}`;
-        },
-        recordUsage: (record) => {
-            recordedUsage.push(record);
-        },
-    });
-
-    const server = http.createServer((_req, res) => {
-        res.statusCode = 404;
-        res.end();
-    });
-
-    server.on('upgrade', (req, socket, head) => {
-        handleUpgrade(req, socket, head);
-    });
-
-    await new Promise<void>((resolve) => {
-        server.listen(0, '127.0.0.1', resolve);
-    });
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-
-    return {
-        close: () =>
-            new Promise((resolve, reject) => {
-                server.close((error) => {
-                    if (error) {
-                        reject(error);
-                        return;
-                    }
-                    resolve();
+const createRealtimeHandlerHarness =
+    async (): Promise<RealtimeHandlerHarness> => {
+        const requests: RealtimeHandlerHarness['requests'] = [];
+        const recordedUsage: BackendLLMCostRecord[] = [];
+        let currentSession: StubRealtimeSession | null = null;
+        let lastContext: InternalVoiceSessionContext = {
+            participants: [],
+        };
+        const runtime: RealtimeVoiceRuntime = {
+            kind: 'stub-realtime-runtime',
+            async createSession(request) {
+                currentSession = new StubRealtimeSession();
+                requests.push({
+                    instructions: request.instructions,
+                    context: lastContext,
+                    options: request.options,
                 });
+                return currentSession;
+            },
+        };
+
+        const { handleUpgrade } = createInternalVoiceRealtimeHandler({
+            realtimeVoiceRuntime: runtime,
+            traceApiToken: 'trace-token',
+            serviceToken: 'service-token',
+            serviceRateLimiter: new SimpleRateLimiter({
+                limit: 10,
+                window: 60000,
             }),
-        connect: (headers = {}) =>
-            new Promise((resolve, reject) => {
-                const ws = new WebSocket(
-                    `ws://127.0.0.1:${address.port}/api/internal/voice/realtime`,
-                    {
-                        headers: {
-                            'X-Trace-Token': 'trace-token',
-                            ...headers,
-                        },
-                    }
-                );
-                ws.once('open', () => resolve(ws));
-                ws.once('error', reject);
-            }),
-        lastSession: () => currentSession,
-        recordedUsage,
-        requests,
+            buildInstructions: (context) => {
+                lastContext = context;
+                return `participants=${context.participants.length}`;
+            },
+            recordUsage: (record) => {
+                recordedUsage.push(record);
+            },
+        });
+
+        const server = http.createServer((_req, res) => {
+            res.statusCode = 404;
+            res.end();
+        });
+
+        server.on('upgrade', (req, socket, head) => {
+            handleUpgrade(req, socket, head);
+        });
+
+        await new Promise<void>((resolve) => {
+            server.listen(0, '127.0.0.1', resolve);
+        });
+        const address = server.address();
+        assert.ok(address && typeof address === 'object');
+
+        return {
+            close: () =>
+                new Promise((resolve, reject) => {
+                    server.close((error) => {
+                        if (error) {
+                            reject(error);
+                            return;
+                        }
+                        resolve();
+                    });
+                }),
+            connect: (headers = {}) =>
+                new Promise((resolve, reject) => {
+                    const ws = new WebSocket(
+                        `ws://127.0.0.1:${address.port}/api/internal/voice/realtime`,
+                        {
+                            headers: {
+                                'X-Trace-Token': 'trace-token',
+                                ...headers,
+                            },
+                        }
+                    );
+                    ws.once('open', () => resolve(ws));
+                    ws.once('error', reject);
+                }),
+            lastSession: () => currentSession,
+            recordedUsage,
+            requests,
+        };
     };
-};
 
 const waitForJsonMessage = async (
     ws: WebSocket
@@ -298,22 +302,24 @@ test('internal realtime handler starts a session and forwards session.ready to t
             })
         );
 
-        const session = await new Promise<StubRealtimeSession>((resolve, reject) => {
-            const startedAt = Date.now();
-            const poll = () => {
-                const current = harness.lastSession();
-                if (current) {
-                    resolve(current);
-                    return;
-                }
-                if (Date.now() - startedAt > 1000) {
-                    reject(new Error('Realtime session was not created.'));
-                    return;
-                }
-                setTimeout(poll, 10);
-            };
-            poll();
-        });
+        const session = await new Promise<StubRealtimeSession>(
+            (resolve, reject) => {
+                const startedAt = Date.now();
+                const poll = () => {
+                    const current = harness.lastSession();
+                    if (current) {
+                        resolve(current);
+                        return;
+                    }
+                    if (Date.now() - startedAt > 1000) {
+                        reject(new Error('Realtime session was not created.'));
+                        return;
+                    }
+                    setTimeout(poll, 10);
+                };
+                poll();
+            }
+        );
 
         assert.equal(harness.requests.length, 1);
         assert.equal(harness.requests[0].instructions, 'participants=1');

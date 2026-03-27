@@ -21,9 +21,9 @@ This flow covers:
 2. The bot presents a private consent step.
 3. If the user declines, the flow stops and no incident is created.
 4. If the user consents, the bot may collect optional inputs:
-   - tags,
-   - short description,
-   - contact preference.
+    - tags,
+    - short description,
+    - contact preference.
 5. The bot creates one durable incident record with captured pointers.
 6. The bot confirms that the report was recorded.
 7. If the configured policy requires immediate remediation, the bot marks the reported assistant message as under review.

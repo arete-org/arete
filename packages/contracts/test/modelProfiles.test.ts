@@ -36,6 +36,8 @@ test('ModelProfileCatalogSchema rejects duplicate profile ids with a clear error
         return;
     }
 
-    const message = parsed.error.issues.map((issue) => issue.message).join('\n');
+    const message = parsed.error.issues
+        .map((issue) => issue.message)
+        .join('\n');
     assert.match(message, /Duplicate model profile id\(s\): openai-text-fast/);
 });

@@ -11,13 +11,13 @@ Last updated: 2026-03-02
 
 Footnote is released under a **dual-license model**, combining the openness and accessibility of the [MIT License](../MIT_LICENSE.md) with the moral commitments of the [Hippocratic License v3](../HIPPOCRATIC_LICENSE.md).
 
-All components of the project are, by default, dual-licensed under both terms unless otherwise noted.  
+All components of the project are, by default, dual-licensed under both terms unless otherwise noted.
 
 ---
 
 ## Motivation
 
-Footnote's design centers around transparency, value reasoning, and public auditability. Its outputs are ethically weighted and traceable. To be consistent with that mission, the terms under which the project itself is built and used must also be transparent and morally coherent.  
+Footnote's design centers around transparency, value reasoning, and public auditability. Its outputs are ethically weighted and traceable. To be consistent with that mission, the terms under which the project itself is built and used must also be transparent and morally coherent.
 
 The Hippocratic License aligns with this vision by embedding moral constraints directly into the license itself. Specifically, it forbids uses that violate fundamental human rights, and allows modular extensions to cover additional harms (e.g., surveillance, labor exploitation, environmental destruction).
 

@@ -142,7 +142,9 @@ export const missingRiskRationale = true;
 
     assert.ok(
         messages.some((message) =>
-            message.includes('@footnote-risk must use "level - <rationale text>"')
+            message.includes(
+                '@footnote-risk must use "level - <rationale text>"'
+            )
         )
     );
 });

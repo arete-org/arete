@@ -8,9 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-    createGenerationRuntime,
-} from '../src/index.js';
+import { createGenerationRuntime } from '../src/index.js';
 
 test('createGenerationRuntime builds the VoltAgent runtime', async () => {
     const runtime = createGenerationRuntime({

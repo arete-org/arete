@@ -67,7 +67,9 @@ export type IncidentApi = {
     ) => Promise<PostIncidentRemediationResponse>;
 };
 
-const buildTrustedHeaders = (traceApiToken?: string): Record<string, string> => {
+const buildTrustedHeaders = (
+    traceApiToken?: string
+): Record<string, string> => {
     const headers: Record<string, string> = {};
     if (traceApiToken) {
         headers['X-Trace-Token'] = traceApiToken;

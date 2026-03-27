@@ -34,10 +34,7 @@ test('parseChatRequest resumes oversized requests rejected by content-length', a
         return originalResume();
     }) as typeof request.resume;
 
-    const result = await parseChatRequest(
-        request as IncomingMessage,
-        1024
-    );
+    const result = await parseChatRequest(request as IncomingMessage, 1024);
 
     assert.equal(result.success, false);
     if (result.success) {
@@ -50,10 +47,7 @@ test('parseChatRequest resumes oversized requests rejected by content-length', a
 
 test('parseChatRequest resolves cleanly when an oversized streamed body destroys the request', async () => {
     const request = createRequest({});
-    const resultPromise = parseChatRequest(
-        request as IncomingMessage,
-        5
-    );
+    const resultPromise = parseChatRequest(request as IncomingMessage, 5);
 
     request.write('123456');
     request.end();

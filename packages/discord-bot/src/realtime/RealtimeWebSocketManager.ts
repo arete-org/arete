@@ -44,13 +44,10 @@ export class RealtimeWebSocketManager {
         url: string,
         headers: Record<string, string>
     ): Promise<void> {
-        realtimeWebSocketLogger.debug(
-            '[realtime-ws] Connect requested.',
-            {
-                url,
-                headerKeys: Object.keys(headers),
-            }
-        );
+        realtimeWebSocketLogger.debug('[realtime-ws] Connect requested.', {
+            url,
+            headerKeys: Object.keys(headers),
+        });
         // If already connected, return immediately
         if (this.isConnected) {
             throw new Error('Session is already connected');
@@ -352,4 +349,3 @@ export class RealtimeWebSocketManager {
         return this.ws;
     }
 }
-

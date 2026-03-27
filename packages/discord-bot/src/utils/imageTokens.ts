@@ -298,4 +298,3 @@ function formatCountdown(seconds: number): string {
 
     return `${remainingSeconds}s`;
 }
-

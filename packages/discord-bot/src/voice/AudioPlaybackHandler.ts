@@ -292,14 +292,17 @@ export class AudioPlaybackHandler {
                 this.pipelineErrorHandlers.delete(guildId);
             }
 
-            void pipeline.destroy().catch((error: Error) => {
-                logger.error(
-                    `[AudioPlayback] Error cleaning up pipeline for guild ${guildId}:`,
-                    error
-                );
-            }).finally(() => {
-                this.pipelineDisposing.delete(guildId);
-            });
+            void pipeline
+                .destroy()
+                .catch((error: Error) => {
+                    logger.error(
+                        `[AudioPlayback] Error cleaning up pipeline for guild ${guildId}:`,
+                        error
+                    );
+                })
+                .finally(() => {
+                    this.pipelineDisposing.delete(guildId);
+                });
             this.pipelines.delete(guildId);
         }
         this.clearPipelineCleanupTimer(guildId);
@@ -323,4 +326,3 @@ export class AudioPlaybackHandler {
         this.pipelineDisposing.clear();
     }
 }
-

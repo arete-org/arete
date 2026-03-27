@@ -72,7 +72,9 @@ export class RealtimeEventHandler extends EventEmitter {
                         this.audioBuffer = [];
                         this.audioChunkCount = 0;
                         this.totalAudioBytes = 0;
-                        logger.debug('[RealtimeEventHandler] Audio stream started');
+                        logger.debug(
+                            '[RealtimeEventHandler] Audio stream started'
+                        );
                     }
                     this.audioChunkCount += 1;
                     this.totalAudioBytes += audioData.length;
@@ -100,12 +102,9 @@ export class RealtimeEventHandler extends EventEmitter {
             this.totalAudioBytes = 0;
         });
 
-        this.on(
-            'response.done',
-            (event: RealtimeResponseDoneEvent) => {
-                this.emit('responseComplete', event);
-            }
-        );
+        this.on('response.done', (event: RealtimeResponseDoneEvent) => {
+            this.emit('responseComplete', event);
+        });
 
         this.on('error', (event: RealtimeErrorEvent) => {
             logger.error('Realtime API error:', event.error);
@@ -160,4 +159,3 @@ const isRealtimeErrorEvent = (
         event.type === 'error'
     );
 };
-

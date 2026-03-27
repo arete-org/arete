@@ -48,7 +48,9 @@ export async function handleModalSubmitInteraction(
         return false;
     }
 
-    const responseId = customId.slice(IMAGE_VARIATION_PROMPT_MODAL_ID_PREFIX.length);
+    const responseId = customId.slice(
+        IMAGE_VARIATION_PROMPT_MODAL_ID_PREFIX.length
+    );
     const rawPrompt = interaction.fields.getTextInputValue(
         IMAGE_VARIATION_PROMPT_INPUT_ID
     );
@@ -82,14 +84,17 @@ export async function handleModalSubmitInteraction(
         return true;
     }
 
-    const refreshed = resetVariationCooldown(interaction.user.id, responseId) ?? session;
+    const refreshed =
+        resetVariationCooldown(interaction.user.id, responseId) ?? session;
     try {
         // If the original configurator message is still active, refresh it so
         // users can continue adjusting settings without reopening the flow.
         if (refreshed.messageUpdater) {
             await refreshed.messageUpdater(
                 buildVariationConfiguratorView(refreshed, {
-                    statusMessage: buildVariationStatusMessage(interaction.user.id),
+                    statusMessage: buildVariationStatusMessage(
+                        interaction.user.id
+                    ),
                 })
             );
         }

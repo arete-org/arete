@@ -58,4 +58,3 @@ export class RealtimeAudioHandler {
         // No local audio state to reset while server VAD owns turn handling.
     }
 }
-

@@ -29,9 +29,9 @@ Adopt a core + persona model:
 - Default Footnote persona is a replaceable persona layer.
 - When an overlay is active, it replaces default persona behavior (while preserving core constraints).
 - Prompt resolution for active persona is deterministic:
-  - If `BOT_PROFILE_PROMPT_OVERLAY` is non-empty, use it.
-  - Else, if `BOT_PROFILE_PROMPT_OVERLAY_PATH` is readable, use that file content.
-  - Else, use the default Footnote persona key for that path.
+    - If `BOT_PROFILE_PROMPT_OVERLAY` is non-empty, use it.
+    - Else, if `BOT_PROFILE_PROMPT_OVERLAY_PATH` is readable, use that file content.
+    - Else, use the default Footnote persona key for that path.
 - Persona layers are never stacked. Each generation path uses exactly one active persona layer.
 
 ### 2.2 Core-constraint scope

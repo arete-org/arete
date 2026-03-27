@@ -129,8 +129,7 @@ try {
     }
 }
 
-type DailyRotateFileConstructor =
-    typeof import('winston-daily-rotate-file');
+type DailyRotateFileConstructor = typeof import('winston-daily-rotate-file');
 type DailyRotateFileModule = DailyRotateFileConstructor & {
     default?: DailyRotateFileConstructor;
 };
@@ -139,11 +138,9 @@ let DailyRotateFile: DailyRotateFileConstructor | null = null;
 try {
     // Load the rotating file transport lazily so a missing optional package
     // does not take the backend down during startup.
-    const dailyRotateFileModule = (await import(
-        'winston-daily-rotate-file'
-    )) as DailyRotateFileModule;
-    DailyRotateFile =
-        dailyRotateFileModule.default ?? dailyRotateFileModule;
+    const dailyRotateFileModule =
+        (await import('winston-daily-rotate-file')) as DailyRotateFileModule;
+    DailyRotateFile = dailyRotateFileModule.default ?? dailyRotateFileModule;
 } catch (error) {
     console.warn(
         `Logger could not load winston-daily-rotate-file. Continuing with console logging only. Error: ${error instanceof Error ? error.message : String(error)}`
@@ -237,4 +234,3 @@ export const logLLMCostSummary = (getTotals?: LLMCostSummaryProvider) => {
         );
     }
 };
-

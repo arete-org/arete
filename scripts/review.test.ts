@@ -12,17 +12,18 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { parseFootnoteTagDiagnostics } = require('./review.cjs') as {
-    parseFootnoteTagDiagnostics: (
-        result: { status: number; stdout: string; stderr: string }
-    ) => Array<{ file: string; line: number; message: string }>;
+    parseFootnoteTagDiagnostics: (result: {
+        status: number;
+        stdout: string;
+        stderr: string;
+    }) => Array<{ file: string; line: number; message: string }>;
 };
 
 test('review parser keeps recognizing Footnote validator diagnostics', () => {
     const diagnostics = parseFootnoteTagDiagnostics({
         status: 1,
         stdout: '',
-        stderr:
-            'Footnote tag error in packages/example/src/module.ts: Line 4: Missing required @footnote-module tag.',
+        stderr: 'Footnote tag error in packages/example/src/module.ts: Line 4: Missing required @footnote-module tag.',
     });
 
     assert.deepEqual(diagnostics, [

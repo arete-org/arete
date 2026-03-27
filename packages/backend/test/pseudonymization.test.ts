@@ -123,4 +123,3 @@ test('pseudonymizeActorId is idempotent and null-safe', () => {
     assert.equal(pseudonymizeActorId(null, SECRET_A), null);
     assert.equal(pseudonymizeActorId(undefined, SECRET_A), null);
 });
-

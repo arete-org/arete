@@ -109,7 +109,9 @@ const formatIncidentDetail = (incident: IncidentDetail): string => {
     ].filter((line): line is string => Boolean(line));
 
     const auditLines = incident.auditEvents.slice(-6).map((event) => {
-        const actor = event.actorHash ? ` actor=${shorten(event.actorHash)}` : '';
+        const actor = event.actorHash
+            ? ` actor=${shorten(event.actorHash)}`
+            : '';
         const notes = event.notes ? ` notes=${event.notes}` : '';
         return `- ${event.createdAt} ${event.action}${actor}${notes}`;
     });
@@ -140,7 +142,9 @@ const formatIncidentDetail = (incident: IncidentDetail): string => {
  */
 const formatApiError = (error: unknown): string => {
     if (isDiscordApiClientError(error)) {
-        return error.details ? `${error.message} (${error.details})` : error.message;
+        return error.details
+            ? `${error.message} (${error.details})`
+            : error.message;
     }
     return error instanceof Error ? error.message : String(error);
 };
@@ -228,10 +232,16 @@ const buildIncidentViewPicker = (
 export const handleIncidentViewSelect = async (
     interaction: StringSelectMenuInteraction
 ): Promise<void> => {
-    const ownerUserId = interaction.customId.slice(INCIDENT_VIEW_SELECT_PREFIX.length);
-    if (interaction.user.id !== ownerUserId || !isIncidentSuperuser(interaction.user.id)) {
+    const ownerUserId = interaction.customId.slice(
+        INCIDENT_VIEW_SELECT_PREFIX.length
+    );
+    if (
+        interaction.user.id !== ownerUserId ||
+        !isIncidentSuperuser(interaction.user.id)
+    ) {
         await interaction.reply({
-            content: 'Only the requesting superuser can use this incident picker.',
+            content:
+                'Only the requesting superuser can use this incident picker.',
             flags: [EPHEMERAL_FLAG],
         });
         return;
@@ -249,7 +259,9 @@ export const handleIncidentViewSelect = async (
         interactionDeferred = true;
         const response = await botApi.getIncident(incidentId);
         await interaction.editReply({
-            content: limitDiscordMessage(formatIncidentDetail(response.incident)),
+            content: limitDiscordMessage(
+                formatIncidentDetail(response.incident)
+            ),
             components: [],
         });
     } catch (error) {
@@ -319,7 +331,9 @@ const incidentCommand: Command = {
                 .addStringOption((option) =>
                     option
                         .setName('incident_id')
-                        .setDescription('Incident short ID. Leave blank to pick from a menu.')
+                        .setDescription(
+                            'Incident short ID. Leave blank to pick from a menu.'
+                        )
                         .setRequired(false)
                 )
         )
@@ -391,7 +405,9 @@ const incidentCommand: Command = {
                     });
                     replyDeferred = true;
                     const response = await botApi.listIncidents({
-                        status: interaction.options.getString('status') ?? undefined,
+                        status:
+                            interaction.options.getString('status') ??
+                            undefined,
                         tag: interaction.options.getString('tag') ?? undefined,
                         createdFrom:
                             interaction.options.getString('created_from') ??
@@ -420,7 +436,8 @@ const incidentCommand: Command = {
                     });
                     replyDeferred = true;
                     const incidentId =
-                        interaction.options.getString('incident_id') ?? undefined;
+                        interaction.options.getString('incident_id') ??
+                        undefined;
                     if (!incidentId) {
                         const response = await botApi.listIncidents();
                         const unprocessedIncidents = getUnprocessedIncidents(
@@ -468,12 +485,16 @@ const incidentCommand: Command = {
                         'status',
                         true
                     ) as IncidentSummary['status'];
-                    const note = interaction.options.getString('note') ?? undefined;
-                    const response = await botApi.updateIncidentStatus(incidentId, {
-                        status,
-                        actorUserId: interaction.user.id,
-                        notes: note,
-                    });
+                    const note =
+                        interaction.options.getString('note') ?? undefined;
+                    const response = await botApi.updateIncidentStatus(
+                        incidentId,
+                        {
+                            status,
+                            actorUserId: interaction.user.id,
+                            notes: note,
+                        }
+                    );
                     await interaction.editReply({
                         content: `Updated **${response.incident.incidentId}** to **${response.incident.status}**.`,
                     });
