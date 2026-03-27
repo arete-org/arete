@@ -18,11 +18,15 @@ import type {
     ExecutionReasonCode,
     ExecutionStatus,
     EvaluatorOutcome,
+    EvaluatorExecutionReasonCode,
+    GenerationExecutionReasonCode,
     PartialResponseTemperament,
+    PlannerExecutionReasonCode,
     Provenance,
     ResponseMetadata,
     RiskTier,
     ToolExecutionContext,
+    ToolInvocationReasonCode,
     TraceAxisScore,
 } from '@footnote/contracts/ethics-core';
 import { runtimeConfig } from '../config.js';
@@ -668,6 +672,81 @@ type ResponseMetadataRuntimeContext = {
     };
 };
 
+const normalizePlannerReasonCode = (
+    status: ExecutionStatus,
+    reasonCode: ExecutionReasonCode | undefined
+): PlannerExecutionReasonCode | undefined => {
+    if (status === 'executed') {
+        return undefined;
+    }
+
+    if (
+        reasonCode === 'planner_runtime_error' ||
+        reasonCode === 'planner_invalid_output'
+    ) {
+        return reasonCode;
+    }
+
+    return 'planner_runtime_error';
+};
+
+const normalizeEvaluatorReasonCode = (
+    status: ExecutionStatus,
+    reasonCode: ExecutionReasonCode | undefined
+): EvaluatorExecutionReasonCode | undefined => {
+    if (status === 'executed') {
+        return undefined;
+    }
+
+    if (reasonCode === 'evaluator_runtime_error') {
+        return reasonCode;
+    }
+
+    return 'evaluator_runtime_error';
+};
+
+const normalizeGenerationReasonCode = (
+    status: ExecutionStatus,
+    reasonCode: ExecutionReasonCode | undefined
+): GenerationExecutionReasonCode | undefined => {
+    if (status === 'executed') {
+        return undefined;
+    }
+
+    if (reasonCode === 'generation_runtime_error') {
+        return reasonCode;
+    }
+
+    return 'generation_runtime_error';
+};
+
+const normalizeToolReasonCode = (
+    status: ExecutionStatus,
+    reasonCode: ToolInvocationReasonCode | undefined
+): ToolInvocationReasonCode | undefined => {
+    if (
+        reasonCode === 'tool_not_requested' ||
+        reasonCode === 'tool_not_used' ||
+        reasonCode === 'search_rerouted_to_fallback_profile' ||
+        reasonCode === 'search_reroute_not_permitted_by_selection_source' ||
+        reasonCode === 'search_reroute_no_tool_capable_fallback_available' ||
+        reasonCode === 'tool_unavailable' ||
+        reasonCode === 'tool_execution_error' ||
+        reasonCode === 'search_not_supported_by_selected_profile' ||
+        reasonCode === 'unspecified_tool_outcome'
+    ) {
+        return reasonCode;
+    }
+
+    if (status === 'executed') {
+        return undefined;
+    }
+
+    return status === 'failed'
+        ? 'tool_execution_error'
+        : 'unspecified_tool_outcome';
+};
+
 /**
  * Builds canonical ResponseMetadata for trace storage and UI rendering.
  * All values are derived from control-plane context and API annotations.
@@ -743,13 +822,10 @@ const buildResponseMetadata = (
     const execution: ExecutionEvent[] = [];
     const plannerExecution = runtimeContext.executionContext?.planner;
     if (plannerExecution) {
-        // Contract invariant: executed events omit reasonCode; failed/skipped
-        // must include one. We normalize here so downstream storage/UI never
-        // receives ambiguous planner failure semantics.
-        const normalizedPlannerReasonCode =
-            plannerExecution.status === 'executed'
-                ? undefined
-                : (plannerExecution.reasonCode ?? 'planner_runtime_error');
+        const normalizedPlannerReasonCode = normalizePlannerReasonCode(
+            plannerExecution.status,
+            plannerExecution.reasonCode
+        );
         execution.push({
             kind: 'planner',
             status: plannerExecution.status,
@@ -772,12 +848,10 @@ const buildResponseMetadata = (
     }
     const evaluatorExecution = runtimeContext.executionContext?.evaluator;
     if (evaluatorExecution) {
-        // Evaluator metadata is currently observe-only and additive. We still
-        // normalize failed/skipped outcomes to stable reason codes.
-        const normalizedEvaluatorReasonCode =
-            evaluatorExecution.status === 'executed'
-                ? undefined
-                : (evaluatorExecution.reasonCode ?? 'evaluator_runtime_error');
+        const normalizedEvaluatorReasonCode = normalizeEvaluatorReasonCode(
+            evaluatorExecution.status,
+            evaluatorExecution.reasonCode
+        );
         execution.push({
             kind: 'evaluator',
             status: evaluatorExecution.status,
@@ -794,14 +868,10 @@ const buildResponseMetadata = (
     }
     const toolExecution = runtimeContext.executionContext?.tool;
     if (toolExecution) {
-        // Tool outcomes normalize missing skip/failure codes, but preserve
-        // explicit executed reason codes for policy-audit metadata.
-        const normalizedToolReasonCode =
-            toolExecution.status === 'executed'
-                ? toolExecution.reasonCode
-                : toolExecution.status === 'failed'
-                  ? (toolExecution.reasonCode ?? 'tool_execution_error')
-                  : (toolExecution.reasonCode ?? 'unspecified_tool_outcome');
+        const normalizedToolReasonCode = normalizeToolReasonCode(
+            toolExecution.status,
+            toolExecution.reasonCode
+        );
         execution.push({
             kind: 'tool',
             status: toolExecution.status,
@@ -816,13 +886,10 @@ const buildResponseMetadata = (
     }
     const generationExecution = runtimeContext.executionContext?.generation;
     if (generationExecution) {
-        // Generation defaults are defensive: if non-executed reaches this path
-        // without a code, mark it as a generation runtime error.
-        const normalizedGenerationReasonCode =
-            generationExecution.status === 'executed'
-                ? undefined
-                : (generationExecution.reasonCode ??
-                  'generation_runtime_error');
+        const normalizedGenerationReasonCode = normalizeGenerationReasonCode(
+            generationExecution.status,
+            generationExecution.reasonCode
+        );
         execution.push({
             kind: 'generation',
             status: generationExecution.status,

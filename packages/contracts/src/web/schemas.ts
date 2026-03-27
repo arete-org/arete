@@ -152,6 +152,25 @@ const ExecutionReasonCodeSchema = z.enum([
     'search_not_supported_by_selected_profile',
     'unspecified_tool_outcome',
 ]);
+const PlannerExecutionReasonCodeSchema = z.enum([
+    'planner_runtime_error',
+    'planner_invalid_output',
+]);
+const EvaluatorExecutionReasonCodeSchema = z.enum(['evaluator_runtime_error']);
+const GenerationExecutionReasonCodeSchema = z.enum([
+    'generation_runtime_error',
+]);
+const ToolExecutionReasonCodeSchema = z.enum([
+    'tool_not_requested',
+    'tool_not_used',
+    'search_rerouted_to_fallback_profile',
+    'search_reroute_not_permitted_by_selection_source',
+    'search_reroute_no_tool_capable_fallback_available',
+    'tool_unavailable',
+    'tool_execution_error',
+    'search_not_supported_by_selected_profile',
+    'unspecified_tool_outcome',
+]);
 const EvaluatorDecisionModeSchema = z.enum(['observe_only', 'enforced']);
 const EvaluatorOutcomeSchema = z
     .object({
@@ -192,6 +211,31 @@ const ExecutionEventSchema = z
             });
         }
 
+        if (value.kind === 'tool' && !value.toolName) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'toolName is required when execution kind is tool.',
+            });
+        }
+
+        if (value.reasonCode) {
+            const reasonCodeByKind = {
+                planner: PlannerExecutionReasonCodeSchema,
+                evaluator: EvaluatorExecutionReasonCodeSchema,
+                tool: ToolExecutionReasonCodeSchema,
+                generation: GenerationExecutionReasonCodeSchema,
+            } as const;
+            const reasonCodeSchema = reasonCodeByKind[value.kind];
+            const reasonCodeResult = reasonCodeSchema.safeParse(
+                value.reasonCode
+            );
+            if (!reasonCodeResult.success) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `reasonCode "${value.reasonCode}" is not valid for execution kind "${value.kind}".`,
+                });
+            }
+        }
     })
     .strict();
 
