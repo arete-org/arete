@@ -123,7 +123,9 @@ const rankSearchFallbackProfiles = (
         }
 
         const tierBindingRank = compareNumbers(
-            left.tierBindings.some((binding) => selectedTierBindings.has(binding))
+            left.tierBindings.some((binding) =>
+                selectedTierBindings.has(binding)
+            )
                 ? 0
                 : 1,
             right.tierBindings.some((binding) =>
@@ -371,7 +373,8 @@ export const createChatOrchestrator = ({
             chatOrchestratorLogger.warn(
                 'deterministic evaluator failed open; continuing without evaluator outcome',
                 {
-                    error: error instanceof Error ? error.message : String(error),
+                    error:
+                        error instanceof Error ? error.message : String(error),
                 }
             );
             evaluatorExecutionContext = {
@@ -801,8 +804,7 @@ export const createChatOrchestrator = ({
             evaluatorStatus: evaluatorExecutionContext?.status,
             evaluatorReasonCode: evaluatorExecutionContext?.reasonCode,
             evaluatorRiskTier: evaluatorExecutionContext?.outcome?.riskTier,
-            evaluatorProvenance:
-                evaluatorExecutionContext?.outcome?.provenance,
+            evaluatorProvenance: evaluatorExecutionContext?.outcome?.provenance,
             evaluatorMode: evaluatorExecutionContext?.outcome?.mode,
             generationDurationMs: response.generationDurationMs,
             totalDurationMs,
@@ -811,10 +813,22 @@ export const createChatOrchestrator = ({
             originalProfileId: originalSelectedProfileId,
             effectiveProfileId: effectiveSelectedProfileId,
             searchRequested: generationForExecution.search !== undefined,
+            toolName: toolRequestContext?.toolName,
             toolStatus: toolExecutionContext?.status,
+            toolReasonCode: toolExecutionContext?.reasonCode,
             toolEligible: toolRequestContext?.eligible,
+            toolRequestReasonCode: toolRequestContext?.reasonCode,
             rerouteApplied,
             fallbackApplied: plannerExecution.status === 'failed',
+            fallbackReasons,
+            responseId: response.metadata.responseId,
+            responseAction: 'message',
+            responseModality: executionPlan.modality,
+            responseProvenance: response.metadata.provenance,
+            responseRiskTier: response.metadata.riskTier,
+            responseModelVersion: response.metadata.modelVersion,
+            responseCitationCount: response.metadata.citations.length,
+            responseMessageLength: response.message.length,
         });
 
         // Message action is the only branch that returns provenance metadata.
