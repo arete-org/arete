@@ -513,7 +513,7 @@ export const createChatOrchestrator = ({
                     model: plannerProfile.providerModel,
                     durationMs: plannerExecution.durationMs,
                 },
-                ...(evaluatorExecutionContext !== undefined && {
+                ...(evaluatorExecutionContext && {
                     evaluator: evaluatorExecutionContext,
                 }),
                 generation: {
