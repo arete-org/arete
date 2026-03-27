@@ -12,10 +12,11 @@ import type { ButtonInteraction } from 'discord.js';
 import { botApi } from '../src/api/botApi.js';
 import { handleProvenanceButtonInteraction } from '../src/interactions/button/provenanceButtons.js';
 
-type TestInteraction = Pick<
-    ButtonInteraction,
-    'customId' | 'deferReply' | 'editReply'
->;
+type TestInteraction = {
+    customId: string;
+    deferReply: (payload: unknown) => Promise<void>;
+    editReply: (payload: unknown) => Promise<void>;
+};
 
 function createDetailsInteraction(
     responseId: string,
@@ -89,7 +90,7 @@ test('details action renders markdown-first sections with raw JSON debug block',
                 'resp_details_sections',
                 editReplyPayloads,
                 deferReplyPayloads
-            ) as ButtonInteraction
+            ) as unknown as ButtonInteraction
         );
 
         assert.equal(handled, true);
@@ -160,7 +161,7 @@ test('details action truncates oversized payloads while preserving section reada
                 'resp_details_long',
                 editReplyPayloads,
                 deferReplyPayloads
-            ) as ButtonInteraction
+            ) as unknown as ButtonInteraction
         );
         assert.equal(handled, true);
         assert.equal(editReplyPayloads.length, 1);
@@ -194,7 +195,7 @@ test('details action stays fail-open with fallback sections when trace metadata 
                 'resp_unavailable',
                 editReplyPayloads,
                 deferReplyPayloads
-            ) as ButtonInteraction
+            ) as unknown as ButtonInteraction
         );
 
         assert.equal(handled, true);
