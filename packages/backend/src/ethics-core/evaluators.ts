@@ -29,7 +29,7 @@ const RETRIEVAL_PATTERNS: readonly RegExp[] = [
 const SPECULATION_PATTERNS: readonly RegExp[] = [
     /\bi think\b/i,
     /\bi guess\b/i,
-    /\bmay\b/i,
+    /\bmay\b(?=\s+[a-z])/,
     /\bmight\b/i,
     /\bcould\b/i,
     /\bpossibly\b/i,
@@ -91,9 +91,14 @@ export function computeProvenance(context: string[]): Provenance {
         provenance = 'Speculative';
     }
 
-    logger.debug(
-        `[computeProvenance] Context length: ${context.length}, hasContext: ${signals.hasContext}, retrieval: ${signals.retrieval}, speculation: ${signals.speculation}, classified: ${provenance}`
-    );
+    logger.debug('computeProvenance evaluated', {
+        event: 'computeProvenance',
+        contextLength: context.length,
+        hasContext: signals.hasContext,
+        retrieval: signals.retrieval,
+        speculation: signals.speculation,
+        provenance,
+    });
 
     return provenance;
 }
