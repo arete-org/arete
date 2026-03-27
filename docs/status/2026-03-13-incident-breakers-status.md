@@ -4,67 +4,55 @@
 
 2026-03-27
 
+## Owners
+
+- `packages/backend` (incident workflow and breaker/evaluator behavior)
+- `docs` (status maintenance)
+
 ## Purpose
 
-Track the live incident queue state and the remaining breaker roadmap work.
+Track current incident + breaker status for operations. Keep this short and aligned with code reality.
 
-This status file is operational and can change quickly. Architecture and decision docs remain the durable source for design intent.
+Canonical runtime capability reference: [2026-03-27-runtime-capability-matrix.md](./2026-03-27-runtime-capability-matrix.md).
 
-## Queue Reconciliation (Now)
+## Current State
 
-Local incident DB reviewed: `C:\Users\Jordan\Desktop\footnote\data\incidents.db`
-
-Current queue snapshot:
-
-- `68432fa8` -> `new` (remediation already `applied`)
-- `97f51680` -> `resolved`
-
-Queue hygiene action taken on 2026-03-27:
-
-- Added `incident.note_added` audit event to `68432fa8` with rationale: parked pending operator disposition because remediation is already applied and final review outcome still requires human decision.
-
-Why this is parked (not force-resolved):
-
-- The remaining decision is governance: choose `confirmed`, `dismissed`, or `resolved` after operator review.
-- Auto-resolving without that decision would hide unresolved review intent.
-
-## Implementation Reality Check
-
-### Incident reporting and review (Wave 1)
+### Incident reporting and review
 
 Status: Implemented
 
-Implemented in backend:
+Backend currently ships:
 
-- Incident report/list/detail/status/notes/remediation internal APIs in `packages/backend/src/handlers/incidents.ts`
-- Durable incident workflow and audit orchestration in `packages/backend/src/services/incidents.ts`
-- SQLite incident storage, pseudonymization, and audit persistence in `packages/backend/src/storage/incidents/`
+- Incident report/list/detail/status/notes/remediation APIs
+- Durable incident workflow orchestration and audit trail emission
+- SQLite incident persistence with pseudonymization support
 
-Implemented in Discord bot:
+### Deterministic breakers
 
-- Consented report flow and remediation persistence in `packages/discord-bot/src/utils/response/incidentReporting.ts`
-- Private superuser `/incident` list/view/status/note tooling in `packages/discord-bot/src/commands/incident.ts`
-- Shared incident API client wiring in `packages/discord-bot/src/api/incidents.ts`
+Status: Partial (observe-only)
 
-Canonical structured incident events currently emitted by backend:
+Backend currently ships:
 
-- `incident.created`
-- `incident.status_changed`
-- `incident.remediated`
+- Deterministic risk and provenance evaluators
+- Evaluator execution metadata in chat orchestration
 
-### Deterministic breakers (Wave 2)
+Not yet shipped:
 
-Status: Not implemented yet
+- Final breaker enforcement gate that can deterministically block/redirect/safe-partial before response emission
 
-- No finalized deterministic `evaluateRiskAndBreakers` authority path is wired as the final response gate.
-
-### Alerts (Wave 3)
+### Alerts
 
 Status: Deferred
 
-- Alert transport and notification policy work is still intentionally deferred.
+- Alert transport and notification policy remain intentionally deferred.
 
-## Remaining Work
+## Known Gaps
 
-- Operator chooses final disposition for incident `68432fa8` (`confirmed`/`dismissed`/`resolved`) and records rationale.
-- Breaker implementation work remains open after incident operations are fully stabilized.
+- Breaker decisions are not yet the final response gate.
+- Architecture target in `docs/architecture/risk-evaluation-and-breakers.md` is ahead of runtime enforcement reality.
+
+## Next Gates
+
+1. Wire deterministic breaker action enforcement in chat orchestration.
+2. Keep incident audit semantics stable while breaker enforcement is introduced.
+3. Revisit alert transport only after breaker enforcement behavior is stable.
