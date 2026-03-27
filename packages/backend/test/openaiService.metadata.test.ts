@@ -329,6 +329,34 @@ test('buildResponseMetadata preserves executed tool reasonCode for reroute audit
     ]);
 });
 
+test('buildResponseMetadata preserves tool_unavailable reasonCode for skipped tool outcomes and JSON serialization', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                tool: {
+                    toolName: 'web_search',
+                    status: 'skipped',
+                    reasonCode: 'tool_unavailable',
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'tool',
+            status: 'skipped',
+            toolName: 'web_search',
+            reasonCode: 'tool_unavailable',
+        },
+    ]);
+    assert.deepEqual(
+        JSON.parse(JSON.stringify(metadata)).execution,
+        metadata.execution
+    );
+});
+
 test('buildResponseMetadata normalizes failed tool event with fallback reasonCode', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
