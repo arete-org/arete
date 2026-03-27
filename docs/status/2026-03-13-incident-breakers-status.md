@@ -11,48 +11,58 @@
 
 ## Purpose
 
-Track current incident + breaker status for operations. Keep this short and aligned with code reality.
+Track current incident + breaker status for operations.
+Keep this short and aligned with code reality.
 
 Canonical runtime capability reference: [2026-03-27-runtime-capability-matrix.md](./2026-03-27-runtime-capability-matrix.md).
 
-## Current State
+## Snapshot
 
-### Incident reporting and review
+- Incident storage and pseudonymization foundations are in place.
+- Incident report/review workflow APIs are implemented in backend.
+- Deterministic breaker rollout is still a focused follow-up area.
+- Alert transport and notification policy remain deferred.
+- Next review checkpoint: 2026-04-10 (roughly 2 weeks).
 
-Status: Implemented
+## What Is Landed
 
-Backend currently ships:
+- Incident report/list/detail/status/notes/remediation APIs.
+- Durable incident workflow orchestration and audit trail emission.
+- SQLite incident persistence with pseudonymization support.
+- Deterministic risk/provenance evaluator metadata in chat orchestration.
 
-- Incident report/list/detail/status/notes/remediation APIs
-- Durable incident workflow orchestration and audit trail emission
-- SQLite incident persistence with pseudonymization support
+## What Is Open
 
-### Deterministic breakers
+### 1) Integration Pilot
 
-Status: Partial (observe-only)
+Goal: validate one real integration path with clear provenance and fail-open behavior.
 
-Backend currently ships:
+Reference issue: `JBA-18`
+Summary: validate one real integration path with clear provenance and fail-open behavior.
 
-- Deterministic risk and provenance evaluators
-- Evaluator execution metadata in chat orchestration
+### 2) Deterministic Breaker Metadata Parity
 
-Not yet shipped:
+Goal: ensure breaker outcomes are explicit and auditable in execution metadata.
 
-- Final breaker enforcement gate that can deterministically block/redirect/safe-partial before response emission
+Reference issue: `JBA-19`
+Summary: ensure breaker outcomes are explicit and auditable in execution metadata.
 
-### Alerts
+### 3) Multi-step Workflow Follow-up
 
-Status: Deferred
+Goal: add lineage safely after current single-path hardening is stable.
 
-- Alert transport and notification policy remain intentionally deferred.
+Reference issue: `JBA-20`
+Summary: add lineage safely after current single-path hardening is stable.
 
-## Known Gaps
+## Guardrails
 
-- Breaker decisions are not yet the final response gate.
-- Architecture target in `docs/architecture/risk-evaluation-and-breakers.md` is ahead of runtime enforcement reality.
+- Backend stays the runtime boundary and cost authority.
+- Public interfaces stay serializable.
+- Fail-open remains default except explicit refusal policy paths.
+- No migrations/backfills/compat layers unless explicitly requested.
 
-## Next Gates
+## Validation Focus
 
-1. Wire deterministic breaker action enforcement in chat orchestration.
-2. Keep incident audit semantics stable while breaker enforcement is introduced.
-3. Revisit alert transport only after breaker enforcement behavior is stable.
+- Tool outcome visibility (`executed` / `skipped` / `failed` + reason codes).
+- Breaker outcome visibility (`ruleId`, action, and user-safe metadata).
+- End-to-end traceability across backend and Discord/web rendering surfaces.

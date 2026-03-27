@@ -23,6 +23,7 @@ Footnote keeps docs in three buckets:
 - [Persona/Core Split + Out-of-Band TRACE Metadata](./decisions/2026-03-persona-core-and-trace-metadata-separation.md): Records the split between core constraints, persona layers, and control-plane metadata generation.
 - [Completing Legacy OpenAI Removal Across Text, Image, and Voice](./decisions/2026-03-legacy-openai-removal-and-runtime-branching.md): Records the end-state architecture for removing legacy OpenAI product flows across text, image, and voice.
 - [VoltAgent Runtime Adoption Behind the Existing Backend](./decisions/2026-03-voltagent-runtime-adoption.md): Records why VoltAgent is being adopted behind Footnote's backend boundary and what the first MVP should prove.
+- [External Pattern Adoption: Context Packaging + Tool Governance](./decisions/2026-03-external-pattern-adoption-context-and-tooling.md): Records selective adoption of external architecture patterns without platform migration.
 
 ## Status
 
