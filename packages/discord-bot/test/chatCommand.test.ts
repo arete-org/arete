@@ -84,7 +84,8 @@ test('/chat forwards prompt/profile/generation options and renders message actio
             },
         };
     }) as typeof botApi.chatViaApi;
-    botApi.postTraceCardFromTrace = (async () => ({
+    botApi.postTraceCardFromTrace = (async (request, _options) => ({
+        responseId: request.responseId,
         pngBase64: Buffer.from('trace-card').toString('base64'),
     })) as typeof botApi.postTraceCardFromTrace;
 
