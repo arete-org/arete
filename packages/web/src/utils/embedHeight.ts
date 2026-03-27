@@ -7,7 +7,8 @@
  * @footnote-ethics: medium - Broken embed sizing can hide provenance or error states from users on external sites.
  */
 
-export const EMBED_HEIGHT_MESSAGE_TYPE = 'arete-embed-height';
+export const EMBED_HEIGHT_MESSAGE_TYPE = 'footnote-embed-height';
+export const LEGACY_EMBED_HEIGHT_MESSAGE_TYPE = 'arete-embed-height';
 export const EMBED_LAYOUT_CHANGE_EVENT = 'footnote:embed-layout-change';
 
 interface EmbedHeightMessengerOptions {
@@ -66,8 +67,13 @@ export function createEmbedHeightMessenger({
         }
 
         lastHeight = height;
+        // Keep both message types during branding transition so older embeds continue working.
         targetWindow.postMessage(
             { type: EMBED_HEIGHT_MESSAGE_TYPE, height },
+            targetOrigin
+        );
+        targetWindow.postMessage(
+            { type: LEGACY_EMBED_HEIGHT_MESSAGE_TYPE, height },
             targetOrigin
         );
         return height;

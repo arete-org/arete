@@ -16,7 +16,7 @@ import {
 
 /**
  * EmbedPage component provides a minimal embeddable version of Footnote
- * that includes the header, title/subtitle, "I'm Arí" section, and AskMeAnything.
+ * that includes the header, title/subtitle, intro section, and AskMeAnything.
  * Designed for iframe embedding in external sites.
  * Automatically communicates height to parent window to eliminate scrollbars.
  */
@@ -106,9 +106,10 @@ const EmbedPage = (): JSX.Element => {
             <Header breadcrumbItems={breadcrumbItems} />
 
             <div className="hero-copy">
-                <h1 id="hero-title">Mindful and honest AI.</h1>
+                <h1 id="hero-title">AI you can inspect and steer.</h1>
                 <p className="hero-copy__subtitle">
-                    Ethics-first, private, and easy to run yourself.
+                    A transparency-first framework for people who want more than
+                    a black-box answer.
                 </p>
 
                 <div className="intro-card" aria-labelledby="intro-card-title">
@@ -137,13 +138,13 @@ const EmbedPage = (): JSX.Element => {
                             />
                         </div>
                         <div className="intro-card-text">
-                            <h2 id="intro-card-title">I'm Arí,</h2>
+                            <h2 id="intro-card-title">Footnote, at a glance</h2>
                             <p>
-                                I'm an AI built for clarity and care, not speed
-                                or persuasion. I explain how I think, and
-                                clearly show what I know and what I don't. You
-                                can host me yourself, invite me to Discord, and
-                                see how I work.
+                                Footnote pairs model output with inspectable
+                                metadata, including confidence, sources,
+                                trade-offs, and applied constraints. Run it
+                                locally, self-host it, or bring it into Discord
+                                while keeping human oversight in the loop.
                             </p>
                         </div>
                     </div>

@@ -22,30 +22,31 @@ const FEATURES: ServiceFeature[] = [
         id: 'chat',
         title: 'Chat',
         description:
-            'Explore ideas and questions with transparency about how I think.',
+            'Get answers with confidence signals, trade-offs, and traceable context.',
     },
     {
         id: 'realtime',
         title: 'Realtime search',
         description:
-            'I can fetch information from the web and provide sources.',
+            'Pull fresh web context and show which sources shaped the response.',
     },
     {
         id: 'call',
         title: '/call',
-        description: 'Join a voice channel and speak with me in real-time.',
+        description:
+            'Run live voice sessions in Discord while preserving inspectable output.',
     },
     {
         id: 'image-understanding',
         title: 'Image understanding',
         description:
-            'I can analyze images for meaning and context to support richer responses.',
+            'Analyze visual inputs and fold findings into grounded, auditable replies.',
     },
     {
         id: 'image',
         title: '/image',
         description:
-            'Turn prompts into reflective or illustrative imagery, supporting discussion or workflows with visual context.',
+            'Generate visual artifacts that support discussion and decision workflows.',
         variant: 'wide',
     },
 ];
@@ -114,7 +115,7 @@ const Services = (): JSX.Element => {
     return (
         <>
             <section className="services" aria-labelledby="services-title">
-                <h2 id="services-title">What I can do for you</h2>
+                <h2 id="services-title">What Footnote surfaces</h2>
                 <div className="services-grid">
                     {FEATURES.map((feature) => (
                         <article

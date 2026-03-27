@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import {
     createEmbedHeightMessenger,
     EMBED_HEIGHT_MESSAGE_TYPE,
+    LEGACY_EMBED_HEIGHT_MESSAGE_TYPE,
     measureEmbedHeight,
 } from './embedHeight';
 
@@ -53,7 +54,7 @@ test('measureEmbedHeight uses the tallest available source', () => {
     assert.equal(measureEmbedHeight(root, documentRef), 880);
 });
 
-test('createEmbedHeightMessenger posts the standardized message type once per frame', async () => {
+test('createEmbedHeightMessenger posts current and legacy message types once per frame', () => {
     const postedMessages: Array<{ height: number; type: string }> = [];
     const parentWindow = {
         postMessage: (message: { height: number; type: string }) => {
@@ -100,6 +101,7 @@ test('createEmbedHeightMessenger posts the standardized message type once per fr
 
         assert.deepEqual(postedMessages, [
             { type: EMBED_HEIGHT_MESSAGE_TYPE, height: 540 },
+            { type: LEGACY_EMBED_HEIGHT_MESSAGE_TYPE, height: 540 },
         ]);
     } finally {
         Object.defineProperty(globalThis, 'window', {
@@ -161,7 +163,9 @@ test('createEmbedHeightMessenger posts again when the height grows later', () =>
 
         assert.deepEqual(postedMessages, [
             { type: EMBED_HEIGHT_MESSAGE_TYPE, height: 320 },
+            { type: LEGACY_EMBED_HEIGHT_MESSAGE_TYPE, height: 320 },
             { type: EMBED_HEIGHT_MESSAGE_TYPE, height: 640 },
+            { type: LEGACY_EMBED_HEIGHT_MESSAGE_TYPE, height: 640 },
         ]);
     } finally {
         Object.defineProperty(globalThis, 'window', {
