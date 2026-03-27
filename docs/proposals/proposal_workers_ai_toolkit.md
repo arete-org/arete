@@ -1,8 +1,5 @@
 # Feature Proposal: Ethical Model Autonomy via AI Toolkit + Cloudflare Workers AI
 
-**Status:** Draft  
-**License Context:** MIT + HL3 (Human Rights, No State Violence/Torture/Genocide, No Forced Labor)  
-**Author:** Footnote Core Team  
 **Last Updated:** 2025-10-27
 
 ---
