@@ -438,6 +438,58 @@ test('request profileId override controls response model selection', async () =>
     assert.equal(observedResponseModel, selectedProfile.providerModel);
 });
 
+test('request profileId with ollama profile forwards provider/model to generation runtime', async () => {
+    let observedProvider: string | undefined;
+    let observedModel: string | undefined;
+    const ollamaProfile = runtimeConfig.modelProfiles.catalog.find(
+        (profile) => profile.id === 'ollama-text-gptoss' && profile.enabled
+    );
+    assert.ok(ollamaProfile);
+
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === 700) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        riskTier: 'Low',
+                        reasoning: 'Return a normal message.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            observedProvider = request.provider;
+            observedModel = request.model;
+            return {
+                text: 'ollama-route reply',
+                model: request.model,
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            profileId: ollamaProfile.id,
+        })
+    );
+
+    assert.equal(response.action, 'message');
+    assert.equal(observedProvider, ollamaProfile.provider);
+    assert.equal(observedModel, ollamaProfile.providerModel);
+});
+
 test('invalid planner-selected profile id falls back to default response profile', async () => {
     let observedResponseModel: string | undefined;
     const warnings: Array<{ message: string; meta?: unknown }> = [];

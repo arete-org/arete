@@ -159,6 +159,9 @@ const initializeServices = () => {
     // --- Text generation runtime ---
     // Chat runtime can run when at least one provider is configured.
     const hasOpenAiProvider = Boolean(runtimeConfig.openai.apiKey);
+    const hasOllamaCatalogProfiles = runtimeConfig.modelProfiles.catalog.some(
+        (profile) => profile.provider === 'ollama'
+    );
     const ollamaHostname = (() => {
         if (!runtimeConfig.ollama.baseUrl) {
             return null;
@@ -177,10 +180,28 @@ const initializeServices = () => {
         ollamaHostname === '127.0.0.1' ||
         ollamaHostname === '::1' ||
         ollamaHostname === 'host.docker.internal';
+    if (ollamaHostname && ollamaBaseUrlIsLocal) {
+        logger.info(
+            runtimeConfig.ollama.localInferenceEnabled
+                ? 'Ollama startup profile: local host + local inference enabled.'
+                : 'Ollama startup profile: local host + local inference disabled.'
+        );
+    } else if (ollamaHostname) {
+        logger.info(
+            runtimeConfig.ollama.localInferenceEnabled
+                ? 'Ollama startup profile: remote host + local inference enabled.'
+                : 'Ollama startup profile: remote host + local inference disabled.'
+        );
+    }
     const hasOllamaProvider =
         Boolean(runtimeConfig.ollama.baseUrl) &&
         ollamaHostname !== null &&
         (!ollamaBaseUrlIsLocal || runtimeConfig.ollama.localInferenceEnabled);
+    if (hasOllamaCatalogProfiles && !hasOllamaProvider) {
+        logger.warn(
+            'Ollama profiles are present in the model catalog, but Ollama provider is unavailable at boot. Ollama profiles will remain disabled.'
+        );
+    }
     if (hasOpenAiProvider || hasOllamaProvider) {
         generationRuntime = createVoltAgentRuntime({
             defaultModel: runtimeConfig.openai.defaultModel,
