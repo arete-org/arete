@@ -185,11 +185,39 @@ export const createChatOrchestrator = ({
             planned.plan,
             chatOrchestratorLogger
         );
-        // Planner-selected profile is advisory.
-        // Runtime resolution here is authoritative and fail-open:
+        // Profile selection precedence:
+        // 1) explicit request.profileId override (for example `/chat`)
+        // 2) planner-selected profileId
+        // 3) startup default response profile
+        // Runtime resolution stays authoritative and fail-open:
         // unknown/disabled profile ids never hard-fail the request.
         let selectedResponseProfile = defaultResponseProfile;
-        if (plan.profileId) {
+        const requestedProfileId = normalizedRequest.profileId?.trim();
+        if (requestedProfileId) {
+            const selectedProfile = enabledProfilesById.get(requestedProfileId);
+            if (selectedProfile) {
+                selectedResponseProfile = selectedProfile;
+                if (plan.profileId && plan.profileId !== selectedProfile.id) {
+                    chatOrchestratorLogger.warn(
+                        'request profile override superseded planner profile selection',
+                        {
+                            requestedProfileId: selectedProfile.id,
+                            plannerProfileId: plan.profileId,
+                            surface: normalizedRequest.surface,
+                        }
+                    );
+                }
+            } else {
+                chatOrchestratorLogger.warn(
+                    'request selected invalid or disabled profile id; falling back to planner/default profile',
+                    {
+                        selectedProfileId: requestedProfileId,
+                        defaultProfileId: defaultResponseProfile.id,
+                        surface: normalizedRequest.surface,
+                    }
+                );
+            }
+        } else if (plan.profileId) {
             const selectedProfile = enabledProfilesById.get(plan.profileId);
             if (selectedProfile) {
                 selectedResponseProfile = selectedProfile;

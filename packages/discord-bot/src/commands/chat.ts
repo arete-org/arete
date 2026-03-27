@@ -6,14 +6,17 @@
  * @footnote-ethics: medium - Exposes backend profile selection to users and should remain transparent/fail-open.
  */
 import {
+    AttachmentBuilder,
     ChatInputCommandInteraction,
     SlashCommandBuilder,
     type SlashCommandStringOption,
 } from 'discord.js';
+import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type { ChatProfileOption } from '@footnote/contracts/web';
 import { botApi } from '../api/botApi.js';
 import type { DiscordChatApiResponse } from '../api/index.js';
 import { logger } from '../utils/logger.js';
+import { buildProvenanceActionRow } from '../utils/response/provenanceCgi.js';
 import type { Command, SlashCommand } from './BaseCommand.js';
 
 const PROFILE_CHOICE_LIMIT = 25;
@@ -139,6 +142,38 @@ const renderNonMessageAction = (response: DiscordChatApiResponse): string => {
     }
 };
 
+const hasResponseMetadata = (value: unknown): value is ResponseMetadata =>
+    Boolean(
+        value &&
+        typeof value === 'object' &&
+        typeof (value as { responseId?: unknown }).responseId === 'string'
+    );
+
+const buildChatDetailsPrefix = (options: {
+    profileId: string | null | undefined;
+    reasoningEffort: ReasoningEffort | null;
+    verbosity: Verbosity | null;
+}): string => {
+    const details: string[] = [];
+    const trimmedProfileId = options.profileId?.trim();
+
+    if (trimmedProfileId) {
+        details.push(`> profile_id: ${trimmedProfileId}`);
+    }
+    if (options.reasoningEffort) {
+        details.push(`> reasoning_effort: ${options.reasoningEffort}`);
+    }
+    if (options.verbosity) {
+        details.push(`> verbosity: ${options.verbosity}`);
+    }
+
+    if (details.length === 0) {
+        return '';
+    }
+
+    return details.join('\n') + '\n\n';
+};
+
 const chatCommand: ChatCommandWithProfiles = {
     data: buildChatCommandData([]),
     setProfileChoices(profiles: ChatProfileOption[]) {
@@ -190,14 +225,61 @@ const chatCommand: ChatCommandWithProfiles = {
                 response.action === 'message' &&
                 typeof response.message === 'string'
             ) {
+                const replyBody = clampReplyContent(
+                    `${buildChatDetailsPrefix({ profileId, reasoningEffort, verbosity })}${response.message}`
+                );
+                const metadata = hasResponseMetadata(response.metadata)
+                    ? response.metadata
+                    : null;
+                if (!metadata) {
+                    await interaction.editReply({
+                        content: replyBody,
+                    });
+                    return;
+                }
+
+                const components = [
+                    buildProvenanceActionRow(metadata.responseId),
+                ];
+                const files: AttachmentBuilder[] = [];
+                try {
+                    const traceCard = await botApi.postTraceCardFromTrace({
+                        responseId: metadata.responseId,
+                    });
+                    files.push(
+                        new AttachmentBuilder(
+                            Buffer.from(traceCard.pngBase64, 'base64'),
+                            {
+                                name: 'trace-card.png',
+                            }
+                        )
+                    );
+                } catch (error) {
+                    logger.warn(
+                        'Failed to generate /chat trace-card; sending details controls only.',
+                        {
+                            responseId: metadata.responseId,
+                            interactionId: interaction.id,
+                            error:
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                        }
+                    );
+                }
+
                 await interaction.editReply({
-                    content: clampReplyContent(response.message),
+                    content: replyBody,
+                    components,
+                    files,
                 });
                 return;
             }
 
             await interaction.editReply({
-                content: clampReplyContent(renderNonMessageAction(response)),
+                content: clampReplyContent(
+                    `${buildChatDetailsPrefix({ profileId, reasoningEffort, verbosity })}${renderNonMessageAction(response)}`
+                ),
             });
         } catch (error) {
             logger.error('chat slash command failed', {

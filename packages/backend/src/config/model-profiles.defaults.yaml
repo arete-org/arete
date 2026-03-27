@@ -4,7 +4,7 @@ profiles:
     # ==========
     # https://platform.openai.com/docs/models/gpt-5
     - id: openai-text-fast
-      description: Lower-latency profile for quick replies and lightweight tasks.
+      description: Lower-latency, quick replies and lightweight tasks.
       provider: openai
       providerModel: gpt-5-nano
       enabled: true
@@ -19,7 +19,7 @@ profiles:
 
     # https://platform.openai.com/docs/models/gpt-5-mini
     - id: openai-text-medium
-      description: Balanced profile for everyday conversation and general reasoning.
+      description: Balanced, everyday conversation and general reasoning.
       provider: openai
       providerModel: gpt-5-mini
       enabled: true
@@ -34,7 +34,7 @@ profiles:
 
     # https://developers.openai.com/api/docs/models/gpt-5.4
     - id: openai-text-quality
-      description: Higher-capability profile for deeper reasoning and more complex prompts.
+      description: Deeper reasoning and more complex prompts.
       provider: openai
       providerModel: gpt-5.4-mini
       enabled: true
@@ -52,7 +52,7 @@ profiles:
     # ==========
     # https://ollama.com/library/qwen3.5
     - id: ollama-text-qwen
-      description: Very long-context profile for mixed coding and analysis workloads.
+      description: Very long-context, mixed coding and analysis workloads.
       provider: ollama
       providerModel: qwen3.5:cloud
       enabled: true
@@ -67,7 +67,7 @@ profiles:
 
     # https://ollama.com/library/deepseek-v3.2
     - id: ollama-text-deepseek
-      description: Deep-reasoning profile for complex multi-step problem solving.
+      description: Deep-reasoning, complex multi-step problem solving.
       provider: ollama
       providerModel: deepseek-v3.2:cloud
       enabled: true
@@ -82,7 +82,7 @@ profiles:
 
     # https://ollama.com/library/gpt-oss:20b-cloud
     - id: ollama-text-gptoss
-      description: Faster-response profile with solid everyday quality for general chat.
+      description: Solid everyday quality for general chat.
       provider: ollama
       providerModel: gpt-oss:20b-cloud
       enabled: true

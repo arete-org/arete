@@ -171,8 +171,8 @@ const isChatReactAction = (
 const isChatImageAction = (
     value: DiscordChatApiResponse
 ): value is ChatImageAction => {
-    const prompt = (value as { imageRequest?: ChatImageRequest })
-        .imageRequest?.prompt;
+    const prompt = (value as { imageRequest?: ChatImageRequest }).imageRequest
+        ?.prompt;
     return (
         value.action === 'image' &&
         typeof prompt === 'string' &&
@@ -211,7 +211,8 @@ const buildEmbedSummary = (message: Message): string | null => {
         if (embed.thumbnail?.url)
             lines.push(`Thumbnail: ${embed.thumbnail.url}`);
         if (embed.footer?.text) lines.push(`Footer: ${embed.footer.text}`);
-        if (embed.provider?.name) lines.push(`Provider: ${embed.provider.name}`);
+        if (embed.provider?.name)
+            lines.push(`Provider: ${embed.provider.name}`);
         if (embed.fields?.length) {
             for (const field of embed.fields) {
                 lines.push(`${field.name}: ${field.value ?? ''}`);
@@ -353,9 +354,7 @@ export class MessageProcessor {
                 metadata: null,
             };
             try {
-                chatResponse = await botApi.chatViaApi(
-                    chatContext.request
-                );
+                chatResponse = await botApi.chatViaApi(chatContext.request);
             } catch (error) {
                 logger.error(
                     `Backend chat request failed for message ${message.id}: ${
@@ -527,7 +526,6 @@ export class MessageProcessor {
         return {
             request: {
                 surface: 'discord',
-                profileId: runtimeConfig.profile.id,
                 trigger: {
                     kind: this.getChatTriggerKind(message, trigger),
                     messageId: message.id,
@@ -817,10 +815,7 @@ export class MessageProcessor {
 
         if (ttsResult) {
             try {
-                const fileBuffer = Buffer.from(
-                    ttsResult.audioBase64,
-                    'base64'
-                );
+                const fileBuffer = Buffer.from(ttsResult.audioBase64, 'base64');
                 const cleanResponseText = finalResponseText
                     .replace(/\n/g, ' ')
                     .replace(/`/g, '');

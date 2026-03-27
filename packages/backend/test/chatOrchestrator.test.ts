@@ -385,6 +385,59 @@ test('planner-selected profile id controls response model selection', async () =
     assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
 });
 
+test('request profileId override controls response model selection', async () => {
+    let observedResponseModel: string | undefined;
+    const selectedProfile =
+        runtimeConfig.modelProfiles.catalog.find(
+            (profile) => profile.id === 'openai-text-medium' && profile.enabled
+        ) ??
+        runtimeConfig.modelProfiles.catalog.find((profile) => profile.enabled);
+    assert.ok(selectedProfile);
+
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === 700) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        profileId: 'openai-text-fast',
+                        riskTier: 'Low',
+                        reasoning:
+                            'Planner selected a different profile, but request override should win.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            observedResponseModel = request.model;
+            return {
+                text: 'request override reply',
+                model: request.model,
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            profileId: selectedProfile.id,
+        })
+    );
+
+    assert.equal(response.action, 'message');
+    assert.equal(observedResponseModel, selectedProfile.providerModel);
+});
+
 test('invalid planner-selected profile id falls back to default response profile', async () => {
     let observedResponseModel: string | undefined;
     const warnings: Array<{ message: string; meta?: unknown }> = [];
@@ -641,10 +694,8 @@ test('discord requests use backend profile overlay when runtime overlay is confi
     }
 });
 
-test('discord profileId mismatch warns and falls back to backend runtime profile overlay', async () => {
+test('discord profileId does not change backend runtime profile overlay', async () => {
     let finalMessages: Array<{ role: string; content: string }> = [];
-    const warnings: string[] = [];
-    const originalWarn = logger.warn;
     const originalProfile = runtimeConfig.profile;
     const runtimeConfigMutable = runtimeConfig as unknown as {
         profile: BotProfileConfig;
@@ -660,10 +711,6 @@ test('discord profileId mismatch warns and falls back to backend runtime profile
             length: 25,
         },
     };
-    logger.warn = ((message: string) => {
-        warnings.push(message);
-        return logger;
-    }) as typeof logger.warn;
 
     try {
         const orchestrator = createChatOrchestrator({
@@ -708,11 +755,8 @@ test('discord profileId mismatch warns and falls back to backend runtime profile
             })
         );
 
-        assert.equal(warnings.length, 1);
-        assert.equal(warnings[0], 'profile id mismatch');
         assert.match(finalMessages[1]?.content ?? '', /Profile ID: ari-vendor/);
     } finally {
-        logger.warn = originalWarn;
         runtimeConfigMutable.profile = originalProfile;
     }
 });

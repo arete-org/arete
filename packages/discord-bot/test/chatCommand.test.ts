@@ -63,6 +63,7 @@ const createInteraction = (overrides: {
 
 test('/chat forwards prompt/profile/generation options and renders message action', async () => {
     const originalChatViaApi = botApi.chatViaApi;
+    const originalPostTraceCardFromTrace = botApi.postTraceCardFromTrace;
     const seenRequests: unknown[] = [];
     botApi.chatViaApi = (async (request) => {
         seenRequests.push(request);
@@ -83,6 +84,9 @@ test('/chat forwards prompt/profile/generation options and renders message actio
             },
         };
     }) as typeof botApi.chatViaApi;
+    botApi.postTraceCardFromTrace = (async () => ({
+        pngBase64: Buffer.from('trace-card').toString('base64'),
+    })) as typeof botApi.postTraceCardFromTrace;
 
     const { interaction, editReplyPayloads, deferReplyPayloads } =
         createInteraction({
@@ -127,11 +131,22 @@ test('/chat forwards prompt/profile/generation options and renders message actio
                 },
             },
         ]);
-        assert.deepEqual(editReplyPayloads[0], {
-            content: 'Model-switched response',
-        });
+        const payload = editReplyPayloads[0] as {
+            content?: string;
+            components?: unknown[];
+            files?: unknown[];
+        };
+        assert.match(
+            String(payload.content),
+            /^> profile_id: openai-text-medium\n> reasoning_effort: high\n> verbosity: low\n\nModel-switched response$/
+        );
+        assert.equal(Array.isArray(payload.components), true);
+        assert.equal(payload.components?.length, 1);
+        assert.equal(Array.isArray(payload.files), true);
+        assert.equal(payload.files?.length, 1);
     } finally {
         botApi.chatViaApi = originalChatViaApi;
+        botApi.postTraceCardFromTrace = originalPostTraceCardFromTrace;
     }
 });
 
@@ -154,7 +169,7 @@ test('/chat handles non-message actions gracefully', async () => {
         assert.equal(editReplyPayloads.length, 1);
         assert.match(
             String((editReplyPayloads[0] as { content?: string }).content),
-            /reaction mode/i
+            /^Backend selected reaction mode \(👍\). \/chat currently returns text only\.$/i
         );
     } finally {
         botApi.chatViaApi = originalChatViaApi;
