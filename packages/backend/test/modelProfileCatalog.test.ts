@@ -214,73 +214,81 @@ test('buildModelProfilesSection reports catalogPath from the source that produce
 test('buildModelProfilesSection disables local ollama profiles when local inference flag is off', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'model-catalog-'));
     const yamlPath = path.join(tempDir, 'catalog.yaml');
-    fs.writeFileSync(
-        yamlPath,
-        [
-            'profiles:',
-            '  - id: ollama-text-fast',
-            '    description: Local ollama profile',
-            '    provider: ollama',
-            '    providerModel: llama3.2:3b',
-            '    enabled: true',
-            '    tierBindings: [text-fast]',
-            '    capabilities:',
-            '      canUseSearch: false',
-        ].join('\n')
-    );
+    try {
+        fs.writeFileSync(
+            yamlPath,
+            [
+                'profiles:',
+                '  - id: ollama-text-fast',
+                '    description: Local ollama profile',
+                '    provider: ollama',
+                '    providerModel: llama3.2:3b',
+                '    enabled: true',
+                '    tierBindings: [text-fast]',
+                '    capabilities:',
+                '      canUseSearch: false',
+            ].join('\n')
+        );
 
-    const warnings: string[] = [];
-    const section = buildModelProfilesSection(
-        {
-            MODEL_PROFILE_CATALOG_PATH: yamlPath,
-            DEFAULT_PROFILE_ID: 'ollama-text-fast',
-            OLLAMA_BASE_URL: 'http://localhost:11434',
-            OLLAMA_LOCAL_INFERENCE_ENABLED: 'false',
-        },
-        process.cwd(),
-        (message) => warnings.push(message)
-    );
+        const warnings: string[] = [];
+        const section = buildModelProfilesSection(
+            {
+                MODEL_PROFILE_CATALOG_PATH: yamlPath,
+                DEFAULT_PROFILE_ID: 'ollama-text-fast',
+                OLLAMA_BASE_URL: 'http://localhost:11434',
+                OLLAMA_LOCAL_INFERENCE_ENABLED: 'false',
+            },
+            process.cwd(),
+            (message) => warnings.push(message)
+        );
 
-    assert.equal(section.catalog.length, 1);
-    assert.equal(section.catalog[0]?.enabled, false);
-    assert.match(
-        warnings.join('\n'),
-        /OLLAMA_LOCAL_INFERENCE_ENABLED|Disabling model profile/i
-    );
+        assert.equal(section.catalog.length, 1);
+        assert.equal(section.catalog[0]?.enabled, false);
+        assert.match(
+            warnings.join('\n'),
+            /OLLAMA_LOCAL_INFERENCE_ENABLED|Disabling model profile/i
+        );
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
 });
 
 test('buildModelProfilesSection keeps ollama profiles enabled for cloud ollama endpoints', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'model-catalog-'));
     const yamlPath = path.join(tempDir, 'catalog.yaml');
-    fs.writeFileSync(
-        yamlPath,
-        [
-            'profiles:',
-            '  - id: ollama-text-fast',
-            '    description: Cloud ollama profile',
-            '    provider: ollama',
-            '    providerModel: llama3.2:3b',
-            '    enabled: true',
-            '    tierBindings: [text-fast]',
-            '    capabilities:',
-            '      canUseSearch: false',
-        ].join('\n')
-    );
+    try {
+        fs.writeFileSync(
+            yamlPath,
+            [
+                'profiles:',
+                '  - id: ollama-text-fast',
+                '    description: Cloud ollama profile',
+                '    provider: ollama',
+                '    providerModel: llama3.2:3b',
+                '    enabled: true',
+                '    tierBindings: [text-fast]',
+                '    capabilities:',
+                '      canUseSearch: false',
+            ].join('\n')
+        );
 
-    const warnings: string[] = [];
-    const section = buildModelProfilesSection(
-        {
-            MODEL_PROFILE_CATALOG_PATH: yamlPath,
-            DEFAULT_PROFILE_ID: 'ollama-text-fast',
-            OLLAMA_BASE_URL: 'https://api.ollama.com',
-        },
-        process.cwd(),
-        (message) => warnings.push(message)
-    );
+        const warnings: string[] = [];
+        const section = buildModelProfilesSection(
+            {
+                MODEL_PROFILE_CATALOG_PATH: yamlPath,
+                DEFAULT_PROFILE_ID: 'ollama-text-fast',
+                OLLAMA_BASE_URL: 'https://api.ollama.com',
+            },
+            process.cwd(),
+            (message) => warnings.push(message)
+        );
 
-    assert.equal(section.catalog.length, 1);
-    assert.equal(section.catalog[0]?.enabled, true);
-    assert.equal(warnings.length, 0);
+        assert.equal(section.catalog.length, 1);
+        assert.equal(section.catalog[0]?.enabled, true);
+        assert.equal(warnings.length, 0);
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
 });
 
 test('model profile resolver handles id, tier, and raw selectors with fail-open fallback', () => {
