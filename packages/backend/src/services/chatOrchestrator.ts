@@ -513,9 +513,7 @@ export const createChatOrchestrator = ({
                     model: plannerProfile.providerModel,
                     durationMs: plannerExecution.durationMs,
                 },
-                ...(evaluatorExecutionContext && {
-                    evaluator: evaluatorExecutionContext,
-                }),
+                evaluator: evaluatorExecutionContext,
                 generation: {
                     // Generation starts as "executed" at orchestration level.
                     // ChatService injects runtime-resolved model + duration.
