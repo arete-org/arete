@@ -15,25 +15,24 @@ interface InviteStep {
 const STEPS: InviteStep[] = [
     {
         title: '1. Prepare',
-        description:
-            'Create a Discord bot, add your API keys, and configure personality and rules.',
+        description: 'Install dependencies and copy `.env.example` to `.env`.',
     },
     {
         title: '2. Deploy',
         description:
-            'Run the Node server locally or deploy it to Fly.io using the provided configuration.',
+            'Set required secrets, including `OPENAI_API_KEY` and `INCIDENT_PSEUDONYMIZATION_SECRET`.',
     },
     {
         title: '3. Invite',
         description:
-            'Add the bot to your Discord server and start the conversation!',
+            'Run `pnpm dev` for web + backend, or `pnpm start:all` to include Discord.',
     },
 ];
 
 // Section inviting operators to walk through the deployment steps at a human pace.
 const Invite = (): JSX.Element => (
     <section className="invite" aria-labelledby="invite-title">
-        <h2 id="invite-title">Invite Footnote to your server</h2>
+        <h2 id="invite-title">Run Footnote in your environment</h2>
         <div className="card-grid" role="list">
             {STEPS.map((step) => (
                 <article key={step.title} className="card" role="listitem">
@@ -47,7 +46,7 @@ const Invite = (): JSX.Element => (
             href="/invite/"
             aria-label="View setup instructions"
         >
-            <span aria-hidden="true">🛠</span> Setup Instructions
+            <span aria-hidden="true">🛠</span> Open Setup Guide
         </a>
     </section>
 );

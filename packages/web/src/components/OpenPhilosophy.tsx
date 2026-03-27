@@ -31,17 +31,17 @@ const OpenPhilosophy = (): JSX.Element => (
             </div>
             <div className="intro-card-text">
                 <p>
-                    You can host me yourself, invite me to Discord, and see how
-                    I work. I'm open-source, easy to modify, and built for
-                    privacy.
+                    Footnote is built for human oversight. Inspect what shaped
+                    an answer, challenge weak output, and steer behavior over
+                    time with provenance and trace context.
                 </p>
                 <div className="cta-group" aria-label="Primary actions">
                     <a
                         className="cta-button primary"
                         href="/invite/"
-                        aria-label="Invite Footnote to Discord server"
+                        aria-label="View setup guide"
                     >
-                        Invite to Discord <span aria-hidden="true">↗</span>
+                        Setup Guide <span aria-hidden="true">↗</span>
                     </a>
                     <a
                         className="cta-button secondary"
