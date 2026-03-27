@@ -63,6 +63,7 @@ function parseArgs(argv) {
         limit: DEFAULT_LIMIT,
         format: DEFAULT_FORMAT,
         mapPath: DEFAULT_MAP_PATH,
+        quietNotes: false,
         help: false,
     };
 
@@ -70,6 +71,10 @@ function parseArgs(argv) {
         const arg = argv[index];
         if (arg === '--help' || arg === '-h') {
             parsed.help = true;
+            continue;
+        }
+        if (arg === '--quiet-notes') {
+            parsed.quietNotes = true;
             continue;
         }
         if (!arg.startsWith('--')) {
@@ -139,7 +144,7 @@ function printUsage() {
     process.stdout.write(
         [
             'Usage:',
-            '  pnpm refactor:lookup --kind <smell|technique|pattern|typescript-design> --query "<text>" [--limit <n>] [--format <json|md>] [--map <path>]',
+            '  pnpm refactor:lookup --kind <smell|technique|pattern|typescript-design> --query "<text>" [--limit <n>] [--format <json|md>] [--map <path>] [--quiet-notes]',
             '',
             'Examples:',
             '  pnpm refactor:lookup --kind smell --query "long function"',
@@ -175,6 +180,12 @@ function resolveCanonicalQuery(rawQuery, lookupMap) {
         original: normalizedQuery,
         aliasUsed,
     };
+}
+
+function addUniqueNote(notes, note) {
+    if (!notes.includes(note)) {
+        notes.push(note);
+    }
 }
 
 function buildSearchQuery(kind, canonicalQuery, lookupMap) {
@@ -414,21 +425,22 @@ async function resolveAuthHeader(owner, notes, fetchImpl = fetch) {
                 owner,
                 fetchImpl
             );
-            notes.push(`auth: github-app(${owner})`);
+            addUniqueNote(notes, `auth: github-app(${owner})`);
             return `token ${appToken}`;
         } catch (error) {
-            notes.push(
+            addUniqueNote(
+                notes,
                 `auth warning: github app unavailable for ${owner}; ${error.message}`
             );
         }
     }
 
     if (process.env.GITHUB_TOKEN) {
-        notes.push('auth: github-token');
+        addUniqueNote(notes, 'auth: github-token');
         return `token ${process.env.GITHUB_TOKEN}`;
     }
 
-    notes.push('auth: unauthenticated public search');
+    addUniqueNote(notes, 'auth: unauthenticated public search');
     return null;
 }
 
@@ -572,7 +584,8 @@ async function searchRepoByTree({
             url: `https://github.com/${repo}/blob/${mainTree.branch}/${entry.entryPath}`,
         }));
 
-    notes.push(
+    addUniqueNote(
+        notes,
         `search fallback: used git tree path matching for ${repo} (${mainTree.branch})`
     );
     return candidates;
@@ -605,7 +618,8 @@ async function searchRepoExamples({
             throw error;
         }
 
-        notes.push(
+        addUniqueNote(
+            notes,
             `search warning: code search unavailable for ${repo}; falling back to tree search`
         );
         return searchRepoByTree({
@@ -641,7 +655,8 @@ async function lookupRefactorExamples(options) {
     const notes = [];
     const canonicalQuery = resolveCanonicalQuery(queryValue, lookupMap);
     if (canonicalQuery.aliasUsed) {
-        notes.push(
+        addUniqueNote(
+            notes,
             `query alias normalized: "${canonicalQuery.original}" -> "${canonicalQuery.canonical}"`
         );
     }
@@ -682,7 +697,8 @@ async function lookupRefactorExamples(options) {
 
     if (fallbackRepo && topPrimaryScore < confidenceRules.fallbackTrigger) {
         fallbackUsed = true;
-        notes.push(
+        addUniqueNote(
+            notes,
             `fallback triggered: top score ${topPrimaryScore} below ${confidenceRules.fallbackTrigger}`
         );
 
@@ -732,7 +748,8 @@ async function lookupRefactorExamples(options) {
     if (matches.length === 0) {
         fallbackUsed = true;
         confidence = 'low';
-        notes.push(
+        addUniqueNote(
+            notes,
             'no strong code search results; returning broad fallback links'
         );
         matches = createFallbackMatches(
@@ -790,10 +807,13 @@ async function runCli(argv = process.argv.slice(2)) {
 
     try {
         const result = await lookupRefactorExamples(args);
+        const outputResult = args.quietNotes
+            ? { ...result, notes: [] }
+            : result;
         if (args.format === 'md') {
-            process.stdout.write(`${formatMarkdown(result)}\n`);
+            process.stdout.write(`${formatMarkdown(outputResult)}\n`);
         } else {
-            process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+            process.stdout.write(`${JSON.stringify(outputResult, null, 2)}\n`);
         }
         return 0;
     } catch (error) {

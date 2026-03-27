@@ -86,6 +86,17 @@ test('resolveCanonicalQuery normalizes alias', () => {
     assert.equal(resolved.aliasUsed, true);
 });
 
+test('parseArgs supports --quiet-notes flag', () => {
+    const parsed = lookup.parseArgs([
+        '--kind',
+        'pattern',
+        '--query',
+        'adapter',
+        '--quiet-notes',
+    ]);
+    assert.equal(parsed.quietNotes, true);
+});
+
 test('rankCandidates is deterministic and prefers stronger match', () => {
     const ranked = lookup.rankCandidates(
         [
@@ -146,6 +157,10 @@ test('lookupRefactorExamples uses fallback when primary confidence is low', asyn
 
     assert.equal(result.fallbackUsed, true);
     assert.ok(result.matches.length > 0);
+    const unauthNotes = result.notes.filter(
+        (note: string) => note === 'auth: unauthenticated public search'
+    );
+    assert.equal(unauthNotes.length, 1);
 });
 
 test('lookupRefactorExamples returns fallback links when no search results exist', async () => {

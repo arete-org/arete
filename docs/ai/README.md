@@ -49,6 +49,7 @@ Example:
 
 - `pnpm refactor:lookup --kind technique --query \"extract method\"`
 - `pnpm refactor:lookup --kind pattern --query \"strategy\" --format md`
+- `pnpm refactor:lookup --kind pattern --query \"strategy\" --format md --quiet-notes`
 
 Intent routing:
 
