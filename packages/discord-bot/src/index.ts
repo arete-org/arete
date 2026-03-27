@@ -86,11 +86,38 @@ client.handlers = new Collection();
         // Deploy commands to Discord across all configured guilds.
         // This keeps command rollout explicit and predictable for each guild.
         logger.debug('Deploying commands to Discord...');
+        let successfulGuildDeployments = 0;
+        let failedGuildDeployments = 0;
         for (const guildId of runtimeConfig.guildIds) {
-            await commandHandler.deployCommands(
-                runtimeConfig.token,
-                runtimeConfig.clientId,
-                guildId
+            try {
+                await commandHandler.deployCommands(
+                    runtimeConfig.token,
+                    runtimeConfig.clientId,
+                    guildId
+                );
+                successfulGuildDeployments += 1;
+            } catch (error) {
+                failedGuildDeployments += 1;
+                logger.error('Guild command deployment failed.', {
+                    guildId,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                });
+            }
+        }
+
+        logger.info('Guild command deployment completed.', {
+            successfulGuildDeployments,
+            failedGuildDeployments,
+            totalGuilds: runtimeConfig.guildIds.length,
+        });
+
+        if (
+            successfulGuildDeployments === 0 &&
+            runtimeConfig.guildIds.length > 0
+        ) {
+            throw new Error(
+                'All guild command deployments failed. Aborting startup.'
             );
         }
 
