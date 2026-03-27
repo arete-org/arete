@@ -420,13 +420,12 @@ export const createChatOrchestrator = ({
                 }),
             },
         });
-        const totalDurationMs = Math.max(
-            0,
-            Date.now() - orchestrationStartedAt
-        );
-        // Total duration is persisted to metadata for UI visibility and
-        // troubleshooting; it is not used to alter request behavior.
-        response.metadata.totalDurationMs = totalDurationMs;
+        // ChatService computes totalDurationMs before metadata assembly and
+        // queued trace writes. Avoid mutating metadata here to keep trace
+        // persistence race-free.
+        const totalDurationMs =
+            response.metadata.totalDurationMs ??
+            Math.max(0, Date.now() - orchestrationStartedAt);
         chatOrchestratorLogger.info('chat.orchestration.timing', {
             surface: normalizedRequest.surface,
             plannerStatus: plannerExecution.status,
