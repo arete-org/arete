@@ -128,6 +128,14 @@ function formatMarkdownValue(
     return truncateInline(normalized.replace(/`/g, "'"), limit);
 }
 
+function escapeMarkdownLinkText(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/\]/g, '\\]');
+}
+
+function escapeMarkdownLinkUrl(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/\)/g, '\\)');
+}
+
 function formatSummarySection(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
@@ -189,8 +197,12 @@ function formatSourcesSection(
     );
     for (let index = 0; index < citationCount; index += 1) {
         const citation = payload.citations[index];
-        const title = formatMarkdownValue(citation.title, 70);
-        const url = formatMarkdownValue(citation.url, 140);
+        const title = escapeMarkdownLinkText(
+            formatMarkdownValue(citation.title, 70)
+        );
+        const url = escapeMarkdownLinkUrl(
+            formatMarkdownValue(citation.url, 140)
+        );
         lines.push(`${index + 1}. [${title}](${url})`);
     }
 

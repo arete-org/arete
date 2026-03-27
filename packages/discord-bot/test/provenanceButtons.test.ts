@@ -62,8 +62,8 @@ test('details action renders markdown-first sections with raw JSON debug block',
             },
             citations: [
                 {
-                    title: 'Primary source',
-                    url: 'https://example.com/source',
+                    title: 'Primary source ] title',
+                    url: 'https://example.com/source?q=a)',
                     snippet: 'Evidence',
                 },
             ],
@@ -105,6 +105,10 @@ test('details action renders markdown-first sections with raw JSON debug block',
         assert.match(content, /\*\*Sources\*\*/);
         assert.match(content, /\*\*Execution\*\*/);
         assert.match(content, /\*\*Raw JSON \(debug\)\*\*/);
+        assert.match(
+            content,
+            /\[Primary source \\] title\]\(https:\/\/example\.com\/source\?q=a\\\)\)/
+        );
         assert.doesNotMatch(content, /^```json/);
     } finally {
         botApi.getTrace = originalGetTrace;
