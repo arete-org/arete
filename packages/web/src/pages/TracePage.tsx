@@ -12,6 +12,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { formatExecutionTimelineSummary } from '@footnote/contracts/ethics-core';
 import type {
     GetTraceResponse,
     GetTraceStaleResponse,
@@ -52,24 +53,8 @@ const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
     );
 };
 
-const resolveExecutionSummary = (traceData: ServerMetadata): string | null => {
-    if (!traceData.execution || traceData.execution.length === 0) {
-        return null;
-    }
-
-    // Canonical v1 timeline formatter:
-    // planner/tool/generation with status and optional per-step duration.
-    return traceData.execution
-        .map((event) => {
-            const durationSuffix =
-                event.durationMs !== undefined ? `,${event.durationMs}ms` : '';
-            if (event.kind === 'tool') {
-                return `${event.kind}:${event.toolName ?? 'tool'}(${event.status}${durationSuffix})`;
-            }
-            return `${event.kind}:${event.model ?? event.profileId ?? event.provider ?? 'unknown'}(${event.status}${durationSuffix})`;
-        })
-        .join(' -> ');
-};
+const resolveExecutionSummary = (traceData: ServerMetadata): string | null =>
+    formatExecutionTimelineSummary(traceData.execution);
 
 const tracePageLogger = createScopedLogger('TracePage');
 

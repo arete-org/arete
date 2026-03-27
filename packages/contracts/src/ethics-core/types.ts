@@ -100,6 +100,7 @@ export type ResponseMetadata = {
     tradeoffCount: number; // Number of trade-offs the model surfaced.
     chainHash: string; // Short hash to help detect tampering.
     licenseContext: string; // Human-readable license label.
+    /** @deprecated Prefer execution[] as the canonical model/runtime timeline. */
     modelVersion: string; // Compatibility mirror of the final generation model.
     staleAfter: string; // ISO timestamp after which the data is stale.
     totalDurationMs?: number; // End-to-end orchestration duration when available.
