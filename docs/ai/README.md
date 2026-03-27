@@ -41,6 +41,22 @@ When relevant:
 - `docker compose -f deploy/compose.yml build`
     - Run when a change can affect deployable runtime packaging (service startup, build/deploy config, runtime dependencies).
 
+## Refactor/Design Example Lookup
+
+Use `pnpm refactor:lookup` when making non-trivial structural changes and you want example-backed guidance.
+
+Example:
+
+- `pnpm refactor:lookup --kind technique --query \"extract method\"`
+- `pnpm refactor:lookup --kind pattern --query \"strategy\" --format md`
+
+Intent routing:
+
+- `smell` and `technique` queries prioritize `RefactoringGuru/refactoring-examples`.
+- `pattern` and `typescript-design` queries prioritize `RefactoringGuru/design-patterns-typescript`.
+- The lookup automatically falls back to the secondary repo when primary confidence is low.
+- Routing and aliases are versioned in `docs/ai/refactor_lookup_map.json`.
+
 ## Human Review Checklist
 
 Use this quick checklist before merge:

@@ -19,6 +19,7 @@ Do not add migrations, backfills, or compatibility layers unless the user asks.
 
 Footnote is a transparency- and provenance-focused AI framework.
 Main surfaces:
+
 - `packages/backend`
 - `packages/discord-bot`
 - `packages/web`
@@ -56,18 +57,22 @@ Use this exact order and include a short rationale on risk and ethics lines.
 ## API Boundary Rule
 
 For API boundary changes, keep links in sync:
+
 - code annotations: `@api.operationId` and `@api.path`
 - OpenAPI refs: `x-codeRefs` in `docs/api/openapi.yaml`
 
 ## Validation Commands
 
 After edits:
+
 - `pnpm lint:fix`
 
 Before final handoff:
+
 - `pnpm lint`
 
 When relevant:
+
 - `pnpm validate-footnote-tags`
 - `pnpm validate-openapi-links` (API boundary changes)
 - `pnpm review` (cross-cutting or review-ready changes)
@@ -77,12 +82,14 @@ When relevant:
 
 - Prefer small, focused diffs.
 - Edit only files needed for the task.
+- For non-trivial structural refactors, include 1-2 example evidence links using `pnpm refactor:lookup`.
 - Do not invent runtime facts, command output, or test results.
 - If a check was not run, say that clearly.
 
 ## Communication Style
 
 Write for a junior contributor:
+
 - Plain language first.
 - Short sentences.
 - Concrete action words.

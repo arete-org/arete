@@ -1,0 +1,91 @@
+{
+    "aliases": {
+        "long function": "long method",
+        "god class": "large class",
+        "if else tree": "switch statements",
+        "too many params": "long parameter list",
+        "primitive obsession": "primitive obsession",
+        "shotgun surgery": "shotgun surgery",
+        "conditional complexity": "switch statements",
+        "duplicate code": "duplicate code",
+        "feature envy": "feature envy",
+        "temporary field": "temporary field",
+        "data clumps": "data clumps",
+        "telescoping constructor": "introduce parameter object",
+        "strategy pattern": "strategy",
+        "adapter pattern": "adapter",
+        "factory pattern": "factory method",
+        "builder pattern": "builder",
+        "observer pattern": "observer"
+    },
+    "intents": {
+        "smell": {
+            "canonicalTerms": [
+                "smell",
+                "maintainability",
+                "cleanup",
+                "code smell"
+            ]
+        },
+        "technique": {
+            "canonicalTerms": [
+                "refactor",
+                "refactoring",
+                "extract",
+                "replace",
+                "inline"
+            ]
+        },
+        "pattern": {
+            "canonicalTerms": ["pattern", "architecture", "design pattern"]
+        },
+        "typescript-design": {
+            "canonicalTerms": [
+                "typescript",
+                "design",
+                "architecture",
+                "interface",
+                "abstraction"
+            ]
+        }
+    },
+    "repoRouting": {
+        "smell": {
+            "primary": "RefactoringGuru/refactoring-examples",
+            "fallback": "RefactoringGuru/design-patterns-typescript"
+        },
+        "technique": {
+            "primary": "RefactoringGuru/refactoring-examples",
+            "fallback": "RefactoringGuru/design-patterns-typescript"
+        },
+        "pattern": {
+            "primary": "RefactoringGuru/design-patterns-typescript",
+            "fallback": "RefactoringGuru/refactoring-examples"
+        },
+        "typescript-design": {
+            "primary": "RefactoringGuru/design-patterns-typescript",
+            "fallback": "RefactoringGuru/refactoring-examples"
+        }
+    },
+    "seedPaths": {
+        "RefactoringGuru/refactoring-examples": [
+            "README.md",
+            "src",
+            "before",
+            "after"
+        ],
+        "RefactoringGuru/design-patterns-typescript": [
+            "README.md",
+            "src",
+            "src/Behavioral",
+            "src/Structural",
+            "src/Creational"
+        ]
+    },
+    "confidenceRules": {
+        "highThreshold": 85,
+        "mediumThreshold": 55,
+        "fallbackTrigger": 55,
+        "maxPerRepo": 20
+    }
+}

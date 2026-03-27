@@ -16,6 +16,7 @@ Run these when relevant:
 - [ ] `pnpm validate-openapi-links` (when API boundary code, `@api.operationId`/`@api.path`, or OpenAPI `x-codeRefs` changed)
 - [ ] `pnpm review` (cross-cutting or review-ready changes)
 - [ ] `docker compose -f deploy/compose.yml build` (changes can affect deployable packaging/runtime)
+- [ ] For non-trivial structural refactors/pattern decisions, include 1-2 example evidence links from `pnpm refactor:lookup` and state behavior change (`none` or explicit).
 
 ## Change Integrity
 
