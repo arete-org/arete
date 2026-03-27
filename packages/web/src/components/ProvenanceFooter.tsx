@@ -93,6 +93,13 @@ const ProvenanceFooter = ({
               // modelVersion remains a fallback for legacy traces.
               metadata.execution.map(formatExecutionEvent).join(' -> ')
             : null;
+    const searchUnavailableWarning = metadata.execution?.some(
+        (event) =>
+            event.kind === 'tool' &&
+            event.toolName === 'web_search' &&
+            event.status === 'skipped' &&
+            event.reasonCode === 'search_not_supported_by_selected_profile'
+    );
 
     return (
         <aside
@@ -106,6 +113,14 @@ const ProvenanceFooter = ({
             </div>
 
             <div className="provenance-main">
+                {searchUnavailableWarning && (
+                    <>
+                        <span className="provenance-risktier">
+                            search unavailable for selected model
+                        </span>
+                        <span className="provenance-separator"> • </span>
+                    </>
+                )}
                 {metadata.riskTier && (
                     <>
                         <span className="provenance-risktier">

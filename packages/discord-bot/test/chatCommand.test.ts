@@ -81,6 +81,14 @@ test('/chat forwards prompt/profile/generation options and renders message actio
                 modelVersion: 'gpt-5-mini',
                 staleAfter: new Date(Date.now() + 60000).toISOString(),
                 citations: [],
+                execution: [
+                    {
+                        kind: 'tool',
+                        toolName: 'web_search',
+                        status: 'skipped',
+                        reasonCode: 'search_not_supported_by_selected_profile',
+                    },
+                ],
             },
         };
     }) as typeof botApi.chatViaApi;
@@ -139,7 +147,7 @@ test('/chat forwards prompt/profile/generation options and renders message actio
         };
         assert.match(
             String(payload.content),
-            /^> profile_id: openai-text-medium\n> reasoning_effort: high\n> verbosity: low\n\nModel-switched response$/
+            /^> profile_id: openai-text-medium\n> reasoning_effort: high\n> verbosity: low\n\n⚠️ search unavailable for selected model\n\nModel-switched response$/
         );
         assert.equal(Array.isArray(payload.components), true);
         assert.equal(payload.components?.length, 1);

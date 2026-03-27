@@ -74,6 +74,9 @@ export const createChatOrchestrator = ({
     const enabledProfiles = catalogProfiles.filter(
         (profile) => profile.enabled
     );
+    const searchCapableFallbackProfiles = enabledProfiles.filter(
+        (profile) => profile.capabilities.canUseSearch
+    );
     const enabledProfilesById = new Map(
         enabledProfiles.map((profile) => [profile.id, profile])
     );
@@ -192,11 +195,14 @@ export const createChatOrchestrator = ({
         // Runtime resolution stays authoritative and fail-open:
         // unknown/disabled profile ids never hard-fail the request.
         let selectedResponseProfile = defaultResponseProfile;
+        let profileSelectionSource: 'request' | 'planner' | 'default' =
+            'default';
         const requestedProfileId = normalizedRequest.profileId?.trim();
         if (requestedProfileId) {
             const selectedProfile = enabledProfilesById.get(requestedProfileId);
             if (selectedProfile) {
                 selectedResponseProfile = selectedProfile;
+                profileSelectionSource = 'request';
                 if (plan.profileId && plan.profileId !== selectedProfile.id) {
                     chatOrchestratorLogger.warn(
                         'request profile override superseded planner profile selection',
@@ -221,6 +227,7 @@ export const createChatOrchestrator = ({
             const selectedProfile = enabledProfilesById.get(plan.profileId);
             if (selectedProfile) {
                 selectedResponseProfile = selectedProfile;
+                profileSelectionSource = 'planner';
             } else {
                 chatOrchestratorLogger.warn(
                     'planner selected invalid or disabled profile id; falling back to default profile',
@@ -240,6 +247,9 @@ export const createChatOrchestrator = ({
         // like `/chat` that want quick side-by-side runs without changing
         // planner prompt semantics.
         const requestGeneration = normalizedRequest.generation;
+        const originalSelectedProfileId = selectedResponseProfile.id;
+        let effectiveSelectedProfileId = selectedResponseProfile.id;
+        let rerouteApplied = false;
         let generationForExecution: ChatGenerationPlan = {
             ...plan.generation,
             ...(requestGeneration?.reasoningEffort
@@ -260,26 +270,47 @@ export const createChatOrchestrator = ({
             generationForExecution.search &&
             !selectedResponseProfile.capabilities.canUseSearch
         ) {
-            // TODO: Before dropping search, attempt rerouting to a search-capable profile. Emit structured fields for observability, maybe:
-            // - searchFallbackApplied
-            // - originalProfileId
-            // - effectiveProfileId
-            generationForExecution = {
-                ...generationForExecution,
-                search: undefined,
-            };
-            toolExecutionContext = {
-                toolName: 'web_search',
-                status: 'skipped',
-                reasonCode: 'search_not_supported_by_selected_profile',
-            };
-            chatOrchestratorLogger.warn(
-                'planner requested search but selected profile does not support search; running without search',
-                {
-                    selectedProfileId: selectedResponseProfile.id,
-                    surface: normalizedRequest.surface,
-                }
-            );
+            const shouldRerouteToSearchCapableFallback =
+                profileSelectionSource === 'planner';
+            const fallbackProfile = shouldRerouteToSearchCapableFallback
+                ? searchCapableFallbackProfiles.find(
+                      (profile) => profile.id !== selectedResponseProfile.id
+                  )
+                : undefined;
+
+            if (fallbackProfile) {
+                rerouteApplied = true;
+                selectedResponseProfile = fallbackProfile;
+                effectiveSelectedProfileId = fallbackProfile.id;
+                chatOrchestratorLogger.warn(
+                    'planner selected a non-search-capable profile; rerouting search to first enabled search-capable fallback profile',
+                    {
+                        originalProfileId: originalSelectedProfileId,
+                        effectiveProfileId: effectiveSelectedProfileId,
+                        surface: normalizedRequest.surface,
+                    }
+                );
+            } else {
+                generationForExecution = {
+                    ...generationForExecution,
+                    search: undefined,
+                };
+                toolExecutionContext = {
+                    toolName: 'web_search',
+                    status: 'skipped',
+                    reasonCode: 'search_not_supported_by_selected_profile',
+                };
+                chatOrchestratorLogger.warn(
+                    'search requested but selected profile does not support search; running without search',
+                    {
+                        originalProfileId: originalSelectedProfileId,
+                        effectiveProfileId: effectiveSelectedProfileId,
+                        rerouteApplied,
+                        selectionSource: profileSelectionSource,
+                        surface: normalizedRequest.surface,
+                    }
+                );
+            }
         }
         // Persist the effective profile id in planner payload/snapshot so traces
         // reflect what was actually executed.
@@ -403,6 +434,8 @@ export const createChatOrchestrator = ({
                         reasonCode: plannerExecution.reasonCode,
                     }),
                     profileId: plannerProfile.id,
+                    originalProfileId: plannerProfile.id,
+                    effectiveProfileId: plannerProfile.id,
                     provider: plannerProfile.provider,
                     model: plannerProfile.providerModel,
                     durationMs: plannerExecution.durationMs,
@@ -412,6 +445,8 @@ export const createChatOrchestrator = ({
                     // ChatService injects runtime-resolved model + duration.
                     status: 'executed',
                     profileId: selectedResponseProfile.id,
+                    originalProfileId: originalSelectedProfileId,
+                    effectiveProfileId: effectiveSelectedProfileId,
                     provider: selectedResponseProfile.provider,
                     model: selectedResponseProfile.providerModel,
                 },
@@ -435,8 +470,11 @@ export const createChatOrchestrator = ({
             totalDurationMs,
             plannerProfileId: plannerProfile.id,
             responseProfileId: selectedResponseProfile.id,
+            originalProfileId: originalSelectedProfileId,
+            effectiveProfileId: effectiveSelectedProfileId,
             searchRequested: generationForExecution.search !== undefined,
             toolStatus: toolExecutionContext?.status,
+            rerouteApplied,
             fallbackApplied: plannerExecution.status === 'failed',
         });
 
