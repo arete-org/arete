@@ -242,14 +242,15 @@ export const createChatService = ({
             generationResult.provenance === 'Retrieved' ||
             (generationResult.citations?.length ?? 0) > 0;
         const hasSearchIntent = normalizedGeneration?.search !== undefined;
+        const upstreamToolExecution = executionContext?.tool;
         const effectiveToolExecutionContext:
             | NonNullable<
                   ResponseMetadataRuntimeContext['executionContext']
               >['tool']
             | undefined =
-            // Respect an explicit upstream skip reason from orchestrator first.
-            executionContext?.tool?.status === 'skipped'
-                ? executionContext.tool
+            // Respect explicit orchestrator skip context first.
+            upstreamToolExecution?.status === 'skipped'
+                ? upstreamToolExecution
                 : hasSearchIntent
                   ? {
                         // When search was requested, infer tool execution from
@@ -257,7 +258,14 @@ export const createChatService = ({
                         toolName: 'web_search',
                         status: retrievalUsed ? 'executed' : 'skipped',
                         ...(retrievalUsed
-                            ? {}
+                            ? upstreamToolExecution?.reasonCode !== undefined
+                                ? {
+                                      // Preserve upstream policy reason when
+                                      // runtime confirms search executed.
+                                      reasonCode:
+                                          upstreamToolExecution.reasonCode,
+                                  }
+                                : {}
                             : {
                                   reasonCode: 'tool_not_used',
                               }),

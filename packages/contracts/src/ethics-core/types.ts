@@ -68,6 +68,9 @@ export type ExecutionReasonCode =
     | 'planner_invalid_output'
     | 'generation_runtime_error'
     | 'tool_not_used'
+    | 'search_rerouted_to_fallback_profile'
+    | 'search_reroute_not_permitted_by_selection_source'
+    | 'search_reroute_no_tool_capable_fallback_available'
     | 'search_not_supported_by_selected_profile'
     | 'unspecified_tool_outcome';
 

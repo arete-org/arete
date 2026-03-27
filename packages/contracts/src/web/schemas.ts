@@ -142,13 +142,16 @@ const ExecutionReasonCodeSchema = z.enum([
     'planner_invalid_output',
     'generation_runtime_error',
     'tool_not_used',
+    'search_rerouted_to_fallback_profile',
+    'search_reroute_not_permitted_by_selection_source',
+    'search_reroute_no_tool_capable_fallback_available',
     'search_not_supported_by_selected_profile',
     'unspecified_tool_outcome',
 ]);
 // Cross-field execution invariants:
 // - skipped/failed must explain why (reasonCode required)
-// - executed must not include reasonCode
-// This keeps telemetry queryable and avoids ambiguous event payloads.
+// - executed may include reasonCode for policy outcomes (for example reroutes)
+// This keeps telemetry queryable and makes fallback intent auditable.
 const ExecutionEventSchema = z
     .object({
         kind: z.enum(['planner', 'tool', 'generation']),
@@ -174,13 +177,6 @@ const ExecutionEventSchema = z
             });
         }
 
-        if (value.status === 'executed' && value.reasonCode) {
-            context.addIssue({
-                code: z.ZodIssueCode.custom,
-                message:
-                    'reasonCode must be omitted when execution status is executed.',
-            });
-        }
     })
     .strict();
 

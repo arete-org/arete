@@ -299,13 +299,13 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
         ...baseMetadata,
         execution: [
             {
-                kind: 'generation',
+                kind: 'tool',
                 status: 'executed',
-                reasonCode: 'planner_runtime_error',
+                reasonCode: 'search_rerouted_to_fallback_profile',
             },
         ],
     });
-    assert.equal(executedWithReasonCode.success, false);
+    assert.equal(executedWithReasonCode.success, true);
 });
 
 test('ResponseMetadataSchema accepts valid TRACE temperament metadata', () => {
