@@ -373,7 +373,7 @@ test('planner-selected profile id controls response model selection', async () =
     assert.equal(observedResponseModel, selectedProfile.providerModel);
     assert.equal(
         capturedExecutionContext?.planner?.profileId,
-        'openai-text-fast'
+        runtimeConfig.modelProfiles.plannerProfileId
     );
     assert.equal(capturedExecutionContext?.planner?.status, 'executed');
     assert.ok((capturedExecutionContext?.planner?.durationMs ?? -1) >= 0);
