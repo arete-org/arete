@@ -153,6 +153,8 @@ const ExecutionEventSchema = z
     .object({
         kind: z.enum(['planner', 'tool', 'generation']),
         status: ExecutionStatusSchema,
+        originalProfileId: z.string().min(1).optional(),
+        effectiveProfileId: z.string().min(1).optional(),
         profileId: z.string().min(1).optional(),
         provider: z.string().min(1).optional(),
         model: z.string().min(1).optional(),

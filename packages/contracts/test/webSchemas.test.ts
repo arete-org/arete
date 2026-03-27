@@ -236,6 +236,8 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
                 kind: 'generation',
                 status: 'executed',
                 profileId: 'openai-text-medium',
+                originalProfileId: 'openai-text-fast',
+                effectiveProfileId: 'openai-text-medium',
                 provider: 'openai',
                 model: 'gpt-5-mini',
                 durationMs: 20,

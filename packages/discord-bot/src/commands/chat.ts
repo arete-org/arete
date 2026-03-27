@@ -174,6 +174,23 @@ const buildChatDetailsPrefix = (options: {
     return details.join('\n') + '\n\n';
 };
 
+const buildSearchUnavailablePrefix = (
+    metadata: ResponseMetadata | null
+): string => {
+    // Mirror backend execution metadata so Discord users see the same search
+    // degradation signal that web users see in provenance UI.
+    const isSearchUnavailable = metadata?.execution?.some(
+        (event) =>
+            event.kind === 'tool' &&
+            event.toolName === 'web_search' &&
+            event.status === 'skipped' &&
+            event.reasonCode === 'search_not_supported_by_selected_profile'
+    );
+    return isSearchUnavailable
+        ? '⚠️ search unavailable for selected model\n\n'
+        : '';
+};
+
 const chatCommand: ChatCommandWithProfiles = {
     data: buildChatCommandData([]),
     setProfileChoices(profiles: ChatProfileOption[]) {
@@ -225,12 +242,12 @@ const chatCommand: ChatCommandWithProfiles = {
                 response.action === 'message' &&
                 typeof response.message === 'string'
             ) {
-                const replyBody = clampReplyContent(
-                    `${buildChatDetailsPrefix({ profileId, reasoningEffort, verbosity })}${response.message}`
-                );
                 const metadata = hasResponseMetadata(response.metadata)
                     ? response.metadata
                     : null;
+                const replyBody = clampReplyContent(
+                    `${buildChatDetailsPrefix({ profileId, reasoningEffort, verbosity })}${buildSearchUnavailablePrefix(metadata)}${response.message}`
+                );
                 if (!metadata) {
                     await interaction.editReply({
                         content: replyBody,

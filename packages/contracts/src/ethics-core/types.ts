@@ -80,6 +80,8 @@ export type ExecutionReasonCode =
 export type ExecutionEvent = {
     kind: 'planner' | 'tool' | 'generation';
     status: ExecutionStatus;
+    originalProfileId?: string;
+    effectiveProfileId?: string;
     profileId?: string;
     provider?: string;
     model?: string;

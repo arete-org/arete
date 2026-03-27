@@ -635,6 +635,8 @@ type ResponseMetadataRuntimeContext = {
             status: ExecutionStatus;
             reasonCode?: ExecutionReasonCode;
             profileId: string;
+            originalProfileId?: string;
+            effectiveProfileId?: string;
             provider: string;
             model: string;
             durationMs?: number;
@@ -643,6 +645,8 @@ type ResponseMetadataRuntimeContext = {
             status: ExecutionStatus;
             reasonCode?: ExecutionReasonCode;
             profileId: string;
+            originalProfileId?: string;
+            effectiveProfileId?: string;
             provider: string;
             model: string;
             durationMs?: number;
@@ -742,6 +746,12 @@ const buildResponseMetadata = (
             kind: 'planner',
             status: plannerExecution.status,
             profileId: plannerExecution.profileId,
+            ...(plannerExecution.originalProfileId !== undefined && {
+                originalProfileId: plannerExecution.originalProfileId,
+            }),
+            ...(plannerExecution.effectiveProfileId !== undefined && {
+                effectiveProfileId: plannerExecution.effectiveProfileId,
+            }),
             provider: plannerExecution.provider,
             model: plannerExecution.model,
             ...(normalizedPlannerReasonCode !== undefined && {
@@ -785,6 +795,12 @@ const buildResponseMetadata = (
             kind: 'generation',
             status: generationExecution.status,
             profileId: generationExecution.profileId,
+            ...(generationExecution.originalProfileId !== undefined && {
+                originalProfileId: generationExecution.originalProfileId,
+            }),
+            ...(generationExecution.effectiveProfileId !== undefined && {
+                effectiveProfileId: generationExecution.effectiveProfileId,
+            }),
             provider: generationExecution.provider,
             model: generationExecution.model,
             ...(normalizedGenerationReasonCode !== undefined && {

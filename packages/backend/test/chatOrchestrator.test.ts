@@ -508,7 +508,7 @@ test('invalid planner-selected profile id falls back to default response profile
     assert.ok(fallbackWarning);
 });
 
-test('search is dropped when selected profile does not support search', async () => {
+test('planner-selected non-search profile reroutes to search-capable fallback', async () => {
     let observedSearch: unknown;
     let capturedExecutionContext:
         | ResponseMetadataRuntimeContext['executionContext']
@@ -519,21 +519,28 @@ test('search is dropped when selected profile does not support search', async ()
     const runtimeConfigMutable = runtimeConfig as unknown as {
         modelProfiles: typeof runtimeConfig.modelProfiles;
     };
+    const mutatedCatalog = runtimeConfig.modelProfiles.catalog.map((profile) =>
+        profile.id === 'openai-text-fast'
+            ? {
+                  ...profile,
+                  capabilities: {
+                      ...profile.capabilities,
+                      canUseSearch: false,
+                  },
+              }
+            : profile
+    );
+    const expectedFallbackProfile = mutatedCatalog
+        .filter(
+            (profile) => profile.enabled && profile.capabilities.canUseSearch
+        )
+        .find((profile) => profile.id !== 'openai-text-fast');
+    assert.ok(expectedFallbackProfile);
     runtimeConfigMutable.modelProfiles = {
         ...runtimeConfig.modelProfiles,
         defaultProfileId: 'openai-text-fast',
         plannerProfileId: runtimeConfig.modelProfiles.plannerProfileId,
-        catalog: runtimeConfig.modelProfiles.catalog.map((profile) =>
-            profile.id === 'openai-text-fast'
-                ? {
-                      ...profile,
-                      capabilities: {
-                          ...profile.capabilities,
-                          canUseSearch: false,
-                      },
-                  }
-                : profile
-        ),
+        catalog: mutatedCatalog,
     };
 
     logger.warn = ((message: string, meta?: unknown) => {
@@ -576,10 +583,15 @@ test('search is dropped when selected profile does not support search', async ()
 
                 observedSearch = request.search;
                 return {
-                    text: 'search-disabled reply',
+                    text: 'search-rerouted reply',
                     model: request.model,
-                    provenance: 'Inferred',
-                    citations: [],
+                    provenance: 'Retrieved',
+                    citations: [
+                        {
+                            title: 'source',
+                            url: 'https://example.com/source',
+                        },
+                    ],
                 };
             }),
             storeTrace: async () => undefined,
@@ -597,16 +609,136 @@ test('search is dropped when selected profile does not support search', async ()
         runtimeConfigMutable.modelProfiles = originalModelProfiles;
     }
 
-    assert.equal(observedSearch, undefined);
+    assert.deepEqual(observedSearch, {
+        query: 'latest OpenAI policy update',
+        contextSize: 'low',
+        intent: 'current_facts',
+    });
     const mismatchWarning = warnings.find((warning) =>
-        /selected profile does not support search/i.test(warning.message)
+        /rerouting search to first enabled search-capable fallback profile/i.test(
+            warning.message
+        )
     );
     assert.ok(mismatchWarning);
     assert.deepEqual(capturedExecutionContext?.tool, {
         toolName: 'web_search',
+        status: 'executed',
+    });
+    assert.equal(
+        capturedExecutionContext?.generation?.originalProfileId,
+        'openai-text-fast'
+    );
+    assert.equal(
+        capturedExecutionContext?.generation?.effectiveProfileId,
+        expectedFallbackProfile.id
+    );
+});
+
+test('request-selected non-search profile drops search without reroute', async () => {
+    let observedSearch: unknown;
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
+    const requestSelectedProfile = runtimeConfig.modelProfiles.catalog.find(
+        (profile) => profile.id === 'openai-text-fast' && profile.enabled
+    );
+    assert.ok(requestSelectedProfile);
+    const originalModelProfiles = runtimeConfig.modelProfiles;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        modelProfiles: typeof runtimeConfig.modelProfiles;
+    };
+    runtimeConfigMutable.modelProfiles = {
+        ...runtimeConfig.modelProfiles,
+        defaultProfileId: requestSelectedProfile.id,
+        plannerProfileId: runtimeConfig.modelProfiles.plannerProfileId,
+        catalog: runtimeConfig.modelProfiles.catalog.map((profile) =>
+            profile.id === requestSelectedProfile.id
+                ? {
+                      ...profile,
+                      capabilities: {
+                          ...profile.capabilities,
+                          canUseSearch: false,
+                      },
+                  }
+                : profile
+        ),
+    };
+
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async (request) => {
+                if (request.maxOutputTokens === 700) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            profileId: requestSelectedProfile.id,
+                            riskTier: 'Low',
+                            reasoning: 'Request profile override should win.',
+                            generation: {
+                                reasoningEffort: 'medium',
+                                verbosity: 'medium',
+                                temperament: {
+                                    tightness: 4,
+                                    rationale: 3,
+                                    attribution: 4,
+                                    caution: 3,
+                                    extent: 4,
+                                },
+                                search: {
+                                    query: 'latest OpenAI policy update',
+                                    contextSize: 'low',
+                                    intent: 'current_facts',
+                                },
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+
+                observedSearch = request.search;
+                return {
+                    text: 'request-drop reply',
+                    model: request.model,
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+                capturedExecutionContext = runtimeContext.executionContext;
+                return createMetadata();
+            },
+            defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+            recordUsage: () => undefined,
+        });
+
+        await orchestrator.runChat(
+            createChatRequest({
+                profileId: requestSelectedProfile.id,
+            })
+        );
+    } finally {
+        runtimeConfigMutable.modelProfiles = originalModelProfiles;
+    }
+
+    assert.equal(observedSearch, undefined);
+    assert.ok(capturedExecutionContext);
+    assert.ok(capturedExecutionContext.tool);
+    const toolExecution = capturedExecutionContext.tool;
+    assert.deepEqual(toolExecution, {
+        toolName: 'web_search',
         status: 'skipped',
         reasonCode: 'search_not_supported_by_selected_profile',
     });
+    assert.equal(
+        capturedExecutionContext?.generation?.originalProfileId,
+        requestSelectedProfile.id
+    );
+    assert.equal(
+        capturedExecutionContext?.generation?.effectiveProfileId,
+        requestSelectedProfile.id
+    );
 });
 
 test('discord requests use backend profile overlay when runtime overlay is configured', async () => {
