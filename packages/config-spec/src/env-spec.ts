@@ -89,6 +89,20 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'LITESTREAM_REPLICA_URL',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'storage',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description:
+            'S3-compatible replica URL used by Litestream for SQLite backup replication.',
+        defaultValue: noDefault(),
+        usedBy: ['deploy/litestream.yml', 'packages/backend/src/server.ts'],
+    }),
+
+    defineEnv({
         key: 'INCIDENT_PSEUDONYMIZATION_SECRET',
         owner: 'shared',
         stage: 'runtime',
