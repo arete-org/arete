@@ -106,6 +106,21 @@ export type ExecutionReasonCode =
     | 'search_not_supported_by_selected_profile'
     | 'unspecified_tool_outcome';
 
+export type PlannerExecutionReasonCode = Extract<
+    ExecutionReasonCode,
+    'planner_runtime_error' | 'planner_invalid_output'
+>;
+
+export type EvaluatorExecutionReasonCode = Extract<
+    ExecutionReasonCode,
+    'evaluator_runtime_error'
+>;
+
+export type GenerationExecutionReasonCode = Extract<
+    ExecutionReasonCode,
+    'generation_runtime_error'
+>;
+
 export type EvaluatorDecisionMode = 'observe_only' | 'enforced';
 
 /**
@@ -145,6 +160,47 @@ export type ToolInvocationReasonCode = Extract<
     | 'unspecified_tool_outcome'
 >;
 
+export type ExecutionEventKind =
+    | 'planner'
+    | 'evaluator'
+    | 'tool'
+    | 'generation';
+
+type BaseExecutionEvent = {
+    status: ExecutionStatus;
+    durationMs?: number;
+};
+
+type ProfileExecutionEvent = BaseExecutionEvent & {
+    originalProfileId?: string;
+    effectiveProfileId?: string;
+    profileId?: string;
+    provider?: string;
+    model?: string;
+};
+
+export type PlannerExecutionEvent = ProfileExecutionEvent & {
+    kind: 'planner';
+    reasonCode?: PlannerExecutionReasonCode;
+};
+
+export type EvaluatorExecutionEvent = BaseExecutionEvent & {
+    kind: 'evaluator';
+    evaluator?: EvaluatorOutcome;
+    reasonCode?: EvaluatorExecutionReasonCode;
+};
+
+export type ToolExecutionEvent = BaseExecutionEvent & {
+    kind: 'tool';
+    toolName: string;
+    reasonCode?: ToolInvocationReasonCode;
+};
+
+export type GenerationExecutionEvent = ProfileExecutionEvent & {
+    kind: 'generation';
+    reasonCode?: GenerationExecutionReasonCode;
+};
+
 /**
  * Planner-owned tool intent before orchestration eligibility checks.
  * This shape is fully serializable for trace/debug payloads.
@@ -182,7 +238,7 @@ export type ToolExecutionContext = {
  * workflow-based execution is enabled (lineage, timing, and per-step usage).
  */
 export type ExecutionEvent = {
-    kind: 'planner' | 'evaluator' | 'tool' | 'generation';
+    kind: ExecutionEventKind;
     status: ExecutionStatus;
     originalProfileId?: string;
     effectiveProfileId?: string;

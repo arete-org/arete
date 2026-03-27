@@ -7,6 +7,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import type { ToolInvocationReasonCode } from '@footnote/contracts/ethics-core';
 
 import {
     type AssistantResponseMetadata,
@@ -375,6 +376,110 @@ test('buildResponseMetadata keeps failed planner reasonCode in execution timelin
             profileId: 'openai-text-fast',
             provider: 'openai',
             model: 'gpt-5-nano',
+        },
+    ]);
+});
+
+test('buildResponseMetadata normalizes invalid planner reasonCode to planner_runtime_error', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                planner: {
+                    status: 'failed',
+                    reasonCode: 'tool_execution_error',
+                    profileId: 'openai-text-fast',
+                    provider: 'openai',
+                    model: 'gpt-5-nano',
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'planner',
+            status: 'failed',
+            reasonCode: 'planner_runtime_error',
+            profileId: 'openai-text-fast',
+            provider: 'openai',
+            model: 'gpt-5-nano',
+        },
+    ]);
+});
+
+test('buildResponseMetadata normalizes invalid generation reasonCode to generation_runtime_error', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                generation: {
+                    status: 'failed',
+                    reasonCode: 'planner_runtime_error',
+                    profileId: 'openai-text-medium',
+                    provider: 'openai',
+                    model: 'gpt-5-mini',
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'generation',
+            status: 'failed',
+            reasonCode: 'generation_runtime_error',
+            profileId: 'openai-text-medium',
+            provider: 'openai',
+            model: 'gpt-5-mini',
+        },
+    ]);
+});
+
+test('buildResponseMetadata normalizes invalid tool reasonCode by status defaults', () => {
+    const skippedMetadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                tool: {
+                    toolName: 'web_search',
+                    status: 'skipped',
+                    reasonCode:
+                        'planner_runtime_error' as unknown as ToolInvocationReasonCode,
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(skippedMetadata.execution, [
+        {
+            kind: 'tool',
+            status: 'skipped',
+            toolName: 'web_search',
+            reasonCode: 'unspecified_tool_outcome',
+        },
+    ]);
+
+    const failedMetadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                tool: {
+                    toolName: 'web_search',
+                    status: 'failed',
+                    reasonCode:
+                        'planner_runtime_error' as unknown as ToolInvocationReasonCode,
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(failedMetadata.execution, [
+        {
+            kind: 'tool',
+            status: 'failed',
+            toolName: 'web_search',
+            reasonCode: 'tool_execution_error',
         },
     ]);
 });
