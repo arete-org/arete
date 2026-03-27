@@ -326,6 +326,73 @@ test('invalid weather request is disabled safely', async () => {
     assert.match(plan.reasoning, /weather tool request was disabled safely/i);
 });
 
+test('out-of-range lat/lon weather request is disabled safely', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'Need weather data.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                weather: {
+                    location: {
+                        latitude: 123.45,
+                        longitude: -86.1581,
+                    },
+                },
+            },
+        })
+    );
+
+    const { plan } = await planner.planChat(createChatRequest());
+
+    assert.equal(plan.generation.weather, undefined);
+    assert.match(plan.reasoning, /weather tool request was disabled safely/i);
+});
+
+test('non-positive gridpoint weather request is disabled safely', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'Need weather data.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                weather: {
+                    location: {
+                        office: 'IND',
+                        gridX: 0,
+                        gridY: 69,
+                    },
+                },
+            },
+        })
+    );
+
+    const { plan } = await planner.planChat(createChatRequest());
+
+    assert.equal(plan.generation.weather, undefined);
+    assert.match(plan.reasoning, /weather tool request was disabled safely/i);
+});
+
 test('invalid weather request does not suppress valid search normalization', async () => {
     const planner = createPlanner(
         JSON.stringify({

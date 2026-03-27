@@ -279,8 +279,12 @@ const normalizeWeatherLocation = (
     if (
         typeof latitude === 'number' &&
         Number.isFinite(latitude) &&
+        latitude >= -90 &&
+        latitude <= 90 &&
         typeof longitude === 'number' &&
-        Number.isFinite(longitude)
+        Number.isFinite(longitude) &&
+        longitude >= -180 &&
+        longitude <= 180
     ) {
         return {
             type: 'lat_lon',
@@ -297,8 +301,10 @@ const normalizeWeatherLocation = (
         office.length > 0 &&
         typeof gridX === 'number' &&
         Number.isInteger(gridX) &&
+        gridX > 0 &&
         typeof gridY === 'number' &&
-        Number.isInteger(gridY)
+        Number.isInteger(gridY) &&
+        gridY > 0
     ) {
         return {
             type: 'gridpoint',

@@ -281,7 +281,8 @@ chat:
                   - For repo_explainer, prefer contextSize broad enough to find DeepWiki or Footnote-specific documentation.
                   - Include generation.weather only for US weather requests that need forecast data and already contain explicit coordinates (latitude/longitude) or a resolved NWS gridpoint (office, gridX, gridY).
                   - Never invent, geocode, or guess weather locations. If coordinates or resolved gridpoint are missing, omit generation.weather.
-                  - When generation.weather is included, set location using one valid shape and optionally include horizonPeriods (1-12).
+                  - If weather and search both seem possible, prefer generation.weather and do not also propose generation.search for the same weather query.
+                  - When generation.weather is included, set location using one valid shape and include horizonPeriods only when applicable (1-12).
                   - generation.temperament is required for message responses and must include all five TRACE axes.
                   - Every TRACE axis must be an integer from 1 to 5.
                   - TRACE scoring rubric for message responses:

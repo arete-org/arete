@@ -6,7 +6,10 @@
  * @footnote-risk: medium - Adapter regressions can degrade weather context quality, but blast radius is one optional tool path.
  * @footnote-ethics: medium - Weather guidance can influence user decisions, so we preserve explicit provenance and failure semantics.
  */
-import type { ToolExecutionContext } from '@footnote/contracts/ethics-core';
+import type {
+    ToolExecutionContext,
+    ToolInvocationReasonCode,
+} from '@footnote/contracts/ethics-core';
 import type {
     WeatherForecastTool,
     WeatherForecastToolResult,
@@ -66,6 +69,19 @@ export const executeWeatherForecastTool = async ({
     toolResultMessage?: string;
     toolExecutionContext: ToolExecutionContext;
 }> => {
+    const mapWeatherErrorCodeToReasonCode = (
+        code: string | undefined
+    ): ToolInvocationReasonCode =>
+        code === 'timeout'
+            ? 'tool_timeout'
+            : code === 'http_error'
+              ? 'tool_http_error'
+              : code === 'network_error'
+                ? 'tool_network_error'
+                : code === 'invalid_response'
+                  ? 'tool_invalid_response'
+                  : 'tool_execution_error';
+
     const weatherToolStartedAt = Date.now();
     try {
         const weatherToolResult =
@@ -82,7 +98,9 @@ export const executeWeatherForecastTool = async ({
                 status:
                     weatherToolResult.status === 'ok' ? 'executed' : 'failed',
                 ...(weatherToolResult.status === 'error' && {
-                    reasonCode: 'tool_execution_error',
+                    reasonCode: mapWeatherErrorCodeToReasonCode(
+                        weatherToolResult.error.code
+                    ),
                 }),
                 durationMs: weatherToolDurationMs,
             },

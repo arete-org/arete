@@ -1438,12 +1438,12 @@ test('orchestrator fails open when weather tool throws and still generates a res
 
     assert.equal(response.action, 'message');
     assert.equal(response.message, 'Fallback non-tool weather response');
-    assert.deepEqual(capturedExecutionContext?.tool, {
-        toolName: 'weather_forecast',
-        status: 'failed',
-        reasonCode: 'tool_execution_error',
-        durationMs: capturedExecutionContext?.tool?.durationMs,
-    });
+    assert.equal(capturedExecutionContext?.tool?.toolName, 'weather_forecast');
+    assert.equal(capturedExecutionContext?.tool?.status, 'failed');
+    assert.equal(
+        capturedExecutionContext?.tool?.reasonCode,
+        'tool_execution_error'
+    );
     assert.ok((capturedExecutionContext?.tool?.durationMs ?? 0) >= 0);
 });
 

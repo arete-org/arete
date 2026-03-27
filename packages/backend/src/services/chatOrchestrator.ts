@@ -695,6 +695,16 @@ export const createChatOrchestrator = ({
         const weatherToolResultMessage = toolExecution.toolResultMessage;
         toolExecutionContext =
             toolExecution.toolExecutionContext ?? toolExecutionContext;
+        const plannerGenerationForPrompt = weatherToolResultMessage
+            ? executionPlan.generation
+            : {
+                  ...executionPlan.generation,
+                  weather: undefined,
+              };
+        const executionPlanForPrompt: ChatPlan = {
+            ...executionPlan,
+            generation: plannerGenerationForPrompt,
+        };
 
         // Planner output is injected as a final system message so generation
         // can follow one backend-owned decision payload.
@@ -725,7 +735,7 @@ export const createChatOrchestrator = ({
                     '// BEGIN Planner Output',
                     '// This planner decision was made by the backend and should be treated as authoritative for this response.',
                     '// ==========',
-                    buildPlannerPayload(executionPlan, surfacePolicy),
+                    buildPlannerPayload(executionPlanForPrompt, surfacePolicy),
                     '// ==========',
                     '// END Planner Output',
                     '// ==========',
@@ -755,7 +765,7 @@ export const createChatOrchestrator = ({
                     modality: executionPlan.modality,
                     profileId: executionPlan.profileId,
                     riskTier: executionPlan.riskTier,
-                    generation: executionPlan.generation,
+                    generation: plannerGenerationForPrompt,
                     toolIntent,
                     toolRequest: toolRequestContext,
                     ...(surfacePolicy && { surfacePolicy }),

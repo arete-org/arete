@@ -45,7 +45,7 @@ const buildWeatherForecastToolIntent = (
         ? {
               toolName: 'weather_forecast',
               requested: true,
-              input: generation.weather as Record<string, unknown>,
+              input: generation.weather,
           }
         : {
               toolName: 'weather_forecast',

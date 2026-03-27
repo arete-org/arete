@@ -398,10 +398,10 @@ export const createWeatherGovForecastTool = ({
 
             const pointProperties = pointsResponse.data.properties;
             const forecastUrlRaw =
-                typeof pointProperties?.forecastHourly === 'string'
-                    ? pointProperties.forecastHourly
-                    : typeof pointProperties?.forecast === 'string'
-                      ? pointProperties.forecast
+                typeof pointProperties?.forecast === 'string'
+                    ? pointProperties.forecast
+                    : typeof pointProperties?.forecastHourly === 'string'
+                      ? pointProperties.forecastHourly
                       : undefined;
             forecastEndpoint = forecastUrlRaw
                 ? toAbsoluteWeatherGovUrl(forecastUrlRaw)

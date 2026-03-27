@@ -732,6 +732,10 @@ const normalizeToolReasonCode = (
         reasonCode === 'search_reroute_no_tool_capable_fallback_available' ||
         reasonCode === 'tool_unavailable' ||
         reasonCode === 'tool_execution_error' ||
+        reasonCode === 'tool_timeout' ||
+        reasonCode === 'tool_http_error' ||
+        reasonCode === 'tool_network_error' ||
+        reasonCode === 'tool_invalid_response' ||
         reasonCode === 'search_not_supported_by_selected_profile' ||
         reasonCode === 'unspecified_tool_outcome'
     ) {

@@ -84,7 +84,9 @@ let traceStore: ReturnType<typeof createTraceStore> | null = null;
 let incidentStore: ReturnType<typeof getDefaultIncidentStore> | null = null;
 let generationRuntime: GenerationRuntime | null = null;
 let imageGenerationRuntime: ImageGenerationRuntime | null = null;
-const weatherForecastTool = createWeatherGovForecastTool();
+let weatherForecastTool: ReturnType<
+    typeof createWeatherGovForecastTool
+> | null = null;
 let internalNewsTaskService: ReturnType<
     typeof createInternalNewsTaskService
 > | null = null;
@@ -227,6 +229,9 @@ const initializeServices = () => {
             'No text-generation provider is configured. Set OPENAI_API_KEY or OLLAMA_BASE_URL to enable /api/chat.'
         );
     }
+    // Keep weather adapter construction in service bootstrap so runtime config
+    // can control pilot enablement/behavior without import-time wiring.
+    weatherForecastTool = createWeatherGovForecastTool();
 
     // --- OpenAI-only services ---
     if (runtimeConfig.openai.apiKey) {
@@ -455,7 +460,7 @@ const wantsJsonResponse = (req: http.IncomingMessage): boolean => {
 // Chat is the backend-standardized conversation interface (adapter-facing, Turnstile + rate-limited for public web calls).
 const handleChatRequest = createChatHandler({
     generationRuntime,
-    weatherForecastTool,
+    weatherForecastTool: weatherForecastTool ?? undefined,
     ipRateLimiter,
     sessionRateLimiter,
     serviceRateLimiter,
