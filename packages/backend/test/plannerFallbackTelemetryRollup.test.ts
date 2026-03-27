@@ -35,8 +35,8 @@ test('rollup emits grouped summary on first event and every configured interval'
     const logs: LoggedSummary[] = [];
     const rollup = createPlannerFallbackTelemetryRollup({
         logger: {
-            info: (_message: string, payload: LoggedSummary) => {
-                logs.push(payload);
+            info: (_message: string, payload: unknown) => {
+                logs.push(payload as LoggedSummary);
             },
         },
         emitEvery: 3,
