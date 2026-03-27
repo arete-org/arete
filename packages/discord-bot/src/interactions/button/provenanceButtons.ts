@@ -6,7 +6,10 @@
  * @footnote-ethics: high - Provenance details and reporting actions directly affect transparency and accountability.
  */
 import type { ButtonInteraction } from 'discord.js';
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import {
+    formatExecutionTimelineSummary,
+    type ResponseMetadata,
+} from '@footnote/contracts/ethics-core';
 import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 import { botApi } from '../../api/botApi.js';
 import { logger } from '../../utils/logger.js';
@@ -122,6 +125,7 @@ function serializeDetailsPayload(
     const entries = Object.entries(payload).filter(
         ([, value]) => value !== undefined
     );
+    const executionSummary = formatExecutionTimelineSummary(payload.execution);
 
     for (let index = 0; index < entries.length; index += 1) {
         const [key, value] = entries[index];
@@ -156,6 +160,17 @@ function serializeDetailsPayload(
             lines.push(
                 `  "temperament": ${formatInlineJsonObject(value)}${trailingComma}`
             );
+            continue;
+        }
+
+        if (key === 'execution') {
+            if (executionSummary) {
+                lines.push(
+                    `  "executionSummary": ${JSON.stringify(executionSummary)}${trailingComma}`
+                );
+            } else {
+                lines.push(`  "executionSummary": null${trailingComma}`);
+            }
             continue;
         }
 

@@ -2409,6 +2409,8 @@ components:
                     type: string
                 modelVersion:
                     type: string
+                    deprecated: true
+                    description: Deprecated compatibility mirror of the final generation model. Prefer execution[].
                 staleAfter:
                     type: string
                     format: date-time
@@ -2416,6 +2418,45 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/Citation'
+                execution:
+                    type: array
+                    items:
+                        type: object
+                        required: [kind, status]
+                        properties:
+                            kind:
+                                type: string
+                                enum: [planner, tool, generation]
+                            status:
+                                type: string
+                                enum: [executed, skipped, failed]
+                            originalProfileId:
+                                type: string
+                            effectiveProfileId:
+                                type: string
+                            profileId:
+                                type: string
+                            provider:
+                                type: string
+                            model:
+                                type: string
+                            toolName:
+                                type: string
+                            reasonCode:
+                                type: string
+                                enum:
+                                    [
+                                        planner_runtime_error,
+                                        planner_invalid_output,
+                                        generation_runtime_error,
+                                        tool_not_used,
+                                        search_not_supported_by_selected_profile,
+                                        unspecified_tool_outcome,
+                                    ]
+                            durationMs:
+                                type: integer
+                                minimum: 0
+                        additionalProperties: false
                 imageDescriptions:
                     type: array
                     items:

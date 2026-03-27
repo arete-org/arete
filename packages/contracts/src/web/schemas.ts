@@ -191,6 +191,7 @@ const responseMetadataShape = {
     tradeoffCount: z.number().nonnegative(),
     chainHash: z.string(),
     licenseContext: z.string(),
+    // Deprecated compatibility field; prefer execution[].
     modelVersion: z.string(),
     staleAfter: z.string(),
     totalDurationMs: z.number().int().nonnegative().optional(),

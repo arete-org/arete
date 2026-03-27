@@ -23,6 +23,7 @@ export type {
     ResponseTemperament,
     ResponseMetadata,
 } from './ethics-core/index.js';
+export { formatExecutionTimelineSummary } from './ethics-core/index.js';
 
 // Web API contracts (request/response envelopes)
 export type {
