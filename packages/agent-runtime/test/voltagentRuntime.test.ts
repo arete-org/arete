@@ -226,6 +226,10 @@ test('voltagent runtime executes search requests through the VoltAgent executor'
         requested: true,
         used: true,
     });
+    assert.deepEqual(result.toolExecution, {
+        toolName: 'web_search',
+        status: 'executed',
+    });
     assert.equal(result.provenance, 'Retrieved');
 });
 
@@ -279,7 +283,7 @@ test('voltagent runtime does not forward search for providers without a mapped s
         }),
     });
 
-    await runtime.generate({
+    const result = await runtime.generate({
         messages: [{ role: 'user', content: 'Summarize this.' }],
         model: 'ollama/llama3.2:3b',
         search: {
@@ -293,6 +297,11 @@ test('voltagent runtime does not forward search for providers without a mapped s
     });
 
     assert.equal(seenOptions?.search, undefined);
+    assert.deepEqual(result.toolExecution, {
+        toolName: 'web_search',
+        status: 'skipped',
+        reasonCode: 'tool_unavailable',
+    });
 });
 
 test('voltagent runtime maps remote ollama provider to ollama-cloud and normalizes cloud base URL', async () => {

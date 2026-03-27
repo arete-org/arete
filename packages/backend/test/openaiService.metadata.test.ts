@@ -304,6 +304,29 @@ test('buildResponseMetadata normalizes skipped tool event with fallback reasonCo
     ]);
 });
 
+test('buildResponseMetadata normalizes failed tool event with fallback reasonCode', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                tool: {
+                    toolName: 'web_search',
+                    status: 'failed',
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'tool',
+            status: 'failed',
+            toolName: 'web_search',
+            reasonCode: 'tool_execution_error',
+        },
+    ]);
+});
+
 test('buildResponseMetadata keeps failed planner reasonCode in execution timeline', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),

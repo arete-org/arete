@@ -15,6 +15,7 @@ import type {
     SupportedOpenAITextModel,
     SupportedProvider,
 } from '@footnote/contracts';
+import type { ToolExecutionContext } from '@footnote/contracts/ethics-core';
 import type {
     InternalTtsCosts,
     InternalTtsOptions,
@@ -239,6 +240,12 @@ export interface GenerationResult {
      * Runtime-reported provenance classification, when available.
      */
     provenance?: GenerationProvenance;
+    /**
+     * Optional canonical tool execution outcome reported by the runtime.
+     * Backend orchestration can still override this when policy requires
+     * deterministic fail-open semantics.
+     */
+    toolExecution?: ToolExecutionContext;
     /**
      * Placeholder memory retrieval payload reserved for future memory features.
      * Current flows should leave this undefined.

@@ -12,6 +12,9 @@ import type {
 } from '@footnote/contracts/web';
 import type { ModelProfile } from '@footnote/contracts';
 import type {
+    ToolExecutionContext,
+    ToolInvocationIntent,
+    ToolInvocationRequest,
     ExecutionReasonCode,
     ExecutionStatus,
     EvaluatorOutcome,
@@ -99,6 +102,34 @@ const buildPlannerPayload = (
         generation: plan.generation,
         ...(surfacePolicy && { surfacePolicy }),
     });
+
+/**
+ * Converts planner generation.search into a serializable tool-intent contract.
+ */
+const buildWebSearchToolIntent = (
+    generation: ChatGenerationPlan
+): ToolInvocationIntent => {
+    if (!generation.search) {
+        return {
+            toolName: 'web_search',
+            requested: false,
+        };
+    }
+
+    return {
+        toolName: 'web_search',
+        requested: true,
+        input: {
+            query: generation.search.query,
+            intent: generation.search.intent,
+            contextSize: generation.search.contextSize,
+            ...(generation.search.repoHints &&
+                generation.search.repoHints.length > 0 && {
+                    repoHints: generation.search.repoHints,
+                }),
+        },
+    };
+};
 
 /**
  * The orchestrator keeps surface-specific policy in one place while reusing the
@@ -402,13 +433,21 @@ export const createChatOrchestrator = ({
                 ? { verbosity: requestGeneration.verbosity }
                 : {}),
         };
-        let toolExecutionContext:
-            | {
-                  toolName: 'web_search';
-                  status: ExecutionStatus;
-                  reasonCode?: ExecutionReasonCode;
-              }
-            | undefined;
+        const toolIntent = buildWebSearchToolIntent(generationForExecution);
+        let toolRequestContext: ToolInvocationRequest | undefined =
+            toolIntent.requested
+                ? {
+                      toolName: 'web_search',
+                      requested: true,
+                      eligible: true,
+                  }
+                : {
+                      toolName: 'web_search',
+                      requested: false,
+                      eligible: false,
+                      reasonCode: 'tool_not_requested',
+                  };
+        let toolExecutionContext: ToolExecutionContext | undefined;
         if (
             generationForExecution.search &&
             !selectedResponseProfile.capabilities.canUseSearch
@@ -449,6 +488,12 @@ export const createChatOrchestrator = ({
                 generationForExecution = {
                     ...generationForExecution,
                     search: undefined,
+                };
+                toolRequestContext = {
+                    toolName: 'web_search',
+                    requested: true,
+                    eligible: false,
+                    reasonCode: 'search_not_supported_by_selected_profile',
                 };
                 toolExecutionContext = {
                     toolName: 'web_search',
@@ -600,6 +645,8 @@ export const createChatOrchestrator = ({
                     profileId: executionPlan.profileId,
                     riskTier: executionPlan.riskTier,
                     generation: executionPlan.generation,
+                    toolIntent,
+                    toolRequest: toolRequestContext,
                     ...(surfacePolicy && { surfacePolicy }),
                 },
             }),
@@ -667,6 +714,7 @@ export const createChatOrchestrator = ({
             effectiveProfileId: effectiveSelectedProfileId,
             searchRequested: generationForExecution.search !== undefined,
             toolStatus: toolExecutionContext?.status,
+            toolEligible: toolRequestContext?.eligible,
             rerouteApplied,
             fallbackApplied: plannerExecution.status === 'failed',
         });

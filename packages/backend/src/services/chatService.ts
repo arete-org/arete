@@ -16,6 +16,7 @@ import type {
     PartialResponseTemperament,
     ResponseMetadata,
     RiskTier,
+    ToolExecutionContext,
 } from '@footnote/contracts/ethics-core';
 import type {
     ModelProfileCapabilities,
@@ -234,22 +235,25 @@ export const createChatService = ({
                   ResponseMetadataRuntimeContext['executionContext']
               >['tool']
             | undefined =
-            // Respect an explicit upstream skip reason from orchestrator first.
-            executionContext?.tool?.status === 'skipped'
+            // Respect explicit upstream tool outcomes first (for example,
+            // orchestrator-level fail-open policy decisions).
+            executionContext?.tool
                 ? executionContext.tool
-                : hasSearchIntent
-                  ? {
-                        // When search was requested, infer tool execution from
-                        // retrieval usage signals reported by the runtime.
-                        toolName: 'web_search',
-                        status: retrievalUsed ? 'executed' : 'skipped',
-                        ...(retrievalUsed
-                            ? {}
-                            : {
-                                  reasonCode: 'tool_not_used',
-                              }),
-                    }
-                  : undefined;
+                : generationResult.toolExecution
+                  ? generationResult.toolExecution
+                  : hasSearchIntent
+                    ? ({
+                          // When search was requested, infer tool execution from
+                          // retrieval usage signals reported by the runtime.
+                          toolName: 'web_search',
+                          status: retrievalUsed ? 'executed' : 'skipped',
+                          ...(retrievalUsed
+                              ? {}
+                              : {
+                                    reasonCode: 'tool_not_used',
+                                }),
+                      } satisfies ToolExecutionContext)
+                    : undefined;
 
         const usageModel = assistantMetadata.model || defaultModel;
         const effectiveGenerationExecutionContext = executionContext?.generation
