@@ -1,3 +1,6 @@
+# Keep these paths aligned with backend env vars in deploy/runtime config:
+# PROVENANCE_SQLITE_PATH must match /data/provenance.db and INCIDENT_SQLITE_PATH
+# must match /data/incidents.db, as defined in this deploy/litestream.yml file.
 dbs:
     - path: /data/provenance.db
       replicas:
