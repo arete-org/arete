@@ -10,7 +10,7 @@ Footnote is a transparency-first AI framework for people who want more than a bl
 
 Built for human oversight, not "just trust me."
 
-![footnote_chat](https://github.com/user-attachments/assets/963e6144-7d83-4d90-a580-7fc5a01d3566)
+<img width="761" height="344" alt="image" src="https://github.com/user-attachments/assets/706ea443-7085-41c0-a7ee-06633f196acd" />
 
 [Demo](https://ai.jordanmakes.dev) · [Quickstart](#quickstart) · [Docs](#docs) · [Contributing](#contributing)
 
