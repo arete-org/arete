@@ -22,6 +22,7 @@ Canonical runtime capability reference: [2026-03-27-runtime-capability-matrix.md
 - Incident report/review workflow APIs are implemented in backend.
 - Deterministic breaker rollout is still a focused follow-up area.
 - Alert transport and notification policy remain deferred.
+- Next review checkpoint: 2026-04-10 (roughly 2 weeks).
 
 ## What Is Landed
 
@@ -37,18 +38,21 @@ Canonical runtime capability reference: [2026-03-27-runtime-capability-matrix.md
 Goal: validate one real integration path with clear provenance and fail-open behavior.
 
 Reference issue: `JBA-18`
+Summary: validate one real integration path with clear provenance and fail-open behavior.
 
 ### 2) Deterministic Breaker Metadata Parity
 
 Goal: ensure breaker outcomes are explicit and auditable in execution metadata.
 
 Reference issue: `JBA-19`
+Summary: ensure breaker outcomes are explicit and auditable in execution metadata.
 
 ### 3) Multi-step Workflow Follow-up
 
 Goal: add lineage safely after current single-path hardening is stable.
 
 Reference issue: `JBA-20`
+Summary: add lineage safely after current single-path hardening is stable.
 
 ## Guardrails
 

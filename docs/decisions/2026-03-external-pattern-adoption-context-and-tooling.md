@@ -79,9 +79,50 @@ Do not adopt a separate runtime platform, service boundary, or orchestration sta
 
 ### 6.1 Immediate scope
 
-- Define a Footnote-shaped context package envelope
-- Harden provider/tool unsupported behavior semantics
-- Ensure reason-code visibility is stable end-to-end
+Objective D: Context package envelope (schema + tests)
+
+- Deliver one serializable envelope schema with these fields:
+    - `id: string` (stable identifier)
+    - `version: string` (schema version, for example `v1`)
+    - `provenance: { source: string; chainHash?: string; citations?: Array<{ title: string; url: string }> }`
+    - `payload: { intent: string; messages: Array<{ role: string; content: string }>; toolHints?: Record<string, unknown> }`
+    - `signatures?: { createdBy: string; createdAt: string }`
+    - `metadata?: { profileId?: string; provider?: string; responseId?: string }`
+- Deliver one serializer/deserializer implementation task and matching unit tests.
+- Acceptance criteria:
+    - schema is reviewed in one PR and approved by API Owners + Security + UX reviewer
+    - checklist complete: serializable, fail-open-safe defaults, no framework-only fields
+    - test coverage for parse success/failure and version mismatch behavior
+
+Objective E: Unsupported provider/tool hardening
+
+- Scope current known paths:
+    - Providers: `openai`, `ollama`
+    - Tool: `web_search`
+- For each provider/tool path, define:
+    - explicit fallback behavior when unsupported
+    - explicit reason codes for `skipped`/`failed`
+    - retry policy (if any) and no-retry cases
+- Owners:
+    - `packages/backend`: orchestration policy + reason-code propagation
+    - `packages/agent-runtime`: provider/tool mapping + unsupported behavior handling
+- Acceptance criteria:
+    - integration tests for supported and unsupported paths
+    - no silent tool-intent drops
+
+Objective F: End-to-end reason-code stability
+
+- Define stability as:
+    - reason code present at orchestration output
+    - reason code persisted in metadata/logging path
+    - reason code visible in downstream review surfaces
+- Verification steps:
+    - integration test matrix across provider/tool outcomes
+    - logging assertions for required reason-code fields
+    - telemetry check that non-executed tool outcomes include reason code
+- Rollback criteria:
+    - missing reason-code propagation in critical path
+    - mismatch between metadata and log reason codes
 
 ### 6.2 Deferred scope
 
@@ -95,10 +136,41 @@ Do not adopt a separate runtime platform, service boundary, or orchestration sta
 
 This decision is considered validated when:
 
-1. Context package envelope is defined and reviewable in contracts/docs.
-2. Tool outcomes are consistent and inspectable in metadata/logging.
-3. Unsupported provider/tool paths are explicitly fail-open and test-covered.
-4. A go/no-go checkpoint is recorded for broader expansion.
+1. Gate 1 - Context package envelope approved
+    - Reviewers: API Owners, Security reviewer, UX reviewer.
+    - Approval criteria:
+        - one signed-off PR with schema + checklist completion
+        - serializer/deserializer task linked and unit tests passing
+        - Objective D acceptance criteria complete
+2. Gate 2 - Tool outcomes are consistent and inspectable
+    - Consistency metrics:
+        - 100% of non-executed tool outcomes include reason code
+        - 100% of tested provider/tool paths emit one of: `executed` / `skipped` / `failed`
+    - Inspectability artifacts:
+        - metadata/logging path includes outcome + reason code
+        - sample JSON schema/example payload checked into docs or test fixtures
+    - Objective mapping: E + F
+3. Gate 3 - Fail-open and tests are complete
+    - Minimum test targets:
+        - at least 6 unit tests (envelope parse/version + reason-code propagation)
+        - at least 4 integration tests (supported openai/web_search, unsupported ollama/web_search, retry/no-retry, timeout fallback)
+    - Automated threshold:
+        - 100% pass on required test subset in CI for merge
+    - Edge scenarios covered:
+        - unsupported provider/tool pair
+        - timeout/transport failure
+        - malformed tool payload
+4. Gate 4 - Go/no-go checkpoint
+    - Decision makers: backend maintainer + runtime owner + one product/UX reviewer.
+    - Required evidence:
+        - Gate 1-3 checklists complete
+        - test artifacts attached
+        - short risk summary + rollback plan
+    - Go trigger:
+        - all critical tests pass and checklist complete within 14 days of gate start
+    - No-go trigger:
+        - unresolved critical failure path or incomplete checklist after 14 days
+    - Objective mapping: D + E + F
 
 ---
 
