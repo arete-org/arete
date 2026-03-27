@@ -14,6 +14,8 @@
 export type {
     Provenance,
     RiskTier,
+    RiskRuleId,
+    RiskEvaluationResult,
     Citation,
     ExecutionStatus,
     ExecutionReasonCode,
