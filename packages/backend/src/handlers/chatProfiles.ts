@@ -27,7 +27,7 @@ const truncateDescription = (description: string): string => {
         return trimmed;
     }
 
-    return `${trimmed.slice(0, DESCRIPTION_MAX_LENGTH - 1).trimEnd()}...`;
+    return `${trimmed.slice(0, DESCRIPTION_MAX_LENGTH - 3).trimEnd()}...`;
 };
 
 /**
