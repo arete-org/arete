@@ -7,6 +7,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import type { ToolInvocationReasonCode } from '@footnote/contracts/ethics-core';
 
 import {
     type AssistantResponseMetadata,
@@ -443,7 +444,8 @@ test('buildResponseMetadata normalizes invalid tool reasonCode by status default
                 tool: {
                     toolName: 'web_search',
                     status: 'skipped',
-                    reasonCode: 'planner_runtime_error',
+                    reasonCode:
+                        'planner_runtime_error' as unknown as ToolInvocationReasonCode,
                 },
             },
         })
@@ -465,7 +467,8 @@ test('buildResponseMetadata normalizes invalid tool reasonCode by status default
                 tool: {
                     toolName: 'web_search',
                     status: 'failed',
-                    reasonCode: 'planner_runtime_error',
+                    reasonCode:
+                        'planner_runtime_error' as unknown as ToolInvocationReasonCode,
                 },
             },
         })

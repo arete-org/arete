@@ -15,7 +15,7 @@ const formatExecutionEvent = (event: ExecutionEvent): string => {
             ? ''
             : `, ${event.reasonCode}`;
     if (event.kind === 'tool') {
-        const tool = event.toolName.trim() || 'tool';
+        const tool = event.toolName?.trim() || 'tool';
         return `${event.kind}:${tool}(${event.status}${reasonSuffix}${durationSuffix})`;
     }
     if (event.kind === 'evaluator') {

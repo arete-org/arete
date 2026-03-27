@@ -237,11 +237,19 @@ export type ToolExecutionContext = {
  * This v1 shape is intentionally compact and is expected to grow once
  * workflow-based execution is enabled (lineage, timing, and per-step usage).
  */
-export type ExecutionEvent =
-    | PlannerExecutionEvent
-    | EvaluatorExecutionEvent
-    | ToolExecutionEvent
-    | GenerationExecutionEvent;
+export type ExecutionEvent = {
+    kind: ExecutionEventKind;
+    status: ExecutionStatus;
+    originalProfileId?: string;
+    effectiveProfileId?: string;
+    profileId?: string;
+    provider?: string;
+    model?: string;
+    toolName?: string;
+    evaluator?: EvaluatorOutcome;
+    reasonCode?: ExecutionReasonCode;
+    durationMs?: number;
+};
 
 /**
  * ResponseMetadata is the compact record attached to a model response.
