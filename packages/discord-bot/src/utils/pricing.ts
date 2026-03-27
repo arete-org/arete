@@ -7,6 +7,8 @@
  */
 
 export type {
+    OpenAIModelCanonicalizationResult,
+    OpenAIModelCanonicalizationRule,
     GPT5ModelType,
     OmniModelType,
     SupportedOpenAIEmbeddingModel as EmbeddingModelType,
@@ -19,6 +21,8 @@ export type {
     ImageGenerationCostEstimate,
 } from '@footnote/contracts/pricing';
 export {
+    canonicalizeOpenAIModelIdForPricing,
+    resolveOpenAITextPricingModel,
     estimateOpenAITextCost as estimateTextCost,
     estimateOpenAIImageGenerationCost as estimateImageGenerationCost,
     openAITextPricingTable as TEXT_MODEL_PRICING,

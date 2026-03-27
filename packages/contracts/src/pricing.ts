@@ -11,6 +11,7 @@ import type {
     SupportedOpenAIRealtimeModel,
     SupportedOpenAITextModel,
     SupportedOpenAITtsModel,
+    SupportedProvider,
 } from './providers.js';
 import { supportedOpenAITextModels } from './providers.js';
 
@@ -147,6 +148,58 @@ export type OpenAITextPricingEntry = {
     input: number;
     output: number;
 };
+
+export type OpenAIModelCanonicalizationRule =
+    | 'trim'
+    | 'lowercase'
+    | 'remove_openai_prefix'
+    | 'strip_slash_date_suffix'
+    | 'strip_slash_snapshot_suffix'
+    | 'strip_hyphen_date_suffix';
+
+export interface OpenAIModelCanonicalizationResult {
+    inputModel: string;
+    canonicalModel: string;
+    wasCanonicalized: boolean;
+    appliedRules: OpenAIModelCanonicalizationRule[];
+}
+
+export interface OpenAIModelPricingResolution<ModelKey extends string> {
+    inputModel: string;
+    canonicalModel: string;
+    matchedModel: ModelKey | null;
+    wasCanonicalized: boolean;
+    appliedRules: OpenAIModelCanonicalizationRule[];
+}
+
+export type ModelPricingCoverageClassification =
+    | 'priced'
+    | 'unpriced_by_policy'
+    | 'unknown_unpriced';
+
+/**
+ * OpenAI text model ids intentionally excluded from shared backend pricing.
+ * Keeping this explicit prevents silent drift between "missing price data"
+ * and "known policy decision to treat as unpriced".
+ */
+export const explicitlyUnpricedOpenAITextModels = ['gpt-5.4-mini'] as const;
+export type ExplicitlyUnpricedOpenAITextModel =
+    (typeof explicitlyUnpricedOpenAITextModels)[number];
+
+export interface ModelProfileTextPricingCoverage {
+    provider: SupportedProvider;
+    model: string;
+    canonicalModel: string;
+    matchedModel: PricedOpenAITextModel | null;
+    classification: ModelPricingCoverageClassification;
+    policyReason:
+        | 'openai_priced'
+        | 'openai_explicitly_unpriced_by_policy'
+        | 'openai_unpriced_unknown'
+        | 'non_openai_not_priced_by_backend_policy';
+    wasCanonicalized: boolean;
+    appliedRules: OpenAIModelCanonicalizationRule[];
+}
 
 /**
  * Realtime token pricing per 1M tokens (USD).
@@ -290,42 +343,212 @@ const openAIImageTokenPricingTable: Record<
     'gpt-image-1-mini': { input: 2.5, output: 8.0 },
 };
 
+const openAIProviderPrefixPattern = /^openai\//i;
+const slashDateSuffixPattern = /\/\d{4}-\d{2}-\d{2}$/;
+const slashSnapshotSuffixPattern = /\/snapshot-[a-z0-9._-]+$/;
+const hyphenDateSuffixPattern = /-\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Canonicalizes provider-qualified and version-suffixed OpenAI model ids
+ * into a stable family id for pricing lookup.
+ *
+ * This is intentionally conservative:
+ * - only OpenAI provider prefixes are stripped
+ * - only known suffix formats are removed
+ * - no cross-family guessing is attempted
+ */
+export const canonicalizeOpenAIModelIdForPricing = (
+    model: string
+): OpenAIModelCanonicalizationResult => {
+    const inputModel = model;
+    const appliedRules: OpenAIModelCanonicalizationRule[] = [];
+    let canonicalModel = model.trim();
+
+    if (canonicalModel !== model) {
+        appliedRules.push('trim');
+    }
+
+    const lowerCased = canonicalModel.toLowerCase();
+    if (lowerCased !== canonicalModel) {
+        appliedRules.push('lowercase');
+    }
+    canonicalModel = lowerCased;
+
+    if (openAIProviderPrefixPattern.test(canonicalModel)) {
+        canonicalModel = canonicalModel.replace(
+            openAIProviderPrefixPattern,
+            ''
+        );
+        appliedRules.push('remove_openai_prefix');
+    }
+
+    if (slashDateSuffixPattern.test(canonicalModel)) {
+        canonicalModel = canonicalModel.replace(slashDateSuffixPattern, '');
+        appliedRules.push('strip_slash_date_suffix');
+    }
+
+    if (slashSnapshotSuffixPattern.test(canonicalModel)) {
+        canonicalModel = canonicalModel.replace(slashSnapshotSuffixPattern, '');
+        appliedRules.push('strip_slash_snapshot_suffix');
+    }
+
+    if (hyphenDateSuffixPattern.test(canonicalModel)) {
+        canonicalModel = canonicalModel.replace(hyphenDateSuffixPattern, '');
+        appliedRules.push('strip_hyphen_date_suffix');
+    }
+
+    return {
+        inputModel,
+        canonicalModel,
+        wasCanonicalized: canonicalModel !== inputModel,
+        appliedRules,
+    };
+};
+
+const resolveOpenAIModelPricingKey = <ModelKey extends string>(
+    model: string,
+    table: Record<ModelKey, unknown>
+): OpenAIModelPricingResolution<ModelKey> => {
+    const canonicalized = canonicalizeOpenAIModelIdForPricing(model);
+    const matchedModel = Object.prototype.hasOwnProperty.call(
+        table,
+        canonicalized.canonicalModel
+    )
+        ? (canonicalized.canonicalModel as ModelKey)
+        : null;
+
+    return {
+        inputModel: canonicalized.inputModel,
+        canonicalModel: canonicalized.canonicalModel,
+        matchedModel,
+        wasCanonicalized: canonicalized.wasCanonicalized,
+        appliedRules: canonicalized.appliedRules,
+    };
+};
+
+/**
+ * Resolves one text model id to a priced model key after canonicalization.
+ */
+export const resolveOpenAITextPricingModel = (
+    model: string
+): OpenAIModelPricingResolution<PricedOpenAITextModel> =>
+    resolveOpenAIModelPricingKey(model, openAITextPricingTable);
+
+/**
+ * Resolves one TTS model id to a priced model key after canonicalization.
+ */
+export const resolveOpenAITtsPricingModel = (
+    model: string
+): OpenAIModelPricingResolution<SupportedOpenAITtsModel> =>
+    resolveOpenAIModelPricingKey(model, openAITtsPricingTable);
+
+/**
+ * Resolves one realtime model id to a priced model key after canonicalization.
+ */
+export const resolveOpenAIRealtimePricingModel = (
+    model: string
+): OpenAIModelPricingResolution<SupportedOpenAIRealtimeModel> =>
+    resolveOpenAIModelPricingKey(model, openAIRealtimePricingTable);
+
+/**
+ * Resolves one image generation model id to a priced model key after
+ * canonicalization.
+ */
+export const resolveOpenAIImagePricingModel = (
+    model: string
+): OpenAIModelPricingResolution<SupportedOpenAIImageModel> =>
+    resolveOpenAIModelPricingKey(model, openAIImageGenerationPricingTable);
+
 /**
  * Checks whether Footnote has a shared text-pricing entry for the given model.
  */
-export const hasOpenAITextPricing = (
-    model: string
-): model is PricedOpenAITextModel =>
-    Object.prototype.hasOwnProperty.call(openAITextPricingTable, model);
+export const hasOpenAITextPricing = (model: string): boolean =>
+    resolveOpenAITextPricingModel(model).matchedModel !== null;
 
 /**
  * Checks whether Footnote has a shared image-pricing entry for the given
  * render model.
  */
-export const hasOpenAIImagePricing = (
-    model: string
-): model is SupportedOpenAIImageModel =>
-    Object.prototype.hasOwnProperty.call(
-        openAIImageGenerationPricingTable,
-        model
-    );
+export const hasOpenAIImagePricing = (model: string): boolean =>
+    resolveOpenAIImagePricingModel(model).matchedModel !== null;
 
 /**
  * Checks whether Footnote has a shared TTS pricing entry for the given model.
  */
-export const hasOpenAITtsPricing = (
-    model: string
-): model is SupportedOpenAITtsModel =>
-    Object.prototype.hasOwnProperty.call(openAITtsPricingTable, model);
+export const hasOpenAITtsPricing = (model: string): boolean =>
+    resolveOpenAITtsPricingModel(model).matchedModel !== null;
 
 /**
  * Checks whether Footnote has a shared realtime pricing entry for the given
  * model.
  */
-export const hasOpenAIRealtimePricing = (
+export const hasOpenAIRealtimePricing = (model: string): boolean =>
+    resolveOpenAIRealtimePricingModel(model).matchedModel !== null;
+
+/**
+ * Classifies whether one active text profile model is priced, intentionally
+ * unpriced by policy, or currently unknown/unpriced.
+ */
+export const classifyModelProfileTextPricingCoverage = (
+    provider: SupportedProvider,
     model: string
-): model is SupportedOpenAIRealtimeModel =>
-    Object.prototype.hasOwnProperty.call(openAIRealtimePricingTable, model);
+): ModelProfileTextPricingCoverage => {
+    if (provider !== 'openai') {
+        const canonicalized = canonicalizeOpenAIModelIdForPricing(model);
+        return {
+            provider,
+            model,
+            canonicalModel: canonicalized.canonicalModel,
+            matchedModel: null,
+            classification: 'unpriced_by_policy',
+            policyReason: 'non_openai_not_priced_by_backend_policy',
+            wasCanonicalized: canonicalized.wasCanonicalized,
+            appliedRules: canonicalized.appliedRules,
+        };
+    }
+
+    const resolved = resolveOpenAITextPricingModel(model);
+    if (resolved.matchedModel) {
+        return {
+            provider,
+            model,
+            canonicalModel: resolved.canonicalModel,
+            matchedModel: resolved.matchedModel,
+            classification: 'priced',
+            policyReason: 'openai_priced',
+            wasCanonicalized: resolved.wasCanonicalized,
+            appliedRules: resolved.appliedRules,
+        };
+    }
+
+    if (
+        explicitlyUnpricedOpenAITextModels.includes(
+            resolved.canonicalModel as ExplicitlyUnpricedOpenAITextModel
+        )
+    ) {
+        return {
+            provider,
+            model,
+            canonicalModel: resolved.canonicalModel,
+            matchedModel: null,
+            classification: 'unpriced_by_policy',
+            policyReason: 'openai_explicitly_unpriced_by_policy',
+            wasCanonicalized: resolved.wasCanonicalized,
+            appliedRules: resolved.appliedRules,
+        };
+    }
+
+    return {
+        provider,
+        model,
+        canonicalModel: resolved.canonicalModel,
+        matchedModel: null,
+        classification: 'unknown_unpriced',
+        policyReason: 'openai_unpriced_unknown',
+        wasCanonicalized: resolved.wasCanonicalized,
+        appliedRules: resolved.appliedRules,
+    };
+};
 
 /**
  * Resolves "auto" image quality to the default tier used by current image
@@ -353,9 +576,8 @@ export const estimateOpenAITextCost = (
     inputTokens: number,
     outputTokens: number
 ): OpenAITextCostBreakdown => {
-    const pricing = hasOpenAITextPricing(model)
-        ? openAITextPricingTable[model]
-        : null;
+    const pricingModel = resolveOpenAITextPricingModel(model).matchedModel;
+    const pricing = pricingModel ? openAITextPricingTable[pricingModel] : null;
 
     if (!pricing) {
         return {
@@ -388,9 +610,8 @@ export const estimateOpenAITtsCost = (
     model: string,
     inputTokens: number
 ): OpenAITtsCostBreakdown => {
-    const pricing = hasOpenAITtsPricing(model)
-        ? openAITtsPricingTable[model]
-        : null;
+    const pricingModel = resolveOpenAITtsPricingModel(model).matchedModel;
+    const pricing = pricingModel ? openAITtsPricingTable[pricingModel] : null;
 
     if (!pricing) {
         return {
@@ -420,8 +641,9 @@ export const estimateOpenAIRealtimeCost = (
     inputTokens: number,
     outputTokens: number
 ): OpenAITextCostBreakdown => {
-    const pricing = hasOpenAIRealtimePricing(model)
-        ? openAIRealtimePricingTable[model]
+    const pricingModel = resolveOpenAIRealtimePricingModel(model).matchedModel;
+    const pricing = pricingModel
+        ? openAIRealtimePricingTable[pricingModel]
         : null;
 
     if (!pricing) {
@@ -466,11 +688,14 @@ export const estimateOpenAIImageGenerationCost = (
         options.quality
     );
     const effectiveSize = resolveEffectiveImageGenerationSize(options.size);
-    const pricing = hasOpenAIImagePricing(options.model)
-        ? openAIImageGenerationPricingTable[options.model]
+    const pricingModel = resolveOpenAIImagePricingModel(
+        options.model
+    ).matchedModel;
+    const pricing = pricingModel
+        ? openAIImageGenerationPricingTable[pricingModel]
         : null;
-    const tokenPricing = hasOpenAIImagePricing(options.model)
-        ? openAIImageTokenPricingTable[options.model]
+    const tokenPricing = pricingModel
+        ? openAIImageTokenPricingTable[pricingModel]
         : null;
 
     if (
