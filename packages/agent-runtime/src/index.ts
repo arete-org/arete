@@ -492,8 +492,13 @@ export {
     type VoltAgentGenerateTextOptions,
     type VoltAgentLogger,
     type VoltAgentProviderOptions,
+    type ProviderToolFactory,
+    type ProviderToolRegistry,
     type VoltAgentResponseMetadata,
     type VoltAgentTextExecutor,
     type VoltAgentTextResult,
     type VoltAgentUsage,
+    getToolForProvider,
+    hasToolForProvider,
+    providerToolRegistry,
 } from './voltagentRuntime.js';

@@ -283,28 +283,63 @@ const getVoltAgentProvider = (model: string): string => {
     return model.slice(0, slashIndex).toLowerCase();
 };
 
-type ProviderSearchToolFactory = (search: GenerationSearchRequest) => {
+/**
+ * Factory signature for one provider-specific tool payload.
+ * The runtime asks for a tool by name, then this function shapes the
+ * provider-native tool object to send into VoltAgent.
+ */
+export type ProviderToolFactory = (search: GenerationSearchRequest) => {
     type: 'provider';
     id: string;
     name: string;
     args?: Record<string, unknown>;
 };
 
-const providerSearchToolRegistry: Record<string, ProviderSearchToolFactory> = {
+/**
+ * Registry of tool-name -> provider -> tool factory.
+ * Example: web_search -> openai -> openai.web_search factory.
+ */
+export type ProviderToolRegistry = Record<
+    string,
+    Record<string, ProviderToolFactory>
+>;
+
+/**
+ * Canonical runtime registry for provider tool mappings.
+ * Keep this data-only so new tools/providers can be added without branching
+ * logic across generation code paths.
+ */
+export const providerToolRegistry: ProviderToolRegistry = {
     // Provider-neutral registry entry for search forwarding. Providers without
     // a mapping simply do not receive search tools.
-    openai: (search) => ({
-        type: 'provider',
-        id: 'openai.web_search',
-        name: 'web_search',
-        args: {
-            searchContextSize: search.contextSize,
-        },
-    }),
+    web_search: {
+        openai: (search) => ({
+            type: 'provider',
+            id: 'openai.web_search',
+            name: 'web_search',
+            args: {
+                searchContextSize: search.contextSize,
+            },
+        }),
+    },
 };
 
-const supportsSearchToolsForProvider = (provider: string): boolean =>
-    provider in providerSearchToolRegistry;
+/**
+ * Returns the provider factory for a named tool when one is registered.
+ */
+export const getToolForProvider = (
+    toolName: string,
+    provider: string
+): ProviderToolFactory | undefined =>
+    providerToolRegistry[toolName]?.[provider];
+
+/**
+ * Fast capability check used before constructing tool instructions.
+ */
+export const hasToolForProvider = (
+    toolName: string,
+    provider: string
+): boolean => getToolForProvider(toolName, provider) !== undefined;
 
 type VoltAgentModelResolution = {
     selectedModel: string | undefined;
@@ -566,8 +601,8 @@ const buildVoltAgentSearchInstruction = (
 const createVoltAgentSearchTool = (
     provider: string,
     search: GenerationSearchRequest
-): ReturnType<ProviderSearchToolFactory> => {
-    const factory = providerSearchToolRegistry[provider];
+): ReturnType<ProviderToolFactory> => {
+    const factory = getToolForProvider('web_search', provider);
     if (!factory) {
         throw new Error(
             `Provider "${provider}" does not have a registered web_search tool mapping.`
@@ -881,8 +916,10 @@ const createVoltAgentRuntime = ({
                 ollama
             );
             const canUseSearch = request.capabilities?.canUseSearch === true;
-            const canProviderUseSearchTools =
-                supportsSearchToolsForProvider(provider);
+            const canProviderUseSearchTools = hasToolForProvider(
+                'web_search',
+                provider
+            );
             const shouldForwardSearch =
                 canUseSearch &&
                 request.search !== undefined &&

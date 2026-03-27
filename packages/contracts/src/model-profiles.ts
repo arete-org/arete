@@ -27,6 +27,7 @@ export type ModelLatencyClass = (typeof modelLatencyClasses)[number];
  */
 export interface ModelProfileCapabilities {
     canUseSearch: boolean;
+    toolCapabilities?: Record<string, boolean>;
 }
 
 /**
@@ -50,6 +51,7 @@ export interface ModelProfile {
 export const ModelProfileCapabilitiesSchema = z
     .object({
         canUseSearch: z.boolean(),
+        toolCapabilities: z.record(z.string(), z.boolean()).optional(),
     })
     .strict();
 
