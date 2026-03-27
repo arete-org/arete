@@ -13,6 +13,8 @@ import type { GenerationRequest, RuntimeMessage } from '../src/index.js';
 import {
     createDefaultVoltAgentExecutor,
     createVoltAgentRuntime,
+    getToolForProvider,
+    hasToolForProvider,
     type VoltAgentGenerateTextOptions,
     type VoltAgentLogger,
 } from '../src/voltagentRuntime.js';
@@ -341,6 +343,29 @@ test('voltagent runtime maps remote ollama provider to ollama-cloud and normaliz
         apiKey: 'test-ollama-key',
         localInferenceEnabled: false,
     });
+});
+
+test('provider tool registry lookups expose search mappings for supported providers', () => {
+    assert.equal(hasToolForProvider('web_search', 'openai'), true);
+    assert.equal(hasToolForProvider('web_search', 'ollama'), false);
+
+    const openAiSearchToolFactory = getToolForProvider('web_search', 'openai');
+    assert.ok(openAiSearchToolFactory);
+    assert.deepEqual(
+        openAiSearchToolFactory?.({
+            query: 'latest policy updates',
+            contextSize: 'low',
+            intent: 'current_facts',
+        }),
+        {
+            type: 'provider',
+            id: 'openai.web_search',
+            name: 'web_search',
+            args: {
+                searchContextSize: 'low',
+            },
+        }
+    );
 });
 
 test('voltagent runtime recovers markdown-link citations when retrieved output lacks structured sources', async () => {
