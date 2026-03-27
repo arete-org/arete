@@ -4,147 +4,143 @@
 [![Hippocratic License HL3-CORE](https://img.shields.io/static/v1?label=Hippocratic%20License&message=HL3-CORE&labelColor=5e2751&color=bc8c3d)](https://firstdonoharm.dev/version/3/0/core.html)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/footnote-ai/footnote)
 
-Footnote is an AI assistant that tries to show its work — it returns trace metadata you can easily inspect.
+AI you can inspect and steer.
 
-Every response includes:
+Footnote is a transparency-first AI framework for people who want more than a black-box answer. It pairs responses with provenance and trace metadata so you can understand what happened, challenge weak output, and guide behavior over time.
 
-- how confident it is
-- what sources it relied on
-- what trade-offs it considered
-- what constraints and safety checks were applied
+Built for human oversight, not "just trust me."
 
 ![footnote_chat](https://github.com/user-attachments/assets/963e6144-7d83-4d90-a580-7fc5a01d3566)
 
-Built for human oversight, rather than “just believe me.”
-
-**Try the demo:** [https://ai.jordanmakes.dev](https://ai.jordanmakes.dev)
+[Demo](https://ai.jordanmakes.dev) · [Quickstart](#quickstart) · [Docs](#docs) · [Contributing](#contributing)
 
 ---
 
-## Try it today
+## Why Footnote
 
-Footnote is a working prototype with:
+Most AI products give you an answer and hide the reasoning context.
 
-- **Web demo** with a quick “ask” flow
-- **Discord bot** provides seamless and rich interaction
-- **Self-hosting** via Docker, or in the cloud (Fly.io)
+Footnote takes the opposite approach: make responses easier to inspect, easier to challenge, and easier to steer. The goal is to support better human judgment, not replace it.
 
----
+With Footnote, you can:
 
-## Getting Started
+- See how confident the AI is
+- Check what information it used
+- Understand the trade-offs behind an answer
+- See what guardrails were applied
 
-1. Install dependencies
+[Try the live demo](https://ai.jordanmakes.dev)
+
+## Quickstart
+
+This starts the local backend + web app.
+
+1. Install dependencies:
 
 ```bash
 pnpm install
 ```
 
-> If pnpm isn't available yet, run `corepack enable` once (Node 16.10+), then `pnpm install`
+> If `pnpm` is not available yet, run `corepack enable` once, then run `pnpm install`.
 
-2. Set environment variables
+2. Create a local env file from `.env.example`.
 
-Copy `.env.example` to a new `.env`, edit:
+Set at least these keys in `.env` for a useful local run:
 
-```
-DISCORD_TOKEN=...
-DISCORD_CLIENT_ID=...
-DISCORD_GUILD_ID=...
-DISCORD_USER_ID=...
+```env
 OPENAI_API_KEY=...
-TRACE_API_TOKEN=...
-INCIDENT_PSEUDONYMIZATION_SECRET=...
+INCIDENT_PSEUDONYMIZATION_SECRET=<generate-a-random-secret>
 ```
 
-> This is the minimum config—See [.env.example](.env.example) for the full list.
+Generate a secret with:
 
-> Current deployments rely on OpenAI-backed adapters. Broader runtime/provider support is planned.
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
 
-3. Start all services
+3. Start backend + web:
+
+```bash
+pnpm dev
+```
+
+4. Open:
+
+- Web app: `http://localhost:8080`
+- Backend: `http://localhost:3000`
+
+## How It Works
+
+1. You ask Footnote a question.
+2. The backend generates a response using the configured model runtime.
+3. Footnote returns the answer with inspectable metadata (confidence, sources, trade-offs, and applied constraints).
+
+Representative metadata shape:
+
+```json
+{
+    "confidence": "medium",
+    "sources": ["..."],
+    "tradeoffs": ["..."],
+    "constraintsApplied": ["..."]
+}
+```
+
+## Advanced Setup
+
+### Run Discord Bot + Web + Backend
+
+If you want the Discord surface, set Discord credentials in `.env` and run:
 
 ```bash
 pnpm start:all
 ```
 
-### Optional: Enable VoltOps Observability
+Required Discord configuration includes:
 
-If you want VoltAgent runtime traces in VoltOps:
+- `DISCORD_TOKEN`
+- `DISCORD_CLIENT_ID`
+- `DISCORD_USER_ID`
+- `DISCORD_GUILD_IDS` (preferred) or `DISCORD_GUILD_ID` (legacy fallback)
 
-1. Open `https://console.voltagent.dev`.
-2. Go to `Settings > Projects`.
-3. Open your project (or create one).
-4. Copy the project `Public Key` (`pk_...`) and `Secret Key` (`sk_...`).
-5. Add both keys to `.env`:
+### VoltOps Observability
+
+To enable VoltAgent runtime observability in VoltOps, set:
 
 ```env
 VOLTAGENT_PUBLIC_KEY=pk_...
 VOLTAGENT_SECRET_KEY=sk_...
 ```
 
-> If you deploy on Fly, set these on the **backend** Fly app
+### Multi-Bot Vendoring
 
-### Optional: Vendoring & Multiple Discord Bots
+You can run a vendored bot identity by setting:
 
-We treat `Footnote` as the default Discord persona, which is used if you do nothing beyond the base setup.
+- `BOT_PROFILE_ID`
+- `BOT_PROFILE_DISPLAY_NAME`
+- `BOT_PROFILE_PROMPT_OVERLAY` or `BOT_PROFILE_PROMPT_OVERLAY_PATH`
+- `BOT_PROFILE_MENTION_ALIASES` (optional)
 
-If you want a vendored bot identity on top, configure the runtime with profile env vars:
+For precedence details, see [`docs/architecture/prompt-resolution.md`](docs/architecture/prompt-resolution.md).
 
-```env
-BOT_PROFILE_ID=acme-bot
-BOT_PROFILE_DISPLAY_NAME=Acme Assistant
-BOT_PROFILE_MENTION_ALIASES=acme,a-bot
-BOT_PROFILE_PROMPT_OVERLAY=
-BOT_PROFILE_PROMPT_OVERLAY_PATH=
-```
-
-If you omit these values, the runtime falls back to the default Footnote identity.
-
-Recommended vendoring workflow:
-
-1. Set a unique `BOT_PROFILE_ID` for the bot machine.
-2. Set `BOT_PROFILE_DISPLAY_NAME` for the visible identity.
-3. Add either [1] `BOT_PROFILE_PROMPT_OVERLAY` or [2] `BOT_PROFILE_PROMPT_OVERLAY_PATH` for persona-specific instructions (1 takes priority over 2).
-4. Add `BOT_PROFILE_MENTION_ALIASES` when the bot should respond to vendor-specific plaintext names.
-
-Persona overlay templates are available:
-
-```env
-BOT_PROFILE_ID=danny
-BOT_PROFILE_DISPLAY_NAME=Danny
-BOT_PROFILE_PROMPT_OVERLAY_PATH=packages/prompts/src/profile-overlays/danny.md
-```
-
-```env
-BOT_PROFILE_ID=myuri
-BOT_PROFILE_DISPLAY_NAME=Myuri
-BOT_PROFILE_PROMPT_OVERLAY_PATH=packages/prompts/src/profile-overlays/myuri.md
-```
-
-Precedence rules are documented in [`prompt-resolution.md`](docs/architecture/prompt-resolution.md).
-
----
-
-## Documentation
-
-The docs are split by purpose:
-
-- architecture: stable system design
-- decisions: durable technical choices and rationale
-- status: implementation progress for active work
+## Docs
 
 Start here: [Documentation Map](docs/README.md)
 
----
+Docs are actively being improved as Footnote evolves. If something is unclear or hard to find, open a Discussion and we will point you to the right source.
+
+## Contributing
+
+Contribution docs are still in progress.
+
+For now, please open an Issue or Discussion for non-trivial changes so we can align on scope early. Thoughtful critique, focused PRs, and experiments are welcome.
+
+## Project Status
+
+Footnote is pre-1.0 and moving quickly. Expect rapid iteration and occasional sharp edges while interfaces and workflows stabilize.
 
 ## License
 
 Footnote is dual-licensed under MIT and the Hippocratic License v3 (HL3-CORE).
 
-See our [license strategy](docs/LICENSE_STRATEGY.md) for details.
-
----
-
-## Contributing
-
-Contribution guidelines are still being drafted.
-
-For now, thoughtful discussion, critique, and experimentation are welcome via Discussions and Issues on this repo.
+See [license strategy](docs/LICENSE_STRATEGY.md) for details.
