@@ -251,7 +251,8 @@ export const createChatService = ({
             // Respect explicit upstream tool outcomes first (for example,
             // orchestrator-level fail-open policy decisions).
             upstreamToolExecution
-                ? hasSearchIntent
+                ? hasSearchIntent &&
+                  upstreamToolExecution.toolName === 'web_search'
                     ? {
                           ...upstreamToolExecution,
                           status: retrievalUsed ? 'executed' : 'skipped',

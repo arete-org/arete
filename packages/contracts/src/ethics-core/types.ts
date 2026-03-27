@@ -103,6 +103,10 @@ export type ExecutionReasonCode =
     | 'search_reroute_no_tool_capable_fallback_available'
     | 'tool_unavailable'
     | 'tool_execution_error'
+    | 'tool_timeout'
+    | 'tool_http_error'
+    | 'tool_network_error'
+    | 'tool_invalid_response'
     | 'search_not_supported_by_selected_profile'
     | 'unspecified_tool_outcome';
 
@@ -141,7 +145,28 @@ export type EvaluatorOutcome = {
  * Keep this string union narrow and additive so clients can pattern-match
  * known tools while still allowing forward-compatible unknown values.
  */
-export type ToolInvocationName = 'web_search' | (string & {});
+export type ToolInvocationName =
+    | 'web_search'
+    | 'weather_forecast'
+    | (string & {});
+
+export type WeatherToolInputLocation =
+    | {
+          type: 'lat_lon';
+          latitude: number;
+          longitude: number;
+      }
+    | {
+          type: 'gridpoint';
+          office: string;
+          gridX: number;
+          gridY: number;
+      };
+
+export type WeatherToolInput = {
+    location: WeatherToolInputLocation;
+    horizonPeriods?: number;
+};
 
 /**
  * Tool reason codes used across eligibility and execution records.
@@ -153,6 +178,10 @@ export type ToolInvocationReasonCode = Extract<
     | 'tool_not_used'
     | 'tool_unavailable'
     | 'tool_execution_error'
+    | 'tool_timeout'
+    | 'tool_http_error'
+    | 'tool_network_error'
+    | 'tool_invalid_response'
     | 'search_rerouted_to_fallback_profile'
     | 'search_reroute_not_permitted_by_selection_source'
     | 'search_reroute_no_tool_capable_fallback_available'
@@ -208,7 +237,7 @@ export type GenerationExecutionEvent = ProfileExecutionEvent & {
 export type ToolInvocationIntent = {
     toolName: ToolInvocationName;
     requested: boolean;
-    input?: Record<string, unknown>;
+    input?: Record<string, unknown> | WeatherToolInput;
 };
 
 /**

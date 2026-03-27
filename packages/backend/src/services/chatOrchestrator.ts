@@ -17,7 +17,6 @@ import type {
 } from '@footnote/contracts';
 import type {
     ToolExecutionContext,
-    ToolInvocationIntent,
     ToolInvocationReasonCode,
     ToolInvocationRequest,
     ExecutionReasonCode,
@@ -48,10 +47,31 @@ import {
     type PlannerFallbackReason,
     type PlannerSelectionSource,
 } from './plannerFallbackTelemetryRollup.js';
+import type { WeatherForecastTool } from './weatherGovForecastTool.js';
+import { applySingleToolPolicy } from './tools/toolPolicy.js';
+import {
+    executeSelectedTool,
+    resolveToolSelection,
+} from './tools/toolRegistry.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
-type CreateChatOrchestratorOptions = CreateChatServiceOptions;
+type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
+    weatherForecastTool?: WeatherForecastTool;
+};
+
+type PlannerWeatherFailureMarker = {
+    failed: true;
+    reason: 'weather_tool_failed';
+};
+
+type PlannerGenerationForPrompt = Omit<ChatGenerationPlan, 'weather'> & {
+    weather?: ChatGenerationPlan['weather'] | PlannerWeatherFailureMarker;
+};
+
+type PlannerPayloadChatPlan = Omit<ChatPlan, 'generation'> & {
+    generation: PlannerGenerationForPrompt;
+};
 
 const searchFallbackPolicyBySelectionSource: Record<
     PlannerSelectionSource,
@@ -172,7 +192,7 @@ const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
  * as data, not as ambiguous free-form text.
  */
 const buildPlannerPayload = (
-    plan: ChatPlan,
+    plan: PlannerPayloadChatPlan,
     surfacePolicy?: { coercedFrom: ChatPlan['action'] }
 ): string =>
     JSON.stringify({
@@ -188,34 +208,6 @@ const buildPlannerPayload = (
     });
 
 /**
- * Converts planner generation.search into a serializable tool-intent contract.
- */
-const buildWebSearchToolIntent = (
-    generation: ChatGenerationPlan
-): ToolInvocationIntent => {
-    if (!generation.search) {
-        return {
-            toolName: 'web_search',
-            requested: false,
-        };
-    }
-
-    return {
-        toolName: 'web_search',
-        requested: true,
-        input: {
-            query: generation.search.query,
-            intent: generation.search.intent,
-            contextSize: generation.search.contextSize,
-            ...(generation.search.repoHints &&
-                generation.search.repoHints.length > 0 && {
-                    repoHints: generation.search.repoHints,
-                }),
-        },
-    };
-};
-
-/**
  * The orchestrator keeps surface-specific policy in one place while reusing the
  * shared message-generation service for any branch that ends in text output.
  */
@@ -225,6 +217,7 @@ export const createChatOrchestrator = ({
     buildResponseMetadata,
     defaultModel = runtimeConfig.modelProfiles.defaultProfileId,
     recordUsage,
+    weatherForecastTool,
 }: CreateChatOrchestratorOptions) => {
     const chatOrchestratorLogger =
         typeof logger.child === 'function'
@@ -518,20 +511,22 @@ export const createChatOrchestrator = ({
                 ? { verbosity: requestGeneration.verbosity }
                 : {}),
         };
-        const toolIntent = buildWebSearchToolIntent(generationForExecution);
-        let toolRequestContext: ToolInvocationRequest | undefined =
-            toolIntent.requested
-                ? {
-                      toolName: 'web_search',
-                      requested: true,
-                      eligible: true,
-                  }
-                : {
-                      toolName: 'web_search',
-                      requested: false,
-                      eligible: false,
-                      reasonCode: 'tool_not_requested',
-                  };
+        const toolPolicyDecision = applySingleToolPolicy(
+            generationForExecution
+        );
+        generationForExecution = toolPolicyDecision.generation;
+        if (toolPolicyDecision.logEvent) {
+            chatOrchestratorLogger.warn(
+                'planner requested both weather and search; applying single-tool policy with weather priority',
+                {
+                    ...toolPolicyDecision.logEvent,
+                    surface: normalizedRequest.surface,
+                }
+            );
+        }
+        let webSearchToolRequestContextOverride:
+            | ToolInvocationRequest
+            | undefined;
         let toolExecutionContext: ToolExecutionContext | undefined;
         if (
             generationForExecution.search &&
@@ -585,7 +580,7 @@ export const createChatOrchestrator = ({
                     ...generationForExecution,
                     search: undefined,
                 };
-                toolRequestContext = {
+                webSearchToolRequestContextOverride = {
                     toolName: 'web_search',
                     requested: true,
                     eligible: false,
@@ -627,6 +622,16 @@ export const createChatOrchestrator = ({
                 );
             }
         }
+        const toolSelection = resolveToolSelection({
+            generation: generationForExecution,
+            weatherForecastTool,
+            webSearchToolRequestOverride: webSearchToolRequestContextOverride,
+            inheritedToolExecution: toolExecutionContext,
+        });
+        const toolIntent = toolSelection.toolIntent;
+        const toolRequestContext = toolSelection.toolRequest;
+        toolExecutionContext =
+            toolSelection.toolExecution ?? toolExecutionContext;
         // Persist the effective profile id in planner payload/snapshot so traces
         // reflect what was actually executed.
         const executionPlan: ChatPlan = {
@@ -693,6 +698,35 @@ export const createChatOrchestrator = ({
         // Web keeps default prompt persona layers.
         const personaPrompt =
             backendOwnedProfileOverlay ?? promptLayers.personaPrompt;
+        const toolExecution = await executeSelectedTool({
+            toolSelection,
+            weatherForecastTool,
+            onWarn: (message, meta) => {
+                chatOrchestratorLogger.warn(message, meta);
+            },
+        });
+        const weatherToolResultMessage = toolExecution.toolResultMessage;
+        toolExecutionContext =
+            toolExecution.toolExecutionContext ?? toolExecutionContext;
+        const weatherToolRequested =
+            toolSelection.toolRequest.toolName === 'weather_forecast' &&
+            toolSelection.toolRequest.requested;
+        const plannerGenerationForPrompt: PlannerGenerationForPrompt =
+            weatherToolResultMessage
+                ? executionPlan.generation
+                : weatherToolRequested
+                  ? {
+                        ...executionPlan.generation,
+                        weather: {
+                            failed: true,
+                            reason: 'weather_tool_failed',
+                        },
+                    }
+                  : executionPlan.generation;
+        const executionPlanForPrompt: PlannerPayloadChatPlan = {
+            ...executionPlan,
+            generation: plannerGenerationForPrompt,
+        };
 
         // Planner output is injected as a final system message so generation
         // can follow one backend-owned decision payload.
@@ -708,6 +742,14 @@ export const createChatOrchestrator = ({
                 content: personaPrompt,
             },
             ...normalizedConversation,
+            ...(weatherToolResultMessage
+                ? [
+                      {
+                          role: 'system' as const,
+                          content: weatherToolResultMessage,
+                      },
+                  ]
+                : []),
             {
                 role: 'system',
                 content: [
@@ -715,7 +757,7 @@ export const createChatOrchestrator = ({
                     '// BEGIN Planner Output',
                     '// This planner decision was made by the backend and should be treated as authoritative for this response.',
                     '// ==========',
-                    buildPlannerPayload(executionPlan, surfacePolicy),
+                    buildPlannerPayload(executionPlanForPrompt, surfacePolicy),
                     '// ==========',
                     '// END Planner Output',
                     '// ==========',
@@ -745,7 +787,7 @@ export const createChatOrchestrator = ({
                     modality: executionPlan.modality,
                     profileId: executionPlan.profileId,
                     riskTier: executionPlan.riskTier,
-                    generation: executionPlan.generation,
+                    generation: plannerGenerationForPrompt,
                     toolIntent,
                     toolRequest: toolRequestContext,
                     ...(surfacePolicy && { surfacePolicy }),

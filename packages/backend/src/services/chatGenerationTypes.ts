@@ -38,6 +38,24 @@ export type ChatGenerationSearch = Omit<
     repoHints?: ChatRepoSearchHint[];
 };
 
+export type ChatGenerationWeatherLocation =
+    | {
+          type: 'lat_lon';
+          latitude: number;
+          longitude: number;
+      }
+    | {
+          type: 'gridpoint';
+          office: string;
+          gridX: number;
+          gridY: number;
+      };
+
+export type ChatGenerationWeatherRequest = {
+    location: ChatGenerationWeatherLocation;
+    horizonPeriods?: number;
+};
+
 /**
  * Chat-specific generation settings. Runtime-facing search and generation
  * knobs come from `@footnote/agent-runtime`, while TRACE temperament remains
@@ -48,5 +66,6 @@ export type ChatGenerationPlan = {
     reasoningEffort: NonNullable<GenerationRequest['reasoningEffort']>;
     verbosity: NonNullable<GenerationRequest['verbosity']>;
     search?: ChatGenerationSearch;
+    weather?: ChatGenerationWeatherRequest;
     temperament?: ResponseTemperament;
 };
