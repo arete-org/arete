@@ -18,7 +18,7 @@ packages/ethics-core/licenses/
 # TypeScript build artifacts
 *.tsbuildinfo
 *.js.map
-*.d.ts
+**/dist/**/*.d.ts
 
 # Lock files
 pnpm-lock.yaml

@@ -4,19 +4,14 @@
             "prefix": "footnote-risk",
             "body": [
                 "/**",
-                " * @footnote-module: ${1:Module name}",
-                " * @footnote-risk: ${2|critical,high,moderate,low|}",
-                " * @footnote-ethics: ${3|critical,high,moderate,low|}",
-                " * @footnote-scope: ${4:Scope of change}",
-                " * @description",
-                " * ${5:Summary of functionality and rationale}",
-                " * ",
-                " * @impact",
-                " * Risk: ${6:Risk impact details}",
-                " * Ethics: ${7:Ethics impact details}",
+                " * @description: ${1:1-3 lines summarizing what this module does.}",
+                " * @footnote-scope: ${2|core,utility,interface,web,test|}",
+                " * @footnote-module: ${3:ModuleName}",
+                " * @footnote-risk: ${4|low,medium,high|} - ${5:Technical blast radius if mishandled.}",
+                " * @footnote-ethics: ${6|low,medium,high|} - ${7:Human or governance impact if this behaves incorrectly.}",
                 " */"
             ],
-            "description": "Footnote risk/ethics header template"
+            "description": "Footnote module header template (current required format)"
         },
         "footnote-logger": {
             "prefix": "footnote-log",

@@ -1,119 +1,89 @@
-## AGENTS.md
+# Footnote Agent Contract
 
-This file provides default context for automation tools (Codex, Cursor) so work is productive without manually selecting files.
+This is the main guidance file for AI coding agents in this repo.
+Keep it short, clear, and current.
 
-## Project Overview
+## Rule Architecture
 
-- Monorepo for Footnote (a transparency- and provenance-focused AI framework) with Discord bot, backend core, and web site.
-- Core principles: interpretability, traceability, cost tracking, fail-open behavior.
-- Required annotations: `@footnote-module`, `@footnote-risk`, `@footnote-ethics`, `@footnote-scope`.
-- Structured logging is mandatory; use scoped loggers from `packages/discord-bot/src/utils/logger.ts`.
+- `AGENTS.md` is the canonical ruleset.
+- Tool-specific files (for example `cursor.rules`, `.codexrules`, `.github/copilot-instructions.md`) are thin adapters.
+- Adapters should only point to this file and include tool-only details when absolutely needed.
 
-## Primary Entrypoints
+## Project Stage
 
-- Discord bot runtime: `packages/discord-bot/src/index.ts`
-- Backend core: `packages/backend/src`
-- Web app: `packages/web/src`
-- Server wrapper: `server.js`
-- Environment templates: `.env.example`
-- Project docs: `README.md`, `docs/Philosophy.md`, `SECURITY.md`
+Footnote is pre-1.0 and changing quickly.
+Prefer fast, correct, small-scope delivery over broad compatibility planning.
+Do not add migrations, backfills, or compatibility layers unless the user asks.
 
-## Preferred Context (load first)
+## What This Repo Is
 
-- `cursor.rules` (authoritative development rules)
-- `packages/discord-bot/src/config.ts`
-- `packages/discord-bot/src/utils/logger.ts`
-- `packages/discord-bot/src/state/ChannelContextManager.ts`
-- `packages/backend/src/storage/incidents/incidentStore.ts`
-- `packages/backend/src/utils/pseudonymization.ts`
+Footnote is a transparency- and provenance-focused AI framework.
+Main surfaces:
+- `packages/backend`
+- `packages/discord-bot`
+- `packages/web`
+- `packages/contracts`
+- `packages/api-client`
+- `packages/agent-runtime`
+- `packages/prompts`
 
-## When Editing
+## Non-Negotiables
 
-- Preserve provenance comments and licensing headers.
-- Use explicit types; avoid `any`.
-- Keep backend as the authoritative owner of LLM cost recording. Discord should only display cost data that backend or a shared pricing helper already computed.
-- Keep interfaces serializable for future UI integration.
-- Use fail-open design: if uncertain, do not block execution.
-- Keep `packages/backend` as the only public runtime/control-plane boundary for `web` and `discord-bot` unless a decision doc explicitly says otherwise.
-- Place framework-specific runtime code behind an internal package or boundary instead of spreading it through backend handlers.
-- Keep Footnote-owned provenance, trace, auth, incident, and review semantics outside framework-specific adapters.
-- For API boundary code, keep OpenAPI links current:
-    - code annotations: `@api.operationId` + `@api.path`
-    - spec references: `x-codeRefs` in `docs/api/openapi.yaml`
+- Use `pnpm` commands.
+- Use explicit TypeScript types. Avoid `any`.
+- Use structured logging from `packages/discord-bot/src/utils/logger.ts`.
+- Keep fail-open behavior: if uncertain, do not block execution.
+- Preserve provenance comments and license headers.
+- Keep `packages/backend` as the public runtime boundary for web and discord-bot.
+- Keep Footnote provenance/trace/auth/incident/review semantics outside framework-specific adapters.
+- Keep backend as the authority for LLM cost recording. Discord/web should display cost data already computed by backend or shared pricing helpers.
+- Keep public interfaces serializable.
 
-## Communication Style
+## Required Module Header Format
 
-- Prefer a junior-friendly teaching tone by default.
-- Explain decisions in plain language first, then include technical detail.
-- Keep explanations concrete and actionable.
-- Write code comments in the same style: short, plain-language, and easy for a junior contributor to follow.
-- Prefer comments that explain purpose, trigger, and consequence over comments that restate the code.
-- Bias toward slightly more comments and JSDoc than default AI output when a new contributor would otherwise have to infer too much from the code alone.
-- Prioritize comment and JSDoc quality over numeric coverage targets.
-- Prefer plain language over compressed technical shorthand when the longer wording makes the code easier for a junior contributor to understand.
-
-## Current `@footnote-*` Header Format
-
-- Order: `@description`, `@footnote-scope`, `@footnote-module`, `@footnote-risk`, `@footnote-ethics` (colon required).
-- Risk/Ethics annotations must include a short rationale on the same line.
-- Canonical reference: `docs/architecture/footnote-annotations.md`.
-
-Example:
+Use this exact order and include a short rationale on risk and ethics lines.
 
 ```ts
 /**
- * @description: Handles realtime audio streaming and event dispatch for the bot.
- * @footnote-scope: core
- * @footnote-module: RealtimeEventHandler
- * @footnote-risk: high - Audio/event failures can break live conversations or leak resources.
- * @footnote-ethics: high - Realtime audio handling impacts privacy and consent expectations.
+ * @description: <1-3 lines>
+ * @footnote-scope: <core|utility|interface|web|test>
+ * @footnote-module: <ModuleName>
+ * @footnote-risk: <low|medium|high> - <technical blast radius>
+ * @footnote-ethics: <low|medium|high> - <human/governance impact>
  */
 ```
 
-## Testing & Validation
+## API Boundary Rule
 
-- Run `pnpm lint:fix` by default after any file edit (robot/local workflow).
-- Use `pnpm lint` as non-mutating verification (CI and final gate checks).
-- `pnpm format:check` and `pnpm format:write` are changed-file aware by default.
-  Optional CI override: set `FORMAT_BASE_REF` to check/write against a base branch range.
-- If a file type is intentionally outside prettier/eslint globs (for example `.env.example`), keep formatting consistent manually and call that out in the summary.
-- Prefer linting only the touched files when the repo tooling supports it cleanly.
-- If the repo only exposes a broader lint command, run that broader command and note the wider validation scope.
-- Review: `pnpm review`
-- Packaging validation for deployable service changes or cleanup that can affect runtime packaging: `docker compose -f deploy/compose.yml build`
-- PR readiness gate for large or cross-cutting changes: run both `pnpm review` and `docker compose -f deploy/compose.yml build` before marking the change review-ready.
-- `@footnote-*` tags: `pnpm validate-footnote-tags`
-- OpenAPI linking: `pnpm validate-openapi-links`
+For API boundary changes, keep links in sync:
+- code annotations: `@api.operationId` and `@api.path`
+- OpenAPI refs: `x-codeRefs` in `docs/api/openapi.yaml`
 
-## Review Communication for Correctness/Safety-Critical Changes
+## Validation Commands
 
-- Default review/summarization structure should use three sections:
-    - `What Changed`: 2-4 concrete bullets describing behavior/boundary changes.
-    - `Risk Check`: one short paragraph naming the primary failure mode and any residual risk.
-    - `Validation`: exact tests/checks run and pass/fail outcome.
-- For correctness/safety-critical changes (schemas, validators, CI gates, auth, provenance/audit logging, policy enforcement),
-  include these details within that structure:
-    - in `Risk Check`, state key invariants (what must always be true) and at least one realistic failure mode
-    - in `Validation`, name the test(s), validation(s), or CI check(s) that would catch that failure
-- If no such check exists, say so plainly as a gap in `Validation`.
-- Do not present correctness/safety-critical changes as review-ready unless the invariants,
-  failure mode, and catching checks are explained concretely from code and validation setup.
+After edits:
+- `pnpm lint:fix`
 
-## CodeRabbit CLI
+Before final handoff:
+- `pnpm lint`
 
-- CodeRabbit is installed in the terminal and can be used for code review support.
-- Run `cr -h` to view available commands.
-- Prefer CodeRabbit with `--prompt-only`.
-- To review uncommitted changes: `coderabbit --prompt-only -t uncommitted`.
-- Run CodeRabbit no more than 3 times per set of changes.
+When relevant:
+- `pnpm validate-footnote-tags`
+- `pnpm validate-openapi-links` (API boundary changes)
+- `pnpm review` (cross-cutting or review-ready changes)
+- `docker compose -f deploy/compose.yml build` (deploy/runtime packaging impact)
 
-## Context Hints
+## Working Style
 
-- Bot: `packages/discord-bot/src/events`, `packages/discord-bot/src/commands`, `packages/discord-bot/src/voice`
-- Realtime audio: `packages/discord-bot/src/realtime`
-- Shared prompts: `packages/backend/src/services/prompts`
-- Web UI: `packages/web/src/components`, `packages/web/src/pages`
+- Prefer small, focused diffs.
+- Edit only files needed for the task.
+- Do not invent runtime facts, command output, or test results.
+- If a check was not run, say that clearly.
 
-## Exclusions
+## Communication Style
 
-Avoid loading secrets, logs, traces, or build artifacts (see `.codexignore`).
+Write for a junior contributor:
+- Plain language first.
+- Short sentences.
+- Concrete action words.
+- Comments should explain purpose, trigger, and consequence.

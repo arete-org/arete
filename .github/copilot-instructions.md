@@ -1,27 +1,7 @@
-# Footnote Project - Copilot Instructions
+# Footnote Copilot Instructions
 
-This project follows strict project framework principles for ethical AI development.
+Use `AGENTS.md` as the canonical guidance file.
 
-## Key Rules:
+If another instruction source conflicts with `AGENTS.md`, follow `AGENTS.md`.
 
-- Always include the current module annotations (@footnote-module, @footnote-risk, @footnote-ethics, @footnote-scope)
-- Use structured logging with scoped loggers (@footnote-logger, @logs)
-- Follow TypeScript best practices
-- Maintain cost tracking for all LLM interactions
-
-## Reference Files:
-
-- `cursor.rules` - Complete development rules (authoritative source)
-- `.codexrules` - Points to cursor.rules for AI assistants
-- `cursor.dictionary` - Project-specific terminology
-- `docs/ai/contributing_cursor.md` - Detailed Cursor configuration guide
-
-## Critical Requirements:
-
-1. Every module must have proper `@footnote-*` annotations
-2. All LLM calls must record costs via ChannelContextManager
-3. Use fail-open design patterns
-4. Maintain backward compatibility
-5. Include comprehensive error handling
-
-See `cursor.rules` for complete guidelines.
+Keep this file short on purpose.

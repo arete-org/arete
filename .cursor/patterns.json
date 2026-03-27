@@ -2,7 +2,7 @@
     "patterns": {
         "logging": {
             "description": "Always use structured logging with logger.ts",
-            "pattern": "logger.(debug|info|warn|error)",
+            "pattern": "logger\\.(debug|info|warn|error)",
             "example": "logger.info('User interaction processed', { userId, action })"
         },
         "errorHandling": {
@@ -16,9 +16,19 @@
             "example": "ChannelContextManager.recordLLMUsage(tokens, cost)"
         },
         "riskTags": {
-            "description": "Include risk/ethics tags in module headers",
-            "pattern": "@footnote-risk:\\s*(critical|high|medium|low)",
-            "example": "@footnote-risk: high"
+            "description": "Use the current risk tag format and levels in module headers",
+            "pattern": "@footnote-risk:\\s*(low|medium|high)\\s*-\\s*.+",
+            "example": "@footnote-risk: medium - Incorrect state handling can break request flow."
+        },
+        "ethicsTags": {
+            "description": "Use the current ethics tag format and levels in module headers",
+            "pattern": "@footnote-ethics:\\s*(low|medium|high)\\s*-\\s*.+",
+            "example": "@footnote-ethics: high - Incorrect behavior could reduce user trust or transparency."
+        },
+        "headerOrder": {
+            "description": "Keep module header tags in required order",
+            "pattern": "@description:\\s*[\\s\\S]*@footnote-scope:\\s*(core|utility|interface|web|test)[\\s\\S]*@footnote-module:\\s*\\w+[\\s\\S]*@footnote-risk:\\s*(low|medium|high)\\s*-\\s*.+[\\s\\S]*@footnote-ethics:\\s*(low|medium|high)\\s*-\\s*.+",
+            "example": "@description -> @footnote-scope -> @footnote-module -> @footnote-risk -> @footnote-ethics"
         },
         "asyncAwait": {
             "description": "Prefer async/await over promises",

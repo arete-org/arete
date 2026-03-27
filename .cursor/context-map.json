@@ -1,17 +1,20 @@
 {
-    "aliases": {
-        "@core/*": ["packages/discord-bot/src/*"],
-        "@shared/*": ["packages/shared/src/*"],
-        "@ethics/*": ["packages/ethics-core/src/*"],
-        "@web/*": ["packages/web/src/*"]
-    },
-    "imports": {
-        "utils": "packages/discord-bot/src/utils",
-        "commands": "packages/discord-bot/src/commands",
-        "events": "packages/discord-bot/src/events",
-        "voice": "packages/discord-bot/src/voice",
-        "realtime": "packages/discord-bot/src/realtime",
-        "shared": "packages/shared/src",
-        "ethics": "packages/ethics-core/src"
-    }
+  "aliases": {
+    "@backend/*": ["packages/backend/src/*"],
+    "@discord/*": ["packages/discord-bot/src/*"],
+    "@web/*": ["packages/web/src/*"],
+    "@contracts/*": ["packages/contracts/src/*"],
+    "@api-client/*": ["packages/api-client/src/*"],
+    "@agent-runtime/*": ["packages/agent-runtime/src/*"],
+    "@prompts/*": ["packages/prompts/src/*"]
+  },
+  "imports": {
+    "backend": "packages/backend/src",
+    "discord": "packages/discord-bot/src",
+    "web": "packages/web/src",
+    "contracts": "packages/contracts/src",
+    "apiClient": "packages/api-client/src",
+    "agentRuntime": "packages/agent-runtime/src",
+    "prompts": "packages/prompts/src"
+  }
 }
