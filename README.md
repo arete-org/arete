@@ -64,10 +64,9 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 pnpm dev
 ```
 
-4. Open:
+4. Open web app:
 
-- Web app: `http://localhost:8080`
-- Backend: `http://localhost:3000`
+`http://localhost:8080`
 
 ## How It Works
 
@@ -85,6 +84,12 @@ Representative metadata shape:
     "constraintsApplied": ["..."]
 }
 ```
+
+### TRACE Wheel
+
+TRACE shows five response qualities at a glance: Tightness, Rationale, Attribution, Caution, and Extent.
+
+Learn more: [TRACE decision record](docs/decisions/2026-03-compact-provenance-TRACE.md)
 
 ## Advanced Setup
 
