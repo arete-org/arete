@@ -10,6 +10,7 @@ import type {
     PostChatResponse,
     ChatConversationMessage,
 } from '@footnote/contracts/web';
+import type { ModelProfile } from '@footnote/contracts';
 import type {
     ExecutionReasonCode,
     ExecutionStatus,
@@ -43,6 +44,36 @@ import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions;
+
+const RESPONSE_PROFILE_FALLBACK_POLICY = 'response_profile_fallback_v1';
+const SEARCH_REROUTE_FALLBACK_POLICY = 'search_reroute_profile_fallback_v1';
+
+const buildDeterministicSearchFallbackOrder = (
+    searchCapableProfiles: ModelProfile[],
+    selectedProfileId: string,
+    defaultProfileId: string
+): string[] => {
+    const orderedIds = searchCapableProfiles
+        .filter((profile) => profile.id !== selectedProfileId)
+        .map((profile) => profile.id)
+        .sort((left, right) => left.localeCompare(right));
+
+    const defaultProfileIndex = orderedIds.findIndex(
+        (profileId) => profileId === defaultProfileId
+    );
+    if (defaultProfileIndex > 0) {
+        const [defaultProfileCandidate] = orderedIds.splice(
+            defaultProfileIndex,
+            1
+        );
+        if (defaultProfileCandidate) {
+            orderedIds.unshift(defaultProfileCandidate);
+        }
+    }
+
+    return orderedIds;
+};
+
 const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
 });
@@ -88,7 +119,7 @@ export const createChatOrchestrator = ({
     const enabledProfiles = catalogProfiles.filter(
         (profile) => profile.enabled
     );
-    const searchCapableFallbackProfiles = enabledProfiles.filter(
+    const searchCapableProfiles = enabledProfiles.filter(
         (profile) => profile.capabilities.canUseSearch
     );
     const enabledProfilesById = new Map(
@@ -275,48 +306,81 @@ export const createChatOrchestrator = ({
         let selectedResponseProfile = defaultResponseProfile;
         let profileSelectionSource: PlannerSelectionSource = 'default';
         const requestedProfileId = normalizedRequest.profileId?.trim();
-        if (requestedProfileId) {
-            const selectedProfile = enabledProfilesById.get(requestedProfileId);
-            if (selectedProfile) {
-                selectedResponseProfile = selectedProfile;
-                profileSelectionSource = 'request';
-                if (plan.profileId && plan.profileId !== selectedProfile.id) {
-                    chatOrchestratorLogger.warn(
-                        'request profile override superseded planner profile selection',
-                        {
-                            requestedProfileId: selectedProfile.id,
-                            plannerProfileId: plan.profileId,
-                            surface: normalizedRequest.surface,
-                        }
-                    );
+        const plannerSelectedProfileId = plan.profileId?.trim();
+        const profileSelectionOrder: Array<{
+            source: PlannerSelectionSource;
+            profileId?: string;
+        }> = [
+            {
+                source: 'request',
+                profileId: requestedProfileId,
+            },
+            {
+                source: 'planner',
+                profileId: plannerSelectedProfileId,
+            },
+            {
+                source: 'default',
+                profileId: defaultResponseProfile.id,
+            },
+        ];
+
+        for (const candidate of profileSelectionOrder) {
+            if (!candidate.profileId) {
+                continue;
+            }
+
+            if (candidate.source === 'default') {
+                selectedResponseProfile = defaultResponseProfile;
+                profileSelectionSource = 'default';
+                break;
+            }
+
+            const matchedProfile = enabledProfilesById.get(candidate.profileId);
+            if (matchedProfile) {
+                selectedResponseProfile = matchedProfile;
+                profileSelectionSource = candidate.source;
+                break;
+            }
+
+            chatOrchestratorLogger.warn(
+                'chat profile selection candidate is invalid or disabled; continuing fallback order',
+                {
+                    event: 'chat.orchestration.profile_fallback',
+                    policy: RESPONSE_PROFILE_FALLBACK_POLICY,
+                    stage: 'invalid_profile_candidate',
+                    source: candidate.source,
+                    selectedProfileId: candidate.profileId,
+                    defaultProfileId: defaultResponseProfile.id,
+                    fallbackOrder: profileSelectionOrder.map(
+                        (entry) => entry.source
+                    ),
+                    surface: normalizedRequest.surface,
                 }
-            } else {
+            );
+            if (candidate.source === 'request') {
                 fallbackReasons.push('request_invalid_or_disabled_profile');
-                chatOrchestratorLogger.warn(
-                    'request selected invalid or disabled profile id; falling back to planner/default profile',
-                    {
-                        selectedProfileId: requestedProfileId,
-                        defaultProfileId: defaultResponseProfile.id,
-                        surface: normalizedRequest.surface,
-                    }
-                );
-            }
-        } else if (plan.profileId) {
-            const selectedProfile = enabledProfilesById.get(plan.profileId);
-            if (selectedProfile) {
-                selectedResponseProfile = selectedProfile;
-                profileSelectionSource = 'planner';
-            } else {
+            } else if (candidate.source === 'planner') {
                 fallbackReasons.push('planner_invalid_or_disabled_profile');
-                chatOrchestratorLogger.warn(
-                    'planner selected invalid or disabled profile id; falling back to default profile',
-                    {
-                        selectedProfileId: plan.profileId,
-                        defaultProfileId: defaultResponseProfile.id,
-                        surface: normalizedRequest.surface,
-                    }
-                );
             }
+        }
+
+        if (
+            profileSelectionSource === 'request' &&
+            plan.profileId &&
+            plan.profileId !== selectedResponseProfile.id
+        ) {
+            chatOrchestratorLogger.warn(
+                'chat request profile override superseded planner profile selection',
+                {
+                    event: 'chat.orchestration.profile_fallback',
+                    policy: RESPONSE_PROFILE_FALLBACK_POLICY,
+                    stage: 'request_override_superseded_planner',
+                    requestedProfileId: selectedResponseProfile.id,
+                    plannerProfileId: plan.profileId,
+                    surface: normalizedRequest.surface,
+                }
+            );
         }
 
         // Capability policy for this branch:
@@ -351,10 +415,16 @@ export const createChatOrchestrator = ({
         ) {
             const shouldRerouteToSearchCapableFallback =
                 profileSelectionSource === 'planner';
-            const fallbackProfile = shouldRerouteToSearchCapableFallback
-                ? searchCapableFallbackProfiles.find(
-                      (profile) => profile.id !== selectedResponseProfile.id
+            const searchFallbackOrder = shouldRerouteToSearchCapableFallback
+                ? buildDeterministicSearchFallbackOrder(
+                      searchCapableProfiles,
+                      selectedResponseProfile.id,
+                      defaultResponseProfile.id
                   )
+                : [];
+            const fallbackProfileId = searchFallbackOrder[0];
+            const fallbackProfile = fallbackProfileId
+                ? enabledProfilesById.get(fallbackProfileId)
                 : undefined;
 
             if (fallbackProfile) {
@@ -363,10 +433,15 @@ export const createChatOrchestrator = ({
                 effectiveSelectedProfileId = fallbackProfile.id;
                 fallbackReasons.push('planner_non_search_profile_rerouted');
                 chatOrchestratorLogger.warn(
-                    'planner selected a non-search-capable profile; rerouting search to first enabled search-capable fallback profile',
+                    'planner selected a non-search-capable profile; rerouting search to deterministic search-capable fallback profile',
                     {
+                        event: 'chat.orchestration.profile_fallback',
+                        policy: SEARCH_REROUTE_FALLBACK_POLICY,
+                        stage: 'search_rerouted',
                         originalProfileId: originalSelectedProfileId,
                         effectiveProfileId: effectiveSelectedProfileId,
+                        fallbackOrder: searchFallbackOrder,
+                        selectionSource: profileSelectionSource,
                         surface: normalizedRequest.surface,
                     }
                 );
@@ -380,33 +455,30 @@ export const createChatOrchestrator = ({
                     status: 'skipped',
                     reasonCode: 'search_not_supported_by_selected_profile',
                 };
-                if (profileSelectionSource !== 'planner') {
+                if (profileSelectionSource === 'planner') {
+                    fallbackReasons.push('search_dropped_no_fallback_profile');
+                } else {
                     fallbackReasons.push(
                         'search_dropped_selection_source_guard'
                     );
-                    chatOrchestratorLogger.warn(
-                        'reroute not permitted by selection source; running without search',
-                        {
-                            originalProfileId: originalSelectedProfileId,
-                            effectiveProfileId: effectiveSelectedProfileId,
-                            rerouteApplied,
-                            selectionSource: profileSelectionSource,
-                            surface: normalizedRequest.surface,
-                        }
-                    );
-                } else {
-                    fallbackReasons.push('search_dropped_no_fallback_profile');
-                    chatOrchestratorLogger.warn(
-                        'no search-capable fallback available; running without search',
-                        {
-                            originalProfileId: originalSelectedProfileId,
-                            effectiveProfileId: effectiveSelectedProfileId,
-                            rerouteApplied,
-                            selectionSource: profileSelectionSource,
-                            surface: normalizedRequest.surface,
-                        }
-                    );
                 }
+                chatOrchestratorLogger.warn(
+                    'search is not supported by selected profile; continuing without search',
+                    {
+                        event: 'chat.orchestration.profile_fallback',
+                        policy: SEARCH_REROUTE_FALLBACK_POLICY,
+                        stage:
+                            profileSelectionSource === 'planner'
+                                ? 'search_dropped_no_search_capable_fallback'
+                                : 'search_dropped_by_selection_policy',
+                        originalProfileId: originalSelectedProfileId,
+                        effectiveProfileId: effectiveSelectedProfileId,
+                        rerouteApplied,
+                        selectionSource: profileSelectionSource,
+                        fallbackOrder: searchFallbackOrder,
+                        surface: normalizedRequest.surface,
+                    }
+                );
             }
         }
         // Persist the effective profile id in planner payload/snapshot so traces

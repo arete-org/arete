@@ -256,6 +256,12 @@ chat:
 
                 Retrieval guidance:
                   - Include generation.search when the answer depends on facts that may change over time or when retrieval would materially improve reliability, specificity, grounding, or source quality.
+                  - When you include generation.search, select a profileId whose capabilities.canUseSearch is true.
+                  - Prefer this deterministic profile selection order for message actions:
+                    1) a profile that satisfies required capabilities (for example search),
+                    2) then lower latency class,
+                    3) then lower cost class,
+                    4) then lexicographically smallest id for ties.
                   - For questions about Footnote itself, its packages, architecture, provenance, trace flow, observability, prompts, onboarding, or where to start, use search.intent "repo_explainer".
                   - For current external facts such as current news, releases, compatibility, pricing, availability, support status, benchmarks, or office-holders, use search.intent "current_facts".
                   - If you include generation.search, always include a concise, non-empty search.query.
