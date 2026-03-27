@@ -11,7 +11,7 @@ import path from 'node:path';
 import { envDefaultValues } from '@footnote/config-spec';
 import { ModelProfileSchema } from '@footnote/contracts';
 import yaml from 'js-yaml';
-import { parseOptionalTrimmedString } from '../parsers.js';
+import { parseBooleanFlag, parseOptionalTrimmedString } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
 const DEFAULT_CATALOG_RELATIVE_PATH =
@@ -57,15 +57,6 @@ const tryExtractCatalogEntries = (payload: unknown): unknown[] | null => {
     }
 
     return null;
-};
-
-const parseBooleanFlag = (value: string | undefined): boolean => {
-    if (typeof value !== 'string') {
-        return false;
-    }
-
-    const normalized = value.trim().toLowerCase();
-    return normalized === '1' || normalized === 'true' || normalized === 'yes';
 };
 
 const parseUrlHostname = (value: string): string | null => {

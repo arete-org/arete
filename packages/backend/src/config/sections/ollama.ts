@@ -6,17 +6,8 @@
  * @footnote-ethics: medium - Provider routing determines where user prompts are processed.
  */
 
-import { parseOptionalTrimmedString } from '../parsers.js';
+import { parseBooleanFlag, parseOptionalTrimmedString } from '../parsers.js';
 import type { RuntimeConfig } from '../types.js';
-
-const parseBooleanFlag = (value: string | undefined): boolean => {
-    if (typeof value !== 'string') {
-        return false;
-    }
-
-    const normalized = value.trim().toLowerCase();
-    return normalized === '1' || normalized === 'true' || normalized === 'yes';
-};
 
 /**
  * Builds the Ollama section from env.
