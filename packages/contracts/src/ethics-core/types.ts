@@ -129,7 +129,8 @@ export type EvaluatorOutcome = {
 export type ToolInvocationName = 'web_search' | (string & {});
 
 /**
- * Tool-specific reason codes used when a tool is skipped or fails.
+ * Tool reason codes used across eligibility and execution records.
+ * Includes skip/failure outcomes plus executed policy reroute metadata.
  */
 export type ToolInvocationReasonCode = Extract<
     ExecutionReasonCode,
@@ -137,6 +138,9 @@ export type ToolInvocationReasonCode = Extract<
     | 'tool_not_used'
     | 'tool_unavailable'
     | 'tool_execution_error'
+    | 'search_rerouted_to_fallback_profile'
+    | 'search_reroute_not_permitted_by_selection_source'
+    | 'search_reroute_no_tool_capable_fallback_available'
     | 'search_not_supported_by_selected_profile'
     | 'unspecified_tool_outcome'
 >;
