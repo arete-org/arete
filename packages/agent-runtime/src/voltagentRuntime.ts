@@ -125,7 +125,15 @@ export type VoltAgentExecutorFactory = (input: {
     model: string;
     logger?: VoltAgentLogger;
     voltOpsClient?: VoltOpsClient;
+    ollama?: VoltAgentExecutorOllamaConfig;
 }) => VoltAgentTextExecutor;
+
+export type VoltAgentExecutorOllamaConfig = {
+    provider: 'ollama' | 'ollama-cloud';
+    baseUrl?: string;
+    apiKey?: string;
+    localInferenceEnabled: boolean;
+};
 
 type VoltAgentLike = Pick<Agent, 'generateText'>;
 
@@ -242,25 +250,37 @@ const resolveVoltAgentProviderOverride = ({
     }
 };
 
-const applyOllamaProviderEnvironment = (
+const resolveExecutorOllamaConfig = (
+    provider: string,
     ollama: CreateVoltAgentRuntimeOptions['ollama'] | undefined
-): void => {
-    const apiKey = ollama?.apiKey?.trim();
-    if (apiKey) {
-        process.env.OLLAMA_API_KEY = apiKey;
+): VoltAgentExecutorOllamaConfig | undefined => {
+    if (provider !== 'ollama' && provider !== 'ollama-cloud') {
+        return undefined;
     }
 
-    const baseUrl = ollama?.baseUrl?.trim();
-    if (!baseUrl) {
-        return;
+    const normalizedLocalInferenceEnabled =
+        ollama?.localInferenceEnabled === true;
+    const normalizedApiKey = ollama?.apiKey?.trim() || undefined;
+    const configuredBaseUrl = ollama?.baseUrl?.trim();
+    if (provider === 'ollama-cloud') {
+        const normalizedCloudBaseUrl = configuredBaseUrl
+            ? (normalizeOllamaCloudBaseUrl(configuredBaseUrl) ??
+              configuredBaseUrl)
+            : undefined;
+        return {
+            provider: 'ollama-cloud',
+            baseUrl: normalizedCloudBaseUrl,
+            apiKey: normalizedApiKey,
+            localInferenceEnabled: normalizedLocalInferenceEnabled,
+        };
     }
 
-    const normalizedCloudBaseUrl = normalizeOllamaCloudBaseUrl(baseUrl);
-    if (normalizedCloudBaseUrl) {
-        // VoltAgent's `ollama-cloud` provider resolves base URL from this
-        // provider-specific env key.
-        process.env.OLLAMA_CLOUD_BASE_URL = normalizedCloudBaseUrl;
-    }
+    return {
+        provider: 'ollama',
+        baseUrl: configuredBaseUrl,
+        apiKey: normalizedApiKey,
+        localInferenceEnabled: normalizedLocalInferenceEnabled,
+    };
 };
 
 const getVoltAgentProvider = (model: string): string => {
@@ -731,6 +751,7 @@ const createDefaultVoltAgentExecutor = ({
     model,
     logger,
     voltOpsClient,
+    ollama: _ollama,
     agentFactory = ({
         model: agentModel,
         tools,
@@ -753,6 +774,7 @@ const createDefaultVoltAgentExecutor = ({
     model: string;
     logger?: VoltAgentLogger;
     voltOpsClient?: VoltOpsClient;
+    ollama?: VoltAgentExecutorOllamaConfig;
     agentFactory?: (input: CreateVoltAgentAgentFactoryInput) => VoltAgentLike;
 }): VoltAgentTextExecutor => {
     const createAgent = (tools?: NonNullable<AgentOptions['tools']>) =>
@@ -861,8 +883,6 @@ const createVoltAgentRuntime = ({
     ollama,
     voltOps,
 }: CreateVoltAgentRuntimeOptions): GenerationRuntime => {
-    applyOllamaProviderEnvironment(ollama);
-
     const voltOpsClient =
         voltOps !== undefined
             ? new VoltOpsClient({
@@ -917,6 +937,10 @@ const createVoltAgentRuntime = ({
                 })
             );
             const provider = getVoltAgentProvider(executedModel);
+            const executorOllamaConfig = resolveExecutorOllamaConfig(
+                provider,
+                ollama
+            );
             const canUseSearch = request.capabilities?.canUseSearch === true;
             const canProviderUseSearchTools =
                 supportsSearchToolsForProvider(provider);
@@ -949,6 +973,9 @@ const createVoltAgentRuntime = ({
                 model: executedModel,
                 ...(logger !== undefined && { logger }),
                 ...(voltOpsClient !== undefined && { voltOpsClient }),
+                ...(executorOllamaConfig !== undefined && {
+                    ollama: executorOllamaConfig,
+                }),
             });
             const providerOptions = buildVoltAgentProviderOptions(
                 request,
