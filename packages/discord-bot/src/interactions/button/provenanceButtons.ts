@@ -8,6 +8,7 @@
 import type { ButtonInteraction } from 'discord.js';
 import {
     formatExecutionTimelineSummary,
+    type ExecutionEvent,
     type ResponseMetadata,
 } from '@footnote/contracts/ethics-core';
 import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
@@ -18,10 +19,14 @@ import { handleIncidentReportButton } from '../../utils/response/incidentReporti
 import { EPHEMERAL_FLAG } from './shared.js';
 
 const DISCORD_MESSAGE_MAX_LENGTH = 2000;
+const DETAILS_SECTION_SEPARATOR = '\n\n';
 const DETAILS_CODE_FENCE_PREFIX = '```json\n';
 const DETAILS_CODE_FENCE_SUFFIX = '\n```';
 const DETAILS_TRUNCATION_SUFFIX = '\n... (truncated)';
 const DETAILS_FALLBACK_REASON = 'metadata_unavailable';
+const DETAILS_INLINE_FIELD_LIMIT = 120;
+const DETAILS_CITATION_LIMIT = 4;
+const DETAILS_EXECUTION_EVENT_LIMIT = 5;
 
 type DetailsFallbackPayload = {
     responseId: string | null;
@@ -95,117 +100,253 @@ function extractMetadataFromTraceResponse(
     return null;
 }
 
-/**
- * Keeps citation and temperament entries compact when rendering JSON previews
- * in Discord's 2,000 character message limit.
- */
-function formatInlineJsonObject(value: Record<string, unknown>): string {
-    const entries = Object.entries(value).filter(
-        ([, entryValue]) => entryValue !== undefined
-    );
-    const serializedEntries = entries.map(
-        ([entryKey, entryValue]) =>
-            `${JSON.stringify(entryKey)}: ${JSON.stringify(entryValue)}`
-    );
-    return `{ ${serializedEntries.join(', ')} }`;
+function truncateInline(value: string, limit: number): string {
+    if (value.length <= limit) {
+        return value;
+    }
+
+    if (limit <= 3) {
+        return value.slice(0, Math.max(0, limit));
+    }
+
+    return `${value.slice(0, limit - 3)}...`;
 }
 
-/**
- * Serializes metadata in a predictable order/shape for the details button.
- * We keep this custom serializer so large citation arrays stay readable.
- */
-function serializeDetailsPayload(
+function formatMarkdownValue(
+    value: string | number | null | undefined,
+    limit = DETAILS_INLINE_FIELD_LIMIT
+): string {
+    if (value === null || value === undefined) {
+        return 'n/a';
+    }
+
+    const normalized = String(value).replace(/\s+/g, ' ').trim();
+    if (!normalized) {
+        return 'n/a';
+    }
+
+    return truncateInline(normalized.replace(/`/g, "'"), limit);
+}
+
+function formatSummarySection(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
     if (!('provenance' in payload)) {
-        return JSON.stringify(payload, null, 2);
+        return [
+            '**Summary**',
+            `- Response ID: \`${formatMarkdownValue(payload.responseId)}\``,
+            '- Provenance metadata: unavailable',
+            `- Reason: \`${payload.reason}\``,
+        ].join('\n');
     }
 
-    const lines: string[] = ['{'];
-    const entries = Object.entries(payload).filter(
-        ([, value]) => value !== undefined
+    return [
+        '**Summary**',
+        `- Response ID: \`${formatMarkdownValue(payload.responseId)}\``,
+        `- Provenance: \`${formatMarkdownValue(payload.provenance)}\``,
+        `- Risk Tier: \`${formatMarkdownValue(payload.riskTier)}\``,
+        `- Tradeoffs: \`${formatMarkdownValue(payload.tradeoffCount)}\``,
+        `- Model: \`${formatMarkdownValue(payload.modelVersion)}\``,
+        `- Stale After: \`${formatMarkdownValue(payload.staleAfter)}\``,
+    ].join('\n');
+}
+
+function formatTraceSection(
+    payload: ResponseMetadata | DetailsFallbackPayload
+): string {
+    if (!('provenance' in payload)) {
+        return ['**TRACE**', '- TRACE scores unavailable'].join('\n');
+    }
+
+    const temperament = payload.temperament;
+    return [
+        '**TRACE**',
+        `- Tightness: \`${formatMarkdownValue(temperament?.tightness)}\``,
+        `- Rationale: \`${formatMarkdownValue(temperament?.rationale)}\``,
+        `- Attribution: \`${formatMarkdownValue(temperament?.attribution)}\``,
+        `- Caution: \`${formatMarkdownValue(temperament?.caution)}\``,
+        `- Extent: \`${formatMarkdownValue(temperament?.extent)}\``,
+        `- Evidence: \`${formatMarkdownValue(payload.evidenceScore)}\``,
+        `- Freshness: \`${formatMarkdownValue(payload.freshnessScore)}\``,
+    ].join('\n');
+}
+
+function formatSourcesSection(
+    payload: ResponseMetadata | DetailsFallbackPayload
+): string {
+    if (!('provenance' in payload)) {
+        return ['**Sources**', '- Source metadata unavailable'].join('\n');
+    }
+
+    if (!payload.citations.length) {
+        return ['**Sources**', '- No citations recorded'].join('\n');
+    }
+
+    const lines = ['**Sources**'];
+    const citationCount = Math.min(
+        payload.citations.length,
+        DETAILS_CITATION_LIMIT
     );
-    const executionSummary = formatExecutionTimelineSummary(payload.execution);
+    for (let index = 0; index < citationCount; index += 1) {
+        const citation = payload.citations[index];
+        const title = formatMarkdownValue(citation.title, 70);
+        const url = formatMarkdownValue(citation.url, 140);
+        lines.push(`${index + 1}. [${title}](${url})`);
+    }
 
-    for (let index = 0; index < entries.length; index += 1) {
-        const [key, value] = entries[index];
-        const hasTrailingComma = index < entries.length - 1;
-        const trailingComma = hasTrailingComma ? ',' : '';
-
-        if (key === 'citations' && Array.isArray(value)) {
-            lines.push('  "citations": [');
-            for (
-                let citationIndex = 0;
-                citationIndex < value.length;
-                citationIndex += 1
-            ) {
-                const citation = value[citationIndex];
-                const citationComma =
-                    citationIndex < value.length - 1 ? ',' : '';
-                if (isPlainObject(citation)) {
-                    lines.push(
-                        `    ${formatInlineJsonObject(citation)}${citationComma}`
-                    );
-                } else {
-                    lines.push(
-                        `    ${JSON.stringify(citation)}${citationComma}`
-                    );
-                }
-            }
-            lines.push(`  ]${trailingComma}`);
-            continue;
-        }
-
-        if (key === 'temperament' && isPlainObject(value)) {
-            lines.push(
-                `  "temperament": ${formatInlineJsonObject(value)}${trailingComma}`
-            );
-            continue;
-        }
-
-        if (key === 'execution') {
-            if (executionSummary) {
-                lines.push(
-                    `  "executionSummary": ${JSON.stringify(executionSummary)}${trailingComma}`
-                );
-            } else {
-                lines.push(`  "executionSummary": null${trailingComma}`);
-            }
-            continue;
-        }
-
+    if (payload.citations.length > citationCount) {
         lines.push(
-            `  ${JSON.stringify(key)}: ${JSON.stringify(value)}${trailingComma}`
+            `- ...and ${payload.citations.length - citationCount} more source(s)`
         );
     }
 
-    lines.push('}');
     return lines.join('\n');
 }
 
+function formatExecutionEventLine(event: ExecutionEvent): string {
+    const identity =
+        event.kind === 'tool'
+            ? formatMarkdownValue(event.toolName, 40)
+            : formatMarkdownValue(
+                  event.model ??
+                      event.effectiveProfileId ??
+                      event.profileId ??
+                      event.originalProfileId ??
+                      event.provider,
+                  40
+              );
+    const reason =
+        event.status !== 'executed' && event.reasonCode
+            ? `, ${formatMarkdownValue(event.reasonCode, 60)}`
+            : '';
+    const duration =
+        event.durationMs !== undefined ? `, ${event.durationMs}ms` : '';
+    return `- ${event.kind}:${identity} (${event.status}${reason}${duration})`;
+}
+
+function formatExecutionSection(
+    payload: ResponseMetadata | DetailsFallbackPayload
+): string {
+    if (!('provenance' in payload)) {
+        return ['**Execution**', '- Execution metadata unavailable'].join('\n');
+    }
+
+    const lines = ['**Execution**'];
+    const summary = formatExecutionTimelineSummary(payload.execution);
+    if (summary) {
+        lines.push(`- Timeline: \`${formatMarkdownValue(summary, 180)}\``);
+    } else {
+        lines.push('- Timeline: unavailable');
+    }
+
+    if (!payload.execution?.length) {
+        lines.push('- Events: none');
+        return lines.join('\n');
+    }
+
+    const executedCount = payload.execution.filter(
+        (event) => event.status === 'executed'
+    ).length;
+    const skippedCount = payload.execution.filter(
+        (event) => event.status === 'skipped'
+    ).length;
+    const failedCount = payload.execution.filter(
+        (event) => event.status === 'failed'
+    ).length;
+    lines.push(
+        `- Status counts: executed=${executedCount}, skipped=${skippedCount}, failed=${failedCount}`
+    );
+    if (payload.totalDurationMs !== undefined) {
+        lines.push(`- Total duration: ${payload.totalDurationMs}ms`);
+    }
+
+    const eventCount = Math.min(
+        payload.execution.length,
+        DETAILS_EXECUTION_EVENT_LIMIT
+    );
+    for (let index = 0; index < eventCount; index += 1) {
+        lines.push(formatExecutionEventLine(payload.execution[index]));
+    }
+    if (payload.execution.length > eventCount) {
+        lines.push(
+            `- ...and ${payload.execution.length - eventCount} more execution event(s)`
+        );
+    }
+
+    return lines.join('\n');
+}
+
+function truncateBlockToLength(value: string, maxLength: number): string {
+    if (value.length <= maxLength) {
+        return value;
+    }
+
+    const truncatedLength = Math.max(
+        0,
+        maxLength - DETAILS_TRUNCATION_SUFFIX.length
+    );
+    return `${value.slice(0, truncatedLength)}${DETAILS_TRUNCATION_SUFFIX}`;
+}
+
+function formatRawJsonSection(
+    payload: ResponseMetadata | DetailsFallbackPayload,
+    maxLength: number
+): string | null {
+    if (maxLength <= 0) {
+        return null;
+    }
+
+    const title = '**Raw JSON (debug)**\n';
+    const framingLength =
+        title.length +
+        DETAILS_CODE_FENCE_PREFIX.length +
+        DETAILS_CODE_FENCE_SUFFIX.length;
+    if (maxLength <= framingLength) {
+        return null;
+    }
+
+    const serialized = JSON.stringify(payload, null, 2);
+    const maxPayloadLength = maxLength - framingLength;
+    const body = truncateBlockToLength(serialized, maxPayloadLength);
+    return `${title}${DETAILS_CODE_FENCE_PREFIX}${body}${DETAILS_CODE_FENCE_SUFFIX}`;
+}
+
 /**
- * Wraps details payload in a code fence and truncates when needed so we do not
+ * Builds markdown-first details with a small optional raw JSON debug section.
+ * This keeps provenance easy to scan while still preserving inspectability.
+ */
+function formatDetailsMarkdownBody(
+    payload: ResponseMetadata | DetailsFallbackPayload
+): string {
+    return [
+        formatSummarySection(payload),
+        formatTraceSection(payload),
+        formatSourcesSection(payload),
+        formatExecutionSection(payload),
+    ].join(DETAILS_SECTION_SEPARATOR);
+}
+
+/**
+ * Renders details payload and truncates when needed so we do not
  * exceed Discord's hard message-length cap.
  */
 function formatDetailsPayloadForDiscord(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
-    const serialized = serializeDetailsPayload(payload);
-    const maxPayloadLength =
-        DISCORD_MESSAGE_MAX_LENGTH -
-        DETAILS_CODE_FENCE_PREFIX.length -
-        DETAILS_CODE_FENCE_SUFFIX.length;
-
-    if (serialized.length <= maxPayloadLength) {
-        return `${DETAILS_CODE_FENCE_PREFIX}${serialized}${DETAILS_CODE_FENCE_SUFFIX}`;
+    const markdownBody = formatDetailsMarkdownBody(payload);
+    if (markdownBody.length >= DISCORD_MESSAGE_MAX_LENGTH) {
+        return truncateBlockToLength(markdownBody, DISCORD_MESSAGE_MAX_LENGTH);
     }
 
-    const truncatedPayloadLength = Math.max(
-        0,
-        maxPayloadLength - DETAILS_TRUNCATION_SUFFIX.length
-    );
-    const truncatedPayload = `${serialized.slice(0, truncatedPayloadLength)}${DETAILS_TRUNCATION_SUFFIX}`;
-    return `${DETAILS_CODE_FENCE_PREFIX}${truncatedPayload}${DETAILS_CODE_FENCE_SUFFIX}`;
+    const sectionBreakLength = DETAILS_SECTION_SEPARATOR.length;
+    const rawJsonRoom =
+        DISCORD_MESSAGE_MAX_LENGTH - markdownBody.length - sectionBreakLength;
+    const rawJsonSection = formatRawJsonSection(payload, rawJsonRoom);
+    if (!rawJsonSection) {
+        return markdownBody;
+    }
+
+    return `${markdownBody}${DETAILS_SECTION_SEPARATOR}${rawJsonSection}`;
 }
 
 /**
