@@ -31,6 +31,7 @@ import {
 import type {
     ChatGenerationPlan,
     ChatGenerationSearch,
+    ChatGenerationWeatherLocation,
     ChatRepoSearchHint,
 } from './chatGenerationTypes.js';
 import { runtimeConfig } from '../config.js';
@@ -150,6 +151,7 @@ type PlannerCandidate = Partial<ChatPlan> & {
         search?: Partial<ChatGenerationSearch> & {
             repoHints?: unknown;
         };
+        weather?: unknown;
         temperament?: unknown;
     };
 };
@@ -262,6 +264,76 @@ const normalizeRepoHints = (value: unknown): ChatRepoSearchHint[] => {
     }
 
     return normalized;
+};
+
+const normalizeWeatherLocation = (
+    value: unknown
+): ChatGenerationWeatherLocation | undefined => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return undefined;
+    }
+
+    const candidate = value as Record<string, unknown>;
+    const latitude = candidate.latitude;
+    const longitude = candidate.longitude;
+    if (
+        typeof latitude === 'number' &&
+        Number.isFinite(latitude) &&
+        typeof longitude === 'number' &&
+        Number.isFinite(longitude)
+    ) {
+        return {
+            type: 'lat_lon',
+            latitude,
+            longitude,
+        };
+    }
+
+    const office =
+        typeof candidate.office === 'string' ? candidate.office.trim() : '';
+    const gridX = candidate.gridX;
+    const gridY = candidate.gridY;
+    if (
+        office.length > 0 &&
+        typeof gridX === 'number' &&
+        Number.isInteger(gridX) &&
+        typeof gridY === 'number' &&
+        Number.isInteger(gridY)
+    ) {
+        return {
+            type: 'gridpoint',
+            office,
+            gridX,
+            gridY,
+        };
+    }
+
+    return undefined;
+};
+
+const normalizeWeatherRequest = (
+    value: unknown
+): ChatGenerationPlan['weather'] | undefined => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return undefined;
+    }
+
+    const candidate = value as Record<string, unknown>;
+    const location = normalizeWeatherLocation(candidate.location ?? candidate);
+    if (!location) {
+        return undefined;
+    }
+
+    const horizonPeriods =
+        typeof candidate.horizonPeriods === 'number' &&
+        Number.isFinite(candidate.horizonPeriods)
+            ? Math.min(12, Math.max(1, Math.round(candidate.horizonPeriods)))
+            : undefined;
+
+    return {
+        location,
+        ...(horizonPeriods !== undefined && { horizonPeriods }),
+    };
 };
 
 const normalizeTraceAxisScore = (
@@ -459,6 +531,7 @@ const normalizeGeneration = (
     generation: ChatGenerationPlan;
     reasoningSuffix?: string;
 } => {
+    const reasoningSuffixes: string[] = [];
     const baseGeneration: ChatGenerationPlan = {
         reasoningEffort: normalizeReasoningEffort(candidate?.reasoningEffort),
         verbosity: normalizeVerbosity(candidate?.verbosity),
@@ -467,9 +540,29 @@ const normalizeGeneration = (
     if (normalizedTemperament) {
         baseGeneration.temperament = normalizedTemperament;
     }
+    const normalizedWeather = normalizeWeatherRequest(candidate?.weather);
+    if (normalizedWeather) {
+        baseGeneration.weather = normalizedWeather;
+    } else if (candidate?.weather !== undefined) {
+        if (
+            !reasoning.includes('weather tool request was disabled safely') &&
+            !reasoningSuffixes.some((suffix) =>
+                suffix.includes('weather tool request was disabled safely')
+            )
+        ) {
+            reasoningSuffixes.push(
+                'The planner requested weather without a valid location contract, so weather tool request was disabled safely.'
+            );
+        }
+    }
 
     if (!candidate?.search) {
-        return { generation: baseGeneration };
+        return {
+            generation: baseGeneration,
+            ...(reasoningSuffixes.length > 0 && {
+                reasoningSuffix: reasoningSuffixes.join(' '),
+            }),
+        };
     }
 
     const rawQuery =
@@ -477,11 +570,21 @@ const normalizeGeneration = (
             ? candidate.search.query.trim()
             : '';
     if (!rawQuery) {
+        if (
+            !reasoning.includes('search was disabled safely') &&
+            !reasoningSuffixes.some((suffix) =>
+                suffix.includes('search was disabled safely')
+            )
+        ) {
+            reasoningSuffixes.push(
+                'The planner requested search without a usable query, so search was disabled safely.'
+            );
+        }
         return {
             generation: baseGeneration,
-            reasoningSuffix: reasoning.includes('search was disabled safely')
-                ? undefined
-                : 'The planner requested search without a usable query, so search was disabled safely.',
+            ...(reasoningSuffixes.length > 0 && {
+                reasoningSuffix: reasoningSuffixes.join(' '),
+            }),
         };
     }
 
@@ -504,6 +607,9 @@ const normalizeGeneration = (
                 ...(repoHints && repoHints.length > 0 ? { repoHints } : {}),
             },
         },
+        ...(reasoningSuffixes.length > 0 && {
+            reasoningSuffix: reasoningSuffixes.join(' '),
+        }),
     };
 };
 
@@ -584,6 +690,7 @@ const normalizePlan = (
             generation: {
                 ...normalizedPlan.generation,
                 search: undefined,
+                weather: undefined,
             },
         };
     }
@@ -613,6 +720,7 @@ const normalizePlan = (
             generation: {
                 ...normalizedPlan.generation,
                 search: undefined,
+                weather: undefined,
             },
         };
     }
@@ -624,6 +732,7 @@ const normalizePlan = (
             generation: {
                 ...normalizedPlan.generation,
                 search: undefined,
+                weather: undefined,
             },
         };
     }

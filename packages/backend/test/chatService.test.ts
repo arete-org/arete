@@ -377,6 +377,48 @@ test('runChatMessages marks tool execution as executed when retrieval was used',
     });
 });
 
+test('runChatMessages preserves non-search tool execution context when search is absent', async () => {
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
+
+    const chatService = createChatService({
+        generationRuntime: createRuntime({
+            provenance: 'Inferred',
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedExecutionContext = runtimeContext.executionContext;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Weather at these coordinates.' }],
+        conversationSnapshot: 'Weather at these coordinates.',
+        executionContext: {
+            tool: {
+                toolName: 'weather_forecast',
+                status: 'executed',
+                durationMs: 12,
+            },
+        },
+        toolRequest: {
+            toolName: 'weather_forecast',
+            requested: true,
+            eligible: true,
+        },
+    });
+
+    assert.deepEqual(capturedExecutionContext?.tool, {
+        toolName: 'weather_forecast',
+        status: 'executed',
+        durationMs: 12,
+    });
+});
+
 test('runChatMessages forwards total orchestration duration when provided', async () => {
     let capturedTotalDurationMs: number | undefined;
 

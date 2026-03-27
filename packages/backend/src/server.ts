@@ -52,6 +52,7 @@ import { createInternalVoiceTtsHandler } from './handlers/internalVoiceTts.js';
 import { createInternalVoiceRealtimeHandler } from './handlers/internalVoiceRealtime.js';
 import { buildRealtimeInstructions } from './services/prompts/realtimePromptComposer.js';
 import { createChatProfilesHandler } from './handlers/chatProfiles.js';
+import { createWeatherGovForecastTool } from './services/weatherGovForecastTool.js';
 
 /**
  * @footnote-logger: openAiRealtimeVoiceRuntime
@@ -83,6 +84,7 @@ let traceStore: ReturnType<typeof createTraceStore> | null = null;
 let incidentStore: ReturnType<typeof getDefaultIncidentStore> | null = null;
 let generationRuntime: GenerationRuntime | null = null;
 let imageGenerationRuntime: ImageGenerationRuntime | null = null;
+const weatherForecastTool = createWeatherGovForecastTool();
 let internalNewsTaskService: ReturnType<
     typeof createInternalNewsTaskService
 > | null = null;
@@ -450,9 +452,10 @@ const wantsJsonResponse = (req: http.IncomingMessage): boolean => {
 
     return true;
 };
-// Chat is the slim, web-facing conversation interface (Turnstile + rate-limited).
+// Chat is the backend-standardized conversation interface (adapter-facing, Turnstile + rate-limited for public web calls).
 const handleChatRequest = createChatHandler({
     generationRuntime,
+    weatherForecastTool,
     ipRateLimiter,
     sessionRateLimiter,
     serviceRateLimiter,
