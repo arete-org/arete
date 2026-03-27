@@ -305,6 +305,16 @@ export type ProviderToolRegistry = Record<
     Record<string, ProviderToolFactory>
 >;
 
+export type ProviderToolResolution =
+    | {
+          supported: true;
+          factory: ProviderToolFactory;
+      }
+    | {
+          supported: false;
+          reason: 'tool_not_registered' | 'provider_not_registered';
+      };
+
 /**
  * Canonical runtime registry for provider tool mappings.
  * Keep this data-only so new tools/providers can be added without branching
@@ -322,7 +332,44 @@ export const providerToolRegistry: ProviderToolRegistry = {
                 searchContextSize: search.contextSize,
             },
         }),
+        'ollama-cloud': (search) => ({
+            type: 'provider',
+            id: 'ollama-cloud.web_search',
+            name: 'web_search',
+            args: {
+                searchContextSize: search.contextSize,
+            },
+        }),
     },
+};
+
+/**
+ * Resolves one provider/tool mapping and returns deterministic support status.
+ */
+export const resolveToolForProvider = (
+    toolName: string,
+    provider: string
+): ProviderToolResolution => {
+    const toolMappings = providerToolRegistry[toolName];
+    if (!toolMappings) {
+        return {
+            supported: false,
+            reason: 'tool_not_registered',
+        };
+    }
+
+    const factory = toolMappings[provider];
+    if (!factory) {
+        return {
+            supported: false,
+            reason: 'provider_not_registered',
+        };
+    }
+
+    return {
+        supported: true,
+        factory,
+    };
 };
 
 /**
@@ -331,8 +378,10 @@ export const providerToolRegistry: ProviderToolRegistry = {
 export const getToolForProvider = (
     toolName: string,
     provider: string
-): ProviderToolFactory | undefined =>
-    providerToolRegistry[toolName]?.[provider];
+): ProviderToolFactory | undefined => {
+    const mapping = resolveToolForProvider(toolName, provider);
+    return mapping.supported ? mapping.factory : undefined;
+};
 
 /**
  * Fast capability check used before constructing tool instructions.
@@ -340,7 +389,7 @@ export const getToolForProvider = (
 export const hasToolForProvider = (
     toolName: string,
     provider: string
-): boolean => getToolForProvider(toolName, provider) !== undefined;
+): boolean => resolveToolForProvider(toolName, provider).supported;
 
 type VoltAgentModelResolution = {
     selectedModel: string | undefined;
@@ -603,14 +652,14 @@ const createVoltAgentSearchTool = (
     provider: string,
     search: GenerationSearchRequest
 ): ReturnType<ProviderToolFactory> => {
-    const factory = getToolForProvider('web_search', provider);
-    if (!factory) {
+    const mapping = resolveToolForProvider('web_search', provider);
+    if (!mapping.supported) {
         throw new Error(
-            `Provider "${provider}" does not have a registered web_search tool mapping.`
+            `Provider "${provider}" does not have a registered web_search tool mapping (${mapping.reason}).`
         );
     }
 
-    return factory(search);
+    return mapping.factory(search);
 };
 
 const toVoltAgentProviderTool = (
@@ -935,10 +984,11 @@ const createVoltAgentRuntime = ({
                 ollama
             );
             const canUseSearch = request.capabilities?.canUseSearch === true;
-            const canProviderUseSearchTools = hasToolForProvider(
+            const searchToolMapping = resolveToolForProvider(
                 'web_search',
                 provider
             );
+            const canProviderUseSearchTools = searchToolMapping.supported;
             const shouldForwardSearch =
                 canUseSearch &&
                 request.search !== undefined &&
@@ -973,6 +1023,11 @@ const createVoltAgentRuntime = ({
                     {
                         provider,
                         model: executedModel,
+                        toolName: 'web_search',
+                        mappingReason:
+                            searchToolMapping.supported === false
+                                ? searchToolMapping.reason
+                                : undefined,
                     }
                 );
             }

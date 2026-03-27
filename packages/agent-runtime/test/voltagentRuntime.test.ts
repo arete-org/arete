@@ -15,6 +15,7 @@ import {
     createVoltAgentRuntime,
     getToolForProvider,
     hasToolForProvider,
+    resolveToolForProvider,
     type VoltAgentGenerateTextOptions,
     type VoltAgentLogger,
 } from '../src/voltagentRuntime.js';
@@ -304,6 +305,106 @@ test('voltagent runtime does not forward search for providers without a mapped s
     });
 });
 
+test('voltagent runtime forwards search for ollama-cloud when a provider mapping exists', async () => {
+    let seenModel: string | undefined;
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'gpt-oss:20b-cloud',
+        ollama: {
+            baseUrl: 'https://ollama.com/api',
+            localInferenceEnabled: false,
+        },
+        createExecutor: ({ model }) => {
+            seenModel = model;
+            return {
+                async generateText(_messages, options) {
+                    seenOptions = options;
+                    return {
+                        text: 'cloud-search reply',
+                        response: {
+                            modelId: model,
+                            body: {
+                                output: [{ type: 'web_search_call' }],
+                            },
+                        },
+                        sources: [
+                            {
+                                title: 'Cloud Source',
+                                url: 'https://example.com/cloud',
+                            },
+                        ],
+                    };
+                },
+            };
+        },
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'What changed this week?' }],
+        model: 'gpt-oss:20b-cloud',
+        provider: 'ollama',
+        search: {
+            query: 'latest cloud release notes',
+            contextSize: 'medium',
+            intent: 'current_facts',
+        },
+        capabilities: {
+            canUseSearch: true,
+        },
+    });
+
+    assert.equal(seenModel, 'ollama-cloud/gpt-oss:20b-cloud');
+    assert.deepEqual(seenOptions?.search, {
+        query: 'latest cloud release notes',
+        contextSize: 'medium',
+        intent: 'current_facts',
+    });
+    assert.deepEqual(result.toolExecution, {
+        toolName: 'web_search',
+        status: 'executed',
+    });
+    assert.equal(result.retrieval?.used, true);
+});
+
+test('voltagent runtime fails open for unknown provider/tool combinations with stable reason code', async () => {
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'claude-3-5-sonnet',
+        createExecutor: () => ({
+            async generateText(_messages, options) {
+                seenOptions = options;
+                return {
+                    text: 'unsupported provider reply',
+                    response: {
+                        modelId: 'anthropic/claude-3-5-sonnet',
+                    },
+                };
+            },
+        }),
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        model: 'claude-3-5-sonnet',
+        provider: 'anthropic' as GenerationRequest['provider'],
+        search: {
+            query: 'latest safety policy',
+            contextSize: 'low',
+            intent: 'current_facts',
+        },
+        capabilities: {
+            canUseSearch: true,
+        },
+    });
+
+    assert.equal(seenOptions?.search, undefined);
+    assert.deepEqual(result.toolExecution, {
+        toolName: 'web_search',
+        status: 'skipped',
+        reasonCode: 'tool_unavailable',
+    });
+});
+
 test('voltagent runtime maps remote ollama provider to ollama-cloud and normalizes cloud base URL', async () => {
     let seenModel: string | undefined;
     let seenOllamaConfig:
@@ -356,6 +457,7 @@ test('voltagent runtime maps remote ollama provider to ollama-cloud and normaliz
 
 test('provider tool registry lookups expose search mappings for supported providers', () => {
     assert.equal(hasToolForProvider('web_search', 'openai'), true);
+    assert.equal(hasToolForProvider('web_search', 'ollama-cloud'), true);
     assert.equal(hasToolForProvider('web_search', 'ollama'), false);
 
     const openAiSearchToolFactory = getToolForProvider('web_search', 'openai');
@@ -375,6 +477,43 @@ test('provider tool registry lookups expose search mappings for supported provid
             },
         }
     );
+
+    const ollamaCloudSearchToolFactory = getToolForProvider(
+        'web_search',
+        'ollama-cloud'
+    );
+    assert.ok(ollamaCloudSearchToolFactory);
+    assert.deepEqual(
+        ollamaCloudSearchToolFactory?.({
+            query: 'latest cloud policy updates',
+            contextSize: 'medium',
+            intent: 'current_facts',
+        }),
+        {
+            type: 'provider',
+            id: 'ollama-cloud.web_search',
+            name: 'web_search',
+            args: {
+                searchContextSize: 'medium',
+            },
+        }
+    );
+});
+
+test('provider tool registry resolution reports stable reasons for unsupported mappings', () => {
+    const supportedMapping = resolveToolForProvider('web_search', 'openai');
+    assert.equal(supportedMapping.supported, true);
+    if (supportedMapping.supported) {
+        assert.equal(typeof supportedMapping.factory, 'function');
+    }
+    assert.deepEqual(resolveToolForProvider('web_search', 'anthropic'), {
+        supported: false,
+        reason: 'provider_not_registered',
+    });
+    assert.deepEqual(resolveToolForProvider('unknown_tool', 'openai'), {
+        supported: false,
+        reason: 'tool_not_registered',
+    });
 });
 
 test('voltagent runtime recovers markdown-link citations when retrieved output lacks structured sources', async () => {

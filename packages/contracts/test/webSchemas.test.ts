@@ -265,6 +265,22 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
     assert.equal(parsed.success, true);
 });
 
+test('ResponseMetadataSchema accepts tool_unavailable reason code for skipped tool events', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        execution: [
+            {
+                kind: 'tool',
+                status: 'skipped',
+                toolName: 'web_search',
+                reasonCode: 'tool_unavailable',
+            },
+        ],
+    });
+
+    assert.equal(parsed.success, true);
+});
+
 test('ResponseMetadataSchema rejects invalid execution timeline event kind/status', () => {
     const invalidKind = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
