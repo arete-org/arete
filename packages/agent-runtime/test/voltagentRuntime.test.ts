@@ -358,6 +358,61 @@ test('voltagent runtime does not forward search for providers without a mapped s
     assert.equal(seenOptions?.search, undefined);
 });
 
+test('voltagent runtime maps remote ollama provider to ollama-cloud and normalizes cloud base URL', async () => {
+    let seenModel: string | undefined;
+    const originalOllamaCloudBaseUrl = process.env.OLLAMA_CLOUD_BASE_URL;
+    const originalOllamaApiKey = process.env.OLLAMA_API_KEY;
+
+    try {
+        const runtime = createVoltAgentRuntime({
+            defaultModel: 'gpt-oss:20b-cloud',
+            ollama: {
+                baseUrl: 'https://ollama.com/api',
+                apiKey: 'test-ollama-key',
+                localInferenceEnabled: false,
+            },
+            createExecutor: ({ model }) => {
+                seenModel = model;
+                return {
+                    async generateText() {
+                        return {
+                            text: 'cloud ollama reply',
+                            response: {
+                                modelId: model,
+                            },
+                        };
+                    },
+                };
+            },
+        });
+
+        const result = await runtime.generate({
+            messages: [{ role: 'user', content: 'Summarize this.' }],
+            model: 'gpt-oss:20b-cloud',
+            provider: 'ollama',
+        });
+
+        assert.equal(seenModel, 'ollama-cloud/gpt-oss:20b-cloud');
+        assert.equal(result.model, 'gpt-oss:20b-cloud');
+        assert.equal(
+            process.env.OLLAMA_CLOUD_BASE_URL,
+            'https://ollama.com/v1'
+        );
+        assert.equal(process.env.OLLAMA_API_KEY, 'test-ollama-key');
+    } finally {
+        if (originalOllamaCloudBaseUrl === undefined) {
+            delete process.env.OLLAMA_CLOUD_BASE_URL;
+        } else {
+            process.env.OLLAMA_CLOUD_BASE_URL = originalOllamaCloudBaseUrl;
+        }
+        if (originalOllamaApiKey === undefined) {
+            delete process.env.OLLAMA_API_KEY;
+        } else {
+            process.env.OLLAMA_API_KEY = originalOllamaApiKey;
+        }
+    }
+});
+
 test('voltagent runtime recovers markdown-link citations when retrieved output lacks structured sources', async () => {
     const runtime = createVoltAgentRuntime({
         defaultModel: 'gpt-5-mini',

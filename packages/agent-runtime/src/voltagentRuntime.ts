@@ -151,6 +151,11 @@ export interface CreateVoltAgentRuntimeOptions {
     createExecutor?: VoltAgentExecutorFactory;
     kind?: string;
     logger?: VoltAgentLogger;
+    ollama?: {
+        baseUrl?: string;
+        apiKey?: string;
+        localInferenceEnabled?: boolean;
+    };
     voltOps?: {
         publicKey: string;
         secretKey: string;
@@ -172,10 +177,7 @@ const toVoltAgentMessages = (messages: RuntimeMessage[]): BaseMessage[] =>
 /**
  * VoltAgent's model router expects provider-prefixed model ids.
  */
-const toVoltAgentModel = (
-    model: string,
-    provider?: GenerationRequest['provider']
-): string => {
+const toVoltAgentModel = (model: string, provider?: string): string => {
     if (model.includes('/')) {
         return model;
     }
@@ -184,6 +186,81 @@ const toVoltAgentModel = (
     return normalizedProvider
         ? `${normalizedProvider}/${model}`
         : `openai/${model}`;
+};
+
+const isLocalOllamaHost = (hostname: string): boolean =>
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === 'host.docker.internal';
+
+const normalizeOllamaCloudBaseUrl = (baseUrl: string): string | undefined => {
+    try {
+        const parsed = new URL(baseUrl);
+        const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+        if (normalizedPath === '/api') {
+            parsed.pathname = '/v1';
+        } else if (!normalizedPath.endsWith('/v1')) {
+            parsed.pathname = `${normalizedPath}/v1`.replace(/\/{2,}/g, '/');
+        } else {
+            parsed.pathname = normalizedPath;
+        }
+        return parsed.toString().replace(/\/+$/, '');
+    } catch {
+        return undefined;
+    }
+};
+
+const resolveVoltAgentProviderOverride = ({
+    provider,
+    ollama,
+}: {
+    provider: GenerationRequest['provider'];
+    ollama?: CreateVoltAgentRuntimeOptions['ollama'];
+}): string | undefined => {
+    if (provider !== 'ollama') {
+        return provider;
+    }
+
+    const configuredBaseUrl = ollama?.baseUrl?.trim();
+    if (!configuredBaseUrl) {
+        return provider;
+    }
+
+    try {
+        const hostname = new URL(configuredBaseUrl).hostname.toLowerCase();
+        if (
+            isLocalOllamaHost(hostname) &&
+            ollama?.localInferenceEnabled !== true
+        ) {
+            return provider;
+        }
+
+        return isLocalOllamaHost(hostname) ? 'ollama' : 'ollama-cloud';
+    } catch {
+        return provider;
+    }
+};
+
+const applyOllamaProviderEnvironment = (
+    ollama: CreateVoltAgentRuntimeOptions['ollama'] | undefined
+): void => {
+    const apiKey = ollama?.apiKey?.trim();
+    if (apiKey) {
+        process.env.OLLAMA_API_KEY = apiKey;
+    }
+
+    const baseUrl = ollama?.baseUrl?.trim();
+    if (!baseUrl) {
+        return;
+    }
+
+    const normalizedCloudBaseUrl = normalizeOllamaCloudBaseUrl(baseUrl);
+    if (normalizedCloudBaseUrl) {
+        // VoltAgent's `ollama-cloud` provider resolves base URL from this
+        // provider-specific env key.
+        process.env.OLLAMA_CLOUD_BASE_URL = normalizedCloudBaseUrl;
+    }
 };
 
 const getVoltAgentProvider = (model: string): string => {
@@ -781,8 +858,11 @@ const createVoltAgentRuntime = ({
     createExecutor = createDefaultVoltAgentExecutor,
     kind = 'voltagent',
     logger,
+    ollama,
     voltOps,
 }: CreateVoltAgentRuntimeOptions): GenerationRuntime => {
+    applyOllamaProviderEnvironment(ollama);
+
     const voltOpsClient =
         voltOps !== undefined
             ? new VoltOpsClient({
@@ -831,7 +911,10 @@ const createVoltAgentRuntime = ({
 
             const executedModel = toVoltAgentModel(
                 selectedModel,
-                request.provider
+                resolveVoltAgentProviderOverride({
+                    provider: request.provider,
+                    ollama,
+                })
             );
             const provider = getVoltAgentProvider(executedModel);
             const canUseSearch = request.capabilities?.canUseSearch === true;

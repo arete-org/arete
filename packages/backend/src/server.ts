@@ -175,6 +175,12 @@ const initializeServices = () => {
         generationRuntime = createVoltAgentRuntime({
             defaultModel: runtimeConfig.openai.defaultModel,
             logger: voltAgentLogger,
+            ollama: {
+                baseUrl: runtimeConfig.ollama.baseUrl ?? undefined,
+                apiKey: runtimeConfig.ollama.apiKey ?? undefined,
+                localInferenceEnabled:
+                    runtimeConfig.ollama.localInferenceEnabled,
+            },
             ...(runtimeConfig.voltagent.observabilityEnabled && {
                 voltOps: {
                     publicKey: runtimeConfig.voltagent.publicKey!,
