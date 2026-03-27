@@ -18,6 +18,7 @@ import type {
 import type {
     ToolExecutionContext,
     ToolInvocationIntent,
+    ToolInvocationReasonCode,
     ToolInvocationRequest,
     ExecutionReasonCode,
     ExecutionStatus,
@@ -56,8 +57,8 @@ const searchFallbackPolicyBySelectionSource: Record<
     PlannerSelectionSource,
     {
         allowReroute: boolean;
-        rerouteReasonCode: ExecutionReasonCode;
-        skipReasonCode: ExecutionReasonCode;
+        rerouteReasonCode: ToolInvocationReasonCode;
+        skipReasonCode: ToolInvocationReasonCode;
     }
 > = {
     planner: {
