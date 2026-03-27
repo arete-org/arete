@@ -1,3 +1,11 @@
+/**
+ * @description: Verifies refactor lookup argument parsing, ranking, fallback behavior, and GitHub error handling.
+ * @footnote-scope: test
+ * @footnote-module: RefactorLookupTests
+ * @footnote-risk: low - This test validates script behavior and does not affect runtime request handling.
+ * @footnote-ethics: low - Assertions use synthetic fixtures and do not process user-sensitive data.
+ */
+
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
