@@ -985,6 +985,7 @@ test('chat orchestration timing log includes response summary fields for normal 
               responseProvenance?: string;
               responseCitationCount?: number;
               responseMessageLength?: number;
+              fallbackApplied?: boolean;
               fallbackReasons?: unknown[];
           }
         | undefined;
@@ -992,6 +993,7 @@ test('chat orchestration timing log includes response summary fields for normal 
     assert.equal(payload?.responseProvenance, 'Inferred');
     assert.equal(payload?.responseCitationCount, 0);
     assert.ok((payload?.responseMessageLength ?? 0) > 0);
+    assert.equal(payload?.fallbackApplied, false);
     assert.deepEqual(payload?.fallbackReasons, []);
 });
 
@@ -1079,7 +1081,9 @@ test('chat orchestration timing log includes fallback reason and reason codes wh
         | {
               toolStatus?: string;
               toolReasonCode?: string;
+              toolEligible?: boolean;
               toolRequestReasonCode?: string;
+              fallbackApplied?: boolean;
               fallbackReasons?: string[];
               responseProvenance?: string;
               searchRequested?: boolean;
@@ -1090,11 +1094,13 @@ test('chat orchestration timing log includes fallback reason and reason codes wh
         payload?.toolReasonCode,
         'search_reroute_no_tool_capable_fallback_available'
     );
+    assert.equal(payload?.toolEligible, false);
     assert.equal(
         payload?.toolRequestReasonCode,
         'search_not_supported_by_selected_profile'
     );
     assert.equal(payload?.searchRequested, false);
+    assert.equal(payload?.fallbackApplied, true);
     assert.equal(payload?.responseProvenance, 'Inferred');
     assert.ok(
         payload?.fallbackReasons?.includes('search_dropped_no_fallback_profile')

@@ -758,6 +758,7 @@ export const createChatOrchestrator = ({
             provider: selectedResponseProfile.provider,
             capabilities: selectedResponseProfile.capabilities,
             generation: executionPlan.generation,
+            toolRequest: toolRequestContext,
             executionContext: {
                 // Planner execution metadata is sourced from ChatPlannerResult
                 // so traces can distinguish successful planning from fallback.
@@ -813,13 +814,16 @@ export const createChatOrchestrator = ({
             originalProfileId: originalSelectedProfileId,
             effectiveProfileId: effectiveSelectedProfileId,
             searchRequested: generationForExecution.search !== undefined,
-            toolName: toolRequestContext?.toolName,
-            toolStatus: toolExecutionContext?.status,
-            toolReasonCode: toolExecutionContext?.reasonCode,
-            toolEligible: toolRequestContext?.eligible,
-            toolRequestReasonCode: toolRequestContext?.reasonCode,
+            toolName: response.finalToolExecutionTelemetry?.toolName,
+            toolStatus: response.finalToolExecutionTelemetry?.status,
+            toolReasonCode: response.finalToolExecutionTelemetry?.reasonCode,
+            toolEligible: response.finalToolExecutionTelemetry?.eligible,
+            toolRequestReasonCode:
+                response.finalToolExecutionTelemetry?.requestReasonCode,
             rerouteApplied,
-            fallbackApplied: plannerExecution.status === 'failed',
+            fallbackApplied:
+                plannerExecution.status === 'failed' ||
+                fallbackReasons.length > 0,
             fallbackReasons,
             responseId: response.metadata.responseId,
             responseAction: 'message',
