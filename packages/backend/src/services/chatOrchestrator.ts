@@ -346,9 +346,7 @@ export const createChatOrchestrator = ({
                         }
                     );
                 } else {
-                    fallbackReasons.push(
-                        'search_dropped_no_fallback_profile'
-                    );
+                    fallbackReasons.push('search_dropped_no_fallback_profile');
                     chatOrchestratorLogger.warn(
                         'no search-capable fallback available; running without search',
                         {

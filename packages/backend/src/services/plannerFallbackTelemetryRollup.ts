@@ -72,9 +72,7 @@ const EVENT_KEY_SEPARATOR = '|';
 const toEventKey = (event: PlannerFallbackRollupEvent): string =>
     `${event.reason}${EVENT_KEY_SEPARATOR}${event.surface}${EVENT_KEY_SEPARATOR}${event.selectionSource}`;
 
-const fromEventKey = (
-    key: string
-): PlannerFallbackRollupEvent | undefined => {
+const fromEventKey = (key: string): PlannerFallbackRollupEvent | undefined => {
     const [reason, surface, selectionSource] = key.split(EVENT_KEY_SEPARATOR);
     if (!reason || !surface || !selectionSource) {
         return undefined;
@@ -125,9 +123,8 @@ export const createPlannerFallbackTelemetryRollup = ({
     logger,
     emitEvery = 25,
 }: CreatePlannerFallbackTelemetryRollupOptions): PlannerFallbackTelemetryRollup => {
-    const normalizedEmitEvery = Number.isInteger(emitEvery) && emitEvery > 0
-        ? emitEvery
-        : 25;
+    const normalizedEmitEvery =
+        Number.isInteger(emitEvery) && emitEvery > 0 ? emitEvery : 25;
     const countsByKey = new Map<string, number>();
     let totalEvents = 0;
 

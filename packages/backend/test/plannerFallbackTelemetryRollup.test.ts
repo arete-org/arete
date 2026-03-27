@@ -16,7 +16,10 @@ import {
 
 type LoggedSummary = {
     totalEvents: number;
-    byClassification: Record<'expected_fail_open' | 'regression_candidate', number>;
+    byClassification: Record<
+        'expected_fail_open' | 'regression_candidate',
+        number
+    >;
     grouped: Array<{
         reason: PlannerFallbackReason;
         surface: 'web' | 'discord';

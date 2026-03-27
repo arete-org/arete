@@ -39,6 +39,16 @@ export type RiskEvaluationResult = {
 export type Provenance = 'Retrieved' | 'Inferred' | 'Speculative';
 
 /**
+ * Deterministic signal map used by provenance evaluators.
+ * This shape stays serializable for logging and trace debugging.
+ */
+export type ProvenanceSignals = {
+    retrieval: boolean;
+    speculation: boolean;
+    hasContext: boolean;
+};
+
+/**
  * A citation points to a source used in a response.
  */
 export type Citation = {
