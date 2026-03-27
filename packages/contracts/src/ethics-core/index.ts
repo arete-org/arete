@@ -6,8 +6,9 @@
  * @footnote-ethics: medium - Types document data meaning but do not execute logic.
  */
 
-// This file is intentionally small. It only re-exports types so every package
-// can import from one place without pulling in runtime code.
+// This file is intentionally small. It re-exports shared ethics-core types and
+// runtime helpers (for example, formatExecutionTimelineSummary) so every
+// package can import from one place.
 
 export type {
     Provenance,
