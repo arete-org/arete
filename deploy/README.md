@@ -62,6 +62,7 @@ Services:
 - backend/bot: `LOG_LEVEL` (defaults to `debug`)
 - backend: `ALLOWED_ORIGINS`, `FRAME_ANCESTORS` (override CORS/CSP allowlists)
 - backend: `DEFAULT_MODEL`, `DEFAULT_REASONING_EFFORT`, `DEFAULT_VERBOSITY` (reflect defaults)
+- backend: `OLLAMA_BASE_URL`, `OLLAMA_API_KEY`, `OLLAMA_LOCAL_INFERENCE_ENABLED` (Ollama cloud/local behavior)
 - backend: `TRACE_API_RATE_LIMIT`, `TRACE_API_RATE_LIMIT_WINDOW_MS`, `TRACE_API_MAX_BODY_BYTES` (trace ingestion limits)
 - backend: `LITESTREAM_REPLICA_URL` (SQLite replication target)
 - bot: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (optional image uploads)
