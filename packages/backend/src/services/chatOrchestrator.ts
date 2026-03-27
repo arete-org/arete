@@ -28,10 +28,18 @@ import {
 } from './chatProfileOverlay.js';
 import { coercePlanForSurface } from './chatSurfacePolicy.js';
 import { createModelProfileResolver } from './modelProfileResolver.js';
+import {
+    createPlannerFallbackTelemetryRollup,
+    type PlannerFallbackReason,
+    type PlannerSelectionSource,
+} from './plannerFallbackTelemetryRollup.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions;
+const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
+    logger,
+});
 
 /**
  * Packs the normalized planner decision into one structured system payload.
@@ -183,6 +191,27 @@ export const createChatOrchestrator = ({
         const botProfileDisplayName = resolveBotProfileDisplayName();
         const planned = await chatPlanner.planChat(normalizedRequest);
         const plannerExecution = planned.execution;
+        const fallbackReasons: PlannerFallbackReason[] = [];
+        if (plannerExecution.status === 'failed') {
+            const plannerFailureReason =
+                plannerExecution.reasonCode === 'planner_invalid_output'
+                    ? 'planner_execution_failed_planner_invalid_output'
+                    : plannerExecution.reasonCode === 'planner_runtime_error'
+                      ? 'planner_execution_failed_planner_runtime_error'
+                      : 'planner_execution_failed_unknown';
+            fallbackReasons.push(plannerFailureReason);
+        }
+        const emitFallbackRollup = (
+            selectionSource: PlannerSelectionSource
+        ): void => {
+            for (const reason of fallbackReasons) {
+                plannerFallbackTelemetryRollup.record({
+                    reason,
+                    surface: normalizedRequest.surface,
+                    selectionSource,
+                });
+            }
+        };
         const { plan, surfacePolicy } = coercePlanForSurface(
             normalizedRequest,
             planned.plan,
@@ -195,8 +224,7 @@ export const createChatOrchestrator = ({
         // Runtime resolution stays authoritative and fail-open:
         // unknown/disabled profile ids never hard-fail the request.
         let selectedResponseProfile = defaultResponseProfile;
-        let profileSelectionSource: 'request' | 'planner' | 'default' =
-            'default';
+        let profileSelectionSource: PlannerSelectionSource = 'default';
         const requestedProfileId = normalizedRequest.profileId?.trim();
         if (requestedProfileId) {
             const selectedProfile = enabledProfilesById.get(requestedProfileId);
@@ -214,6 +242,7 @@ export const createChatOrchestrator = ({
                     );
                 }
             } else {
+                fallbackReasons.push('request_invalid_or_disabled_profile');
                 chatOrchestratorLogger.warn(
                     'request selected invalid or disabled profile id; falling back to planner/default profile',
                     {
@@ -229,6 +258,7 @@ export const createChatOrchestrator = ({
                 selectedResponseProfile = selectedProfile;
                 profileSelectionSource = 'planner';
             } else {
+                fallbackReasons.push('planner_invalid_or_disabled_profile');
                 chatOrchestratorLogger.warn(
                     'planner selected invalid or disabled profile id; falling back to default profile',
                     {
@@ -282,6 +312,7 @@ export const createChatOrchestrator = ({
                 rerouteApplied = true;
                 selectedResponseProfile = fallbackProfile;
                 effectiveSelectedProfileId = fallbackProfile.id;
+                fallbackReasons.push('planner_non_search_profile_rerouted');
                 chatOrchestratorLogger.warn(
                     'planner selected a non-search-capable profile; rerouting search to first enabled search-capable fallback profile',
                     {
@@ -301,6 +332,9 @@ export const createChatOrchestrator = ({
                     reasonCode: 'search_not_supported_by_selected_profile',
                 };
                 if (profileSelectionSource !== 'planner') {
+                    fallbackReasons.push(
+                        'search_dropped_selection_source_guard'
+                    );
                     chatOrchestratorLogger.warn(
                         'reroute not permitted by selection source; running without search',
                         {
@@ -312,6 +346,9 @@ export const createChatOrchestrator = ({
                         }
                     );
                 } else {
+                    fallbackReasons.push(
+                        'search_dropped_no_fallback_profile'
+                    );
                     chatOrchestratorLogger.warn(
                         'no search-capable fallback available; running without search',
                         {
@@ -335,6 +372,7 @@ export const createChatOrchestrator = ({
 
         // Non-message actions return early and skip model generation.
         if (executionPlan.action === 'ignore') {
+            emitFallbackRollup(profileSelectionSource);
             return {
                 action: 'ignore',
                 metadata: null,
@@ -342,6 +380,7 @@ export const createChatOrchestrator = ({
         }
 
         if (executionPlan.action === 'react') {
+            emitFallbackRollup(profileSelectionSource);
             return {
                 action: 'react',
                 reaction: executionPlan.reaction ?? '👍',
@@ -350,6 +389,7 @@ export const createChatOrchestrator = ({
         }
 
         if (executionPlan.action === 'image' && executionPlan.imageRequest) {
+            emitFallbackRollup(profileSelectionSource);
             return {
                 action: 'image',
                 imageRequest: executionPlan.imageRequest,
@@ -359,9 +399,11 @@ export const createChatOrchestrator = ({
 
         if (executionPlan.action === 'image' && !executionPlan.imageRequest) {
             // Invalid image action should not block response flow.
+            fallbackReasons.push('image_action_missing_image_request');
             chatOrchestratorLogger.warn(
                 `Chat planner returned image without imageRequest; falling back to ignore. surface=${normalizedRequest.surface} trigger=${normalizedRequest.trigger.kind} latestUserInputLength=${normalizedRequest.latestUserInput.length}`
             );
+            emitFallbackRollup(profileSelectionSource);
             return {
                 action: 'ignore',
                 metadata: null,
@@ -474,6 +516,7 @@ export const createChatOrchestrator = ({
         const totalDurationMs =
             response.metadata.totalDurationMs ??
             Math.max(0, Date.now() - orchestrationStartedAt);
+        emitFallbackRollup(profileSelectionSource);
         chatOrchestratorLogger.info('chat.orchestration.timing', {
             surface: normalizedRequest.surface,
             plannerStatus: plannerExecution.status,
