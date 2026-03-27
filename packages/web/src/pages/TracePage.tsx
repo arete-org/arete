@@ -39,6 +39,38 @@ type ServerMetadata = GetTraceResponse & {
 // React page can consume the JSON payload without re-defining the entire schema.
 type SerializableResponseMetadata = ServerMetadata;
 
+const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
+    // Prefer canonical generation event model first, then legacy mirrors.
+    const generationEventModel = traceData.execution
+        ?.filter((event) => event.kind === 'generation')
+        .at(-1)?.model;
+    return (
+        generationEventModel ||
+        traceData.model ||
+        traceData.modelVersion ||
+        'Unspecified'
+    );
+};
+
+const resolveExecutionSummary = (traceData: ServerMetadata): string | null => {
+    if (!traceData.execution || traceData.execution.length === 0) {
+        return null;
+    }
+
+    // Canonical v1 timeline formatter:
+    // planner/tool/generation with status and optional per-step duration.
+    return traceData.execution
+        .map((event) => {
+            const durationSuffix =
+                event.durationMs !== undefined ? `,${event.durationMs}ms` : '';
+            if (event.kind === 'tool') {
+                return `${event.kind}:${event.toolName ?? 'tool'}(${event.status}${durationSuffix})`;
+            }
+            return `${event.kind}:${event.model ?? event.profileId ?? event.provider ?? 'unknown'}(${event.status}${durationSuffix})`;
+        })
+        .join(' -> ');
+};
+
 const tracePageLogger = createScopedLogger('TracePage');
 
 // Helper to extract payload from 410 (stale) responses
@@ -327,7 +359,8 @@ const TracePage = (): JSX.Element => {
     const riskColor = RISK_TIER_COLORS[normalizedRiskTier] ?? '#6b7280';
     const provenance =
         traceData?.provenance || traceData?.reasoningEffort || 'Unknown';
-    const model = traceData?.model || traceData?.modelVersion || 'Unspecified';
+    const model = resolveTraceModelLabel(traceData);
+    const executionSummary = resolveExecutionSummary(traceData);
     const riskLabel = riskTier || 'Unspecified';
     const chainHash =
         traceData?.chainHash || traceData?.chainHash === ''
@@ -385,6 +418,17 @@ const TracePage = (): JSX.Element => {
                 <p>
                     <strong>Model:</strong> {model}
                 </p>
+                {executionSummary && (
+                    <p>
+                        <strong>Execution:</strong> {executionSummary}
+                    </p>
+                )}
+                {traceData.totalDurationMs !== undefined && (
+                    <p>
+                        <strong>Total Duration:</strong>{' '}
+                        {traceData.totalDurationMs}ms
+                    </p>
+                )}
             </article>
 
             <article className="card" aria-label="Citations">

@@ -37,25 +37,13 @@ export const resolveBotProfileDisplayName = (): string => {
 };
 
 /**
- * Chat profile selection is backend-owned. The bot may suggest a profile ID,
- * but the backend only honors the active runtime profile and warns on mismatch.
+ * Persona overlay selection is backend-owned and tied to runtime bot profile.
+ * Request profile selection is handled separately by chat orchestrator routing.
  */
 export const resolveActiveProfileOverlayPrompt = (
-    request: Pick<PostChatRequest, 'profileId' | 'surface'>,
-    logger: ChatProfileOverlayLogger
+    _request: Pick<PostChatRequest, 'profileId' | 'surface'>,
+    _logger: ChatProfileOverlayLogger
 ): string | null => {
-    const requestedProfileId = request.profileId?.trim();
-    const runtimeProfileId = runtimeConfig.profile.id;
-
-    if (requestedProfileId && requestedProfileId !== runtimeProfileId) {
-        logger.warn('profile id mismatch', {
-            requestedProfileId,
-            runtimeProfileId,
-            surface: request.surface,
-        });
-    }
-
-    // Runtime profile config stays authoritative even when callers include a
-    // profileId hint in the request payload.
+    // Runtime profile config stays authoritative for persona overlay text.
     return buildProfileOverlaySystemMessage(runtimeConfig.profile, 'chat');
 };

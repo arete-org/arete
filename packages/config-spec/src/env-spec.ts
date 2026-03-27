@@ -34,15 +34,58 @@ export const envEntries = [
         owner: 'shared',
         stage: 'runtime',
         section: 'openai',
-        required: true,
+        required: false,
         secret: true,
         kind: 'string',
-        description: 'OpenAI API key used by the bot and backend.',
+        description:
+            'OpenAI API key used when OpenAI-backed profiles or OpenAI-only routes are enabled.',
         defaultValue: noDefault(),
         usedBy: [
             'packages/backend/src/config.ts',
             'packages/discord-bot/src/config.ts',
         ],
+    }),
+
+    defineEnv({
+        key: 'OLLAMA_BASE_URL',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Base URL for Ollama inference (local daemon or Ollama cloud endpoint).',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'OLLAMA_API_KEY',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description:
+            'Optional Ollama API key for cloud-hosted endpoints that require auth.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'OLLAMA_LOCAL_INFERENCE_ENABLED',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'When true, allows model profiles to target local Ollama hosts (localhost/loopback).',
+        defaultValue: literal(false),
+        usedBy: ['packages/backend/src/config.ts'],
     }),
 
     defineEnv({

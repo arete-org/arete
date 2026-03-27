@@ -57,6 +57,37 @@ export type ResponseTemperament = {
  */
 export type PartialResponseTemperament = Partial<ResponseTemperament>;
 
+export type ExecutionStatus = 'executed' | 'skipped' | 'failed';
+
+/**
+ * Stable execution reason codes emitted by backend orchestration/runtime.
+ * Keep this list narrow so logs/UI/tests can rely on deterministic values.
+ */
+export type ExecutionReasonCode =
+    | 'planner_runtime_error'
+    | 'planner_invalid_output'
+    | 'generation_runtime_error'
+    | 'tool_not_used'
+    | 'search_not_supported_by_selected_profile'
+    | 'unspecified_tool_outcome';
+
+/**
+ * One backend-owned execution timeline entry for this response.
+ *
+ * This v1 shape is intentionally compact and is expected to grow once
+ * workflow-based execution is enabled (lineage, timing, and per-step usage).
+ */
+export type ExecutionEvent = {
+    kind: 'planner' | 'tool' | 'generation';
+    status: ExecutionStatus;
+    profileId?: string;
+    provider?: string;
+    model?: string;
+    toolName?: string;
+    reasonCode?: ExecutionReasonCode;
+    durationMs?: number;
+};
+
 /**
  * ResponseMetadata is the compact record attached to a model response.
  */
@@ -67,9 +98,11 @@ export type ResponseMetadata = {
     tradeoffCount: number; // Number of trade-offs the model surfaced.
     chainHash: string; // Short hash to help detect tampering.
     licenseContext: string; // Human-readable license label.
-    modelVersion: string; // The model id or version string.
+    modelVersion: string; // Compatibility mirror of the final generation model.
     staleAfter: string; // ISO timestamp after which the data is stale.
+    totalDurationMs?: number; // End-to-end orchestration duration when available.
     citations: Citation[]; // Sources used for the answer.
+    execution?: ExecutionEvent[]; // Canonical execution timeline for model/tool visibility.
     imageDescriptions?: string[]; // Optional captions for any images used.
     evidenceScore?: TraceAxisScore; // Optional TRACE evidence chip score (1..5).
     freshnessScore?: TraceAxisScore; // Optional TRACE freshness chip score (1..5).

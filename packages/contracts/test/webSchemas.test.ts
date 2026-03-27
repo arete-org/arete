@@ -213,6 +213,99 @@ test('ResponseMetadataSchema remains tolerant for forward-compatible responses',
     assert.equal(parsed.success, true);
 });
 
+test('ResponseMetadataSchema accepts execution timeline events', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        execution: [
+            {
+                kind: 'planner',
+                status: 'executed',
+                profileId: 'openai-text-fast',
+                provider: 'openai',
+                model: 'gpt-5-nano',
+                durationMs: 12,
+            },
+            {
+                kind: 'tool',
+                status: 'skipped',
+                toolName: 'web_search',
+                reasonCode: 'search_not_supported_by_selected_profile',
+                durationMs: 5,
+            },
+            {
+                kind: 'generation',
+                status: 'executed',
+                profileId: 'openai-text-medium',
+                provider: 'openai',
+                model: 'gpt-5-mini',
+                durationMs: 20,
+            },
+        ],
+    });
+
+    assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema rejects invalid execution timeline event kind/status', () => {
+    const invalidKind = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        execution: [
+            {
+                kind: 'step',
+                status: 'executed',
+            },
+        ],
+    });
+    assert.equal(invalidKind.success, false);
+
+    const invalidStatus = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        execution: [
+            {
+                kind: 'planner',
+                status: 'requested',
+            },
+        ],
+    });
+    assert.equal(invalidStatus.success, false);
+
+    const missingReasonForSkipped = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        execution: [
+            {
+                kind: 'tool',
+                status: 'skipped',
+                toolName: 'web_search',
+            },
+        ],
+    });
+    assert.equal(missingReasonForSkipped.success, false);
+
+    const invalidReasonCode = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        execution: [
+            {
+                kind: 'planner',
+                status: 'failed',
+                reasonCode: 'unknown_failure',
+            },
+        ],
+    });
+    assert.equal(invalidReasonCode.success, false);
+
+    const executedWithReasonCode = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        execution: [
+            {
+                kind: 'generation',
+                status: 'executed',
+                reasonCode: 'planner_runtime_error',
+            },
+        ],
+    });
+    assert.equal(executedWithReasonCode.success, false);
+});
+
 test('ResponseMetadataSchema accepts valid TRACE temperament metadata', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,

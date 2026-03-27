@@ -22,9 +22,7 @@ import {
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 
 import { runtimeConfig } from './config.js';
-import {
-    buildResponseMetadata,
-} from './services/openaiService.js';
+import { buildResponseMetadata } from './services/openaiService.js';
 import { SimpleRateLimiter } from './services/rateLimiter.js';
 import { createTraceStore, storeTrace } from './services/traceStore.js';
 import { createBlogStore } from './storage/blogStore.js';
@@ -53,6 +51,7 @@ import { createInternalVoiceTtsService } from './services/internalVoiceTts.js';
 import { createInternalVoiceTtsHandler } from './handlers/internalVoiceTts.js';
 import { createInternalVoiceRealtimeHandler } from './handlers/internalVoiceRealtime.js';
 import { buildRealtimeInstructions } from './services/prompts/realtimePromptComposer.js';
+import { createChatProfilesHandler } from './handlers/chatProfiles.js';
 
 /**
  * @footnote-logger: openAiRealtimeVoiceRuntime
@@ -70,7 +69,10 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(currentDirectory, '../../web/dist');
 const DATA_DIR = runtimeConfig.server.dataDir;
 const BLOG_POSTS_DIR = path.join(DATA_DIR, 'blog-posts');
-const VOLTAGENT_LOG_DIR = path.join(runtimeConfig.logging.directory, 'voltagent');
+const VOLTAGENT_LOG_DIR = path.join(
+    runtimeConfig.logging.directory,
+    'voltagent'
+);
 
 // --- Storage and asset helpers ---
 const blogStore = createBlogStore(BLOG_POSTS_DIR);
@@ -111,6 +113,15 @@ const initializeServices = () => {
         `OPENAI_API_KEY: ${runtimeConfig.openai.apiKey ? 'SET' : 'NOT SET'}`
     );
     logger.info(
+        `OLLAMA_BASE_URL: ${runtimeConfig.ollama.baseUrl ? 'SET' : 'NOT SET'}`
+    );
+    logger.info(
+        `OLLAMA_API_KEY: ${runtimeConfig.ollama.apiKey ? 'SET' : 'NOT SET'}`
+    );
+    logger.info(
+        `OLLAMA_LOCAL_INFERENCE_ENABLED: ${runtimeConfig.ollama.localInferenceEnabled ? 'ENABLED' : 'DISABLED'}`
+    );
+    logger.info(
         `TURNSTILE_SECRET_KEY: ${runtimeConfig.turnstile.secretKey ? 'SET' : 'NOT SET'}`
     );
     logger.info(
@@ -135,12 +146,41 @@ const initializeServices = () => {
     // Incident storage is a required Wave 1 dependency. Surface failures early.
     incidentStore = getDefaultIncidentStore();
 
-    // --- OpenAI service ---
-    if (runtimeConfig.openai.apiKey) {
-        // Only enable OpenAI when an API key is configured.
+    // --- Text generation runtime ---
+    // Chat runtime can run when at least one provider is configured.
+    const hasOpenAiProvider = Boolean(runtimeConfig.openai.apiKey);
+    const ollamaHostname = (() => {
+        if (!runtimeConfig.ollama.baseUrl) {
+            return null;
+        }
+        try {
+            return new URL(runtimeConfig.ollama.baseUrl).hostname.toLowerCase();
+        } catch {
+            logger.warn(
+                `OLLAMA_BASE_URL is invalid ("${runtimeConfig.ollama.baseUrl}"); ignoring ollama provider setup.`
+            );
+            return null;
+        }
+    })();
+    const ollamaBaseUrlIsLocal =
+        ollamaHostname === 'localhost' ||
+        ollamaHostname === '127.0.0.1' ||
+        ollamaHostname === '::1' ||
+        ollamaHostname === 'host.docker.internal';
+    const hasOllamaProvider =
+        Boolean(runtimeConfig.ollama.baseUrl) &&
+        ollamaHostname !== null &&
+        (!ollamaBaseUrlIsLocal || runtimeConfig.ollama.localInferenceEnabled);
+    if (hasOpenAiProvider || hasOllamaProvider) {
         generationRuntime = createVoltAgentRuntime({
             defaultModel: runtimeConfig.openai.defaultModel,
             logger: voltAgentLogger,
+            ollama: {
+                baseUrl: runtimeConfig.ollama.baseUrl ?? undefined,
+                apiKey: runtimeConfig.ollama.apiKey ?? undefined,
+                localInferenceEnabled:
+                    runtimeConfig.ollama.localInferenceEnabled,
+            },
             ...(runtimeConfig.voltagent.observabilityEnabled && {
                 voltOps: {
                     publicKey: runtimeConfig.voltagent.publicKey!,
@@ -148,14 +188,26 @@ const initializeServices = () => {
                 },
             }),
         });
+    } else {
+        generationRuntime = null;
+        logger.warn(
+            'No text-generation provider is configured. Set OPENAI_API_KEY or OLLAMA_BASE_URL to enable /api/chat.'
+        );
+    }
+
+    // --- OpenAI-only services ---
+    if (runtimeConfig.openai.apiKey) {
         imageGenerationRuntime = createOpenAiImageRuntime({
             apiKey: runtimeConfig.openai.apiKey,
             requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
         });
-        internalNewsTaskService = createInternalNewsTaskService({
-            generationRuntime,
-            defaultModel: runtimeConfig.openai.defaultModel,
-        });
+        internalNewsTaskService =
+            generationRuntime !== null
+                ? createInternalNewsTaskService({
+                      generationRuntime,
+                      defaultModel: runtimeConfig.openai.defaultModel,
+                  })
+                : null;
         internalImageDescriptionTaskService =
             createInternalImageDescriptionTaskService({
                 adapter: createOpenAiImageDescriptionAdapter({
@@ -180,7 +232,6 @@ const initializeServices = () => {
             logger: openAiRealtimeLogger,
         });
     } else {
-        generationRuntime = null;
         imageGenerationRuntime = null;
         internalNewsTaskService = null;
         internalImageDescriptionTaskService = null;
@@ -188,7 +239,7 @@ const initializeServices = () => {
         internalVoiceTtsService = null;
         realtimeVoiceRuntime = null;
         logger.warn(
-            'OPENAI_API_KEY is missing; /api/chat and runtime-backed internal text/image/voice tasks will return 503 until configured.'
+            'OPENAI_API_KEY is missing; OpenAI-only image and voice routes will return 503 until configured.'
         );
     }
 
@@ -288,6 +339,7 @@ const {
     serviceToken: runtimeConfig.reflect.serviceToken,
 });
 const handleRuntimeConfigRequest = createRuntimeConfigHandler({ logRequest });
+const handleChatProfilesRequest = createChatProfilesHandler({ logRequest });
 const handleWebhookRequest = createWebhookHandler({
     writeBlogPost: blogStore.writeBlogPost,
     verifyGitHubSignature,
@@ -504,6 +556,11 @@ const server = http.createServer(async (req, res) => {
 
         if (normalizedPathname === '/api/chat') {
             await handleChatRequest(req, res);
+            return;
+        }
+
+        if (normalizedPathname === '/api/chat/profiles') {
+            await handleChatProfilesRequest(req, res);
             return;
         }
 

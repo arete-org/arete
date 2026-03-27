@@ -315,6 +315,10 @@ export type ChatImageRequest = {
 export type PostChatRequest = {
     surface: ChatSurface;
     profileId?: string;
+    generation?: {
+        reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
+        verbosity?: 'low' | 'medium' | 'high';
+    };
     trigger: {
         kind: ChatTriggerKind;
         messageId?: string;
@@ -381,6 +385,27 @@ export type PostChatResponse =
     | ChatReactActionResponse
     | ChatIgnoreActionResponse
     | ChatImageActionResponse;
+
+/**
+ * One chat profile choice exposed for Discord slash-command model switching.
+ *
+ * @api.operationId: getChatProfiles
+ * @api.path: GET /api/chat/profiles
+ */
+export type ChatProfileOption = {
+    id: string;
+    description?: string;
+};
+
+/**
+ * Bot/runtime-facing list of enabled chat profiles.
+ *
+ * @api.operationId: getChatProfiles
+ * @api.path: GET /api/chat/profiles
+ */
+export type GetChatProfilesResponse = {
+    profiles: ChatProfileOption[];
+};
 
 /**
  * Curated text-model vocabulary accepted by the trusted internal image route.

@@ -30,7 +30,6 @@ const projectRoot = path.resolve(__dirname, '../../../../');
 const REQUIRED_ENV_VARS = [
     'DISCORD_TOKEN',
     'DISCORD_CLIENT_ID',
-    'DISCORD_GUILD_ID',
     'DISCORD_USER_ID',
     'INCIDENT_PSEUDONYMIZATION_SECRET',
 ] as const;
@@ -78,6 +77,20 @@ const validateEnvironment = () => {
         if (!process.env[envVar]) {
             throw new Error(`Missing required environment variable: ${envVar}`);
         }
+    }
+
+    const hasGuildIds =
+        typeof process.env.DISCORD_GUILD_IDS === 'string' &&
+        process.env.DISCORD_GUILD_IDS.split(',').some(
+            (entry) => entry.trim().length > 0
+        );
+    const hasLegacyGuildId =
+        typeof process.env.DISCORD_GUILD_ID === 'string' &&
+        process.env.DISCORD_GUILD_ID.trim().length > 0;
+    if (!hasGuildIds && !hasLegacyGuildId) {
+        throw new Error(
+            'Missing required Discord guild configuration. Set DISCORD_GUILD_IDS (comma-delimited) or DISCORD_GUILD_ID.'
+        );
     }
 
     bootstrapLogger.debug(
@@ -370,8 +383,7 @@ const getRealtimeModelEnv = (
         return undefined;
     }
 
-    const normalizedValue =
-        value.trim() as SupportedOpenAIRealtimeModel;
+    const normalizedValue = value.trim() as SupportedOpenAIRealtimeModel;
     if (VALID_REALTIME_MODELS.has(normalizedValue)) {
         return normalizedValue;
     }
@@ -399,6 +411,28 @@ const getRealtimeVoiceEnv = (
         `Ignoring invalid realtime voice for ${key}: "${value}".`
     );
     return undefined;
+};
+
+const resolveCommandDeploymentGuildIds = (): string[] => {
+    const configuredGuildIds = getStringArrayEnv('DISCORD_GUILD_IDS', []);
+    if (configuredGuildIds.length > 0) {
+        const uniqueGuildIds = [...new Set(configuredGuildIds)];
+        if (uniqueGuildIds.length !== configuredGuildIds.length) {
+            bootstrapLogger.warn(
+                'DISCORD_GUILD_IDS contained duplicate guild IDs; duplicates were removed.'
+            );
+        }
+
+        return uniqueGuildIds;
+    }
+
+    const legacyGuildId = getOptionalStringEnv('DISCORD_GUILD_ID');
+    if (legacyGuildId) {
+        return [legacyGuildId];
+    }
+
+    // validateEnvironment should guarantee this path is unreachable.
+    return [];
 };
 
 const getRealtimeTurnDetectionEnv = (
@@ -430,8 +464,7 @@ const getRealtimeVadEagernessEnv = (
         return undefined;
     }
 
-    const normalizedValue =
-        value.trim() as SupportedOpenAIRealtimeVadEagerness;
+    const normalizedValue = value.trim() as SupportedOpenAIRealtimeVadEagerness;
     if (VALID_REALTIME_VAD_EAGERNESS.has(normalizedValue)) {
         return normalizedValue;
     }
@@ -538,6 +571,11 @@ const nodeEnv =
               return DEFAULT_RUNTIME_NODE_ENV;
           })();
 const isProduction = nodeEnv === 'production';
+const commandDeploymentGuildIds = resolveCommandDeploymentGuildIds();
+bootstrapLogger.info('Resolved command deployment guild IDs.', {
+    guildCount: commandDeploymentGuildIds.length,
+    guildIds: commandDeploymentGuildIds,
+});
 
 /**
  * Discord bot runtime config assembled from env defaults and validated
@@ -546,7 +584,10 @@ const isProduction = nodeEnv === 'production';
 export const runtimeConfig = {
     token: process.env.DISCORD_TOKEN!,
     clientId: process.env.DISCORD_CLIENT_ID!,
-    guildId: process.env.DISCORD_GUILD_ID!,
+    // Legacy single-guild convenience field.
+    // For multi-guild command deployment, prefer `guildIds`.
+    guildId: commandDeploymentGuildIds[0]!,
+    guildIds: commandDeploymentGuildIds,
     developerUserId: process.env.DISCORD_USER_ID!,
     incidentReview: {
         superuserIds: resolveIncidentSuperuserIds(),
@@ -718,9 +759,7 @@ export const runtimeConfig = {
                 ),
             };
             const semanticVad = {
-                eagerness: getRealtimeVadEagernessEnv(
-                    'REALTIME_VAD_EAGERNESS'
-                ),
+                eagerness: getRealtimeVadEagernessEnv('REALTIME_VAD_EAGERNESS'),
             };
             const config = {
                 createResponse: getOptionalBooleanEnv(

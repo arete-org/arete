@@ -9,10 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { Agent } from '@voltagent/core';
-import type {
-    GenerationRequest,
-    RuntimeMessage,
-} from '../src/index.js';
+import type { GenerationRequest, RuntimeMessage } from '../src/index.js';
 import {
     createDefaultVoltAgentExecutor,
     createVoltAgentRuntime,
@@ -295,17 +292,17 @@ test('voltagent runtime executes search requests through the VoltAgent executor'
     assert.equal(result.provenance, 'Retrieved');
 });
 
-test('voltagent runtime omits openai-only options for non-openai models', async () => {
+test('voltagent runtime omits openai-only options for ollama models', async () => {
     let seenOptions: VoltAgentGenerateTextOptions | undefined;
     const runtime = createVoltAgentRuntime({
-        defaultModel: 'anthropic/claude-3-5-sonnet',
+        defaultModel: 'ollama/llama3.2:3b',
         createExecutor: () => ({
             async generateText(_messages, options) {
                 seenOptions = options;
                 return {
-                    text: 'non-openai reply',
+                    text: 'ollama reply',
                     response: {
-                        modelId: 'anthropic/claude-3-5-sonnet',
+                        modelId: 'ollama/llama3.2:3b',
                     },
                 };
             },
@@ -314,7 +311,7 @@ test('voltagent runtime omits openai-only options for non-openai models', async 
 
     await runtime.generate({
         messages: [{ role: 'user', content: 'Summarize this.' }],
-        model: 'anthropic/claude-3-5-sonnet',
+        model: 'ollama/llama3.2:3b',
         reasoningEffort: 'high',
         verbosity: 'high',
         search: {
@@ -331,14 +328,14 @@ test('voltagent runtime omits openai-only options for non-openai models', async 
 test('voltagent runtime does not forward search for providers without a mapped search tool', async () => {
     let seenOptions: VoltAgentGenerateTextOptions | undefined;
     const runtime = createVoltAgentRuntime({
-        defaultModel: 'anthropic/claude-3-5-sonnet',
+        defaultModel: 'ollama/llama3.2:3b',
         createExecutor: () => ({
             async generateText(_messages, options) {
                 seenOptions = options;
                 return {
                     text: 'capability-enabled search reply',
                     response: {
-                        modelId: 'anthropic/claude-3-5-sonnet',
+                        modelId: 'ollama/llama3.2:3b',
                     },
                 };
             },
@@ -347,7 +344,7 @@ test('voltagent runtime does not forward search for providers without a mapped s
 
     await runtime.generate({
         messages: [{ role: 'user', content: 'Summarize this.' }],
-        model: 'anthropic/claude-3-5-sonnet',
+        model: 'ollama/llama3.2:3b',
         search: {
             query: 'latest release notes',
             contextSize: 'high',
@@ -359,6 +356,56 @@ test('voltagent runtime does not forward search for providers without a mapped s
     });
 
     assert.equal(seenOptions?.search, undefined);
+});
+
+test('voltagent runtime maps remote ollama provider to ollama-cloud and normalizes cloud base URL', async () => {
+    let seenModel: string | undefined;
+    let seenOllamaConfig:
+        | {
+              provider: 'ollama' | 'ollama-cloud';
+              baseUrl?: string;
+              apiKey?: string;
+              localInferenceEnabled: boolean;
+          }
+        | undefined;
+
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'gpt-oss:20b-cloud',
+        ollama: {
+            baseUrl: 'https://ollama.com/api',
+            apiKey: 'test-ollama-key',
+            localInferenceEnabled: false,
+        },
+        createExecutor: ({ model, ollama: ollamaConfig }) => {
+            seenModel = model;
+            seenOllamaConfig = ollamaConfig;
+            return {
+                async generateText() {
+                    return {
+                        text: 'cloud ollama reply',
+                        response: {
+                            modelId: model,
+                        },
+                    };
+                },
+            };
+        },
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        model: 'gpt-oss:20b-cloud',
+        provider: 'ollama',
+    });
+
+    assert.equal(seenModel, 'ollama-cloud/gpt-oss:20b-cloud');
+    assert.equal(result.model, 'gpt-oss:20b-cloud');
+    assert.deepEqual(seenOllamaConfig, {
+        provider: 'ollama-cloud',
+        baseUrl: 'https://ollama.com/v1',
+        apiKey: 'test-ollama-key',
+        localInferenceEnabled: false,
+    });
 });
 
 test('voltagent runtime recovers markdown-link citations when retrieved output lacks structured sources', async () => {
@@ -620,10 +667,7 @@ test('default VoltAgent executor passes the configured logger into Agent creatio
         },
     });
 
-    await executor.generateText(
-        [{ role: 'user', content: 'Ping' }],
-        {}
-    );
+    await executor.generateText([{ role: 'user', content: 'Ping' }], {});
 
     assert.deepEqual(seenLoggers, [logger]);
 });

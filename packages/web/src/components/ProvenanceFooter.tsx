@@ -12,6 +12,7 @@ import type {
     ResponseMetadata,
     RiskTier,
     Citation,
+    ExecutionEvent,
 } from '@footnote/contracts/ethics-core';
 
 interface ProvenanceFooterProps {
@@ -23,6 +24,19 @@ const RISK_TIER_COLORS: Record<RiskTier, string> = {
     Low: '#7FDCA4', // Sage green
     Medium: '#F8E37C', // Warm gold
     High: '#E27C7C', // Soft coral
+};
+
+const formatExecutionEvent = (event: ExecutionEvent): string => {
+    const durationSuffix =
+        event.durationMs !== undefined ? `, ${event.durationMs}ms` : '';
+    if (event.kind === 'tool') {
+        const tool = event.toolName ?? 'tool';
+        return `${event.kind}:${tool}(${event.status}${durationSuffix})`;
+    }
+
+    const modelOrProfile =
+        event.model ?? event.profileId ?? event.provider ?? 'unknown';
+    return `${event.kind}:${modelOrProfile}(${event.status}${durationSuffix})`;
 };
 
 const ProvenanceFooter = ({
@@ -73,6 +87,12 @@ const ProvenanceFooter = ({
             }
         });
     }
+    const executionSummary =
+        metadata.execution && metadata.execution.length > 0
+            ? // execution[] is canonical for modern traces.
+              // modelVersion remains a fallback for legacy traces.
+              metadata.execution.map(formatExecutionEvent).join(' -> ')
+            : null;
 
     return (
         <aside
@@ -120,7 +140,15 @@ const ProvenanceFooter = ({
             </div>
 
             <div className="provenance-meta">
-                {metadata.modelVersion &&
+                {executionSummary ? (
+                    <>
+                        <span className="provenance-model">
+                            {executionSummary}
+                        </span>
+                        <span className="provenance-separator"> • </span>
+                    </>
+                ) : (
+                    metadata.modelVersion &&
                     metadata.modelVersion.trim() !== '' && (
                         <>
                             <span className="provenance-model">
@@ -128,11 +156,20 @@ const ProvenanceFooter = ({
                             </span>
                             <span className="provenance-separator"> • </span>
                         </>
-                    )}
+                    )
+                )}
                 {metadata.chainHash && metadata.chainHash.trim() !== '' && (
                     <>
                         <span className="provenance-hash">
                             {metadata.chainHash}
+                        </span>
+                        <span className="provenance-separator"> • </span>
+                    </>
+                )}
+                {metadata.totalDurationMs !== undefined && (
+                    <>
+                        <span className="provenance-duration">
+                            {metadata.totalDurationMs}ms total
                         </span>
                         <span className="provenance-separator"> • </span>
                     </>

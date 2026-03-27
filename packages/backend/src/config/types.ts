@@ -60,6 +60,11 @@ export type RuntimeConfig = {
         defaultChannelContext: { channelId: string };
         requestTimeoutMs: number;
     };
+    ollama: {
+        baseUrl: string | null;
+        apiKey: string | null;
+        localInferenceEnabled: boolean;
+    };
     modelProfiles: {
         defaultProfileId: string;
         plannerProfileId: string;

@@ -116,12 +116,14 @@ export type RunChatInput = {
 export type RunChatMessagesInput = {
     messages: RuntimeMessage[];
     conversationSnapshot: string;
+    orchestrationStartedAtMs?: number;
     plannerTemperament?: PartialResponseTemperament;
     riskTier?: RiskTier;
     model?: string;
     provider?: SupportedProvider;
     capabilities?: ModelProfileCapabilities;
     generation?: ChatGenerationPlan;
+    executionContext?: ResponseMetadataRuntimeContext['executionContext'];
 };
 
 /**
@@ -171,16 +173,20 @@ export const createChatService = ({
     const runChatMessages = async ({
         messages,
         conversationSnapshot,
+        orchestrationStartedAtMs,
         plannerTemperament,
         riskTier,
         model,
         provider,
         capabilities,
         generation,
+        executionContext,
     }: RunChatMessagesInput): Promise<{
         message: string;
         metadata: ResponseMetadata;
+        generationDurationMs: number;
     }> => {
+        const generationStartedAt = Date.now();
         const normalizedGeneration = normalizeGenerationPlan(generation);
         // Repo-explainer mode appends one helper system hint so responses stay
         // aligned with Footnote repository-explanation expectations.
@@ -219,13 +225,53 @@ export const createChatService = ({
         // One runtime call produces both user-visible text and metadata inputs.
         const generationResult =
             await generationRuntime.generate(generationRequest);
+        // Generation duration is measured at the runtime boundary only.
+        // It intentionally excludes planner time and pre/post processing.
+        const generationDurationMs = Date.now() - generationStartedAt;
+        const totalDurationMs =
+            orchestrationStartedAtMs !== undefined
+                ? Math.max(0, Date.now() - orchestrationStartedAtMs)
+                : undefined;
         const assistantMetadata = buildAssistantMetadata(
             generationResult,
             normalizedGeneration,
             generationRequest.model
         );
+        const retrievalUsed =
+            generationResult.retrieval?.used === true ||
+            generationResult.provenance === 'Retrieved' ||
+            (generationResult.citations?.length ?? 0) > 0;
+        const hasSearchIntent = normalizedGeneration?.search !== undefined;
+        const effectiveToolExecutionContext:
+            | NonNullable<
+                  ResponseMetadataRuntimeContext['executionContext']
+              >['tool']
+            | undefined =
+            // Respect an explicit upstream skip reason from orchestrator first.
+            executionContext?.tool?.status === 'skipped'
+                ? executionContext.tool
+                : hasSearchIntent
+                  ? {
+                        // When search was requested, infer tool execution from
+                        // retrieval usage signals reported by the runtime.
+                        toolName: 'web_search',
+                        status: retrievalUsed ? 'executed' : 'skipped',
+                        ...(retrievalUsed
+                            ? {}
+                            : {
+                                  reasonCode: 'tool_not_used',
+                              }),
+                    }
+                  : undefined;
 
         const usageModel = assistantMetadata.model || defaultModel;
+        const effectiveGenerationExecutionContext = executionContext?.generation
+            ? {
+                  ...executionContext.generation,
+                  model: usageModel,
+                  durationMs: generationDurationMs,
+              }
+            : undefined;
         const promptTokens = assistantMetadata.usage?.promptTokens ?? 0;
         const completionTokens = assistantMetadata.usage?.completionTokens ?? 0;
         const totalTokens =
@@ -258,13 +304,22 @@ export const createChatService = ({
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
             conversationSnapshot: `${conversationSnapshot}\n\n${generationResult.text}`,
+            ...(totalDurationMs !== undefined && { totalDurationMs }),
             plannerTemperament,
+            executionContext: {
+                // Preserve upstream execution context and overlay runtime facts
+                // (for example, generation duration + final resolved model).
+                ...executionContext,
+                ...(effectiveGenerationExecutionContext !== undefined && {
+                    generation: effectiveGenerationExecutionContext,
+                }),
+                ...(effectiveToolExecutionContext !== undefined && {
+                    tool: effectiveToolExecutionContext,
+                }),
+            },
             retrieval: {
-                requested: normalizedGeneration?.search !== undefined,
-                used:
-                    generationResult.retrieval?.used === true ||
-                    generationResult.provenance === 'Retrieved' ||
-                    (generationResult.citations?.length ?? 0) > 0,
+                requested: hasSearchIntent,
+                used: retrievalUsed,
                 intent: normalizedGeneration?.search?.intent,
                 contextSize: normalizedGeneration?.search?.contextSize,
             },
@@ -304,6 +359,7 @@ export const createChatService = ({
         return {
             message: generationResult.text,
             metadata: normalizedResponseMetadata,
+            generationDurationMs,
         };
     };
 

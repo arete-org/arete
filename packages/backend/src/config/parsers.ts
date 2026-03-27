@@ -41,6 +41,19 @@ export const parseOptionalTrimmedString = (
 };
 
 /**
+ * Parses permissive boolean flags commonly used for enable/disable env knobs.
+ * Accepts "1", "true", and "yes" (case-insensitive) as true.
+ */
+export const parseBooleanFlag = (value: string | undefined): boolean => {
+    if (typeof value !== 'string') {
+        return false;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes';
+};
+
+/**
  * Parses a boolean env override and warns when the value is not clearly
  * `true` or `false`.
  */
@@ -178,8 +191,6 @@ export const parseLogLevelEnv = (
         return normalized as SupportedLogLevel;
     }
 
-    warn(
-        `Ignoring invalid LOG_LEVEL "${value}". Using default (${fallback}).`
-    );
+    warn(`Ignoring invalid LOG_LEVEL "${value}". Using default (${fallback}).`);
     return fallback;
 };

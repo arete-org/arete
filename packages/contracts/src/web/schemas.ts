@@ -136,6 +136,51 @@ const ResponseTemperamentSchema = z
     })
     .strict();
 const PartialResponseTemperamentSchema = ResponseTemperamentSchema.partial();
+const ExecutionStatusSchema = z.enum(['executed', 'skipped', 'failed']);
+const ExecutionReasonCodeSchema = z.enum([
+    'planner_runtime_error',
+    'planner_invalid_output',
+    'generation_runtime_error',
+    'tool_not_used',
+    'search_not_supported_by_selected_profile',
+    'unspecified_tool_outcome',
+]);
+// Cross-field execution invariants:
+// - skipped/failed must explain why (reasonCode required)
+// - executed must not include reasonCode
+// This keeps telemetry queryable and avoids ambiguous event payloads.
+const ExecutionEventSchema = z
+    .object({
+        kind: z.enum(['planner', 'tool', 'generation']),
+        status: ExecutionStatusSchema,
+        profileId: z.string().min(1).optional(),
+        provider: z.string().min(1).optional(),
+        model: z.string().min(1).optional(),
+        toolName: z.string().min(1).optional(),
+        reasonCode: ExecutionReasonCodeSchema.optional(),
+        durationMs: z.number().int().nonnegative().optional(),
+    })
+    .superRefine((value, context) => {
+        if (
+            (value.status === 'skipped' || value.status === 'failed') &&
+            !value.reasonCode
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message:
+                    'reasonCode is required when execution status is skipped or failed.',
+            });
+        }
+
+        if (value.status === 'executed' && value.reasonCode) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message:
+                    'reasonCode must be omitted when execution status is executed.',
+            });
+        }
+    })
+    .strict();
 
 const responseMetadataShape = {
     responseId: z.string().min(1),
@@ -146,7 +191,9 @@ const responseMetadataShape = {
     licenseContext: z.string(),
     modelVersion: z.string(),
     staleAfter: z.string(),
+    totalDurationMs: z.number().int().nonnegative().optional(),
     citations: z.array(CitationSchema),
+    execution: z.array(ExecutionEventSchema).optional(),
     imageDescriptions: z.array(z.string()).optional(),
     evidenceScore: TraceAxisScoreSchema.optional(),
     freshnessScore: TraceAxisScoreSchema.optional(),
@@ -175,6 +222,15 @@ export const PostChatRequestSchema = z
     .object({
         surface: ChatSurfaceSchema,
         profileId: ChatProfileIdSchema.optional(),
+        generation: z
+            .object({
+                reasoningEffort: z
+                    .enum(['minimal', 'low', 'medium', 'high'])
+                    .optional(),
+                verbosity: z.enum(['low', 'medium', 'high']).optional(),
+            })
+            .strict()
+            .optional(),
         trigger: z
             .object({
                 kind: ChatTriggerKindSchema,
@@ -232,6 +288,25 @@ export const PostChatResponseSchema = z.discriminatedUnion('action', [
         })
         .passthrough(),
 ]);
+
+/**
+ * @api.operationId: getChatProfiles
+ * @api.path: GET /api/chat/profiles
+ */
+export const GetChatProfilesResponseSchema = z
+    .object({
+        profiles: z
+            .array(
+                z
+                    .object({
+                        id: z.string().min(1),
+                        description: z.string().min(1).optional(),
+                    })
+                    .strict()
+            )
+            .max(100),
+    })
+    .strict();
 
 /**
  * @api.operationId: postInternalTextTask

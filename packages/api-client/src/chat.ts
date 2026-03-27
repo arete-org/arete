@@ -6,10 +6,12 @@
  * @footnote-ethics: medium - Stable chat transport keeps backend reasoning and provenance visible to users.
  */
 import type {
+    GetChatProfilesResponse,
     PostChatRequest,
     PostChatResponse,
 } from '@footnote/contracts/web';
 import {
+    GetChatProfilesResponseSchema,
     PostChatResponseSchema,
     createSchemaResponseValidator,
 } from '@footnote/contracts/web/schemas';
@@ -29,6 +31,9 @@ export type DiscordChatApiResponse =
     | UnknownChatActionResponse;
 
 export type ChatApi = {
+    getChatProfiles: (options?: {
+        signal?: AbortSignal;
+    }) => Promise<GetChatProfilesResponse>;
     chatViaApi: (
         request: PostChatRequest,
         options?: { signal?: AbortSignal }
@@ -39,20 +44,40 @@ export type ChatApi = {
     ) => Promise<PostChatResponse>;
 };
 
-const isChatApiResponse = (
-    value: unknown
-): value is DiscordChatApiResponse =>
+const isChatApiResponse = (value: unknown): value is DiscordChatApiResponse =>
     Boolean(
         value &&
-            typeof value === 'object' &&
-            typeof (value as { action?: unknown }).action === 'string' &&
-            (value as { action: string }).action.trim().length > 0
+        typeof value === 'object' &&
+        typeof (value as { action?: unknown }).action === 'string' &&
+        (value as { action: string }).action.trim().length > 0
     );
 
 export const createChatApi = (
     requestJson: ApiRequester,
     { traceApiToken }: CreateChatApiOptions = {}
 ): ChatApi => {
+    /**
+     * @api.operationId: getChatProfiles
+     * @api.path: GET /api/chat/profiles
+     */
+    const getChatProfiles = async (options?: {
+        signal?: AbortSignal;
+    }): Promise<GetChatProfilesResponse> => {
+        const response = await requestJson<GetChatProfilesResponse>(
+            '/api/chat/profiles',
+            {
+                method: 'GET',
+                signal: options?.signal,
+                cache: 'no-store',
+                validateResponse: createSchemaResponseValidator(
+                    GetChatProfilesResponseSchema
+                ),
+            }
+        );
+
+        return response.data;
+    };
+
     /**
      * @api.operationId: postChat
      * @api.path: POST /api/chat
@@ -114,6 +139,7 @@ export const createChatApi = (
     };
 
     return {
+        getChatProfiles,
         chatViaApi,
         chatQuestion,
     };

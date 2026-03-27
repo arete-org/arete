@@ -15,6 +15,7 @@ import { logger } from './utils/logger.js';
 import { runtimeConfig } from './config.js';
 import type { Command } from './commands/BaseCommand.js';
 import { ChannelContextManager } from './state/ChannelContextManager.js';
+import { applyChatCommandProfileChoices } from './utils/chatCommandProfiles.js';
 import { handleButtonInteraction } from './interactions/buttonHandlers.js';
 import { handleModalSubmitInteraction } from './interactions/modalSubmitHandlers.js';
 import { handleStringSelectMenuInteraction } from './interactions/selectMenuHandlers.js';
@@ -35,7 +36,8 @@ const __dirname = path.dirname(__filename);
 const sharedContextManager = runtimeConfig.contextManager.enabled
     ? new ChannelContextManager({
           enabled: true,
-          maxMessagesPerChannel: runtimeConfig.contextManager.maxMessagesPerChannel,
+          maxMessagesPerChannel:
+              runtimeConfig.contextManager.maxMessagesPerChannel,
           messageRetentionMs: runtimeConfig.contextManager.messageRetentionMs,
           evictionIntervalMs: runtimeConfig.contextManager.evictionIntervalMs,
       })
@@ -79,14 +81,45 @@ client.handlers = new Collection();
     try {
         // Load commands first
         const commands = await commandHandler.loadCommands();
+        await applyChatCommandProfileChoices(commands);
 
-        // Deploy commands to Discord
+        // Deploy commands to Discord across all configured guilds.
+        // This keeps command rollout explicit and predictable for each guild.
         logger.debug('Deploying commands to Discord...');
-        await commandHandler.deployCommands(
-            runtimeConfig.token,
-            runtimeConfig.clientId,
-            runtimeConfig.guildId
-        );
+        let successfulGuildDeployments = 0;
+        let failedGuildDeployments = 0;
+        for (const guildId of runtimeConfig.guildIds) {
+            try {
+                await commandHandler.deployCommands(
+                    runtimeConfig.token,
+                    runtimeConfig.clientId,
+                    guildId
+                );
+                successfulGuildDeployments += 1;
+            } catch (error) {
+                failedGuildDeployments += 1;
+                logger.error('Guild command deployment failed.', {
+                    guildId,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                });
+            }
+        }
+
+        logger.info('Guild command deployment completed.', {
+            successfulGuildDeployments,
+            failedGuildDeployments,
+            totalGuilds: runtimeConfig.guildIds.length,
+        });
+
+        if (
+            successfulGuildDeployments === 0 &&
+            runtimeConfig.guildIds.length > 0
+        ) {
+            throw new Error(
+                'All guild command deployments failed. Aborting startup.'
+            );
+        }
 
         // Store commands in memory for execution
         commands.forEach((cmd, name) => {

@@ -4,6 +4,7 @@ openapi: 3.1.0
 # Quick Map
 # - POST /api/chat: Chat (public; Turnstile + rate limits when configured)
 # - OPTIONS /api/chat: CORS preflight
+# - GET /api/chat/profiles: Enabled chat profile options (public)
 # - POST /api/internal/text: Trusted internal text task execution
 # - POST /api/internal/image: Trusted internal image task execution
 # - POST /api/internal/voice/tts: Trusted internal voice TTS execution
@@ -137,6 +138,29 @@ paths:
             responses:
                 '204':
                     $ref: '#/components/responses/PreflightAccepted'
+
+    /api/chat/profiles:
+        get:
+            operationId: getChatProfiles
+            x-codeRefs:
+                - packages/backend/src/handlers/chatProfiles.ts#createChatProfilesHandler
+                - packages/api-client/src/chat.ts#createChatApi
+                - packages/contracts/src/web/types.ts#GetChatProfilesResponse
+            summary: List enabled chat profile options
+            description: |
+                Returns enabled chat profile ids for model/profile switching UX.
+                This endpoint is public-safe and excludes provider secrets/internal config.
+            tags:
+                - Chat
+            responses:
+                '200':
+                    description: Enabled chat profile options.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ChatProfilesResponse'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
 
     /api/internal/text:
         post:
@@ -1371,6 +1395,16 @@ components:
                     type: string
                     pattern: '^[a-z0-9][a-z0-9-]{0,31}$'
                     description: Optional profile selector resolved by backend prompt composition.
+                generation:
+                    type: object
+                    properties:
+                        reasoningEffort:
+                            type: string
+                            enum: [minimal, low, medium, high]
+                        verbosity:
+                            type: string
+                            enum: [low, medium, high]
+                    additionalProperties: false
                 trigger:
                     type: object
                     properties:
@@ -1426,6 +1460,31 @@ components:
                 - trigger
                 - latestUserInput
                 - conversation
+            additionalProperties: false
+
+        ChatProfileOption:
+            type: object
+            properties:
+                id:
+                    type: string
+                    minLength: 1
+                description:
+                    type: string
+                    minLength: 1
+            required:
+                - id
+            additionalProperties: false
+
+        ChatProfilesResponse:
+            type: object
+            properties:
+                profiles:
+                    type: array
+                    maxItems: 100
+                    items:
+                        $ref: '#/components/schemas/ChatProfileOption'
+            required:
+                - profiles
             additionalProperties: false
 
         ChatResponse:

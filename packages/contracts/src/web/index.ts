@@ -16,6 +16,7 @@ export type { ApiErrorResponse, NormalizedApiError } from './types.js';
 export type {
     ChatSurface,
     ChatTriggerKind,
+    ChatProfileOption,
     ChatConversationMessage,
     ChatAttachment,
     ChatCapabilities,
@@ -26,6 +27,7 @@ export type {
     ChatIgnoreActionResponse,
     ChatImageActionResponse,
     PostChatResponse,
+    GetChatProfilesResponse,
 } from './types.js';
 
 /**
@@ -188,6 +190,7 @@ export {
     PostInternalTextRequestSchema,
     PostInternalTextResponseSchema,
     PostChatRequestSchema,
+    GetChatProfilesResponseSchema,
     PostChatResponseSchema,
     PostTraceCardFromTraceRequestSchema,
     PostTraceCardFromTraceResponseSchema,

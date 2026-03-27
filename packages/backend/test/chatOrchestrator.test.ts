@@ -14,6 +14,7 @@ import type { PostChatRequest } from '@footnote/contracts/web';
 import type { BotProfileConfig } from '../src/config/profile.js';
 import { runtimeConfig } from '../src/config.js';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
+import type { ResponseMetadataRuntimeContext } from '../src/services/openaiService.js';
 import { renderConversationPromptLayers } from '../src/services/prompts/conversationPromptLayers.js';
 import { logger } from '../src/utils/logger.js';
 
@@ -252,8 +253,69 @@ test('message plans pass planner generation options into chatService', async () 
     );
 });
 
+test('request-level generation overrides replace planner reasoning effort and verbosity', async () => {
+    let observedReasoningEffort: string | undefined;
+    let observedVerbosity: string | undefined;
+
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === 700) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        riskTier: 'Low',
+                        reasoning: 'Planner default generation choices.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            observedReasoningEffort = request.reasoningEffort;
+            observedVerbosity = request.verbosity;
+            return {
+                text: 'override test reply',
+                model: request.model,
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            generation: {
+                reasoningEffort: 'high',
+                verbosity: 'medium',
+            },
+        })
+    );
+
+    assert.equal(response.action, 'message');
+    assert.equal(observedReasoningEffort, 'high');
+    assert.equal(observedVerbosity, 'medium');
+});
+
 test('planner-selected profile id controls response model selection', async () => {
     let observedResponseModel: string | undefined;
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
     const selectedProfile =
         runtimeConfig.modelProfiles.catalog.find(
             (profile) => profile.id === 'openai-text-quality' && profile.enabled
@@ -297,12 +359,80 @@ test('planner-selected profile id controls response model selection', async () =
             };
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: () => createMetadata(),
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedExecutionContext = runtimeContext.executionContext;
+            return createMetadata();
+        },
         defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
         recordUsage: () => undefined,
     });
 
     const response = await orchestrator.runChat(createChatRequest());
+
+    assert.equal(response.action, 'message');
+    assert.equal(observedResponseModel, selectedProfile.providerModel);
+    assert.equal(
+        capturedExecutionContext?.planner?.profileId,
+        runtimeConfig.modelProfiles.plannerProfileId
+    );
+    assert.equal(capturedExecutionContext?.planner?.status, 'executed');
+    assert.ok((capturedExecutionContext?.planner?.durationMs ?? -1) >= 0);
+    assert.equal(
+        capturedExecutionContext?.generation?.profileId,
+        selectedProfile.id
+    );
+    assert.equal(capturedExecutionContext?.generation?.status, 'executed');
+    assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
+});
+
+test('request profileId override controls response model selection', async () => {
+    let observedResponseModel: string | undefined;
+    const selectedProfile =
+        runtimeConfig.modelProfiles.catalog.find(
+            (profile) => profile.id === 'openai-text-medium' && profile.enabled
+        ) ??
+        runtimeConfig.modelProfiles.catalog.find((profile) => profile.enabled);
+    assert.ok(selectedProfile);
+
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === 700) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        profileId: 'openai-text-fast',
+                        riskTier: 'Low',
+                        reasoning:
+                            'Planner selected a different profile, but request override should win.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            observedResponseModel = request.model;
+            return {
+                text: 'request override reply',
+                model: request.model,
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            profileId: selectedProfile.id,
+        })
+    );
 
     assert.equal(response.action, 'message');
     assert.equal(observedResponseModel, selectedProfile.providerModel);
@@ -380,6 +510,9 @@ test('invalid planner-selected profile id falls back to default response profile
 
 test('search is dropped when selected profile does not support search', async () => {
     let observedSearch: unknown;
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
     const warnings: Array<{ message: string; meta?: unknown }> = [];
     const originalWarn = logger.warn;
     const originalModelProfiles = runtimeConfig.modelProfiles;
@@ -450,7 +583,10 @@ test('search is dropped when selected profile does not support search', async ()
                 };
             }),
             storeTrace: async () => undefined,
-            buildResponseMetadata: () => createMetadata(),
+            buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+                capturedExecutionContext = runtimeContext.executionContext;
+                return createMetadata();
+            },
             defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
             recordUsage: () => undefined,
         });
@@ -466,6 +602,11 @@ test('search is dropped when selected profile does not support search', async ()
         /selected profile does not support search/i.test(warning.message)
     );
     assert.ok(mismatchWarning);
+    assert.deepEqual(capturedExecutionContext?.tool, {
+        toolName: 'web_search',
+        status: 'skipped',
+        reasonCode: 'search_not_supported_by_selected_profile',
+    });
 });
 
 test('discord requests use backend profile overlay when runtime overlay is configured', async () => {
@@ -553,10 +694,8 @@ test('discord requests use backend profile overlay when runtime overlay is confi
     }
 });
 
-test('discord profileId mismatch warns and falls back to backend runtime profile overlay', async () => {
+test('discord profileId does not change backend runtime profile overlay', async () => {
     let finalMessages: Array<{ role: string; content: string }> = [];
-    const warnings: string[] = [];
-    const originalWarn = logger.warn;
     const originalProfile = runtimeConfig.profile;
     const runtimeConfigMutable = runtimeConfig as unknown as {
         profile: BotProfileConfig;
@@ -572,10 +711,6 @@ test('discord profileId mismatch warns and falls back to backend runtime profile
             length: 25,
         },
     };
-    logger.warn = ((message: string) => {
-        warnings.push(message);
-        return logger;
-    }) as typeof logger.warn;
 
     try {
         const orchestrator = createChatOrchestrator({
@@ -620,11 +755,8 @@ test('discord profileId mismatch warns and falls back to backend runtime profile
             })
         );
 
-        assert.equal(warnings.length, 1);
-        assert.equal(warnings[0], 'profile id mismatch');
         assert.match(finalMessages[1]?.content ?? '', /Profile ID: ari-vendor/);
     } finally {
-        logger.warn = originalWarn;
         runtimeConfigMutable.profile = originalProfile;
     }
 });
@@ -709,4 +841,45 @@ test('discord requests are trimmed/formatted in backend before planner and gener
             ?.content ?? '',
         /\(bot\) said:/
     );
+});
+
+test('planner runtime failures emit failed planner execution metadata and still generate a message', async () => {
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
+
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === 700) {
+                throw new Error('planner upstream unavailable');
+            }
+
+            return {
+                text: 'fallback-generated reply',
+                model: request.model,
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedExecutionContext = runtimeContext.executionContext;
+            return createMetadata();
+        },
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(createChatRequest());
+
+    assert.equal(response.action, 'message');
+    assert.equal(response.message, 'fallback-generated reply');
+    assert.equal(capturedExecutionContext?.planner?.status, 'failed');
+    assert.equal(
+        capturedExecutionContext?.planner?.reasonCode,
+        'planner_runtime_error'
+    );
+    assert.ok((capturedExecutionContext?.planner?.durationMs ?? -1) >= 0);
+    assert.equal(capturedExecutionContext?.generation?.status, 'executed');
+    assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
 });

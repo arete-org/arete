@@ -14,6 +14,9 @@ import type {
 } from '@footnote/agent-runtime';
 import type {
     Citation,
+    ExecutionEvent,
+    ExecutionReasonCode,
+    ExecutionStatus,
     PartialResponseTemperament,
     Provenance,
     ResponseMetadata,
@@ -624,8 +627,33 @@ type ResponseMetadataRetrievalContext = {
 type ResponseMetadataRuntimeContext = {
     modelVersion: string;
     conversationSnapshot: string;
+    totalDurationMs?: number;
     plannerTemperament?: PartialResponseTemperament;
     retrieval?: ResponseMetadataRetrievalContext;
+    executionContext?: {
+        planner?: {
+            status: ExecutionStatus;
+            reasonCode?: ExecutionReasonCode;
+            profileId: string;
+            provider: string;
+            model: string;
+            durationMs?: number;
+        };
+        generation?: {
+            status: ExecutionStatus;
+            reasonCode?: ExecutionReasonCode;
+            profileId: string;
+            provider: string;
+            model: string;
+            durationMs?: number;
+        };
+        tool?: {
+            toolName: string;
+            status: ExecutionStatus;
+            reasonCode?: ExecutionReasonCode;
+            durationMs?: number;
+        };
+    };
 };
 
 /**
@@ -700,6 +728,79 @@ const buildResponseMetadata = (
 
     const riskTier: RiskTier = 'Low';
     const licenseContext = 'MIT + HL3';
+    const execution: ExecutionEvent[] = [];
+    const plannerExecution = runtimeContext.executionContext?.planner;
+    if (plannerExecution) {
+        // Contract invariant: executed events omit reasonCode; failed/skipped
+        // must include one. We normalize here so downstream storage/UI never
+        // receives ambiguous planner failure semantics.
+        const normalizedPlannerReasonCode =
+            plannerExecution.status === 'executed'
+                ? undefined
+                : (plannerExecution.reasonCode ?? 'planner_runtime_error');
+        execution.push({
+            kind: 'planner',
+            status: plannerExecution.status,
+            profileId: plannerExecution.profileId,
+            provider: plannerExecution.provider,
+            model: plannerExecution.model,
+            ...(normalizedPlannerReasonCode !== undefined && {
+                reasonCode: normalizedPlannerReasonCode,
+            }),
+            ...(plannerExecution.durationMs !== undefined && {
+                durationMs: plannerExecution.durationMs,
+            }),
+        });
+    }
+    const toolExecution = runtimeContext.executionContext?.tool;
+    if (toolExecution) {
+        // Tool skips/failures are normalized to a stable code so analytics and
+        // UI can query outcomes without parsing log strings.
+        const normalizedToolReasonCode =
+            toolExecution.status === 'executed'
+                ? undefined
+                : (toolExecution.reasonCode ?? 'unspecified_tool_outcome');
+        execution.push({
+            kind: 'tool',
+            status: toolExecution.status,
+            toolName: toolExecution.toolName,
+            ...(normalizedToolReasonCode !== undefined && {
+                reasonCode: normalizedToolReasonCode,
+            }),
+            ...(toolExecution.durationMs !== undefined && {
+                durationMs: toolExecution.durationMs,
+            }),
+        });
+    }
+    const generationExecution = runtimeContext.executionContext?.generation;
+    if (generationExecution) {
+        // Generation defaults are defensive: if non-executed reaches this path
+        // without a code, mark it as a generation runtime error.
+        const normalizedGenerationReasonCode =
+            generationExecution.status === 'executed'
+                ? undefined
+                : (generationExecution.reasonCode ??
+                  'generation_runtime_error');
+        execution.push({
+            kind: 'generation',
+            status: generationExecution.status,
+            profileId: generationExecution.profileId,
+            provider: generationExecution.provider,
+            model: generationExecution.model,
+            ...(normalizedGenerationReasonCode !== undefined && {
+                reasonCode: normalizedGenerationReasonCode,
+            }),
+            ...(generationExecution.durationMs !== undefined && {
+                durationMs: generationExecution.durationMs,
+            }),
+        });
+    }
+    // TODO(workflow-execution-metadata): Extend execution events with lineage
+    // (id/parentId), timing (startedAt/finishedAt), and per-step usage/cost
+    // once multi-step workflow execution is enabled.
+    const generationEventModel = execution
+        .filter((event) => event.kind === 'generation')
+        .at(-1)?.model;
 
     return {
         responseId,
@@ -708,10 +809,20 @@ const buildResponseMetadata = (
         tradeoffCount,
         chainHash,
         licenseContext,
+        // TODO(workflow-execution-metadata): Remove modelVersion once all
+        // metadata consumers have migrated to execution[] as canonical.
+        // Compatibility mirror for legacy consumers that still read only a
+        // single model string.
         modelVersion:
-            runtimeContext.modelVersion || runtimeConfig.openai.defaultModel,
+            generationEventModel ??
+            runtimeContext.modelVersion ??
+            runtimeConfig.openai.defaultModel,
         staleAfter: new Date(Date.now() + ninetyDaysMs).toISOString(),
         citations,
+        ...(runtimeContext.totalDurationMs !== undefined && {
+            totalDurationMs: runtimeContext.totalDurationMs,
+        }),
+        ...(execution.length > 0 && { execution }),
         ...(temperament && { temperament }),
         ...(finalEvidenceScore !== undefined && {
             evidenceScore: finalEvidenceScore,

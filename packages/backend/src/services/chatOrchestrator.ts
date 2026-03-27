@@ -10,6 +10,10 @@ import type {
     PostChatResponse,
     ChatConversationMessage,
 } from '@footnote/contracts/web';
+import type {
+    ExecutionReasonCode,
+    ExecutionStatus,
+} from '@footnote/contracts/ethics-core';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
     createChatService,
@@ -155,6 +159,9 @@ export const createChatOrchestrator = ({
     const runChat = async (
         request: PostChatRequest
     ): Promise<PostChatResponse> => {
+        // Total wall-clock budget for this request from planner entry to
+        // final response payload. This is exposed as telemetry only.
+        const orchestrationStartedAt = Date.now();
         const normalizedConversation =
             request.surface === 'discord'
                 ? normalizeDiscordConversation(request, chatOrchestratorLogger)
@@ -172,15 +179,45 @@ export const createChatOrchestrator = ({
 
         const botProfileDisplayName = resolveBotProfileDisplayName();
         const planned = await chatPlanner.planChat(normalizedRequest);
+        const plannerExecution = planned.execution;
         const { plan, surfacePolicy } = coercePlanForSurface(
             normalizedRequest,
-            planned,
+            planned.plan,
             chatOrchestratorLogger
         );
-        // Planner-selected profile is advisory.
-        // Runtime resolution here is authoritative and fail-open.
+        // Profile selection precedence:
+        // 1) explicit request.profileId override (for example `/chat`)
+        // 2) planner-selected profileId
+        // 3) startup default response profile
+        // Runtime resolution stays authoritative and fail-open:
+        // unknown/disabled profile ids never hard-fail the request.
         let selectedResponseProfile = defaultResponseProfile;
-        if (plan.profileId) {
+        const requestedProfileId = normalizedRequest.profileId?.trim();
+        if (requestedProfileId) {
+            const selectedProfile = enabledProfilesById.get(requestedProfileId);
+            if (selectedProfile) {
+                selectedResponseProfile = selectedProfile;
+                if (plan.profileId && plan.profileId !== selectedProfile.id) {
+                    chatOrchestratorLogger.warn(
+                        'request profile override superseded planner profile selection',
+                        {
+                            requestedProfileId: selectedProfile.id,
+                            plannerProfileId: plan.profileId,
+                            surface: normalizedRequest.surface,
+                        }
+                    );
+                }
+            } else {
+                chatOrchestratorLogger.warn(
+                    'request selected invalid or disabled profile id; falling back to planner/default profile',
+                    {
+                        selectedProfileId: requestedProfileId,
+                        defaultProfileId: defaultResponseProfile.id,
+                        surface: normalizedRequest.surface,
+                    }
+                );
+            }
+        } else if (plan.profileId) {
             const selectedProfile = enabledProfilesById.get(plan.profileId);
             if (selectedProfile) {
                 selectedResponseProfile = selectedProfile;
@@ -196,9 +233,29 @@ export const createChatOrchestrator = ({
             }
         }
 
-        // Keep selected profile, but drop search when profile capabilities do
-        // not allow it. This avoids silently forcing a different model.
-        let generationForExecution: ChatGenerationPlan = plan.generation;
+        // Capability policy for this branch:
+        // keep the selected profile, but drop search when capabilities disallow
+        // it, instead of silently switching to a different profile/model.
+        // Request-level generation overrides are advisory knobs from callers
+        // like `/chat` that want quick side-by-side runs without changing
+        // planner prompt semantics.
+        const requestGeneration = normalizedRequest.generation;
+        let generationForExecution: ChatGenerationPlan = {
+            ...plan.generation,
+            ...(requestGeneration?.reasoningEffort
+                ? { reasoningEffort: requestGeneration.reasoningEffort }
+                : {}),
+            ...(requestGeneration?.verbosity
+                ? { verbosity: requestGeneration.verbosity }
+                : {}),
+        };
+        let toolExecutionContext:
+            | {
+                  toolName: 'web_search';
+                  status: ExecutionStatus;
+                  reasonCode?: ExecutionReasonCode;
+              }
+            | undefined;
         if (
             generationForExecution.search &&
             !selectedResponseProfile.capabilities.canUseSearch
@@ -210,6 +267,11 @@ export const createChatOrchestrator = ({
             generationForExecution = {
                 ...generationForExecution,
                 search: undefined,
+            };
+            toolExecutionContext = {
+                toolName: 'web_search',
+                status: 'skipped',
+                reasonCode: 'search_not_supported_by_selected_profile',
             };
             chatOrchestratorLogger.warn(
                 'planner requested search but selected profile does not support search; running without search',
@@ -325,12 +387,57 @@ export const createChatOrchestrator = ({
                     ...(surfacePolicy && { surfacePolicy }),
                 },
             }),
+            orchestrationStartedAtMs: orchestrationStartedAt,
             plannerTemperament: executionPlan.generation.temperament,
             riskTier: executionPlan.riskTier,
             model: selectedResponseProfile.providerModel,
             provider: selectedResponseProfile.provider,
             capabilities: selectedResponseProfile.capabilities,
             generation: executionPlan.generation,
+            executionContext: {
+                // Planner execution metadata is sourced from ChatPlannerResult
+                // so traces can distinguish successful planning from fallback.
+                planner: {
+                    status: plannerExecution.status,
+                    ...(plannerExecution.reasonCode !== undefined && {
+                        reasonCode: plannerExecution.reasonCode,
+                    }),
+                    profileId: plannerProfile.id,
+                    provider: plannerProfile.provider,
+                    model: plannerProfile.providerModel,
+                    durationMs: plannerExecution.durationMs,
+                },
+                generation: {
+                    // Generation starts as "executed" at orchestration level.
+                    // ChatService injects runtime-resolved model + duration.
+                    status: 'executed',
+                    profileId: selectedResponseProfile.id,
+                    provider: selectedResponseProfile.provider,
+                    model: selectedResponseProfile.providerModel,
+                },
+                ...(toolExecutionContext !== undefined && {
+                    tool: toolExecutionContext,
+                }),
+            },
+        });
+        // ChatService computes totalDurationMs before metadata assembly and
+        // queued trace writes. Avoid mutating metadata here to keep trace
+        // persistence race-free.
+        const totalDurationMs =
+            response.metadata.totalDurationMs ??
+            Math.max(0, Date.now() - orchestrationStartedAt);
+        chatOrchestratorLogger.info('chat.orchestration.timing', {
+            surface: normalizedRequest.surface,
+            plannerStatus: plannerExecution.status,
+            plannerReasonCode: plannerExecution.reasonCode,
+            plannerDurationMs: plannerExecution.durationMs,
+            generationDurationMs: response.generationDurationMs,
+            totalDurationMs,
+            plannerProfileId: plannerProfile.id,
+            responseProfileId: selectedResponseProfile.id,
+            searchRequested: generationForExecution.search !== undefined,
+            toolStatus: toolExecutionContext?.status,
+            fallbackApplied: plannerExecution.status === 'failed',
         });
 
         // Message action is the only branch that returns provenance metadata.

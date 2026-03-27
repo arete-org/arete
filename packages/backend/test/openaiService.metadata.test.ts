@@ -180,3 +180,138 @@ test('buildResponseMetadata defaults tradeoffCount to 0 when assistant and plann
 
     assert.equal(metadata.tradeoffCount, 0);
 });
+
+test('buildResponseMetadata writes execution timeline from runtime context', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                planner: {
+                    status: 'executed',
+                    profileId: 'openai-text-fast',
+                    provider: 'openai',
+                    model: 'gpt-5-nano',
+                    durationMs: 12,
+                },
+                tool: {
+                    toolName: 'web_search',
+                    status: 'executed',
+                    durationMs: 8,
+                },
+                generation: {
+                    status: 'executed',
+                    profileId: 'openai-text-medium',
+                    provider: 'openai',
+                    model: 'gpt-5-mini',
+                    durationMs: 34,
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'planner',
+            status: 'executed',
+            profileId: 'openai-text-fast',
+            provider: 'openai',
+            model: 'gpt-5-nano',
+            durationMs: 12,
+        },
+        {
+            kind: 'tool',
+            status: 'executed',
+            toolName: 'web_search',
+            durationMs: 8,
+        },
+        {
+            kind: 'generation',
+            status: 'executed',
+            profileId: 'openai-text-medium',
+            provider: 'openai',
+            model: 'gpt-5-mini',
+            durationMs: 34,
+        },
+    ]);
+});
+
+test('buildResponseMetadata mirrors modelVersion from final generation execution model', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata({ model: 'fallback-model' }),
+        baseRuntimeContext({
+            modelVersion: 'runtime-fallback-model',
+            executionContext: {
+                generation: {
+                    status: 'executed',
+                    profileId: 'openai-text-quality',
+                    provider: 'openai',
+                    model: 'gpt-5.4-mini',
+                },
+            },
+        })
+    );
+
+    assert.equal(metadata.modelVersion, 'gpt-5.4-mini');
+});
+
+test('buildResponseMetadata normalizes skipped tool event with fallback reasonCode', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                tool: {
+                    toolName: 'web_search',
+                    status: 'skipped',
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'tool',
+            status: 'skipped',
+            toolName: 'web_search',
+            reasonCode: 'unspecified_tool_outcome',
+        },
+    ]);
+});
+
+test('buildResponseMetadata keeps failed planner reasonCode in execution timeline', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                planner: {
+                    status: 'failed',
+                    reasonCode: 'planner_runtime_error',
+                    profileId: 'openai-text-fast',
+                    provider: 'openai',
+                    model: 'gpt-5-nano',
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'planner',
+            status: 'failed',
+            reasonCode: 'planner_runtime_error',
+            profileId: 'openai-text-fast',
+            provider: 'openai',
+            model: 'gpt-5-nano',
+        },
+    ]);
+});
+
+test('buildResponseMetadata includes totalDurationMs when runtime context provides it', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            totalDurationMs: 1234,
+        })
+    );
+
+    assert.equal(metadata.totalDurationMs, 1234);
+});
