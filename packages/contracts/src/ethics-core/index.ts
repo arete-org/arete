@@ -12,13 +12,18 @@
 
 export type {
     Provenance,
+    ProvenanceSignals,
     RiskTier,
+    RiskRuleId,
+    RiskEvaluationResult,
     Citation,
     TraceAxisScore,
     ResponseTemperament,
     PartialResponseTemperament,
     ExecutionStatus,
     ExecutionReasonCode,
+    EvaluatorDecisionMode,
+    EvaluatorOutcome,
     ExecutionEvent,
     ResponseMetadata,
 } from './types.js';

@@ -118,5 +118,9 @@ export type RuntimeConfig = {
         directory: string;
         level: SupportedLogLevel;
     };
+    litestream: {
+        replicaUrl: string | null;
+        latestSnapshotAt: string | null;
+    };
     profile: BotProfileConfig;
 };

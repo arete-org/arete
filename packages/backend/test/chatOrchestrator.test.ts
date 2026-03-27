@@ -383,6 +383,15 @@ test('planner-selected profile id controls response model selection', async () =
     );
     assert.equal(capturedExecutionContext?.generation?.status, 'executed');
     assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
+    assert.equal(capturedExecutionContext?.evaluator?.status, 'executed');
+    assert.equal(
+        capturedExecutionContext?.evaluator?.outcome?.mode,
+        'observe_only'
+    );
+    assert.equal(
+        capturedExecutionContext?.evaluator?.outcome?.breakerTriggered,
+        false
+    );
 });
 
 test('request profileId override controls response model selection', async () => {
@@ -1080,6 +1089,11 @@ test('planner runtime failures emit failed planner execution metadata and still 
         'planner_runtime_error'
     );
     assert.ok((capturedExecutionContext?.planner?.durationMs ?? -1) >= 0);
+    assert.equal(capturedExecutionContext?.evaluator?.status, 'executed');
+    assert.equal(
+        capturedExecutionContext?.evaluator?.outcome?.mode,
+        'observe_only'
+    );
     assert.equal(capturedExecutionContext?.generation?.status, 'executed');
     assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
 });

@@ -75,6 +75,7 @@ const ProvenanceFooter = ({
         });
     }
     const executionSummary = formatExecutionTimelineSummary(metadata.execution);
+    const evaluatorOutcome = metadata.evaluator;
     const searchUnavailableWarning = metadata.execution?.some(
         (event) =>
             event.kind === 'tool' &&
@@ -111,6 +112,18 @@ const ProvenanceFooter = ({
                     <>
                         <span className="provenance-risktier">
                             {metadata.riskTier} risk
+                        </span>
+                    </>
+                )}
+                {evaluatorOutcome && (
+                    <>
+                        <span className="provenance-separator"> • </span>
+                        <span className="provenance-tradeoffs">
+                            eval {evaluatorOutcome.riskTier}/
+                            {evaluatorOutcome.provenance}
+                            {evaluatorOutcome.breakerTriggered
+                                ? ' breaker-signaled'
+                                : ''}
                         </span>
                     </>
                 )}
