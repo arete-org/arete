@@ -9,9 +9,9 @@ import {
     estimateOpenAITextCost,
     estimateOpenAIRealtimeCost,
     estimateOpenAITtsCost,
-    hasOpenAITextPricing,
-    hasOpenAIRealtimePricing,
-    hasOpenAITtsPricing,
+    resolveOpenAITextPricingModel,
+    resolveOpenAIRealtimePricingModel,
+    resolveOpenAITtsPricingModel,
 } from '@footnote/contracts/pricing';
 import { formatUsd, logger, type LLMCostTotals } from '../utils/logger.js';
 
@@ -49,9 +49,20 @@ export const estimateBackendTextCost = (
     BackendLLMCostRecord,
     'inputCostUsd' | 'outputCostUsd' | 'totalCostUsd'
 > => {
-    if (!hasOpenAITextPricing(model)) {
+    const pricingResolution = resolveOpenAITextPricingModel(model);
+    if (!pricingResolution.matchedModel) {
         logger.warn(
-            `No backend LLM pricing configured for model ${model}. Recording zero estimated cost.`
+            JSON.stringify({
+                event: 'backend_unpriced_model',
+                pricingKind: 'text',
+                model,
+                canonicalModel: pricingResolution.canonicalModel,
+                matchedModel: pricingResolution.matchedModel,
+                wasCanonicalized: pricingResolution.wasCanonicalized,
+                appliedRules: pricingResolution.appliedRules,
+                message:
+                    'No backend text pricing configured for model. Recording zero estimated cost.',
+            })
         );
     }
 
@@ -74,9 +85,20 @@ export const estimateBackendTtsCost = (
     BackendLLMCostRecord,
     'inputCostUsd' | 'outputCostUsd' | 'totalCostUsd'
 > => {
-    if (!hasOpenAITtsPricing(model)) {
+    const pricingResolution = resolveOpenAITtsPricingModel(model);
+    if (!pricingResolution.matchedModel) {
         logger.warn(
-            `No backend TTS pricing configured for model ${model}. Recording zero estimated cost.`
+            JSON.stringify({
+                event: 'backend_unpriced_model',
+                pricingKind: 'tts',
+                model,
+                canonicalModel: pricingResolution.canonicalModel,
+                matchedModel: pricingResolution.matchedModel,
+                wasCanonicalized: pricingResolution.wasCanonicalized,
+                appliedRules: pricingResolution.appliedRules,
+                message:
+                    'No backend TTS pricing configured for model. Recording zero estimated cost.',
+            })
         );
     }
 
@@ -96,9 +118,20 @@ export const estimateBackendVoiceRealtimeCost = (
     BackendLLMCostRecord,
     'inputCostUsd' | 'outputCostUsd' | 'totalCostUsd'
 > => {
-    if (!hasOpenAIRealtimePricing(model)) {
+    const pricingResolution = resolveOpenAIRealtimePricingModel(model);
+    if (!pricingResolution.matchedModel) {
         logger.warn(
-            `No backend realtime pricing configured for model ${model}. Recording zero estimated cost.`
+            JSON.stringify({
+                event: 'backend_unpriced_model',
+                pricingKind: 'realtime',
+                model,
+                canonicalModel: pricingResolution.canonicalModel,
+                matchedModel: pricingResolution.matchedModel,
+                wasCanonicalized: pricingResolution.wasCanonicalized,
+                appliedRules: pricingResolution.appliedRules,
+                message:
+                    'No backend realtime pricing configured for model. Recording zero estimated cost.',
+            })
         );
     }
 

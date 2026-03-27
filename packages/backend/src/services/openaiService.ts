@@ -17,6 +17,7 @@ import type {
     ExecutionEvent,
     ExecutionReasonCode,
     ExecutionStatus,
+    EvaluatorOutcome,
     PartialResponseTemperament,
     Provenance,
     ResponseMetadata,
@@ -642,6 +643,12 @@ type ResponseMetadataRuntimeContext = {
             model: string;
             durationMs?: number;
         };
+        evaluator?: {
+            status: ExecutionStatus;
+            reasonCode?: ExecutionReasonCode;
+            outcome?: EvaluatorOutcome;
+            durationMs?: number;
+        };
         generation?: {
             status: ExecutionStatus;
             reasonCode?: ExecutionReasonCode;
@@ -763,6 +770,28 @@ const buildResponseMetadata = (
             }),
         });
     }
+    const evaluatorExecution = runtimeContext.executionContext?.evaluator;
+    if (evaluatorExecution) {
+        // Evaluator metadata is currently observe-only and additive. We still
+        // normalize failed/skipped outcomes to stable reason codes.
+        const normalizedEvaluatorReasonCode =
+            evaluatorExecution.status === 'executed'
+                ? undefined
+                : (evaluatorExecution.reasonCode ?? 'evaluator_runtime_error');
+        execution.push({
+            kind: 'evaluator',
+            status: evaluatorExecution.status,
+            ...(evaluatorExecution.outcome !== undefined && {
+                evaluator: evaluatorExecution.outcome,
+            }),
+            ...(normalizedEvaluatorReasonCode !== undefined && {
+                reasonCode: normalizedEvaluatorReasonCode,
+            }),
+            ...(evaluatorExecution.durationMs !== undefined && {
+                durationMs: evaluatorExecution.durationMs,
+            }),
+        });
+    }
     const toolExecution = runtimeContext.executionContext?.tool;
     if (toolExecution) {
         // Tool skips/failures are normalized to a stable code so analytics and
@@ -842,6 +871,9 @@ const buildResponseMetadata = (
             totalDurationMs: runtimeContext.totalDurationMs,
         }),
         ...(execution.length > 0 && { execution }),
+        ...(evaluatorExecution?.outcome !== undefined && {
+            evaluator: evaluatorExecution.outcome,
+        }),
         ...(temperament && { temperament }),
         ...(finalEvidenceScore !== undefined && {
             evidenceScore: finalEvidenceScore,

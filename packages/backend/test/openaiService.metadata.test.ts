@@ -193,6 +193,16 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
                     model: 'gpt-5-nano',
                     durationMs: 12,
                 },
+                evaluator: {
+                    status: 'executed',
+                    outcome: {
+                        mode: 'observe_only',
+                        riskTier: 'Low',
+                        provenance: 'Inferred',
+                        breakerTriggered: false,
+                    },
+                    durationMs: 3,
+                },
                 tool: {
                     toolName: 'web_search',
                     status: 'executed',
@@ -219,6 +229,17 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
             durationMs: 12,
         },
         {
+            kind: 'evaluator',
+            status: 'executed',
+            evaluator: {
+                mode: 'observe_only',
+                riskTier: 'Low',
+                provenance: 'Inferred',
+                breakerTriggered: false,
+            },
+            durationMs: 3,
+        },
+        {
             kind: 'tool',
             status: 'executed',
             toolName: 'web_search',
@@ -233,6 +254,12 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
             durationMs: 34,
         },
     ]);
+    assert.deepEqual(metadata.evaluator, {
+        mode: 'observe_only',
+        riskTier: 'Low',
+        provenance: 'Inferred',
+        breakerTriggered: false,
+    });
 });
 
 test('buildResponseMetadata mirrors modelVersion from final generation execution model', () => {
@@ -326,6 +353,28 @@ test('buildResponseMetadata keeps failed planner reasonCode in execution timelin
             model: 'gpt-5-nano',
         },
     ]);
+});
+
+test('buildResponseMetadata normalizes failed evaluator event with fallback reasonCode', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                evaluator: {
+                    status: 'failed',
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'evaluator',
+            status: 'failed',
+            reasonCode: 'evaluator_runtime_error',
+        },
+    ]);
+    assert.equal(metadata.evaluator, undefined);
 });
 
 test('buildResponseMetadata includes totalDurationMs when runtime context provides it', () => {

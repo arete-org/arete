@@ -296,6 +296,15 @@ test('runChatMessages forwards execution context into metadata runtime context',
                 provider: 'openai',
                 model: 'gpt-5-nano',
             },
+            evaluator: {
+                status: 'executed',
+                outcome: {
+                    mode: 'observe_only',
+                    riskTier: 'Low',
+                    provenance: 'Inferred',
+                    breakerTriggered: false,
+                },
+            },
             generation: {
                 status: 'executed',
                 profileId: 'openai-text-medium',
@@ -310,6 +319,15 @@ test('runChatMessages forwards execution context into metadata runtime context',
         profileId: 'openai-text-fast',
         provider: 'openai',
         model: 'gpt-5-nano',
+    });
+    assert.deepEqual(capturedExecutionContext?.evaluator, {
+        status: 'executed',
+        outcome: {
+            mode: 'observe_only',
+            riskTier: 'Low',
+            provenance: 'Inferred',
+            breakerTriggered: false,
+        },
     });
     assert.equal(capturedExecutionContext?.generation?.status, 'executed');
     assert.equal(

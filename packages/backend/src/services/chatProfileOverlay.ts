@@ -10,8 +10,6 @@ import type { PostChatRequest } from '@footnote/contracts/web';
 import { buildProfileOverlaySystemMessage } from './prompts/profilePromptOverlay.js';
 import { runtimeConfig } from '../config.js';
 
-const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
-
 type ChatProfileOverlayLogger = {
     warn: (
         message: string,
@@ -28,12 +26,7 @@ type ChatProfileOverlayLogger = {
  * resolve to the same name operators configured for the deployment.
  */
 export const resolveBotProfileDisplayName = (): string => {
-    const envValue = process.env.BOT_PROFILE_DISPLAY_NAME;
-    if (typeof envValue === 'string' && envValue.trim().length > 0) {
-        return envValue.trim();
-    }
-
-    return DEFAULT_BOT_PROFILE_DISPLAY_NAME;
+    return runtimeConfig.profile.displayName;
 };
 
 /**

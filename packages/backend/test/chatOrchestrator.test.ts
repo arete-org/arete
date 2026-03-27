@@ -383,6 +383,15 @@ test('planner-selected profile id controls response model selection', async () =
     );
     assert.equal(capturedExecutionContext?.generation?.status, 'executed');
     assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
+    assert.equal(capturedExecutionContext?.evaluator?.status, 'executed');
+    assert.equal(
+        capturedExecutionContext?.evaluator?.outcome?.mode,
+        'observe_only'
+    );
+    assert.equal(
+        capturedExecutionContext?.evaluator?.outcome?.breakerTriggered,
+        false
+    );
 });
 
 test('request profileId override controls response model selection', async () => {
@@ -555,9 +564,19 @@ test('invalid planner-selected profile id falls back to default response profile
 
     assert.equal(observedResponseModel, defaultProfile.providerModel);
     const fallbackWarning = warnings.find((warning) =>
-        /planner selected invalid or disabled profile id/i.test(warning.message)
+        /invalid or disabled; continuing fallback order/i.test(warning.message)
     );
     assert.ok(fallbackWarning);
+    assert.deepEqual(fallbackWarning.meta, {
+        event: 'chat.orchestration.profile_fallback',
+        policy: 'response_profile_fallback_v1',
+        stage: 'invalid_profile_candidate',
+        source: 'planner',
+        selectedProfileId: 'missing-profile-id',
+        defaultProfileId: defaultProfile.id,
+        fallbackOrder: ['request', 'planner', 'default'],
+        surface: 'discord',
+    });
 });
 
 test('planner-selected non-search profile reroutes to search-capable fallback', async () => {
@@ -667,11 +686,17 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
         intent: 'current_facts',
     });
     const mismatchWarning = warnings.find((warning) =>
-        /rerouting search to first enabled search-capable fallback profile/i.test(
-            warning.message
-        )
+        /deterministic search-capable fallback profile/i.test(warning.message)
     );
     assert.ok(mismatchWarning);
+    assert.equal(
+        (mismatchWarning?.meta as { policy?: string } | undefined)?.policy,
+        'search_reroute_profile_fallback_v1'
+    );
+    assert.equal(
+        (mismatchWarning?.meta as { stage?: string } | undefined)?.stage,
+        'search_rerouted'
+    );
     assert.deepEqual(capturedExecutionContext?.tool, {
         toolName: 'web_search',
         status: 'executed',
@@ -1064,6 +1089,11 @@ test('planner runtime failures emit failed planner execution metadata and still 
         'planner_runtime_error'
     );
     assert.ok((capturedExecutionContext?.planner?.durationMs ?? -1) >= 0);
+    assert.equal(capturedExecutionContext?.evaluator?.status, 'executed');
+    assert.equal(
+        capturedExecutionContext?.evaluator?.outcome?.mode,
+        'observe_only'
+    );
     assert.equal(capturedExecutionContext?.generation?.status, 'executed');
     assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
 });

@@ -13,6 +13,7 @@ import {
     createChatPlanner,
     type ChatPlannerProfileOption,
 } from '../src/services/chatPlanner.js';
+import { logger } from '../src/utils/logger.js';
 
 const createChatRequest = (
     overrides: Partial<PostChatRequest> = {}
@@ -150,15 +151,38 @@ test('chatPlanner forwards bounded profile options context and normalizes blank 
 });
 
 test('chatPlanner fails open to a valid fallback generation config when planner JSON is invalid', async () => {
-    const planner = createPlanner('{not-valid-json');
-    const { plan, execution } = await planner.planChat(createChatRequest());
+    const warnings: Array<{ message: string; meta?: unknown }> = [];
+    const originalWarn = logger.warn;
+    logger.warn = ((message: string, meta?: unknown) => {
+        warnings.push({ message, meta });
+        return logger;
+    }) as typeof logger.warn;
 
-    assert.equal(plan.action, 'message');
-    assert.equal(plan.generation.search, undefined);
-    assert.equal(plan.generation.reasoningEffort, 'low');
-    assert.equal(plan.generation.verbosity, 'low');
-    assert.equal(execution.status, 'failed');
-    assert.equal(execution.reasonCode, 'planner_invalid_output');
+    try {
+        const planner = createPlanner('{not-valid-json');
+        const { plan, execution } = await planner.planChat(createChatRequest());
+
+        assert.equal(plan.action, 'message');
+        assert.equal(plan.generation.search, undefined);
+        assert.equal(plan.generation.reasoningEffort, 'low');
+        assert.equal(plan.generation.verbosity, 'low');
+        assert.equal(execution.status, 'failed');
+        assert.equal(execution.reasonCode, 'planner_invalid_output');
+        const warning = warnings.find((entry) =>
+            /using fallback plan/i.test(entry.message)
+        );
+        assert.ok(warning);
+        assert.equal(
+            (warning?.meta as { policy?: string } | undefined)?.policy,
+            'planner_fallback_v1'
+        );
+        assert.equal(
+            (warning?.meta as { reasonCode?: string } | undefined)?.reasonCode,
+            'planner_invalid_output'
+        );
+    } finally {
+        logger.warn = originalWarn;
+    }
 });
 
 test('repo_explainer search plans normalize repo hints and medium context', async () => {
