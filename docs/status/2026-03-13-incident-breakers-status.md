@@ -1,203 +1,70 @@
-# Incident And Breakers Status
+# Incident Queue And Breakers Status
 
 ## Last Updated
 
-2026-03-13
+2026-03-27
 
 ## Purpose
 
-Track the current plan for incident reporting, review, and deterministic breaker work.
+Track the live incident queue state and the remaining breaker roadmap work.
 
-This file should change as the work moves. The architecture and decision docs should stay more stable.
+This status file is operational and can change quickly. Architecture and decision docs remain the durable source for design intent.
 
-## Current State
+## Queue Reconciliation (Now)
 
-The storage and privacy groundwork is ahead of the original milestone draft, but the real reporting flow and breaker enforcement are not built yet.
+Local incident DB reviewed: `C:\Users\Jordan\Desktop\footnote\data\incidents.db`
 
-Assumptions for this plan:
+Current queue snapshot:
 
-- incident persistence and review state live in the backend
-- Discord is the first reporting surface
-- review tooling will exist both as backend admin APIs and Discord superuser commands
-- internal incident APIs reuse the existing trusted service-auth pattern
-- breaker work starts after the incident flow is real
-- alerts wait until incident creation and review are stable
+- `68432fa8` -> `new` (remediation already `applied`)
+- `97f51680` -> `resolved`
 
-### What we already have
+Queue hygiene action taken on 2026-03-27:
 
-- Incident SQLite schema, status updates, and audit append primitives in `packages/backend/src/storage/incidents/`
-- Pseudonymization helpers in `packages/backend/src/utils/pseudonymization.ts`
-- Discord ID redaction in `packages/discord-bot/src/utils/logger.ts`
-- A `report_issue` provenance button in `packages/discord-bot/src/utils/response/provenanceCgi.ts`
-- A stub click handler in `packages/discord-bot/src/index.ts`
-- Shared risk metadata contracts, but not a real deterministic ethics-core evaluator
+- Added `incident.note_added` audit event to `68432fa8` with rationale: parked pending operator disposition because remediation is already applied and final review outcome still requires human decision.
 
-### Validation baseline
+Why this is parked (not force-resolved):
 
-Already in place:
+- The remaining decision is governance: choose `confirmed`, `dismissed`, or `resolved` after operator review.
+- Auto-resolving without that decision would hide unresolved review intent.
 
-- `packages/backend/test/incidentStore.test.ts`
-- `packages/discord-bot/test/loggingPrivacy.test.ts`
+## Implementation Reality Check
 
-Still missing:
+### Incident reporting and review (Wave 1)
 
-- consented report-flow interaction tests
-- remediation idempotency tests
-- admin review command tests
-- structured incident-event tests
-- breaker rule unit tests
-- end-to-end breaker enforcement tests
+Status: Implemented
 
-## Working Plan
+Implemented in backend:
 
-### Wave 1: Incident Flow First
+- Incident report/list/detail/status/notes/remediation internal APIs in `packages/backend/src/handlers/incidents.ts`
+- Durable incident workflow and audit orchestration in `packages/backend/src/services/incidents.ts`
+- SQLite incident storage, pseudonymization, and audit persistence in `packages/backend/src/storage/incidents/`
 
-Goal: ship a real incident workflow before breaker work starts.
+Implemented in Discord bot:
 
-#### 1A. Backend incident APIs and startup wiring
+- Consented report flow and remediation persistence in `packages/discord-bot/src/utils/response/incidentReporting.ts`
+- Private superuser `/incident` list/view/status/note tooling in `packages/discord-bot/src/commands/incident.ts`
+- Shared incident API client wiring in `packages/discord-bot/src/api/incidents.ts`
 
-Status: Planned
+Canonical structured incident events currently emitted by backend:
 
-- backend incident APIs for report creation, list, detail, status update, and internal notes
-- shared contract types and schemas in `packages/contracts/src/web`
-- incident store startup initialization, instead of relying only on lazy first use
+- `incident.created`
+- `incident.status_changed`
+- `incident.remediated`
 
-Acceptance:
+### Deterministic breakers (Wave 2)
 
-- backend is the only source of truth for incident state
-- schema tests cover each new endpoint
-- integration tests cover SQLite incident storage
+Status: Not implemented yet
 
-#### 1B. Discord consented report flow
+- No finalized deterministic `evaluateRiskAndBreakers` authority path is wired as the final response gate.
 
-Status: Planned
-
-- replace the `report_issue` stub with an ephemeral consent flow
-- collect optional tags, description, and contact text
-- submit the report to the backend and return a clear success or failure reply
-
-Depends on:
-
-- Wave 1A
-
-Acceptance:
-
-- no incident row is created without explicit user consent
-- interaction tests cover consent, cancel, submit, and storage-failure paths
-- integration tests assert row counts correctly
-
-#### 1C. Immediate remediation
-
-Status: Planned
-
-- an idempotent helper that marks a reported assistant message as under review
-- warning text plus spoiler wrapping where possible
-- a safe fallback when editing the original content directly is risky
-- remediation persistence and `incident.remediated` only when a new remediation actually happens
-
-Depends on:
-
-- Wave 1B
-
-Acceptance:
-
-- repeated reports do not stack duplicate warning banners
-- edits do not corrupt the original assistant message body
-- tests cover already-marked, long, and awkward content cases
-
-#### 1D. Review tooling
-
-Status: Planned
-
-- a real CSV superuser allowlist in bot runtime config
-- backend admin APIs for list, detail, status change, and internal notes
-- private Discord `/incident` review commands that call those APIs
-
-Depends on:
-
-- Wave 1A
-
-Acceptance:
-
-- every moderator action creates an audit event
-- tests cover allowlist enforcement and Discord command behavior
-- integration tests assert audit rows for status changes and notes
-
-#### 1E. Canonical incident events
-
-Status: Planned
-
-- privacy-safe structured events for `incident.created`, `incident.remediated`, and `incident.status_changed`
-- shared correlation fields such as `incidentId`, `responseId`, `status`, and action
-
-Depends on:
-
-- Waves 1A through 1D
-
-Acceptance:
-
-- logs are usable for tracing one incident end to end
-- raw Discord identifiers do not appear in event payloads
-- logger tests cover event names, correlation fields, and redaction
-
-### Wave 2: Narrow Deterministic Breakers
-
-Goal: make ethics-core the final authority for a small, testable first breaker set.
-
-#### 2A. Deterministic evaluation API
-
-Status: Planned
-
-- `evaluateRiskAndBreakers(input) -> { riskTier, action, ruleId, notes }`
-- a narrow first rule set:
-    - self-harm or crisis escalation
-    - dangerous weaponization or explicit harm enablement
-    - one tightly scoped high-risk advice family
-
-Notes:
-
-- nothing blocks this technically, but it should come after Wave 1
-
-Acceptance:
-
-- planner risk remains a hint, not the final breaker authority
-- rule-by-rule unit tests exist
-- evaluator contract tests cover `ruleId`, action, and notes
-
-#### 2B. Reflect pipeline enforcement
-
-Status: Planned
-
-- run deterministic evaluation before final response emission in the backend reflect path
-- apply `allow`, `block`, `redirect`, `safe_partial`, or `human_review`
-- add optional breaker metadata to response metadata
-- emit `breaker.tripped` for non-allow outcomes
-
-Depends on:
-
-- Wave 2A
-
-Acceptance:
-
-- planner output cannot bypass breaker results
-- integration tests cover blocked and redirected outcomes
-- response metadata remains compatible with current consumers
-
-### Wave 3: Alerts
-
-Goal: add notifications only after incident creation and review are stable.
+### Alerts (Wave 3)
 
 Status: Deferred
 
-- redacted Discord alert targets and SMTP alert targets
-- alerts for new incidents and optionally confirmed incidents
-- payloads with short IDs and safe pointers only
+- Alert transport and notification policy work is still intentionally deferred.
 
-Depends on:
+## Remaining Work
 
-- stable outputs from Wave 1
-
-Acceptance:
-
-- alerts do not include raw IDs or broad raw content by default
-- tests cover payload redaction and enabled/disabled config paths
+- Operator chooses final disposition for incident `68432fa8` (`confirmed`/`dismissed`/`resolved`) and records rationale.
+- Breaker implementation work remains open after incident operations are fully stabilized.
