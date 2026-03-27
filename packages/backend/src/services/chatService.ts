@@ -17,6 +17,7 @@ import type {
     ResponseMetadata,
     RiskTier,
     ToolExecutionContext,
+    ToolInvocationRequest,
 } from '@footnote/contracts/ethics-core';
 import type {
     ModelProfileCapabilities,
@@ -112,6 +113,15 @@ export type RunChatMessagesInput = {
     capabilities?: ModelProfileCapabilities;
     generation?: ChatGenerationPlan;
     executionContext?: ResponseMetadataRuntimeContext['executionContext'];
+    toolRequest?: ToolInvocationRequest;
+};
+
+export type FinalToolExecutionTelemetry = {
+    toolName: string;
+    status: ToolExecutionContext['status'];
+    reasonCode?: ToolExecutionContext['reasonCode'];
+    eligible?: boolean;
+    requestReasonCode?: ToolInvocationRequest['reasonCode'];
 };
 
 /**
@@ -169,10 +179,12 @@ export const createChatService = ({
         capabilities,
         generation,
         executionContext,
+        toolRequest,
     }: RunChatMessagesInput): Promise<{
         message: string;
         metadata: ResponseMetadata;
         generationDurationMs: number;
+        finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
     }> => {
         const generationStartedAt = Date.now();
         const normalizedGeneration = normalizeGenerationPlan(generation);
@@ -335,6 +347,25 @@ export const createChatService = ({
                 contextSize: normalizedGeneration?.search?.contextSize,
             },
         };
+        const finalToolExecutionTelemetry:
+            | FinalToolExecutionTelemetry
+            | undefined =
+            effectiveToolExecutionContext !== undefined
+                ? {
+                      toolName: effectiveToolExecutionContext.toolName,
+                      status: effectiveToolExecutionContext.status,
+                      ...(effectiveToolExecutionContext.reasonCode !==
+                          undefined && {
+                          reasonCode: effectiveToolExecutionContext.reasonCode,
+                      }),
+                      ...(toolRequest !== undefined && {
+                          eligible: toolRequest.eligible,
+                      }),
+                      ...(toolRequest?.reasonCode !== undefined && {
+                          requestReasonCode: toolRequest.reasonCode,
+                      }),
+                  }
+                : undefined;
 
         // Metadata is the contract that downstream UIs and trace storage rely on.
         const responseMetadata = buildResponseMetadata(
@@ -371,6 +402,9 @@ export const createChatService = ({
             message: generationResult.text,
             metadata: normalizedResponseMetadata,
             generationDurationMs,
+            ...(finalToolExecutionTelemetry !== undefined && {
+                finalToolExecutionTelemetry,
+            }),
         };
     };
 

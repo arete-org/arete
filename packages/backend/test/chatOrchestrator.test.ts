@@ -930,6 +930,183 @@ test('request-selected non-search profile drops search without reroute', async (
     );
 });
 
+test('chat orchestration timing log includes response summary fields for normal message flow', async () => {
+    const infoLogs: Array<{ message: string; payload: unknown }> = [];
+    const originalInfo = logger.info;
+    logger.info = ((message: string, payload?: unknown) => {
+        infoLogs.push({ message, payload });
+        return logger;
+    }) as typeof logger.info;
+
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async (request) => {
+                if (request.maxOutputTokens === 700) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            riskTier: 'Low',
+                            reasoning: 'Normal response path.',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+
+                return {
+                    text: 'normal message reply',
+                    model: request.model,
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: () => createMetadata(),
+            defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+            recordUsage: () => undefined,
+        });
+
+        await orchestrator.runChat(createChatRequest());
+    } finally {
+        logger.info = originalInfo;
+    }
+
+    const timingLog = infoLogs.find(
+        (entry) => entry.message === 'chat.orchestration.timing'
+    );
+    assert.ok(timingLog);
+    const payload = timingLog?.payload as
+        | {
+              responseAction?: string;
+              responseProvenance?: string;
+              responseCitationCount?: number;
+              responseMessageLength?: number;
+              fallbackApplied?: boolean;
+              fallbackReasons?: unknown[];
+          }
+        | undefined;
+    assert.equal(payload?.responseAction, 'message');
+    assert.equal(payload?.responseProvenance, 'Inferred');
+    assert.equal(payload?.responseCitationCount, 0);
+    assert.ok((payload?.responseMessageLength ?? 0) > 0);
+    assert.equal(payload?.fallbackApplied, false);
+    assert.deepEqual(payload?.fallbackReasons, []);
+});
+
+test('chat orchestration timing log includes fallback reason and reason codes when search is dropped', async () => {
+    const infoLogs: Array<{ message: string; payload: unknown }> = [];
+    const originalInfo = logger.info;
+    const originalModelProfiles = runtimeConfig.modelProfiles;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        modelProfiles: typeof runtimeConfig.modelProfiles;
+    };
+    runtimeConfigMutable.modelProfiles = {
+        ...runtimeConfig.modelProfiles,
+        defaultProfileId: 'openai-text-fast',
+        plannerProfileId: runtimeConfig.modelProfiles.plannerProfileId,
+        catalog: runtimeConfig.modelProfiles.catalog.map((profile) => ({
+            ...profile,
+            capabilities: {
+                ...profile.capabilities,
+                canUseSearch: false,
+            },
+        })),
+    };
+    logger.info = ((message: string, payload?: unknown) => {
+        infoLogs.push({ message, payload });
+        return logger;
+    }) as typeof logger.info;
+
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async (request) => {
+                if (request.maxOutputTokens === 700) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            profileId: 'openai-text-fast',
+                            riskTier: 'Low',
+                            reasoning:
+                                'Search will be dropped because no profile can use tools.',
+                            generation: {
+                                reasoningEffort: 'medium',
+                                verbosity: 'medium',
+                                temperament: {
+                                    tightness: 4,
+                                    rationale: 3,
+                                    attribution: 4,
+                                    caution: 3,
+                                    extent: 4,
+                                },
+                                search: {
+                                    query: 'latest OpenAI policy update',
+                                    contextSize: 'low',
+                                    intent: 'current_facts',
+                                },
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+
+                return {
+                    text: 'fallback reply without retrieval',
+                    model: request.model,
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: () => createMetadata(),
+            defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+            recordUsage: () => undefined,
+        });
+
+        await orchestrator.runChat(createChatRequest());
+    } finally {
+        logger.info = originalInfo;
+        runtimeConfigMutable.modelProfiles = originalModelProfiles;
+    }
+
+    const timingLog = infoLogs.find(
+        (entry) => entry.message === 'chat.orchestration.timing'
+    );
+    assert.ok(timingLog);
+    const payload = timingLog?.payload as
+        | {
+              toolStatus?: string;
+              toolReasonCode?: string;
+              toolEligible?: boolean;
+              toolRequestReasonCode?: string;
+              fallbackApplied?: boolean;
+              fallbackReasons?: string[];
+              responseProvenance?: string;
+              searchRequested?: boolean;
+          }
+        | undefined;
+    assert.equal(payload?.toolStatus, 'skipped');
+    assert.equal(
+        payload?.toolReasonCode,
+        'search_reroute_no_tool_capable_fallback_available'
+    );
+    assert.equal(payload?.toolEligible, false);
+    assert.equal(
+        payload?.toolRequestReasonCode,
+        'search_not_supported_by_selected_profile'
+    );
+    assert.equal(payload?.searchRequested, false);
+    assert.equal(payload?.fallbackApplied, true);
+    assert.equal(payload?.responseProvenance, 'Inferred');
+    assert.ok(
+        payload?.fallbackReasons?.includes('search_dropped_no_fallback_profile')
+    );
+});
+
 test('discord requests use backend profile overlay when runtime overlay is configured', async () => {
     let finalMessages: Array<{ role: string; content: string }> = [];
     const originalProfile = runtimeConfig.profile;
