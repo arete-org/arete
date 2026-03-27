@@ -39,8 +39,6 @@ export type VoltAgentProviderOptions = {
     providerHints?: Record<string, unknown>;
 };
 
-export type VoltAgentModelTier = 'text-fast' | 'text-quality';
-
 /**
  * Narrow execution options the VoltAgent adapter passes into one text call.
  */
@@ -149,13 +147,6 @@ type CreateVoltAgentAgentFactoryInput = {
  */
 export interface CreateVoltAgentRuntimeOptions {
     defaultModel?: string;
-    /**
-     * Optional capability-tier aliases that resolve to concrete provider/model
-     * ids inside the runtime adapter (for example, "text-fast").
-     * @deprecated Backend model-profile catalog resolution now owns tier
-     * mapping. This field is retained temporarily for compatibility.
-     */
-    modelTiers?: Partial<Record<VoltAgentModelTier, string>>;
     createExecutor?: VoltAgentExecutorFactory;
     kind?: string;
     logger?: VoltAgentLogger;
@@ -315,17 +306,8 @@ const providerSearchToolRegistry: Record<string, ProviderSearchToolFactory> = {
 const supportsSearchToolsForProvider = (provider: string): boolean =>
     provider in providerSearchToolRegistry;
 
-const VOLTAGENT_MODEL_TIER_VALUES: readonly VoltAgentModelTier[] = [
-    'text-fast',
-    'text-quality',
-] as const;
-
-const isVoltAgentModelTier = (value: string): value is VoltAgentModelTier =>
-    VOLTAGENT_MODEL_TIER_VALUES.includes(value as VoltAgentModelTier);
-
 type VoltAgentModelResolution = {
     selectedModel: string | undefined;
-    missingTierAlias?: VoltAgentModelTier;
 };
 
 const normalizeConfiguredModel = (value?: string): string | undefined => {
@@ -340,11 +322,9 @@ const normalizeConfiguredModel = (value?: string): string | undefined => {
 const resolveVoltAgentModelId = ({
     requestedModel,
     defaultModel,
-    modelTiers,
 }: {
     requestedModel?: string;
     defaultModel?: string;
-    modelTiers?: Partial<Record<VoltAgentModelTier, string>>;
 }): VoltAgentModelResolution => {
     const normalizedDefaultModel = normalizeConfiguredModel(defaultModel);
 
@@ -353,22 +333,6 @@ const resolveVoltAgentModelId = ({
         if (trimmedModel.length === 0) {
             return {
                 selectedModel: normalizedDefaultModel,
-            };
-        }
-
-        if (isVoltAgentModelTier(trimmedModel)) {
-            const resolvedTierModel = modelTiers?.[trimmedModel];
-            const normalizedTierModel =
-                normalizeConfiguredModel(resolvedTierModel);
-            if (normalizedTierModel !== undefined) {
-                return {
-                    selectedModel: normalizedTierModel,
-                };
-            }
-
-            return {
-                selectedModel: normalizedDefaultModel,
-                missingTierAlias: trimmedModel,
             };
         }
 
@@ -876,7 +840,6 @@ const createDefaultVoltAgentExecutor = ({
  */
 const createVoltAgentRuntime = ({
     defaultModel,
-    modelTiers,
     createExecutor = createDefaultVoltAgentExecutor,
     kind = 'voltagent',
     logger,
@@ -897,35 +860,11 @@ const createVoltAgentRuntime = ({
             const modelResolution = resolveVoltAgentModelId({
                 requestedModel: request.model,
                 defaultModel,
-                modelTiers,
             });
             const selectedModel = modelResolution.selectedModel;
             if (!selectedModel) {
-                const trimmedRequestedModel = request.model?.trim();
-                if (
-                    trimmedRequestedModel !== undefined &&
-                    trimmedRequestedModel.length > 0 &&
-                    isVoltAgentModelTier(trimmedRequestedModel) &&
-                    modelResolution.missingTierAlias !== undefined
-                ) {
-                    throw new Error(
-                        `VoltAgent runtime could not resolve tier alias "${trimmedRequestedModel}". Cause: requested model is a tier alias with no mapping or defaultModel configured. Fix: configure a mapping for this tier alias in modelTiers, set a non-empty defaultModel, or pass a concrete model name in request.model.`
-                    );
-                }
-
                 throw new Error(
                     'VoltAgent runtime requires request.model or a configured defaultModel.'
-                );
-            }
-            if (modelResolution.missingTierAlias !== undefined && logger) {
-                logger.warn(
-                    'VoltAgent tier alias was not configured; falling back to defaultModel.',
-                    {
-                        requestedModel: request.model,
-                        resolvedModel: selectedModel,
-                        missingTierAlias: modelResolution.missingTierAlias,
-                        configuredTierAliases: Object.keys(modelTiers ?? {}),
-                    }
                 );
             }
 

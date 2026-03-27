@@ -454,12 +454,7 @@ import {
  */
 export type CreateGenerationRuntimeOptions = {
     kind: 'voltagent';
-} & Pick<
-    CreateVoltAgentRuntimeOptions,
-    // modelTiers is still surfaced for compatibility, but backend catalog
-    // resolution should be preferred for new routing behavior.
-    'defaultModel' | 'modelTiers' | 'createExecutor'
->;
+} & Pick<CreateVoltAgentRuntimeOptions, 'defaultModel' | 'createExecutor'>;
 
 /**
  * Creates one configured generation runtime implementation.
@@ -469,7 +464,6 @@ export function createGenerationRuntime(
 ): GenerationRuntime {
     return createVoltAgentRuntime({
         defaultModel: options.defaultModel,
-        modelTiers: options.modelTiers,
         createExecutor: options.createExecutor,
     });
 }
@@ -497,7 +491,6 @@ export {
     type VoltAgentExecutorFactory,
     type VoltAgentGenerateTextOptions,
     type VoltAgentLogger,
-    type VoltAgentModelTier,
     type VoltAgentProviderOptions,
     type VoltAgentResponseMetadata,
     type VoltAgentTextExecutor,
