@@ -1,0 +1,7 @@
+dbs:
+    - path: /data/provenance.db
+      replicas:
+          - url: ${LITESTREAM_REPLICA_URL}/provenance
+    - path: /data/incidents.db
+      replicas:
+          - url: ${LITESTREAM_REPLICA_URL}/incidents

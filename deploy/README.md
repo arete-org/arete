@@ -48,6 +48,12 @@ Services:
     PROVENANCE_SQLITE_PATH=/data/provenance.db
     ```
     > On Fly.io, `/data` is backed by a persistent volume. On other hosts, point this path at a durable directory.
+- **Litestream backup replication**
+  Backend image runs through Litestream and can continuously replicate both SQLite files.
+    ```env
+    LITESTREAM_REPLICA_URL=s3://<bucket>/<prefix>
+    ```
+    > Litestream reads `deploy/litestream.yml` and replicates `/data/provenance.db` and `/data/incidents.db`.
 
 ### Optional Environment Variables
 
@@ -57,6 +63,7 @@ Services:
 - backend: `ALLOWED_ORIGINS`, `FRAME_ANCESTORS` (override CORS/CSP allowlists)
 - backend: `DEFAULT_MODEL`, `DEFAULT_REASONING_EFFORT`, `DEFAULT_VERBOSITY` (reflect defaults)
 - backend: `TRACE_API_RATE_LIMIT`, `TRACE_API_RATE_LIMIT_WINDOW_MS`, `TRACE_API_MAX_BODY_BYTES` (trace ingestion limits)
+- backend: `LITESTREAM_REPLICA_URL` (SQLite replication target)
 - bot: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (optional image uploads)
 - bot: `BOT_PROFILE_ID`, `BOT_PROFILE_DISPLAY_NAME`, `BOT_PROFILE_PROMPT_OVERLAY_PATH` (optional persona overlays)
 
@@ -95,5 +102,19 @@ Template overlay paths:
 
 - Only the web service is exposed on host port 8080 (`http://localhost:8080`) to avoid admin privileges.
 - The backend listens internally on port 3000 and stores data in `/data` (Docker volume: `footnote-data`).
+- Backend startup logs include Litestream replication visibility and latest known snapshot timestamp (or `none yet`).
 - Blog post JSONs are stored in backend-owned storage under `/data/blog-posts` and served via backend endpoints.
 - The web app fetches runtime config from `/config.json` (proxied to the backend) to read `TURNSTILE_SITE_KEY`.
+
+## Litestream Restore Runbook
+
+1. Stop backend writes and run restore commands to a temp directory:
+    - `litestream restore -if-replica-exists -o /tmp/restore/provenance.db "${LITESTREAM_REPLICA_URL}/provenance"`
+    - `litestream restore -if-replica-exists -o /tmp/restore/incidents.db "${LITESTREAM_REPLICA_URL}/incidents"`
+2. Verify restored DBs are readable:
+    - `sqlite3 /tmp/restore/provenance.db "select count(*) from provenance_traces;"`
+    - `sqlite3 /tmp/restore/incidents.db "select count(*) from incidents;"`
+3. Replace live files only during maintenance downtime:
+    - copy restored files to `/data/provenance.db` and `/data/incidents.db`
+    - restart backend container
+4. Confirm backend boot logs show normal SQLite initialization and no Litestream replication errors.

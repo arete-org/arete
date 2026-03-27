@@ -313,6 +313,15 @@ export class SqliteTraceStore {
         return row?.trace_card_svg ?? null;
     }
 
+    /**
+     * Flushes and truncates the WAL file so shutdown leaves less recovery work
+     * for Litestream snapshots and next process start.
+     */
+    checkpointWalTruncate(): void {
+        this.db.pragma('wal_checkpoint(TRUNCATE)');
+        traceLogger.info('Trace store WAL checkpoint completed (TRUNCATE).');
+    }
+
     close(): void {
         // Close the SQLite handle so Windows can clean up temp DB files.
         this.db.close();

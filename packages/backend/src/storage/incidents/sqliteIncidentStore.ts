@@ -1046,6 +1046,17 @@ export class SqliteIncidentStore {
     }
 
     /**
+     * Flushes and truncates the WAL file so graceful shutdown does not leave a
+     * large pending log segment.
+     */
+    checkpointWalTruncate(): void {
+        this.db.pragma('wal_checkpoint(TRUNCATE)');
+        incidentLogger.info(
+            'Incident store WAL checkpoint completed (TRUNCATE).'
+        );
+    }
+
+    /**
      * Closes the SQLite handle so tests and shutdown paths can release the file
      * cleanly.
      */

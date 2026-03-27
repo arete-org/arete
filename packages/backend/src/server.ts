@@ -130,6 +130,16 @@ const initializeServices = () => {
     logger.info(
         `VOLTOPS_TRACING_CONFIGURED: ${runtimeConfig.voltagent.observabilityEnabled ? 'ENABLED' : 'DISABLED'}`
     );
+    logger.info(
+        `LITESTREAM_REPLICA_URL: ${
+            process.env.LITESTREAM_REPLICA_URL?.trim() ? 'SET' : 'NOT SET'
+        }`
+    );
+    logger.info(
+        `LITESTREAM_LATEST_SNAPSHOT_AT: ${
+            process.env.LITESTREAM_LATEST_SNAPSHOT_AT?.trim() || 'none yet'
+        }`
+    );
     logger.info(`NODE_ENV: ${runtimeConfig.runtime.nodeEnv}`);
 
     // --- Trace store ---
@@ -678,6 +688,89 @@ server.on('upgrade', (req, socket, head) => {
 
     socket.destroy();
 });
+
+let isShuttingDown = false;
+const shutdownGracefully = (signal: 'SIGINT' | 'SIGTERM'): void => {
+    if (isShuttingDown) {
+        return;
+    }
+    isShuttingDown = true;
+    logger.info(`Received ${signal}; starting graceful shutdown.`);
+
+    // Order matters:
+    // 1) checkpoint WAL so replicated snapshots include recent writes
+    // 2) close stores so file locks are released before process exit
+    // 3) close HTTP server and then terminate with explicit exit status
+    try {
+        traceStore?.checkpointWalTruncate();
+    } catch (error) {
+        logger.error(
+            `Failed trace-store WAL checkpoint during shutdown: ${
+                error instanceof Error ? error.message : String(error)
+            }`
+        );
+    }
+
+    try {
+        incidentStore?.checkpointWalTruncate();
+    } catch (error) {
+        logger.error(
+            `Failed incident-store WAL checkpoint during shutdown: ${
+                error instanceof Error ? error.message : String(error)
+            }`
+        );
+    }
+
+    try {
+        traceStore?.close();
+    } catch (error) {
+        logger.error(
+            `Failed to close trace store during shutdown: ${
+                error instanceof Error ? error.message : String(error)
+            }`
+        );
+    } finally {
+        traceStore = null;
+    }
+
+    try {
+        incidentStore?.close();
+    } catch (error) {
+        logger.error(
+            `Failed to close incident store during shutdown: ${
+                error instanceof Error ? error.message : String(error)
+            }`
+        );
+    } finally {
+        incidentStore = null;
+    }
+
+    const forceExitTimer = setTimeout(() => {
+        logger.error(
+            'Graceful shutdown timeout reached; forcing process termination.'
+        );
+        process.exit(1);
+    }, 10000);
+    forceExitTimer.unref();
+
+    server.close((error) => {
+        if (error) {
+            logger.error(
+                `Server close failed during shutdown: ${
+                    error instanceof Error ? error.message : String(error)
+                }`
+            );
+            process.exit(1);
+            return;
+        }
+
+        logger.info('Graceful shutdown complete.');
+        process.exit(0);
+    });
+};
+
+process.once('SIGINT', () => shutdownGracefully('SIGINT'));
+process.once('SIGTERM', () => shutdownGracefully('SIGTERM'));
 
 // --- Server startup ---
 const port = runtimeConfig.server.port;
