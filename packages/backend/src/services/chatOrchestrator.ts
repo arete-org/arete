@@ -151,7 +151,7 @@ const rankSearchFallbackProfiles = (
             return costRank;
         }
 
-        return left.id.localeCompare(right.id);
+        return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
     });
 };
 

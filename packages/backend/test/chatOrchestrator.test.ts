@@ -590,23 +590,56 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
     const runtimeConfigMutable = runtimeConfig as unknown as {
         modelProfiles: typeof runtimeConfig.modelProfiles;
     };
-    const mutatedCatalog = runtimeConfig.modelProfiles.catalog.map((profile) =>
-        profile.id === 'openai-text-fast'
-            ? {
-                  ...profile,
-                  capabilities: {
-                      ...profile.capabilities,
-                      canUseSearch: false,
-                  },
-              }
-            : profile
+    const baseMutatedCatalog = runtimeConfig.modelProfiles.catalog.map(
+        (profile) =>
+            profile.id === 'openai-text-fast'
+                ? {
+                      ...profile,
+                      capabilities: {
+                          ...profile.capabilities,
+                          canUseSearch: false,
+                      },
+                  }
+                : profile
     );
-    const expectedFallbackProfile = mutatedCatalog
-        .filter(
-            (profile) => profile.enabled && profile.capabilities.canUseSearch
-        )
-        .find((profile) => profile.id !== 'openai-text-fast');
+    const fastProfile = baseMutatedCatalog.find(
+        (profile) => profile.id === 'openai-text-fast'
+    );
+    const qualityProfile = baseMutatedCatalog.find(
+        (profile) => profile.id === 'openai-text-quality'
+    );
+    const mediumProfile = baseMutatedCatalog.find(
+        (profile) => profile.id === 'openai-text-medium'
+    );
+    assert.ok(fastProfile);
+    assert.ok(qualityProfile);
+    assert.ok(mediumProfile);
+    const remainingProfiles = baseMutatedCatalog.filter(
+        (profile) =>
+            profile.id !== 'openai-text-fast' &&
+            profile.id !== 'openai-text-quality' &&
+            profile.id !== 'openai-text-medium'
+    );
+    // Place a higher-latency candidate before medium to ensure this test would
+    // fail under simple first-match fallback behavior.
+    const mutatedCatalog = [
+        fastProfile,
+        qualityProfile,
+        mediumProfile,
+        ...remainingProfiles,
+    ];
+    const expectedFallbackProfile = mutatedCatalog.find(
+        (profile) => profile.id === 'openai-text-medium'
+    );
     assert.ok(expectedFallbackProfile);
+    const firstCatalogSearchCapable = mutatedCatalog.find(
+        (profile) =>
+            profile.enabled &&
+            profile.capabilities.canUseSearch &&
+            profile.id !== 'openai-text-fast'
+    );
+    assert.ok(firstCatalogSearchCapable);
+    assert.notEqual(firstCatalogSearchCapable.id, expectedFallbackProfile.id);
     runtimeConfigMutable.modelProfiles = {
         ...runtimeConfig.modelProfiles,
         defaultProfileId: 'openai-text-fast',

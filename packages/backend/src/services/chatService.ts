@@ -253,7 +253,9 @@ export const createChatService = ({
                                     }
                                   : {}
                               : {
-                                    reasonCode: 'tool_not_used',
+                                    reasonCode:
+                                        upstreamToolExecution.reasonCode ??
+                                        'tool_not_used',
                                 }),
                       }
                     : upstreamToolExecution
