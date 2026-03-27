@@ -12,6 +12,7 @@
 
 export type {
     Provenance,
+    ProvenanceSignals,
     RiskTier,
     Citation,
     TraceAxisScore,
