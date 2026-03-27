@@ -794,11 +794,11 @@ const buildResponseMetadata = (
     }
     const toolExecution = runtimeContext.executionContext?.tool;
     if (toolExecution) {
-        // Tool skips/failures are normalized to a stable code so analytics and
-        // UI can query outcomes without parsing log strings.
+        // Tool outcomes normalize missing skip/failure codes, but preserve
+        // explicit executed reason codes for policy-audit metadata.
         const normalizedToolReasonCode =
             toolExecution.status === 'executed'
-                ? undefined
+                ? toolExecution.reasonCode
                 : toolExecution.status === 'failed'
                   ? (toolExecution.reasonCode ?? 'tool_execution_error')
                   : (toolExecution.reasonCode ?? 'unspecified_tool_outcome');

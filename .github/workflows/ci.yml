@@ -21,6 +21,10 @@ jobs:
 
             - run: corepack enable
             - run: corepack prepare pnpm@10.26.2 --activate
+            - name: Fix corepack node-gyp python shim permissions
+              shell: bash
+              run: |
+                  find "${HOME}/.cache/node/corepack" -type f -path "*/node-gyp/gyp/gyp_main.py" -exec chmod +x {} \; || true
             - run: pnpm install --frozen-lockfile
             - run: pnpm review
             - run: pnpm -r build

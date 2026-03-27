@@ -230,6 +230,7 @@ export const createChatService = ({
             generationResult.provenance === 'Retrieved' ||
             (generationResult.citations?.length ?? 0) > 0;
         const hasSearchIntent = normalizedGeneration?.search !== undefined;
+        const upstreamToolExecution = executionContext?.tool;
         const effectiveToolExecutionContext:
             | NonNullable<
                   ResponseMetadataRuntimeContext['executionContext']
@@ -237,8 +238,27 @@ export const createChatService = ({
             | undefined =
             // Respect explicit upstream tool outcomes first (for example,
             // orchestrator-level fail-open policy decisions).
-            executionContext?.tool
-                ? executionContext.tool
+            upstreamToolExecution
+                ? hasSearchIntent
+                    ? {
+                          ...upstreamToolExecution,
+                          status: retrievalUsed ? 'executed' : 'skipped',
+                          ...(retrievalUsed
+                              ? upstreamToolExecution.reasonCode !== undefined
+                                  ? {
+                                        // Keep policy reason codes when
+                                        // runtime confirms tool execution.
+                                        reasonCode:
+                                            upstreamToolExecution.reasonCode,
+                                    }
+                                  : {}
+                              : {
+                                    reasonCode:
+                                        upstreamToolExecution.reasonCode ??
+                                        'tool_not_used',
+                                }),
+                      }
+                    : upstreamToolExecution
                 : generationResult.toolExecution
                   ? generationResult.toolExecution
                   : hasSearchIntent

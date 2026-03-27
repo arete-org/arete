@@ -73,6 +73,12 @@ jobs:
               if: matrix.language == 'javascript-typescript'
               run: corepack prepare pnpm@10.27.0 --activate
 
+            - name: Fix corepack node-gyp python shim permissions
+              if: matrix.language == 'javascript-typescript'
+              shell: bash
+              run: |
+                  find "${HOME}/.cache/node/corepack" -type f -path "*/node-gyp/gyp/gyp_main.py" -exec chmod +x {} \; || true
+
             - name: Install dependencies
               if: matrix.language == 'javascript-typescript'
               run: pnpm install --frozen-lockfile

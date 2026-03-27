@@ -590,23 +590,56 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
     const runtimeConfigMutable = runtimeConfig as unknown as {
         modelProfiles: typeof runtimeConfig.modelProfiles;
     };
-    const mutatedCatalog = runtimeConfig.modelProfiles.catalog.map((profile) =>
-        profile.id === 'openai-text-fast'
-            ? {
-                  ...profile,
-                  capabilities: {
-                      ...profile.capabilities,
-                      canUseSearch: false,
-                  },
-              }
-            : profile
+    const baseMutatedCatalog = runtimeConfig.modelProfiles.catalog.map(
+        (profile) =>
+            profile.id === 'openai-text-fast'
+                ? {
+                      ...profile,
+                      capabilities: {
+                          ...profile.capabilities,
+                          canUseSearch: false,
+                      },
+                  }
+                : profile
     );
-    const expectedFallbackProfile = mutatedCatalog
-        .filter(
-            (profile) => profile.enabled && profile.capabilities.canUseSearch
-        )
-        .find((profile) => profile.id !== 'openai-text-fast');
+    const fastProfile = baseMutatedCatalog.find(
+        (profile) => profile.id === 'openai-text-fast'
+    );
+    const qualityProfile = baseMutatedCatalog.find(
+        (profile) => profile.id === 'openai-text-quality'
+    );
+    const mediumProfile = baseMutatedCatalog.find(
+        (profile) => profile.id === 'openai-text-medium'
+    );
+    assert.ok(fastProfile);
+    assert.ok(qualityProfile);
+    assert.ok(mediumProfile);
+    const remainingProfiles = baseMutatedCatalog.filter(
+        (profile) =>
+            profile.id !== 'openai-text-fast' &&
+            profile.id !== 'openai-text-quality' &&
+            profile.id !== 'openai-text-medium'
+    );
+    // Place a higher-latency candidate before medium to ensure this test would
+    // fail under simple first-match fallback behavior.
+    const mutatedCatalog = [
+        fastProfile,
+        qualityProfile,
+        mediumProfile,
+        ...remainingProfiles,
+    ];
+    const expectedFallbackProfile = mutatedCatalog.find(
+        (profile) => profile.id === 'openai-text-medium'
+    );
     assert.ok(expectedFallbackProfile);
+    const firstCatalogSearchCapable = mutatedCatalog.find(
+        (profile) =>
+            profile.enabled &&
+            profile.capabilities.canUseSearch &&
+            profile.id !== 'openai-text-fast'
+    );
+    assert.ok(firstCatalogSearchCapable);
+    assert.notEqual(firstCatalogSearchCapable.id, expectedFallbackProfile.id);
     runtimeConfigMutable.modelProfiles = {
         ...runtimeConfig.modelProfiles,
         defaultProfileId: 'openai-text-fast',
@@ -686,7 +719,7 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
         intent: 'current_facts',
     });
     const mismatchWarning = warnings.find((warning) =>
-        /deterministic search-capable fallback profile/i.test(warning.message)
+        /tool-capable fallback profile/i.test(warning.message)
     );
     assert.ok(mismatchWarning);
     assert.equal(
@@ -700,6 +733,7 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
     assert.deepEqual(capturedExecutionContext?.tool, {
         toolName: 'web_search',
         status: 'executed',
+        reasonCode: 'search_rerouted_to_fallback_profile',
     });
     assert.equal(
         capturedExecutionContext?.generation?.originalProfileId,
@@ -709,6 +743,84 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
         capturedExecutionContext?.generation?.effectiveProfileId,
         expectedFallbackProfile.id
     );
+});
+
+test('planner-selected non-search profile skips search when no tool-capable fallback exists', async () => {
+    let observedSearch: unknown;
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
+    const originalModelProfiles = runtimeConfig.modelProfiles;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        modelProfiles: typeof runtimeConfig.modelProfiles;
+    };
+    runtimeConfigMutable.modelProfiles = {
+        ...runtimeConfig.modelProfiles,
+        defaultProfileId: 'openai-text-fast',
+        plannerProfileId: runtimeConfig.modelProfiles.plannerProfileId,
+        catalog: runtimeConfig.modelProfiles.catalog.map((profile) => ({
+            ...profile,
+            capabilities: {
+                ...profile.capabilities,
+                canUseSearch: false,
+            },
+        })),
+    };
+
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async (request) => {
+                if (request.maxOutputTokens === 700) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            profileId: 'openai-text-fast',
+                            riskTier: 'Low',
+                            reasoning:
+                                'Attempt search with a planner-selected profile.',
+                            generation: {
+                                reasoningEffort: 'medium',
+                                verbosity: 'medium',
+                                search: {
+                                    query: 'latest OpenAI policy update',
+                                    contextSize: 'low',
+                                    intent: 'current_facts',
+                                },
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+
+                observedSearch = request.search;
+                return {
+                    text: 'planner-no-fallback reply',
+                    model: request.model,
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+                capturedExecutionContext = runtimeContext.executionContext;
+                return createMetadata();
+            },
+            defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+            recordUsage: () => undefined,
+        });
+
+        await orchestrator.runChat(createChatRequest());
+    } finally {
+        runtimeConfigMutable.modelProfiles = originalModelProfiles;
+    }
+
+    assert.equal(observedSearch, undefined);
+    assert.deepEqual(capturedExecutionContext?.tool, {
+        toolName: 'web_search',
+        status: 'skipped',
+        reasonCode: 'search_reroute_no_tool_capable_fallback_available',
+    });
 });
 
 test('request-selected non-search profile drops search without reroute', async () => {
@@ -806,7 +918,7 @@ test('request-selected non-search profile drops search without reroute', async (
     assert.deepEqual(toolExecution, {
         toolName: 'web_search',
         status: 'skipped',
-        reasonCode: 'search_not_supported_by_selected_profile',
+        reasonCode: 'search_reroute_not_permitted_by_selection_source',
     });
     assert.equal(
         capturedExecutionContext?.generation?.originalProfileId,

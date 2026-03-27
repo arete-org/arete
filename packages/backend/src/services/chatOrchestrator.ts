@@ -10,10 +10,15 @@ import type {
     PostChatResponse,
     ChatConversationMessage,
 } from '@footnote/contracts/web';
-import type { ModelProfile } from '@footnote/contracts';
+import type {
+    ModelCostClass,
+    ModelLatencyClass,
+    ModelProfile,
+} from '@footnote/contracts';
 import type {
     ToolExecutionContext,
     ToolInvocationIntent,
+    ToolInvocationReasonCode,
     ToolInvocationRequest,
     ExecutionReasonCode,
     ExecutionStatus,
@@ -48,34 +53,111 @@ import { logger } from '../utils/logger.js';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions;
 
+const searchFallbackPolicyBySelectionSource: Record<
+    PlannerSelectionSource,
+    {
+        allowReroute: boolean;
+        rerouteReasonCode: ToolInvocationReasonCode;
+        skipReasonCode: ToolInvocationReasonCode;
+    }
+> = {
+    planner: {
+        allowReroute: true,
+        rerouteReasonCode: 'search_rerouted_to_fallback_profile',
+        skipReasonCode: 'search_reroute_no_tool_capable_fallback_available',
+    },
+    request: {
+        allowReroute: false,
+        rerouteReasonCode: 'search_rerouted_to_fallback_profile',
+        skipReasonCode: 'search_reroute_not_permitted_by_selection_source',
+    },
+    default: {
+        allowReroute: false,
+        rerouteReasonCode: 'search_rerouted_to_fallback_profile',
+        skipReasonCode: 'search_reroute_not_permitted_by_selection_source',
+    },
+};
+
+const searchFallbackRankingPolicy = {
+    steps: [
+        'prefer_same_provider',
+        'prefer_shared_tier_binding',
+        'prefer_lower_latency_class',
+        'prefer_lower_cost_class',
+        'tie_break_by_profile_id_ascending',
+    ] as const,
+};
+
+const latencyClassRank: Record<ModelLatencyClass, number> = {
+    low: 0,
+    medium: 1,
+    high: 2,
+};
+
+const costClassRank: Record<ModelCostClass, number> = {
+    low: 0,
+    medium: 1,
+    high: 2,
+};
+
+const rankLatencyClass = (latencyClass: ModelLatencyClass | undefined) =>
+    latencyClass === undefined ? 3 : latencyClassRank[latencyClass];
+
+const rankCostClass = (costClass: ModelCostClass | undefined) =>
+    costClass === undefined ? 3 : costClassRank[costClass];
+
+const compareNumbers = (left: number, right: number) => left - right;
+
+const rankSearchFallbackProfiles = (
+    selectedProfile: ModelProfile,
+    candidates: ModelProfile[]
+): ModelProfile[] => {
+    const selectedTierBindings = new Set(selectedProfile.tierBindings);
+    return [...candidates].sort((left, right) => {
+        const providerRank = compareNumbers(
+            left.provider === selectedProfile.provider ? 0 : 1,
+            right.provider === selectedProfile.provider ? 0 : 1
+        );
+        if (providerRank !== 0) {
+            return providerRank;
+        }
+
+        const tierBindingRank = compareNumbers(
+            left.tierBindings.some((binding) => selectedTierBindings.has(binding))
+                ? 0
+                : 1,
+            right.tierBindings.some((binding) =>
+                selectedTierBindings.has(binding)
+            )
+                ? 0
+                : 1
+        );
+        if (tierBindingRank !== 0) {
+            return tierBindingRank;
+        }
+
+        const latencyRank = compareNumbers(
+            rankLatencyClass(left.latencyClass),
+            rankLatencyClass(right.latencyClass)
+        );
+        if (latencyRank !== 0) {
+            return latencyRank;
+        }
+
+        const costRank = compareNumbers(
+            rankCostClass(left.costClass),
+            rankCostClass(right.costClass)
+        );
+        if (costRank !== 0) {
+            return costRank;
+        }
+
+        return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+    });
+};
+
 const RESPONSE_PROFILE_FALLBACK_POLICY = 'response_profile_fallback_v1';
 const SEARCH_REROUTE_FALLBACK_POLICY = 'search_reroute_profile_fallback_v1';
-
-const buildDeterministicSearchFallbackOrder = (
-    searchCapableProfiles: ModelProfile[],
-    selectedProfileId: string,
-    defaultProfileId: string
-): string[] => {
-    const orderedIds = searchCapableProfiles
-        .filter((profile) => profile.id !== selectedProfileId)
-        .map((profile) => profile.id)
-        .sort((left, right) => left.localeCompare(right));
-
-    const defaultProfileIndex = orderedIds.findIndex(
-        (profileId) => profileId === defaultProfileId
-    );
-    if (defaultProfileIndex > 0) {
-        const [defaultProfileCandidate] = orderedIds.splice(
-            defaultProfileIndex,
-            1
-        );
-        if (defaultProfileCandidate) {
-            orderedIds.unshift(defaultProfileCandidate);
-        }
-    }
-
-    return orderedIds;
-};
 
 const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
@@ -452,35 +534,46 @@ export const createChatOrchestrator = ({
             generationForExecution.search &&
             !selectedResponseProfile.capabilities.canUseSearch
         ) {
-            const shouldRerouteToSearchCapableFallback =
-                profileSelectionSource === 'planner';
-            const searchFallbackOrder = shouldRerouteToSearchCapableFallback
-                ? buildDeterministicSearchFallbackOrder(
-                      searchCapableProfiles,
-                      selectedResponseProfile.id,
-                      defaultResponseProfile.id
-                  )
-                : [];
-            const fallbackProfileId = searchFallbackOrder[0];
-            const fallbackProfile = fallbackProfileId
-                ? enabledProfilesById.get(fallbackProfileId)
+            const fallbackPolicy =
+                searchFallbackPolicyBySelectionSource[profileSelectionSource];
+            const rankedFallbackCandidates = rankSearchFallbackProfiles(
+                selectedResponseProfile,
+                searchCapableProfiles.filter(
+                    (profile) => profile.id !== selectedResponseProfile.id
+                )
+            );
+            const fallbackProfile = fallbackPolicy.allowReroute
+                ? rankedFallbackCandidates[0]
                 : undefined;
+            const searchFallbackOrder = rankedFallbackCandidates.map(
+                (profile) => profile.id
+            );
 
             if (fallbackProfile) {
                 rerouteApplied = true;
                 selectedResponseProfile = fallbackProfile;
                 effectiveSelectedProfileId = fallbackProfile.id;
+                toolExecutionContext = {
+                    toolName: 'web_search',
+                    status: 'executed',
+                    reasonCode: fallbackPolicy.rerouteReasonCode,
+                };
                 fallbackReasons.push('planner_non_search_profile_rerouted');
                 chatOrchestratorLogger.warn(
-                    'planner selected a non-search-capable profile; rerouting search to deterministic search-capable fallback profile',
+                    'selected profile cannot use search; rerouting to policy-ranked tool-capable fallback profile',
                     {
                         event: 'chat.orchestration.profile_fallback',
                         policy: SEARCH_REROUTE_FALLBACK_POLICY,
                         stage: 'search_rerouted',
+                        reasonCode: fallbackPolicy.rerouteReasonCode,
                         originalProfileId: originalSelectedProfileId,
                         effectiveProfileId: effectiveSelectedProfileId,
-                        fallbackOrder: searchFallbackOrder,
                         selectionSource: profileSelectionSource,
+                        rankingPolicy: searchFallbackRankingPolicy.steps,
+                        rankedFallbackProfileIds: rankedFallbackCandidates.map(
+                            (profile) => profile.id
+                        ),
+                        fallbackOrder: searchFallbackOrder,
                         surface: normalizedRequest.surface,
                     }
                 );
@@ -498,7 +591,7 @@ export const createChatOrchestrator = ({
                 toolExecutionContext = {
                     toolName: 'web_search',
                     status: 'skipped',
-                    reasonCode: 'search_not_supported_by_selected_profile',
+                    reasonCode: fallbackPolicy.skipReasonCode,
                 };
                 if (profileSelectionSource === 'planner') {
                     fallbackReasons.push('search_dropped_no_fallback_profile');
@@ -519,8 +612,13 @@ export const createChatOrchestrator = ({
                         originalProfileId: originalSelectedProfileId,
                         effectiveProfileId: effectiveSelectedProfileId,
                         rerouteApplied,
+                        reasonCode: fallbackPolicy.skipReasonCode,
                         selectionSource: profileSelectionSource,
                         fallbackOrder: searchFallbackOrder,
+                        rankingPolicy: searchFallbackRankingPolicy.steps,
+                        rankedFallbackProfileIds: rankedFallbackCandidates.map(
+                            (profile) => profile.id
+                        ),
                         surface: normalizedRequest.surface,
                     }
                 );

@@ -304,6 +304,30 @@ test('buildResponseMetadata normalizes skipped tool event with fallback reasonCo
     ]);
 });
 
+test('buildResponseMetadata preserves executed tool reasonCode for reroute auditability', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                tool: {
+                    toolName: 'web_search',
+                    status: 'executed',
+                    reasonCode: 'search_rerouted_to_fallback_profile',
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'tool',
+            status: 'executed',
+            toolName: 'web_search',
+            reasonCode: 'search_rerouted_to_fallback_profile',
+        },
+    ]);
+});
+
 test('buildResponseMetadata normalizes failed tool event with fallback reasonCode', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
