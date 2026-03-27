@@ -115,7 +115,11 @@ const ProvenanceFooter = ({
             <div className="provenance-main">
                 {searchUnavailableWarning && (
                     <>
-                        <span className="provenance-risktier">
+                        <span
+                            className="provenance-risktier"
+                            role="status"
+                            aria-live="polite"
+                        >
                             search unavailable for selected model
                         </span>
                         <span className="provenance-separator"> • </span>

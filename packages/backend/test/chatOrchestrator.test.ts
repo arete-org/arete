@@ -519,21 +519,28 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
     const runtimeConfigMutable = runtimeConfig as unknown as {
         modelProfiles: typeof runtimeConfig.modelProfiles;
     };
+    const mutatedCatalog = runtimeConfig.modelProfiles.catalog.map((profile) =>
+        profile.id === 'openai-text-fast'
+            ? {
+                  ...profile,
+                  capabilities: {
+                      ...profile.capabilities,
+                      canUseSearch: false,
+                  },
+              }
+            : profile
+    );
+    const expectedFallbackProfile = mutatedCatalog
+        .filter(
+            (profile) => profile.enabled && profile.capabilities.canUseSearch
+        )
+        .find((profile) => profile.id !== 'openai-text-fast');
+    assert.ok(expectedFallbackProfile);
     runtimeConfigMutable.modelProfiles = {
         ...runtimeConfig.modelProfiles,
         defaultProfileId: 'openai-text-fast',
         plannerProfileId: runtimeConfig.modelProfiles.plannerProfileId,
-        catalog: runtimeConfig.modelProfiles.catalog.map((profile) =>
-            profile.id === 'openai-text-fast'
-                ? {
-                      ...profile,
-                      capabilities: {
-                          ...profile.capabilities,
-                          canUseSearch: false,
-                      },
-                  }
-                : profile
-        ),
+        catalog: mutatedCatalog,
     };
 
     logger.warn = ((message: string, meta?: unknown) => {
@@ -623,7 +630,7 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
     );
     assert.equal(
         capturedExecutionContext?.generation?.effectiveProfileId,
-        'openai-text-medium'
+        expectedFallbackProfile.id
     );
 });
 
@@ -671,6 +678,13 @@ test('request-selected non-search profile drops search without reroute', async (
                             generation: {
                                 reasoningEffort: 'medium',
                                 verbosity: 'medium',
+                                temperament: {
+                                    tightness: 4,
+                                    rationale: 3,
+                                    attribution: 4,
+                                    caution: 3,
+                                    extent: 4,
+                                },
                                 search: {
                                     query: 'latest OpenAI policy update',
                                     contextSize: 'low',
@@ -709,13 +723,14 @@ test('request-selected non-search profile drops search without reroute', async (
     }
 
     assert.equal(observedSearch, undefined);
-    if (capturedExecutionContext?.tool !== undefined) {
-        assert.deepEqual(capturedExecutionContext.tool, {
-            toolName: 'web_search',
-            status: 'skipped',
-            reasonCode: 'search_not_supported_by_selected_profile',
-        });
-    }
+    assert.ok(capturedExecutionContext);
+    assert.ok(capturedExecutionContext.tool);
+    const toolExecution = capturedExecutionContext.tool;
+    assert.deepEqual(toolExecution, {
+        toolName: 'web_search',
+        status: 'skipped',
+        reasonCode: 'search_not_supported_by_selected_profile',
+    });
     assert.equal(
         capturedExecutionContext?.generation?.originalProfileId,
         requestSelectedProfile.id

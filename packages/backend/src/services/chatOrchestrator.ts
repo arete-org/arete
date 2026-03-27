@@ -300,16 +300,29 @@ export const createChatOrchestrator = ({
                     status: 'skipped',
                     reasonCode: 'search_not_supported_by_selected_profile',
                 };
-                chatOrchestratorLogger.warn(
-                    'search requested but selected profile does not support search; running without search',
-                    {
-                        originalProfileId: originalSelectedProfileId,
-                        effectiveProfileId: effectiveSelectedProfileId,
-                        rerouteApplied,
-                        selectionSource: profileSelectionSource,
-                        surface: normalizedRequest.surface,
-                    }
-                );
+                if (profileSelectionSource !== 'planner') {
+                    chatOrchestratorLogger.warn(
+                        'reroute not permitted by selection source; running without search',
+                        {
+                            originalProfileId: originalSelectedProfileId,
+                            effectiveProfileId: effectiveSelectedProfileId,
+                            rerouteApplied,
+                            selectionSource: profileSelectionSource,
+                            surface: normalizedRequest.surface,
+                        }
+                    );
+                } else {
+                    chatOrchestratorLogger.warn(
+                        'no search-capable fallback available; running without search',
+                        {
+                            originalProfileId: originalSelectedProfileId,
+                            effectiveProfileId: effectiveSelectedProfileId,
+                            rerouteApplied,
+                            selectionSource: profileSelectionSource,
+                            surface: normalizedRequest.surface,
+                        }
+                    );
+                }
             }
         }
         // Persist the effective profile id in planner payload/snapshot so traces
