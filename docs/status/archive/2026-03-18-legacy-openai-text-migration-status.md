@@ -10,8 +10,8 @@ Track branch-level status for completing the text migration away from the legacy
 
 This file records current state and validation. The durable architecture decisions live in:
 
-- [Completing Legacy OpenAI Removal Across Text, Image, and Voice](../decisions/2026-03-legacy-openai-removal-and-runtime-branching.md)
-- [VoltAgent Runtime Adoption (Behind the Existing Backend)](../decisions/2026-03-voltagent-runtime-adoption.md)
+- [Completing Legacy OpenAI Removal Across Text, Image, and Voice](../../decisions/2026-03-legacy-openai-removal-and-runtime-branching.md)
+- [VoltAgent Runtime Adoption (Behind the Existing Backend)](../../decisions/2026-03-voltagent-runtime-adoption.md)
 
 ## Scope
 

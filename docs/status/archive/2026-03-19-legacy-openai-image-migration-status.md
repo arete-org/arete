@@ -10,7 +10,7 @@ This note explains what this branch ended up doing for image migration, why the 
 
 The long-term direction still lives in:
 
-- [Completing Legacy OpenAI Removal Across Text, Image, and Voice](../decisions/2026-03-legacy-openai-removal-and-runtime-branching.md)
+- [Completing Legacy OpenAI Removal Across Text, Image, and Voice](../../decisions/2026-03-legacy-openai-removal-and-runtime-branching.md)
 
 This file is the branch review. It is meant to be easier to read than the decision record, especially for someone joining the work later.
 
