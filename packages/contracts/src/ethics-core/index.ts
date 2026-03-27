@@ -22,6 +22,8 @@ export type {
     PartialResponseTemperament,
     ExecutionStatus,
     ExecutionReasonCode,
+    EvaluatorDecisionMode,
+    EvaluatorOutcome,
     ExecutionEvent,
     ResponseMetadata,
 } from './types.js';

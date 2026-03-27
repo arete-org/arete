@@ -13,7 +13,13 @@ import type {
 import type {
     ExecutionReasonCode,
     ExecutionStatus,
+    EvaluatorOutcome,
+    RiskTier,
 } from '@footnote/contracts/ethics-core';
+import {
+    computeProvenance,
+    computeRiskTier,
+} from '../ethics-core/evaluators.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
     createChatService,
@@ -187,6 +193,49 @@ export const createChatOrchestrator = ({
             conversation: normalizedConversation,
         };
         // Planner and generation both consume this normalized request shape.
+        const evaluatorStartedAt = Date.now();
+        let evaluatorExecutionContext:
+            | {
+                  status: ExecutionStatus;
+                  reasonCode?: ExecutionReasonCode;
+                  outcome?: EvaluatorOutcome;
+                  durationMs: number;
+              }
+            | undefined;
+        let evaluatorRiskTierHint: RiskTier | undefined;
+        try {
+            const evaluatorContext = normalizedConversation.map(
+                (message) => message.content
+            );
+            const evaluatorOutcome: EvaluatorOutcome = {
+                mode: 'observe_only',
+                riskTier: computeRiskTier(
+                    normalizedRequest.latestUserInput,
+                    evaluatorContext
+                ),
+                provenance: computeProvenance(evaluatorContext),
+                breakerTriggered: false,
+            };
+            evaluatorExecutionContext = {
+                status: 'executed',
+                outcome: evaluatorOutcome,
+                durationMs: Math.max(0, Date.now() - evaluatorStartedAt),
+            };
+            evaluatorRiskTierHint = evaluatorOutcome.riskTier;
+        } catch (error) {
+            // Evaluator failures must not block normal response generation.
+            chatOrchestratorLogger.warn(
+                'deterministic evaluator failed open; continuing without evaluator outcome',
+                {
+                    error: error instanceof Error ? error.message : String(error),
+                }
+            );
+            evaluatorExecutionContext = {
+                status: 'failed',
+                reasonCode: 'evaluator_runtime_error',
+                durationMs: Math.max(0, Date.now() - evaluatorStartedAt),
+            };
+        }
 
         const botProfileDisplayName = resolveBotProfileDisplayName();
         const planned = await chatPlanner.planChat(normalizedRequest);
@@ -455,6 +504,17 @@ export const createChatOrchestrator = ({
                 ].join('\n'),
             },
         ];
+        const riskTierRank: Record<RiskTier, number> = {
+            Low: 1,
+            Medium: 2,
+            High: 3,
+        };
+        const orchestrationRiskTier =
+            evaluatorRiskTierHint &&
+            riskTierRank[evaluatorRiskTierHint] >
+                riskTierRank[executionPlan.riskTier]
+                ? evaluatorRiskTierHint
+                : executionPlan.riskTier;
 
         // Generation receives resolved provider/capabilities from the active
         // default model profile instead of relying on provider-name checks.
@@ -473,7 +533,7 @@ export const createChatOrchestrator = ({
             }),
             orchestrationStartedAtMs: orchestrationStartedAt,
             plannerTemperament: executionPlan.generation.temperament,
-            riskTier: executionPlan.riskTier,
+            riskTier: orchestrationRiskTier,
             model: selectedResponseProfile.providerModel,
             provider: selectedResponseProfile.provider,
             capabilities: selectedResponseProfile.capabilities,
@@ -493,6 +553,7 @@ export const createChatOrchestrator = ({
                     model: plannerProfile.providerModel,
                     durationMs: plannerExecution.durationMs,
                 },
+                evaluator: evaluatorExecutionContext,
                 generation: {
                     // Generation starts as "executed" at orchestration level.
                     // ChatService injects runtime-resolved model + duration.
@@ -520,6 +581,12 @@ export const createChatOrchestrator = ({
             plannerStatus: plannerExecution.status,
             plannerReasonCode: plannerExecution.reasonCode,
             plannerDurationMs: plannerExecution.durationMs,
+            evaluatorStatus: evaluatorExecutionContext?.status,
+            evaluatorReasonCode: evaluatorExecutionContext?.reasonCode,
+            evaluatorRiskTier: evaluatorExecutionContext?.outcome?.riskTier,
+            evaluatorProvenance:
+                evaluatorExecutionContext?.outcome?.provenance,
+            evaluatorMode: evaluatorExecutionContext?.outcome?.mode,
             generationDurationMs: response.generationDurationMs,
             totalDurationMs,
             plannerProfileId: plannerProfile.id,

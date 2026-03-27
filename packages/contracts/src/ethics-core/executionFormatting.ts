@@ -14,6 +14,12 @@ const formatExecutionEvent = (event: ExecutionEvent): string => {
         const tool = event.toolName ?? 'tool';
         return `${event.kind}:${tool}(${event.status}${durationSuffix})`;
     }
+    if (event.kind === 'evaluator') {
+        const evaluatorSummary = event.evaluator
+            ? `${event.evaluator.riskTier}/${event.evaluator.provenance}`
+            : 'decision';
+        return `${event.kind}:${evaluatorSummary}(${event.status}${durationSuffix})`;
+    }
 
     // Prefer model first because that is the most user-visible execution
     // identifier. Fall back to profile/provider ids for partial traces.

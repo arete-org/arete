@@ -94,10 +94,26 @@ export type ExecutionStatus = 'executed' | 'skipped' | 'failed';
 export type ExecutionReasonCode =
     | 'planner_runtime_error'
     | 'planner_invalid_output'
+    | 'evaluator_runtime_error'
     | 'generation_runtime_error'
     | 'tool_not_used'
     | 'search_not_supported_by_selected_profile'
     | 'unspecified_tool_outcome';
+
+export type EvaluatorDecisionMode = 'observe_only' | 'enforced';
+
+/**
+ * Deterministic evaluator outcome emitted during orchestration.
+ * This stays additive and non-blocking while strict breaker enforcement rolls
+ * out incrementally.
+ */
+export type EvaluatorOutcome = {
+    mode: EvaluatorDecisionMode;
+    riskTier: RiskTier;
+    provenance: Provenance;
+    breakerTriggered: boolean;
+    breakerReason?: string;
+};
 
 /**
  * One backend-owned execution timeline entry for this response.
@@ -106,7 +122,7 @@ export type ExecutionReasonCode =
  * workflow-based execution is enabled (lineage, timing, and per-step usage).
  */
 export type ExecutionEvent = {
-    kind: 'planner' | 'tool' | 'generation';
+    kind: 'planner' | 'evaluator' | 'tool' | 'generation';
     status: ExecutionStatus;
     originalProfileId?: string;
     effectiveProfileId?: string;
@@ -114,6 +130,7 @@ export type ExecutionEvent = {
     provider?: string;
     model?: string;
     toolName?: string;
+    evaluator?: EvaluatorOutcome;
     reasonCode?: ExecutionReasonCode;
     durationMs?: number;
 };
@@ -134,6 +151,7 @@ export type ResponseMetadata = {
     totalDurationMs?: number; // End-to-end orchestration duration when available.
     citations: Citation[]; // Sources used for the answer.
     execution?: ExecutionEvent[]; // Canonical execution timeline for model/tool visibility.
+    evaluator?: EvaluatorOutcome; // Deterministic evaluator decision captured before breaker enforcement.
     imageDescriptions?: string[]; // Optional captions for any images used.
     evidenceScore?: TraceAxisScore; // Optional TRACE evidence chip score (1..5).
     freshnessScore?: TraceAxisScore; // Optional TRACE freshness chip score (1..5).

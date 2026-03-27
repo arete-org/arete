@@ -19,6 +19,8 @@ export type {
     Citation,
     ExecutionStatus,
     ExecutionReasonCode,
+    EvaluatorDecisionMode,
+    EvaluatorOutcome,
     ExecutionEvent,
     TraceAxisScore,
     PartialResponseTemperament,
