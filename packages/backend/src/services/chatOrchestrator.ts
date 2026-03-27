@@ -60,6 +60,19 @@ type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
     weatherForecastTool?: WeatherForecastTool;
 };
 
+type PlannerWeatherFailureMarker = {
+    failed: true;
+    reason: 'weather_tool_failed';
+};
+
+type PlannerGenerationForPrompt = Omit<ChatGenerationPlan, 'weather'> & {
+    weather?: ChatGenerationPlan['weather'] | PlannerWeatherFailureMarker;
+};
+
+type PlannerPayloadChatPlan = Omit<ChatPlan, 'generation'> & {
+    generation: PlannerGenerationForPrompt;
+};
+
 const searchFallbackPolicyBySelectionSource: Record<
     PlannerSelectionSource,
     {
@@ -179,7 +192,7 @@ const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
  * as data, not as ambiguous free-form text.
  */
 const buildPlannerPayload = (
-    plan: ChatPlan,
+    plan: PlannerPayloadChatPlan,
     surfacePolicy?: { coercedFrom: ChatPlan['action'] }
 ): string =>
     JSON.stringify({
@@ -695,13 +708,22 @@ export const createChatOrchestrator = ({
         const weatherToolResultMessage = toolExecution.toolResultMessage;
         toolExecutionContext =
             toolExecution.toolExecutionContext ?? toolExecutionContext;
-        const plannerGenerationForPrompt = weatherToolResultMessage
-            ? executionPlan.generation
-            : {
-                  ...executionPlan.generation,
-                  weather: undefined,
-              };
-        const executionPlanForPrompt: ChatPlan = {
+        const weatherToolRequested =
+            toolSelection.toolRequest.toolName === 'weather_forecast' &&
+            toolSelection.toolRequest.requested;
+        const plannerGenerationForPrompt: PlannerGenerationForPrompt =
+            weatherToolResultMessage
+                ? executionPlan.generation
+                : weatherToolRequested
+                  ? {
+                        ...executionPlan.generation,
+                        weather: {
+                            failed: true,
+                            reason: 'weather_tool_failed',
+                        },
+                    }
+                  : executionPlan.generation;
+        const executionPlanForPrompt: PlannerPayloadChatPlan = {
             ...executionPlan,
             generation: plannerGenerationForPrompt,
         };

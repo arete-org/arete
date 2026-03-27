@@ -786,6 +786,13 @@ test('planner-selected non-search profile skips search when no tool-capable fall
                             generation: {
                                 reasoningEffort: 'medium',
                                 verbosity: 'medium',
+                                temperament: {
+                                    tightness: 3,
+                                    rationale: 3,
+                                    attribution: 3,
+                                    caution: 3,
+                                    extent: 3,
+                                },
                                 search: {
                                     query: 'latest OpenAI policy update',
                                     contextSize: 'low',
@@ -820,7 +827,11 @@ test('planner-selected non-search profile skips search when no tool-capable fall
     }
 
     assert.equal(observedSearch, undefined);
-    assert.equal(capturedExecutionContext?.tool, undefined);
+    assert.deepEqual(capturedExecutionContext?.tool, {
+        toolName: 'web_search',
+        status: 'skipped',
+        reasonCode: 'search_reroute_no_tool_capable_fallback_available',
+    });
 });
 
 test('request-selected non-search profile drops search without reroute', async () => {

@@ -247,10 +247,10 @@ chat:
                         "longitude": number
                       } | {
                         "office": string,
-                        "gridX": number,
-                        "gridY": number
+                        "gridX": positive integer,
+                        "gridY": positive integer
                       },
-                      "horizonPeriods"?: number
+                      "horizonPeriods"?: integer (1-12)
                     }
                   }
                 }

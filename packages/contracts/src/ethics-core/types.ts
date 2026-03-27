@@ -145,7 +145,10 @@ export type EvaluatorOutcome = {
  * Keep this string union narrow and additive so clients can pattern-match
  * known tools while still allowing forward-compatible unknown values.
  */
-export type ToolInvocationName = 'web_search' | (string & {});
+export type ToolInvocationName =
+    | 'web_search'
+    | 'weather_forecast'
+    | (string & {});
 
 export type WeatherToolInputLocation =
     | {

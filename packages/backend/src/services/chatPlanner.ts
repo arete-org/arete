@@ -276,7 +276,7 @@ const normalizeWeatherLocation = (
     const candidate = value as Record<string, unknown>;
     const latitude = candidate.latitude;
     const longitude = candidate.longitude;
-    if (
+    const hasValidLatLon =
         typeof latitude === 'number' &&
         Number.isFinite(latitude) &&
         latitude >= -90 &&
@@ -284,8 +284,27 @@ const normalizeWeatherLocation = (
         typeof longitude === 'number' &&
         Number.isFinite(longitude) &&
         longitude >= -180 &&
-        longitude <= 180
-    ) {
+        longitude <= 180;
+
+    const office =
+        typeof candidate.office === 'string' ? candidate.office.trim() : '';
+    const gridX = candidate.gridX;
+    const gridY = candidate.gridY;
+    const hasValidGridpoint =
+        office.length > 0 &&
+        typeof gridX === 'number' &&
+        Number.isInteger(gridX) &&
+        gridX > 0 &&
+        typeof gridY === 'number' &&
+        Number.isInteger(gridY) &&
+        gridY > 0;
+
+    // Mixed location shapes are ambiguous; fail open by disabling weather.
+    if (hasValidLatLon && hasValidGridpoint) {
+        return undefined;
+    }
+
+    if (hasValidLatLon) {
         return {
             type: 'lat_lon',
             latitude,
@@ -293,19 +312,7 @@ const normalizeWeatherLocation = (
         };
     }
 
-    const office =
-        typeof candidate.office === 'string' ? candidate.office.trim() : '';
-    const gridX = candidate.gridX;
-    const gridY = candidate.gridY;
-    if (
-        office.length > 0 &&
-        typeof gridX === 'number' &&
-        Number.isInteger(gridX) &&
-        gridX > 0 &&
-        typeof gridY === 'number' &&
-        Number.isInteger(gridY) &&
-        gridY > 0
-    ) {
+    if (hasValidGridpoint) {
         return {
             type: 'gridpoint',
             office,
