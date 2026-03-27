@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { ModelProfile } from '@footnote/contracts';
+import { classifyModelProfileTextPricingCoverage } from '@footnote/contracts/pricing';
 import { buildModelProfilesSection } from '../src/config/sections/modelProfiles.js';
 import { createModelProfileResolver } from '../src/services/modelProfileResolver.js';
 
@@ -377,4 +378,30 @@ test('model profile resolver synthesizes raw profile when multiple enabled catal
         warnings.map((warning) => warning.message).join('\n'),
         /multiple enabled catalog profiles matched raw selector/i
     );
+});
+
+test('bundled active model profiles are fully covered by pricing or explicit policy classifications', () => {
+    const section = buildModelProfilesSection(
+        {
+            OPENAI_API_KEY: 'test-key',
+            OLLAMA_BASE_URL: 'https://api.ollama.com',
+        },
+        process.cwd(),
+        () => undefined
+    );
+
+    const enabledProfiles = section.catalog.filter(
+        (profile) => profile.enabled
+    );
+    assert.ok(enabledProfiles.length > 0);
+
+    const uncovered = enabledProfiles.filter((profile) => {
+        const coverage = classifyModelProfileTextPricingCoverage(
+            profile.provider,
+            profile.providerModel
+        );
+        return coverage.classification === 'unknown_unpriced';
+    });
+
+    assert.deepEqual(uncovered, []);
 });

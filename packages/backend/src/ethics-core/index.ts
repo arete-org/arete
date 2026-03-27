@@ -15,4 +15,8 @@ export type {
 } from '@footnote/contracts/ethics-core';
 
 // Export functions
-export { computeProvenance, computeRiskTier } from './evaluators.js';
+export {
+    computeProvenance,
+    computeRiskTier,
+    evaluateRiskTierDeterministic,
+} from './evaluators.js';

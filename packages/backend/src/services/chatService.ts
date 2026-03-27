@@ -36,8 +36,7 @@ import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import { logger } from '../utils/logger.js';
-
-const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
+import { runtimeConfig } from '../config.js';
 
 /**
  * Search is optional, but if it is present it needs a real query. Blank values
@@ -69,18 +68,6 @@ const normalizeGenerationPlan = (
             query: normalizedQuery,
         },
     };
-};
-
-/**
- * Keeps backend-only chat persona rendering aligned with deployment naming.
- */
-const resolveBotProfileDisplayName = (): string => {
-    const envValue = process.env.BOT_PROFILE_DISPLAY_NAME;
-    if (typeof envValue === 'string' && envValue.trim().length > 0) {
-        return envValue.trim();
-    }
-
-    return DEFAULT_BOT_PROFILE_DISPLAY_NAME;
 };
 
 /**
@@ -366,7 +353,7 @@ export const createChatService = ({
     const runChat = async ({
         question,
     }: RunChatInput): Promise<PostChatResponse> => {
-        const botProfileDisplayName = resolveBotProfileDisplayName();
+        const botProfileDisplayName = runtimeConfig.profile.displayName;
         const promptLayers = renderConversationPromptLayers('web-chat', {
             botProfileDisplayName,
         });

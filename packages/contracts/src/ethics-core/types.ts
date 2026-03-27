@@ -16,6 +16,24 @@
 export type RiskTier = 'Low' | 'Medium' | 'High';
 
 /**
+ * Stable deterministic rule IDs emitted by the backend risk evaluator.
+ * Values are versioned so future rule changes can roll forward safely.
+ */
+export type RiskRuleId =
+    | 'risk.self_harm.crisis_intent.v1'
+    | 'risk.safety.weaponization_request.v1'
+    | 'risk.professional.medical_or_legal_advice.v1';
+
+/**
+ * Deterministic risk evaluation output used for audit and tests.
+ */
+export type RiskEvaluationResult = {
+    riskTier: RiskTier;
+    ruleId: RiskRuleId | null;
+    matchedRuleIds: RiskRuleId[];
+};
+
+/**
  * Provenance describes where the answer "came from" at a high level.
  */
 export type Provenance = 'Retrieved' | 'Inferred' | 'Speculative';

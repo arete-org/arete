@@ -10,8 +10,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+    canonicalizeOpenAIModelIdForPricing,
+    classifyModelProfileTextPricingCoverage,
     estimateOpenAIImageGenerationCost,
     estimateOpenAITextCost,
+    resolveOpenAITextPricingModel,
     supportedPricedOpenAITextModels,
 } from '../src/pricing.js';
 import { supportedOpenAITextModels } from '../src/providers.js';
@@ -30,6 +33,18 @@ test('estimateOpenAITextCost fails open to zero for unknown model strings', () =
     assert.equal(result.inputCost, 0);
     assert.equal(result.outputCost, 0);
     assert.equal(result.totalCost, 0);
+});
+
+test('estimateOpenAITextCost resolves versioned OpenAI model ids through canonicalization', () => {
+    const result = estimateOpenAITextCost(
+        'openai/gpt-5-mini/2026-03-27',
+        120,
+        80
+    );
+
+    assert.equal(result.inputCost, 0.00003);
+    assert.equal(result.outputCost, 0.00016);
+    assert.equal(result.totalCost, 0.00019);
 });
 
 test('estimateOpenAIImageGenerationCost keeps auto settings unresolved so callers can treat cost as unknown', () => {
@@ -80,4 +95,51 @@ test('supportedPricedOpenAITextModels includes the shared text registry plus emb
         supportedPricedOpenAITextModels.includes('text-embedding-3-small'),
         true
     );
+});
+
+test('canonicalizeOpenAIModelIdForPricing strips only recognized suffix formats', () => {
+    const canonicalized = canonicalizeOpenAIModelIdForPricing(
+        ' OpenAI/GPT-5-Mini/2026-03-27 '
+    );
+
+    assert.equal(canonicalized.canonicalModel, 'gpt-5-mini');
+    assert.equal(canonicalized.wasCanonicalized, true);
+    assert.deepEqual(canonicalized.appliedRules, [
+        'trim',
+        'lowercase',
+        'remove_openai_prefix',
+        'strip_slash_date_suffix',
+    ]);
+});
+
+test('resolveOpenAITextPricingModel fails open for unknown families after canonicalization', () => {
+    const resolved = resolveOpenAITextPricingModel(
+        'openai/gpt-5.4-mini/2026-03-27'
+    );
+
+    assert.equal(resolved.canonicalModel, 'gpt-5.4-mini');
+    assert.equal(resolved.matchedModel, null);
+});
+
+test('classifyModelProfileTextPricingCoverage marks non-openai providers as explicit policy unpriced', () => {
+    const coverage = classifyModelProfileTextPricingCoverage(
+        'ollama',
+        'qwen3.5:cloud'
+    );
+
+    assert.equal(coverage.classification, 'unpriced_by_policy');
+    assert.equal(
+        coverage.policyReason,
+        'non_openai_not_priced_by_backend_policy'
+    );
+});
+
+test('classifyModelProfileTextPricingCoverage marks policy-listed OpenAI models as explicit unpriced', () => {
+    const coverage = classifyModelProfileTextPricingCoverage(
+        'openai',
+        'gpt-5.4-mini'
+    );
+
+    assert.equal(coverage.classification, 'unpriced_by_policy');
+    assert.equal(coverage.policyReason, 'openai_explicitly_unpriced_by_policy');
 });

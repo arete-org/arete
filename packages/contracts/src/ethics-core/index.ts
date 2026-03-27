@@ -14,6 +14,8 @@ export type {
     Provenance,
     ProvenanceSignals,
     RiskTier,
+    RiskRuleId,
+    RiskEvaluationResult,
     Citation,
     TraceAxisScore,
     ResponseTemperament,

@@ -7,6 +7,7 @@
  */
 
 import { buildLoggingSection } from './sections/logging.js';
+import { buildLitestreamSection } from './sections/litestream.js';
 import { buildModelProfilesSection } from './sections/modelProfiles.js';
 import { buildOllamaSection } from './sections/ollama.js';
 import { buildOpenAISection } from './sections/openai.js';
@@ -46,6 +47,7 @@ export const buildRuntimeConfig = (
     const webhook = buildWebhookSection(env, warn);
     const storage = buildStorageSection(env, warn);
     const logging = buildLoggingSection(env, warn);
+    const litestream = buildLitestreamSection(env);
     const profile = readBotProfileConfig({
         env,
         projectRoot: runtime.projectRoot,
@@ -68,6 +70,7 @@ export const buildRuntimeConfig = (
         webhook,
         storage,
         logging,
+        litestream,
         profile,
     };
 };
