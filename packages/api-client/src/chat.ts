@@ -10,6 +10,7 @@ import type {
     PostChatRequest,
     PostChatResponse,
 } from '@footnote/contracts/web';
+import type { ToolExecutionContext } from '@footnote/contracts/ethics-core';
 import {
     GetChatProfilesResponseSchema,
     PostChatResponseSchema,
@@ -29,6 +30,8 @@ export type UnknownChatActionResponse = {
 export type DiscordChatApiResponse =
     | PostChatResponse
     | UnknownChatActionResponse;
+
+export type ChatToolExecutionContext = ToolExecutionContext;
 
 export type ChatApi = {
     getChatProfiles: (options?: {

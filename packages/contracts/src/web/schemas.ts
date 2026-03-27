@@ -141,7 +141,10 @@ const ExecutionReasonCodeSchema = z.enum([
     'planner_runtime_error',
     'planner_invalid_output',
     'generation_runtime_error',
+    'tool_not_requested',
     'tool_not_used',
+    'tool_unavailable',
+    'tool_execution_error',
     'search_not_supported_by_selected_profile',
     'unspecified_tool_outcome',
 ]);

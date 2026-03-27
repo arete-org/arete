@@ -19,6 +19,11 @@ export type {
     PartialResponseTemperament,
     ExecutionStatus,
     ExecutionReasonCode,
+    ToolInvocationName,
+    ToolInvocationReasonCode,
+    ToolInvocationIntent,
+    ToolInvocationRequest,
+    ToolExecutionContext,
     ExecutionEvent,
     ResponseMetadata,
 } from './types.js';

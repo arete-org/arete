@@ -21,6 +21,7 @@ import type {
     Provenance,
     ResponseMetadata,
     RiskTier,
+    ToolExecutionContext,
     TraceAxisScore,
 } from '@footnote/contracts/ethics-core';
 import { runtimeConfig } from '../config.js';
@@ -652,10 +653,10 @@ type ResponseMetadataRuntimeContext = {
             durationMs?: number;
         };
         tool?: {
-            toolName: string;
-            status: ExecutionStatus;
-            reasonCode?: ExecutionReasonCode;
-            durationMs?: number;
+            toolName: ToolExecutionContext['toolName'];
+            status: ToolExecutionContext['status'];
+            reasonCode?: ToolExecutionContext['reasonCode'];
+            durationMs?: ToolExecutionContext['durationMs'];
         };
     };
 };
@@ -769,7 +770,9 @@ const buildResponseMetadata = (
         const normalizedToolReasonCode =
             toolExecution.status === 'executed'
                 ? undefined
-                : (toolExecution.reasonCode ?? 'unspecified_tool_outcome');
+                : toolExecution.status === 'failed'
+                  ? (toolExecution.reasonCode ?? 'tool_execution_error')
+                  : (toolExecution.reasonCode ?? 'unspecified_tool_outcome');
         execution.push({
             kind: 'tool',
             status: toolExecution.status,

@@ -24,6 +24,7 @@ import {
     createChatApi,
     type CreateChatApiOptions,
     type ChatApi,
+    type ChatToolExecutionContext,
     type DiscordChatApiResponse,
     type UnknownChatActionResponse,
 } from './chat.js';
@@ -160,6 +161,7 @@ export type {
     CreateInternalVoiceApiOptions,
     CreateTraceApiOptions,
     DiscordChatApiResponse,
+    ChatToolExecutionContext,
     IncidentApi,
     InternalImageApi,
     InternalTextApi,

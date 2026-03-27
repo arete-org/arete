@@ -67,9 +67,62 @@ export type ExecutionReasonCode =
     | 'planner_runtime_error'
     | 'planner_invalid_output'
     | 'generation_runtime_error'
+    | 'tool_not_requested'
     | 'tool_not_used'
+    | 'tool_unavailable'
+    | 'tool_execution_error'
     | 'search_not_supported_by_selected_profile'
     | 'unspecified_tool_outcome';
+
+/**
+ * Stable tool names emitted in planner/runtime execution records.
+ * Keep this string union narrow and additive so clients can pattern-match
+ * known tools while still allowing forward-compatible unknown values.
+ */
+export type ToolInvocationName = 'web_search' | (string & {});
+
+/**
+ * Tool-specific reason codes used when a tool is skipped or fails.
+ */
+export type ToolInvocationReasonCode = Extract<
+    ExecutionReasonCode,
+    | 'tool_not_requested'
+    | 'tool_not_used'
+    | 'tool_unavailable'
+    | 'tool_execution_error'
+    | 'search_not_supported_by_selected_profile'
+    | 'unspecified_tool_outcome'
+>;
+
+/**
+ * Planner-owned tool intent before orchestration eligibility checks.
+ * This shape is fully serializable for trace/debug payloads.
+ */
+export type ToolInvocationIntent = {
+    toolName: ToolInvocationName;
+    requested: boolean;
+    input?: Record<string, unknown>;
+};
+
+/**
+ * Orchestrator-owned tool eligibility decision before runtime execution.
+ */
+export type ToolInvocationRequest = {
+    toolName: ToolInvocationName;
+    requested: boolean;
+    eligible: boolean;
+    reasonCode?: ToolInvocationReasonCode;
+};
+
+/**
+ * Runtime-owned final tool outcome emitted into execution metadata.
+ */
+export type ToolExecutionContext = {
+    toolName: ToolInvocationName;
+    status: ExecutionStatus;
+    reasonCode?: ToolInvocationReasonCode;
+    durationMs?: number;
+};
 
 /**
  * One backend-owned execution timeline entry for this response.

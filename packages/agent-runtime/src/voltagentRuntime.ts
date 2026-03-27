@@ -21,6 +21,7 @@ import type {
     GenerationUsage,
     RuntimeMessage,
 } from './index.js';
+import type { ToolExecutionContext } from '@footnote/contracts/ethics-core';
 
 type VoltAgentOpenAiProviderOptions = {
     reasoningEffort?: 'low' | 'medium' | 'high';
@@ -702,7 +703,8 @@ const extractCitationsFromSources = (
 const normalizeVoltAgentResult = (
     executedModel: string,
     request: GenerationRequest,
-    result: VoltAgentTextResult
+    result: VoltAgentTextResult,
+    fallbackToolExecution?: ToolExecutionContext
 ): GenerationResult => {
     const responseModel = result.response?.modelId ?? executedModel;
     const usage: GenerationUsage | undefined = result.usage
@@ -725,6 +727,18 @@ const normalizeVoltAgentResult = (
             : citationsFromSources;
     const retrievalUsed =
         hasSearchRequest && (hasWebSearchCall || citations.length > 0);
+    const inferredToolExecution: ToolExecutionContext | undefined =
+        hasSearchRequest
+            ? {
+                  toolName: 'web_search',
+                  status: retrievalUsed ? 'executed' : 'skipped',
+                  ...(retrievalUsed
+                      ? {}
+                      : {
+                            reasonCode: 'tool_not_used',
+                        }),
+              }
+            : undefined;
 
     return {
         text: result.text,
@@ -737,6 +751,11 @@ const normalizeVoltAgentResult = (
             used: retrievalUsed,
         },
         provenance: retrievalUsed ? 'Retrieved' : 'Inferred',
+        ...(fallbackToolExecution !== undefined
+            ? { toolExecution: fallbackToolExecution }
+            : inferredToolExecution !== undefined
+              ? { toolExecution: inferredToolExecution }
+              : {}),
     };
 };
 
@@ -924,6 +943,18 @@ const createVoltAgentRuntime = ({
                 canUseSearch &&
                 request.search !== undefined &&
                 canProviderUseSearchTools;
+            const fallbackToolExecution: ToolExecutionContext | undefined =
+                request.search === undefined
+                    ? undefined
+                    : shouldForwardSearch
+                      ? undefined
+                      : {
+                            toolName: 'web_search',
+                            status: 'skipped',
+                            reasonCode: canProviderUseSearchTools
+                                ? 'search_not_supported_by_selected_profile'
+                                : 'tool_unavailable',
+                        };
             const requestForResult: GenerationRequest =
                 shouldForwardSearch || request.search === undefined
                     ? request
@@ -971,7 +1002,8 @@ const createVoltAgentRuntime = ({
             return normalizeVoltAgentResult(
                 executedModel,
                 requestForResult,
-                result
+                result,
+                fallbackToolExecution
             );
         },
     };
