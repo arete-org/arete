@@ -216,6 +216,12 @@ test('ResponseMetadataSchema remains tolerant for forward-compatible responses',
 test('ResponseMetadataSchema accepts execution timeline events', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
+        evaluator: {
+            mode: 'observe_only',
+            riskTier: 'Low',
+            provenance: 'Inferred',
+            breakerTriggered: false,
+        },
         execution: [
             {
                 kind: 'planner',
@@ -231,6 +237,17 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
                 toolName: 'web_search',
                 reasonCode: 'search_not_supported_by_selected_profile',
                 durationMs: 5,
+            },
+            {
+                kind: 'evaluator',
+                status: 'executed',
+                evaluator: {
+                    mode: 'observe_only',
+                    riskTier: 'Low',
+                    provenance: 'Inferred',
+                    breakerTriggered: false,
+                },
+                durationMs: 2,
             },
             {
                 kind: 'generation',
@@ -287,7 +304,7 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
         ...baseMetadata,
         execution: [
             {
-                kind: 'planner',
+                kind: 'evaluator',
                 status: 'failed',
                 reasonCode: 'unknown_failure',
             },
@@ -306,6 +323,17 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
         ],
     });
     assert.equal(executedWithReasonCode.success, true);
+
+    const invalidEvaluatorMode = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        evaluator: {
+            mode: 'shadow',
+            riskTier: 'Low',
+            provenance: 'Inferred',
+            breakerTriggered: false,
+        },
+    });
+    assert.equal(invalidEvaluatorMode.success, false);
 });
 
 test('ResponseMetadataSchema accepts valid TRACE temperament metadata', () => {

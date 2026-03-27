@@ -141,6 +141,8 @@ type ChatPlannerExecutor = (
     request: ChatPlannerExecutionRequest
 ) => Promise<ChatPlannerExecutionResult>;
 
+const CHAT_PLANNER_FALLBACK_POLICY = 'planner_fallback_v1';
+
 type PlannerCandidate = Partial<ChatPlan> & {
     profileId?: unknown;
     reasoning?: unknown;
@@ -777,9 +779,17 @@ export const createChatPlanner = ({
                 error instanceof SyntaxError
                     ? 'planner_invalid_output'
                     : 'planner_runtime_error';
-            logger.warn(
-                `Chat planner failed; using fallback action=${fallbackPlan.action}. Error: ${error instanceof Error ? error.message : String(error)}`
-            );
+            logger.warn('chat planner failed; using fallback plan', {
+                event: 'chat.planner.fallback',
+                policy: CHAT_PLANNER_FALLBACK_POLICY,
+                reasonCode,
+                fallbackAction: fallbackPlan.action,
+                triggerKind: request.trigger.kind,
+                surface: request.surface,
+                errorName: error instanceof Error ? error.name : undefined,
+                errorMessage:
+                    error instanceof Error ? error.message : String(error),
+            });
             return {
                 plan: fallbackPlan,
                 execution: {

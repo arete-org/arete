@@ -17,10 +17,12 @@ import type {
     ExecutionEvent,
     ExecutionReasonCode,
     ExecutionStatus,
+    EvaluatorOutcome,
     PartialResponseTemperament,
     Provenance,
     ResponseMetadata,
     RiskTier,
+    ToolExecutionContext,
     TraceAxisScore,
 } from '@footnote/contracts/ethics-core';
 import { runtimeConfig } from '../config.js';
@@ -641,6 +643,12 @@ type ResponseMetadataRuntimeContext = {
             model: string;
             durationMs?: number;
         };
+        evaluator?: {
+            status: ExecutionStatus;
+            reasonCode?: ExecutionReasonCode;
+            outcome?: EvaluatorOutcome;
+            durationMs?: number;
+        };
         generation?: {
             status: ExecutionStatus;
             reasonCode?: ExecutionReasonCode;
@@ -652,10 +660,10 @@ type ResponseMetadataRuntimeContext = {
             durationMs?: number;
         };
         tool?: {
-            toolName: string;
-            status: ExecutionStatus;
-            reasonCode?: ExecutionReasonCode;
-            durationMs?: number;
+            toolName: ToolExecutionContext['toolName'];
+            status: ToolExecutionContext['status'];
+            reasonCode?: ToolExecutionContext['reasonCode'];
+            durationMs?: ToolExecutionContext['durationMs'];
         };
     };
 };
@@ -762,6 +770,28 @@ const buildResponseMetadata = (
             }),
         });
     }
+    const evaluatorExecution = runtimeContext.executionContext?.evaluator;
+    if (evaluatorExecution) {
+        // Evaluator metadata is currently observe-only and additive. We still
+        // normalize failed/skipped outcomes to stable reason codes.
+        const normalizedEvaluatorReasonCode =
+            evaluatorExecution.status === 'executed'
+                ? undefined
+                : (evaluatorExecution.reasonCode ?? 'evaluator_runtime_error');
+        execution.push({
+            kind: 'evaluator',
+            status: evaluatorExecution.status,
+            ...(evaluatorExecution.outcome !== undefined && {
+                evaluator: evaluatorExecution.outcome,
+            }),
+            ...(normalizedEvaluatorReasonCode !== undefined && {
+                reasonCode: normalizedEvaluatorReasonCode,
+            }),
+            ...(evaluatorExecution.durationMs !== undefined && {
+                durationMs: evaluatorExecution.durationMs,
+            }),
+        });
+    }
     const toolExecution = runtimeContext.executionContext?.tool;
     if (toolExecution) {
         // Tool outcomes normalize missing skip/failure codes, but preserve
@@ -769,7 +799,9 @@ const buildResponseMetadata = (
         const normalizedToolReasonCode =
             toolExecution.status === 'executed'
                 ? toolExecution.reasonCode
-                : (toolExecution.reasonCode ?? 'unspecified_tool_outcome');
+                : toolExecution.status === 'failed'
+                  ? (toolExecution.reasonCode ?? 'tool_execution_error')
+                  : (toolExecution.reasonCode ?? 'unspecified_tool_outcome');
         execution.push({
             kind: 'tool',
             status: toolExecution.status,
@@ -839,6 +871,9 @@ const buildResponseMetadata = (
             totalDurationMs: runtimeContext.totalDurationMs,
         }),
         ...(execution.length > 0 && { execution }),
+        ...(evaluatorExecution?.outcome !== undefined && {
+            evaluator: evaluatorExecution.outcome,
+        }),
         ...(temperament && { temperament }),
         ...(finalEvidenceScore !== undefined && {
             evidenceScore: finalEvidenceScore,

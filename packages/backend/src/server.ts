@@ -132,12 +132,12 @@ const initializeServices = () => {
     );
     logger.info(
         `LITESTREAM_REPLICA_URL: ${
-            process.env.LITESTREAM_REPLICA_URL?.trim() ? 'SET' : 'NOT SET'
+            runtimeConfig.litestream.replicaUrl ? 'SET' : 'NOT SET'
         }`
     );
     logger.info(
         `LITESTREAM_LATEST_SNAPSHOT_AT: ${
-            process.env.LITESTREAM_LATEST_SNAPSHOT_AT?.trim() || 'none yet'
+            runtimeConfig.litestream.latestSnapshotAt || 'none yet'
         }`
     );
     logger.info(`NODE_ENV: ${runtimeConfig.runtime.nodeEnv}`);
