@@ -16,6 +16,7 @@ import type {
     ModelProfile,
 } from '@footnote/contracts';
 import type {
+    SafetyBreakerAction,
     SafetyDecision,
     SafetyBreakerReasonCode,
     ToolExecutionContext,
@@ -188,9 +189,7 @@ const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
 });
 
-const buildSafetyDecision = (
-    ruleId: RiskRuleId | null
-): SafetyDecision => {
+const buildSafetyDecision = (ruleId: RiskRuleId | null): SafetyDecision => {
     if (!ruleId) {
         return {
             action: 'allow',
@@ -199,14 +198,16 @@ const buildSafetyDecision = (
         };
     }
 
-    const reasonCodeByRuleId: Record<RiskRuleId, SafetyBreakerReasonCode> =
-        {
-            'risk.self_harm.crisis_intent.v1': 'self_harm_crisis_intent',
-            'risk.safety.weaponization_request.v1': 'weaponization_request',
-            'risk.professional.medical_or_legal_advice.v1':
-                'professional_advice_guardrail',
-        };
-    const actionByRuleId: Record<RiskRuleId, SafetyDecision['action']> = {
+    const reasonCodeByRuleId: Record<RiskRuleId, SafetyBreakerReasonCode> = {
+        'risk.self_harm.crisis_intent.v1': 'self_harm_crisis_intent',
+        'risk.safety.weaponization_request.v1': 'weaponization_request',
+        'risk.professional.medical_or_legal_advice.v1':
+            'professional_advice_guardrail',
+    };
+    const actionByRuleId: Record<
+        RiskRuleId,
+        Exclude<SafetyBreakerAction, 'allow'>
+    > = {
         'risk.self_harm.crisis_intent.v1': 'block',
         'risk.safety.weaponization_request.v1': 'block',
         'risk.professional.medical_or_legal_advice.v1': 'safe_partial',
@@ -915,7 +916,8 @@ export const createChatOrchestrator = ({
             plannerDurationMs: plannerExecution.durationMs,
             evaluatorStatus: evaluatorExecutionContext?.status,
             evaluatorReasonCode: evaluatorExecutionContext?.reasonCode,
-            evaluatorRiskTier: evaluatorExecutionContext?.outcome?.riskTier,
+            evaluatorRiskTier:
+                evaluatorExecutionContext?.outcome?.safetyDecision.riskTier,
             evaluatorProvenance: evaluatorExecutionContext?.outcome?.provenance,
             evaluatorMode: evaluatorExecutionContext?.outcome?.mode,
             generationDurationMs: response.generationDurationMs,
