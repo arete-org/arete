@@ -13,6 +13,7 @@ import {
     createChatPlanner,
     type ChatPlannerProfileOption,
 } from '../src/services/chatPlanner.js';
+import { logger } from '../src/utils/logger.js';
 
 const createChatRequest = (
     overrides: Partial<PostChatRequest> = {}
@@ -150,15 +151,38 @@ test('chatPlanner forwards bounded profile options context and normalizes blank 
 });
 
 test('chatPlanner fails open to a valid fallback generation config when planner JSON is invalid', async () => {
-    const planner = createPlanner('{not-valid-json');
-    const { plan, execution } = await planner.planChat(createChatRequest());
+    const warnings: Array<{ message: string; meta?: unknown }> = [];
+    const originalWarn = logger.warn;
+    logger.warn = ((message: string, meta?: unknown) => {
+        warnings.push({ message, meta });
+        return logger;
+    }) as typeof logger.warn;
 
-    assert.equal(plan.action, 'message');
-    assert.equal(plan.generation.search, undefined);
-    assert.equal(plan.generation.reasoningEffort, 'low');
-    assert.equal(plan.generation.verbosity, 'low');
-    assert.equal(execution.status, 'failed');
-    assert.equal(execution.reasonCode, 'planner_invalid_output');
+    try {
+        const planner = createPlanner('{not-valid-json');
+        const { plan, execution } = await planner.planChat(createChatRequest());
+
+        assert.equal(plan.action, 'message');
+        assert.equal(plan.generation.search, undefined);
+        assert.equal(plan.generation.reasoningEffort, 'low');
+        assert.equal(plan.generation.verbosity, 'low');
+        assert.equal(execution.status, 'failed');
+        assert.equal(execution.reasonCode, 'planner_invalid_output');
+        const warning = warnings.find((entry) =>
+            /using fallback plan/i.test(entry.message)
+        );
+        assert.ok(warning);
+        assert.equal(
+            (warning?.meta as { policy?: string } | undefined)?.policy,
+            'planner_fallback_v1'
+        );
+        assert.equal(
+            (warning?.meta as { reasonCode?: string } | undefined)?.reasonCode,
+            'planner_invalid_output'
+        );
+    } finally {
+        logger.warn = originalWarn;
+    }
 });
 
 test('repo_explainer search plans normalize repo hints and medium context', async () => {
@@ -228,6 +252,222 @@ test('invalid web_search query downgrades safely to none', async () => {
 
     assert.equal(plan.generation.search, undefined);
     assert.match(plan.reasoning, /search was disabled safely/i);
+});
+
+test('planner weather request is normalized when location contract is valid', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'Forecast details are needed.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                weather: {
+                    location: {
+                        latitude: 39.0458,
+                        longitude: -95.6694,
+                    },
+                    horizonPeriods: 8,
+                },
+            },
+        })
+    );
+
+    const { plan } = await planner.planChat(createChatRequest());
+
+    assert.deepEqual(plan.generation.weather, {
+        location: {
+            type: 'lat_lon',
+            latitude: 39.0458,
+            longitude: -95.6694,
+        },
+        horizonPeriods: 8,
+    });
+});
+
+test('invalid weather request is disabled safely', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'Need weather data.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                weather: {
+                    location: {
+                        city: 'Indianapolis',
+                    },
+                },
+            },
+        })
+    );
+
+    const { plan } = await planner.planChat(createChatRequest());
+
+    assert.equal(plan.generation.weather, undefined);
+    assert.match(plan.reasoning, /weather tool request was disabled safely/i);
+});
+
+test('out-of-range lat/lon weather request is disabled safely', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'Need weather data.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                weather: {
+                    location: {
+                        latitude: 123.45,
+                        longitude: -86.1581,
+                    },
+                },
+            },
+        })
+    );
+
+    const { plan } = await planner.planChat(createChatRequest());
+
+    assert.equal(plan.generation.weather, undefined);
+    assert.match(plan.reasoning, /weather tool request was disabled safely/i);
+});
+
+test('non-positive gridpoint weather request is disabled safely', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'Need weather data.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                weather: {
+                    location: {
+                        office: 'IND',
+                        gridX: 0,
+                        gridY: 69,
+                    },
+                },
+            },
+        })
+    );
+
+    const { plan } = await planner.planChat(createChatRequest());
+
+    assert.equal(plan.generation.weather, undefined);
+    assert.match(plan.reasoning, /weather tool request was disabled safely/i);
+});
+
+test('mixed lat/lon and gridpoint weather location is disabled safely', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'Need weather data.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                weather: {
+                    location: {
+                        latitude: 39.7684,
+                        longitude: -86.1581,
+                        office: 'IND',
+                        gridX: 54,
+                        gridY: 69,
+                    },
+                },
+            },
+        })
+    );
+
+    const { plan } = await planner.planChat(createChatRequest());
+
+    assert.equal(plan.generation.weather, undefined);
+    assert.match(plan.reasoning, /weather tool request was disabled safely/i);
+});
+
+test('invalid weather request does not suppress valid search normalization', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'Need weather and current facts.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                weather: {
+                    location: {
+                        city: 'Indianapolis',
+                    },
+                },
+                search: {
+                    query: 'Indianapolis weather headline',
+                    contextSize: 'low',
+                    intent: 'current_facts',
+                },
+            },
+        })
+    );
+
+    const { plan } = await planner.planChat(createChatRequest());
+
+    assert.equal(plan.generation.weather, undefined);
+    assert.equal(
+        plan.generation.search?.query,
+        'Indianapolis weather headline'
+    );
+    assert.match(plan.reasoning, /weather tool request was disabled safely/i);
 });
 
 test('planner temperament is accepted when all TRACE axes are integer 1..5', async () => {

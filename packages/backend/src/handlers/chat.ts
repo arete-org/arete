@@ -16,6 +16,7 @@ import type {
 } from '../services/openaiService.js';
 import { runtimeConfig } from '../config.js';
 import { createChatOrchestrator } from '../services/chatOrchestrator.js';
+import type { WeatherForecastTool } from '../services/weatherGovForecastTool.js';
 import { logger } from '../utils/logger.js';
 import {
     type ChatAuthContext,
@@ -39,6 +40,7 @@ type BuildResponseMetadata = (
 
 type ChatHandlerDeps = {
     generationRuntime: GenerationRuntime | null;
+    weatherForecastTool?: WeatherForecastTool;
     ipRateLimiter: SimpleRateLimiter | null;
     sessionRateLimiter: SimpleRateLimiter | null;
     serviceRateLimiter: SimpleRateLimiter | null;
@@ -130,6 +132,7 @@ const logSuccessfulAuthStep = (
  */
 const createChatHandler = ({
     generationRuntime,
+    weatherForecastTool,
     ipRateLimiter,
     sessionRateLimiter,
     serviceRateLimiter,
@@ -141,6 +144,7 @@ const createChatHandler = ({
     const chatOrchestrator = generationRuntime
         ? createChatOrchestrator({
               generationRuntime,
+              weatherForecastTool,
               storeTrace,
               buildResponseMetadata,
               defaultModel: runtimeConfig.modelProfiles.defaultProfileId,

@@ -7,20 +7,14 @@
  */
 import './bootstrapEnv.js';
 import { buildRuntimeConfig } from './config/buildRuntimeConfig.js';
-import { logger } from './utils/logger.js';
 
 export type { RuntimeConfig } from './config/types.js';
 export { buildRuntimeConfig } from './config/buildRuntimeConfig.js';
-
-const configLogger =
-    typeof logger.child === 'function'
-        ? logger.child({ module: 'backendRuntimeConfig' })
-        : logger;
 
 /**
  * Backend runtime config built once at startup with warning logs for any
  * ignored env overrides.
  */
 export const runtimeConfig = buildRuntimeConfig(process.env, (message) =>
-    configLogger.warn(message)
+    console.warn(`[backendRuntimeConfig] ${message}`)
 );

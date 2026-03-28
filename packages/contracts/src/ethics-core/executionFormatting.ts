@@ -10,9 +10,19 @@ import type { ExecutionEvent } from './types.js';
 const formatExecutionEvent = (event: ExecutionEvent): string => {
     const durationSuffix =
         event.durationMs !== undefined ? `, ${event.durationMs}ms` : '';
+    const reasonSuffix =
+        event.status === 'executed' || !event.reasonCode
+            ? ''
+            : `, ${event.reasonCode}`;
     if (event.kind === 'tool') {
-        const tool = event.toolName ?? 'tool';
-        return `${event.kind}:${tool}(${event.status}${durationSuffix})`;
+        const tool = event.toolName?.trim() || 'tool';
+        return `${event.kind}:${tool}(${event.status}${reasonSuffix}${durationSuffix})`;
+    }
+    if (event.kind === 'evaluator') {
+        const evaluatorSummary = event.evaluator
+            ? `${event.evaluator.riskTier}/${event.evaluator.provenance}`
+            : 'decision';
+        return `${event.kind}:${evaluatorSummary}(${event.status}${reasonSuffix}${durationSuffix})`;
     }
 
     // Prefer model first because that is the most user-visible execution
@@ -24,7 +34,7 @@ const formatExecutionEvent = (event: ExecutionEvent): string => {
         event.originalProfileId ??
         event.provider ??
         'unknown';
-    return `${event.kind}:${modelOrProfile}(${event.status}${durationSuffix})`;
+    return `${event.kind}:${modelOrProfile}(${event.status}${reasonSuffix}${durationSuffix})`;
 };
 
 /**

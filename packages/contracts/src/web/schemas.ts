@@ -140,18 +140,54 @@ const ExecutionStatusSchema = z.enum(['executed', 'skipped', 'failed']);
 const ExecutionReasonCodeSchema = z.enum([
     'planner_runtime_error',
     'planner_invalid_output',
+    'evaluator_runtime_error',
     'generation_runtime_error',
+    'tool_not_requested',
     'tool_not_used',
+    'search_rerouted_to_fallback_profile',
+    'search_reroute_not_permitted_by_selection_source',
+    'search_reroute_no_tool_capable_fallback_available',
+    'tool_unavailable',
+    'tool_execution_error',
     'search_not_supported_by_selected_profile',
     'unspecified_tool_outcome',
 ]);
+const PlannerExecutionReasonCodeSchema = z.enum([
+    'planner_runtime_error',
+    'planner_invalid_output',
+]);
+const EvaluatorExecutionReasonCodeSchema = z.enum(['evaluator_runtime_error']);
+const GenerationExecutionReasonCodeSchema = z.enum([
+    'generation_runtime_error',
+]);
+const ToolExecutionReasonCodeSchema = z.enum([
+    'tool_not_requested',
+    'tool_not_used',
+    'search_rerouted_to_fallback_profile',
+    'search_reroute_not_permitted_by_selection_source',
+    'search_reroute_no_tool_capable_fallback_available',
+    'tool_unavailable',
+    'tool_execution_error',
+    'search_not_supported_by_selected_profile',
+    'unspecified_tool_outcome',
+]);
+const EvaluatorDecisionModeSchema = z.enum(['observe_only', 'enforced']);
+const EvaluatorOutcomeSchema = z
+    .object({
+        mode: EvaluatorDecisionModeSchema,
+        riskTier: RiskTierSchema,
+        provenance: ProvenanceSchema,
+        breakerTriggered: z.boolean(),
+        breakerReason: z.string().min(1).optional(),
+    })
+    .strict();
 // Cross-field execution invariants:
 // - skipped/failed must explain why (reasonCode required)
-// - executed must not include reasonCode
-// This keeps telemetry queryable and avoids ambiguous event payloads.
+// - executed may include reasonCode for policy outcomes (for example reroutes)
+// This keeps telemetry queryable and makes fallback intent auditable.
 const ExecutionEventSchema = z
     .object({
-        kind: z.enum(['planner', 'tool', 'generation']),
+        kind: z.enum(['planner', 'evaluator', 'tool', 'generation']),
         status: ExecutionStatusSchema,
         originalProfileId: z.string().min(1).optional(),
         effectiveProfileId: z.string().min(1).optional(),
@@ -159,6 +195,7 @@ const ExecutionEventSchema = z
         provider: z.string().min(1).optional(),
         model: z.string().min(1).optional(),
         toolName: z.string().min(1).optional(),
+        evaluator: EvaluatorOutcomeSchema.optional(),
         reasonCode: ExecutionReasonCodeSchema.optional(),
         durationMs: z.number().int().nonnegative().optional(),
     })
@@ -174,12 +211,30 @@ const ExecutionEventSchema = z
             });
         }
 
-        if (value.status === 'executed' && value.reasonCode) {
+        if (value.kind === 'tool' && !value.toolName) {
             context.addIssue({
                 code: z.ZodIssueCode.custom,
-                message:
-                    'reasonCode must be omitted when execution status is executed.',
+                message: 'toolName is required when execution kind is tool.',
             });
+        }
+
+        if (value.reasonCode) {
+            const reasonCodeByKind = {
+                planner: PlannerExecutionReasonCodeSchema,
+                evaluator: EvaluatorExecutionReasonCodeSchema,
+                tool: ToolExecutionReasonCodeSchema,
+                generation: GenerationExecutionReasonCodeSchema,
+            } as const;
+            const reasonCodeSchema = reasonCodeByKind[value.kind];
+            const reasonCodeResult = reasonCodeSchema.safeParse(
+                value.reasonCode
+            );
+            if (!reasonCodeResult.success) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `reasonCode "${value.reasonCode}" is not valid for execution kind "${value.kind}".`,
+                });
+            }
         }
     })
     .strict();
@@ -197,6 +252,7 @@ const responseMetadataShape = {
     totalDurationMs: z.number().int().nonnegative().optional(),
     citations: z.array(CitationSchema),
     execution: z.array(ExecutionEventSchema).optional(),
+    evaluator: EvaluatorOutcomeSchema.optional(),
     imageDescriptions: z.array(z.string()).optional(),
     evidenceScore: TraceAxisScoreSchema.optional(),
     freshnessScore: TraceAxisScoreSchema.optional(),

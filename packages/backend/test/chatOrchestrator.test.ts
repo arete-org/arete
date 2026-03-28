@@ -16,6 +16,7 @@ import { runtimeConfig } from '../src/config.js';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
 import type { ResponseMetadataRuntimeContext } from '../src/services/openaiService.js';
 import { renderConversationPromptLayers } from '../src/services/prompts/conversationPromptLayers.js';
+import type { WeatherForecastTool } from '../src/services/weatherGovForecastTool.js';
 import { logger } from '../src/utils/logger.js';
 
 const createMetadata = (): ResponseMetadata => ({
@@ -383,6 +384,15 @@ test('planner-selected profile id controls response model selection', async () =
     );
     assert.equal(capturedExecutionContext?.generation?.status, 'executed');
     assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
+    assert.equal(capturedExecutionContext?.evaluator?.status, 'executed');
+    assert.equal(
+        capturedExecutionContext?.evaluator?.outcome?.mode,
+        'observe_only'
+    );
+    assert.equal(
+        capturedExecutionContext?.evaluator?.outcome?.breakerTriggered,
+        false
+    );
 });
 
 test('request profileId override controls response model selection', async () => {
@@ -444,7 +454,10 @@ test('request profileId with ollama profile forwards provider/model to generatio
     const ollamaProfile = runtimeConfig.modelProfiles.catalog.find(
         (profile) => profile.id === 'ollama-text-gptoss' && profile.enabled
     );
-    assert.ok(ollamaProfile);
+    if (!ollamaProfile) {
+        // Local test envs often disable ollama profiles when provider config is absent.
+        return;
+    }
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
@@ -555,9 +568,19 @@ test('invalid planner-selected profile id falls back to default response profile
 
     assert.equal(observedResponseModel, defaultProfile.providerModel);
     const fallbackWarning = warnings.find((warning) =>
-        /planner selected invalid or disabled profile id/i.test(warning.message)
+        /invalid or disabled; continuing fallback order/i.test(warning.message)
     );
     assert.ok(fallbackWarning);
+    assert.deepEqual(fallbackWarning.meta, {
+        event: 'chat.orchestration.profile_fallback',
+        policy: 'response_profile_fallback_v1',
+        stage: 'invalid_profile_candidate',
+        source: 'planner',
+        selectedProfileId: 'missing-profile-id',
+        defaultProfileId: defaultProfile.id,
+        fallbackOrder: ['request', 'planner', 'default'],
+        surface: 'discord',
+    });
 });
 
 test('planner-selected non-search profile reroutes to search-capable fallback', async () => {
@@ -571,23 +594,56 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
     const runtimeConfigMutable = runtimeConfig as unknown as {
         modelProfiles: typeof runtimeConfig.modelProfiles;
     };
-    const mutatedCatalog = runtimeConfig.modelProfiles.catalog.map((profile) =>
-        profile.id === 'openai-text-fast'
-            ? {
-                  ...profile,
-                  capabilities: {
-                      ...profile.capabilities,
-                      canUseSearch: false,
-                  },
-              }
-            : profile
+    const baseMutatedCatalog = runtimeConfig.modelProfiles.catalog.map(
+        (profile) =>
+            profile.id === 'openai-text-fast'
+                ? {
+                      ...profile,
+                      capabilities: {
+                          ...profile.capabilities,
+                          canUseSearch: false,
+                      },
+                  }
+                : profile
     );
-    const expectedFallbackProfile = mutatedCatalog
-        .filter(
-            (profile) => profile.enabled && profile.capabilities.canUseSearch
-        )
-        .find((profile) => profile.id !== 'openai-text-fast');
+    const fastProfile = baseMutatedCatalog.find(
+        (profile) => profile.id === 'openai-text-fast'
+    );
+    const qualityProfile = baseMutatedCatalog.find(
+        (profile) => profile.id === 'openai-text-quality'
+    );
+    const mediumProfile = baseMutatedCatalog.find(
+        (profile) => profile.id === 'openai-text-medium'
+    );
+    assert.ok(fastProfile);
+    assert.ok(qualityProfile);
+    assert.ok(mediumProfile);
+    const remainingProfiles = baseMutatedCatalog.filter(
+        (profile) =>
+            profile.id !== 'openai-text-fast' &&
+            profile.id !== 'openai-text-quality' &&
+            profile.id !== 'openai-text-medium'
+    );
+    // Place a higher-latency candidate before medium to ensure this test would
+    // fail under simple first-match fallback behavior.
+    const mutatedCatalog = [
+        fastProfile,
+        qualityProfile,
+        mediumProfile,
+        ...remainingProfiles,
+    ];
+    const expectedFallbackProfile = mutatedCatalog.find(
+        (profile) => profile.id === 'openai-text-medium'
+    );
     assert.ok(expectedFallbackProfile);
+    const firstCatalogSearchCapable = mutatedCatalog.find(
+        (profile) =>
+            profile.enabled &&
+            profile.capabilities.canUseSearch &&
+            profile.id !== 'openai-text-fast'
+    );
+    assert.ok(firstCatalogSearchCapable);
+    assert.notEqual(firstCatalogSearchCapable.id, expectedFallbackProfile.id);
     runtimeConfigMutable.modelProfiles = {
         ...runtimeConfig.modelProfiles,
         defaultProfileId: 'openai-text-fast',
@@ -667,14 +723,21 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
         intent: 'current_facts',
     });
     const mismatchWarning = warnings.find((warning) =>
-        /rerouting search to first enabled search-capable fallback profile/i.test(
-            warning.message
-        )
+        /tool-capable fallback profile/i.test(warning.message)
     );
     assert.ok(mismatchWarning);
+    assert.equal(
+        (mismatchWarning?.meta as { policy?: string } | undefined)?.policy,
+        'search_reroute_profile_fallback_v1'
+    );
+    assert.equal(
+        (mismatchWarning?.meta as { stage?: string } | undefined)?.stage,
+        'search_rerouted'
+    );
     assert.deepEqual(capturedExecutionContext?.tool, {
         toolName: 'web_search',
         status: 'executed',
+        reasonCode: 'search_rerouted_to_fallback_profile',
     });
     assert.equal(
         capturedExecutionContext?.generation?.originalProfileId,
@@ -684,6 +747,91 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
         capturedExecutionContext?.generation?.effectiveProfileId,
         expectedFallbackProfile.id
     );
+});
+
+test('planner-selected non-search profile skips search when no tool-capable fallback exists', async () => {
+    let observedSearch: unknown;
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
+    const originalModelProfiles = runtimeConfig.modelProfiles;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        modelProfiles: typeof runtimeConfig.modelProfiles;
+    };
+    runtimeConfigMutable.modelProfiles = {
+        ...runtimeConfig.modelProfiles,
+        defaultProfileId: 'openai-text-fast',
+        plannerProfileId: runtimeConfig.modelProfiles.plannerProfileId,
+        catalog: runtimeConfig.modelProfiles.catalog.map((profile) => ({
+            ...profile,
+            capabilities: {
+                ...profile.capabilities,
+                canUseSearch: false,
+            },
+        })),
+    };
+
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async (request) => {
+                if (request.maxOutputTokens === 700) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            profileId: 'openai-text-fast',
+                            riskTier: 'Low',
+                            reasoning:
+                                'Attempt search with a planner-selected profile.',
+                            generation: {
+                                reasoningEffort: 'medium',
+                                verbosity: 'medium',
+                                temperament: {
+                                    tightness: 3,
+                                    rationale: 3,
+                                    attribution: 3,
+                                    caution: 3,
+                                    extent: 3,
+                                },
+                                search: {
+                                    query: 'latest OpenAI policy update',
+                                    contextSize: 'low',
+                                    intent: 'current_facts',
+                                },
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+
+                observedSearch = request.search;
+                return {
+                    text: 'planner-no-fallback reply',
+                    model: request.model,
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+                capturedExecutionContext = runtimeContext.executionContext;
+                return createMetadata();
+            },
+            defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+            recordUsage: () => undefined,
+        });
+
+        await orchestrator.runChat(createChatRequest());
+    } finally {
+        runtimeConfigMutable.modelProfiles = originalModelProfiles;
+    }
+
+    assert.equal(observedSearch, undefined);
+    assert.deepEqual(capturedExecutionContext?.tool, {
+        toolName: 'web_search',
+        status: 'skipped',
+        reasonCode: 'search_reroute_no_tool_capable_fallback_available',
+    });
 });
 
 test('request-selected non-search profile drops search without reroute', async () => {
@@ -781,7 +929,7 @@ test('request-selected non-search profile drops search without reroute', async (
     assert.deepEqual(toolExecution, {
         toolName: 'web_search',
         status: 'skipped',
-        reasonCode: 'search_not_supported_by_selected_profile',
+        reasonCode: 'search_reroute_not_permitted_by_selection_source',
     });
     assert.equal(
         capturedExecutionContext?.generation?.originalProfileId,
@@ -791,6 +939,523 @@ test('request-selected non-search profile drops search without reroute', async (
         capturedExecutionContext?.generation?.effectiveProfileId,
         requestSelectedProfile.id
     );
+});
+
+test('chat orchestration timing log includes response summary fields for normal message flow', async () => {
+    const infoLogs: Array<{ message: string; payload: unknown }> = [];
+    const originalInfo = logger.info;
+    logger.info = ((message: string, payload?: unknown) => {
+        infoLogs.push({ message, payload });
+        return logger;
+    }) as typeof logger.info;
+
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async (request) => {
+                if (request.maxOutputTokens === 700) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            riskTier: 'Low',
+                            reasoning: 'Normal response path.',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+
+                return {
+                    text: 'normal message reply',
+                    model: request.model,
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: () => createMetadata(),
+            defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+            recordUsage: () => undefined,
+        });
+
+        await orchestrator.runChat(createChatRequest());
+    } finally {
+        logger.info = originalInfo;
+    }
+
+    const timingLog = infoLogs.find(
+        (entry) => entry.message === 'chat.orchestration.timing'
+    );
+    assert.ok(timingLog);
+    const payload = timingLog?.payload as
+        | {
+              responseAction?: string;
+              responseProvenance?: string;
+              responseCitationCount?: number;
+              responseMessageLength?: number;
+              fallbackApplied?: boolean;
+              fallbackReasons?: unknown[];
+          }
+        | undefined;
+    assert.equal(payload?.responseAction, 'message');
+    assert.equal(payload?.responseProvenance, 'Inferred');
+    assert.equal(payload?.responseCitationCount, 0);
+    assert.ok((payload?.responseMessageLength ?? 0) > 0);
+    assert.equal(payload?.fallbackApplied, false);
+    assert.deepEqual(payload?.fallbackReasons, []);
+});
+
+test('chat orchestration timing log includes fallback reason and reason codes when search is dropped', async () => {
+    const infoLogs: Array<{ message: string; payload: unknown }> = [];
+    const originalInfo = logger.info;
+    const originalModelProfiles = runtimeConfig.modelProfiles;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        modelProfiles: typeof runtimeConfig.modelProfiles;
+    };
+    runtimeConfigMutable.modelProfiles = {
+        ...runtimeConfig.modelProfiles,
+        defaultProfileId: 'openai-text-fast',
+        plannerProfileId: runtimeConfig.modelProfiles.plannerProfileId,
+        catalog: runtimeConfig.modelProfiles.catalog.map((profile) => ({
+            ...profile,
+            capabilities: {
+                ...profile.capabilities,
+                canUseSearch: false,
+            },
+        })),
+    };
+    logger.info = ((message: string, payload?: unknown) => {
+        infoLogs.push({ message, payload });
+        return logger;
+    }) as typeof logger.info;
+
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async (request) => {
+                if (request.maxOutputTokens === 700) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            profileId: 'openai-text-fast',
+                            riskTier: 'Low',
+                            reasoning:
+                                'Search will be dropped because no profile can use tools.',
+                            generation: {
+                                reasoningEffort: 'medium',
+                                verbosity: 'medium',
+                                temperament: {
+                                    tightness: 4,
+                                    rationale: 3,
+                                    attribution: 4,
+                                    caution: 3,
+                                    extent: 4,
+                                },
+                                search: {
+                                    query: 'latest OpenAI policy update',
+                                    contextSize: 'low',
+                                    intent: 'current_facts',
+                                },
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+
+                return {
+                    text: 'fallback reply without retrieval',
+                    model: request.model,
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: () => createMetadata(),
+            defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+            recordUsage: () => undefined,
+        });
+
+        await orchestrator.runChat(createChatRequest());
+    } finally {
+        logger.info = originalInfo;
+        runtimeConfigMutable.modelProfiles = originalModelProfiles;
+    }
+
+    const timingLog = infoLogs.find(
+        (entry) => entry.message === 'chat.orchestration.timing'
+    );
+    assert.ok(timingLog);
+    const payload = timingLog?.payload as
+        | {
+              toolStatus?: string;
+              toolReasonCode?: string;
+              toolEligible?: boolean;
+              toolRequestReasonCode?: string;
+              fallbackApplied?: boolean;
+              fallbackReasons?: string[];
+              responseProvenance?: string;
+              searchRequested?: boolean;
+          }
+        | undefined;
+    assert.equal(payload?.toolStatus, 'skipped');
+    assert.equal(
+        payload?.toolReasonCode,
+        'search_reroute_no_tool_capable_fallback_available'
+    );
+    assert.equal(payload?.toolEligible, false);
+    assert.equal(
+        payload?.toolRequestReasonCode,
+        'search_not_supported_by_selected_profile'
+    );
+    assert.equal(payload?.searchRequested, false);
+    assert.equal(payload?.fallbackApplied, true);
+    assert.equal(payload?.responseProvenance, 'Inferred');
+    assert.ok(
+        payload?.fallbackReasons?.includes('search_dropped_no_fallback_profile')
+    );
+});
+
+test('orchestrator injects backend weather tool context and records executed tool metadata', async () => {
+    let generationMessages: Array<{ role: string; content: string }> = [];
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
+    const weatherForecastTool: WeatherForecastTool = {
+        fetchForecast: async () => ({
+            toolName: 'weather_forecast',
+            status: 'ok',
+            request: {
+                location: {
+                    type: 'lat_lon',
+                    latitude: 39.7684,
+                    longitude: -86.1581,
+                },
+                horizonPeriods: 4,
+            },
+            location: {
+                name: 'Indianapolis, IN',
+                latitude: 39.7684,
+                longitude: -86.1581,
+            },
+            forecast: {
+                periods: [
+                    {
+                        name: 'Today',
+                        startsAt: '2026-03-27T08:00:00-04:00',
+                        endsAt: '2026-03-27T20:00:00-04:00',
+                        isDaytime: true,
+                        temperature: {
+                            value: 57,
+                            unit: 'F',
+                        },
+                        wind: {
+                            speed: '12 mph',
+                            direction: 'NW',
+                        },
+                        shortForecast: 'Mostly sunny',
+                        detailedForecast: 'Mostly sunny with light wind.',
+                    },
+                ],
+            },
+            provenance: {
+                provider: 'weather.gov',
+                endpoint:
+                    'https://api.weather.gov/gridpoints/IND/56,69/forecast',
+                requestedAt: '2026-03-27T12:00:00.000Z',
+            },
+        }),
+    };
+
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === 700) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        riskTier: 'Low',
+                        reasoning:
+                            'Use weather tool for this forecast question.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                            weather: {
+                                location: {
+                                    latitude: 39.7684,
+                                    longitude: -86.1581,
+                                },
+                                horizonPeriods: 4,
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            generationMessages = request.messages;
+            return {
+                text: 'Forecast response generated',
+                model: request.model,
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        weatherForecastTool,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedExecutionContext = runtimeContext.executionContext;
+            return createMetadata();
+        },
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            latestUserInput:
+                'Weather at 39.7684,-86.1581 for the next 4 forecast periods',
+            conversation: [
+                {
+                    role: 'user',
+                    content:
+                        'Weather at 39.7684,-86.1581 for the next 4 forecast periods',
+                },
+            ],
+        })
+    );
+
+    assert.equal(response.action, 'message');
+    const weatherToolMessage = generationMessages.find((message) =>
+        message.content.includes('BEGIN Backend Tool Result')
+    );
+    assert.ok(weatherToolMessage);
+    const weatherPayloadText =
+        weatherToolMessage?.content
+            .split('\n')
+            .find((line) => line.startsWith('{"toolName"')) ?? '';
+    const weatherPayload = JSON.parse(weatherPayloadText) as {
+        forecast?: {
+            periods?: Array<Record<string, unknown>>;
+        };
+    };
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            weatherPayload.forecast?.periods?.[0] ?? {},
+            'detailedForecast'
+        ),
+        false
+    );
+    assert.equal(capturedExecutionContext?.tool?.toolName, 'weather_forecast');
+    assert.equal(capturedExecutionContext?.tool?.status, 'executed');
+    assert.ok((capturedExecutionContext?.tool?.durationMs ?? 0) >= 0);
+});
+
+test('planner mixed weather and search requests apply single-tool weather priority policy', async () => {
+    let generationSearch: unknown;
+
+    const weatherForecastTool: WeatherForecastTool = {
+        fetchForecast: async () => ({
+            toolName: 'weather_forecast',
+            status: 'ok',
+            request: {
+                location: {
+                    type: 'lat_lon',
+                    latitude: 39.7684,
+                    longitude: -86.1581,
+                },
+                horizonPeriods: 2,
+            },
+            location: {
+                name: 'Indianapolis, IN',
+            },
+            forecast: {
+                periods: [
+                    {
+                        name: 'Today',
+                        startsAt: '2026-03-27T08:00:00-04:00',
+                        endsAt: '2026-03-27T20:00:00-04:00',
+                        isDaytime: true,
+                        temperature: {
+                            value: 57,
+                            unit: 'F',
+                        },
+                        wind: {
+                            speed: '12 mph',
+                            direction: 'NW',
+                        },
+                        shortForecast: 'Mostly sunny',
+                        detailedForecast: 'Mostly sunny with light wind.',
+                    },
+                ],
+            },
+            provenance: {
+                provider: 'weather.gov',
+                endpoint:
+                    'https://api.weather.gov/gridpoints/IND/56,69/forecast',
+                requestedAt: '2026-03-27T12:00:00.000Z',
+            },
+        }),
+    };
+
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === 700) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        riskTier: 'Low',
+                        reasoning:
+                            'Use weather and current facts for this request.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                            weather: {
+                                location: {
+                                    latitude: 39.7684,
+                                    longitude: -86.1581,
+                                },
+                                horizonPeriods: 2,
+                            },
+                            search: {
+                                query: 'Indianapolis severe weather alerts',
+                                contextSize: 'low',
+                                intent: 'current_facts',
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            generationSearch = request.search;
+            return {
+                text: 'Weather-priority reply',
+                model: request.model,
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        weatherForecastTool,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            latestUserInput: 'Weather and alerts for Indianapolis',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'Weather and alerts for Indianapolis',
+                },
+            ],
+        })
+    );
+
+    assert.equal(response.action, 'message');
+    assert.equal(generationSearch, undefined);
+});
+
+test('orchestrator fails open when weather tool throws and still generates a response', async () => {
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
+    const weatherForecastTool: WeatherForecastTool = {
+        fetchForecast: async () => {
+            throw new Error('weather.gov unavailable');
+        },
+    };
+
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === 700) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        riskTier: 'Low',
+                        reasoning:
+                            'Use weather tool for this forecast question.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                            weather: {
+                                location: {
+                                    latitude: 39.7684,
+                                    longitude: -86.1581,
+                                },
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            return {
+                text: 'Fallback non-tool weather response',
+                model: request.model,
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        weatherForecastTool,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedExecutionContext = runtimeContext.executionContext;
+            return createMetadata();
+        },
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            latestUserInput: 'weather 39.7684,-86.1581',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'weather 39.7684,-86.1581',
+                },
+            ],
+        })
+    );
+
+    assert.equal(response.action, 'message');
+    assert.equal(response.message, 'Fallback non-tool weather response');
+    assert.equal(capturedExecutionContext?.tool?.toolName, 'weather_forecast');
+    assert.equal(capturedExecutionContext?.tool?.status, 'failed');
+    assert.equal(
+        capturedExecutionContext?.tool?.reasonCode,
+        'tool_execution_error'
+    );
+    assert.ok((capturedExecutionContext?.tool?.durationMs ?? 0) >= 0);
 });
 
 test('discord requests use backend profile overlay when runtime overlay is configured', async () => {
@@ -866,7 +1531,9 @@ test('discord requests use backend profile overlay when runtime overlay is confi
         assert.equal(response.action, 'message');
         assert.equal(
             finalMessages[0]?.content,
-            renderConversationPromptLayers('discord-chat').systemPrompt
+            renderConversationPromptLayers('discord-chat', {
+                botProfileDisplayName: 'Ari',
+            }).systemPrompt
         );
         assert.match(
             finalMessages[1]?.content ?? '',
@@ -1064,6 +1731,11 @@ test('planner runtime failures emit failed planner execution metadata and still 
         'planner_runtime_error'
     );
     assert.ok((capturedExecutionContext?.planner?.durationMs ?? -1) >= 0);
+    assert.equal(capturedExecutionContext?.evaluator?.status, 'executed');
+    assert.equal(
+        capturedExecutionContext?.evaluator?.outcome?.mode,
+        'observe_only'
+    );
     assert.equal(capturedExecutionContext?.generation?.status, 'executed');
     assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
 });

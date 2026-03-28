@@ -296,6 +296,15 @@ test('runChatMessages forwards execution context into metadata runtime context',
                 provider: 'openai',
                 model: 'gpt-5-nano',
             },
+            evaluator: {
+                status: 'executed',
+                outcome: {
+                    mode: 'observe_only',
+                    riskTier: 'Low',
+                    provenance: 'Inferred',
+                    breakerTriggered: false,
+                },
+            },
             generation: {
                 status: 'executed',
                 profileId: 'openai-text-medium',
@@ -310,6 +319,15 @@ test('runChatMessages forwards execution context into metadata runtime context',
         profileId: 'openai-text-fast',
         provider: 'openai',
         model: 'gpt-5-nano',
+    });
+    assert.deepEqual(capturedExecutionContext?.evaluator, {
+        status: 'executed',
+        outcome: {
+            mode: 'observe_only',
+            riskTier: 'Low',
+            provenance: 'Inferred',
+            breakerTriggered: false,
+        },
     });
     assert.equal(capturedExecutionContext?.generation?.status, 'executed');
     assert.equal(
@@ -356,6 +374,48 @@ test('runChatMessages marks tool execution as executed when retrieval was used',
     assert.deepEqual(capturedExecutionContext?.tool, {
         toolName: 'web_search',
         status: 'executed',
+    });
+});
+
+test('runChatMessages preserves non-search tool execution context when search is absent', async () => {
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
+
+    const chatService = createChatService({
+        generationRuntime: createRuntime({
+            provenance: 'Inferred',
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedExecutionContext = runtimeContext.executionContext;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Weather at these coordinates.' }],
+        conversationSnapshot: 'Weather at these coordinates.',
+        executionContext: {
+            tool: {
+                toolName: 'weather_forecast',
+                status: 'executed',
+                durationMs: 12,
+            },
+        },
+        toolRequest: {
+            toolName: 'weather_forecast',
+            requested: true,
+            eligible: true,
+        },
+    });
+
+    assert.deepEqual(capturedExecutionContext?.tool, {
+        toolName: 'weather_forecast',
+        status: 'executed',
+        durationMs: 12,
     });
 });
 

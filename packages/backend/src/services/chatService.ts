@@ -16,6 +16,8 @@ import type {
     PartialResponseTemperament,
     ResponseMetadata,
     RiskTier,
+    ToolExecutionContext,
+    ToolInvocationRequest,
 } from '@footnote/contracts/ethics-core';
 import type {
     ModelProfileCapabilities,
@@ -36,8 +38,7 @@ import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import { logger } from '../utils/logger.js';
-
-const DEFAULT_BOT_PROFILE_DISPLAY_NAME = 'Footnote';
+import { runtimeConfig } from '../config.js';
 
 /**
  * Search is optional, but if it is present it needs a real query. Blank values
@@ -69,18 +70,6 @@ const normalizeGenerationPlan = (
             query: normalizedQuery,
         },
     };
-};
-
-/**
- * Keeps backend-only chat persona rendering aligned with deployment naming.
- */
-const resolveBotProfileDisplayName = (): string => {
-    const envValue = process.env.BOT_PROFILE_DISPLAY_NAME;
-    if (typeof envValue === 'string' && envValue.trim().length > 0) {
-        return envValue.trim();
-    }
-
-    return DEFAULT_BOT_PROFILE_DISPLAY_NAME;
 };
 
 /**
@@ -124,6 +113,15 @@ export type RunChatMessagesInput = {
     capabilities?: ModelProfileCapabilities;
     generation?: ChatGenerationPlan;
     executionContext?: ResponseMetadataRuntimeContext['executionContext'];
+    toolRequest?: ToolInvocationRequest;
+};
+
+export type FinalToolExecutionTelemetry = {
+    toolName: string;
+    status: ToolExecutionContext['status'];
+    reasonCode?: ToolExecutionContext['reasonCode'];
+    eligible?: boolean;
+    requestReasonCode?: ToolInvocationRequest['reasonCode'];
 };
 
 /**
@@ -181,10 +179,12 @@ export const createChatService = ({
         capabilities,
         generation,
         executionContext,
+        toolRequest,
     }: RunChatMessagesInput): Promise<{
         message: string;
         metadata: ResponseMetadata;
         generationDurationMs: number;
+        finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
     }> => {
         const generationStartedAt = Date.now();
         const normalizedGeneration = normalizeGenerationPlan(generation);
@@ -242,27 +242,51 @@ export const createChatService = ({
             generationResult.provenance === 'Retrieved' ||
             (generationResult.citations?.length ?? 0) > 0;
         const hasSearchIntent = normalizedGeneration?.search !== undefined;
+        const upstreamToolExecution = executionContext?.tool;
         const effectiveToolExecutionContext:
             | NonNullable<
                   ResponseMetadataRuntimeContext['executionContext']
               >['tool']
             | undefined =
-            // Respect an explicit upstream skip reason from orchestrator first.
-            executionContext?.tool?.status === 'skipped'
-                ? executionContext.tool
-                : hasSearchIntent
-                  ? {
-                        // When search was requested, infer tool execution from
-                        // retrieval usage signals reported by the runtime.
-                        toolName: 'web_search',
-                        status: retrievalUsed ? 'executed' : 'skipped',
-                        ...(retrievalUsed
-                            ? {}
-                            : {
-                                  reasonCode: 'tool_not_used',
-                              }),
-                    }
-                  : undefined;
+            // Respect explicit upstream tool outcomes first (for example,
+            // orchestrator-level fail-open policy decisions).
+            upstreamToolExecution
+                ? hasSearchIntent &&
+                  upstreamToolExecution.toolName === 'web_search'
+                    ? {
+                          ...upstreamToolExecution,
+                          status: retrievalUsed ? 'executed' : 'skipped',
+                          ...(retrievalUsed
+                              ? upstreamToolExecution.reasonCode !== undefined
+                                  ? {
+                                        // Keep policy reason codes when
+                                        // runtime confirms tool execution.
+                                        reasonCode:
+                                            upstreamToolExecution.reasonCode,
+                                    }
+                                  : {}
+                              : {
+                                    reasonCode:
+                                        upstreamToolExecution.reasonCode ??
+                                        'tool_not_used',
+                                }),
+                      }
+                    : upstreamToolExecution
+                : generationResult.toolExecution
+                  ? generationResult.toolExecution
+                  : hasSearchIntent
+                    ? ({
+                          // When search was requested, infer tool execution from
+                          // retrieval usage signals reported by the runtime.
+                          toolName: 'web_search',
+                          status: retrievalUsed ? 'executed' : 'skipped',
+                          ...(retrievalUsed
+                              ? {}
+                              : {
+                                    reasonCode: 'tool_not_used',
+                                }),
+                      } satisfies ToolExecutionContext)
+                    : undefined;
 
         const usageModel = assistantMetadata.model || defaultModel;
         const effectiveGenerationExecutionContext = executionContext?.generation
@@ -324,6 +348,25 @@ export const createChatService = ({
                 contextSize: normalizedGeneration?.search?.contextSize,
             },
         };
+        const finalToolExecutionTelemetry:
+            | FinalToolExecutionTelemetry
+            | undefined =
+            effectiveToolExecutionContext !== undefined
+                ? {
+                      toolName: effectiveToolExecutionContext.toolName,
+                      status: effectiveToolExecutionContext.status,
+                      ...(effectiveToolExecutionContext.reasonCode !==
+                          undefined && {
+                          reasonCode: effectiveToolExecutionContext.reasonCode,
+                      }),
+                      ...(toolRequest !== undefined && {
+                          eligible: toolRequest.eligible,
+                      }),
+                      ...(toolRequest?.reasonCode !== undefined && {
+                          requestReasonCode: toolRequest.reasonCode,
+                      }),
+                  }
+                : undefined;
 
         // Metadata is the contract that downstream UIs and trace storage rely on.
         const responseMetadata = buildResponseMetadata(
@@ -360,13 +403,16 @@ export const createChatService = ({
             message: generationResult.text,
             metadata: normalizedResponseMetadata,
             generationDurationMs,
+            ...(finalToolExecutionTelemetry !== undefined && {
+                finalToolExecutionTelemetry,
+            }),
         };
     };
 
     const runChat = async ({
         question,
     }: RunChatInput): Promise<PostChatResponse> => {
-        const botProfileDisplayName = resolveBotProfileDisplayName();
+        const botProfileDisplayName = runtimeConfig.profile.displayName;
         const promptLayers = renderConversationPromptLayers('web-chat', {
             botProfileDisplayName,
         });

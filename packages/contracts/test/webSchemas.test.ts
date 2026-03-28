@@ -216,6 +216,12 @@ test('ResponseMetadataSchema remains tolerant for forward-compatible responses',
 test('ResponseMetadataSchema accepts execution timeline events', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
+        evaluator: {
+            mode: 'observe_only',
+            riskTier: 'Low',
+            provenance: 'Inferred',
+            breakerTriggered: false,
+        },
         execution: [
             {
                 kind: 'planner',
@@ -233,6 +239,17 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
                 durationMs: 5,
             },
             {
+                kind: 'evaluator',
+                status: 'executed',
+                evaluator: {
+                    mode: 'observe_only',
+                    riskTier: 'Low',
+                    provenance: 'Inferred',
+                    breakerTriggered: false,
+                },
+                durationMs: 2,
+            },
+            {
                 kind: 'generation',
                 status: 'executed',
                 profileId: 'openai-text-medium',
@@ -241,6 +258,22 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
                 provider: 'openai',
                 model: 'gpt-5-mini',
                 durationMs: 20,
+            },
+        ],
+    });
+
+    assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema accepts tool_unavailable reason code for skipped tool events', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        execution: [
+            {
+                kind: 'tool',
+                status: 'skipped',
+                toolName: 'web_search',
+                reasonCode: 'tool_unavailable',
             },
         ],
     });
@@ -287,7 +320,7 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
         ...baseMetadata,
         execution: [
             {
-                kind: 'planner',
+                kind: 'evaluator',
                 status: 'failed',
                 reasonCode: 'unknown_failure',
             },
@@ -295,17 +328,65 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
     });
     assert.equal(invalidReasonCode.success, false);
 
-    const executedWithReasonCode = ResponseMetadataSchema.safeParse({
+    const plannerWithToolReasonCode = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        execution: [
+            {
+                kind: 'planner',
+                status: 'failed',
+                reasonCode: 'tool_execution_error',
+            },
+        ],
+    });
+    assert.equal(plannerWithToolReasonCode.success, false);
+
+    const generationWithPlannerReasonCode = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
         execution: [
             {
                 kind: 'generation',
-                status: 'executed',
+                status: 'failed',
                 reasonCode: 'planner_runtime_error',
             },
         ],
     });
-    assert.equal(executedWithReasonCode.success, false);
+    assert.equal(generationWithPlannerReasonCode.success, false);
+
+    const toolWithoutToolName = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        execution: [
+            {
+                kind: 'tool',
+                status: 'failed',
+                reasonCode: 'tool_execution_error',
+            },
+        ],
+    });
+    assert.equal(toolWithoutToolName.success, false);
+
+    const executedWithReasonCode = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        execution: [
+            {
+                kind: 'tool',
+                status: 'executed',
+                toolName: 'web_search',
+                reasonCode: 'search_rerouted_to_fallback_profile',
+            },
+        ],
+    });
+    assert.equal(executedWithReasonCode.success, true);
+
+    const invalidEvaluatorMode = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        evaluator: {
+            mode: 'shadow',
+            riskTier: 'Low',
+            provenance: 'Inferred',
+            breakerTriggered: false,
+        },
+    });
+    assert.equal(invalidEvaluatorMode.success, false);
 });
 
 test('ResponseMetadataSchema accepts valid TRACE temperament metadata', () => {
