@@ -122,12 +122,13 @@ const ProvenanceFooter = ({
                     <>
                         <span className="provenance-separator"> • </span>
                         <span className="provenance-tradeoffs">
-                            eval {safetyDecision?.riskTier ?? 'Low'}/
-                            {evaluatorOutcome.provenance}/
-                            {safetyDecision?.action ?? 'allow'}
-                            {hasNonAllowSafetyDecision
-                                ? ` (${safetyDecision.ruleId}/${safetyDecision.reasonCode})`
-                                : ''}
+                            {safetyDecision
+                                ? `eval ${safetyDecision.riskTier}/${evaluatorOutcome.provenance}/${safetyDecision.action}${
+                                      hasNonAllowSafetyDecision
+                                          ? ` (${safetyDecision.ruleId}/${safetyDecision.reasonCode})`
+                                          : ''
+                                  }`
+                                : 'eval unavailable'}
                         </span>
                     </>
                 )}

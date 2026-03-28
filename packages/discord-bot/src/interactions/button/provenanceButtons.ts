@@ -26,6 +26,7 @@ const DETAILS_FALLBACK_REASON = 'metadata_unavailable';
 const DETAILS_INLINE_FIELD_LIMIT = 120;
 const DETAILS_CITATION_LIMIT = 4;
 const DETAILS_EXECUTION_EVENT_LIMIT = 5;
+const DETAILS_MIN_EXECUTION_SECTION_LENGTH = 320;
 const EXECUTION_TABLE_COLUMN_WIDTHS = {
     kind: 10,
     status: 10,
@@ -251,7 +252,7 @@ function formatExecutionEventLine(event: ExecutionEvent): string {
         event.evaluator?.safetyDecision.action !== 'allow' &&
         event.evaluator?.safetyDecision.reasonCode
             ? event.evaluator.safetyDecision.reasonCode
-            : event.reasonCode ?? '-';
+            : (event.reasonCode ?? '-');
     const duration =
         event.durationMs !== undefined ? `${event.durationMs}ms` : '-';
     const formatCell = (value: string, width: number): string =>
@@ -267,7 +268,8 @@ function formatExecutionEventLine(event: ExecutionEvent): string {
 }
 
 function formatExecutionSection(
-    payload: ResponseMetadata | DetailsFallbackPayload
+    payload: ResponseMetadata | DetailsFallbackPayload,
+    maxLength = Number.POSITIVE_INFINITY
 ): string {
     if (!('provenance' in payload)) {
         return ['**Execution**', '- Execution metadata unavailable'].join('\n');
@@ -302,21 +304,52 @@ function formatExecutionSection(
         lines.push(`- Total duration: ${payload.totalDurationMs}ms`);
     }
 
-    const eventCount = Math.min(
+    const candidateEventCount = Math.min(
         payload.execution.length,
         DETAILS_EXECUTION_EVENT_LIMIT
     );
-    lines.push('```text');
-    lines.push(EXECUTION_TABLE_HEADER);
-    lines.push('-'.repeat(EXECUTION_TABLE_HEADER.length));
-    for (let index = 0; index < eventCount; index += 1) {
-        lines.push(formatExecutionEventLine(payload.execution[index]));
-    }
-    lines.push('```');
-    if (payload.execution.length > eventCount) {
-        lines.push(
-            `- ...and ${payload.execution.length - eventCount} more execution event(s)`
+    const candidateTableLines = [
+        EXECUTION_TABLE_HEADER,
+        '-'.repeat(EXECUTION_TABLE_HEADER.length),
+    ];
+    for (let index = 0; index < candidateEventCount; index += 1) {
+        candidateTableLines.push(
+            formatExecutionEventLine(payload.execution[index])
         );
+    }
+
+    const linesWithFence = [...lines, '```text', '```'];
+    const fixedLength = linesWithFence.join('\n').length;
+    const availableTableBodyLength = Number.isFinite(maxLength)
+        ? Math.max(0, maxLength - fixedLength)
+        : Number.POSITIVE_INFINITY;
+
+    const tableLines: string[] = [];
+    let tableBodyLength = 0;
+    for (const tableLine of candidateTableLines) {
+        const projectedLength =
+            tableBodyLength +
+            tableLine.length +
+            (tableLines.length > 0 ? 1 : 0);
+        if (projectedLength > availableTableBodyLength) {
+            break;
+        }
+        tableLines.push(tableLine);
+        tableBodyLength = projectedLength;
+    }
+
+    lines.push('```text');
+    lines.push(...tableLines);
+    lines.push('```');
+
+    const shownEventCount = Math.max(0, tableLines.length - 2);
+    const remainingEventCount = payload.execution.length - shownEventCount;
+    if (remainingEventCount > 0) {
+        const overflowLine = `- ...and ${remainingEventCount} more execution event(s)`;
+        const withOverflow = [...lines, overflowLine].join('\n');
+        if (!Number.isFinite(maxLength) || withOverflow.length <= maxLength) {
+            lines.push(overflowLine);
+        }
     }
 
     return lines.join('\n');
@@ -334,12 +367,14 @@ function truncateBlockToLength(value: string, maxLength: number): string {
     return `${value.slice(0, truncatedLength)}${DETAILS_TRUNCATION_SUFFIX}`;
 }
 
-function buildTraceViewerUrl(responseId: string | null | undefined): string | null {
+function buildTraceViewerUrl(
+    responseId: string | null | undefined
+): string | null {
     if (!responseId || responseId.trim().length === 0) {
         return null;
     }
     const baseUrl = runtimeConfig.webBaseUrl.trim().replace(/\/+$/, '');
-    return `${baseUrl}/api/traces/${encodeURIComponent(responseId.trim())}`;
+    return `${baseUrl}/n/${encodeURIComponent(responseId.trim())}`;
 }
 
 function formatTraceViewerSection(
@@ -354,29 +389,43 @@ function formatTraceViewerSection(
 }
 
 /**
- * Builds markdown-first details that stay readable in ephemeral Discord replies.
- */
-function formatDetailsMarkdownBody(
-    payload: ResponseMetadata | DetailsFallbackPayload
-): string {
-    return [
-        formatSummarySection(payload),
-        formatTraceSection(payload),
-        formatSourcesSection(payload),
-        formatExecutionSection(payload),
-        formatTraceViewerSection(payload),
-    ].join(DETAILS_SECTION_SEPARATOR);
-}
-
-/**
  * Renders details payload and truncates when needed so we do not
  * exceed Discord's hard message-length cap.
  */
 function formatDetailsPayloadForDiscord(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
-    const markdownBody = formatDetailsMarkdownBody(payload);
-    return truncateBlockToLength(markdownBody, DISCORD_MESSAGE_MAX_LENGTH);
+    const summarySection = formatSummarySection(payload);
+    const traceSection = formatTraceSection(payload);
+    const sourcesSection = formatSourcesSection(payload);
+    const traceViewerSection = formatTraceViewerSection(payload);
+    const maxExecutionLength = Math.max(
+        DETAILS_MIN_EXECUTION_SECTION_LENGTH,
+        DISCORD_MESSAGE_MAX_LENGTH -
+            traceViewerSection.length -
+            DETAILS_SECTION_SEPARATOR.length
+    );
+    const executionSection = formatExecutionSection(
+        payload,
+        maxExecutionLength
+    );
+    const tail = [executionSection, traceViewerSection].join(
+        DETAILS_SECTION_SEPARATOR
+    );
+
+    if (tail.length >= DISCORD_MESSAGE_MAX_LENGTH) {
+        return truncateBlockToLength(tail, DISCORD_MESSAGE_MAX_LENGTH);
+    }
+
+    const head = truncateBlockToLength(
+        [summarySection, traceSection, sourcesSection].join(
+            DETAILS_SECTION_SEPARATOR
+        ),
+        DISCORD_MESSAGE_MAX_LENGTH -
+            tail.length -
+            DETAILS_SECTION_SEPARATOR.length
+    );
+    return [head, tail].join(DETAILS_SECTION_SEPARATOR);
 }
 
 /**

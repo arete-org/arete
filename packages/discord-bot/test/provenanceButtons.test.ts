@@ -80,6 +80,22 @@ test('details action renders markdown sections with execution table and trace vi
                     model: 'gpt-5-mini',
                     durationMs: 140,
                 },
+                {
+                    kind: 'evaluator',
+                    status: 'executed',
+                    evaluator: {
+                        mode: 'observe_only',
+                        provenance: 'Inferred',
+                        safetyDecision: {
+                            action: 'block',
+                            riskTier: 'High',
+                            ruleId: 'risk.safety.weaponization_request.v1',
+                            reasonCode: 'weaponization_request',
+                            reason: 'Deterministic weaponization-request rule matched.',
+                        },
+                    },
+                    durationMs: 11,
+                },
             ],
         },
     })) as typeof botApi.getTrace;
@@ -106,7 +122,9 @@ test('details action renders markdown sections with execution table and trace vi
         assert.match(content, /\*\*Execution\*\*/);
         assert.match(content, /\*\*Trace Viewer\*\*/);
         assert.match(content, /Open full trace/);
-        assert.match(content, /\/api\/traces\/resp_details_sections/);
+        assert.match(content, /\/n\/resp_details_sections/);
+        assert.match(content, /weaponization_request/);
+        assert.match(content, /High\/Inferred\/block/);
         assert.match(content, /```text/);
         assert.match(
             content,

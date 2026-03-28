@@ -56,6 +56,27 @@ const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
 const resolveExecutionSummary = (traceData: ServerMetadata): string | null =>
     formatExecutionTimelineSummary(traceData.execution);
 
+const buildDisplayTrace = (traceData: ServerMetadata) => ({
+    responseId: traceData.responseId ?? null,
+    timestamp: traceData.timestamp ?? null,
+    provenance: traceData.provenance ?? null,
+    riskTier: traceData.riskTier ?? null,
+    modelVersion: traceData.modelVersion ?? null,
+    tradeoffCount: traceData.tradeoffCount ?? null,
+    staleAfter: traceData.staleAfter ?? null,
+    citationCount: traceData.citations?.length ?? 0,
+    executionCount: traceData.execution?.length ?? 0,
+    runtimeContext: traceData.runtimeContext
+        ? {
+              modelVersion: traceData.runtimeContext.modelVersion ?? null,
+              conversationSnapshot: traceData.runtimeContext
+                  .conversationSnapshot
+                  ? `[redacted:${traceData.runtimeContext.conversationSnapshot.length} chars]`
+                  : null,
+          }
+        : null,
+});
+
 const tracePageLogger = createScopedLogger('TracePage');
 
 // Helper to extract payload from 410 (stale) responses
@@ -346,6 +367,7 @@ const TracePage = (): JSX.Element => {
         traceData?.provenance || traceData?.reasoningEffort || 'Unknown';
     const model = resolveTraceModelLabel(traceData);
     const executionSummary = resolveExecutionSummary(traceData);
+    const sanitizedTraceData = buildDisplayTrace(traceData);
     const riskLabel = riskTier || 'Unspecified';
     const chainHash =
         traceData?.chainHash || traceData?.chainHash === ''
@@ -507,7 +529,7 @@ const TracePage = (): JSX.Element => {
                             whiteSpace: 'pre-wrap',
                         }}
                     >
-                        {JSON.stringify(traceData, null, 2)}
+                        {JSON.stringify(sanitizedTraceData, null, 2)}
                     </pre>
                 </details>
             </article>

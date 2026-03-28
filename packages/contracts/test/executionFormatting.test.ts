@@ -105,6 +105,22 @@ test('formatExecutionTimelineSummary includes evaluator breaker rule context for
     );
 });
 
+test('formatExecutionTimelineSummary falls back gracefully for legacy evaluator payloads', () => {
+    const legacyEvent = {
+        kind: 'evaluator',
+        status: 'executed',
+        evaluator: {
+            decision: 'allow',
+            provenance: 'Retrieved',
+        },
+    } as unknown as ExecutionEvent;
+
+    assert.equal(
+        formatExecutionTimelineSummary([legacyEvent]),
+        'evaluator:allow/Retrieved(executed)'
+    );
+});
+
 test('formatExecutionTimelineSummary returns null for missing or empty timelines', () => {
     assert.equal(formatExecutionTimelineSummary(undefined), null);
     assert.equal(formatExecutionTimelineSummary([]), null);

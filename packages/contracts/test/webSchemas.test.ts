@@ -271,6 +271,25 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
     assert.equal(parsed.success, true);
 });
 
+test('ResponseMetadataSchema rejects non-canonical safety decision rule tuples', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        evaluator: {
+            mode: 'observe_only',
+            provenance: 'Inferred',
+            safetyDecision: {
+                action: 'block',
+                riskTier: 'Low',
+                ruleId: 'risk.safety.weaponization_request.v1',
+                reasonCode: 'self_harm_crisis_intent',
+                reason: 'Invalid tuple for test coverage.',
+            },
+        },
+    });
+
+    assert.equal(parsed.success, false);
+});
+
 test('ResponseMetadataSchema accepts tool_unavailable reason code for skipped tool events', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
