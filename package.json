@@ -15,6 +15,8 @@
         "start:web": "node scripts/preflight-dev-ports.cjs web && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:web",
         "start:bot": "node scripts/preflight-dev-ports.cjs bot && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:bot",
         "start:all": "node scripts/start-all.cjs",
+        "workspace:bootstrap": "node scripts/workspace-bootstrap.cjs",
+        "workspace:dev": "pnpm workspace:bootstrap && pnpm start:all",
         "start:prod-test": "pnpm backend:prepare && pnpm --filter @footnote/backend build && cross-env NODE_ENV=production node server.js",
         "dev:prod-test": "concurrently \"pnpm backend:prepare && pnpm --filter @footnote/backend build && cross-env NODE_ENV=production node server.js\" \"pnpm --filter @footnote/web dev\"",
         "build:contracts": "pnpm --filter @footnote/contracts build",
@@ -75,14 +77,12 @@
         },
         "onlyBuiltDependencies": [
             "better-sqlite3",
+            "@swc/core",
+            "esbuild",
+            "protobufjs",
             "@discordjs/opus",
             "bufferutil",
             "zlib-sync"
-        ],
-        "ignoredBuiltDependencies": [
-            "@swc/core",
-            "esbuild",
-            "protobufjs"
         ]
     },
     "dependencies": {
