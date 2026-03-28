@@ -25,6 +25,9 @@ export type {
     ToolInvocationRequest,
     ToolExecutionContext,
     EvaluatorDecisionMode,
+    SafetyBreakerAction,
+    SafetyBreakerReasonCode,
+    SafetyDecision,
     EvaluatorOutcome,
     ExecutionEvent,
     TraceAxisScore,
@@ -33,6 +36,12 @@ export type {
     ResponseMetadata,
 } from './ethics-core/index.js';
 export { formatExecutionTimelineSummary } from './ethics-core/index.js';
+export {
+    RiskRuleIdSchema,
+    SafetyBreakerActionSchema,
+    SafetyBreakerReasonCodeSchema,
+    SafetyDecisionSchema,
+} from './ethics-core/index.js';
 
 // Web API contracts (request/response envelopes)
 export type {

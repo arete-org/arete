@@ -1,5 +1,5 @@
 /**
- * @description: Verifies Discord provenance details render markdown-first with TRACE sections and debug JSON fallback.
+ * @description: Verifies Discord provenance details render markdown sections with execution table and trace link.
  * @footnote-scope: test
  * @footnote-module: ProvenanceButtonDetailsTests
  * @footnote-risk: low - Test-only coverage for details rendering and fail-open behavior.
@@ -34,7 +34,7 @@ function createDetailsInteraction(
     };
 }
 
-test('details action renders markdown-first sections with raw JSON debug block', async () => {
+test('details action renders markdown sections with execution table and trace viewer link', async () => {
     const originalGetTrace = botApi.getTrace;
     const deferReplyPayloads: unknown[] = [];
     const editReplyPayloads: unknown[] = [];
@@ -80,6 +80,22 @@ test('details action renders markdown-first sections with raw JSON debug block',
                     model: 'gpt-5-mini',
                     durationMs: 140,
                 },
+                {
+                    kind: 'evaluator',
+                    status: 'executed',
+                    evaluator: {
+                        mode: 'observe_only',
+                        provenance: 'Inferred',
+                        safetyDecision: {
+                            action: 'block',
+                            riskTier: 'High',
+                            ruleId: 'risk.safety.weaponization_request.v1',
+                            reasonCode: 'weaponization_request',
+                            reason: 'Deterministic weaponization-request rule matched.',
+                        },
+                    },
+                    durationMs: 11,
+                },
             ],
         },
     })) as typeof botApi.getTrace;
@@ -104,12 +120,17 @@ test('details action renders markdown-first sections with raw JSON debug block',
         assert.match(content, /\*\*TRACE\*\*/);
         assert.match(content, /\*\*Sources\*\*/);
         assert.match(content, /\*\*Execution\*\*/);
-        assert.match(content, /\*\*Raw JSON \(debug\)\*\*/);
+        assert.match(content, /\*\*Trace Viewer\*\*/);
+        assert.match(content, /Open full trace/);
+        assert.match(content, /\/n\/resp_details_sections/);
+        assert.match(content, /weaponization_request/);
+        assert.match(content, /High\/Inferred\/block/);
+        assert.match(content, /```text/);
         assert.match(
             content,
             /\[Primary source \\] title\]\(https:\/\/example\.com\/source\?q=a\\\)\)/
         );
-        assert.doesNotMatch(content, /^```json/);
+        assert.doesNotMatch(content, /\*\*Raw JSON \(debug\)\*\*/);
     } finally {
         botApi.getTrace = originalGetTrace;
     }

@@ -14,19 +14,33 @@ import {
 import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 import { botApi } from '../../api/botApi.js';
 import { logger } from '../../utils/logger.js';
+import { runtimeConfig } from '../../config/runtime.js';
 import { parseProvenanceActionCustomId } from '../../utils/response/provenanceCgi.js';
 import { handleIncidentReportButton } from '../../utils/response/incidentReporting.js';
 import { EPHEMERAL_FLAG } from './shared.js';
 
 const DISCORD_MESSAGE_MAX_LENGTH = 2000;
 const DETAILS_SECTION_SEPARATOR = '\n\n';
-const DETAILS_CODE_FENCE_PREFIX = '```json\n';
-const DETAILS_CODE_FENCE_SUFFIX = '\n```';
 const DETAILS_TRUNCATION_SUFFIX = '\n... (truncated)';
 const DETAILS_FALLBACK_REASON = 'metadata_unavailable';
 const DETAILS_INLINE_FIELD_LIMIT = 120;
 const DETAILS_CITATION_LIMIT = 4;
 const DETAILS_EXECUTION_EVENT_LIMIT = 5;
+const DETAILS_MIN_EXECUTION_SECTION_LENGTH = 320;
+const EXECUTION_TABLE_COLUMN_WIDTHS = {
+    kind: 10,
+    status: 10,
+    target: 34,
+    reason: 30,
+    duration: 8,
+} as const;
+const EXECUTION_TABLE_HEADER = [
+    'kind'.padEnd(EXECUTION_TABLE_COLUMN_WIDTHS.kind),
+    'status'.padEnd(EXECUTION_TABLE_COLUMN_WIDTHS.status),
+    'target'.padEnd(EXECUTION_TABLE_COLUMN_WIDTHS.target),
+    'reason'.padEnd(EXECUTION_TABLE_COLUMN_WIDTHS.reason),
+    'duration'.padEnd(EXECUTION_TABLE_COLUMN_WIDTHS.duration),
+].join(' ');
 
 type DetailsFallbackPayload = {
     responseId: string | null;
@@ -179,6 +193,15 @@ function formatTraceSection(
     ].join('\n');
 }
 
+/**
+ * Render the "Sources" section as Markdown, listing citations or an appropriate fallback message.
+ *
+ * @param payload - The response metadata containing `citations` or a fallback payload indicating provenance is unavailable.
+ * @returns A Markdown string that either:
+ *  - lists up to DETAILS_CITATION_LIMIT numbered citation links (title and URL), optionally followed by a line like `- ...and N more source(s)` when truncated; or
+ *  - shows `- No citations recorded` when there are no citations; or
+ *  - shows `- Source metadata unavailable` when provenance metadata is absent.
+ */
 function formatSourcesSection(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
@@ -215,29 +238,69 @@ function formatSourcesSection(
     return lines.join('\n');
 }
 
+/**
+ * Render an execution event as a single fixed-width, column-aligned table row.
+ *
+ * @param event - The execution event to format; the event's `kind` influences how the `target` and `reason` columns are derived.
+ * @returns A single-line string containing five fixed-width columns — kind, status, target, reason, and duration — each padded or truncated to the table's configured column widths.
+ */
 function formatExecutionEventLine(event: ExecutionEvent): string {
-    const identity =
-        event.kind === 'tool'
-            ? formatMarkdownValue(event.toolName, 40)
-            : formatMarkdownValue(
-                  event.model ??
-                      event.effectiveProfileId ??
-                      event.profileId ??
-                      event.originalProfileId ??
-                      event.provider,
-                  40
-              );
-    const reason =
-        event.status !== 'executed' && event.reasonCode
-            ? `, ${formatMarkdownValue(event.reasonCode, 60)}`
-            : '';
+    const target =
+        event.kind === 'evaluator'
+            ? event.evaluator
+                ? event.evaluator.safetyDecision.action !== 'allow'
+                    ? `${event.evaluator.safetyDecision.riskTier}/${event.evaluator.provenance}/${event.evaluator.safetyDecision.action}/${event.evaluator.safetyDecision.ruleId}`
+                    : `${event.evaluator.safetyDecision.riskTier}/${event.evaluator.provenance}/${event.evaluator.safetyDecision.action}`
+                : 'decision'
+            : event.kind === 'tool'
+              ? formatMarkdownValue(event.toolName, 40)
+              : formatMarkdownValue(
+                    event.model ??
+                        event.effectiveProfileId ??
+                        event.profileId ??
+                        event.originalProfileId ??
+                        event.provider,
+                    40
+                );
+    const reasonText =
+        event.kind === 'evaluator' &&
+        event.evaluator?.safetyDecision.action !== 'allow' &&
+        event.evaluator?.safetyDecision.reason
+            ? event.evaluator.safetyDecision.reasonCode
+                ? `${event.evaluator.safetyDecision.reasonCode}: ${event.evaluator.safetyDecision.reason}`
+                : event.evaluator.safetyDecision.reason
+            : (event.reasonCode ?? '-');
     const duration =
-        event.durationMs !== undefined ? `, ${event.durationMs}ms` : '';
-    return `- ${event.kind}:${identity} (${event.status}${reason}${duration})`;
+        event.durationMs !== undefined ? `${event.durationMs}ms` : '-';
+    const formatCell = (value: string, width: number): string =>
+        truncateInline(value.replace(/\s+/g, ' ').trim(), width).padEnd(width);
+
+    return [
+        formatCell(event.kind, EXECUTION_TABLE_COLUMN_WIDTHS.kind),
+        formatCell(event.status, EXECUTION_TABLE_COLUMN_WIDTHS.status),
+        formatCell(target, EXECUTION_TABLE_COLUMN_WIDTHS.target),
+        formatCell(reasonText, EXECUTION_TABLE_COLUMN_WIDTHS.reason),
+        formatCell(duration, EXECUTION_TABLE_COLUMN_WIDTHS.duration),
+    ].join(' ');
 }
 
+/**
+ * Build the "Execution" section as a Markdown-compatible string, optionally truncating the execution table to fit a maximum total length.
+ *
+ * When `payload` is a fallback (no `provenance` field), returns a short block indicating execution metadata is unavailable.
+ * Otherwise the returned text includes:
+ * - A timeline line (or "unavailable"),
+ * - Counts for executed/skipped/failed events and optional total duration,
+ * - A fenced "```text" fixed-width table of up to `DETAILS_EXECUTION_EVENT_LIMIT` formatted execution event rows,
+ * - An overflow line (`- ...and N more execution event(s)`) when additional events were omitted and it fits within the length budget.
+ *
+ * @param payload - The response metadata to render, or a fallback payload indicating provenance is unavailable.
+ * @param maxLength - Optional maximum allowed length for the entire returned string; when finite, the table body and optional overflow line are truncated so the result does not exceed this limit.
+ * @returns The formatted Execution section as a single string suitable for inclusion in a Discord message.
+ */
 function formatExecutionSection(
-    payload: ResponseMetadata | DetailsFallbackPayload
+    payload: ResponseMetadata | DetailsFallbackPayload,
+    maxLength = Number.POSITIVE_INFINITY
 ): string {
     if (!('provenance' in payload)) {
         return ['**Execution**', '- Execution metadata unavailable'].join('\n');
@@ -272,22 +335,64 @@ function formatExecutionSection(
         lines.push(`- Total duration: ${payload.totalDurationMs}ms`);
     }
 
-    const eventCount = Math.min(
+    const candidateEventCount = Math.min(
         payload.execution.length,
         DETAILS_EXECUTION_EVENT_LIMIT
     );
-    for (let index = 0; index < eventCount; index += 1) {
-        lines.push(formatExecutionEventLine(payload.execution[index]));
-    }
-    if (payload.execution.length > eventCount) {
-        lines.push(
-            `- ...and ${payload.execution.length - eventCount} more execution event(s)`
+    const candidateTableLines = [
+        EXECUTION_TABLE_HEADER,
+        '-'.repeat(EXECUTION_TABLE_HEADER.length),
+    ];
+    for (let index = 0; index < candidateEventCount; index += 1) {
+        candidateTableLines.push(
+            formatExecutionEventLine(payload.execution[index])
         );
+    }
+
+    const linesWithFence = [...lines, '```text', '```'];
+    const fixedLength = linesWithFence.join('\n').length;
+    const availableTableBodyLength = Number.isFinite(maxLength)
+        ? Math.max(0, maxLength - fixedLength)
+        : Number.POSITIVE_INFINITY;
+
+    const tableLines: string[] = [];
+    let tableBodyLength = 0;
+    for (const tableLine of candidateTableLines) {
+        const projectedLength =
+            tableBodyLength +
+            tableLine.length +
+            (tableLines.length > 0 ? 1 : 0);
+        if (projectedLength > availableTableBodyLength) {
+            break;
+        }
+        tableLines.push(tableLine);
+        tableBodyLength = projectedLength;
+    }
+
+    lines.push('```text');
+    lines.push(...tableLines);
+    lines.push('```');
+
+    const shownEventCount = Math.max(0, tableLines.length - 2);
+    const remainingEventCount = payload.execution.length - shownEventCount;
+    if (remainingEventCount > 0) {
+        const overflowLine = `- ...and ${remainingEventCount} more execution event(s)`;
+        const withOverflow = [...lines, overflowLine].join('\n');
+        if (!Number.isFinite(maxLength) || withOverflow.length <= maxLength) {
+            lines.push(overflowLine);
+        }
     }
 
     return lines.join('\n');
 }
 
+/**
+ * Ensure a string fits within a maximum length, appending a truncation suffix when necessary.
+ *
+ * @param value - The input string to constrain
+ * @param maxLength - Maximum allowed length of the returned string (number of characters)
+ * @returns `value` truncated to at most `maxLength` characters. If truncation occurs, the returned string ends with `DETAILS_TRUNCATION_SUFFIX`. If `maxLength` is smaller than the suffix length, the returned string will consist of the suffix only.
+ */
 function truncateBlockToLength(value: string, maxLength: number): string {
     if (value.length <= maxLength) {
         return value;
@@ -300,65 +405,86 @@ function truncateBlockToLength(value: string, maxLength: number): string {
     return `${value.slice(0, truncatedLength)}${DETAILS_TRUNCATION_SUFFIX}`;
 }
 
-function formatRawJsonSection(
-    payload: ResponseMetadata | DetailsFallbackPayload,
-    maxLength: number
+/**
+ * Builds a trace viewer URL for a given response identifier.
+ *
+ * @param responseId - The response identifier to include in the URL; leading and trailing whitespace are ignored. If `null`, `undefined`, or empty after trimming, no URL is produced.
+ * @returns The full trace viewer URL formed by appending `/n/{encodedResponseId}` to the configured web base URL, or `null` if `responseId` is missing or blank.
+ */
+function buildTraceViewerUrl(
+    responseId: string | null | undefined
 ): string | null {
-    if (maxLength <= 0) {
+    if (!responseId || responseId.trim().length === 0) {
         return null;
     }
-
-    const title = '**Raw JSON (debug)**\n';
-    const framingLength =
-        title.length +
-        DETAILS_CODE_FENCE_PREFIX.length +
-        DETAILS_CODE_FENCE_SUFFIX.length;
-    if (maxLength <= framingLength) {
-        return null;
-    }
-
-    const serialized = JSON.stringify(payload, null, 2);
-    const maxPayloadLength = maxLength - framingLength;
-    const body = truncateBlockToLength(serialized, maxPayloadLength);
-    return `${title}${DETAILS_CODE_FENCE_PREFIX}${body}${DETAILS_CODE_FENCE_SUFFIX}`;
+    const baseUrl = runtimeConfig.webBaseUrl.trim().replace(/\/+$/, '');
+    return `${baseUrl}/n/${encodeURIComponent(responseId.trim())}`;
 }
 
 /**
- * Builds markdown-first details with a small optional raw JSON debug section.
- * This keeps provenance easy to scan while still preserving inspectability.
+ * Render the "Trace Viewer" section containing a link to the full trace or an unavailable notice.
+ *
+ * Uses `payload.responseId` to build the trace viewer URL; if a URL cannot be constructed,
+ * the section will indicate the link is unavailable.
+ *
+ * @param payload - Object that may include `responseId` used to build the trace viewer URL
+ * @returns A Markdown-formatted section titled `**Trace Viewer**` with either `- [Open full trace](<url>)`
+ *          or `- Trace link unavailable`
  */
-function formatDetailsMarkdownBody(
+function formatTraceViewerSection(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
-    return [
-        formatSummarySection(payload),
-        formatTraceSection(payload),
-        formatSourcesSection(payload),
-        formatExecutionSection(payload),
-    ].join(DETAILS_SECTION_SEPARATOR);
+    const traceUrl = buildTraceViewerUrl(payload.responseId);
+    if (!traceUrl) {
+        return ['**Trace Viewer**', '- Trace link unavailable'].join('\n');
+    }
+
+    return ['**Trace Viewer**', `- [Open full trace](${traceUrl})`].join('\n');
 }
 
 /**
- * Renders details payload and truncates when needed so we do not
- * exceed Discord's hard message-length cap.
+ * Compose a Discord-ready details message from provenance payloads and truncate sections to fit the message-length limit.
+ *
+ * Builds the Summary, Trace, Sources, Execution, and Trace Viewer sections, budgets available characters so the combined
+ * output does not exceed Discord's maximum message length, and truncates the head or tail sections as needed.
+ *
+ * @param payload - Valid provenance metadata or a fallback payload used when metadata is unavailable
+ * @returns The final composed details string, truncated as necessary to be within Discord's message-length limit
  */
 function formatDetailsPayloadForDiscord(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
-    const markdownBody = formatDetailsMarkdownBody(payload);
-    if (markdownBody.length >= DISCORD_MESSAGE_MAX_LENGTH) {
-        return truncateBlockToLength(markdownBody, DISCORD_MESSAGE_MAX_LENGTH);
+    const summarySection = formatSummarySection(payload);
+    const traceSection = formatTraceSection(payload);
+    const sourcesSection = formatSourcesSection(payload);
+    const traceViewerSection = formatTraceViewerSection(payload);
+    const maxExecutionLength = Math.max(
+        DETAILS_MIN_EXECUTION_SECTION_LENGTH,
+        DISCORD_MESSAGE_MAX_LENGTH -
+            traceViewerSection.length -
+            DETAILS_SECTION_SEPARATOR.length
+    );
+    const executionSection = formatExecutionSection(
+        payload,
+        maxExecutionLength
+    );
+    const tail = [executionSection, traceViewerSection].join(
+        DETAILS_SECTION_SEPARATOR
+    );
+
+    if (tail.length >= DISCORD_MESSAGE_MAX_LENGTH) {
+        return truncateBlockToLength(tail, DISCORD_MESSAGE_MAX_LENGTH);
     }
 
-    const sectionBreakLength = DETAILS_SECTION_SEPARATOR.length;
-    const rawJsonRoom =
-        DISCORD_MESSAGE_MAX_LENGTH - markdownBody.length - sectionBreakLength;
-    const rawJsonSection = formatRawJsonSection(payload, rawJsonRoom);
-    if (!rawJsonSection) {
-        return markdownBody;
-    }
-
-    return `${markdownBody}${DETAILS_SECTION_SEPARATOR}${rawJsonSection}`;
+    const head = truncateBlockToLength(
+        [summarySection, traceSection, sourcesSection].join(
+            DETAILS_SECTION_SEPARATOR
+        ),
+        DISCORD_MESSAGE_MAX_LENGTH -
+            tail.length -
+            DETAILS_SECTION_SEPARATOR.length
+    );
+    return [head, tail].join(DETAILS_SECTION_SEPARATOR);
 }
 
 /**

@@ -36,8 +36,17 @@ export type {
     ToolExecutionEvent,
     GenerationExecutionEvent,
     EvaluatorDecisionMode,
+    SafetyBreakerAction,
+    SafetyBreakerReasonCode,
+    SafetyDecision,
     EvaluatorOutcome,
     ExecutionEvent,
     ResponseMetadata,
 } from './types.js';
 export { formatExecutionTimelineSummary } from './executionFormatting.js';
+export {
+    RiskRuleIdSchema,
+    SafetyBreakerActionSchema,
+    SafetyBreakerReasonCodeSchema,
+    SafetyDecisionSchema,
+} from './schemas.js';

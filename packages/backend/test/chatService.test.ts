@@ -300,9 +300,12 @@ test('runChatMessages forwards execution context into metadata runtime context',
                 status: 'executed',
                 outcome: {
                     mode: 'observe_only',
-                    riskTier: 'Low',
                     provenance: 'Inferred',
-                    breakerTriggered: false,
+                    safetyDecision: {
+                        action: 'allow',
+                        riskTier: 'Low',
+                        ruleId: null,
+                    },
                 },
             },
             generation: {
@@ -324,9 +327,12 @@ test('runChatMessages forwards execution context into metadata runtime context',
         status: 'executed',
         outcome: {
             mode: 'observe_only',
-            riskTier: 'Low',
             provenance: 'Inferred',
-            breakerTriggered: false,
+            safetyDecision: {
+                action: 'allow',
+                riskTier: 'Low',
+                ruleId: null,
+            },
         },
     });
     assert.equal(capturedExecutionContext?.generation?.status, 'executed');

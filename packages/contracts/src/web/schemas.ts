@@ -8,6 +8,7 @@
 
 import { z } from 'zod';
 import type { TraceAxisScore } from '../ethics-core/index.js';
+import { SafetyDecisionSchema } from '../ethics-core/schemas.js';
 import type { ApiResponseValidationResult } from './client-core.js';
 import {
     internalImageRenderModels,
@@ -149,6 +150,10 @@ const ExecutionReasonCodeSchema = z.enum([
     'search_reroute_no_tool_capable_fallback_available',
     'tool_unavailable',
     'tool_execution_error',
+    'tool_timeout',
+    'tool_http_error',
+    'tool_network_error',
+    'tool_invalid_response',
     'search_not_supported_by_selected_profile',
     'unspecified_tool_outcome',
 ]);
@@ -168,6 +173,10 @@ const ToolExecutionReasonCodeSchema = z.enum([
     'search_reroute_no_tool_capable_fallback_available',
     'tool_unavailable',
     'tool_execution_error',
+    'tool_timeout',
+    'tool_http_error',
+    'tool_network_error',
+    'tool_invalid_response',
     'search_not_supported_by_selected_profile',
     'unspecified_tool_outcome',
 ]);
@@ -175,10 +184,8 @@ const EvaluatorDecisionModeSchema = z.enum(['observe_only', 'enforced']);
 const EvaluatorOutcomeSchema = z
     .object({
         mode: EvaluatorDecisionModeSchema,
-        riskTier: RiskTierSchema,
         provenance: ProvenanceSchema,
-        breakerTriggered: z.boolean(),
-        breakerReason: z.string().min(1).optional(),
+        safetyDecision: SafetyDecisionSchema,
     })
     .strict();
 // Cross-field execution invariants:

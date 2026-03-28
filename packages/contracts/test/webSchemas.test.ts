@@ -218,9 +218,12 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
         ...baseMetadata,
         evaluator: {
             mode: 'observe_only',
-            riskTier: 'Low',
             provenance: 'Inferred',
-            breakerTriggered: false,
+            safetyDecision: {
+                action: 'allow',
+                riskTier: 'Low',
+                ruleId: null,
+            },
         },
         execution: [
             {
@@ -243,9 +246,12 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
                 status: 'executed',
                 evaluator: {
                     mode: 'observe_only',
-                    riskTier: 'Low',
                     provenance: 'Inferred',
-                    breakerTriggered: false,
+                    safetyDecision: {
+                        action: 'allow',
+                        riskTier: 'Low',
+                        ruleId: null,
+                    },
                 },
                 durationMs: 2,
             },
@@ -263,6 +269,25 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
     });
 
     assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema rejects non-canonical safety decision rule tuples', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        evaluator: {
+            mode: 'observe_only',
+            provenance: 'Inferred',
+            safetyDecision: {
+                action: 'block',
+                riskTier: 'Low',
+                ruleId: 'risk.safety.weaponization_request.v1',
+                reasonCode: 'self_harm_crisis_intent',
+                reason: 'Invalid tuple for test coverage.',
+            },
+        },
+    });
+
+    assert.equal(parsed.success, false);
 });
 
 test('ResponseMetadataSchema accepts tool_unavailable reason code for skipped tool events', () => {
@@ -381,12 +406,46 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
         ...baseMetadata,
         evaluator: {
             mode: 'shadow',
-            riskTier: 'Low',
             provenance: 'Inferred',
-            breakerTriggered: false,
+            safetyDecision: {
+                action: 'allow',
+                riskTier: 'Low',
+                ruleId: null,
+            },
         },
     });
     assert.equal(invalidEvaluatorMode.success, false);
+
+    const invalidNonAllowBreaker = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        evaluator: {
+            mode: 'observe_only',
+            provenance: 'Inferred',
+            safetyDecision: {
+                action: 'block',
+                riskTier: 'High',
+                ruleId: 'risk.safety.weaponization_request.v1',
+                reasonCode: 'weaponization_request',
+            },
+        },
+    });
+    assert.equal(invalidNonAllowBreaker.success, false);
+
+    const validNonAllowBreaker = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        evaluator: {
+            mode: 'observe_only',
+            provenance: 'Inferred',
+            safetyDecision: {
+                action: 'block',
+                riskTier: 'High',
+                ruleId: 'risk.safety.weaponization_request.v1',
+                reasonCode: 'weaponization_request',
+                reason: 'Deterministic weaponization-request rule matched.',
+            },
+        },
+    });
+    assert.equal(validNonAllowBreaker.success, true);
 });
 
 test('ResponseMetadataSchema accepts valid TRACE temperament metadata', () => {

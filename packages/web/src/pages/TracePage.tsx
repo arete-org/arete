@@ -40,6 +40,25 @@ type ServerMetadata = GetTraceResponse & {
 // React page can consume the JSON payload without re-defining the entire schema.
 type SerializableResponseMetadata = ServerMetadata;
 
+type DisplayTrace = {
+    responseId: string | null;
+    timestamp: string | null;
+    provenance: string | null;
+    riskTier: ServerMetadata['riskTier'] | null;
+    modelVersion: string | null;
+    tradeoffCount: number | null;
+    staleAfter: string | null;
+    citationCount: number;
+    executionCount: number;
+    citations: ServerMetadata['citations'];
+    execution: ServerMetadata['execution'];
+    evaluator: ServerMetadata['evaluator'] | null;
+    runtimeContext: {
+        modelVersion: string | null;
+        conversationSnapshot: string | null;
+    } | null;
+};
+
 const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
     // Prefer canonical generation event model first, then legacy mirrors.
     const generationEventModel = traceData.execution
@@ -55,6 +74,30 @@ const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
 
 const resolveExecutionSummary = (traceData: ServerMetadata): string | null =>
     formatExecutionTimelineSummary(traceData.execution);
+
+const buildDisplayTrace = (traceData: ServerMetadata): DisplayTrace => ({
+    responseId: traceData.responseId ?? null,
+    timestamp: traceData.timestamp ?? null,
+    provenance: traceData.provenance ?? null,
+    riskTier: traceData.riskTier ?? null,
+    modelVersion: traceData.modelVersion ?? null,
+    tradeoffCount: traceData.tradeoffCount ?? null,
+    staleAfter: traceData.staleAfter ?? null,
+    citationCount: traceData.citations?.length ?? 0,
+    executionCount: traceData.execution?.length ?? 0,
+    citations: traceData.citations ?? [],
+    execution: traceData.execution ?? [],
+    evaluator: traceData.evaluator ?? null,
+    runtimeContext: traceData.runtimeContext
+        ? {
+              modelVersion: traceData.runtimeContext.modelVersion ?? null,
+              conversationSnapshot: traceData.runtimeContext
+                  .conversationSnapshot
+                  ? `[redacted:${traceData.runtimeContext.conversationSnapshot.length} chars]`
+                  : null,
+          }
+        : null,
+});
 
 const tracePageLogger = createScopedLogger('TracePage');
 
@@ -346,6 +389,7 @@ const TracePage = (): JSX.Element => {
         traceData?.provenance || traceData?.reasoningEffort || 'Unknown';
     const model = resolveTraceModelLabel(traceData);
     const executionSummary = resolveExecutionSummary(traceData);
+    const sanitizedTraceData = buildDisplayTrace(traceData);
     const riskLabel = riskTier || 'Unspecified';
     const chainHash =
         traceData?.chainHash || traceData?.chainHash === ''
@@ -497,6 +541,19 @@ const TracePage = (): JSX.Element => {
                         </dd>
                     </div>
                 </dl>
+                <details style={{ marginTop: '1rem' }}>
+                    <summary>Raw JSON</summary>
+                    <pre
+                        style={{
+                            marginTop: '0.75rem',
+                            overflowX: 'auto',
+                            maxHeight: '24rem',
+                            whiteSpace: 'pre-wrap',
+                        }}
+                    >
+                        {JSON.stringify(sanitizedTraceData, null, 2)}
+                    </pre>
+                </details>
             </article>
         </section>
     );
