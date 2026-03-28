@@ -68,25 +68,6 @@ pnpm dev
 
 `http://localhost:8080`
 
-### Vibe Kanban Workspace Setup
-
-Use these scripts so each fresh worktree gets the same setup:
-
-- Setup Script: `pnpm workspace:bootstrap`
-- Dev Server Script: `pnpm start:all`
-
-`workspace:bootstrap` does three things:
-
-1. Copies `.env` from a shared file (if workspace `.env` is missing).
-2. Runs `pnpm install --frozen-lockfile`.
-3. Verifies local `prettier` and `tsx` are available.
-
-Shared `.env` lookup order:
-
-1. `FOOTNOTE_SHARED_ENV_PATH` (recommended explicit path)
-2. `~/.footnote/.env`
-3. `~/footnote/.env`
-
 ## How It Works
 
 1. You ask Footnote a question.
