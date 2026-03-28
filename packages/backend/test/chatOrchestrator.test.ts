@@ -457,6 +457,10 @@ test('deterministic evaluator emits non-allow breaker metadata with rule and rea
     assert.equal(response.action, 'message');
     assert.equal(capturedExecutionContext?.evaluator?.status, 'executed');
     assert.equal(
+        capturedExecutionContext?.evaluator?.outcome?.mode,
+        'observe_only'
+    );
+    assert.equal(
         capturedExecutionContext?.evaluator?.outcome?.safetyDecision.action,
         'block'
     );

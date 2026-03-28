@@ -247,11 +247,13 @@ function formatExecutionEventLine(event: ExecutionEvent): string {
                         event.provider,
                     40
                 );
-    const reasonCode =
+    const reasonText =
         event.kind === 'evaluator' &&
         event.evaluator?.safetyDecision.action !== 'allow' &&
-        event.evaluator?.safetyDecision.reasonCode
+        event.evaluator?.safetyDecision.reason
             ? event.evaluator.safetyDecision.reasonCode
+                ? `${event.evaluator.safetyDecision.reasonCode}: ${event.evaluator.safetyDecision.reason}`
+                : event.evaluator.safetyDecision.reason
             : (event.reasonCode ?? '-');
     const duration =
         event.durationMs !== undefined ? `${event.durationMs}ms` : '-';
@@ -262,7 +264,7 @@ function formatExecutionEventLine(event: ExecutionEvent): string {
         formatCell(event.kind, EXECUTION_TABLE_COLUMN_WIDTHS.kind),
         formatCell(event.status, EXECUTION_TABLE_COLUMN_WIDTHS.status),
         formatCell(target, EXECUTION_TABLE_COLUMN_WIDTHS.target),
-        formatCell(reasonCode, EXECUTION_TABLE_COLUMN_WIDTHS.reason),
+        formatCell(reasonText, EXECUTION_TABLE_COLUMN_WIDTHS.reason),
         formatCell(duration, EXECUTION_TABLE_COLUMN_WIDTHS.duration),
     ].join(' ');
 }
