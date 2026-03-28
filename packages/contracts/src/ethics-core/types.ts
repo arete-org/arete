@@ -127,27 +127,27 @@ export type GenerationExecutionReasonCode = Extract<
 
 export type EvaluatorDecisionMode = 'observe_only' | 'enforced';
 
-export type DeterministicBreakerAction =
+export type SafetyBreakerAction =
     | 'allow'
     | 'block'
     | 'redirect'
     | 'safe_partial'
     | 'human_review';
 
-export type DeterministicBreakerReasonCode =
+export type SafetyBreakerReasonCode =
     | 'self_harm_crisis_intent'
     | 'weaponization_request'
     | 'professional_advice_guardrail';
 
-export type BreakerOutcome =
+export type SafetyBreakerOutcome =
     | {
           action: 'allow';
           ruleId: null;
       }
     | {
-          action: Exclude<DeterministicBreakerAction, 'allow'>;
+          action: Exclude<SafetyBreakerAction, 'allow'>;
           ruleId: RiskRuleId;
-          reasonCode: DeterministicBreakerReasonCode;
+          reasonCode: SafetyBreakerReasonCode;
           reason: string;
       };
 
@@ -160,11 +160,7 @@ export type EvaluatorOutcome = {
     mode: EvaluatorDecisionMode;
     riskTier: RiskTier;
     provenance: Provenance;
-    breaker: BreakerOutcome;
-    /** @deprecated Prefer `breaker.action !== "allow"` for explicit action semantics. */
-    breakerTriggered: boolean;
-    /** @deprecated Prefer `breaker.reason` for explicit non-allow reason context. */
-    breakerReason?: string;
+    breaker: SafetyBreakerOutcome;
 };
 
 /**

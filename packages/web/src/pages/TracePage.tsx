@@ -497,6 +497,19 @@ const TracePage = (): JSX.Element => {
                         </dd>
                     </div>
                 </dl>
+                <details style={{ marginTop: '1rem' }}>
+                    <summary>Raw JSON</summary>
+                    <pre
+                        style={{
+                            marginTop: '0.75rem',
+                            overflowX: 'auto',
+                            maxHeight: '24rem',
+                            whiteSpace: 'pre-wrap',
+                        }}
+                    >
+                        {JSON.stringify(traceData, null, 2)}
+                    </pre>
+                </details>
             </article>
         </section>
     );

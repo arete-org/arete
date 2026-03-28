@@ -204,7 +204,6 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
                             action: 'allow',
                             ruleId: null,
                         },
-                        breakerTriggered: false,
                     },
                     durationMs: 3,
                 },
@@ -244,7 +243,6 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
                     action: 'allow',
                     ruleId: null,
                 },
-                breakerTriggered: false,
             },
             durationMs: 3,
         },
@@ -271,7 +269,6 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
             action: 'allow',
             ruleId: null,
         },
-        breakerTriggered: false,
     });
 });
 

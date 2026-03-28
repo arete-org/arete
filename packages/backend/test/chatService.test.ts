@@ -306,7 +306,6 @@ test('runChatMessages forwards execution context into metadata runtime context',
                         action: 'allow',
                         ruleId: null,
                     },
-                    breakerTriggered: false,
                 },
             },
             generation: {
@@ -334,7 +333,6 @@ test('runChatMessages forwards execution context into metadata runtime context',
                 action: 'allow',
                 ruleId: null,
             },
-            breakerTriggered: false,
         },
     });
     assert.equal(capturedExecutionContext?.generation?.status, 'executed');

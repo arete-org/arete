@@ -224,7 +224,6 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
                 action: 'allow',
                 ruleId: null,
             },
-            breakerTriggered: false,
         },
         execution: [
             {
@@ -253,7 +252,6 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
                         action: 'allow',
                         ruleId: null,
                     },
-                    breakerTriggered: false,
                 },
                 durationMs: 2,
             },
@@ -395,12 +393,11 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
                 action: 'allow',
                 ruleId: null,
             },
-            breakerTriggered: false,
         },
     });
     assert.equal(invalidEvaluatorMode.success, false);
 
-    const invalidBreakerTriggered = ResponseMetadataSchema.safeParse({
+    const invalidNonAllowBreaker = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
         evaluator: {
             mode: 'observe_only',
@@ -410,12 +407,10 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
                 action: 'block',
                 ruleId: 'risk.safety.weaponization_request.v1',
                 reasonCode: 'weaponization_request',
-                reason: 'Deterministic weaponization-request rule matched.',
             },
-            breakerTriggered: false,
         },
     });
-    assert.equal(invalidBreakerTriggered.success, false);
+    assert.equal(invalidNonAllowBreaker.success, false);
 
     const validNonAllowBreaker = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
@@ -429,8 +424,6 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
                 reasonCode: 'weaponization_request',
                 reason: 'Deterministic weaponization-request rule matched.',
             },
-            breakerTriggered: true,
-            breakerReason: 'Deterministic weaponization-request rule matched.',
         },
     });
     assert.equal(validNonAllowBreaker.success, true);

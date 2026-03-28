@@ -16,8 +16,8 @@ import type {
     ModelProfile,
 } from '@footnote/contracts';
 import type {
-    BreakerOutcome,
-    DeterministicBreakerReasonCode,
+    SafetyBreakerOutcome,
+    SafetyBreakerReasonCode,
     ToolExecutionContext,
     ToolInvocationReasonCode,
     ToolInvocationRequest,
@@ -188,7 +188,9 @@ const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
 });
 
-const buildBreakerOutcome = (ruleId: RiskRuleId | null): BreakerOutcome => {
+const buildBreakerOutcome = (
+    ruleId: RiskRuleId | null
+): SafetyBreakerOutcome => {
     if (!ruleId) {
         return {
             action: 'allow',
@@ -196,14 +198,14 @@ const buildBreakerOutcome = (ruleId: RiskRuleId | null): BreakerOutcome => {
         };
     }
 
-    const reasonCodeByRuleId: Record<RiskRuleId, DeterministicBreakerReasonCode> =
+    const reasonCodeByRuleId: Record<RiskRuleId, SafetyBreakerReasonCode> =
         {
             'risk.self_harm.crisis_intent.v1': 'self_harm_crisis_intent',
             'risk.safety.weaponization_request.v1': 'weaponization_request',
             'risk.professional.medical_or_legal_advice.v1':
                 'professional_advice_guardrail',
         };
-    const actionByRuleId: Record<RiskRuleId, BreakerOutcome['action']> = {
+    const actionByRuleId: Record<RiskRuleId, SafetyBreakerOutcome['action']> = {
         'risk.self_harm.crisis_intent.v1': 'block',
         'risk.safety.weaponization_request.v1': 'block',
         'risk.professional.medical_or_legal_advice.v1': 'safe_partial',
@@ -396,10 +398,6 @@ export const createChatOrchestrator = ({
                 riskTier: riskEvaluation.riskTier,
                 provenance: computeProvenance(evaluatorContext),
                 breaker,
-                breakerTriggered: breaker.action !== 'allow',
-                ...(breaker.action !== 'allow' && {
-                    breakerReason: breaker.reason,
-                }),
             };
             evaluatorExecutionContext = {
                 status: 'executed',

@@ -60,7 +60,6 @@ test('formatExecutionTimelineSummary handles missing optional fields', () => {
                     action: 'allow',
                     ruleId: null,
                 },
-                breakerTriggered: false,
             },
         },
         {
@@ -95,8 +94,6 @@ test('formatExecutionTimelineSummary includes evaluator breaker rule context for
                     reasonCode: 'weaponization_request',
                     reason: 'Deterministic weaponization-request rule matched.',
                 },
-                breakerTriggered: true,
-                breakerReason: 'Deterministic weaponization-request rule matched.',
             },
             durationMs: 4,
         },

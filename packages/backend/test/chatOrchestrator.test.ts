@@ -390,10 +390,6 @@ test('planner-selected profile id controls response model selection', async () =
         'observe_only'
     );
     assert.equal(
-        capturedExecutionContext?.evaluator?.outcome?.breakerTriggered,
-        false
-    );
-    assert.equal(
         capturedExecutionContext?.evaluator?.outcome?.breaker.action,
         'allow'
     );
@@ -472,10 +468,6 @@ test('deterministic evaluator emits non-allow breaker metadata with rule and rea
     assert.match(
         capturedExecutionContext?.evaluator?.outcome?.breaker.reason ?? '',
         /weaponization-request rule matched/i
-    );
-    assert.equal(
-        capturedExecutionContext?.evaluator?.outcome?.breakerTriggered,
-        true
     );
 });
 

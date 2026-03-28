@@ -14,19 +14,32 @@ import {
 import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 import { botApi } from '../../api/botApi.js';
 import { logger } from '../../utils/logger.js';
+import { runtimeConfig } from '../../config/runtime.js';
 import { parseProvenanceActionCustomId } from '../../utils/response/provenanceCgi.js';
 import { handleIncidentReportButton } from '../../utils/response/incidentReporting.js';
 import { EPHEMERAL_FLAG } from './shared.js';
 
 const DISCORD_MESSAGE_MAX_LENGTH = 2000;
 const DETAILS_SECTION_SEPARATOR = '\n\n';
-const DETAILS_CODE_FENCE_PREFIX = '```json\n';
-const DETAILS_CODE_FENCE_SUFFIX = '\n```';
 const DETAILS_TRUNCATION_SUFFIX = '\n... (truncated)';
 const DETAILS_FALLBACK_REASON = 'metadata_unavailable';
 const DETAILS_INLINE_FIELD_LIMIT = 120;
 const DETAILS_CITATION_LIMIT = 4;
 const DETAILS_EXECUTION_EVENT_LIMIT = 5;
+const EXECUTION_TABLE_COLUMN_WIDTHS = {
+    kind: 10,
+    status: 10,
+    target: 34,
+    reason: 30,
+    duration: 8,
+} as const;
+const EXECUTION_TABLE_HEADER = [
+    'kind'.padEnd(EXECUTION_TABLE_COLUMN_WIDTHS.kind),
+    'status'.padEnd(EXECUTION_TABLE_COLUMN_WIDTHS.status),
+    'target'.padEnd(EXECUTION_TABLE_COLUMN_WIDTHS.target),
+    'reason'.padEnd(EXECUTION_TABLE_COLUMN_WIDTHS.reason),
+    'duration'.padEnd(EXECUTION_TABLE_COLUMN_WIDTHS.duration),
+].join(' ');
 
 type DetailsFallbackPayload = {
     responseId: string | null;
@@ -216,40 +229,41 @@ function formatSourcesSection(
 }
 
 function formatExecutionEventLine(event: ExecutionEvent): string {
-    if (event.kind === 'evaluator') {
-        const evaluator = event.evaluator;
-        const evaluatorIdentity = evaluator
-            ? evaluator.breaker.action !== 'allow'
-                ? `${formatMarkdownValue(evaluator.riskTier, 20)}/${formatMarkdownValue(evaluator.provenance, 20)}/${formatMarkdownValue(evaluator.breaker.action, 20)}/${formatMarkdownValue(evaluator.breaker.ruleId, 60)}/${formatMarkdownValue(evaluator.breaker.reasonCode, 40)}`
-                : `${formatMarkdownValue(evaluator.riskTier, 20)}/${formatMarkdownValue(evaluator.provenance, 20)}/${formatMarkdownValue(evaluator.breaker.action, 20)}`
-            : 'decision';
-        const reason =
-            event.status !== 'executed' && event.reasonCode
-                ? `, ${formatMarkdownValue(event.reasonCode, 60)}`
-                : '';
-        const duration =
-            event.durationMs !== undefined ? `, ${event.durationMs}ms` : '';
-        return `- evaluator:${evaluatorIdentity} (${event.status}${reason}${duration})`;
-    }
-
-    const identity =
-        event.kind === 'tool'
-            ? formatMarkdownValue(event.toolName, 40)
-            : formatMarkdownValue(
-                  event.model ??
-                      event.effectiveProfileId ??
-                      event.profileId ??
-                      event.originalProfileId ??
-                      event.provider,
-                  40
-              );
-    const reason =
-        event.status !== 'executed' && event.reasonCode
-            ? `, ${formatMarkdownValue(event.reasonCode, 60)}`
-            : '';
+    const target =
+        event.kind === 'evaluator'
+            ? event.evaluator
+                ? event.evaluator.breaker.action !== 'allow'
+                    ? `${event.evaluator.riskTier}/${event.evaluator.provenance}/${event.evaluator.breaker.action}/${event.evaluator.breaker.ruleId}`
+                    : `${event.evaluator.riskTier}/${event.evaluator.provenance}/${event.evaluator.breaker.action}`
+                : 'decision'
+            : event.kind === 'tool'
+              ? formatMarkdownValue(event.toolName, 40)
+              : formatMarkdownValue(
+                    event.model ??
+                        event.effectiveProfileId ??
+                        event.profileId ??
+                        event.originalProfileId ??
+                        event.provider,
+                    40
+                );
+    const reasonCode =
+        event.kind === 'evaluator' &&
+        event.evaluator?.breaker.action !== 'allow' &&
+        event.evaluator?.breaker.reasonCode
+            ? event.evaluator.breaker.reasonCode
+            : event.reasonCode ?? '-';
     const duration =
-        event.durationMs !== undefined ? `, ${event.durationMs}ms` : '';
-    return `- ${event.kind}:${identity} (${event.status}${reason}${duration})`;
+        event.durationMs !== undefined ? `${event.durationMs}ms` : '-';
+    const formatCell = (value: string, width: number): string =>
+        truncateInline(value.replace(/\s+/g, ' ').trim(), width).padEnd(width);
+
+    return [
+        formatCell(event.kind, EXECUTION_TABLE_COLUMN_WIDTHS.kind),
+        formatCell(event.status, EXECUTION_TABLE_COLUMN_WIDTHS.status),
+        formatCell(target, EXECUTION_TABLE_COLUMN_WIDTHS.target),
+        formatCell(reasonCode, EXECUTION_TABLE_COLUMN_WIDTHS.reason),
+        formatCell(duration, EXECUTION_TABLE_COLUMN_WIDTHS.duration),
+    ].join(' ');
 }
 
 function formatExecutionSection(
@@ -292,9 +306,13 @@ function formatExecutionSection(
         payload.execution.length,
         DETAILS_EXECUTION_EVENT_LIMIT
     );
+    lines.push('```text');
+    lines.push(EXECUTION_TABLE_HEADER);
+    lines.push('-'.repeat(EXECUTION_TABLE_HEADER.length));
     for (let index = 0; index < eventCount; index += 1) {
         lines.push(formatExecutionEventLine(payload.execution[index]));
     }
+    lines.push('```');
     if (payload.execution.length > eventCount) {
         lines.push(
             `- ...and ${payload.execution.length - eventCount} more execution event(s)`
@@ -316,32 +334,27 @@ function truncateBlockToLength(value: string, maxLength: number): string {
     return `${value.slice(0, truncatedLength)}${DETAILS_TRUNCATION_SUFFIX}`;
 }
 
-function formatRawJsonSection(
-    payload: ResponseMetadata | DetailsFallbackPayload,
-    maxLength: number
-): string | null {
-    if (maxLength <= 0) {
+function buildTraceViewerUrl(responseId: string | null | undefined): string | null {
+    if (!responseId || responseId.trim().length === 0) {
         return null;
     }
+    const baseUrl = runtimeConfig.webBaseUrl.trim().replace(/\/+$/, '');
+    return `${baseUrl}/api/traces/${encodeURIComponent(responseId.trim())}`;
+}
 
-    const title = '**Raw JSON (debug)**\n';
-    const framingLength =
-        title.length +
-        DETAILS_CODE_FENCE_PREFIX.length +
-        DETAILS_CODE_FENCE_SUFFIX.length;
-    if (maxLength <= framingLength) {
-        return null;
+function formatTraceViewerSection(
+    payload: ResponseMetadata | DetailsFallbackPayload
+): string {
+    const traceUrl = buildTraceViewerUrl(payload.responseId);
+    if (!traceUrl) {
+        return ['**Trace Viewer**', '- Trace link unavailable'].join('\n');
     }
 
-    const serialized = JSON.stringify(payload, null, 2);
-    const maxPayloadLength = maxLength - framingLength;
-    const body = truncateBlockToLength(serialized, maxPayloadLength);
-    return `${title}${DETAILS_CODE_FENCE_PREFIX}${body}${DETAILS_CODE_FENCE_SUFFIX}`;
+    return ['**Trace Viewer**', `- [Open full trace](${traceUrl})`].join('\n');
 }
 
 /**
- * Builds markdown-first details with a small optional raw JSON debug section.
- * This keeps provenance easy to scan while still preserving inspectability.
+ * Builds markdown-first details that stay readable in ephemeral Discord replies.
  */
 function formatDetailsMarkdownBody(
     payload: ResponseMetadata | DetailsFallbackPayload
@@ -351,6 +364,7 @@ function formatDetailsMarkdownBody(
         formatTraceSection(payload),
         formatSourcesSection(payload),
         formatExecutionSection(payload),
+        formatTraceViewerSection(payload),
     ].join(DETAILS_SECTION_SEPARATOR);
 }
 
@@ -362,19 +376,7 @@ function formatDetailsPayloadForDiscord(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
     const markdownBody = formatDetailsMarkdownBody(payload);
-    if (markdownBody.length >= DISCORD_MESSAGE_MAX_LENGTH) {
-        return truncateBlockToLength(markdownBody, DISCORD_MESSAGE_MAX_LENGTH);
-    }
-
-    const sectionBreakLength = DETAILS_SECTION_SEPARATOR.length;
-    const rawJsonRoom =
-        DISCORD_MESSAGE_MAX_LENGTH - markdownBody.length - sectionBreakLength;
-    const rawJsonSection = formatRawJsonSection(payload, rawJsonRoom);
-    if (!rawJsonSection) {
-        return markdownBody;
-    }
-
-    return `${markdownBody}${DETAILS_SECTION_SEPARATOR}${rawJsonSection}`;
+    return truncateBlockToLength(markdownBody, DISCORD_MESSAGE_MAX_LENGTH);
 }
 
 /**
