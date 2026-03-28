@@ -83,6 +83,9 @@ const ProvenanceFooter = ({
             event.status === 'skipped' &&
             event.reasonCode === 'search_not_supported_by_selected_profile'
     );
+    const breakerOutcome = evaluatorOutcome?.breaker;
+    const hasNonAllowBreaker =
+        breakerOutcome !== undefined && breakerOutcome.action !== 'allow';
 
     return (
         <aside
@@ -120,9 +123,10 @@ const ProvenanceFooter = ({
                         <span className="provenance-separator"> • </span>
                         <span className="provenance-tradeoffs">
                             eval {evaluatorOutcome.riskTier}/
-                            {evaluatorOutcome.provenance}
-                            {evaluatorOutcome.breakerTriggered
-                                ? ' breaker-signaled'
+                            {evaluatorOutcome.provenance}/
+                            {breakerOutcome?.action ?? 'allow'}
+                            {hasNonAllowBreaker
+                                ? ` (${breakerOutcome.ruleId}/${breakerOutcome.reasonCode})`
                                 : ''}
                         </span>
                     </>

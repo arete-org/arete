@@ -16,6 +16,8 @@ import type {
     ModelProfile,
 } from '@footnote/contracts';
 import type {
+    BreakerOutcome,
+    DeterministicBreakerReasonCode,
     ToolExecutionContext,
     ToolInvocationReasonCode,
     ToolInvocationRequest,
@@ -23,10 +25,11 @@ import type {
     ExecutionStatus,
     EvaluatorOutcome,
     RiskTier,
+    RiskRuleId,
 } from '@footnote/contracts/ethics-core';
 import {
     computeProvenance,
-    computeRiskTier,
+    evaluateRiskTierDeterministic,
 } from '../ethics-core/evaluators.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
@@ -184,6 +187,43 @@ const SEARCH_REROUTE_FALLBACK_POLICY = 'search_reroute_profile_fallback_v1';
 const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
 });
+
+const buildBreakerOutcome = (ruleId: RiskRuleId | null): BreakerOutcome => {
+    if (!ruleId) {
+        return {
+            action: 'allow',
+            ruleId: null,
+        };
+    }
+
+    const reasonCodeByRuleId: Record<RiskRuleId, DeterministicBreakerReasonCode> =
+        {
+            'risk.self_harm.crisis_intent.v1': 'self_harm_crisis_intent',
+            'risk.safety.weaponization_request.v1': 'weaponization_request',
+            'risk.professional.medical_or_legal_advice.v1':
+                'professional_advice_guardrail',
+        };
+    const actionByRuleId: Record<RiskRuleId, BreakerOutcome['action']> = {
+        'risk.self_harm.crisis_intent.v1': 'block',
+        'risk.safety.weaponization_request.v1': 'block',
+        'risk.professional.medical_or_legal_advice.v1': 'safe_partial',
+    };
+    const reasonByRuleId: Record<RiskRuleId, string> = {
+        'risk.self_harm.crisis_intent.v1':
+            'Deterministic crisis-intent rule matched.',
+        'risk.safety.weaponization_request.v1':
+            'Deterministic weaponization-request rule matched.',
+        'risk.professional.medical_or_legal_advice.v1':
+            'Deterministic professional-advice guardrail rule matched.',
+    };
+
+    return {
+        action: actionByRuleId[ruleId],
+        ruleId,
+        reasonCode: reasonCodeByRuleId[ruleId],
+        reason: reasonByRuleId[ruleId],
+    };
+};
 
 /**
  * Packs the normalized planner decision into one structured system payload.
@@ -346,14 +386,20 @@ export const createChatOrchestrator = ({
             const evaluatorContext = normalizedConversation.map(
                 (message) => message.content
             );
+            const riskEvaluation = evaluateRiskTierDeterministic(
+                normalizedRequest.latestUserInput,
+                evaluatorContext
+            );
+            const breaker = buildBreakerOutcome(riskEvaluation.ruleId);
             const evaluatorOutcome: EvaluatorOutcome = {
                 mode: 'observe_only',
-                riskTier: computeRiskTier(
-                    normalizedRequest.latestUserInput,
-                    evaluatorContext
-                ),
+                riskTier: riskEvaluation.riskTier,
                 provenance: computeProvenance(evaluatorContext),
-                breakerTriggered: false,
+                breaker,
+                breakerTriggered: breaker.action !== 'allow',
+                ...(breaker.action !== 'allow' && {
+                    breakerReason: breaker.reason,
+                }),
             };
             evaluatorExecutionContext = {
                 status: 'executed',
@@ -361,6 +407,22 @@ export const createChatOrchestrator = ({
                 durationMs: Math.max(0, Date.now() - evaluatorStartedAt),
             };
             evaluatorRiskTierHint = evaluatorOutcome.riskTier;
+            if (breaker.action !== 'allow') {
+                chatOrchestratorLogger.warn(
+                    'deterministic breaker signaled a non-allow action in observe-only mode',
+                    {
+                        event: 'chat.orchestration.breaker_signal',
+                        mode: evaluatorOutcome.mode,
+                        action: breaker.action,
+                        ruleId: breaker.ruleId,
+                        reasonCode: breaker.reasonCode,
+                        reason: breaker.reason,
+                        riskTier: evaluatorOutcome.riskTier,
+                        surface: normalizedRequest.surface,
+                        triggerKind: normalizedRequest.trigger.kind,
+                    }
+                );
+            }
         } catch (error) {
             // Evaluator failures must not block normal response generation.
             chatOrchestratorLogger.warn(

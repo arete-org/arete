@@ -220,6 +220,10 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
             mode: 'observe_only',
             riskTier: 'Low',
             provenance: 'Inferred',
+            breaker: {
+                action: 'allow',
+                ruleId: null,
+            },
             breakerTriggered: false,
         },
         execution: [
@@ -245,6 +249,10 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
                     mode: 'observe_only',
                     riskTier: 'Low',
                     provenance: 'Inferred',
+                    breaker: {
+                        action: 'allow',
+                        ruleId: null,
+                    },
                     breakerTriggered: false,
                 },
                 durationMs: 2,
@@ -383,10 +391,49 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
             mode: 'shadow',
             riskTier: 'Low',
             provenance: 'Inferred',
+            breaker: {
+                action: 'allow',
+                ruleId: null,
+            },
             breakerTriggered: false,
         },
     });
     assert.equal(invalidEvaluatorMode.success, false);
+
+    const invalidBreakerTriggered = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        evaluator: {
+            mode: 'observe_only',
+            riskTier: 'High',
+            provenance: 'Inferred',
+            breaker: {
+                action: 'block',
+                ruleId: 'risk.safety.weaponization_request.v1',
+                reasonCode: 'weaponization_request',
+                reason: 'Deterministic weaponization-request rule matched.',
+            },
+            breakerTriggered: false,
+        },
+    });
+    assert.equal(invalidBreakerTriggered.success, false);
+
+    const validNonAllowBreaker = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        evaluator: {
+            mode: 'observe_only',
+            riskTier: 'High',
+            provenance: 'Inferred',
+            breaker: {
+                action: 'block',
+                ruleId: 'risk.safety.weaponization_request.v1',
+                reasonCode: 'weaponization_request',
+                reason: 'Deterministic weaponization-request rule matched.',
+            },
+            breakerTriggered: true,
+            breakerReason: 'Deterministic weaponization-request rule matched.',
+        },
+    });
+    assert.equal(validNonAllowBreaker.success, true);
 });
 
 test('ResponseMetadataSchema accepts valid TRACE temperament metadata', () => {

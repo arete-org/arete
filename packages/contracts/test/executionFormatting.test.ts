@@ -52,6 +52,16 @@ test('formatExecutionTimelineSummary handles missing optional fields', () => {
         {
             kind: 'evaluator',
             status: 'executed',
+            evaluator: {
+                mode: 'observe_only',
+                riskTier: 'Low',
+                provenance: 'Inferred',
+                breaker: {
+                    action: 'allow',
+                    ruleId: null,
+                },
+                breakerTriggered: false,
+            },
         },
         {
             kind: 'tool',
@@ -66,7 +76,35 @@ test('formatExecutionTimelineSummary handles missing optional fields', () => {
 
     assert.equal(
         formatExecutionTimelineSummary(events),
-        'planner:unknown(executed) -> evaluator:decision(executed) -> tool:web_search(executed) -> generation:unknown(executed)'
+        'planner:unknown(executed) -> evaluator:Low/Inferred/allow(executed) -> tool:web_search(executed) -> generation:unknown(executed)'
+    );
+});
+
+test('formatExecutionTimelineSummary includes evaluator breaker rule context for non-allow actions', () => {
+    const summary = formatExecutionTimelineSummary([
+        {
+            kind: 'evaluator',
+            status: 'executed',
+            evaluator: {
+                mode: 'observe_only',
+                riskTier: 'High',
+                provenance: 'Inferred',
+                breaker: {
+                    action: 'block',
+                    ruleId: 'risk.safety.weaponization_request.v1',
+                    reasonCode: 'weaponization_request',
+                    reason: 'Deterministic weaponization-request rule matched.',
+                },
+                breakerTriggered: true,
+                breakerReason: 'Deterministic weaponization-request rule matched.',
+            },
+            durationMs: 4,
+        },
+    ]);
+
+    assert.equal(
+        summary,
+        'evaluator:High/Inferred/block/risk.safety.weaponization_request.v1/weaponization_request(executed, 4ms)'
     );
 });
 

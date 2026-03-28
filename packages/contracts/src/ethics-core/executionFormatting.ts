@@ -20,7 +20,17 @@ const formatExecutionEvent = (event: ExecutionEvent): string => {
     }
     if (event.kind === 'evaluator') {
         const evaluatorSummary = event.evaluator
-            ? `${event.evaluator.riskTier}/${event.evaluator.provenance}`
+            ? [
+                  event.evaluator.riskTier,
+                  event.evaluator.provenance,
+                  event.evaluator.breaker.action,
+                  ...(event.evaluator.breaker.action !== 'allow'
+                      ? [
+                            event.evaluator.breaker.ruleId,
+                            event.evaluator.breaker.reasonCode,
+                        ]
+                      : []),
+              ].join('/')
             : 'decision';
         return `${event.kind}:${evaluatorSummary}(${event.status}${reasonSuffix}${durationSuffix})`;
     }

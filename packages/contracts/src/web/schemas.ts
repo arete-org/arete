@@ -17,6 +17,11 @@ import {
 
 const ProvenanceSchema = z.enum(['Retrieved', 'Inferred', 'Speculative']);
 const RiskTierSchema = z.enum(['Low', 'Medium', 'High']);
+const RiskRuleIdSchema = z.enum([
+    'risk.self_harm.crisis_intent.v1',
+    'risk.safety.weaponization_request.v1',
+    'risk.professional.medical_or_legal_advice.v1',
+]);
 const IncidentStatusSchema = z.enum([
     'new',
     'under_review',
@@ -149,6 +154,10 @@ const ExecutionReasonCodeSchema = z.enum([
     'search_reroute_no_tool_capable_fallback_available',
     'tool_unavailable',
     'tool_execution_error',
+    'tool_timeout',
+    'tool_http_error',
+    'tool_network_error',
+    'tool_invalid_response',
     'search_not_supported_by_selected_profile',
     'unspecified_tool_outcome',
 ]);
@@ -168,17 +177,53 @@ const ToolExecutionReasonCodeSchema = z.enum([
     'search_reroute_no_tool_capable_fallback_available',
     'tool_unavailable',
     'tool_execution_error',
+    'tool_timeout',
+    'tool_http_error',
+    'tool_network_error',
+    'tool_invalid_response',
     'search_not_supported_by_selected_profile',
     'unspecified_tool_outcome',
 ]);
 const EvaluatorDecisionModeSchema = z.enum(['observe_only', 'enforced']);
+const DeterministicBreakerReasonCodeSchema = z.enum([
+    'self_harm_crisis_intent',
+    'weaponization_request',
+    'professional_advice_guardrail',
+]);
+const BreakerOutcomeSchema = z.discriminatedUnion('action', [
+    z
+        .object({
+            action: z.literal('allow'),
+            ruleId: z.null(),
+        })
+        .strict(),
+    z
+        .object({
+            action: z.enum(['block', 'redirect', 'safe_partial', 'human_review']),
+            ruleId: RiskRuleIdSchema,
+            reasonCode: DeterministicBreakerReasonCodeSchema,
+            reason: z.string().min(1),
+        })
+        .strict(),
+]);
 const EvaluatorOutcomeSchema = z
     .object({
         mode: EvaluatorDecisionModeSchema,
         riskTier: RiskTierSchema,
         provenance: ProvenanceSchema,
+        breaker: BreakerOutcomeSchema,
         breakerTriggered: z.boolean(),
         breakerReason: z.string().min(1).optional(),
+    })
+    .superRefine((value, context) => {
+        const breakerTriggered = value.breaker.action !== 'allow';
+        if (breakerTriggered !== value.breakerTriggered) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message:
+                    'breakerTriggered must match breaker.action (non-allow actions require breakerTriggered=true).',
+            });
+        }
     })
     .strict();
 // Cross-field execution invariants:

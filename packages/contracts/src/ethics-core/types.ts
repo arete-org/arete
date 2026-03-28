@@ -127,6 +127,30 @@ export type GenerationExecutionReasonCode = Extract<
 
 export type EvaluatorDecisionMode = 'observe_only' | 'enforced';
 
+export type DeterministicBreakerAction =
+    | 'allow'
+    | 'block'
+    | 'redirect'
+    | 'safe_partial'
+    | 'human_review';
+
+export type DeterministicBreakerReasonCode =
+    | 'self_harm_crisis_intent'
+    | 'weaponization_request'
+    | 'professional_advice_guardrail';
+
+export type BreakerOutcome =
+    | {
+          action: 'allow';
+          ruleId: null;
+      }
+    | {
+          action: Exclude<DeterministicBreakerAction, 'allow'>;
+          ruleId: RiskRuleId;
+          reasonCode: DeterministicBreakerReasonCode;
+          reason: string;
+      };
+
 /**
  * Deterministic evaluator outcome emitted during orchestration.
  * This stays additive and non-blocking while strict breaker enforcement rolls
@@ -136,7 +160,10 @@ export type EvaluatorOutcome = {
     mode: EvaluatorDecisionMode;
     riskTier: RiskTier;
     provenance: Provenance;
+    breaker: BreakerOutcome;
+    /** @deprecated Prefer `breaker.action !== "allow"` for explicit action semantics. */
     breakerTriggered: boolean;
+    /** @deprecated Prefer `breaker.reason` for explicit non-allow reason context. */
     breakerReason?: string;
 };
 

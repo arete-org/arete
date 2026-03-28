@@ -216,6 +216,22 @@ function formatSourcesSection(
 }
 
 function formatExecutionEventLine(event: ExecutionEvent): string {
+    if (event.kind === 'evaluator') {
+        const evaluator = event.evaluator;
+        const evaluatorIdentity = evaluator
+            ? evaluator.breaker.action !== 'allow'
+                ? `${formatMarkdownValue(evaluator.riskTier, 20)}/${formatMarkdownValue(evaluator.provenance, 20)}/${formatMarkdownValue(evaluator.breaker.action, 20)}/${formatMarkdownValue(evaluator.breaker.ruleId, 60)}/${formatMarkdownValue(evaluator.breaker.reasonCode, 40)}`
+                : `${formatMarkdownValue(evaluator.riskTier, 20)}/${formatMarkdownValue(evaluator.provenance, 20)}/${formatMarkdownValue(evaluator.breaker.action, 20)}`
+            : 'decision';
+        const reason =
+            event.status !== 'executed' && event.reasonCode
+                ? `, ${formatMarkdownValue(event.reasonCode, 60)}`
+                : '';
+        const duration =
+            event.durationMs !== undefined ? `, ${event.durationMs}ms` : '';
+        return `- evaluator:${evaluatorIdentity} (${event.status}${reason}${duration})`;
+    }
+
     const identity =
         event.kind === 'tool'
             ? formatMarkdownValue(event.toolName, 40)

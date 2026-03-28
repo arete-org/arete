@@ -200,6 +200,10 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
                         mode: 'observe_only',
                         riskTier: 'Low',
                         provenance: 'Inferred',
+                        breaker: {
+                            action: 'allow',
+                            ruleId: null,
+                        },
                         breakerTriggered: false,
                     },
                     durationMs: 3,
@@ -236,6 +240,10 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
                 mode: 'observe_only',
                 riskTier: 'Low',
                 provenance: 'Inferred',
+                breaker: {
+                    action: 'allow',
+                    ruleId: null,
+                },
                 breakerTriggered: false,
             },
             durationMs: 3,
@@ -259,6 +267,10 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
         mode: 'observe_only',
         riskTier: 'Low',
         provenance: 'Inferred',
+        breaker: {
+            action: 'allow',
+            ruleId: null,
+        },
         breakerTriggered: false,
     });
 });
