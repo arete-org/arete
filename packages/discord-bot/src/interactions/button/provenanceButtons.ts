@@ -193,6 +193,15 @@ function formatTraceSection(
     ].join('\n');
 }
 
+/**
+ * Render the "Sources" section as Markdown, listing citations or an appropriate fallback message.
+ *
+ * @param payload - The response metadata containing `citations` or a fallback payload indicating provenance is unavailable.
+ * @returns A Markdown string that either:
+ *  - lists up to DETAILS_CITATION_LIMIT numbered citation links (title and URL), optionally followed by a line like `- ...and N more source(s)` when truncated; or
+ *  - shows `- No citations recorded` when there are no citations; or
+ *  - shows `- Source metadata unavailable` when provenance metadata is absent.
+ */
 function formatSourcesSection(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
@@ -229,6 +238,12 @@ function formatSourcesSection(
     return lines.join('\n');
 }
 
+/**
+ * Render an execution event as a single fixed-width, column-aligned table row.
+ *
+ * @param event - The execution event to format; the event's `kind` influences how the `target` and `reason` columns are derived.
+ * @returns A single-line string containing five fixed-width columns — kind, status, target, reason, and duration — each padded or truncated to the table's configured column widths.
+ */
 function formatExecutionEventLine(event: ExecutionEvent): string {
     const target =
         event.kind === 'evaluator'
@@ -269,6 +284,20 @@ function formatExecutionEventLine(event: ExecutionEvent): string {
     ].join(' ');
 }
 
+/**
+ * Build the "Execution" section as a Markdown-compatible string, optionally truncating the execution table to fit a maximum total length.
+ *
+ * When `payload` is a fallback (no `provenance` field), returns a short block indicating execution metadata is unavailable.
+ * Otherwise the returned text includes:
+ * - A timeline line (or "unavailable"),
+ * - Counts for executed/skipped/failed events and optional total duration,
+ * - A fenced "```text" fixed-width table of up to `DETAILS_EXECUTION_EVENT_LIMIT` formatted execution event rows,
+ * - An overflow line (`- ...and N more execution event(s)`) when additional events were omitted and it fits within the length budget.
+ *
+ * @param payload - The response metadata to render, or a fallback payload indicating provenance is unavailable.
+ * @param maxLength - Optional maximum allowed length for the entire returned string; when finite, the table body and optional overflow line are truncated so the result does not exceed this limit.
+ * @returns The formatted Execution section as a single string suitable for inclusion in a Discord message.
+ */
 function formatExecutionSection(
     payload: ResponseMetadata | DetailsFallbackPayload,
     maxLength = Number.POSITIVE_INFINITY
@@ -357,6 +386,13 @@ function formatExecutionSection(
     return lines.join('\n');
 }
 
+/**
+ * Ensure a string fits within a maximum length, appending a truncation suffix when necessary.
+ *
+ * @param value - The input string to constrain
+ * @param maxLength - Maximum allowed length of the returned string (number of characters)
+ * @returns `value` truncated to at most `maxLength` characters. If truncation occurs, the returned string ends with `DETAILS_TRUNCATION_SUFFIX`. If `maxLength` is smaller than the suffix length, the returned string will consist of the suffix only.
+ */
 function truncateBlockToLength(value: string, maxLength: number): string {
     if (value.length <= maxLength) {
         return value;
@@ -369,6 +405,12 @@ function truncateBlockToLength(value: string, maxLength: number): string {
     return `${value.slice(0, truncatedLength)}${DETAILS_TRUNCATION_SUFFIX}`;
 }
 
+/**
+ * Builds a trace viewer URL for a given response identifier.
+ *
+ * @param responseId - The response identifier to include in the URL; leading and trailing whitespace are ignored. If `null`, `undefined`, or empty after trimming, no URL is produced.
+ * @returns The full trace viewer URL formed by appending `/n/{encodedResponseId}` to the configured web base URL, or `null` if `responseId` is missing or blank.
+ */
 function buildTraceViewerUrl(
     responseId: string | null | undefined
 ): string | null {
@@ -379,6 +421,16 @@ function buildTraceViewerUrl(
     return `${baseUrl}/n/${encodeURIComponent(responseId.trim())}`;
 }
 
+/**
+ * Render the "Trace Viewer" section containing a link to the full trace or an unavailable notice.
+ *
+ * Uses `payload.responseId` to build the trace viewer URL; if a URL cannot be constructed,
+ * the section will indicate the link is unavailable.
+ *
+ * @param payload - Object that may include `responseId` used to build the trace viewer URL
+ * @returns A Markdown-formatted section titled `**Trace Viewer**` with either `- [Open full trace](<url>)`
+ *          or `- Trace link unavailable`
+ */
 function formatTraceViewerSection(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
@@ -391,8 +443,13 @@ function formatTraceViewerSection(
 }
 
 /**
- * Renders details payload and truncates when needed so we do not
- * exceed Discord's hard message-length cap.
+ * Compose a Discord-ready details message from provenance payloads and truncate sections to fit the message-length limit.
+ *
+ * Builds the Summary, Trace, Sources, Execution, and Trace Viewer sections, budgets available characters so the combined
+ * output does not exceed Discord's maximum message length, and truncates the head or tail sections as needed.
+ *
+ * @param payload - Valid provenance metadata or a fallback payload used when metadata is unavailable
+ * @returns The final composed details string, truncated as necessary to be within Discord's message-length limit
  */
 function formatDetailsPayloadForDiscord(
     payload: ResponseMetadata | DetailsFallbackPayload
