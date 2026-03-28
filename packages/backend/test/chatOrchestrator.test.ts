@@ -390,11 +390,11 @@ test('planner-selected profile id controls response model selection', async () =
         'observe_only'
     );
     assert.equal(
-        capturedExecutionContext?.evaluator?.outcome?.breaker.action,
+        capturedExecutionContext?.evaluator?.outcome?.safetyDecision.action,
         'allow'
     );
     assert.equal(
-        capturedExecutionContext?.evaluator?.outcome?.breaker.ruleId,
+        capturedExecutionContext?.evaluator?.outcome?.safetyDecision.ruleId,
         null
     );
 });
@@ -454,19 +454,20 @@ test('deterministic evaluator emits non-allow breaker metadata with rule and rea
     assert.equal(response.action, 'message');
     assert.equal(capturedExecutionContext?.evaluator?.status, 'executed');
     assert.equal(
-        capturedExecutionContext?.evaluator?.outcome?.breaker.action,
+        capturedExecutionContext?.evaluator?.outcome?.safetyDecision.action,
         'block'
     );
     assert.equal(
-        capturedExecutionContext?.evaluator?.outcome?.breaker.ruleId,
+        capturedExecutionContext?.evaluator?.outcome?.safetyDecision.ruleId,
         'risk.safety.weaponization_request.v1'
     );
     assert.equal(
-        capturedExecutionContext?.evaluator?.outcome?.breaker.reasonCode,
+        capturedExecutionContext?.evaluator?.outcome?.safetyDecision.reasonCode,
         'weaponization_request'
     );
     assert.match(
-        capturedExecutionContext?.evaluator?.outcome?.breaker.reason ?? '',
+        capturedExecutionContext?.evaluator?.outcome?.safetyDecision.reason ??
+            '',
         /weaponization-request rule matched/i
     );
 });

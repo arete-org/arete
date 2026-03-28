@@ -16,7 +16,7 @@ import type {
     ModelProfile,
 } from '@footnote/contracts';
 import type {
-    SafetyBreakerOutcome,
+    SafetyDecision,
     SafetyBreakerReasonCode,
     ToolExecutionContext,
     ToolInvocationReasonCode,
@@ -188,12 +188,13 @@ const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
 });
 
-const buildBreakerOutcome = (
+const buildSafetyDecision = (
     ruleId: RiskRuleId | null
-): SafetyBreakerOutcome => {
+): SafetyDecision => {
     if (!ruleId) {
         return {
             action: 'allow',
+            riskTier: 'Low',
             ruleId: null,
         };
     }
@@ -205,10 +206,15 @@ const buildBreakerOutcome = (
             'risk.professional.medical_or_legal_advice.v1':
                 'professional_advice_guardrail',
         };
-    const actionByRuleId: Record<RiskRuleId, SafetyBreakerOutcome['action']> = {
+    const actionByRuleId: Record<RiskRuleId, SafetyDecision['action']> = {
         'risk.self_harm.crisis_intent.v1': 'block',
         'risk.safety.weaponization_request.v1': 'block',
         'risk.professional.medical_or_legal_advice.v1': 'safe_partial',
+    };
+    const riskTierByRuleId: Record<RiskRuleId, RiskTier> = {
+        'risk.self_harm.crisis_intent.v1': 'High',
+        'risk.safety.weaponization_request.v1': 'High',
+        'risk.professional.medical_or_legal_advice.v1': 'Medium',
     };
     const reasonByRuleId: Record<RiskRuleId, string> = {
         'risk.self_harm.crisis_intent.v1':
@@ -221,6 +227,7 @@ const buildBreakerOutcome = (
 
     return {
         action: actionByRuleId[ruleId],
+        riskTier: riskTierByRuleId[ruleId],
         ruleId,
         reasonCode: reasonCodeByRuleId[ruleId],
         reason: reasonByRuleId[ruleId],
@@ -392,30 +399,32 @@ export const createChatOrchestrator = ({
                 normalizedRequest.latestUserInput,
                 evaluatorContext
             );
-            const breaker = buildBreakerOutcome(riskEvaluation.ruleId);
+            const safetyDecision = buildSafetyDecision(riskEvaluation.ruleId);
             const evaluatorOutcome: EvaluatorOutcome = {
                 mode: 'observe_only',
-                riskTier: riskEvaluation.riskTier,
                 provenance: computeProvenance(evaluatorContext),
-                breaker,
+                safetyDecision: {
+                    ...safetyDecision,
+                    riskTier: riskEvaluation.riskTier,
+                },
             };
             evaluatorExecutionContext = {
                 status: 'executed',
                 outcome: evaluatorOutcome,
                 durationMs: Math.max(0, Date.now() - evaluatorStartedAt),
             };
-            evaluatorRiskTierHint = evaluatorOutcome.riskTier;
-            if (breaker.action !== 'allow') {
+            evaluatorRiskTierHint = evaluatorOutcome.safetyDecision.riskTier;
+            if (evaluatorOutcome.safetyDecision.action !== 'allow') {
                 chatOrchestratorLogger.warn(
                     'deterministic breaker signaled a non-allow action in observe-only mode',
                     {
                         event: 'chat.orchestration.breaker_signal',
                         mode: evaluatorOutcome.mode,
-                        action: breaker.action,
-                        ruleId: breaker.ruleId,
-                        reasonCode: breaker.reasonCode,
-                        reason: breaker.reason,
-                        riskTier: evaluatorOutcome.riskTier,
+                        action: evaluatorOutcome.safetyDecision.action,
+                        ruleId: evaluatorOutcome.safetyDecision.ruleId,
+                        reasonCode: evaluatorOutcome.safetyDecision.reasonCode,
+                        reason: evaluatorOutcome.safetyDecision.reason,
+                        riskTier: evaluatorOutcome.safetyDecision.riskTier,
                         surface: normalizedRequest.surface,
                         triggerKind: normalizedRequest.trigger.kind,
                     }

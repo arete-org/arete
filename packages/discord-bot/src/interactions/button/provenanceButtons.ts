@@ -232,9 +232,9 @@ function formatExecutionEventLine(event: ExecutionEvent): string {
     const target =
         event.kind === 'evaluator'
             ? event.evaluator
-                ? event.evaluator.breaker.action !== 'allow'
-                    ? `${event.evaluator.riskTier}/${event.evaluator.provenance}/${event.evaluator.breaker.action}/${event.evaluator.breaker.ruleId}`
-                    : `${event.evaluator.riskTier}/${event.evaluator.provenance}/${event.evaluator.breaker.action}`
+                ? event.evaluator.safetyDecision.action !== 'allow'
+                    ? `${event.evaluator.safetyDecision.riskTier}/${event.evaluator.provenance}/${event.evaluator.safetyDecision.action}/${event.evaluator.safetyDecision.ruleId}`
+                    : `${event.evaluator.safetyDecision.riskTier}/${event.evaluator.provenance}/${event.evaluator.safetyDecision.action}`
                 : 'decision'
             : event.kind === 'tool'
               ? formatMarkdownValue(event.toolName, 40)
@@ -248,9 +248,9 @@ function formatExecutionEventLine(event: ExecutionEvent): string {
                 );
     const reasonCode =
         event.kind === 'evaluator' &&
-        event.evaluator?.breaker.action !== 'allow' &&
-        event.evaluator?.breaker.reasonCode
-            ? event.evaluator.breaker.reasonCode
+        event.evaluator?.safetyDecision.action !== 'allow' &&
+        event.evaluator?.safetyDecision.reasonCode
+            ? event.evaluator.safetyDecision.reasonCode
             : event.reasonCode ?? '-';
     const duration =
         event.durationMs !== undefined ? `${event.durationMs}ms` : '-';

@@ -8,6 +8,8 @@
 
 import { z } from 'zod';
 
+const RiskTierSchema = z.enum(['Low', 'Medium', 'High']);
+
 export const RiskRuleIdSchema = z.enum([
     'risk.self_harm.crisis_intent.v1',
     'risk.safety.weaponization_request.v1',
@@ -28,16 +30,18 @@ export const SafetyBreakerReasonCodeSchema = z.enum([
     'professional_advice_guardrail',
 ]);
 
-export const SafetyBreakerOutcomeSchema = z.discriminatedUnion('action', [
+export const SafetyDecisionSchema = z.discriminatedUnion('action', [
     z
         .object({
             action: z.literal('allow'),
+            riskTier: RiskTierSchema,
             ruleId: z.null(),
         })
         .strict(),
     z
         .object({
             action: z.enum(['block', 'redirect', 'safe_partial', 'human_review']),
+            riskTier: RiskTierSchema,
             ruleId: RiskRuleIdSchema,
             reasonCode: SafetyBreakerReasonCodeSchema,
             reason: z.string().min(1),

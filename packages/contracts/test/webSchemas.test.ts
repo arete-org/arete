@@ -218,10 +218,10 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
         ...baseMetadata,
         evaluator: {
             mode: 'observe_only',
-            riskTier: 'Low',
             provenance: 'Inferred',
-            breaker: {
+            safetyDecision: {
                 action: 'allow',
+                riskTier: 'Low',
                 ruleId: null,
             },
         },
@@ -246,10 +246,10 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
                 status: 'executed',
                 evaluator: {
                     mode: 'observe_only',
-                    riskTier: 'Low',
                     provenance: 'Inferred',
-                    breaker: {
+                    safetyDecision: {
                         action: 'allow',
+                        riskTier: 'Low',
                         ruleId: null,
                     },
                 },
@@ -387,10 +387,10 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
         ...baseMetadata,
         evaluator: {
             mode: 'shadow',
-            riskTier: 'Low',
             provenance: 'Inferred',
-            breaker: {
+            safetyDecision: {
                 action: 'allow',
+                riskTier: 'Low',
                 ruleId: null,
             },
         },
@@ -401,10 +401,10 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
         ...baseMetadata,
         evaluator: {
             mode: 'observe_only',
-            riskTier: 'High',
             provenance: 'Inferred',
-            breaker: {
+            safetyDecision: {
                 action: 'block',
+                riskTier: 'High',
                 ruleId: 'risk.safety.weaponization_request.v1',
                 reasonCode: 'weaponization_request',
             },
@@ -416,10 +416,10 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
         ...baseMetadata,
         evaluator: {
             mode: 'observe_only',
-            riskTier: 'High',
             provenance: 'Inferred',
-            breaker: {
+            safetyDecision: {
                 action: 'block',
+                riskTier: 'High',
                 ruleId: 'risk.safety.weaponization_request.v1',
                 reasonCode: 'weaponization_request',
                 reason: 'Deterministic weaponization-request rule matched.',

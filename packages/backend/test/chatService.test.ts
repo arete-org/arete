@@ -300,10 +300,10 @@ test('runChatMessages forwards execution context into metadata runtime context',
                 status: 'executed',
                 outcome: {
                     mode: 'observe_only',
-                    riskTier: 'Low',
                     provenance: 'Inferred',
-                    breaker: {
+                    safetyDecision: {
                         action: 'allow',
+                        riskTier: 'Low',
                         ruleId: null,
                     },
                 },
@@ -327,10 +327,10 @@ test('runChatMessages forwards execution context into metadata runtime context',
         status: 'executed',
         outcome: {
             mode: 'observe_only',
-            riskTier: 'Low',
             provenance: 'Inferred',
-            breaker: {
+            safetyDecision: {
                 action: 'allow',
+                riskTier: 'Low',
                 ruleId: null,
             },
         },

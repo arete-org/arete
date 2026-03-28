@@ -198,10 +198,10 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
                     status: 'executed',
                     outcome: {
                         mode: 'observe_only',
-                        riskTier: 'Low',
                         provenance: 'Inferred',
-                        breaker: {
+                        safetyDecision: {
                             action: 'allow',
+                            riskTier: 'Low',
                             ruleId: null,
                         },
                     },
@@ -237,10 +237,10 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
             status: 'executed',
             evaluator: {
                 mode: 'observe_only',
-                riskTier: 'Low',
                 provenance: 'Inferred',
-                breaker: {
+                safetyDecision: {
                     action: 'allow',
+                    riskTier: 'Low',
                     ruleId: null,
                 },
             },
@@ -263,10 +263,10 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
     ]);
     assert.deepEqual(metadata.evaluator, {
         mode: 'observe_only',
-        riskTier: 'Low',
         provenance: 'Inferred',
-        breaker: {
+        safetyDecision: {
             action: 'allow',
+            riskTier: 'Low',
             ruleId: null,
         },
     });

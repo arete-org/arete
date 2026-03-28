@@ -27,7 +27,7 @@ export type {
     EvaluatorDecisionMode,
     SafetyBreakerAction,
     SafetyBreakerReasonCode,
-    SafetyBreakerOutcome,
+    SafetyDecision,
     EvaluatorOutcome,
     ExecutionEvent,
     TraceAxisScore,
@@ -40,7 +40,7 @@ export {
     RiskRuleIdSchema,
     SafetyBreakerActionSchema,
     SafetyBreakerReasonCodeSchema,
-    SafetyBreakerOutcomeSchema,
+    SafetyDecisionSchema,
 } from './ethics-core/index.js';
 
 // Web API contracts (request/response envelopes)

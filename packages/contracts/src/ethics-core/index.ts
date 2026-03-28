@@ -38,7 +38,7 @@ export type {
     EvaluatorDecisionMode,
     SafetyBreakerAction,
     SafetyBreakerReasonCode,
-    SafetyBreakerOutcome,
+    SafetyDecision,
     EvaluatorOutcome,
     ExecutionEvent,
     ResponseMetadata,
@@ -48,5 +48,5 @@ export {
     RiskRuleIdSchema,
     SafetyBreakerActionSchema,
     SafetyBreakerReasonCodeSchema,
-    SafetyBreakerOutcomeSchema,
+    SafetyDecisionSchema,
 } from './schemas.js';

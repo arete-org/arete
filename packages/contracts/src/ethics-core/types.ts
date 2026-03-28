@@ -139,13 +139,15 @@ export type SafetyBreakerReasonCode =
     | 'weaponization_request'
     | 'professional_advice_guardrail';
 
-export type SafetyBreakerOutcome =
+export type SafetyDecision =
     | {
           action: 'allow';
+          riskTier: RiskTier;
           ruleId: null;
       }
     | {
           action: Exclude<SafetyBreakerAction, 'allow'>;
+          riskTier: RiskTier;
           ruleId: RiskRuleId;
           reasonCode: SafetyBreakerReasonCode;
           reason: string;
@@ -158,9 +160,8 @@ export type SafetyBreakerOutcome =
  */
 export type EvaluatorOutcome = {
     mode: EvaluatorDecisionMode;
-    riskTier: RiskTier;
     provenance: Provenance;
-    breaker: SafetyBreakerOutcome;
+    safetyDecision: SafetyDecision;
 };
 
 /**

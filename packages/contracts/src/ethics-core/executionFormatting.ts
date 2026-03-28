@@ -21,13 +21,13 @@ const formatExecutionEvent = (event: ExecutionEvent): string => {
     if (event.kind === 'evaluator') {
         const evaluatorSummary = event.evaluator
             ? [
-                  event.evaluator.riskTier,
+                  event.evaluator.safetyDecision.riskTier,
                   event.evaluator.provenance,
-                  event.evaluator.breaker.action,
-                  ...(event.evaluator.breaker.action !== 'allow'
+                  event.evaluator.safetyDecision.action,
+                  ...(event.evaluator.safetyDecision.action !== 'allow'
                       ? [
-                            event.evaluator.breaker.ruleId,
-                            event.evaluator.breaker.reasonCode,
+                            event.evaluator.safetyDecision.ruleId,
+                            event.evaluator.safetyDecision.reasonCode,
                         ]
                       : []),
               ].join('/')

@@ -8,7 +8,7 @@
 
 import { z } from 'zod';
 import type { TraceAxisScore } from '../ethics-core/index.js';
-import { SafetyBreakerOutcomeSchema } from '../ethics-core/schemas.js';
+import { SafetyDecisionSchema } from '../ethics-core/schemas.js';
 import type { ApiResponseValidationResult } from './client-core.js';
 import {
     internalImageRenderModels,
@@ -184,9 +184,8 @@ const EvaluatorDecisionModeSchema = z.enum(['observe_only', 'enforced']);
 const EvaluatorOutcomeSchema = z
     .object({
         mode: EvaluatorDecisionModeSchema,
-        riskTier: RiskTierSchema,
         provenance: ProvenanceSchema,
-        breaker: SafetyBreakerOutcomeSchema,
+        safetyDecision: SafetyDecisionSchema,
     })
     .strict();
 // Cross-field execution invariants:

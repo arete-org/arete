@@ -54,10 +54,10 @@ test('formatExecutionTimelineSummary handles missing optional fields', () => {
             status: 'executed',
             evaluator: {
                 mode: 'observe_only',
-                riskTier: 'Low',
                 provenance: 'Inferred',
-                breaker: {
+                safetyDecision: {
                     action: 'allow',
+                    riskTier: 'Low',
                     ruleId: null,
                 },
             },
@@ -86,10 +86,10 @@ test('formatExecutionTimelineSummary includes evaluator breaker rule context for
             status: 'executed',
             evaluator: {
                 mode: 'observe_only',
-                riskTier: 'High',
                 provenance: 'Inferred',
-                breaker: {
+                safetyDecision: {
                     action: 'block',
+                    riskTier: 'High',
                     ruleId: 'risk.safety.weaponization_request.v1',
                     reasonCode: 'weaponization_request',
                     reason: 'Deterministic weaponization-request rule matched.',
