@@ -78,6 +78,11 @@
             "@discordjs/opus",
             "bufferutil",
             "zlib-sync"
+        ],
+        "ignoredBuiltDependencies": [
+            "@swc/core",
+            "esbuild",
+            "protobufjs"
         ]
     },
     "dependencies": {
