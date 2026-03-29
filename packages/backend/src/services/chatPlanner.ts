@@ -1177,7 +1177,7 @@ export const createChatPlanner = ({
                 executePlanner
             ) {
                 logger.warn(
-                    'chat planner structured execution failed; attempting text JSON compatibility fallback',
+                    `chat planner structured execution failed; attempting text JSON compatibility fallback. error=${error instanceof Error ? error.message : String(error)}`,
                     {
                         event: 'chat.planner.compatibility_fallback',
                         plannerMode: 'structured',
@@ -1242,43 +1242,48 @@ export const createChatPlanner = ({
                 resolvedError instanceof SyntaxError
                     ? 'planner_invalid_output'
                     : 'planner_runtime_error';
-            logger.warn('chat planner failed; using fallback plan', {
-                event: 'chat.planner.fallback',
-                plannerMode,
-                fallbackFrom: plannerMode,
-                fallbackTo: 'safe_default_plan',
-                fallbackTier: 'safe_default_plan',
-                reasonCode,
-                failureClass:
-                    reasonCode === 'planner_invalid_output'
-                        ? 'schema_invalid'
-                        : 'runtime_error',
-                fallbackAction: fallbackPlan.action,
-                triggerKind: request.trigger.kind,
-                surface: request.surface,
-                errorName:
-                    resolvedError instanceof Error
-                        ? resolvedError.name
-                        : undefined,
-                errorMessage:
-                    resolvedError instanceof Error
-                        ? resolvedError.message
-                        : String(resolvedError),
-                plannerResponsePreviewPresent:
-                    resolvedError instanceof SyntaxError &&
-                    Boolean(plannerStructuredArguments || plannerResponseText),
-                plannerStructuredPreviewPresent:
-                    resolvedError instanceof SyntaxError &&
-                    plannerStructuredArguments !== undefined,
-                plannerStructuredPreviewLength:
-                    resolvedError instanceof SyntaxError
-                        ? plannerStructuredArguments?.length
-                        : undefined,
-                plannerResponseTextLength:
-                    resolvedError instanceof SyntaxError
-                        ? plannerResponseText?.length
-                        : undefined,
-            });
+            logger.warn(
+                `chat planner failed; using fallback plan. reasonCode=${reasonCode} error=${resolvedError instanceof Error ? resolvedError.message : String(resolvedError)}`,
+                {
+                    event: 'chat.planner.fallback',
+                    plannerMode,
+                    fallbackFrom: plannerMode,
+                    fallbackTo: 'safe_default_plan',
+                    fallbackTier: 'safe_default_plan',
+                    reasonCode,
+                    failureClass:
+                        reasonCode === 'planner_invalid_output'
+                            ? 'schema_invalid'
+                            : 'runtime_error',
+                    fallbackAction: fallbackPlan.action,
+                    triggerKind: request.trigger.kind,
+                    surface: request.surface,
+                    errorName:
+                        resolvedError instanceof Error
+                            ? resolvedError.name
+                            : undefined,
+                    errorMessage:
+                        resolvedError instanceof Error
+                            ? resolvedError.message
+                            : String(resolvedError),
+                    plannerResponsePreviewPresent:
+                        resolvedError instanceof SyntaxError &&
+                        Boolean(
+                            plannerStructuredArguments || plannerResponseText
+                        ),
+                    plannerStructuredPreviewPresent:
+                        resolvedError instanceof SyntaxError &&
+                        plannerStructuredArguments !== undefined,
+                    plannerStructuredPreviewLength:
+                        resolvedError instanceof SyntaxError
+                            ? plannerStructuredArguments?.length
+                            : undefined,
+                    plannerResponseTextLength:
+                        resolvedError instanceof SyntaxError
+                            ? plannerResponseText?.length
+                            : undefined,
+                }
+            );
             return {
                 plan: fallbackPlan,
                 execution: {
