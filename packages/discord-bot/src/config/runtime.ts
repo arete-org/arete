@@ -513,6 +513,11 @@ const webBaseUrl =
         : fallbackWebBaseUrl;
 
 bootstrapLogger.info(`Using web base URL: ${webBaseUrl}`);
+if (!rawWebBaseUrl && flyAppName) {
+    bootstrapLogger.warn(
+        'WEB_BASE_URL is unset; using FLY_APP_NAME fallback for trace links. In split backend/web/bot deployments, set WEB_BASE_URL to your public web domain to avoid bot-local trace URLs.'
+    );
+}
 
 const rawBackendBaseUrl = process.env.BACKEND_BASE_URL?.trim();
 const sharedBackendPortFromEnv = process.env.PORT?.trim();
