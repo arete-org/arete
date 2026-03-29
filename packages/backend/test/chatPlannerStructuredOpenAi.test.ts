@@ -71,6 +71,10 @@ test('structured planner executor parses function_call arguments', async () => {
                     role: 'system',
                     content: 'Planner instructions',
                 },
+                {
+                    role: 'assistant',
+                    content: 'Prior assistant response',
+                },
             ],
             model: 'gpt-5-nano',
             maxOutputTokens: 700,
@@ -88,6 +92,13 @@ test('structured planner executor parses function_call arguments', async () => {
                 capturedRequestBody?.tools?.length,
             1
         );
+        const inputMessages = capturedRequestBody?.input as
+            | Array<{ role?: string; content?: unknown }>
+            | undefined;
+        const assistantInput = inputMessages?.find(
+            (message) => message.role === 'assistant'
+        );
+        assert.equal(typeof assistantInput?.content, 'string');
         assert.equal(
             (result.decision as { action?: string }).action,
             'message'

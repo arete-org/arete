@@ -42,10 +42,12 @@ type CreateOpenAiChatPlannerStructuredExecutorOptions = {
 type ResponsesInputMessage = {
     role: string;
     type: 'message';
-    content: Array<{
-        type: 'input_text';
-        text: string;
-    }>;
+    content:
+        | string
+        | Array<{
+              type: 'input_text';
+              text: string;
+          }>;
 };
 
 const normalizeReasoningEffort = (
@@ -72,12 +74,15 @@ const toResponsesInputMessages = (
     messages.map((message) => ({
         role: message.role,
         type: 'message',
-        content: [
-            {
-                type: 'input_text',
-                text: message.content,
-            },
-        ],
+        content:
+            message.role === 'assistant'
+                ? message.content
+                : [
+                      {
+                          type: 'input_text',
+                          text: message.content,
+                      },
+                  ],
     }));
 
 export const createOpenAiChatPlannerStructuredExecutor = ({
