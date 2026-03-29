@@ -115,7 +115,7 @@ test('/chat forwards prompt/profile/generation options and renders message actio
                 botPersonaId: 'footnote',
                 profileId: 'openai-text-medium',
                 trigger: {
-                    kind: 'direct',
+                    kind: 'submit',
                     messageId: 'interaction-1',
                 },
                 latestUserInput: 'Compare model output.',

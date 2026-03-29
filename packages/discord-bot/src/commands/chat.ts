@@ -215,7 +215,7 @@ const chatCommand: ChatCommandWithProfiles = {
                 botPersonaId: runtimeConfig.profile.id,
                 ...(profileId && profileId.length > 0 ? { profileId } : {}),
                 trigger: {
-                    kind: 'direct',
+                    kind: 'submit',
                     messageId: interaction.id,
                 },
                 latestUserInput: prompt,

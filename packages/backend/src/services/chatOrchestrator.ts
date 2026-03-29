@@ -509,32 +509,46 @@ export const createChatOrchestrator = ({
             chatOrchestratorLogger
         );
         // Profile selection precedence:
-        // 1) explicit request.profileId override (for example `/chat`)
-        // 2) planner-selected profileId
-        // 3) startup default response profile
+        // - `/chat` style submit requests may explicitly override via
+        //   request.profileId.
+        // - Non-submit requests defer to planner-selected profileId.
+        // - Startup default profile remains final fail-open fallback.
         // Runtime resolution stays authoritative and fail-open:
         // unknown/disabled profile ids never hard-fail the request.
         let selectedResponseProfile = defaultResponseProfile;
         let profileSelectionSource: PlannerSelectionSource = 'default';
         const requestedProfileId = normalizedRequest.profileId?.trim();
         const plannerSelectedProfileId = plan.profileId?.trim();
+        const allowRequestProfileOverride =
+            normalizedRequest.trigger.kind === 'submit';
         const profileSelectionOrder: Array<{
             source: PlannerSelectionSource;
             profileId?: string;
-        }> = [
-            {
-                source: 'request',
-                profileId: requestedProfileId,
-            },
-            {
-                source: 'planner',
-                profileId: plannerSelectedProfileId,
-            },
-            {
-                source: 'default',
-                profileId: defaultResponseProfile.id,
-            },
-        ];
+        }> = allowRequestProfileOverride
+            ? [
+                  {
+                      source: 'request',
+                      profileId: requestedProfileId,
+                  },
+                  {
+                      source: 'planner',
+                      profileId: plannerSelectedProfileId,
+                  },
+                  {
+                      source: 'default',
+                      profileId: defaultResponseProfile.id,
+                  },
+              ]
+            : [
+                  {
+                      source: 'planner',
+                      profileId: plannerSelectedProfileId,
+                  },
+                  {
+                      source: 'default',
+                      profileId: defaultResponseProfile.id,
+                  },
+              ];
 
         for (const candidate of profileSelectionOrder) {
             if (!candidate.profileId) {
