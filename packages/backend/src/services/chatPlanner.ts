@@ -651,6 +651,7 @@ const normalizeGeneration = (
     if (normalizedWeather) {
         baseGeneration.weather = normalizedWeather;
     } else if (candidate?.weather !== undefined) {
+        correctionCodes.push('weather_location_invalid');
         if (
             !reasoning.includes('weather tool request was disabled safely') &&
             !reasoningSuffixes.some((suffix) =>
@@ -660,7 +661,6 @@ const normalizeGeneration = (
             reasoningSuffixes.push(
                 'The planner requested weather without a valid location contract, so weather tool request was disabled safely.'
             );
-            correctionCodes.push('weather_location_invalid');
         }
     }
 
@@ -679,6 +679,7 @@ const normalizeGeneration = (
             ? candidate.search.query.trim()
             : '';
     if (!rawQuery) {
+        correctionCodes.push('search_query_invalid');
         if (
             !reasoning.includes('search was disabled safely') &&
             !reasoningSuffixes.some((suffix) =>
@@ -688,7 +689,6 @@ const normalizeGeneration = (
             reasoningSuffixes.push(
                 'The planner requested search without a usable query, so search was disabled safely.'
             );
-            correctionCodes.push('search_query_invalid');
         }
         return {
             generation: baseGeneration,
