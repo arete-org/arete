@@ -15,6 +15,10 @@ import type {
     ChatCapabilities,
     ChatImageRequest,
 } from '@footnote/contracts/web';
+import {
+    chatRepoSearchHints,
+    type ChatRepoSearchHint,
+} from '@footnote/contracts';
 import type {
     ExecutionReasonCode,
     ExecutionStatus,
@@ -32,7 +36,6 @@ import type {
     ChatGenerationPlan,
     ChatGenerationSearch,
     ChatGenerationWeatherLocation,
-    ChatRepoSearchHint,
 } from './chatGenerationTypes.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -64,24 +67,7 @@ type PlannerNormalizationResult = {
     correctionCodes: string[];
 };
 
-const REPO_HINTS = [
-    'architecture',
-    'backend',
-    'contracts',
-    'discord',
-    'images',
-    'onboarding',
-    'web',
-    'observability',
-    'openapi',
-    'prompts',
-    'provenance',
-    'chat',
-    'traces',
-    'voice',
-] as const;
-
-const REPO_HINT_SET = new Set<ChatRepoSearchHint>(REPO_HINTS);
+const REPO_HINT_SET = new Set<ChatRepoSearchHint>(chatRepoSearchHints);
 const DISCORD_CUSTOM_EMOJI_PATTERN = /^<a?:[a-zA-Z0-9_]+:[0-9]{2,}>$/;
 const UNICODE_SINGLE_EMOJI_PATTERN =
     /^(?:\p{Regional_Indicator}{2}|[#*0-9]\uFE0F?\u20E3|\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?)*)$/u;
@@ -509,9 +495,6 @@ const createTimeoutSignal = ({
     };
 };
 
-const normalizePlannerResponsePreview = (content: string): string =>
-    content.replace(/\s+/g, ' ').trim().slice(0, 280);
-
 const normalizeProfileId = (value: unknown): string | undefined => {
     if (typeof value !== 'string') {
         return undefined;
@@ -760,6 +743,23 @@ const normalizePlan = (
         request,
         'Planner returned an invalid or incomplete decision.'
     );
+
+    if (
+        typeof candidate !== 'object' ||
+        candidate === null ||
+        Array.isArray(candidate)
+    ) {
+        return {
+            plan: {
+                ...fallbackPlan,
+                reasoning:
+                    `${fallbackPlan.reasoning} Planner output was not an object, so the backend fell back safely.`.trim(),
+            },
+            fallbackTier: 'safe_default_plan',
+            correctionCodes: ['candidate_not_object'],
+        };
+    }
+
     const correctionCodes: string[] = [];
     const capabilities = request.capabilities;
     const actionCandidate =
@@ -1091,11 +1091,10 @@ export const createChatPlanner = ({
                             failureClass: 'policy_invalid',
                             surface: request.surface,
                             triggerKind: request.trigger.kind,
-                            plannerStructuredPreview: plannerStructuredArguments
-                                ? normalizePlannerResponsePreview(
-                                      plannerStructuredArguments
-                                  )
-                                : undefined,
+                            plannerStructuredPreviewPresent:
+                                plannerStructuredArguments !== undefined,
+                            plannerStructuredPreviewLength:
+                                plannerStructuredArguments?.length,
                         }
                     );
                     return {
@@ -1158,7 +1157,15 @@ export const createChatPlanner = ({
             return {
                 plan: normalization.plan,
                 execution: {
-                    status: 'executed',
+                    status:
+                        normalization.fallbackTier === 'safe_default_plan'
+                            ? 'failed'
+                            : 'executed',
+                    ...(normalization.fallbackTier === 'safe_default_plan'
+                        ? {
+                              reasonCode: 'planner_invalid_output' as const,
+                          }
+                        : {}),
                     durationMs: Date.now() - plannerStartedAt,
                 },
             };
@@ -1204,7 +1211,18 @@ export const createChatPlanner = ({
                     return {
                         plan: normalization.plan,
                         execution: {
-                            status: 'executed',
+                            status:
+                                normalization.fallbackTier ===
+                                'safe_default_plan'
+                                    ? 'failed'
+                                    : 'executed',
+                            ...(normalization.fallbackTier ===
+                            'safe_default_plan'
+                                ? {
+                                      reasonCode:
+                                          'planner_invalid_output' as const,
+                                  }
+                                : {}),
                             durationMs: Date.now() - plannerStartedAt,
                         },
                     };
@@ -1246,21 +1264,19 @@ export const createChatPlanner = ({
                     resolvedError instanceof Error
                         ? resolvedError.message
                         : String(resolvedError),
-                plannerResponsePreview:
+                plannerResponsePreviewPresent:
+                    resolvedError instanceof SyntaxError &&
+                    Boolean(plannerStructuredArguments || plannerResponseText),
+                plannerStructuredPreviewPresent:
+                    resolvedError instanceof SyntaxError &&
+                    plannerStructuredArguments !== undefined,
+                plannerStructuredPreviewLength:
                     resolvedError instanceof SyntaxError
-                        ? plannerMode === 'text_json' && plannerResponseText
-                            ? normalizePlannerResponsePreview(
-                                  plannerResponseText
-                              )
-                            : plannerStructuredArguments
-                              ? normalizePlannerResponsePreview(
-                                    plannerStructuredArguments
-                                )
-                              : plannerResponseText
-                                ? normalizePlannerResponsePreview(
-                                      plannerResponseText
-                                  )
-                                : undefined
+                        ? plannerStructuredArguments?.length
+                        : undefined,
+                plannerResponseTextLength:
+                    resolvedError instanceof SyntaxError
+                        ? plannerResponseText?.length
                         : undefined,
             });
             return {

@@ -5,25 +5,9 @@
  * @footnote-risk: high - Contract drift here can break planner execution across providers.
  * @footnote-ethics: high - Planner contract integrity affects action choice, retrieval grounding, and user trust.
  */
+import { chatRepoSearchHints } from '@footnote/contracts';
 
 export const CHAT_PLANNER_TOOL_NAME = 'submit_planner_decision';
-
-const REPO_HINT_ENUM = [
-    'architecture',
-    'backend',
-    'contracts',
-    'discord',
-    'images',
-    'onboarding',
-    'web',
-    'observability',
-    'openapi',
-    'prompts',
-    'provenance',
-    'chat',
-    'traces',
-    'voice',
-] as const;
 
 /**
  * Canonical JSON schema for planner decisions.
@@ -146,7 +130,7 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
                             type: 'array',
                             items: {
                                 type: 'string',
-                                enum: REPO_HINT_ENUM,
+                                enum: chatRepoSearchHints,
                             },
                         },
                         topicHints: {
@@ -171,15 +155,23 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
                                     type: 'object',
                                     additionalProperties: false,
                                     properties: {
+                                        type: {
+                                            type: 'string',
+                                            enum: ['lat_lon'],
+                                        },
                                         latitude: { type: 'number' },
                                         longitude: { type: 'number' },
                                     },
-                                    required: ['latitude', 'longitude'],
+                                    required: ['type', 'latitude', 'longitude'],
                                 },
                                 {
                                     type: 'object',
                                     additionalProperties: false,
                                     properties: {
+                                        type: {
+                                            type: 'string',
+                                            enum: ['gridpoint'],
+                                        },
                                         office: { type: 'string' },
                                         gridX: {
                                             type: 'integer',
@@ -190,7 +182,12 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
                                             minimum: 1,
                                         },
                                     },
-                                    required: ['office', 'gridX', 'gridY'],
+                                    required: [
+                                        'type',
+                                        'office',
+                                        'gridX',
+                                        'gridY',
+                                    ],
                                 },
                             ],
                         },

@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - Repo-aware hints affect how accurately Footnote explains itself.
  */
 import type { GenerationSearchRequest } from '@footnote/agent-runtime';
+import { chatTopicHintQueryTerms } from '@footnote/contracts';
 import type {
     ChatGenerationPlan,
     ChatRepoSearchHint,
@@ -31,12 +32,6 @@ const REPO_HINT_QUERY_TERMS: Record<ChatRepoSearchHint, string[]> = {
     chat: ['chat'],
     traces: ['traces'],
     voice: ['voice'],
-};
-
-const TOPIC_HINT_QUERY_TERMS: Record<string, string[]> = {
-    'incident lifecycle': ['incident lifecycle', 'incident'],
-    'trace envelope': ['trace envelope', 'execution metadata'],
-    'weather tool': ['weather forecast tool', 'weather'],
 };
 
 const isChatRepoSearchHint = (hint: string): hint is ChatRepoSearchHint =>
@@ -72,7 +67,7 @@ export const buildRepoExplainerQuery = (
         ) ?? []),
         ...(search.topicHints?.flatMap((hint) => {
             const normalized = hint.trim().toLowerCase();
-            return TOPIC_HINT_QUERY_TERMS[normalized] ?? [];
+            return chatTopicHintQueryTerms[normalized] ?? [];
         }) ?? []),
         search.query.trim(),
     ]).join(' ');

@@ -196,3 +196,10 @@ export {
     supportedOpenAIEmbeddingModels,
     supportedPricedOpenAITextModels,
 } from './pricing.js';
+
+// Shared planner/search hint vocabularies
+export type { ChatRepoSearchHint } from './chat-search-hints.js';
+export {
+    chatRepoSearchHints,
+    chatTopicHintQueryTerms,
+} from './chat-search-hints.js';

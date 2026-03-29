@@ -164,9 +164,20 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
             );
         }
 
-        const parsedDecision = JSON.parse(
-            functionCallItem.arguments
-        ) as unknown;
+        let parsedDecision: unknown;
+        try {
+            parsedDecision = JSON.parse(functionCallItem.arguments) as unknown;
+        } catch (error) {
+            throw new Error(
+                `Failed structured planner argument parsing: ${functionCallItem.arguments}`,
+                {
+                    cause:
+                        error instanceof Error
+                            ? error
+                            : new Error(String(error)),
+                }
+            );
+        }
         return {
             decision: parsedDecision,
             model: data.model ?? request.model,

@@ -98,3 +98,50 @@ test('structured planner executor parses function_call arguments', async () => {
         globalThis.fetch = originalFetch;
     }
 });
+
+test('structured planner executor returns actionable errors for malformed function_call arguments', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+        new Response(
+            JSON.stringify({
+                model: 'gpt-5-nano',
+                output: [
+                    {
+                        type: 'function_call',
+                        name: 'submit_planner_decision',
+                        arguments: '{bad-json',
+                    },
+                ],
+            }),
+            {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            }
+        )) as typeof fetch;
+
+    try {
+        const executeStructuredPlanner =
+            createOpenAiChatPlannerStructuredExecutor({
+                apiKey: 'test-key',
+            });
+
+        await assert.rejects(
+            () =>
+                executeStructuredPlanner({
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'Planner instructions',
+                        },
+                    ],
+                    model: 'gpt-5-nano',
+                    maxOutputTokens: 700,
+                    reasoningEffort: 'low',
+                    verbosity: 'low',
+                }),
+            /structured planner argument parsing/i
+        );
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});

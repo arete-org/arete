@@ -675,7 +675,7 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
             },
         })
     );
-    const { plan } = await planner.planChat(createChatRequest());
+    const { plan, execution } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.generation.search, undefined);
@@ -683,6 +683,18 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
     assert.equal(plan.generation.verbosity, 'low');
     assert.equal(plan.generation.temperament, undefined);
     assert.match(plan.reasoning, /missing|invalid|TRACE temperament/i);
+    assert.equal(execution.status, 'failed');
+    assert.equal(execution.reasonCode, 'planner_invalid_output');
+});
+
+test('non-object planner payload falls back safely without runtime errors', async () => {
+    const planner = createPlanner(JSON.stringify('not-an-object'));
+    const { plan, execution } = await planner.planChat(createChatRequest());
+
+    assert.equal(plan.action, 'message');
+    assert.equal(plan.generation.search, undefined);
+    assert.equal(execution.status, 'failed');
+    assert.equal(execution.reasonCode, 'planner_invalid_output');
 });
 
 test('react plans with non-emoji payload fall back safely', async () => {
