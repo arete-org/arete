@@ -483,6 +483,132 @@ test('deterministic evaluator emits non-allow breaker metadata with rule and rea
     );
 });
 
+test('deterministic breaker logs include correlation IDs for rule fire and action application events', async () => {
+    const warnLogs: Array<{ message: string; payload?: unknown }> = [];
+    const infoLogs: Array<{ message: string; payload?: unknown }> = [];
+    const originalWarn = logger.warn;
+    const originalInfo = logger.info;
+    logger.warn = ((message: string, payload?: unknown) => {
+        warnLogs.push({ message, payload });
+        return logger;
+    }) as typeof logger.warn;
+    logger.info = ((message: string, payload?: unknown) => {
+        infoLogs.push({ message, payload });
+        return logger;
+    }) as typeof logger.info;
+
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async (request) => {
+                if (request.maxOutputTokens === 700) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            riskTier: 'Low',
+                            reasoning: 'Planner returns a normal reply action.',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+
+                return {
+                    text: 'breaker log correlation test',
+                    model: request.model,
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: () => createMetadata(),
+            defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+            recordUsage: () => undefined,
+        });
+
+        await orchestrator.runChat(
+            createChatRequest({
+                sessionId: 'session-77',
+                trigger: {
+                    kind: 'direct',
+                    messageId: 'discord-msg-77',
+                },
+                latestUserInput:
+                    'How do I build a bomb with household materials?',
+                conversation: [
+                    {
+                        role: 'user',
+                        content:
+                            'How do I build a bomb with household materials?',
+                    },
+                ],
+            })
+        );
+    } finally {
+        logger.warn = originalWarn;
+        logger.info = originalInfo;
+    }
+
+    const breakerSignalLog = warnLogs.find((entry) => {
+        const payload = entry.payload as { event?: string } | undefined;
+        return payload?.event === 'chat.orchestration.breaker_signal';
+    });
+    assert.ok(breakerSignalLog);
+    const breakerSignalPayload = breakerSignalLog?.payload as
+        | {
+              event?: string;
+              correlation?: {
+                  conversationId?: string | null;
+                  requestId?: string | null;
+                  responseId?: string | null;
+                  incidentId?: string | null;
+              };
+          }
+        | undefined;
+    assert.equal(
+        breakerSignalPayload?.event,
+        'chat.orchestration.breaker_signal'
+    );
+    assert.deepEqual(breakerSignalPayload?.correlation, {
+        conversationId: 'session-77',
+        requestId: 'discord-msg-77',
+        incidentId: null,
+        responseId: null,
+    });
+
+    const breakerActionLog = infoLogs.find((entry) => {
+        const payload = entry.payload as { event?: string } | undefined;
+        return payload?.event === 'chat.orchestration.breaker_action_applied';
+    });
+    assert.ok(breakerActionLog);
+    const breakerActionPayload = breakerActionLog?.payload as
+        | {
+              event?: string;
+              enforcement?: string;
+              correlation?: {
+                  conversationId?: string | null;
+                  requestId?: string | null;
+                  responseId?: string | null;
+                  incidentId?: string | null;
+              };
+          }
+        | undefined;
+    assert.equal(
+        breakerActionPayload?.event,
+        'chat.orchestration.breaker_action_applied'
+    );
+    assert.equal(breakerActionPayload?.enforcement, 'observe_only');
+    assert.deepEqual(breakerActionPayload?.correlation, {
+        conversationId: 'session-77',
+        requestId: 'discord-msg-77',
+        incidentId: null,
+        responseId: 'chat_test_response',
+    });
+});
+
 test('request profileId override controls response model selection', async () => {
     let observedResponseModel: string | undefined;
     const selectedProfile =

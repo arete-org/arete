@@ -16,6 +16,7 @@ import Database from 'better-sqlite3';
 import { createIncidentHandlers } from '../src/handlers/incidents.js';
 import { createIncidentService } from '../src/services/incidents.js';
 import { SqliteIncidentStore } from '../src/storage/incidents/sqliteIncidentStore.js';
+import { logger } from '../src/utils/logger.js';
 
 type TestServer = {
     url: string;
@@ -494,4 +495,153 @@ test('incident detail rejects malformed percent-encoding with 400', async () => 
         store.close();
         await fs.rm(tempRoot, { recursive: true, force: true });
     }
+});
+
+test('incident lifecycle emits structured created, updated, and resolved logs with correlation IDs', async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'incident-api-'));
+    const dbPath = path.join(tempRoot, 'incidents.db');
+    const store = new SqliteIncidentStore({
+        dbPath,
+        pseudonymizationSecret: SECRET,
+    });
+    const server = await createIncidentServer(store, {
+        traceApiToken: null,
+        serviceToken: 'service-secret',
+    });
+    const infoLogs: Array<{ message: string; payload?: unknown }> = [];
+    const originalInfo = logger.info;
+    logger.info = ((message: string, payload?: unknown) => {
+        infoLogs.push({ message, payload });
+        return logger;
+    }) as typeof logger.info;
+
+    try {
+        const reportResponse = await fetch(
+            `${server.url}/api/incidents/report`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Service-Token': 'service-secret',
+                },
+                body: JSON.stringify({
+                    reporterUserId: '123456789012345678',
+                    responseId: 'response_77',
+                    messageId: '456789012345678901',
+                    consentedAt: new Date().toISOString(),
+                }),
+            }
+        );
+        assert.equal(reportResponse.status, 200);
+        const reportPayload = (await reportResponse.json()) as {
+            incident: { incidentId: string };
+        };
+        const incidentId = reportPayload.incident.incidentId;
+
+        const noteResponse = await fetch(
+            `${server.url}/api/incidents/${incidentId}/notes`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Service-Token': 'service-secret',
+                },
+                body: JSON.stringify({
+                    actorUserId: '999999999999999999',
+                    notes: 'operator note',
+                }),
+            }
+        );
+        assert.equal(noteResponse.status, 200);
+
+        const statusResponse = await fetch(
+            `${server.url}/api/incidents/${incidentId}/status`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Service-Token': 'service-secret',
+                },
+                body: JSON.stringify({
+                    status: 'resolved',
+                    actorUserId: '999999999999999999',
+                    notes: 'resolved by operator',
+                }),
+            }
+        );
+        assert.equal(statusResponse.status, 200);
+    } finally {
+        logger.info = originalInfo;
+        await server.close();
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+
+    const createdLog = infoLogs.find(
+        (entry) => entry.message === 'incident.created'
+    );
+    assert.ok(createdLog);
+    const createdPayload = createdLog?.payload as
+        | {
+              event?: string;
+              correlation?: {
+                  conversationId?: string | null;
+                  requestId?: string | null;
+                  incidentId?: string;
+                  responseId?: string | null;
+              };
+          }
+        | undefined;
+    assert.equal(createdPayload?.event, 'incident.created');
+    assert.equal(createdPayload?.correlation?.conversationId, 'response_77');
+    assert.ok((createdPayload?.correlation?.requestId?.length ?? 0) > 0);
+    assert.ok((createdPayload?.correlation?.incidentId?.length ?? 0) > 0);
+    assert.equal(createdPayload?.correlation?.responseId, 'response_77');
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            createdPayload?.correlation ?? {},
+            'responseId'
+        ),
+        true
+    );
+
+    const updatedLogs = infoLogs.filter(
+        (entry) => entry.message === 'incident.updated'
+    );
+    assert.ok(updatedLogs.length >= 2);
+    for (const updatedLog of updatedLogs) {
+        const updatedPayload = updatedLog.payload as
+            | { correlation?: { responseId?: string | null } }
+            | undefined;
+        assert.equal(
+            Object.prototype.hasOwnProperty.call(
+                updatedPayload?.correlation ?? {},
+                'responseId'
+            ),
+            true
+        );
+    }
+
+    const resolvedLog = infoLogs.find(
+        (entry) => entry.message === 'incident.resolved'
+    );
+    assert.ok(resolvedLog);
+    const resolvedPayload = resolvedLog?.payload as
+        | {
+              status?: string;
+              correlation?: {
+                  incidentId?: string;
+                  responseId?: string | null;
+              };
+          }
+        | undefined;
+    assert.equal(resolvedPayload?.status, 'resolved');
+    assert.ok((resolvedPayload?.correlation?.incidentId?.length ?? 0) > 0);
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            resolvedPayload?.correlation ?? {},
+            'responseId'
+        ),
+        true
+    );
 });

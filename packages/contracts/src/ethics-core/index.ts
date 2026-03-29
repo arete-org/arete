@@ -30,6 +30,7 @@ export type {
     ToolInvocationIntent,
     ToolInvocationRequest,
     ToolExecutionContext,
+    CorrelationEnvelope,
     ExecutionEventKind,
     PlannerExecutionEvent,
     EvaluatorExecutionEvent,

@@ -24,6 +24,7 @@ export type {
     ToolInvocationIntent,
     ToolInvocationRequest,
     ToolExecutionContext,
+    CorrelationEnvelope,
     EvaluatorDecisionMode,
     SafetyBreakerAction,
     SafetyBreakerReasonCode,
