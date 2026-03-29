@@ -679,7 +679,7 @@ const normalizeGeneration = (
             ? normalizeRepoHints(candidate.search.repoHints)
             : undefined;
     const mergedTopicHints = normalizeTopicHints([
-        ...(normalizeTopicHints(candidate.search.topicHints) ?? []),
+        ...normalizeTopicHints(candidate.search.topicHints),
         ...(repoHints ?? []),
     ]);
 
