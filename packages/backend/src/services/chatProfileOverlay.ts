@@ -62,6 +62,11 @@ const resolvePersonaEntry = (
 
     const requestedPersonaId = request.botPersonaId?.trim().toLowerCase();
     if (!requestedPersonaId) {
+        logger.warn('chat request missing botPersonaId; using fallback', {
+            runtimeProfileId: runtimeConfig.profile.id,
+            surface: request.surface,
+            resolvedPersonaId: DEFAULT_PERSONA_ID,
+        });
         return PERSONA_CATALOG[DEFAULT_PERSONA_ID];
     }
 

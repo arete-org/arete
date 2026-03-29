@@ -982,7 +982,12 @@ export const createChatOrchestrator = ({
             generationDurationMs: response.generationDurationMs,
             totalDurationMs,
             plannerProfileId: plannerProfile.id,
+            incomingBotPersonaId:
+                normalizedRequest.botPersonaId?.trim() || null,
             personaProfileId: personaProfile.id,
+            personaDisplayName: personaProfile.displayName,
+            personaOverlaySource: personaProfile.promptOverlay.source,
+            personaOverlayLength: personaProfile.promptOverlay.length,
             responseProfileId: selectedResponseProfile.id,
             originalProfileId: originalSelectedProfileId,
             effectiveProfileId: effectiveSelectedProfileId,
