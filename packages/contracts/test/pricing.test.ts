@@ -112,13 +112,13 @@ test('canonicalizeOpenAIModelIdForPricing strips only recognized suffix formats'
     ]);
 });
 
-test('resolveOpenAITextPricingModel fails open for unknown families after canonicalization', () => {
+test('resolveOpenAITextPricingModel resolves versioned gpt-5.4-mini ids after canonicalization', () => {
     const resolved = resolveOpenAITextPricingModel(
         'openai/gpt-5.4-mini/2026-03-27'
     );
 
     assert.equal(resolved.canonicalModel, 'gpt-5.4-mini');
-    assert.equal(resolved.matchedModel, null);
+    assert.equal(resolved.matchedModel, 'gpt-5.4-mini');
 });
 
 test('classifyModelProfileTextPricingCoverage marks non-openai providers as explicit policy unpriced', () => {
@@ -134,12 +134,12 @@ test('classifyModelProfileTextPricingCoverage marks non-openai providers as expl
     );
 });
 
-test('classifyModelProfileTextPricingCoverage marks policy-listed OpenAI models as explicit unpriced', () => {
+test('classifyModelProfileTextPricingCoverage marks gpt-5.4-mini as priced', () => {
     const coverage = classifyModelProfileTextPricingCoverage(
         'openai',
         'gpt-5.4-mini'
     );
 
-    assert.equal(coverage.classification, 'unpriced_by_policy');
-    assert.equal(coverage.policyReason, 'openai_explicitly_unpriced_by_policy');
+    assert.equal(coverage.classification, 'priced');
+    assert.equal(coverage.policyReason, 'openai_priced');
 });

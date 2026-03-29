@@ -2,11 +2,11 @@ profiles:
     # ==========
     # OpenAI
     # ==========
-    # https://platform.openai.com/docs/models/gpt-5
+    # https://platform.openai.com/docs/models/gpt-5-mini
     - id: openai-text-fast
       description: Lower-latency, quick replies and lightweight tasks.
       provider: openai
-      providerModel: gpt-5-nano
+      providerModel: gpt-5-mini
       enabled: true
       tierBindings:
           - text-fast
@@ -17,11 +17,11 @@ profiles:
       costClass: low
       latencyClass: low
 
-    # https://platform.openai.com/docs/models/gpt-5-mini
+    # https://developers.openai.com/api/docs/models/gpt-5.4-mini
     - id: openai-text-medium
       description: Balanced, everyday conversation and general reasoning.
       provider: openai
-      providerModel: gpt-5-mini
+      providerModel: gpt-5.4-mini
       enabled: true
       tierBindings:
           - text-medium
@@ -32,11 +32,11 @@ profiles:
       costClass: medium
       latencyClass: medium
 
-    # https://developers.openai.com/api/docs/models/gpt-5.4
+    # https://platform.openai.com/docs/models/gpt-5.1
     - id: openai-text-quality
       description: Deeper reasoning and more complex prompts.
       provider: openai
-      providerModel: gpt-5.4-mini
+      providerModel: gpt-5.1
       enabled: true
       tierBindings:
           - text-quality
@@ -61,21 +61,6 @@ profiles:
       capabilities:
           canUseSearch: false
       maxInputTokens: 262144
-      # maxOutputTokens:
-      costClass: high
-      latencyClass: high
-
-    # https://ollama.com/library/deepseek-v3.2
-    - id: ollama-text-deepseek
-      description: Deep-reasoning, complex multi-step problem solving.
-      provider: ollama
-      providerModel: deepseek-v3.2:cloud
-      enabled: true
-      tierBindings:
-          - text-quality
-      capabilities:
-          canUseSearch: false
-      maxInputTokens: 163840
       # maxOutputTokens:
       costClass: high
       latencyClass: high

@@ -33,6 +33,7 @@ export type SupportedNodeEnv = (typeof supportedNodeEnvs)[number];
  */
 export const supportedOpenAITextModels = [
     'gpt-5.2',
+    'gpt-5.4-mini',
     'gpt-5.1',
     'gpt-5',
     'gpt-5-mini',

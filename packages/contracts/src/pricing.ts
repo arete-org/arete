@@ -182,7 +182,7 @@ export type ModelPricingCoverageClassification =
  * Keeping this explicit prevents silent drift between "missing price data"
  * and "known policy decision to treat as unpriced".
  */
-export const explicitlyUnpricedOpenAITextModels = ['gpt-5.4-mini'] as const;
+export const explicitlyUnpricedOpenAITextModels = [] as const;
 export type ExplicitlyUnpricedOpenAITextModel =
     (typeof explicitlyUnpricedOpenAITextModels)[number];
 
@@ -216,13 +216,14 @@ type OpenAIImageTokenPricingEntry = {
 /**
  * Canonical text pricing per 1M tokens (USD).
  * Source: https://platform.openai.com/pricing
- * Last updated in-repo: 2025-10-26
+ * Last updated in-repo: 2026-03-29
  */
 export const openAITextPricingTable: Record<
     PricedOpenAITextModel,
     OpenAITextPricingEntry
 > = {
     'gpt-5.2': { input: 1.75, output: 14.0 },
+    'gpt-5.4-mini': { input: 0.75, output: 4.5 },
     'gpt-5.1': { input: 1.25, output: 10.0 },
     'gpt-5': { input: 1.25, output: 10.0 },
     'gpt-5-mini': { input: 0.25, output: 2.0 },
