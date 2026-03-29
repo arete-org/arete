@@ -255,6 +255,17 @@ export type GenerationExecutionEvent = ProfileExecutionEvent & {
 };
 
 /**
+ * Shared correlation envelope for structured backend telemetry.
+ * Fields are nullable so callers can keep fail-open behavior.
+ */
+export type CorrelationEnvelope = {
+    conversationId: string | null;
+    requestId: string | null;
+    incidentId: string | null;
+    responseId: string | null;
+};
+
+/**
  * Planner-owned tool intent before orchestration eligibility checks.
  * This shape is fully serializable for trace/debug payloads.
  */

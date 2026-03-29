@@ -588,6 +588,7 @@ test('incident lifecycle emits structured created, updated, and resolved logs wi
                   conversationId?: string | null;
                   requestId?: string | null;
                   incidentId?: string;
+                  responseId?: string | null;
               };
           }
         | undefined;
@@ -595,11 +596,31 @@ test('incident lifecycle emits structured created, updated, and resolved logs wi
     assert.equal(createdPayload?.correlation?.conversationId, 'response_77');
     assert.ok((createdPayload?.correlation?.requestId?.length ?? 0) > 0);
     assert.ok((createdPayload?.correlation?.incidentId?.length ?? 0) > 0);
+    assert.equal(createdPayload?.correlation?.responseId, 'response_77');
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            createdPayload?.correlation ?? {},
+            'responseId'
+        ),
+        true
+    );
 
     const updatedLogs = infoLogs.filter(
         (entry) => entry.message === 'incident.updated'
     );
     assert.ok(updatedLogs.length >= 2);
+    for (const updatedLog of updatedLogs) {
+        const updatedPayload = updatedLog.payload as
+            | { correlation?: { responseId?: string | null } }
+            | undefined;
+        assert.equal(
+            Object.prototype.hasOwnProperty.call(
+                updatedPayload?.correlation ?? {},
+                'responseId'
+            ),
+            true
+        );
+    }
 
     const resolvedLog = infoLogs.find(
         (entry) => entry.message === 'incident.resolved'
@@ -608,9 +629,19 @@ test('incident lifecycle emits structured created, updated, and resolved logs wi
     const resolvedPayload = resolvedLog?.payload as
         | {
               status?: string;
-              correlation?: { incidentId?: string };
+              correlation?: {
+                  incidentId?: string;
+                  responseId?: string | null;
+              };
           }
         | undefined;
     assert.equal(resolvedPayload?.status, 'resolved');
     assert.ok((resolvedPayload?.correlation?.incidentId?.length ?? 0) > 0);
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            resolvedPayload?.correlation ?? {},
+            'responseId'
+        ),
+        true
+    );
 });

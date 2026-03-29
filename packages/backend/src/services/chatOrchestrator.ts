@@ -14,6 +14,7 @@ import type {
     ModelCostClass,
     ModelLatencyClass,
     ModelProfile,
+    CorrelationEnvelope,
 } from '@footnote/contracts';
 import type {
     SafetyBreakerAction,
@@ -260,12 +261,7 @@ const buildPlannerPayload = (
 const buildCorrelationIds = (
     request: PostChatRequest,
     responseId: string | null = null
-): {
-    conversationId: string | null;
-    requestId: string | null;
-    incidentId: string | null;
-    responseId: string | null;
-} => ({
+): CorrelationEnvelope => ({
     conversationId: request.sessionId ?? null,
     requestId: request.trigger.messageId ?? null,
     incidentId: null,

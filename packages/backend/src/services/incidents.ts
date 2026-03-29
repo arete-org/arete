@@ -16,6 +16,7 @@ import type {
     PostIncidentReportRequest,
     PostIncidentStatusRequest,
 } from '@footnote/contracts/web';
+import type { CorrelationEnvelope } from '@footnote/contracts';
 import { logger } from '../utils/logger.js';
 import type {
     IncidentAuditEvent,
@@ -111,10 +112,11 @@ const logIncidentEvent = (
     incident: IncidentRecord,
     extra?: Record<string, unknown>
 ): void => {
-    const correlation = {
+    const correlation: CorrelationEnvelope = {
         conversationId: incident.pointers.responseId ?? null,
         requestId: incident.pointers.messageId ?? null,
         incidentId: incident.shortId,
+        responseId: incident.pointers.responseId ?? null,
     };
 
     incidentServiceLogger.info(eventName, {
