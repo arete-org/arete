@@ -214,6 +214,6 @@ export const chatPlannerDecisionTool = {
     name: CHAT_PLANNER_TOOL_NAME,
     description:
         'Submit one planner decision object for the backend chat orchestrator.',
-    strict: true,
+    strict: false,
     parameters: chatPlannerDecisionParametersSchema,
 };
