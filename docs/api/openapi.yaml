@@ -94,7 +94,8 @@ paths:
                 Submit a transport-neutral chat request and receive the backend-selected action.
                 Public web callers use Turnstile when enabled; trusted internal callers may authenticate with service headers.
                 Send X-Session-Id / X-Turnstile-Token headers when needed for browser traffic.
-                Optionally provide `profileId` to select a backend-owned prompt/profile overlay.
+                Optionally provide `profileId` to select a backend response profile.
+                Optionally provide `botPersonaId` to select the backend-owned bot persona overlay (discord).
             tags:
                 - Chat
             parameters:
@@ -1391,10 +1392,14 @@ components:
                 surface:
                     type: string
                     enum: [web, discord]
+                botPersonaId:
+                    type: string
+                    pattern: '^[a-z0-9][a-z0-9-]{0,31}$'
+                    description: Optional bot persona selector used for backend-owned persona overlays (discord).
                 profileId:
                     type: string
                     pattern: '^[a-z0-9][a-z0-9-]{0,31}$'
-                    description: Optional profile selector resolved by backend prompt composition.
+                    description: Optional response profile selector resolved by backend model routing.
                 generation:
                     type: object
                     properties:

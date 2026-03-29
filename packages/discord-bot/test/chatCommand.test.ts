@@ -112,6 +112,7 @@ test('/chat forwards prompt/profile/generation options and renders message actio
         assert.deepEqual(seenRequests, [
             {
                 surface: 'discord',
+                botPersonaId: 'footnote',
                 profileId: 'openai-text-medium',
                 trigger: {
                     kind: 'direct',

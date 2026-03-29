@@ -314,6 +314,7 @@ export type ChatImageRequest = {
  */
 export type PostChatRequest = {
     surface: ChatSurface;
+    botPersonaId?: string;
     profileId?: string;
     generation?: {
         reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';

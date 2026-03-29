@@ -186,17 +186,22 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
     );
 });
 
-test('openapi ChatRequest documents optional profileId with matching constraints', () => {
+test('openapi ChatRequest documents optional persona/profile ids with matching constraints', () => {
     const chatRequestSectionMatch = openApiSource.match(
         /ChatRequest:[\s\S]*?ChatResponse:/m
     );
     assert.ok(chatRequestSectionMatch);
 
     const chatRequestSection = chatRequestSectionMatch[0];
+    assert.match(chatRequestSection, /botPersonaId:\s*\n\s*type:\s*string/);
     assert.match(chatRequestSection, /profileId:\s*\n\s*type:\s*string/);
     assert.match(
         chatRequestSection,
         /pattern:\s*'\^\[a-z0-9\]\[a-z0-9-\]\{0,31\}\$'/
+    );
+    assert.equal(
+        /required:\s*[\s\S]*-\s*botPersonaId/.test(chatRequestSection),
+        false
     );
     assert.equal(
         /required:\s*[\s\S]*-\s*profileId/.test(chatRequestSection),

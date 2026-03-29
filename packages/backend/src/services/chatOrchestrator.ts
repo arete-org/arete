@@ -45,6 +45,7 @@ import { normalizeDiscordConversation } from './chatConversationNormalization.js
 import {
     resolveActiveProfileOverlayPrompt,
     resolveBotProfileDisplayName,
+    resolveChatPersonaProfile,
 } from './chatProfileOverlay.js';
 import { coercePlanForSurface } from './chatSurfacePolicy.js';
 import { createModelProfileResolver } from './modelProfileResolver.js';
@@ -471,7 +472,14 @@ export const createChatOrchestrator = ({
             };
         }
 
-        const botProfileDisplayName = resolveBotProfileDisplayName();
+        const personaProfile = resolveChatPersonaProfile(
+            normalizedRequest,
+            chatOrchestratorLogger
+        );
+        const botProfileDisplayName = resolveBotProfileDisplayName(
+            normalizedRequest,
+            chatOrchestratorLogger
+        );
         const planned = await chatPlanner.planChat(normalizedRequest);
         const plannerExecution = planned.execution;
         const fallbackReasons: PlannerFallbackReason[] = [];
@@ -974,6 +982,7 @@ export const createChatOrchestrator = ({
             generationDurationMs: response.generationDurationMs,
             totalDurationMs,
             plannerProfileId: plannerProfile.id,
+            personaProfileId: personaProfile.id,
             responseProfileId: selectedResponseProfile.id,
             originalProfileId: originalSelectedProfileId,
             effectiveProfileId: effectiveSelectedProfileId,

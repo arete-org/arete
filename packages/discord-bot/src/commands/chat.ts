@@ -15,6 +15,7 @@ import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type { ChatProfileOption } from '@footnote/contracts/web';
 import { botApi } from '../api/botApi.js';
 import type { DiscordChatApiResponse } from '../api/index.js';
+import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { buildProvenanceActionRow } from '../utils/response/provenanceCgi.js';
 import type { Command, SlashCommand } from './BaseCommand.js';
@@ -211,6 +212,7 @@ const chatCommand: ChatCommandWithProfiles = {
         try {
             const response = await botApi.chatViaApi({
                 surface: 'discord',
+                botPersonaId: runtimeConfig.profile.id,
                 ...(profileId && profileId.length > 0 ? { profileId } : {}),
                 trigger: {
                     kind: 'direct',

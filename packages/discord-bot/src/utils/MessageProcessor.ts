@@ -526,6 +526,7 @@ export class MessageProcessor {
         return {
             request: {
                 surface: 'discord',
+                botPersonaId: runtimeConfig.profile.id,
                 trigger: {
                     kind: this.getChatTriggerKind(message, trigger),
                     messageId: message.id,

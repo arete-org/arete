@@ -666,7 +666,7 @@ test('processMessage replies with a red code-block error when backend chat reque
     );
 });
 
-test('buildChatRequestFromMessage includes profileId and leaves overlay composition to backend', async () => {
+test('buildChatRequestFromMessage includes botPersonaId and leaves overlay composition to backend', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const originalProfile = runtimeConfig.profile;
@@ -698,7 +698,7 @@ test('buildChatRequestFromMessage includes profileId and leaves overlay composit
             throw new Error('Expected chat request to be built');
         }
 
-        assert.equal(built.request.profileId, 'ari-vendor');
+        assert.equal(built.request.botPersonaId, 'ari-vendor');
         assert.equal(built.request.conversation[0].role, 'user');
         assert.doesNotMatch(
             built.request.conversation[0].content,
@@ -953,7 +953,7 @@ test('buildChatRequestFromMessage sends raw conversation without bot-side identi
             throw new Error('Expected chat request to be built');
         }
 
-        assert.equal(built.request.profileId, 'footnote');
+        assert.equal(built.request.botPersonaId, 'footnote');
         assert.equal(built.request.conversation.length, 1);
         assert.equal(built.request.conversation[0].role, 'user');
         assert.doesNotMatch(
