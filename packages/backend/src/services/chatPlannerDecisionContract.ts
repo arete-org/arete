@@ -149,6 +149,15 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
                                 enum: REPO_HINT_ENUM,
                             },
                         },
+                        topicHints: {
+                            type: 'array',
+                            maxItems: 5,
+                            items: {
+                                type: 'string',
+                                minLength: 1,
+                                maxLength: 40,
+                            },
+                        },
                     },
                     required: ['query', 'contextSize', 'intent'],
                 },

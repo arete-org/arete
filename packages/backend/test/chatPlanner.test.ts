@@ -304,6 +304,7 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
                     contextSize: 'low',
                     intent: 'repo_explainer',
                     repoHints: ['Discord', 'provenance', 'discord', 'wiki'],
+                    topicHints: ['Incident Lifecycle', 'discord'],
                 },
             },
         })
@@ -316,6 +317,57 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
     assert.deepEqual(plan.generation.search?.repoHints, [
         'discord',
         'provenance',
+    ]);
+    assert.deepEqual(plan.generation.search?.topicHints, [
+        'incident lifecycle',
+        'discord',
+        'provenance',
+    ]);
+});
+
+test('search topicHints are bounded, deduped, and normalized fail-open', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'Use focused retrieval hints for ranking.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                search: {
+                    query: 'How does incident logging correlate with traces?',
+                    contextSize: 'medium',
+                    intent: 'current_facts',
+                    topicHints: [
+                        ' Incident Lifecycle ',
+                        'trace envelope',
+                        'trace envelope',
+                        '',
+                        'x'.repeat(41),
+                        'weather tool',
+                        'chat planner',
+                        'extra item',
+                    ],
+                },
+            },
+        })
+    );
+    const { plan } = await planner.planChat(createChatRequest());
+
+    assert.deepEqual(plan.generation.search?.topicHints, [
+        'incident lifecycle',
+        'trace envelope',
+        'weather tool',
+        'chat planner',
+        'extra item',
     ]);
 });
 

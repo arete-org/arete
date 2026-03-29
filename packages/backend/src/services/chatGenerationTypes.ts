@@ -33,9 +33,10 @@ export type ChatRepoSearchHint =
  */
 export type ChatGenerationSearch = Omit<
     GenerationSearchRequest,
-    'repoHints'
+    'repoHints' | 'topicHints'
 > & {
     repoHints?: ChatRepoSearchHint[];
+    topicHints?: string[];
 };
 
 export type ChatGenerationWeatherLocation =

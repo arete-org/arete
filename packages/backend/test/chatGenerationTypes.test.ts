@@ -31,6 +31,7 @@ test('chat generation settings stay assignable to canonical runtime settings', (
         contextSize: 'medium',
         intent: 'repo_explainer',
         repoHints: ['architecture', 'backend'],
+        topicHints: ['incident lifecycle', 'trace envelope'],
     };
     const generation: ChatGenerationPlan = {
         reasoningEffort: 'medium',
@@ -47,4 +48,8 @@ test('chat generation settings stay assignable to canonical runtime settings', (
     assert.equal(canonicalSearch?.contextSize, 'medium');
     assert.equal(canonicalSearch?.intent, 'repo_explainer');
     assert.deepEqual(canonicalSearch?.repoHints, ['architecture', 'backend']);
+    assert.deepEqual(canonicalSearch?.topicHints, [
+        'incident lifecycle',
+        'trace envelope',
+    ]);
 });

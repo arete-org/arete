@@ -31,6 +31,10 @@ const buildWebSearchToolIntent = (
                       generation.search.repoHints.length > 0 && {
                           repoHints: generation.search.repoHints,
                       }),
+                  ...(generation.search.topicHints &&
+                      generation.search.topicHints.length > 0 && {
+                          topicHints: generation.search.topicHints,
+                      }),
               },
           }
         : {

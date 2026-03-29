@@ -162,11 +162,15 @@ export type PlannerCandidate = Partial<ChatPlan> & {
     generation?: Partial<ChatGenerationPlan> & {
         search?: Partial<ChatGenerationSearch> & {
             repoHints?: unknown;
+            topicHints?: unknown;
         };
         weather?: unknown;
         temperament?: unknown;
     };
 };
+
+const TOPIC_HINT_MAX_COUNT = 5;
+const TOPIC_HINT_MAX_LENGTH = 40;
 
 /**
  * Coerces arbitrary planner output into the RiskTier contract.
@@ -273,6 +277,42 @@ const normalizeRepoHints = (value: unknown): ChatRepoSearchHint[] => {
 
         seen.add(normalizedHint);
         normalized.push(normalizedHint);
+    }
+
+    return normalized;
+};
+
+/**
+ * Keeps bounded topic hints and removes duplicates.
+ * These are advisory signals only, so invalid entries are dropped fail-open.
+ */
+const normalizeTopicHints = (value: unknown): string[] => {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+
+    for (const rawHint of value) {
+        if (typeof rawHint !== 'string') {
+            continue;
+        }
+
+        const normalizedHint = rawHint.trim().toLowerCase();
+        if (
+            normalizedHint.length === 0 ||
+            normalizedHint.length > TOPIC_HINT_MAX_LENGTH ||
+            seen.has(normalizedHint)
+        ) {
+            continue;
+        }
+
+        seen.add(normalizedHint);
+        normalized.push(normalizedHint);
+        if (normalized.length >= TOPIC_HINT_MAX_COUNT) {
+            break;
+        }
     }
 
     return normalized;
@@ -624,6 +664,10 @@ const normalizeGeneration = (
         searchIntent === 'repo_explainer'
             ? normalizeRepoHints(candidate.search.repoHints)
             : undefined;
+    const mergedTopicHints = normalizeTopicHints([
+        ...(normalizeTopicHints(candidate.search.topicHints) ?? []),
+        ...(repoHints ?? []),
+    ]);
 
     return {
         generation: {
@@ -636,6 +680,9 @@ const normalizeGeneration = (
                 ),
                 intent: searchIntent,
                 ...(repoHints && repoHints.length > 0 ? { repoHints } : {}),
+                ...(mergedTopicHints.length > 0
+                    ? { topicHints: mergedTopicHints }
+                    : {}),
             },
         },
         ...(reasoningSuffixes.length > 0 && {
