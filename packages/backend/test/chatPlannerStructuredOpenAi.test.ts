@@ -63,7 +63,6 @@ test('structured planner executor parses function_call arguments', async () => {
         const executeStructuredPlanner =
             createOpenAiChatPlannerStructuredExecutor({
                 apiKey: 'test-key',
-                requestTimeoutMs: 5000,
             });
 
         const result = await executeStructuredPlanner({

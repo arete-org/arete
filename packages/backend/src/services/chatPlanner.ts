@@ -121,6 +121,7 @@ type CreateChatPlannerOptions = {
     executePlannerStructured?: ChatPlannerStructuredExecutor;
     allowTextJsonCompatibilityFallback?: boolean;
     defaultModel?: string;
+    structuredExecutionTimeoutMs?: number;
     availableProfiles?: ChatPlannerProfileOption[];
     recordUsage?: (record: BackendLLMCostRecord) => void;
 };
@@ -136,6 +137,7 @@ type ChatPlannerExecutionRequest = {
     maxOutputTokens: number;
     reasoningEffort: ChatGenerationPlan['reasoningEffort'];
     verbosity: ChatGenerationPlan['verbosity'];
+    signal?: AbortSignal;
 };
 
 /**
@@ -465,6 +467,47 @@ const stripJsonFences = (content: string): string =>
 
 const parsePlannerCandidateFromTextJson = (content: string): PlannerCandidate =>
     JSON.parse(stripJsonFences(content)) as PlannerCandidate;
+
+const createTimeoutSignal = ({
+    timeoutMs,
+    callerSignal,
+}: {
+    timeoutMs: number;
+    callerSignal?: AbortSignal;
+}): {
+    signal: AbortSignal;
+    cleanup: () => void;
+    timedOut: () => boolean;
+} => {
+    const controller = new AbortController();
+    let didTimeout = false;
+    const timeoutHandle = setTimeout(() => {
+        didTimeout = true;
+        controller.abort();
+    }, timeoutMs);
+
+    const onCallerAbort = () => controller.abort();
+    if (callerSignal) {
+        if (callerSignal.aborted) {
+            controller.abort();
+        } else {
+            callerSignal.addEventListener('abort', onCallerAbort, {
+                once: true,
+            });
+        }
+    }
+
+    return {
+        signal: controller.signal,
+        cleanup: () => {
+            clearTimeout(timeoutHandle);
+            if (callerSignal) {
+                callerSignal.removeEventListener('abort', onCallerAbort);
+            }
+        },
+        timedOut: () => didTimeout,
+    };
+};
 
 const normalizePlannerResponsePreview = (content: string): string =>
     content.replace(/\s+/g, ' ').trim().slice(0, 280);
@@ -899,6 +942,7 @@ export const createChatPlanner = ({
     executePlannerStructured,
     allowTextJsonCompatibilityFallback = false,
     defaultModel = runtimeConfig.openai.defaultModel,
+    structuredExecutionTimeoutMs = runtimeConfig.openai.requestTimeoutMs,
     availableProfiles = [],
     recordUsage = recordBackendLLMUsage,
 }: CreateChatPlannerOptions) => {
@@ -999,8 +1043,31 @@ export const createChatPlanner = ({
 
         try {
             if (executePlannerStructured) {
-                const structuredResponse =
-                    await executePlannerStructured(requestPayload);
+                const structuredAbortContext = createTimeoutSignal({
+                    timeoutMs: structuredExecutionTimeoutMs,
+                    callerSignal: requestPayload.signal,
+                });
+                let structuredResponse: ChatPlannerStructuredExecutionResult;
+                try {
+                    structuredResponse = await executePlannerStructured({
+                        ...requestPayload,
+                        signal: structuredAbortContext.signal,
+                    });
+                } catch (structuredError) {
+                    if (
+                        structuredError instanceof Error &&
+                        structuredError.name === 'AbortError' &&
+                        structuredAbortContext.timedOut()
+                    ) {
+                        throw new Error(
+                            `Planner structured call timed out after ${structuredExecutionTimeoutMs}ms`
+                        );
+                    }
+
+                    throw structuredError;
+                } finally {
+                    structuredAbortContext.cleanup();
+                }
                 plannerStructuredArguments = structuredResponse.rawArguments;
                 recordPlannerUsage(
                     structuredResponse.model || defaultModel,

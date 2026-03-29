@@ -17,6 +17,7 @@ type ChatPlannerStructuredExecutionRequest = {
     maxOutputTokens: number;
     reasoningEffort: 'minimal' | 'low' | 'medium' | 'high';
     verbosity: 'low' | 'medium' | 'high';
+    signal?: AbortSignal;
 };
 
 type PlannerToolCallOutputItem = {
@@ -35,7 +36,6 @@ type ChatPlannerStructuredExecutionResult = {
 
 type CreateOpenAiChatPlannerStructuredExecutorOptions = {
     apiKey: string;
-    requestTimeoutMs: number;
     retryAttempts?: number;
 };
 
@@ -80,50 +80,8 @@ const toResponsesInputMessages = (
         ],
     }));
 
-const buildAbortSignal = ({
-    timeoutMs,
-    callerSignal,
-}: {
-    timeoutMs: number;
-    callerSignal?: AbortSignal;
-}): {
-    signal: AbortSignal;
-    cleanup: () => void;
-    timedOut: () => boolean;
-} => {
-    const controller = new AbortController();
-    let didTimeout = false;
-    const timeoutHandle = setTimeout(() => {
-        didTimeout = true;
-        controller.abort();
-    }, timeoutMs);
-
-    const onCallerAbort = () => controller.abort();
-    if (callerSignal) {
-        if (callerSignal.aborted) {
-            controller.abort();
-        } else {
-            callerSignal.addEventListener('abort', onCallerAbort, {
-                once: true,
-            });
-        }
-    }
-
-    return {
-        signal: controller.signal,
-        cleanup: () => {
-            clearTimeout(timeoutHandle);
-            if (callerSignal) {
-                callerSignal.removeEventListener('abort', onCallerAbort);
-            }
-        },
-        timedOut: () => didTimeout,
-    };
-};
-
 export const createOpenAiChatPlannerStructuredExecutor = ({
     apiKey,
-    requestTimeoutMs,
     retryAttempts = 1,
 }: CreateOpenAiChatPlannerStructuredExecutorOptions) => {
     return async (
@@ -147,9 +105,6 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
         });
 
         const performRequest = async (attempt: number): Promise<Response> => {
-            const abortContext = buildAbortSignal({
-                timeoutMs: requestTimeoutMs,
-            });
             try {
                 return await fetch('https://api.openai.com/v1/responses', {
                     method: 'POST',
@@ -158,15 +113,10 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
                         'Content-Type': 'application/json',
                     },
                     body: requestBody,
-                    signal: abortContext.signal,
+                    signal: request.signal,
                 });
             } catch (error) {
                 if (error instanceof Error && error.name === 'AbortError') {
-                    if (abortContext.timedOut()) {
-                        throw new Error(
-                            `Planner structured call timed out after ${requestTimeoutMs}ms`
-                        );
-                    }
                     throw new Error('Planner structured call was aborted');
                 }
 
@@ -179,8 +129,6 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
                 }
 
                 throw error;
-            } finally {
-                abortContext.cleanup();
             }
         };
 

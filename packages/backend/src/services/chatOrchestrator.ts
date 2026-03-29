@@ -334,7 +334,6 @@ export const createChatOrchestrator = ({
                 executePlannerStructured:
                     createOpenAiChatPlannerStructuredExecutor({
                         apiKey: runtimeConfig.openai.apiKey,
-                        requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
                     }),
             }),
         executePlanner: async ({
