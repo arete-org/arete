@@ -13,5 +13,3 @@ The fallback model is now tiered. If planner output cannot be parsed at all, we 
 To make this observable, normalization emits explicit fallback metadata and correction metadata instead of relying on implicit signals. We now track fallback tier and correction codes so we can tell the difference between complete planner failure and partial correction. This keeps incident investigation straightforward and lets us improve prompts and schemas with concrete evidence.
 
 We are also carrying the same idea into search planning details. For example, `topicHints` are bounded and advisory. Invalid hints are dropped without blocking execution. Legacy-style hints continue to work during transition, but we normalize them into one backend-owned shape so behavior is consistent regardless of provider path.
-
-This decision is intentionally junior-friendly in implementation scope. If you work on planner code, ask one question first: "Is this provider transport, or is this planner policy?" If it is transport, keep it in the adapter. If it is policy, keep it in backend normalization and orchestration. That separation is the core of this decision.
