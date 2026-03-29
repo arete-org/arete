@@ -54,7 +54,7 @@ export type RuntimeConfig = {
         apiKey: string | null;
         defaultModel: ConfiguredProviderModel;
         plannerStructuredOutputEnabled: boolean;
-        plannerAllowLegacyTextFallback: boolean;
+        plannerAllowTextJsonCompatibilityFallback: boolean;
         defaultRealtimeModel: SupportedOpenAIRealtimeModel;
         defaultRealtimeVoice: SupportedOpenAITtsVoice;
         defaultReasoningEffort: SupportedReasoningEffort;

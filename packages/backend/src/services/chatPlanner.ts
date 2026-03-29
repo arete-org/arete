@@ -111,7 +111,7 @@ export type ChatPlannerProfileOption = {
 type CreateChatPlannerOptions = {
     executePlanner?: ChatPlannerExecutor;
     executePlannerStructured?: ChatPlannerStructuredExecutor;
-    allowLegacyTextFallback?: boolean;
+    allowTextJsonCompatibilityFallback?: boolean;
     defaultModel?: string;
     availableProfiles?: ChatPlannerProfileOption[];
     recordUsage?: (record: BackendLLMCostRecord) => void;
@@ -119,7 +119,7 @@ type CreateChatPlannerOptions = {
 
 /**
  * Narrow planner-only execution input.
- * This stays backend-local so planner policy can move off legacy OpenAI
+ * This stays backend-local so planner policy can evolve beyond current providers
  * without creating a second shared runtime abstraction.
  */
 type ChatPlannerExecutionRequest = {
@@ -154,8 +154,7 @@ type ChatPlannerStructuredExecutionResult = {
 type ChatPlannerStructuredExecutor = (
     request: ChatPlannerExecutionRequest
 ) => Promise<ChatPlannerStructuredExecutionResult>;
-
-const CHAT_PLANNER_FALLBACK_POLICY = 'planner_fallback_v1';
+type ChatPlannerExecutionMode = 'structured' | 'text_json';
 
 export type PlannerCandidate = Partial<ChatPlan> & {
     profileId?: unknown;
@@ -416,9 +415,8 @@ const stripJsonFences = (content: string): string =>
         .replace(/```$/i, '')
         .trim();
 
-const parsePlannerCandidateFromLegacyText = (
-    content: string
-): PlannerCandidate => JSON.parse(stripJsonFences(content)) as PlannerCandidate;
+const parsePlannerCandidateFromTextJson = (content: string): PlannerCandidate =>
+    JSON.parse(stripJsonFences(content)) as PlannerCandidate;
 
 const normalizePlannerResponsePreview = (content: string): string =>
     content.replace(/\s+/g, ' ').trim().slice(0, 280);
@@ -792,14 +790,14 @@ const normalizePlan = (
 export const createChatPlanner = ({
     executePlanner,
     executePlannerStructured,
-    allowLegacyTextFallback = false,
+    allowTextJsonCompatibilityFallback = false,
     defaultModel = runtimeConfig.openai.defaultModel,
     availableProfiles = [],
     recordUsage = recordBackendLLMUsage,
 }: CreateChatPlannerOptions) => {
     if (!executePlanner && !executePlannerStructured) {
         throw new Error(
-            'createChatPlanner requires at least one executor (structured or legacy text).'
+            'createChatPlanner requires at least one executor (structured or text JSON).'
         );
     }
 
@@ -822,6 +820,9 @@ export const createChatPlanner = ({
         request: PostChatRequest
     ): Promise<ChatPlannerResult> => {
         const plannerStartedAt = Date.now();
+        let plannerMode: ChatPlannerExecutionMode = executePlannerStructured
+            ? 'structured'
+            : 'text_json';
         let plannerResponseText: string | undefined;
         let plannerStructuredArguments: string | undefined;
         const plannerPrompt = renderPrompt('chat.planner.system').content;
@@ -910,7 +911,9 @@ export const createChatPlanner = ({
                         'chat planner returned policy-invalid structured decision; using fallback telemetry class',
                         {
                             event: 'chat.planner.fallback',
-                            policy: CHAT_PLANNER_FALLBACK_POLICY,
+                            plannerMode: 'structured',
+                            fallbackFrom: 'structured',
+                            fallbackTo: 'default_plan',
                             reasonCode: 'planner_invalid_output',
                             failureClass: 'policy_invalid',
                             surface: request.surface,
@@ -942,16 +945,17 @@ export const createChatPlanner = ({
             }
 
             if (!executePlanner) {
-                throw new Error('Legacy planner executor is not available.');
+                throw new Error('Text JSON planner executor is not available.');
             }
 
+            plannerMode = 'text_json';
             const plannerResponse = await executePlanner(requestPayload);
             plannerResponseText = plannerResponse.text;
             recordPlannerUsage(
                 plannerResponse.model || defaultModel,
                 plannerResponse.usage
             );
-            const parsed = parsePlannerCandidateFromLegacyText(
+            const parsed = parsePlannerCandidateFromTextJson(
                 plannerResponse.text
             );
             const normalizedPlan = normalizePlan(request, parsed);
@@ -989,14 +993,16 @@ export const createChatPlanner = ({
             let resolvedError: unknown = error;
             if (
                 executePlannerStructured &&
-                allowLegacyTextFallback &&
+                allowTextJsonCompatibilityFallback &&
                 executePlanner
             ) {
                 logger.warn(
-                    'chat planner structured execution failed; attempting legacy text fallback',
+                    'chat planner structured execution failed; attempting text JSON compatibility fallback',
                     {
-                        event: 'chat.planner.structured_fallback',
-                        policy: CHAT_PLANNER_FALLBACK_POLICY,
+                        event: 'chat.planner.compatibility_fallback',
+                        plannerMode: 'structured',
+                        fallbackFrom: 'structured',
+                        fallbackTo: 'text_json',
                         failureClass:
                             error instanceof SyntaxError
                                 ? 'schema_invalid'
@@ -1010,14 +1016,16 @@ export const createChatPlanner = ({
                     }
                 );
                 try {
-                    const legacyResponse = await executePlanner(requestPayload);
-                    plannerResponseText = legacyResponse.text;
+                    plannerMode = 'text_json';
+                    const textJsonResponse =
+                        await executePlanner(requestPayload);
+                    plannerResponseText = textJsonResponse.text;
                     recordPlannerUsage(
-                        legacyResponse.model || defaultModel,
-                        legacyResponse.usage
+                        textJsonResponse.model || defaultModel,
+                        textJsonResponse.usage
                     );
-                    const parsed = parsePlannerCandidateFromLegacyText(
-                        legacyResponse.text
+                    const parsed = parsePlannerCandidateFromTextJson(
+                        textJsonResponse.text
                     );
                     const normalizedPlan = normalizePlan(request, parsed);
                     return {
@@ -1027,8 +1035,8 @@ export const createChatPlanner = ({
                             durationMs: Date.now() - plannerStartedAt,
                         },
                     };
-                } catch (legacyError) {
-                    resolvedError = legacyError;
+                } catch (textJsonError) {
+                    resolvedError = textJsonError;
                 }
             }
 
@@ -1045,7 +1053,9 @@ export const createChatPlanner = ({
                     : 'planner_runtime_error';
             logger.warn('chat planner failed; using fallback plan', {
                 event: 'chat.planner.fallback',
-                policy: CHAT_PLANNER_FALLBACK_POLICY,
+                plannerMode,
+                fallbackFrom: plannerMode,
+                fallbackTo: 'default_plan',
                 reasonCode,
                 failureClass:
                     reasonCode === 'planner_invalid_output'
@@ -1064,15 +1074,19 @@ export const createChatPlanner = ({
                         : String(resolvedError),
                 plannerResponsePreview:
                     resolvedError instanceof SyntaxError
-                        ? plannerStructuredArguments
+                        ? plannerMode === 'text_json' && plannerResponseText
                             ? normalizePlannerResponsePreview(
-                                  plannerStructuredArguments
+                                  plannerResponseText
                               )
-                            : plannerResponseText
+                            : plannerStructuredArguments
                               ? normalizePlannerResponsePreview(
-                                    plannerResponseText
+                                    plannerStructuredArguments
                                 )
-                              : undefined
+                              : plannerResponseText
+                                ? normalizePlannerResponsePreview(
+                                      plannerResponseText
+                                  )
+                                : undefined
                         : undefined,
             });
             return {

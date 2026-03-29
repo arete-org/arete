@@ -362,8 +362,8 @@ export const createChatOrchestrator = ({
                 usage: plannerResult.usage,
             };
         },
-        allowLegacyTextFallback:
-            runtimeConfig.openai.plannerAllowLegacyTextFallback,
+        allowTextJsonCompatibilityFallback:
+            runtimeConfig.openai.plannerAllowTextJsonCompatibilityFallback,
         defaultModel: plannerProfile.providerModel,
         recordUsage,
     });

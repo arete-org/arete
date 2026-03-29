@@ -129,7 +129,7 @@ ${JSON.stringify({
     assert.equal(execution.status, 'executed');
 });
 
-test('chatPlanner accepts structured planner decisions without legacy JSON parsing', async () => {
+test('chatPlanner accepts structured planner decisions without text JSON parsing', async () => {
     const planner = createStructuredPlanner({
         action: 'message',
         modality: 'text',
@@ -265,12 +265,17 @@ test('chatPlanner fails open to a valid fallback generation config when planner 
         );
         assert.ok(warning);
         assert.equal(
-            (warning?.meta as { policy?: string } | undefined)?.policy,
-            'planner_fallback_v1'
+            (warning?.meta as { plannerMode?: string } | undefined)
+                ?.plannerMode,
+            'text_json'
         );
         assert.equal(
             (warning?.meta as { reasonCode?: string } | undefined)?.reasonCode,
             'planner_invalid_output'
+        );
+        assert.equal(
+            (warning?.meta as { fallbackTo?: string } | undefined)?.fallbackTo,
+            'default_plan'
         );
     } finally {
         logger.warn = originalWarn;

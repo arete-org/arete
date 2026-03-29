@@ -56,10 +56,10 @@ export const buildOpenAISection = (
         'PLANNER_STRUCTURED_OUTPUT_ENABLED',
         warn
     ),
-    plannerAllowLegacyTextFallback: parseBooleanEnv(
-        env.PLANNER_ALLOW_LEGACY_TEXT_FALLBACK,
-        envDefaultValues.PLANNER_ALLOW_LEGACY_TEXT_FALLBACK,
-        'PLANNER_ALLOW_LEGACY_TEXT_FALLBACK',
+    plannerAllowTextJsonCompatibilityFallback: parseBooleanEnv(
+        env.PLANNER_ALLOW_TEXT_JSON_COMPATIBILITY_FALLBACK,
+        envDefaultValues.PLANNER_ALLOW_TEXT_JSON_COMPATIBILITY_FALLBACK,
+        'PLANNER_ALLOW_TEXT_JSON_COMPATIBILITY_FALLBACK',
         warn
     ),
     defaultRealtimeModel: parseStringUnionEnv(
