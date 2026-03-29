@@ -16,7 +16,7 @@ type ChatPlannerStructuredExecutionRequest = {
     model: string;
     maxOutputTokens: number;
     reasoningEffort: 'minimal' | 'low' | 'medium' | 'high';
-    verbosity: 'low' | 'medium' | 'high';
+    verbosity?: 'low' | 'medium' | 'high';
     signal?: AbortSignal;
 };
 
@@ -99,9 +99,11 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
             reasoning: {
                 effort: normalizeReasoningEffort(request.reasoningEffort),
             },
-            text: {
-                verbosity: normalizeVerbosity(request.verbosity),
-            },
+            ...(request.verbosity !== undefined && {
+                text: {
+                    verbosity: normalizeVerbosity(request.verbosity),
+                },
+            }),
             tools: [chatPlannerDecisionTool],
             tool_choice: {
                 type: 'function',
@@ -173,14 +175,13 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
         try {
             parsedDecision = JSON.parse(functionCallItem.arguments) as unknown;
         } catch (error) {
-            throw new Error(
-                `Failed structured planner argument parsing: ${functionCallItem.arguments}`,
-                {
-                    cause:
-                        error instanceof Error
-                            ? error
-                            : new Error(String(error)),
-                }
+            const parserMessage =
+                error instanceof Error ? error.message : String(error);
+            const argumentPreview = functionCallItem.arguments
+                .replace(/\s+/g, ' ')
+                .slice(0, 280);
+            throw new SyntaxError(
+                `Failed structured planner argument parsing (length=${functionCallItem.arguments.length}): ${parserMessage}. preview=${argumentPreview}`
             );
         }
         return {

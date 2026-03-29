@@ -122,7 +122,7 @@ type ChatPlannerExecutionRequest = {
     model: string;
     maxOutputTokens: number;
     reasoningEffort: ChatGenerationPlan['reasoningEffort'];
-    verbosity: ChatGenerationPlan['verbosity'];
+    verbosity?: ChatGenerationPlan['verbosity'];
     signal?: AbortSignal;
 };
 
@@ -1005,9 +1005,8 @@ export const createChatPlanner = ({
         const requestPayload: ChatPlannerExecutionRequest = {
             messages: plannerMessages,
             model: defaultModel,
-            maxOutputTokens: 700,
+            maxOutputTokens: 1200,
             reasoningEffort: 'low',
-            verbosity: 'low',
         };
 
         const recordPlannerUsage = (
@@ -1171,11 +1170,16 @@ export const createChatPlanner = ({
             };
         } catch (error) {
             let resolvedError: unknown = error;
-            if (
+            const shouldAttemptCompatibilityFallback =
                 executePlannerStructured &&
-                allowTextJsonCompatibilityFallback &&
-                executePlanner
-            ) {
+                executePlanner &&
+                (allowTextJsonCompatibilityFallback ||
+                    error instanceof SyntaxError ||
+                    (error instanceof Error &&
+                        /Failed structured planner argument parsing/i.test(
+                            error.message
+                        )));
+            if (shouldAttemptCompatibilityFallback) {
                 logger.warn(
                     `chat planner structured execution failed; attempting text JSON compatibility fallback. error=${error instanceof Error ? error.message : String(error)}`,
                     {
@@ -1193,6 +1197,11 @@ export const createChatPlanner = ({
                             error instanceof Error
                                 ? error.message
                                 : String(error),
+                        fallbackPolicy: allowTextJsonCompatibilityFallback
+                            ? 'env_enabled'
+                            : error instanceof SyntaxError
+                              ? 'syntax_error_auto'
+                              : 'parse_error_auto',
                     }
                 );
                 try {
