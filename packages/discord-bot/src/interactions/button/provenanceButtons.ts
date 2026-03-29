@@ -409,7 +409,7 @@ function truncateBlockToLength(value: string, maxLength: number): string {
  * Builds a trace viewer URL for a given response identifier.
  *
  * @param responseId - The response identifier to include in the URL; leading and trailing whitespace are ignored. If `null`, `undefined`, or empty after trimming, no URL is produced.
- * @returns The full trace viewer URL formed by appending `/n/{encodedResponseId}` to the configured web base URL, or `null` if `responseId` is missing or blank.
+ * @returns The full trace viewer URL formed by appending `/traces/{encodedResponseId}` to the configured web base URL, or `null` if `responseId` is missing or blank.
  */
 function buildTraceViewerUrl(
     responseId: string | null | undefined
@@ -418,7 +418,7 @@ function buildTraceViewerUrl(
         return null;
     }
     const baseUrl = runtimeConfig.webBaseUrl.trim().replace(/\/+$/, '');
-    return `${baseUrl}/n/${encodeURIComponent(responseId.trim())}`;
+    return `${baseUrl}/traces/${encodeURIComponent(responseId.trim())}`;
 }
 
 /**

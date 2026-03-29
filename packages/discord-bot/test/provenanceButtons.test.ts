@@ -122,7 +122,7 @@ test('details action renders markdown sections with execution table and trace vi
         assert.match(content, /\*\*Execution\*\*/);
         assert.match(content, /\*\*Trace Viewer\*\*/);
         assert.match(content, /Open full trace/);
-        assert.match(content, /\/n\/resp_details_sections/);
+        assert.match(content, /\/traces\/resp_details_sections/);
         assert.match(content, /weaponization_request/);
         assert.match(content, /High\/Inferred\/block/);
         assert.match(content, /```text/);

@@ -49,6 +49,7 @@ const App = (): JSX.Element => (
             <Route path="/blog" element={<BlogListPage />} />
             <Route path="/blog/" element={<BlogListPage />} />
             <Route path="/blog/:number" element={<BlogPostPage />} />
+            <Route path="/traces/:responseId" element={<TracePage />} />
             <Route path="/api/traces/:responseId" element={<TracePage />} />
         </Routes>
     </div>
