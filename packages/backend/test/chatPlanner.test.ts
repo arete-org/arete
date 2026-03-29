@@ -275,7 +275,7 @@ test('chatPlanner fails open to a valid fallback generation config when planner 
         );
         assert.equal(
             (warning?.meta as { fallbackTo?: string } | undefined)?.fallbackTo,
-            'default_plan'
+            'safe_default_plan'
         );
     } finally {
         logger.warn = originalWarn;
