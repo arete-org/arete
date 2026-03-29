@@ -82,6 +82,64 @@ test('chatPlanner parses plain JSON output from the backend-native planner promp
     assert.ok(execution.durationMs >= 0);
 });
 
+test('chatPlanner parses fenced JSON output', async () => {
+    const planner = createPlanner(`\`\`\`json
+${JSON.stringify({
+    action: 'message',
+    modality: 'text',
+    profileId: 'openai-text-medium',
+    riskTier: 'Low',
+    reasoning: 'The user needs a normal reply.',
+    generation: {
+        reasoningEffort: 'low',
+        verbosity: 'low',
+        temperament: {
+            tightness: 4,
+            rationale: 3,
+            attribution: 4,
+            caution: 3,
+            extent: 4,
+        },
+    },
+})}
+\`\`\``);
+
+    const { plan, execution } = await planner.planChat(createChatRequest());
+
+    assert.equal(plan.action, 'message');
+    assert.equal(plan.profileId, 'openai-text-medium');
+    assert.equal(execution.status, 'executed');
+});
+
+test('chatPlanner extracts first top-level JSON object when output has wrapper text', async () => {
+    const planner = createPlanner(
+        `Planning result follows: ${JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            profileId: 'openai-text-fast',
+            riskTier: 'Low',
+            reasoning: 'Reply should be a normal message.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'medium',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+            },
+        })} end of payload.`
+    );
+
+    const { plan, execution } = await planner.planChat(createChatRequest());
+
+    assert.equal(plan.action, 'message');
+    assert.equal(plan.profileId, 'openai-text-fast');
+    assert.equal(execution.status, 'executed');
+});
+
 test('chatPlanner forwards bounded profile options context and normalizes blank profileId', async () => {
     let capturedMessages: Array<{ role: string; content: string }> = [];
     const availableProfiles: ChatPlannerProfileOption[] = [

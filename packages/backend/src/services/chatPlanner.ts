@@ -403,6 +403,82 @@ const stripJsonFences = (content: string): string =>
         .replace(/```$/i, '')
         .trim();
 
+const extractFirstTopLevelJsonObject = (
+    content: string
+): string | undefined => {
+    const trimmed = content.trim();
+    let inString = false;
+    let escaping = false;
+    let depth = 0;
+    let startIndex = -1;
+
+    for (let index = 0; index < trimmed.length; index += 1) {
+        const character = trimmed[index];
+        if (inString) {
+            if (escaping) {
+                escaping = false;
+                continue;
+            }
+
+            if (character === '\\') {
+                escaping = true;
+                continue;
+            }
+
+            if (character === '"') {
+                inString = false;
+            }
+            continue;
+        }
+
+        if (character === '"') {
+            inString = true;
+            continue;
+        }
+
+        if (character === '{') {
+            if (depth === 0) {
+                startIndex = index;
+            }
+            depth += 1;
+            continue;
+        }
+
+        if (character === '}') {
+            if (depth === 0) {
+                continue;
+            }
+            depth -= 1;
+            if (depth === 0 && startIndex >= 0) {
+                return trimmed.slice(startIndex, index + 1);
+            }
+        }
+    }
+
+    return undefined;
+};
+
+const parsePlannerCandidate = (content: string): PlannerCandidate => {
+    const withoutFences = stripJsonFences(content);
+    try {
+        return JSON.parse(withoutFences) as PlannerCandidate;
+    } catch (error) {
+        if (!(error instanceof SyntaxError)) {
+            throw error;
+        }
+    }
+
+    const extractedObject = extractFirstTopLevelJsonObject(withoutFences);
+    if (!extractedObject) {
+        throw new SyntaxError('Planner output did not contain a JSON object.');
+    }
+
+    return JSON.parse(extractedObject) as PlannerCandidate;
+};
+
+const normalizePlannerResponsePreview = (content: string): string =>
+    content.replace(/\s+/g, ' ').trim().slice(0, 280);
+
 const normalizeProfileId = (value: unknown): string | undefined => {
     if (typeof value !== 'string') {
         return undefined;
@@ -794,6 +870,7 @@ export const createChatPlanner = ({
         request: PostChatRequest
     ): Promise<ChatPlannerResult> => {
         const plannerStartedAt = Date.now();
+        let plannerResponseText: string | undefined;
         const plannerPrompt = renderPrompt('chat.planner.system').content;
         const requestSummary = summarizeRequest(request);
         const plannerMessages: RuntimeMessage[] = [
@@ -828,6 +905,7 @@ export const createChatPlanner = ({
                 reasoningEffort: 'low',
                 verbosity: 'low',
             });
+            plannerResponseText = plannerResponse.text;
             const usageModel = plannerResponse.model || defaultModel;
             const promptTokens = plannerResponse.usage?.promptTokens ?? 0;
             const completionTokens =
@@ -856,8 +934,7 @@ export const createChatPlanner = ({
                     );
                 }
             }
-            const rawPlan = stripJsonFences(plannerResponse.text);
-            const parsed = JSON.parse(rawPlan) as PlannerCandidate;
+            const parsed = parsePlannerCandidate(plannerResponse.text);
             const normalizedPlan = normalizePlan(request, parsed);
 
             /*
@@ -911,6 +988,14 @@ export const createChatPlanner = ({
                 errorName: error instanceof Error ? error.name : undefined,
                 errorMessage:
                     error instanceof Error ? error.message : String(error),
+                plannerResponsePreview:
+                    error instanceof SyntaxError
+                        ? plannerResponseText
+                            ? normalizePlannerResponsePreview(
+                                  plannerResponseText
+                              )
+                            : undefined
+                        : undefined,
             });
             return {
                 plan: fallbackPlan,
