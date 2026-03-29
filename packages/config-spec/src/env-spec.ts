@@ -1237,6 +1237,32 @@ export const envEntries = [
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
+        key: 'PLANNER_STRUCTURED_OUTPUT_ENABLED',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'When true, planner execution uses structured function-calling output when available.',
+        defaultValue: literal(true),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
+        key: 'PLANNER_ALLOW_LEGACY_TEXT_FALLBACK',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'When true, planner falls back to legacy text JSON parsing when structured planner execution fails.',
+        defaultValue: literal(false),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
         key: 'REALTIME_DEFAULT_MODEL',
         owner: 'shared',
         stage: 'runtime',

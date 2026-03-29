@@ -42,6 +42,24 @@ const createPlanner = (
         availableProfiles,
     });
 
+const createStructuredPlanner = (
+    decision: unknown,
+    availableProfiles: ChatPlannerProfileOption[] = []
+) =>
+    createChatPlanner({
+        executePlannerStructured: async () => ({
+            decision,
+            model: 'gpt-5-mini',
+            usage: {
+                promptTokens: 12,
+                completionTokens: 8,
+                totalTokens: 20,
+            },
+            rawArguments: JSON.stringify(decision),
+        }),
+        availableProfiles,
+    });
+
 test('chatPlanner parses plain JSON output from the backend-native planner prompt', async () => {
     const planner = createPlanner(
         JSON.stringify({
@@ -111,33 +129,49 @@ ${JSON.stringify({
     assert.equal(execution.status, 'executed');
 });
 
-test('chatPlanner extracts first top-level JSON object when output has wrapper text', async () => {
-    const planner = createPlanner(
-        `Planning result follows: ${JSON.stringify({
-            action: 'message',
-            modality: 'text',
-            profileId: 'openai-text-fast',
-            riskTier: 'Low',
-            reasoning: 'Reply should be a normal message.',
-            generation: {
-                reasoningEffort: 'low',
-                verbosity: 'medium',
-                temperament: {
-                    tightness: 4,
-                    rationale: 3,
-                    attribution: 4,
-                    caution: 3,
-                    extent: 4,
-                },
+test('chatPlanner accepts structured planner decisions without legacy JSON parsing', async () => {
+    const planner = createStructuredPlanner({
+        action: 'message',
+        modality: 'text',
+        profileId: 'openai-text-fast',
+        riskTier: 'Low',
+        reasoning: 'Reply should be a normal message.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'medium',
+            temperament: {
+                tightness: 4,
+                rationale: 3,
+                attribution: 4,
+                caution: 3,
+                extent: 4,
             },
-        })} end of payload.`
-    );
+        },
+    });
 
     const { plan, execution } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.profileId, 'openai-text-fast');
     assert.equal(execution.status, 'executed');
+});
+
+test('chatPlanner marks structured policy-invalid decisions as failed with invalid-output reason', async () => {
+    const planner = createStructuredPlanner({
+        action: 'message',
+        modality: 'text',
+        riskTier: 'Low',
+        reasoning: 'Invalid policy decision shape for message action.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+        },
+    });
+
+    const { execution } = await planner.planChat(createChatRequest());
+
+    assert.equal(execution.status, 'failed');
+    assert.equal(execution.reasonCode, 'planner_invalid_output');
 });
 
 test('chatPlanner forwards bounded profile options context and normalizes blank profileId', async () => {

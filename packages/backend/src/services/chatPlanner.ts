@@ -109,7 +109,9 @@ export type ChatPlannerProfileOption = {
 };
 
 type CreateChatPlannerOptions = {
-    executePlanner: ChatPlannerExecutor;
+    executePlanner?: ChatPlannerExecutor;
+    executePlannerStructured?: ChatPlannerStructuredExecutor;
+    allowLegacyTextFallback?: boolean;
     defaultModel?: string;
     availableProfiles?: ChatPlannerProfileOption[];
     recordUsage?: (record: BackendLLMCostRecord) => void;
@@ -142,9 +144,20 @@ type ChatPlannerExecutor = (
     request: ChatPlannerExecutionRequest
 ) => Promise<ChatPlannerExecutionResult>;
 
+type ChatPlannerStructuredExecutionResult = {
+    decision: unknown;
+    model?: string;
+    usage?: GenerationUsage;
+    rawArguments?: string;
+};
+
+type ChatPlannerStructuredExecutor = (
+    request: ChatPlannerExecutionRequest
+) => Promise<ChatPlannerStructuredExecutionResult>;
+
 const CHAT_PLANNER_FALLBACK_POLICY = 'planner_fallback_v1';
 
-type PlannerCandidate = Partial<ChatPlan> & {
+export type PlannerCandidate = Partial<ChatPlan> & {
     profileId?: unknown;
     reasoning?: unknown;
     generation?: Partial<ChatGenerationPlan> & {
@@ -403,78 +416,9 @@ const stripJsonFences = (content: string): string =>
         .replace(/```$/i, '')
         .trim();
 
-const extractFirstTopLevelJsonObject = (
+const parsePlannerCandidateFromLegacyText = (
     content: string
-): string | undefined => {
-    const trimmed = content.trim();
-    let inString = false;
-    let escaping = false;
-    let depth = 0;
-    let startIndex = -1;
-
-    for (let index = 0; index < trimmed.length; index += 1) {
-        const character = trimmed[index];
-        if (inString) {
-            if (escaping) {
-                escaping = false;
-                continue;
-            }
-
-            if (character === '\\') {
-                escaping = true;
-                continue;
-            }
-
-            if (character === '"') {
-                inString = false;
-            }
-            continue;
-        }
-
-        if (character === '"') {
-            inString = true;
-            continue;
-        }
-
-        if (character === '{') {
-            if (depth === 0) {
-                startIndex = index;
-            }
-            depth += 1;
-            continue;
-        }
-
-        if (character === '}') {
-            if (depth === 0) {
-                continue;
-            }
-            depth -= 1;
-            if (depth === 0 && startIndex >= 0) {
-                return trimmed.slice(startIndex, index + 1);
-            }
-        }
-    }
-
-    return undefined;
-};
-
-const parsePlannerCandidate = (content: string): PlannerCandidate => {
-    const withoutFences = stripJsonFences(content);
-    try {
-        return JSON.parse(withoutFences) as PlannerCandidate;
-    } catch (error) {
-        if (!(error instanceof SyntaxError)) {
-            throw error;
-        }
-    }
-
-    const extractedObject = extractFirstTopLevelJsonObject(withoutFences);
-    if (!extractedObject) {
-        throw new SyntaxError('Planner output did not contain a JSON object.');
-    }
-
-    return JSON.parse(extractedObject) as PlannerCandidate;
-};
+): PlannerCandidate => JSON.parse(stripJsonFences(content)) as PlannerCandidate;
 
 const normalizePlannerResponsePreview = (content: string): string =>
     content.replace(/\s+/g, ' ').trim().slice(0, 280);
@@ -847,10 +791,18 @@ const normalizePlan = (
  */
 export const createChatPlanner = ({
     executePlanner,
+    executePlannerStructured,
+    allowLegacyTextFallback = false,
     defaultModel = runtimeConfig.openai.defaultModel,
     availableProfiles = [],
     recordUsage = recordBackendLLMUsage,
 }: CreateChatPlannerOptions) => {
+    if (!executePlanner && !executePlannerStructured) {
+        throw new Error(
+            'createChatPlanner requires at least one executor (structured or legacy text).'
+        );
+    }
+
     // Keep planner context intentionally narrow.
     // We expose only decision-relevant fields, not full raw catalog config.
     const plannerProfileContext =
@@ -871,6 +823,7 @@ export const createChatPlanner = ({
     ): Promise<ChatPlannerResult> => {
         const plannerStartedAt = Date.now();
         let plannerResponseText: string | undefined;
+        let plannerStructuredArguments: string | undefined;
         const plannerPrompt = renderPrompt('chat.planner.system').content;
         const requestSummary = summarizeRequest(request);
         const plannerMessages: RuntimeMessage[] = [
@@ -897,22 +850,22 @@ export const createChatPlanner = ({
             ),
         ];
 
-        try {
-            const plannerResponse = await executePlanner({
-                messages: plannerMessages,
-                model: defaultModel,
-                maxOutputTokens: 700,
-                reasoningEffort: 'low',
-                verbosity: 'low',
-            });
-            plannerResponseText = plannerResponse.text;
-            const usageModel = plannerResponse.model || defaultModel;
-            const promptTokens = plannerResponse.usage?.promptTokens ?? 0;
-            const completionTokens =
-                plannerResponse.usage?.completionTokens ?? 0;
+        const requestPayload: ChatPlannerExecutionRequest = {
+            messages: plannerMessages,
+            model: defaultModel,
+            maxOutputTokens: 700,
+            reasoningEffort: 'low',
+            verbosity: 'low',
+        };
+
+        const recordPlannerUsage = (
+            usageModel: string,
+            usage?: GenerationUsage
+        ) => {
+            const promptTokens = usage?.promptTokens ?? 0;
+            const completionTokens = usage?.completionTokens ?? 0;
             const totalTokens =
-                plannerResponse.usage?.totalTokens ??
-                promptTokens + completionTokens;
+                usage?.totalTokens ?? promptTokens + completionTokens;
             if (recordUsage) {
                 try {
                     recordUsage({
@@ -934,7 +887,73 @@ export const createChatPlanner = ({
                     );
                 }
             }
-            const parsed = parsePlannerCandidate(plannerResponse.text);
+        };
+
+        const classifyPolicyFallback = (normalizedPlan: ChatPlan): boolean =>
+            /fell back safely/i.test(normalizedPlan.reasoning);
+
+        try {
+            if (executePlannerStructured) {
+                const structuredResponse =
+                    await executePlannerStructured(requestPayload);
+                plannerStructuredArguments = structuredResponse.rawArguments;
+                recordPlannerUsage(
+                    structuredResponse.model || defaultModel,
+                    structuredResponse.usage
+                );
+                const normalizedPlan = normalizePlan(
+                    request,
+                    structuredResponse.decision as PlannerCandidate
+                );
+                if (classifyPolicyFallback(normalizedPlan)) {
+                    logger.warn(
+                        'chat planner returned policy-invalid structured decision; using fallback telemetry class',
+                        {
+                            event: 'chat.planner.fallback',
+                            policy: CHAT_PLANNER_FALLBACK_POLICY,
+                            reasonCode: 'planner_invalid_output',
+                            failureClass: 'policy_invalid',
+                            surface: request.surface,
+                            triggerKind: request.trigger.kind,
+                            plannerStructuredPreview: plannerStructuredArguments
+                                ? normalizePlannerResponsePreview(
+                                      plannerStructuredArguments
+                                  )
+                                : undefined,
+                        }
+                    );
+                    return {
+                        plan: normalizedPlan,
+                        execution: {
+                            status: 'failed',
+                            reasonCode: 'planner_invalid_output',
+                            durationMs: Date.now() - plannerStartedAt,
+                        },
+                    };
+                }
+
+                return {
+                    plan: normalizedPlan,
+                    execution: {
+                        status: 'executed',
+                        durationMs: Date.now() - plannerStartedAt,
+                    },
+                };
+            }
+
+            if (!executePlanner) {
+                throw new Error('Legacy planner executor is not available.');
+            }
+
+            const plannerResponse = await executePlanner(requestPayload);
+            plannerResponseText = plannerResponse.text;
+            recordPlannerUsage(
+                plannerResponse.model || defaultModel,
+                plannerResponse.usage
+            );
+            const parsed = parsePlannerCandidateFromLegacyText(
+                plannerResponse.text
+            );
             const normalizedPlan = normalizePlan(request, parsed);
 
             /*
@@ -967,6 +986,52 @@ export const createChatPlanner = ({
                 },
             };
         } catch (error) {
+            let resolvedError: unknown = error;
+            if (
+                executePlannerStructured &&
+                allowLegacyTextFallback &&
+                executePlanner
+            ) {
+                logger.warn(
+                    'chat planner structured execution failed; attempting legacy text fallback',
+                    {
+                        event: 'chat.planner.structured_fallback',
+                        policy: CHAT_PLANNER_FALLBACK_POLICY,
+                        failureClass:
+                            error instanceof SyntaxError
+                                ? 'schema_invalid'
+                                : 'runtime_error',
+                        errorName:
+                            error instanceof Error ? error.name : undefined,
+                        errorMessage:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    }
+                );
+                try {
+                    const legacyResponse = await executePlanner(requestPayload);
+                    plannerResponseText = legacyResponse.text;
+                    recordPlannerUsage(
+                        legacyResponse.model || defaultModel,
+                        legacyResponse.usage
+                    );
+                    const parsed = parsePlannerCandidateFromLegacyText(
+                        legacyResponse.text
+                    );
+                    const normalizedPlan = normalizePlan(request, parsed);
+                    return {
+                        plan: normalizedPlan,
+                        execution: {
+                            status: 'executed',
+                            durationMs: Date.now() - plannerStartedAt,
+                        },
+                    };
+                } catch (legacyError) {
+                    resolvedError = legacyError;
+                }
+            }
+
             const fallbackPlan = buildFallbackPlan(
                 request,
                 'Planner failed, so the backend used a safe fallback.'
@@ -975,26 +1040,39 @@ export const createChatPlanner = ({
             // downstream metadata and logs can distinguish prompt/schema drift
             // from upstream service instability.
             const reasonCode: ExecutionReasonCode =
-                error instanceof SyntaxError
+                resolvedError instanceof SyntaxError
                     ? 'planner_invalid_output'
                     : 'planner_runtime_error';
             logger.warn('chat planner failed; using fallback plan', {
                 event: 'chat.planner.fallback',
                 policy: CHAT_PLANNER_FALLBACK_POLICY,
                 reasonCode,
+                failureClass:
+                    reasonCode === 'planner_invalid_output'
+                        ? 'schema_invalid'
+                        : 'runtime_error',
                 fallbackAction: fallbackPlan.action,
                 triggerKind: request.trigger.kind,
                 surface: request.surface,
-                errorName: error instanceof Error ? error.name : undefined,
+                errorName:
+                    resolvedError instanceof Error
+                        ? resolvedError.name
+                        : undefined,
                 errorMessage:
-                    error instanceof Error ? error.message : String(error),
+                    resolvedError instanceof Error
+                        ? resolvedError.message
+                        : String(resolvedError),
                 plannerResponsePreview:
-                    error instanceof SyntaxError
-                        ? plannerResponseText
+                    resolvedError instanceof SyntaxError
+                        ? plannerStructuredArguments
                             ? normalizePlannerResponsePreview(
-                                  plannerResponseText
+                                  plannerStructuredArguments
                               )
-                            : undefined
+                            : plannerResponseText
+                              ? normalizePlannerResponsePreview(
+                                    plannerResponseText
+                                )
+                              : undefined
                         : undefined,
             });
             return {
