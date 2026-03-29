@@ -257,6 +257,21 @@ const buildPlannerPayload = (
         ...(surfacePolicy && { surfacePolicy }),
     });
 
+const buildCorrelationIds = (
+    request: PostChatRequest,
+    responseId: string | null = null
+): {
+    conversationId: string | null;
+    requestId: string | null;
+    incidentId: string | null;
+    responseId: string | null;
+} => ({
+    conversationId: request.sessionId ?? null,
+    requestId: request.trigger.messageId ?? null,
+    incidentId: null,
+    responseId,
+});
+
 /**
  * The orchestrator keeps surface-specific policy in one place while reusing the
  * shared message-generation service for any branch that ends in text output.
@@ -428,6 +443,7 @@ export const createChatOrchestrator = ({
                         riskTier: evaluatorOutcome.safetyDecision.riskTier,
                         surface: normalizedRequest.surface,
                         triggerKind: normalizedRequest.trigger.kind,
+                        correlation: buildCorrelationIds(normalizedRequest),
                     }
                 );
             }
@@ -909,6 +925,33 @@ export const createChatOrchestrator = ({
             response.metadata.totalDurationMs ??
             Math.max(0, Date.now() - orchestrationStartedAt);
         emitFallbackRollup(profileSelectionSource);
+        const breakerDecision =
+            evaluatorExecutionContext?.outcome?.safetyDecision;
+        if (
+            evaluatorExecutionContext?.status === 'executed' &&
+            breakerDecision &&
+            breakerDecision.action !== 'allow'
+        ) {
+            chatOrchestratorLogger.info(
+                'chat.orchestration.breaker_action_applied',
+                {
+                    event: 'chat.orchestration.breaker_action_applied',
+                    mode: evaluatorExecutionContext.outcome?.mode,
+                    action: breakerDecision.action,
+                    ruleId: breakerDecision.ruleId,
+                    reasonCode: breakerDecision.reasonCode,
+                    reason: breakerDecision.reason,
+                    riskTier: breakerDecision.riskTier,
+                    enforcement: 'observe_only',
+                    responseAction: 'message',
+                    responseModality: executionPlan.modality,
+                    correlation: buildCorrelationIds(
+                        normalizedRequest,
+                        response.metadata.responseId
+                    ),
+                }
+            );
+        }
         chatOrchestratorLogger.info('chat.orchestration.timing', {
             surface: normalizedRequest.surface,
             plannerStatus: plannerExecution.status,
@@ -946,6 +989,10 @@ export const createChatOrchestrator = ({
             responseModelVersion: response.metadata.modelVersion,
             responseCitationCount: response.metadata.citations.length,
             responseMessageLength: response.message.length,
+            correlation: buildCorrelationIds(
+                normalizedRequest,
+                response.metadata.responseId
+            ),
         });
 
         // Message action is the only branch that returns provenance metadata.

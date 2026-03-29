@@ -111,8 +111,15 @@ const logIncidentEvent = (
     incident: IncidentRecord,
     extra?: Record<string, unknown>
 ): void => {
+    const correlation = {
+        conversationId: incident.pointers.responseId ?? null,
+        requestId: incident.pointers.messageId ?? null,
+        incidentId: incident.shortId,
+    };
+
     incidentServiceLogger.info(eventName, {
         event: eventName,
+        correlation,
         incidentId: incident.shortId,
         incidentNumericId: incident.id,
         responseId: incident.pointers.responseId ?? null,
@@ -230,6 +237,14 @@ export const createIncidentService = ({
             logIncidentEvent('incident.status_changed', updatedIncident, {
                 action: 'incident.status_changed',
             });
+            logIncidentEvent('incident.updated', updatedIncident, {
+                action: 'incident.status_changed',
+            });
+            if (updatedIncident.status === 'resolved') {
+                logIncidentEvent('incident.resolved', updatedIncident, {
+                    action: 'incident.status_changed',
+                });
+            }
 
             return getIncidentDetail(incidentId);
         },
@@ -245,6 +260,10 @@ export const createIncidentService = ({
                 notes: request.notes.trim(),
             });
 
+            const updatedIncident = await getIncidentRecord(incidentId);
+            logIncidentEvent('incident.updated', updatedIncident, {
+                action: 'incident.note_added',
+            });
             return getIncidentDetail(incidentId);
         },
 
@@ -277,6 +296,12 @@ export const createIncidentService = ({
                     action: 'incident.remediated',
                 });
             }
+            logIncidentEvent('incident.updated', updatedIncident, {
+                action:
+                    request.state === 'applied'
+                        ? 'incident.remediated'
+                        : 'incident.remediation_recorded',
+            });
 
             return getIncidentDetail(incidentId);
         },
