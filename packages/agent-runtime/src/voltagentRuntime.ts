@@ -607,6 +607,7 @@ const buildRepoExplainerQuery = (search: GenerationSearchRequest): string => {
         'footnote',
         'DeepWiki',
         ...(search.repoHints ?? []),
+        ...(search.topicHints ?? []),
         search.query.trim(),
     ];
     const seenTerms = new Set<string>();
@@ -634,18 +635,26 @@ const buildVoltAgentSearchInstruction = (
             (search.repoHints?.length ?? 0) > 0
                 ? ` Focus areas: ${search.repoHints?.join(', ')}.`
                 : '';
+        const topicHintText =
+            (search.topicHints?.length ?? 0) > 0
+                ? ` Topic hints: ${search.topicHints?.join(', ')}.`
+                : '';
 
         return [
             'The planner marked this as a Footnote repository explanation lookup.',
             'Treat footnote-ai/footnote as the canonical repository identity for this search.',
             'Prefer DeepWiki results from https://deepwiki.com/footnote-ai/footnote when they are relevant.',
             'If DeepWiki coverage is thin, use broader web context instead of getting stuck.',
-            `Search query: ${repoQuery}.${hintText}`.trim(),
+            `Search query: ${repoQuery}.${hintText}${topicHintText}`.trim(),
             `Original planner query: ${search.query.trim()}.`,
         ].join(' ');
     }
 
-    return `The planner instructed you to perform a web search for: ${search.query.trim()}`;
+    const topicHintText =
+        (search.topicHints?.length ?? 0) > 0
+            ? ` Focus areas: ${search.topicHints?.join(', ')}.`
+            : '';
+    return `The planner instructed you to perform a web search for: ${search.query.trim()}.${topicHintText}`.trim();
 };
 
 const createVoltAgentSearchTool = (

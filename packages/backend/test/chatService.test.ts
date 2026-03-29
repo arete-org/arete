@@ -219,6 +219,7 @@ test('runChatMessages passes structured retrieval facts into response metadata r
                 contextSize: 'low',
                 intent: 'current_facts',
                 repoHints: [],
+                topicHints: ['policy', 'openai'],
             },
         },
     });
@@ -576,6 +577,7 @@ test('runChatMessages forwards planner-selected generation settings to Generatio
                 contextSize: 'low',
                 intent: 'current_facts',
                 repoHints: [],
+                topicHints: ['policy', 'openai'],
             },
         },
     });
@@ -588,6 +590,7 @@ test('runChatMessages forwards planner-selected generation settings to Generatio
     assert.equal(seenRequest?.userId, undefined);
     assert.equal(seenRequest?.search?.query, 'latest OpenAI policy update');
     assert.equal(seenRequest?.search?.intent, 'current_facts');
+    assert.deepEqual(seenRequest?.search?.topicHints, ['policy', 'openai']);
 });
 
 test('runChatMessages tolerates optional memory retrievals field on runtime results', async () => {

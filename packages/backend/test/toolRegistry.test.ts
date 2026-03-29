@@ -110,3 +110,25 @@ test('weather adapter execution fails open and returns tool_execution_error when
     assert.ok((execution.toolExecutionContext?.durationMs ?? 0) >= 0);
     assert.equal(warnings.length, 1);
 });
+
+test('web search tool intent forwards topicHints when provided', () => {
+    const selection = resolveToolSelection({
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            search: {
+                query: 'planner fallback behavior',
+                contextSize: 'low',
+                intent: 'current_facts',
+                topicHints: ['planner fallback', 'chat planner'],
+            },
+        },
+    });
+
+    assert.equal(selection.toolIntent.toolName, 'web_search');
+    assert.equal(selection.toolIntent.requested, true);
+    assert.deepEqual(
+        (selection.toolIntent.input as { topicHints?: string[] }).topicHints,
+        ['planner fallback', 'chat planner']
+    );
+});

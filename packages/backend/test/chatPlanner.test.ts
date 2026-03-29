@@ -42,6 +42,24 @@ const createPlanner = (
         availableProfiles,
     });
 
+const createStructuredPlanner = (
+    decision: unknown,
+    availableProfiles: ChatPlannerProfileOption[] = []
+) =>
+    createChatPlanner({
+        executePlannerStructured: async () => ({
+            decision,
+            model: 'gpt-5-mini',
+            usage: {
+                promptTokens: 12,
+                completionTokens: 8,
+                totalTokens: 20,
+            },
+            rawArguments: JSON.stringify(decision),
+        }),
+        availableProfiles,
+    });
+
 test('chatPlanner parses plain JSON output from the backend-native planner prompt', async () => {
     const planner = createPlanner(
         JSON.stringify({
@@ -80,6 +98,80 @@ test('chatPlanner parses plain JSON output from the backend-native planner promp
     assert.equal(plan.generation.search?.intent, 'current_facts');
     assert.equal(execution.status, 'executed');
     assert.ok(execution.durationMs >= 0);
+});
+
+test('chatPlanner parses fenced JSON output', async () => {
+    const planner = createPlanner(`\`\`\`json
+${JSON.stringify({
+    action: 'message',
+    modality: 'text',
+    profileId: 'openai-text-medium',
+    riskTier: 'Low',
+    reasoning: 'The user needs a normal reply.',
+    generation: {
+        reasoningEffort: 'low',
+        verbosity: 'low',
+        temperament: {
+            tightness: 4,
+            rationale: 3,
+            attribution: 4,
+            caution: 3,
+            extent: 4,
+        },
+    },
+})}
+\`\`\``);
+
+    const { plan, execution } = await planner.planChat(createChatRequest());
+
+    assert.equal(plan.action, 'message');
+    assert.equal(plan.profileId, 'openai-text-medium');
+    assert.equal(execution.status, 'executed');
+});
+
+test('chatPlanner accepts structured planner decisions without text JSON parsing', async () => {
+    const planner = createStructuredPlanner({
+        action: 'message',
+        modality: 'text',
+        profileId: 'openai-text-fast',
+        riskTier: 'Low',
+        reasoning: 'Reply should be a normal message.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'medium',
+            temperament: {
+                tightness: 4,
+                rationale: 3,
+                attribution: 4,
+                caution: 3,
+                extent: 4,
+            },
+        },
+    });
+
+    const { plan, execution } = await planner.planChat(createChatRequest());
+
+    assert.equal(plan.action, 'message');
+    assert.equal(plan.profileId, 'openai-text-fast');
+    assert.equal(execution.status, 'executed');
+});
+
+test('chatPlanner marks structured policy-invalid decisions as failed with invalid-output reason', async () => {
+    const planner = createStructuredPlanner({
+        action: 'message',
+        modality: 'text',
+        riskTier: 'Low',
+        reasoning: 'Invalid policy decision shape for message action.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+        },
+    });
+
+    const { execution } = await planner.planChat(createChatRequest());
+
+    assert.equal(execution.status, 'failed');
+    assert.equal(execution.reasonCode, 'planner_invalid_output');
 });
 
 test('chatPlanner forwards bounded profile options context and normalizes blank profileId', async () => {
@@ -173,12 +265,17 @@ test('chatPlanner fails open to a valid fallback generation config when planner 
         );
         assert.ok(warning);
         assert.equal(
-            (warning?.meta as { policy?: string } | undefined)?.policy,
-            'planner_fallback_v1'
+            (warning?.meta as { plannerMode?: string } | undefined)
+                ?.plannerMode,
+            'text_json'
         );
         assert.equal(
             (warning?.meta as { reasonCode?: string } | undefined)?.reasonCode,
             'planner_invalid_output'
+        );
+        assert.equal(
+            (warning?.meta as { fallbackTo?: string } | undefined)?.fallbackTo,
+            'safe_default_plan'
         );
     } finally {
         logger.warn = originalWarn;
@@ -207,6 +304,7 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
                     contextSize: 'low',
                     intent: 'repo_explainer',
                     repoHints: ['Discord', 'provenance', 'discord', 'wiki'],
+                    topicHints: ['Incident Lifecycle', 'discord'],
                 },
             },
         })
@@ -219,6 +317,57 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
     assert.deepEqual(plan.generation.search?.repoHints, [
         'discord',
         'provenance',
+    ]);
+    assert.deepEqual(plan.generation.search?.topicHints, [
+        'incident lifecycle',
+        'discord',
+        'provenance',
+    ]);
+});
+
+test('search topicHints are bounded, deduped, and normalized fail-open', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            riskTier: 'Low',
+            reasoning: 'Use focused retrieval hints for ranking.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                search: {
+                    query: 'How does incident logging correlate with traces?',
+                    contextSize: 'medium',
+                    intent: 'current_facts',
+                    topicHints: [
+                        ' Incident Lifecycle ',
+                        'trace envelope',
+                        'trace envelope',
+                        '',
+                        'x'.repeat(41),
+                        'weather tool',
+                        'chat planner',
+                        'extra item',
+                    ],
+                },
+            },
+        })
+    );
+    const { plan } = await planner.planChat(createChatRequest());
+
+    assert.deepEqual(plan.generation.search?.topicHints, [
+        'incident lifecycle',
+        'trace envelope',
+        'weather tool',
+        'chat planner',
+        'extra item',
     ]);
 });
 
@@ -526,7 +675,7 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
             },
         })
     );
-    const { plan } = await planner.planChat(createChatRequest());
+    const { plan, execution } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.generation.search, undefined);
@@ -534,6 +683,18 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
     assert.equal(plan.generation.verbosity, 'low');
     assert.equal(plan.generation.temperament, undefined);
     assert.match(plan.reasoning, /missing|invalid|TRACE temperament/i);
+    assert.equal(execution.status, 'failed');
+    assert.equal(execution.reasonCode, 'planner_invalid_output');
+});
+
+test('non-object planner payload falls back safely without runtime errors', async () => {
+    const planner = createPlanner(JSON.stringify('not-an-object'));
+    const { plan, execution } = await planner.planChat(createChatRequest());
+
+    assert.equal(plan.action, 'message');
+    assert.equal(plan.generation.search, undefined);
+    assert.equal(execution.status, 'failed');
+    assert.equal(execution.reasonCode, 'planner_invalid_output');
 });
 
 test('react plans with non-emoji payload fall back safely', async () => {

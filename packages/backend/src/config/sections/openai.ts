@@ -14,6 +14,7 @@ import type {
     SupportedVerbosity,
 } from '@footnote/contracts/providers';
 import {
+    parseBooleanEnv,
     parseOptionalTrimmedString,
     parsePositiveIntEnv,
     parseStringUnionEnv,
@@ -49,6 +50,18 @@ export const buildOpenAISection = (
     defaultModel:
         parseOptionalTrimmedString(env.DEFAULT_MODEL) ||
         envDefaultValues.DEFAULT_MODEL,
+    plannerStructuredOutputEnabled: parseBooleanEnv(
+        env.PLANNER_STRUCTURED_OUTPUT_ENABLED,
+        envDefaultValues.PLANNER_STRUCTURED_OUTPUT_ENABLED,
+        'PLANNER_STRUCTURED_OUTPUT_ENABLED',
+        warn
+    ),
+    plannerAllowTextJsonCompatibilityFallback: parseBooleanEnv(
+        env.PLANNER_ALLOW_TEXT_JSON_COMPATIBILITY_FALLBACK,
+        envDefaultValues.PLANNER_ALLOW_TEXT_JSON_COMPATIBILITY_FALLBACK,
+        'PLANNER_ALLOW_TEXT_JSON_COMPATIBILITY_FALLBACK',
+        warn
+    ),
     defaultRealtimeModel: parseStringUnionEnv(
         env.REALTIME_DEFAULT_MODEL,
         envDefaultValues.REALTIME_DEFAULT_MODEL,

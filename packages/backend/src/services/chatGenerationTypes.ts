@@ -9,23 +9,11 @@ import type {
     GenerationRequest,
     GenerationSearchRequest,
 } from '@footnote/agent-runtime';
-import type { ResponseTemperament } from '@footnote/contracts/ethics-core';
-
-export type ChatRepoSearchHint =
-    | 'architecture'
-    | 'backend'
-    | 'contracts'
-    | 'discord'
-    | 'images'
-    | 'onboarding'
-    | 'web'
-    | 'observability'
-    | 'openapi'
-    | 'prompts'
-    | 'provenance'
-    | 'chat'
-    | 'traces'
-    | 'voice';
+import type {
+    ChatRepoSearchHint,
+    ResponseTemperament,
+} from '@footnote/contracts';
+export type { ChatRepoSearchHint } from '@footnote/contracts';
 
 /**
  * Chat narrows generic repo hints to the known Footnote-specific tags that
@@ -33,9 +21,10 @@ export type ChatRepoSearchHint =
  */
 export type ChatGenerationSearch = Omit<
     GenerationSearchRequest,
-    'repoHints'
+    'repoHints' | 'topicHints'
 > & {
     repoHints?: ChatRepoSearchHint[];
+    topicHints?: string[];
 };
 
 export type ChatGenerationWeatherLocation =

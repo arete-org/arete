@@ -39,6 +39,7 @@ import {
     type CreateChatServiceOptions,
 } from './chatService.js';
 import { createChatPlanner, type ChatPlan } from './chatPlanner.js';
+import { createOpenAiChatPlannerStructuredExecutor } from './chatPlannerStructuredOpenAi.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import { normalizeDiscordConversation } from './chatConversationNormalization.js';
 import {
@@ -337,6 +338,15 @@ export const createChatOrchestrator = ({
     });
     const chatPlanner = createChatPlanner({
         availableProfiles: plannerProfileOptions,
+        ...(runtimeConfig.openai.plannerStructuredOutputEnabled &&
+            plannerProfile.provider === 'openai' &&
+            runtimeConfig.openai.apiKey &&
+            generationRuntime.kind !== 'test-runtime' && {
+                executePlannerStructured:
+                    createOpenAiChatPlannerStructuredExecutor({
+                        apiKey: runtimeConfig.openai.apiKey,
+                    }),
+            }),
         executePlanner: async ({
             messages,
             model,
@@ -362,6 +372,8 @@ export const createChatOrchestrator = ({
                 usage: plannerResult.usage,
             };
         },
+        allowTextJsonCompatibilityFallback:
+            runtimeConfig.openai.plannerAllowTextJsonCompatibilityFallback,
         defaultModel: plannerProfile.providerModel,
         recordUsage,
     });

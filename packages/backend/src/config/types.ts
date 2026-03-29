@@ -53,6 +53,8 @@ export type RuntimeConfig = {
     openai: {
         apiKey: string | null;
         defaultModel: ConfiguredProviderModel;
+        plannerStructuredOutputEnabled: boolean;
+        plannerAllowTextJsonCompatibilityFallback: boolean;
         defaultRealtimeModel: SupportedOpenAIRealtimeModel;
         defaultRealtimeVoice: SupportedOpenAITtsVoice;
         defaultReasoningEffort: SupportedReasoningEffort;

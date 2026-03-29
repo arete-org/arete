@@ -15,6 +15,10 @@ import type {
     ChatCapabilities,
     ChatImageRequest,
 } from '@footnote/contracts/web';
+import {
+    chatRepoSearchHints,
+    type ChatRepoSearchHint,
+} from '@footnote/contracts';
 import type {
     ExecutionReasonCode,
     ExecutionStatus,
@@ -32,7 +36,6 @@ import type {
     ChatGenerationPlan,
     ChatGenerationSearch,
     ChatGenerationWeatherLocation,
-    ChatRepoSearchHint,
 } from './chatGenerationTypes.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -56,24 +59,15 @@ export type ChatPlannerResult = {
     execution: ChatPlannerExecution;
 };
 
-const REPO_HINTS = [
-    'architecture',
-    'backend',
-    'contracts',
-    'discord',
-    'images',
-    'onboarding',
-    'web',
-    'observability',
-    'openapi',
-    'prompts',
-    'provenance',
-    'chat',
-    'traces',
-    'voice',
-] as const;
+type PlannerFallbackTier = 'none' | 'field_corrections' | 'safe_default_plan';
 
-const REPO_HINT_SET = new Set<ChatRepoSearchHint>(REPO_HINTS);
+type PlannerNormalizationResult = {
+    plan: ChatPlan;
+    fallbackTier: PlannerFallbackTier;
+    correctionCodes: string[];
+};
+
+const REPO_HINT_SET = new Set<ChatRepoSearchHint>(chatRepoSearchHints);
 const DISCORD_CUSTOM_EMOJI_PATTERN = /^<a?:[a-zA-Z0-9_]+:[0-9]{2,}>$/;
 const UNICODE_SINGLE_EMOJI_PATTERN =
     /^(?:\p{Regional_Indicator}{2}|[#*0-9]\uFE0F?\u20E3|\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?)*)$/u;
@@ -109,15 +103,18 @@ export type ChatPlannerProfileOption = {
 };
 
 type CreateChatPlannerOptions = {
-    executePlanner: ChatPlannerExecutor;
+    executePlanner?: ChatPlannerExecutor;
+    executePlannerStructured?: ChatPlannerStructuredExecutor;
+    allowTextJsonCompatibilityFallback?: boolean;
     defaultModel?: string;
+    structuredExecutionTimeoutMs?: number;
     availableProfiles?: ChatPlannerProfileOption[];
     recordUsage?: (record: BackendLLMCostRecord) => void;
 };
 
 /**
  * Narrow planner-only execution input.
- * This stays backend-local so planner policy can move off legacy OpenAI
+ * This stays backend-local so planner policy can evolve beyond current providers
  * without creating a second shared runtime abstraction.
  */
 type ChatPlannerExecutionRequest = {
@@ -126,6 +123,7 @@ type ChatPlannerExecutionRequest = {
     maxOutputTokens: number;
     reasoningEffort: ChatGenerationPlan['reasoningEffort'];
     verbosity: ChatGenerationPlan['verbosity'];
+    signal?: AbortSignal;
 };
 
 /**
@@ -142,19 +140,33 @@ type ChatPlannerExecutor = (
     request: ChatPlannerExecutionRequest
 ) => Promise<ChatPlannerExecutionResult>;
 
-const CHAT_PLANNER_FALLBACK_POLICY = 'planner_fallback_v1';
+type ChatPlannerStructuredExecutionResult = {
+    decision: unknown;
+    model?: string;
+    usage?: GenerationUsage;
+    rawArguments?: string;
+};
 
-type PlannerCandidate = Partial<ChatPlan> & {
+type ChatPlannerStructuredExecutor = (
+    request: ChatPlannerExecutionRequest
+) => Promise<ChatPlannerStructuredExecutionResult>;
+type ChatPlannerExecutionMode = 'structured' | 'text_json';
+
+export type PlannerCandidate = Partial<ChatPlan> & {
     profileId?: unknown;
     reasoning?: unknown;
     generation?: Partial<ChatGenerationPlan> & {
         search?: Partial<ChatGenerationSearch> & {
             repoHints?: unknown;
+            topicHints?: unknown;
         };
         weather?: unknown;
         temperament?: unknown;
     };
 };
+
+const TOPIC_HINT_MAX_COUNT = 5;
+const TOPIC_HINT_MAX_LENGTH = 40;
 
 /**
  * Coerces arbitrary planner output into the RiskTier contract.
@@ -261,6 +273,42 @@ const normalizeRepoHints = (value: unknown): ChatRepoSearchHint[] => {
 
         seen.add(normalizedHint);
         normalized.push(normalizedHint);
+    }
+
+    return normalized;
+};
+
+/**
+ * Keeps bounded topic hints and removes duplicates.
+ * These are advisory signals only, so invalid entries are dropped fail-open.
+ */
+const normalizeTopicHints = (value: unknown): string[] => {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+
+    for (const rawHint of value) {
+        if (typeof rawHint !== 'string') {
+            continue;
+        }
+
+        const normalizedHint = rawHint.trim().toLowerCase();
+        if (
+            normalizedHint.length === 0 ||
+            normalizedHint.length > TOPIC_HINT_MAX_LENGTH ||
+            seen.has(normalizedHint)
+        ) {
+            continue;
+        }
+
+        seen.add(normalizedHint);
+        normalized.push(normalizedHint);
+        if (normalized.length >= TOPIC_HINT_MAX_COUNT) {
+            break;
+        }
     }
 
     return normalized;
@@ -403,6 +451,50 @@ const stripJsonFences = (content: string): string =>
         .replace(/```$/i, '')
         .trim();
 
+const parsePlannerCandidateFromTextJson = (content: string): PlannerCandidate =>
+    JSON.parse(stripJsonFences(content)) as PlannerCandidate;
+
+const createTimeoutSignal = ({
+    timeoutMs,
+    callerSignal,
+}: {
+    timeoutMs: number;
+    callerSignal?: AbortSignal;
+}): {
+    signal: AbortSignal;
+    cleanup: () => void;
+    timedOut: () => boolean;
+} => {
+    const controller = new AbortController();
+    let didTimeout = false;
+    const timeoutHandle = setTimeout(() => {
+        didTimeout = true;
+        controller.abort();
+    }, timeoutMs);
+
+    const onCallerAbort = () => controller.abort();
+    if (callerSignal) {
+        if (callerSignal.aborted) {
+            controller.abort();
+        } else {
+            callerSignal.addEventListener('abort', onCallerAbort, {
+                once: true,
+            });
+        }
+    }
+
+    return {
+        signal: controller.signal,
+        cleanup: () => {
+            clearTimeout(timeoutHandle);
+            if (callerSignal) {
+                callerSignal.removeEventListener('abort', onCallerAbort);
+            }
+        },
+        timedOut: () => didTimeout,
+    };
+};
+
 const normalizeProfileId = (value: unknown): string | undefined => {
     if (typeof value !== 'string') {
         return undefined;
@@ -543,8 +635,10 @@ const normalizeGeneration = (
 ): {
     generation: ChatGenerationPlan;
     reasoningSuffix?: string;
+    correctionCodes: string[];
 } => {
     const reasoningSuffixes: string[] = [];
+    const correctionCodes: string[] = [];
     const baseGeneration: ChatGenerationPlan = {
         reasoningEffort: normalizeReasoningEffort(candidate?.reasoningEffort),
         verbosity: normalizeVerbosity(candidate?.verbosity),
@@ -557,6 +651,7 @@ const normalizeGeneration = (
     if (normalizedWeather) {
         baseGeneration.weather = normalizedWeather;
     } else if (candidate?.weather !== undefined) {
+        correctionCodes.push('weather_location_invalid');
         if (
             !reasoning.includes('weather tool request was disabled safely') &&
             !reasoningSuffixes.some((suffix) =>
@@ -572,6 +667,7 @@ const normalizeGeneration = (
     if (!candidate?.search) {
         return {
             generation: baseGeneration,
+            correctionCodes,
             ...(reasoningSuffixes.length > 0 && {
                 reasoningSuffix: reasoningSuffixes.join(' '),
             }),
@@ -583,6 +679,7 @@ const normalizeGeneration = (
             ? candidate.search.query.trim()
             : '';
     if (!rawQuery) {
+        correctionCodes.push('search_query_invalid');
         if (
             !reasoning.includes('search was disabled safely') &&
             !reasoningSuffixes.some((suffix) =>
@@ -595,6 +692,7 @@ const normalizeGeneration = (
         }
         return {
             generation: baseGeneration,
+            correctionCodes,
             ...(reasoningSuffixes.length > 0 && {
                 reasoningSuffix: reasoningSuffixes.join(' '),
             }),
@@ -606,6 +704,10 @@ const normalizeGeneration = (
         searchIntent === 'repo_explainer'
             ? normalizeRepoHints(candidate.search.repoHints)
             : undefined;
+    const mergedTopicHints = normalizeTopicHints([
+        ...normalizeTopicHints(candidate.search.topicHints),
+        ...(repoHints ?? []),
+    ]);
 
     return {
         generation: {
@@ -618,8 +720,12 @@ const normalizeGeneration = (
                 ),
                 intent: searchIntent,
                 ...(repoHints && repoHints.length > 0 ? { repoHints } : {}),
+                ...(mergedTopicHints.length > 0
+                    ? { topicHints: mergedTopicHints }
+                    : {}),
             },
         },
+        correctionCodes,
         ...(reasoningSuffixes.length > 0 && {
             reasoningSuffix: reasoningSuffixes.join(' '),
         }),
@@ -632,11 +738,29 @@ const normalizeGeneration = (
 const normalizePlan = (
     request: PostChatRequest,
     candidate: PlannerCandidate
-): ChatPlan => {
+): PlannerNormalizationResult => {
     const fallbackPlan = buildFallbackPlan(
         request,
         'Planner returned an invalid or incomplete decision.'
     );
+
+    if (
+        typeof candidate !== 'object' ||
+        candidate === null ||
+        Array.isArray(candidate)
+    ) {
+        return {
+            plan: {
+                ...fallbackPlan,
+                reasoning:
+                    `${fallbackPlan.reasoning} Planner output was not an object, so the backend fell back safely.`.trim(),
+            },
+            fallbackTier: 'safe_default_plan',
+            correctionCodes: ['candidate_not_object'],
+        };
+    }
+
+    const correctionCodes: string[] = [];
     const capabilities = request.capabilities;
     const actionCandidate =
         candidate.action === 'message' ||
@@ -664,6 +788,7 @@ const normalizePlan = (
         normalizedPlan.reasoning
     );
     normalizedPlan.generation = normalizedGeneration.generation;
+    correctionCodes.push(...normalizedGeneration.correctionCodes);
     if (normalizedGeneration.reasoningSuffix) {
         normalizedPlan.reasoning =
             `${normalizedPlan.reasoning} ${normalizedGeneration.reasoningSuffix}`.trim();
@@ -672,9 +797,13 @@ const normalizePlan = (
     if (normalizedPlan.action === 'react') {
         if (!capabilities?.canReact) {
             return {
-                ...fallbackPlan,
-                reasoning:
-                    `${normalizedPlan.reasoning} React was not allowed by caller capabilities, so the planner fell back safely.`.trim(),
+                plan: {
+                    ...fallbackPlan,
+                    reasoning:
+                        `${normalizedPlan.reasoning} React was not allowed by caller capabilities, so the planner fell back safely.`.trim(),
+                },
+                fallbackTier: 'safe_default_plan',
+                correctionCodes: [...correctionCodes, 'react_not_allowed'],
             };
         }
 
@@ -683,85 +812,124 @@ const normalizePlan = (
             !candidate.reaction.trim()
         ) {
             return {
-                ...fallbackPlan,
-                reasoning:
-                    `${normalizedPlan.reasoning} React action was missing emoji, so the planner fell back safely.`.trim(),
+                plan: {
+                    ...fallbackPlan,
+                    reasoning:
+                        `${normalizedPlan.reasoning} React action was missing emoji, so the planner fell back safely.`.trim(),
+                },
+                fallbackTier: 'safe_default_plan',
+                correctionCodes: [...correctionCodes, 'react_missing_emoji'],
             };
         }
         const trimmedReaction = candidate.reaction.trim();
         if (!isValidReactionEmoji(trimmedReaction)) {
             return {
-                ...fallbackPlan,
-                reasoning:
-                    `${normalizedPlan.reasoning} React action was not a valid emoji token, so the planner fell back safely.`.trim(),
+                plan: {
+                    ...fallbackPlan,
+                    reasoning:
+                        `${normalizedPlan.reasoning} React action was not a valid emoji token, so the planner fell back safely.`.trim(),
+                },
+                fallbackTier: 'safe_default_plan',
+                correctionCodes: [...correctionCodes, 'react_invalid_emoji'],
             };
         }
 
         return {
-            ...normalizedPlan,
-            reaction: trimmedReaction,
-            generation: {
-                ...normalizedPlan.generation,
-                search: undefined,
-                weather: undefined,
+            plan: {
+                ...normalizedPlan,
+                reaction: trimmedReaction,
+                generation: {
+                    ...normalizedPlan.generation,
+                    search: undefined,
+                    weather: undefined,
+                },
             },
+            fallbackTier:
+                correctionCodes.length > 0 ? 'field_corrections' : 'none',
+            correctionCodes,
         };
     }
 
     if (normalizedPlan.action === 'image') {
         if (!capabilities?.canGenerateImages) {
             return {
-                ...fallbackPlan,
-                reasoning:
-                    `${normalizedPlan.reasoning} Image generation was not allowed by caller capabilities, so the planner fell back safely.`.trim(),
+                plan: {
+                    ...fallbackPlan,
+                    reasoning:
+                        `${normalizedPlan.reasoning} Image generation was not allowed by caller capabilities, so the planner fell back safely.`.trim(),
+                },
+                fallbackTier: 'safe_default_plan',
+                correctionCodes: [...correctionCodes, 'image_not_allowed'],
             };
         }
 
         const imageRequest = normalizeImageRequest(candidate.imageRequest);
         if (!imageRequest) {
             return {
-                ...fallbackPlan,
-                reasoning:
-                    `${normalizedPlan.reasoning} Image action was missing a valid image request, so the planner fell back safely.`.trim(),
+                plan: {
+                    ...fallbackPlan,
+                    reasoning:
+                        `${normalizedPlan.reasoning} Image action was missing a valid image request, so the planner fell back safely.`.trim(),
+                },
+                fallbackTier: 'safe_default_plan',
+                correctionCodes: [...correctionCodes, 'image_request_invalid'],
             };
         }
 
         return {
-            ...normalizedPlan,
-            modality: 'text',
-            imageRequest,
-            generation: {
-                ...normalizedPlan.generation,
-                search: undefined,
-                weather: undefined,
+            plan: {
+                ...normalizedPlan,
+                modality: 'text',
+                imageRequest,
+                generation: {
+                    ...normalizedPlan.generation,
+                    search: undefined,
+                    weather: undefined,
+                },
             },
+            fallbackTier:
+                correctionCodes.length > 0 ? 'field_corrections' : 'none',
+            correctionCodes,
         };
     }
 
     if (normalizedPlan.action === 'ignore') {
         return {
-            ...normalizedPlan,
-            modality: 'text',
-            generation: {
-                ...normalizedPlan.generation,
-                search: undefined,
-                weather: undefined,
+            plan: {
+                ...normalizedPlan,
+                modality: 'text',
+                generation: {
+                    ...normalizedPlan.generation,
+                    search: undefined,
+                    weather: undefined,
+                },
             },
+            fallbackTier:
+                correctionCodes.length > 0 ? 'field_corrections' : 'none',
+            correctionCodes,
         };
     }
 
     if (!normalizedPlan.generation.temperament) {
         return {
-            ...fallbackPlan,
-            action: 'message',
-            modality: normalizedPlan.modality,
-            riskTier: normalizedPlan.riskTier,
-            reasoning:
-                `${normalizedPlan.reasoning} Planner omitted required TRACE temperament, so the backend fell back safely.`.trim(),
+            plan: {
+                ...fallbackPlan,
+                action: 'message',
+                modality: normalizedPlan.modality,
+                riskTier: normalizedPlan.riskTier,
+                reasoning:
+                    `${normalizedPlan.reasoning} Planner omitted required TRACE temperament, so the backend fell back safely.`.trim(),
+            },
+            fallbackTier: 'safe_default_plan',
+            correctionCodes: [...correctionCodes, 'temperament_missing'],
         };
     }
 
-    return normalizedPlan;
+    return {
+        plan: normalizedPlan,
+        fallbackTier: correctionCodes.length > 0 ? 'field_corrections' : 'none',
+        correctionCodes,
+    };
 };
 
 /**
@@ -771,10 +939,19 @@ const normalizePlan = (
  */
 export const createChatPlanner = ({
     executePlanner,
+    executePlannerStructured,
+    allowTextJsonCompatibilityFallback = false,
     defaultModel = runtimeConfig.openai.defaultModel,
+    structuredExecutionTimeoutMs = runtimeConfig.openai.requestTimeoutMs,
     availableProfiles = [],
     recordUsage = recordBackendLLMUsage,
 }: CreateChatPlannerOptions) => {
+    if (!executePlanner && !executePlannerStructured) {
+        throw new Error(
+            'createChatPlanner requires at least one executor (structured or text JSON).'
+        );
+    }
+
     // Keep planner context intentionally narrow.
     // We expose only decision-relevant fields, not full raw catalog config.
     const plannerProfileContext =
@@ -794,6 +971,11 @@ export const createChatPlanner = ({
         request: PostChatRequest
     ): Promise<ChatPlannerResult> => {
         const plannerStartedAt = Date.now();
+        let plannerMode: ChatPlannerExecutionMode = executePlannerStructured
+            ? 'structured'
+            : 'text_json';
+        let plannerResponseText: string | undefined;
+        let plannerStructuredArguments: string | undefined;
         const plannerPrompt = renderPrompt('chat.planner.system').content;
         const requestSummary = summarizeRequest(request);
         const plannerMessages: RuntimeMessage[] = [
@@ -820,21 +1002,22 @@ export const createChatPlanner = ({
             ),
         ];
 
-        try {
-            const plannerResponse = await executePlanner({
-                messages: plannerMessages,
-                model: defaultModel,
-                maxOutputTokens: 700,
-                reasoningEffort: 'low',
-                verbosity: 'low',
-            });
-            const usageModel = plannerResponse.model || defaultModel;
-            const promptTokens = plannerResponse.usage?.promptTokens ?? 0;
-            const completionTokens =
-                plannerResponse.usage?.completionTokens ?? 0;
+        const requestPayload: ChatPlannerExecutionRequest = {
+            messages: plannerMessages,
+            model: defaultModel,
+            maxOutputTokens: 700,
+            reasoningEffort: 'low',
+            verbosity: 'low',
+        };
+
+        const recordPlannerUsage = (
+            usageModel: string,
+            usage?: GenerationUsage
+        ) => {
+            const promptTokens = usage?.promptTokens ?? 0;
+            const completionTokens = usage?.completionTokens ?? 0;
             const totalTokens =
-                plannerResponse.usage?.totalTokens ??
-                promptTokens + completionTokens;
+                usage?.totalTokens ?? promptTokens + completionTokens;
             if (recordUsage) {
                 try {
                     recordUsage({
@@ -856,9 +1039,98 @@ export const createChatPlanner = ({
                     );
                 }
             }
-            const rawPlan = stripJsonFences(plannerResponse.text);
-            const parsed = JSON.parse(rawPlan) as PlannerCandidate;
-            const normalizedPlan = normalizePlan(request, parsed);
+        };
+
+        try {
+            if (executePlannerStructured) {
+                const structuredAbortContext = createTimeoutSignal({
+                    timeoutMs: structuredExecutionTimeoutMs,
+                    callerSignal: requestPayload.signal,
+                });
+                let structuredResponse: ChatPlannerStructuredExecutionResult;
+                try {
+                    structuredResponse = await executePlannerStructured({
+                        ...requestPayload,
+                        signal: structuredAbortContext.signal,
+                    });
+                } catch (structuredError) {
+                    if (
+                        structuredError instanceof Error &&
+                        structuredError.name === 'AbortError' &&
+                        structuredAbortContext.timedOut()
+                    ) {
+                        throw new Error(
+                            `Planner structured call timed out after ${structuredExecutionTimeoutMs}ms`
+                        );
+                    }
+
+                    throw structuredError;
+                } finally {
+                    structuredAbortContext.cleanup();
+                }
+                plannerStructuredArguments = structuredResponse.rawArguments;
+                recordPlannerUsage(
+                    structuredResponse.model || defaultModel,
+                    structuredResponse.usage
+                );
+                const normalization = normalizePlan(
+                    request,
+                    structuredResponse.decision as PlannerCandidate
+                );
+                if (normalization.fallbackTier === 'safe_default_plan') {
+                    logger.warn(
+                        'chat planner returned policy-invalid structured decision; using fallback telemetry class',
+                        {
+                            event: 'chat.planner.fallback',
+                            plannerMode: 'structured',
+                            fallbackFrom: 'structured',
+                            fallbackTo: 'safe_default_plan',
+                            fallbackTier: normalization.fallbackTier,
+                            correctionCodes: normalization.correctionCodes,
+                            reasonCode: 'planner_invalid_output',
+                            failureClass: 'policy_invalid',
+                            surface: request.surface,
+                            triggerKind: request.trigger.kind,
+                            plannerStructuredPreviewPresent:
+                                plannerStructuredArguments !== undefined,
+                            plannerStructuredPreviewLength:
+                                plannerStructuredArguments?.length,
+                        }
+                    );
+                    return {
+                        plan: normalization.plan,
+                        execution: {
+                            status: 'failed',
+                            reasonCode: 'planner_invalid_output',
+                            durationMs: Date.now() - plannerStartedAt,
+                        },
+                    };
+                }
+
+                return {
+                    plan: normalization.plan,
+                    execution: {
+                        status: 'executed',
+                        durationMs: Date.now() - plannerStartedAt,
+                    },
+                };
+            }
+
+            if (!executePlanner) {
+                throw new Error('Text JSON planner executor is not available.');
+            }
+
+            plannerMode = 'text_json';
+            const plannerResponse = await executePlanner(requestPayload);
+            plannerResponseText = plannerResponse.text;
+            recordPlannerUsage(
+                plannerResponse.model || defaultModel,
+                plannerResponse.usage
+            );
+            const parsed = parsePlannerCandidateFromTextJson(
+                plannerResponse.text
+            );
+            const normalization = normalizePlan(request, parsed);
 
             /*
             if (isDevelopment()) {
@@ -883,13 +1155,82 @@ export const createChatPlanner = ({
             */
 
             return {
-                plan: normalizedPlan,
+                plan: normalization.plan,
                 execution: {
-                    status: 'executed',
+                    status:
+                        normalization.fallbackTier === 'safe_default_plan'
+                            ? 'failed'
+                            : 'executed',
+                    ...(normalization.fallbackTier === 'safe_default_plan'
+                        ? {
+                              reasonCode: 'planner_invalid_output' as const,
+                          }
+                        : {}),
                     durationMs: Date.now() - plannerStartedAt,
                 },
             };
         } catch (error) {
+            let resolvedError: unknown = error;
+            if (
+                executePlannerStructured &&
+                allowTextJsonCompatibilityFallback &&
+                executePlanner
+            ) {
+                logger.warn(
+                    'chat planner structured execution failed; attempting text JSON compatibility fallback',
+                    {
+                        event: 'chat.planner.compatibility_fallback',
+                        plannerMode: 'structured',
+                        fallbackFrom: 'structured',
+                        fallbackTo: 'text_json',
+                        failureClass:
+                            error instanceof SyntaxError
+                                ? 'schema_invalid'
+                                : 'runtime_error',
+                        errorName:
+                            error instanceof Error ? error.name : undefined,
+                        errorMessage:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    }
+                );
+                try {
+                    plannerMode = 'text_json';
+                    const textJsonResponse =
+                        await executePlanner(requestPayload);
+                    plannerResponseText = textJsonResponse.text;
+                    recordPlannerUsage(
+                        textJsonResponse.model || defaultModel,
+                        textJsonResponse.usage
+                    );
+                    const parsed = parsePlannerCandidateFromTextJson(
+                        textJsonResponse.text
+                    );
+                    const normalization = normalizePlan(request, parsed);
+                    return {
+                        plan: normalization.plan,
+                        execution: {
+                            status:
+                                normalization.fallbackTier ===
+                                'safe_default_plan'
+                                    ? 'failed'
+                                    : 'executed',
+                            ...(normalization.fallbackTier ===
+                            'safe_default_plan'
+                                ? {
+                                      reasonCode:
+                                          'planner_invalid_output' as const,
+                                  }
+                                : {}),
+                            durationMs: Date.now() - plannerStartedAt,
+                        },
+                    };
+                } catch (textJsonError) {
+                    resolvedError = textJsonError;
+                }
+            }
+
             const fallbackPlan = buildFallbackPlan(
                 request,
                 'Planner failed, so the backend used a safe fallback.'
@@ -898,19 +1239,45 @@ export const createChatPlanner = ({
             // downstream metadata and logs can distinguish prompt/schema drift
             // from upstream service instability.
             const reasonCode: ExecutionReasonCode =
-                error instanceof SyntaxError
+                resolvedError instanceof SyntaxError
                     ? 'planner_invalid_output'
                     : 'planner_runtime_error';
             logger.warn('chat planner failed; using fallback plan', {
                 event: 'chat.planner.fallback',
-                policy: CHAT_PLANNER_FALLBACK_POLICY,
+                plannerMode,
+                fallbackFrom: plannerMode,
+                fallbackTo: 'safe_default_plan',
+                fallbackTier: 'safe_default_plan',
                 reasonCode,
+                failureClass:
+                    reasonCode === 'planner_invalid_output'
+                        ? 'schema_invalid'
+                        : 'runtime_error',
                 fallbackAction: fallbackPlan.action,
                 triggerKind: request.trigger.kind,
                 surface: request.surface,
-                errorName: error instanceof Error ? error.name : undefined,
+                errorName:
+                    resolvedError instanceof Error
+                        ? resolvedError.name
+                        : undefined,
                 errorMessage:
-                    error instanceof Error ? error.message : String(error),
+                    resolvedError instanceof Error
+                        ? resolvedError.message
+                        : String(resolvedError),
+                plannerResponsePreviewPresent:
+                    resolvedError instanceof SyntaxError &&
+                    Boolean(plannerStructuredArguments || plannerResponseText),
+                plannerStructuredPreviewPresent:
+                    resolvedError instanceof SyntaxError &&
+                    plannerStructuredArguments !== undefined,
+                plannerStructuredPreviewLength:
+                    resolvedError instanceof SyntaxError
+                        ? plannerStructuredArguments?.length
+                        : undefined,
+                plannerResponseTextLength:
+                    resolvedError instanceof SyntaxError
+                        ? plannerResponseText?.length
+                        : undefined,
             });
             return {
                 plan: fallbackPlan,

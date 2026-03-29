@@ -96,6 +96,11 @@ export interface GenerationSearchRequest {
      * Optional focus tags that can help repo- or domain-specific retrieval.
      */
     repoHints?: string[];
+    /**
+     * Optional bounded free-form hints used as advisory ranking signals.
+     * Runtime adapters should treat unknown hints as non-fatal and ignore them.
+     */
+    topicHints?: string[];
 }
 
 /**
