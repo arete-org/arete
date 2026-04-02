@@ -222,7 +222,9 @@
                 "packages/backend/src",
                 "packages/contracts/src",
                 "packages/discord-bot/src",
-                "packages/web/src"
+                "packages/web/src",
+                "packages/api-client/src",
+                "packages/prompts/src"
             ],
             "page_notes": [
                 {
@@ -235,6 +237,10 @@
                 },
                 {
                     "content": "Include Agent Runtime as its own package page. It is backend-facing and not a public client surface, but it is now important enough to deserve a first-class wiki entry.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Include API Client and Prompts as first-class package pages because they now carry shared transport and prompt ownership used across web, discord, and backend.",
                     "author": "Maintainer"
                 }
             ]
@@ -270,6 +276,55 @@
                 },
                 {
                     "content": "Call out forward direction: this package is not limited to chat. It is the execution substrate for multiple backend-owned task types as provider capability expands.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "API Client",
+            "purpose": "Document the shared HTTP client package used by web and Discord to call backend APIs with consistent auth headers, error handling, and typed request/response helpers.",
+            "parent": "Packages",
+            "entrypoints": [
+                "packages/api-client/src/index.ts",
+                "packages/api-client/src/client.ts",
+                "packages/api-client/src/chat.ts",
+                "packages/api-client/src/traces.ts",
+                "packages/api-client/src/internalText.ts",
+                "packages/api-client/src/internalImage.ts",
+                "packages/api-client/src/internalVoice.ts",
+                "packages/api-client/src/incidents.ts"
+            ],
+            "page_notes": [
+                {
+                    "content": "Keep this page focused on shared transport behavior and backend boundary rules, not UI-level usage details.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Show how web and Discord wrappers compose these factories so auth and error semantics stay aligned across clients.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Prompts",
+            "purpose": "Document shared prompt ownership in @footnote/prompts, including defaults catalog loading, key-based overrides, and profile overlay composition hooks consumed by backend and Discord.",
+            "parent": "Packages",
+            "entrypoints": [
+                "packages/prompts/src/index.ts",
+                "packages/prompts/src/promptRegistry.ts",
+                "packages/prompts/src/defaults.yaml",
+                "packages/prompts/src/composition.ts",
+                "packages/backend/src/services/prompts/promptRegistry.ts",
+                "packages/discord-bot/src/config/promptRegistryFactory.ts",
+                "docs/architecture/prompt-resolution.md"
+            ],
+            "page_notes": [
+                {
+                    "content": "Explain prompt resolution order in plain language: shared defaults, optional PROMPT_CONFIG_PATH overrides, then one active persona overlay.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Call out that prompt semantics are shared across backend and Discord so behavior parity is intentional and testable.",
                     "author": "Maintainer"
                 }
             ]
@@ -336,6 +391,75 @@
             "page_notes": [
                 {
                     "content": "Focus on stale traces, missing traces, schema mismatch, store failures, and where those failures are logged or surfaced.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Internal Tasks",
+            "purpose": "Document trusted internal backend routes for text, image, and voice task execution, including auth headers, rate-limit boundaries, and fail-open behavior when providers are unavailable.",
+            "parent": "Backend",
+            "entrypoints": [
+                "packages/backend/src/handlers/internalText.ts",
+                "packages/backend/src/handlers/internalImage.ts",
+                "packages/backend/src/handlers/internalVoiceTts.ts",
+                "packages/backend/src/handlers/internalVoiceRealtime.ts",
+                "packages/backend/src/services/internalText.ts",
+                "packages/backend/src/services/internalImage.ts",
+                "packages/backend/src/services/internalVoiceTts.ts",
+                "packages/contracts/src/voice/types.ts",
+                "docs/api/openapi.yaml"
+            ],
+            "page_notes": [
+                {
+                    "content": "Make trusted auth requirements explicit: these routes require x-service-token or x-trace-token and are not public chat endpoints.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Include failure modes for provider-offline states and how callers should handle 429/503 behavior.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Trace Cards",
+            "purpose": "Document trace-card generation and asset retrieval routes, including creation from direct metadata or from stored trace response ids.",
+            "parent": "Backend",
+            "entrypoints": [
+                "packages/backend/src/handlers/trace.ts",
+                "packages/backend/src/storage/traces/sqliteTraceStore.ts",
+                "packages/api-client/src/traces.ts",
+                "docs/api/openapi.yaml"
+            ],
+            "page_notes": [
+                {
+                    "content": "Explain the difference between trace upsert, trace fetch, and trace-card generation flows so callers choose the right route.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Show token requirements for write routes and public behavior for read-only asset retrieval.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Webhook & Blog Ingestion",
+            "purpose": "Document backend webhook ingestion and blog content serving, including GitHub signature validation, storage behavior, and web consumption paths.",
+            "parent": "Backend",
+            "entrypoints": [
+                "packages/backend/src/handlers/webhook.ts",
+                "packages/backend/src/handlers/blog.ts",
+                "packages/backend/src/storage/blogStore.ts",
+                "packages/web/src/utils/blog.ts",
+                "docs/api/openapi.yaml"
+            ],
+            "page_notes": [
+                {
+                    "content": "Keep this page operational: show what is trusted input, what is persisted, and how malformed webhook payloads are handled safely.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Link to web blog pages so readers can follow the end-to-end ingestion-to-render flow.",
                     "author": "Maintainer"
                 }
             ]
@@ -582,7 +706,13 @@
                 "docs/api/openapi-code-linking.md",
                 "scripts/validate-openapi-links.ts",
                 "packages/contracts/src/web/types.ts",
-                "packages/contracts/src/web/schemas.ts"
+                "packages/contracts/src/web/schemas.ts",
+                "packages/contracts/src/voice/types.ts",
+                "packages/api-client/src/chat.ts",
+                "packages/api-client/src/traces.ts",
+                "packages/api-client/src/internalText.ts",
+                "packages/api-client/src/internalImage.ts",
+                "packages/api-client/src/internalVoice.ts"
             ],
             "page_notes": [
                 {
