@@ -380,17 +380,22 @@
         },
         {
             "title": "Backend Traces",
-            "purpose": "Document how traces are validated, stored, retrieved, and expired in the backend.",
+            "purpose": "Document how traces and trace cards are validated, stored, retrieved, generated, and expired in the backend.",
             "parent": "Backend",
             "entrypoints": [
                 "packages/backend/src/handlers/trace.ts",
                 "packages/backend/src/storage/traces/sqliteTraceStore.ts",
                 "packages/backend/src/storage/traces/traceStoreUtils.ts",
-                "packages/contracts/src/web/schemas.ts"
+                "packages/contracts/src/web/schemas.ts",
+                "packages/api-client/src/traces.ts"
             ],
             "page_notes": [
                 {
                     "content": "Focus on stale traces, missing traces, schema mismatch, store failures, and where those failures are logged or surfaced.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Include trace-card flow in this page: when to use creation routes, how assets are fetched, and which routes require tokens.",
                     "author": "Maintainer"
                 }
             ]
@@ -417,27 +422,6 @@
                 },
                 {
                     "content": "Include failure modes for provider-offline states and how callers should handle 429/503 responses.",
-                    "author": "Maintainer"
-                }
-            ]
-        },
-        {
-            "title": "Trace Cards",
-            "purpose": "Document trace-card generation and asset retrieval routes, including creation from direct metadata or a stored trace response id.",
-            "parent": "Backend",
-            "entrypoints": [
-                "packages/backend/src/handlers/trace.ts",
-                "packages/backend/src/storage/traces/sqliteTraceStore.ts",
-                "packages/api-client/src/traces.ts",
-                "docs/api/openapi.yaml"
-            ],
-            "page_notes": [
-                {
-                    "content": "Explain the difference between trace upsert, trace fetch, and trace-card generation so callers choose the right route.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Show token requirements for write routes and public behavior for read-only asset fetches.",
                     "author": "Maintainer"
                 }
             ]
