@@ -7,35 +7,17 @@
  */
 import type { ExecutionEvent } from './types.js';
 
-type LegacyEvaluatorSummary = {
-    decision?: string;
-    provenance?: string;
-    ruleId?: string | null;
-    reasonCode?: string;
-};
-
-const formatLegacyEvaluatorSummary = (
-    evaluator: LegacyEvaluatorSummary
-): string => {
-    const decision = evaluator.decision?.trim() || 'decision';
-    const provenance = evaluator.provenance?.trim();
-    const ruleId = evaluator.ruleId?.trim();
-    const reasonCode = evaluator.reasonCode?.trim();
-    return [decision, provenance, ruleId, reasonCode]
-        .filter((part): part is string => !!part)
-        .join('/');
-};
-
 const formatEvaluatorSummary = (event: ExecutionEvent): string => {
     const rawEvaluator = event.evaluator as
-        | (LegacyEvaluatorSummary & {
+        | {
+              provenance?: string;
               safetyDecision?: {
                   action?: string;
-                  riskTier?: string;
+                  safetyTier?: string;
                   ruleId?: string | null;
                   reasonCode?: string;
               };
-          })
+          }
         | undefined;
     if (!rawEvaluator) {
         return 'decision';
@@ -45,10 +27,10 @@ const formatEvaluatorSummary = (event: ExecutionEvent): string => {
     if (
         safetyDecision &&
         typeof safetyDecision.action === 'string' &&
-        typeof safetyDecision.riskTier === 'string'
+        typeof safetyDecision.safetyTier === 'string'
     ) {
         return [
-            safetyDecision.riskTier,
+            safetyDecision.safetyTier,
             rawEvaluator.provenance,
             safetyDecision.action,
             ...(safetyDecision.action !== 'allow'
@@ -59,7 +41,7 @@ const formatEvaluatorSummary = (event: ExecutionEvent): string => {
             .join('/');
     }
 
-    return formatLegacyEvaluatorSummary(rawEvaluator);
+    return 'decision';
 };
 
 const formatExecutionEvent = (event: ExecutionEvent): string => {

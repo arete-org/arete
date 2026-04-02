@@ -15,7 +15,7 @@ import type {
 import type {
     PartialResponseTemperament,
     ResponseMetadata,
-    RiskTier,
+    SafetyTier,
     ToolExecutionContext,
     ToolInvocationRequest,
 } from '@footnote/contracts/ethics-core';
@@ -107,7 +107,7 @@ export type RunChatMessagesInput = {
     conversationSnapshot: string;
     orchestrationStartedAtMs?: number;
     plannerTemperament?: PartialResponseTemperament;
-    riskTier?: RiskTier;
+    safetyTier?: SafetyTier;
     model?: string;
     provider?: SupportedProvider;
     capabilities?: ModelProfileCapabilities;
@@ -173,7 +173,7 @@ export const createChatService = ({
         conversationSnapshot,
         orchestrationStartedAtMs,
         plannerTemperament,
-        riskTier,
+        safetyTier,
         model,
         provider,
         capabilities,
@@ -373,24 +373,25 @@ export const createChatService = ({
             assistantMetadata,
             runtimeContext
         );
-        const riskTierRank: Record<RiskTier, number> = {
+        const safetyTierRank: Record<SafetyTier, number> = {
             Low: 1,
             Medium: 2,
             High: 3,
         };
-        const shouldRaiseRiskTier =
-            riskTier &&
-            (!responseMetadata.riskTier ||
-                riskTierRank[riskTier] >
-                    riskTierRank[responseMetadata.riskTier]);
+        const shouldRaiseSafetyTier =
+            safetyTier &&
+            (!responseMetadata.safetyTier ||
+                safetyTierRank[safetyTier] >
+                    safetyTierRank[responseMetadata.safetyTier]);
         // Planner may raise risk posture for this response, but we do not
         // downgrade a higher metadata risk tier that was already derived.
-        const normalizedResponseMetadata: ResponseMetadata = shouldRaiseRiskTier
-            ? {
-                  ...responseMetadata,
-                  riskTier,
-              }
-            : responseMetadata;
+        const normalizedResponseMetadata: ResponseMetadata =
+            shouldRaiseSafetyTier
+                ? {
+                      ...responseMetadata,
+                      safetyTier,
+                  }
+                : responseMetadata;
 
         // Trace writes stay fire-and-forget so a storage hiccup does not block the user response.
         storeTrace(normalizedResponseMetadata).catch((error) => {

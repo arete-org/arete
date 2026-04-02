@@ -2404,7 +2404,7 @@ components:
                 provenance:
                     type: string
                     description: Expected values are Retrieved, Inferred, or Speculative.
-                riskTier:
+                safetyTier:
                     type: string
                     description: Expected values are Low, Medium, or High.
                 tradeoffCount:
@@ -2510,7 +2510,7 @@ components:
                     additionalProperties: false
             required:
                 - provenance
-                - riskTier
+                - safetyTier
                 - tradeoffCount
                 - chainHash
                 - licenseContext

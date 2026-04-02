@@ -57,7 +57,7 @@ test('formatExecutionTimelineSummary handles missing optional fields', () => {
                 provenance: 'Inferred',
                 safetyDecision: {
                     action: 'allow',
-                    riskTier: 'Low',
+                    safetyTier: 'Low',
                     ruleId: null,
                 },
             },
@@ -89,8 +89,8 @@ test('formatExecutionTimelineSummary includes evaluator breaker rule context for
                 provenance: 'Inferred',
                 safetyDecision: {
                     action: 'block',
-                    riskTier: 'High',
-                    ruleId: 'risk.safety.weaponization_request.v1',
+                    safetyTier: 'High',
+                    ruleId: 'safety.weaponization_request.v1',
                     reasonCode: 'weaponization_request',
                     reason: 'Deterministic weaponization-request rule matched.',
                 },
@@ -101,12 +101,12 @@ test('formatExecutionTimelineSummary includes evaluator breaker rule context for
 
     assert.equal(
         summary,
-        'evaluator:High/Inferred/block/risk.safety.weaponization_request.v1/weaponization_request(executed, 4ms)'
+        'evaluator:High/Inferred/block/safety.weaponization_request.v1/weaponization_request(executed, 4ms)'
     );
 });
 
-test('formatExecutionTimelineSummary falls back gracefully for legacy evaluator payloads', () => {
-    const legacyEvent = {
+test('formatExecutionTimelineSummary falls back to decision label for malformed evaluator payloads', () => {
+    const malformedEvent = {
         kind: 'evaluator',
         status: 'executed',
         evaluator: {
@@ -116,8 +116,8 @@ test('formatExecutionTimelineSummary falls back gracefully for legacy evaluator 
     } as unknown as ExecutionEvent;
 
     assert.equal(
-        formatExecutionTimelineSummary([legacyEvent]),
-        'evaluator:allow/Retrieved(executed)'
+        formatExecutionTimelineSummary([malformedEvent]),
+        'evaluator:decision(executed)'
     );
 });
 

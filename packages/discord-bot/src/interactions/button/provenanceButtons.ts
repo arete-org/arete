@@ -150,6 +150,12 @@ function escapeMarkdownLinkUrl(value: string): string {
     return value.replace(/\\/g, '\\\\').replace(/\)/g, '\\)');
 }
 
+/**
+ * Builds the Markdown "Summary" section for provenance details displayed in Discord.
+ *
+ * @param payload - Either validated provenance `ResponseMetadata` or a `DetailsFallbackPayload` used when metadata is unavailable.
+ * @returns A Markdown-formatted string containing the Summary section: the response ID plus either provenance fields (provenance, safety tier, tradeoffs, model, stale-after) or an unavailable notice with a reason.
+ */
 function formatSummarySection(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
@@ -166,7 +172,7 @@ function formatSummarySection(
         '**Summary**',
         `- Response ID: \`${formatMarkdownValue(payload.responseId)}\``,
         `- Provenance: \`${formatMarkdownValue(payload.provenance)}\``,
-        `- Risk Tier: \`${formatMarkdownValue(payload.riskTier)}\``,
+        `- Safety Tier: \`${formatMarkdownValue(payload.safetyTier)}\``,
         `- Tradeoffs: \`${formatMarkdownValue(payload.tradeoffCount)}\``,
         `- Model: \`${formatMarkdownValue(payload.modelVersion)}\``,
         `- Stale After: \`${formatMarkdownValue(payload.staleAfter)}\``,
@@ -249,8 +255,8 @@ function formatExecutionEventLine(event: ExecutionEvent): string {
         event.kind === 'evaluator'
             ? event.evaluator
                 ? event.evaluator.safetyDecision.action !== 'allow'
-                    ? `${event.evaluator.safetyDecision.riskTier}/${event.evaluator.provenance}/${event.evaluator.safetyDecision.action}/${event.evaluator.safetyDecision.ruleId}`
-                    : `${event.evaluator.safetyDecision.riskTier}/${event.evaluator.provenance}/${event.evaluator.safetyDecision.action}`
+                    ? `${event.evaluator.safetyDecision.safetyTier}/${event.evaluator.provenance}/${event.evaluator.safetyDecision.action}/${event.evaluator.safetyDecision.ruleId}`
+                    : `${event.evaluator.safetyDecision.safetyTier}/${event.evaluator.provenance}/${event.evaluator.safetyDecision.action}`
                 : 'decision'
             : event.kind === 'tool'
               ? formatMarkdownValue(event.toolName, 40)

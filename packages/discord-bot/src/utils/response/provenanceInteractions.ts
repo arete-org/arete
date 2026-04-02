@@ -47,10 +47,10 @@ const isResponseMetadataPayload = (
         candidate.provenance === 'Retrieved' ||
         candidate.provenance === 'Inferred' ||
         candidate.provenance === 'Speculative';
-    const validRiskTier =
-        candidate.riskTier === 'Low' ||
-        candidate.riskTier === 'Medium' ||
-        candidate.riskTier === 'High';
+    const validSafetyTier =
+        candidate.safetyTier === 'Low' ||
+        candidate.safetyTier === 'Medium' ||
+        candidate.safetyTier === 'High';
     const validCitations =
         Array.isArray(candidate.citations) &&
         candidate.citations.every(isCitationPayload);
@@ -58,7 +58,7 @@ const isResponseMetadataPayload = (
     return (
         typeof candidate.responseId === 'string' &&
         validProvenance &&
-        validRiskTier &&
+        validSafetyTier &&
         typeof candidate.tradeoffCount === 'number' &&
         Number.isFinite(candidate.tradeoffCount) &&
         validCitations

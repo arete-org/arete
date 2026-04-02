@@ -21,7 +21,7 @@ function createMetadata(): ResponseMetadata {
     return {
         responseId: 'resp_test_123',
         provenance: 'Inferred',
-        riskTier: 'Medium',
+        safetyTier: 'Medium',
         tradeoffCount: 1,
         chainHash: 'abc123def456',
         licenseContext: 'MIT',

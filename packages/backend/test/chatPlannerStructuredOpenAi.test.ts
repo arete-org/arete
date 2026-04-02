@@ -35,7 +35,7 @@ test('structured planner executor parses function_call arguments', async () => {
                         arguments: JSON.stringify({
                             action: 'message',
                             modality: 'text',
-                            riskTier: 'Low',
+                            safetyTier: 'Low',
                             reasoning: 'Use a normal message.',
                             generation: {
                                 reasoningEffort: 'low',

@@ -66,7 +66,7 @@ test('chatPlanner parses plain JSON output from the backend-native planner promp
             action: 'message',
             modality: 'text',
             profileId: 'openai-text-medium',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             reasoning: 'The user is asking a question that needs a reply.',
             generation: {
                 reasoningEffort: 'medium',
@@ -106,7 +106,7 @@ ${JSON.stringify({
     action: 'message',
     modality: 'text',
     profileId: 'openai-text-medium',
-    riskTier: 'Low',
+    safetyTier: 'Low',
     reasoning: 'The user needs a normal reply.',
     generation: {
         reasoningEffort: 'low',
@@ -134,7 +134,7 @@ test('chatPlanner accepts structured planner decisions without text JSON parsing
         action: 'message',
         modality: 'text',
         profileId: 'openai-text-fast',
-        riskTier: 'Low',
+        safetyTier: 'Low',
         reasoning: 'Reply should be a normal message.',
         generation: {
             reasoningEffort: 'low',
@@ -160,7 +160,7 @@ test('chatPlanner marks structured policy-invalid decisions as failed with inval
     const planner = createStructuredPlanner({
         action: 'message',
         modality: 'text',
-        riskTier: 'Low',
+        safetyTier: 'Low',
         reasoning: 'Invalid policy decision shape for message action.',
         generation: {
             reasoningEffort: 'low',
@@ -202,7 +202,7 @@ test('chatPlanner forwards bounded profile options context and normalizes blank 
                     action: 'message',
                     modality: 'text',
                     profileId: '   ',
-                    riskTier: 'Low',
+                    safetyTier: 'Low',
                     reasoning: 'Use safe defaults.',
                     generation: {
                         reasoningEffort: 'low',
@@ -287,7 +287,7 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
         JSON.stringify({
             action: 'message',
             modality: 'text',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             reasoning: 'This is a Footnote architecture question.',
             generation: {
                 reasoningEffort: 'low',
@@ -330,7 +330,7 @@ test('search topicHints are bounded, deduped, and normalized fail-open', async (
         JSON.stringify({
             action: 'message',
             modality: 'text',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             reasoning: 'Use focused retrieval hints for ranking.',
             generation: {
                 reasoningEffort: 'low',
@@ -376,7 +376,7 @@ test('invalid web_search query downgrades safely to none', async () => {
         JSON.stringify({
             action: 'message',
             modality: 'text',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             reasoning: 'This could have used search.',
             generation: {
                 reasoningEffort: 'low',
@@ -408,7 +408,7 @@ test('planner weather request is normalized when location contract is valid', as
         JSON.stringify({
             action: 'message',
             modality: 'text',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             reasoning: 'Forecast details are needed.',
             generation: {
                 reasoningEffort: 'low',
@@ -448,7 +448,7 @@ test('invalid weather request is disabled safely', async () => {
         JSON.stringify({
             action: 'message',
             modality: 'text',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             reasoning: 'Need weather data.',
             generation: {
                 reasoningEffort: 'low',
@@ -480,7 +480,7 @@ test('out-of-range lat/lon weather request is disabled safely', async () => {
         JSON.stringify({
             action: 'message',
             modality: 'text',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             reasoning: 'Need weather data.',
             generation: {
                 reasoningEffort: 'low',
@@ -513,7 +513,7 @@ test('non-positive gridpoint weather request is disabled safely', async () => {
         JSON.stringify({
             action: 'message',
             modality: 'text',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             reasoning: 'Need weather data.',
             generation: {
                 reasoningEffort: 'low',
@@ -547,7 +547,7 @@ test('mixed lat/lon and gridpoint weather location is disabled safely', async ()
         JSON.stringify({
             action: 'message',
             modality: 'text',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             reasoning: 'Need weather data.',
             generation: {
                 reasoningEffort: 'low',
@@ -583,7 +583,7 @@ test('invalid weather request does not suppress valid search normalization', asy
         JSON.stringify({
             action: 'message',
             modality: 'text',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             reasoning: 'Need weather and current facts.',
             generation: {
                 reasoningEffort: 'low',
@@ -624,7 +624,7 @@ test('planner temperament is accepted when all TRACE axes are integer 1..5', asy
         JSON.stringify({
             action: 'message',
             modality: 'text',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             reasoning: 'This should include TRACE temperament guidance.',
             generation: {
                 reasoningEffort: 'low',
@@ -655,7 +655,7 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
         JSON.stringify({
             action: 'message',
             modality: 'text',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             reasoning: 'This should include TRACE temperament guidance.',
             generation: {
                 reasoningEffort: 'medium',
@@ -702,7 +702,7 @@ test('react plans with non-emoji payload fall back safely', async () => {
         JSON.stringify({
             action: 'react',
             modality: 'text',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             reaction: 'sounds good',
             reasoning: 'A reaction is enough.',
             generation: {

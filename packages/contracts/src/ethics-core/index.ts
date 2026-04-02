@@ -13,9 +13,8 @@
 export type {
     Provenance,
     ProvenanceSignals,
-    RiskTier,
-    RiskRuleId,
-    RiskEvaluationResult,
+    SafetyTier,
+    SafetyRuleId,
     Citation,
     TraceAxisScore,
     ResponseTemperament,
@@ -37,8 +36,10 @@ export type {
     ToolExecutionEvent,
     GenerationExecutionEvent,
     EvaluatorDecisionMode,
-    SafetyBreakerAction,
-    SafetyBreakerReasonCode,
+    SafetyAction,
+    SafetyReasonCode,
+    SafetyEvaluationInput,
+    SafetyEvaluationResult,
     SafetyDecision,
     EvaluatorOutcome,
     ExecutionEvent,
@@ -46,8 +47,12 @@ export type {
 } from './types.js';
 export { formatExecutionTimelineSummary } from './executionFormatting.js';
 export {
-    RiskRuleIdSchema,
-    SafetyBreakerActionSchema,
-    SafetyBreakerReasonCodeSchema,
+    SafetyRuleIdSchema,
+    SafetyActionSchema,
+    SafetyReasonCodeSchema,
     SafetyDecisionSchema,
 } from './schemas.js';
+export {
+    SAFETY_RULE_METADATA,
+    type SafetyRuleMetadata,
+} from './safetyRuleMetadata.js';

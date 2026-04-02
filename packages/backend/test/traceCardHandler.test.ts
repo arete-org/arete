@@ -262,7 +262,7 @@ test('POST /api/trace-cards/from-trace uses stored metadata temperament and chip
         await server.store.upsert({
             responseId,
             provenance: 'Retrieved',
-            riskTier: 'High',
+            safetyTier: 'High',
             tradeoffCount: 3,
             chainHash: 'chain_hash',
             licenseContext: 'MIT + HL3',
@@ -315,7 +315,7 @@ test('POST /api/trace-cards/from-trace renders successfully when stored chip sco
         await server.store.upsert({
             responseId,
             provenance: 'Retrieved',
-            riskTier: 'Medium',
+            safetyTier: 'Medium',
             tradeoffCount: 2,
             chainHash: 'chain_hash',
             licenseContext: 'MIT + HL3',
@@ -364,7 +364,7 @@ test('POST /api/trace-cards/from-trace renders successfully when stored temperam
         await server.store.upsert({
             responseId,
             provenance: 'Retrieved',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             tradeoffCount: 0,
             chainHash: 'chain_hash',
             licenseContext: 'MIT + HL3',

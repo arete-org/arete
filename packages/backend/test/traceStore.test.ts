@@ -22,7 +22,7 @@ test('TraceStore round trips metadata with citation URLs', async () => {
     const metadata: ResponseMetadata = {
         responseId: 'response_123',
         provenance: 'Retrieved',
-        riskTier: 'Low',
+        safetyTier: 'Low',
         tradeoffCount: 2,
         chainHash: 'abc123',
         licenseContext: 'MIT',
@@ -89,7 +89,7 @@ test('TraceStore round trips trace-card SVG assets', async () => {
         await store.upsert({
             responseId,
             provenance: 'Retrieved',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             tradeoffCount: 1,
             chainHash: 'trace_card_chain_hash',
             licenseContext: 'MIT + HL3',
@@ -125,7 +125,7 @@ test('TraceStore delete removes both trace metadata and trace-card SVG', async (
         await store.upsert({
             responseId,
             provenance: 'Retrieved',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             tradeoffCount: 1,
             chainHash: 'chain_hash',
             licenseContext: 'MIT + HL3',

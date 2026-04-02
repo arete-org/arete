@@ -24,7 +24,7 @@ import { buildProvenanceActionRow } from '../src/utils/response/provenanceCgi.js
 const createMetadata = (): ResponseMetadata => ({
     responseId: 'resp_123',
     provenance: 'Inferred',
-    riskTier: 'Low',
+    safetyTier: 'Low',
     tradeoffCount: 1,
     chainHash: 'hash_123',
     licenseContext: 'MIT + HL3',

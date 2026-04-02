@@ -19,10 +19,12 @@ import { renderConversationPromptLayers } from '../src/services/prompts/conversa
 import type { WeatherForecastTool } from '../src/services/weatherGovForecastTool.js';
 import { logger } from '../src/utils/logger.js';
 
+const PLANNER_TOKEN_SENTINEL = 1200;
+
 const createMetadata = (): ResponseMetadata => ({
     responseId: 'chat_test_response',
     provenance: 'Inferred',
-    riskTier: 'Low',
+    safetyTier: 'Low',
     tradeoffCount: 0,
     chainHash: 'abc123def456',
     licenseContext: 'MIT + HL3',
@@ -63,13 +65,13 @@ test('web requests go through planner and are coerced to message when planner pi
         generationRuntime: createGenerationRuntime(
             async ({ messages, maxOutputTokens }) => {
                 callCount += 1;
-                if (maxOutputTokens === 700) {
+                if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'react',
                             modality: 'text',
                             reaction: '👍',
-                            riskTier: 'Low',
+                            safetyTier: 'Low',
                             reasoning: 'A reaction would normally be enough.',
                             generation: {
                                 reasoningEffort: 'low',
@@ -131,7 +133,7 @@ test('discord requests preserve non-message planner actions', async () => {
         generationRuntime: createGenerationRuntime(
             async ({ maxOutputTokens }) => {
                 callCount += 1;
-                if (maxOutputTokens === 700) {
+                if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'image',
@@ -139,7 +141,7 @@ test('discord requests preserve non-message planner actions', async () => {
                             imageRequest: {
                                 prompt: 'draw a chative skyline',
                             },
-                            riskTier: 'Low',
+                            safetyTier: 'Low',
                             reasoning:
                                 'The user explicitly asked for an image.',
                             generation: {
@@ -189,7 +191,7 @@ test('message plans pass planner generation options into chatService', async () 
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 700) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 assert.equal(request.provider, expectedPlannerProfile.provider);
                 assert.equal(
                     request.model,
@@ -199,7 +201,7 @@ test('message plans pass planner generation options into chatService', async () 
                     text: JSON.stringify({
                         action: 'message',
                         modality: 'text',
-                        riskTier: 'Low',
+                        safetyTier: 'Low',
                         reasoning: 'This needs a sourced reply.',
                         generation: {
                             reasoningEffort: 'medium',
@@ -260,12 +262,12 @@ test('request-level generation overrides replace planner reasoning effort and ve
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 700) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
                         modality: 'text',
-                        riskTier: 'Low',
+                        safetyTier: 'Low',
                         reasoning: 'Planner default generation choices.',
                         generation: {
                             reasoningEffort: 'low',
@@ -326,13 +328,13 @@ test('planner-selected profile id controls response model selection', async () =
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 700) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
                         modality: 'text',
                         profileId: selectedProfile.id,
-                        riskTier: 'Low',
+                        safetyTier: 'Low',
                         reasoning:
                             'Use a richer response profile for this request.',
                         generation: {
@@ -394,7 +396,7 @@ test('planner-selected profile id controls response model selection', async () =
         'allow'
     );
     assert.equal(
-        capturedExecutionContext?.evaluator?.outcome?.safetyDecision.riskTier,
+        capturedExecutionContext?.evaluator?.outcome?.safetyDecision.safetyTier,
         'Low'
     );
     assert.equal(
@@ -410,12 +412,12 @@ test('deterministic evaluator emits non-allow breaker metadata with rule and rea
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 700) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
                         modality: 'text',
-                        riskTier: 'Low',
+                        safetyTier: 'Low',
                         reasoning: 'Planner returns a normal reply action.',
                         generation: {
                             reasoningEffort: 'low',
@@ -465,12 +467,12 @@ test('deterministic evaluator emits non-allow breaker metadata with rule and rea
         'block'
     );
     assert.equal(
-        capturedExecutionContext?.evaluator?.outcome?.safetyDecision.riskTier,
+        capturedExecutionContext?.evaluator?.outcome?.safetyDecision.safetyTier,
         'High'
     );
     assert.equal(
         capturedExecutionContext?.evaluator?.outcome?.safetyDecision.ruleId,
-        'risk.safety.weaponization_request.v1'
+        'safety.weaponization_request.v1'
     );
     assert.equal(
         capturedExecutionContext?.evaluator?.outcome?.safetyDecision.reasonCode,
@@ -500,12 +502,12 @@ test('deterministic breaker logs include correlation IDs for rule fire and actio
     try {
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(async (request) => {
-                if (request.maxOutputTokens === 700) {
+                if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
-                            riskTier: 'Low',
+                            safetyTier: 'Low',
                             reasoning: 'Planner returns a normal reply action.',
                             generation: {
                                 reasoningEffort: 'low',
@@ -620,13 +622,13 @@ test('request profileId override controls response model selection', async () =>
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 700) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
                         modality: 'text',
                         profileId: 'openai-text-fast',
-                        riskTier: 'Low',
+                        safetyTier: 'Low',
                         reasoning:
                             'Planner selected a different profile, but request override should win.',
                         generation: {
@@ -675,12 +677,12 @@ test('request profileId with ollama profile forwards provider/model to generatio
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 700) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
                         modality: 'text',
-                        riskTier: 'Low',
+                        safetyTier: 'Low',
                         reasoning: 'Return a normal message.',
                         generation: {
                             reasoningEffort: 'low',
@@ -738,13 +740,13 @@ test('invalid planner-selected profile id falls back to default response profile
     try {
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(async (request) => {
-                if (request.maxOutputTokens === 700) {
+                if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
                             profileId: 'missing-profile-id',
-                            riskTier: 'Low',
+                            safetyTier: 'Low',
                             reasoning: 'Try a profile that does not exist.',
                             generation: {
                                 reasoningEffort: 'low',
@@ -792,7 +794,7 @@ test('invalid planner-selected profile id falls back to default response profile
         source: 'planner',
         selectedProfileId: 'missing-profile-id',
         defaultProfileId: defaultProfile.id,
-        fallbackOrder: ['request', 'planner', 'default'],
+        fallbackOrder: ['planner', 'default'],
         surface: 'discord',
     });
 });
@@ -873,13 +875,13 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
     try {
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(async (request) => {
-                if (request.maxOutputTokens === 700) {
+                if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
                             profileId: 'openai-text-fast',
-                            riskTier: 'Low',
+                            safetyTier: 'Low',
                             reasoning:
                                 'Use search even though selected profile cannot search.',
                             generation: {
@@ -988,13 +990,13 @@ test('planner-selected non-search profile skips search when no tool-capable fall
     try {
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(async (request) => {
-                if (request.maxOutputTokens === 700) {
+                if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
                             profileId: 'openai-text-fast',
-                            riskTier: 'Low',
+                            safetyTier: 'Low',
                             reasoning:
                                 'Attempt search with a planner-selected profile.',
                             generation: {
@@ -1048,7 +1050,7 @@ test('planner-selected non-search profile skips search when no tool-capable fall
     });
 });
 
-test('request-selected non-search profile drops search without reroute', async () => {
+test('request-selected non-search profile can still reroute when planner confirms same profile', async () => {
     let observedSearch: unknown;
     let capturedExecutionContext:
         | ResponseMetadataRuntimeContext['executionContext']
@@ -1081,13 +1083,13 @@ test('request-selected non-search profile drops search without reroute', async (
     try {
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(async (request) => {
-                if (request.maxOutputTokens === 700) {
+                if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
                             profileId: requestSelectedProfile.id,
-                            riskTier: 'Low',
+                            safetyTier: 'Low',
                             reasoning: 'Request profile override should win.',
                             generation: {
                                 reasoningEffort: 'medium',
@@ -1136,95 +1138,74 @@ test('request-selected non-search profile drops search without reroute', async (
         runtimeConfigMutable.modelProfiles = originalModelProfiles;
     }
 
-    assert.equal(observedSearch, undefined);
+    assert.deepEqual(observedSearch, {
+        query: 'latest OpenAI policy update',
+        contextSize: 'low',
+        intent: 'current_facts',
+    });
     assert.ok(capturedExecutionContext);
     assert.ok(capturedExecutionContext.tool);
     const toolExecution = capturedExecutionContext.tool;
     assert.deepEqual(toolExecution, {
         toolName: 'web_search',
         status: 'skipped',
-        reasonCode: 'search_reroute_not_permitted_by_selection_source',
+        reasonCode: 'search_rerouted_to_fallback_profile',
     });
     assert.equal(
         capturedExecutionContext?.generation?.originalProfileId,
         requestSelectedProfile.id
     );
-    assert.equal(
+    assert.notEqual(
         capturedExecutionContext?.generation?.effectiveProfileId,
         requestSelectedProfile.id
     );
 });
 
-test('chat orchestration timing log includes response summary fields for normal message flow', async () => {
-    const infoLogs: Array<{ message: string; payload: unknown }> = [];
-    const originalInfo = logger.info;
-    logger.info = ((message: string, payload?: unknown) => {
-        infoLogs.push({ message, payload });
-        return logger;
-    }) as typeof logger.info;
-
-    try {
-        const orchestrator = createChatOrchestrator({
-            generationRuntime: createGenerationRuntime(async (request) => {
-                if (request.maxOutputTokens === 700) {
-                    return {
-                        text: JSON.stringify({
-                            action: 'message',
-                            modality: 'text',
-                            riskTier: 'Low',
-                            reasoning: 'Normal response path.',
-                            generation: {
-                                reasoningEffort: 'low',
-                                verbosity: 'low',
-                            },
-                        }),
-                        model: 'gpt-5-mini',
-                    };
-                }
-
+test('normal message flow returns summary-equivalent response metadata fields', async () => {
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
-                    text: 'normal message reply',
-                    model: request.model,
-                    provenance: 'Inferred',
-                    citations: [],
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        safetyTier: 'Low',
+                        reasoning: 'Normal response path.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                        },
+                    }),
+                    model: 'gpt-5-mini',
                 };
-            }),
-            storeTrace: async () => undefined,
-            buildResponseMetadata: () => createMetadata(),
-            defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
-            recordUsage: () => undefined,
-        });
+            }
 
-        await orchestrator.runChat(createChatRequest());
-    } finally {
-        logger.info = originalInfo;
-    }
+            return {
+                text: 'normal message reply',
+                model: request.model,
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
 
-    const timingLog = infoLogs.find(
-        (entry) => entry.message === 'chat.orchestration.timing'
-    );
-    assert.ok(timingLog);
-    const payload = timingLog?.payload as
-        | {
-              responseAction?: string;
-              responseProvenance?: string;
-              responseCitationCount?: number;
-              responseMessageLength?: number;
-              fallbackApplied?: boolean;
-              fallbackReasons?: unknown[];
-          }
-        | undefined;
-    assert.equal(payload?.responseAction, 'message');
-    assert.equal(payload?.responseProvenance, 'Inferred');
-    assert.equal(payload?.responseCitationCount, 0);
-    assert.ok((payload?.responseMessageLength ?? 0) > 0);
-    assert.equal(payload?.fallbackApplied, false);
-    assert.deepEqual(payload?.fallbackReasons, []);
+    const response = await orchestrator.runChat(createChatRequest());
+
+    assert.equal(response.action, 'message');
+    assert.equal(response.metadata?.provenance, 'Inferred');
+    assert.equal(response.metadata?.citations.length, 0);
+    assert.ok((response.message ?? '').length > 0);
+    assert.equal(response.metadata?.safetyTier, 'Low');
 });
 
-test('chat orchestration timing log includes fallback reason and reason codes when search is dropped', async () => {
-    const infoLogs: Array<{ message: string; payload: unknown }> = [];
-    const originalInfo = logger.info;
+test('search drop path exposes reason codes in response execution metadata', async () => {
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
     const originalModelProfiles = runtimeConfig.modelProfiles;
     const runtimeConfigMutable = runtimeConfig as unknown as {
         modelProfiles: typeof runtimeConfig.modelProfiles;
@@ -1241,21 +1222,17 @@ test('chat orchestration timing log includes fallback reason and reason codes wh
             },
         })),
     };
-    logger.info = ((message: string, payload?: unknown) => {
-        infoLogs.push({ message, payload });
-        return logger;
-    }) as typeof logger.info;
 
     try {
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(async (request) => {
-                if (request.maxOutputTokens === 700) {
+                if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
                             profileId: 'openai-text-fast',
-                            riskTier: 'Low',
+                            safetyTier: 'Low',
                             reasoning:
                                 'Search will be dropped because no profile can use tools.',
                             generation: {
@@ -1287,49 +1264,24 @@ test('chat orchestration timing log includes fallback reason and reason codes wh
                 };
             }),
             storeTrace: async () => undefined,
-            buildResponseMetadata: () => createMetadata(),
+            buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+                capturedExecutionContext = runtimeContext.executionContext;
+                return createMetadata();
+            },
             defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
             recordUsage: () => undefined,
         });
 
-        await orchestrator.runChat(createChatRequest());
+        const response = await orchestrator.runChat(createChatRequest());
+        assert.equal(capturedExecutionContext?.tool?.status, 'skipped');
+        assert.equal(
+            capturedExecutionContext?.tool?.reasonCode,
+            'search_reroute_no_tool_capable_fallback_available'
+        );
+        assert.equal(response.metadata?.provenance, 'Inferred');
     } finally {
-        logger.info = originalInfo;
         runtimeConfigMutable.modelProfiles = originalModelProfiles;
     }
-
-    const timingLog = infoLogs.find(
-        (entry) => entry.message === 'chat.orchestration.timing'
-    );
-    assert.ok(timingLog);
-    const payload = timingLog?.payload as
-        | {
-              toolStatus?: string;
-              toolReasonCode?: string;
-              toolEligible?: boolean;
-              toolRequestReasonCode?: string;
-              fallbackApplied?: boolean;
-              fallbackReasons?: string[];
-              responseProvenance?: string;
-              searchRequested?: boolean;
-          }
-        | undefined;
-    assert.equal(payload?.toolStatus, 'skipped');
-    assert.equal(
-        payload?.toolReasonCode,
-        'search_reroute_no_tool_capable_fallback_available'
-    );
-    assert.equal(payload?.toolEligible, false);
-    assert.equal(
-        payload?.toolRequestReasonCode,
-        'search_not_supported_by_selected_profile'
-    );
-    assert.equal(payload?.searchRequested, false);
-    assert.equal(payload?.fallbackApplied, true);
-    assert.equal(payload?.responseProvenance, 'Inferred');
-    assert.ok(
-        payload?.fallbackReasons?.includes('search_dropped_no_fallback_profile')
-    );
 });
 
 test('orchestrator injects backend weather tool context and records executed tool metadata', async () => {
@@ -1385,12 +1337,12 @@ test('orchestrator injects backend weather tool context and records executed too
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 700) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
                         modality: 'text',
-                        riskTier: 'Low',
+                        safetyTier: 'Low',
                         reasoning:
                             'Use weather tool for this forecast question.',
                         generation: {
@@ -1523,12 +1475,12 @@ test('planner mixed weather and search requests apply single-tool weather priori
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 700) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
                         modality: 'text',
-                        riskTier: 'Low',
+                        safetyTier: 'Low',
                         reasoning:
                             'Use weather and current facts for this request.',
                         generation: {
@@ -1602,12 +1554,12 @@ test('orchestrator fails open when weather tool throws and still generates a res
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 700) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
                         modality: 'text',
-                        riskTier: 'Low',
+                        safetyTier: 'Low',
                         reasoning:
                             'Use weather tool for this forecast question.',
                         generation: {
@@ -1672,7 +1624,7 @@ test('orchestrator fails open when weather tool throws and still generates a res
     assert.ok((capturedExecutionContext?.tool?.durationMs ?? 0) >= 0);
 });
 
-test('discord requests use backend profile overlay when runtime overlay is configured', async () => {
+test('discord requests ignore runtime profile overlay when no botPersonaId is provided', async () => {
     let finalMessages: Array<{ role: string; content: string }> = [];
     const originalProfile = runtimeConfig.profile;
     const runtimeConfigMutable = runtimeConfig as unknown as {
@@ -1694,12 +1646,12 @@ test('discord requests use backend profile overlay when runtime overlay is confi
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(
                 async ({ messages, maxOutputTokens }) => {
-                    if (maxOutputTokens === 700) {
+                    if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                         return {
                             text: JSON.stringify({
                                 action: 'message',
                                 modality: 'text',
-                                riskTier: 'Low',
+                                safetyTier: 'Low',
                                 reasoning:
                                     'A normal text response is appropriate.',
                                 generation: {
@@ -1746,14 +1698,19 @@ test('discord requests use backend profile overlay when runtime overlay is confi
         assert.equal(
             finalMessages[0]?.content,
             renderConversationPromptLayers('discord-chat', {
-                botProfileDisplayName: 'Ari',
+                botProfileDisplayName: 'Footnote',
             }).systemPrompt
         );
-        assert.match(
+        assert.equal(
+            finalMessages[1]?.content ?? '',
+            renderConversationPromptLayers('discord-chat', {
+                botProfileDisplayName: 'Footnote',
+            }).personaPrompt
+        );
+        assert.doesNotMatch(
             finalMessages[1]?.content ?? '',
             /BEGIN Bot Profile Overlay/
         );
-        assert.match(finalMessages[1]?.content ?? '', /Profile ID: ari-vendor/);
     } finally {
         runtimeConfigMutable.profile = originalProfile;
     }
@@ -1781,12 +1738,12 @@ test('discord profileId does not change backend runtime profile overlay', async 
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(
                 async ({ messages, maxOutputTokens }) => {
-                    if (maxOutputTokens === 700) {
+                    if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                         return {
                             text: JSON.stringify({
                                 action: 'message',
                                 modality: 'text',
-                                riskTier: 'Low',
+                                safetyTier: 'Low',
                                 reasoning:
                                     'A normal text response is appropriate.',
                                 generation: {
@@ -1820,7 +1777,12 @@ test('discord profileId does not change backend runtime profile overlay', async 
             })
         );
 
-        assert.match(finalMessages[1]?.content ?? '', /Profile ID: ari-vendor/);
+        assert.equal(
+            finalMessages[1]?.content ?? '',
+            renderConversationPromptLayers('discord-chat', {
+                botProfileDisplayName: 'Footnote',
+            }).personaPrompt
+        );
     } finally {
         runtimeConfigMutable.profile = originalProfile;
     }
@@ -1842,13 +1804,13 @@ test('discord requests are trimmed/formatted in backend before planner and gener
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(
             async ({ messages, maxOutputTokens }) => {
-                if (maxOutputTokens === 700) {
+                if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     plannerConversation = messages;
                     return {
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
-                            riskTier: 'Low',
+                            safetyTier: 'Low',
                             reasoning: 'Answer with a normal message.',
                             generation: {
                                 reasoningEffort: 'low',
@@ -1915,7 +1877,7 @@ test('planner runtime failures emit failed planner execution metadata and still 
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 700) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 throw new Error('planner upstream unavailable');
             }
 
