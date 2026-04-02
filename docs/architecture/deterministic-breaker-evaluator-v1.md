@@ -40,7 +40,7 @@ The evaluator is pure local logic. There are no network calls, no clock reads, a
 - `safety.weaponization_request.v1`
 - `safety.professional.medical_or_legal_advice.v1`
 
-The matcher uses regex-based pattern checks over the trimmed latest user input. If more than one rule matches, precedence is fixed in code. High-risk rules win over medium-risk rules. Within a tier, the first matched rule in source order wins. The evaluator still returns `matchedRuleIds` so tests and audit tooling can see the full match set, not just the winning rule.
+The matcher uses regex-based pattern checks over the trimmed latest user input. If more than one rule matches, precedence is fixed in code. High-safety rules win over medium-safety rules. Within a tier, explicit rule precedence decides the winner. The evaluator still returns `matchedRuleIds` so tests and audit tooling can see the full match set, not just the winning rule.
 
 If evaluation throws, the path fails open to:
 
@@ -66,7 +66,7 @@ This is the current split:
 - `SafetyEvaluationResult` is the full evaluator output used in tests and backend logic.
 - `SafetyDecision` is the compact enforcement-facing view attached to metadata and execution events.
 
-The schemas enforce that non-allow decisions match the canonical tuple in `SAFETY_RULE_METADATA`. In other words, a rule ID cannot drift away from its expected action, reason code, or risk tier without validation failing.
+The schemas enforce that non-allow decisions match the canonical tuple in `SAFETY_RULE_METADATA`. In other words, a rule ID cannot drift away from its expected action, reason code, or `SafetyTier` without validation failing.
 
 ## Rule Metadata
 
@@ -84,7 +84,7 @@ That map currently defines:
 - weaponization request -> `block` / `High` / `weaponization_request`
 - professional medical or legal advice -> `safe_partial` / `Medium` / `professional_advice_guardrail`
 
-Both the evaluator and the schemas use this as the source of truth. That keeps rule IDs, actions, reason codes, and risk tiers aligned.
+Both the evaluator and the schemas use this as the source of truth. That keeps rule IDs, actions, reason codes, and `SafetyTier` values aligned.
 
 ## Backend Handoff
 

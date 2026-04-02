@@ -1,5 +1,5 @@
 /**
- * @description: Shared type contracts for response provenance, risk, and metadata.
+ * @description: Shared type contracts for response provenance, safety, and metadata.
  * @footnote-scope: interface
  * @footnote-module: EthicsCoreContracts
  * @footnote-risk: low - Incorrect shapes can break UI assumptions or validation.

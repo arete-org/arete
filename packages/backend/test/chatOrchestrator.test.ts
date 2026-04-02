@@ -19,6 +19,8 @@ import { renderConversationPromptLayers } from '../src/services/prompts/conversa
 import type { WeatherForecastTool } from '../src/services/weatherGovForecastTool.js';
 import { logger } from '../src/utils/logger.js';
 
+const PLANNER_TOKEN_SENTINEL = 1200;
+
 const createMetadata = (): ResponseMetadata => ({
     responseId: 'chat_test_response',
     provenance: 'Inferred',
@@ -63,7 +65,7 @@ test('web requests go through planner and are coerced to message when planner pi
         generationRuntime: createGenerationRuntime(
             async ({ messages, maxOutputTokens }) => {
                 callCount += 1;
-                if (maxOutputTokens === 1200) {
+                if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'react',
@@ -131,7 +133,7 @@ test('discord requests preserve non-message planner actions', async () => {
         generationRuntime: createGenerationRuntime(
             async ({ maxOutputTokens }) => {
                 callCount += 1;
-                if (maxOutputTokens === 1200) {
+                if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'image',
@@ -189,7 +191,7 @@ test('message plans pass planner generation options into chatService', async () 
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 1200) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 assert.equal(request.provider, expectedPlannerProfile.provider);
                 assert.equal(
                     request.model,
@@ -260,7 +262,7 @@ test('request-level generation overrides replace planner reasoning effort and ve
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 1200) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
@@ -326,7 +328,7 @@ test('planner-selected profile id controls response model selection', async () =
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 1200) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
@@ -410,7 +412,7 @@ test('deterministic evaluator emits non-allow breaker metadata with rule and rea
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 1200) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
@@ -500,7 +502,7 @@ test('deterministic breaker logs include correlation IDs for rule fire and actio
     try {
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(async (request) => {
-                if (request.maxOutputTokens === 1200) {
+                if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'message',
@@ -620,7 +622,7 @@ test('request profileId override controls response model selection', async () =>
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 1200) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
@@ -675,7 +677,7 @@ test('request profileId with ollama profile forwards provider/model to generatio
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 1200) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
@@ -738,7 +740,7 @@ test('invalid planner-selected profile id falls back to default response profile
     try {
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(async (request) => {
-                if (request.maxOutputTokens === 1200) {
+                if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'message',
@@ -873,7 +875,7 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
     try {
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(async (request) => {
-                if (request.maxOutputTokens === 1200) {
+                if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'message',
@@ -988,7 +990,7 @@ test('planner-selected non-search profile skips search when no tool-capable fall
     try {
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(async (request) => {
-                if (request.maxOutputTokens === 1200) {
+                if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'message',
@@ -1081,7 +1083,7 @@ test('request-selected non-search profile can still reroute when planner confirm
     try {
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(async (request) => {
-                if (request.maxOutputTokens === 1200) {
+                if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'message',
@@ -1162,7 +1164,7 @@ test('request-selected non-search profile can still reroute when planner confirm
 test('normal message flow returns summary-equivalent response metadata fields', async () => {
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 1200) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
@@ -1224,7 +1226,7 @@ test('search drop path exposes reason codes in response execution metadata', asy
     try {
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(async (request) => {
-                if (request.maxOutputTokens === 1200) {
+                if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     return {
                         text: JSON.stringify({
                             action: 'message',
@@ -1335,7 +1337,7 @@ test('orchestrator injects backend weather tool context and records executed too
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 1200) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
@@ -1473,7 +1475,7 @@ test('planner mixed weather and search requests apply single-tool weather priori
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 1200) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
@@ -1552,7 +1554,7 @@ test('orchestrator fails open when weather tool throws and still generates a res
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 1200) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 return {
                     text: JSON.stringify({
                         action: 'message',
@@ -1644,7 +1646,7 @@ test('discord requests ignore runtime profile overlay when no botPersonaId is pr
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(
                 async ({ messages, maxOutputTokens }) => {
-                    if (maxOutputTokens === 1200) {
+                    if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                         return {
                             text: JSON.stringify({
                                 action: 'message',
@@ -1736,7 +1738,7 @@ test('discord profileId does not change backend runtime profile overlay', async 
         const orchestrator = createChatOrchestrator({
             generationRuntime: createGenerationRuntime(
                 async ({ messages, maxOutputTokens }) => {
-                    if (maxOutputTokens === 1200) {
+                    if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                         return {
                             text: JSON.stringify({
                                 action: 'message',
@@ -1802,7 +1804,7 @@ test('discord requests are trimmed/formatted in backend before planner and gener
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(
             async ({ messages, maxOutputTokens }) => {
-                if (maxOutputTokens === 1200) {
+                if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                     plannerConversation = messages;
                     return {
                         text: JSON.stringify({
@@ -1875,7 +1877,7 @@ test('planner runtime failures emit failed planner execution metadata and still 
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === 1200) {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
                 throw new Error('planner upstream unavailable');
             }
 

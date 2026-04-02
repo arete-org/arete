@@ -140,9 +140,9 @@ type LoadingState =
 
 // Safety tier colors matching the server constants
 const SAFETY_TIER_COLORS: Record<string, string> = {
-    low: '#7FDCA4', // Low reasoning effort - sage green
-    medium: '#F8E37C', // Medium reasoning effort - warm gold
-    high: '#E27C7C', // High reasoning effort - soft coral
+    low: '#7FDCA4', // Low safety tier - sage green
+    medium: '#F8E37C', // Medium safety tier - warm gold
+    high: '#E27C7C', // High safety tier - soft coral
 };
 
 const TracePage = (): JSX.Element => {
@@ -380,17 +380,16 @@ const TracePage = (): JSX.Element => {
         );
     }
 
-    const rawSafetyTier = traceData?.safetyTier || 'low';
+    const rawSafetyTier = traceData?.safetyTier;
     const normalizedSafetyTier =
         typeof rawSafetyTier === 'string' ? rawSafetyTier.toLowerCase() : 'low';
-    const safetyTier = rawSafetyTier || 'low';
     const safetyColor = SAFETY_TIER_COLORS[normalizedSafetyTier] ?? '#6b7280';
     const provenance =
         traceData?.provenance || traceData?.reasoningEffort || 'Unknown';
     const model = resolveTraceModelLabel(traceData);
     const executionSummary = resolveExecutionSummary(traceData);
     const sanitizedTraceData = buildDisplayTrace(traceData);
-    const safetyLabel = safetyTier || 'Unspecified';
+    const safetyLabel = rawSafetyTier ?? 'Unspecified';
     const chainHash =
         traceData?.chainHash || traceData?.chainHash === ''
             ? traceData.chainHash

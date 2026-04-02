@@ -106,16 +106,22 @@ export function computeProvenance(context: string[]): Provenance {
     return provenance;
 }
 
-const RISK_RULE_IDS = {
+const SAFETY_RULE_IDS = {
     selfHarmCrisisIntent: 'safety.self_harm.crisis_intent.v1',
     weaponizationRequest: 'safety.weaponization_request.v1',
     medicalOrLegalAdvice: 'safety.professional.medical_or_legal_advice.v1',
 } as const satisfies Record<string, SafetyRuleId>;
 
-const HIGH_RISK_RULE_IDS: ReadonlySet<SafetyRuleId> = new Set<SafetyRuleId>([
-    RISK_RULE_IDS.selfHarmCrisisIntent,
-    RISK_RULE_IDS.weaponizationRequest,
+const HIGH_SAFETY_RULE_IDS: ReadonlySet<SafetyRuleId> = new Set<SafetyRuleId>([
+    SAFETY_RULE_IDS.selfHarmCrisisIntent,
+    SAFETY_RULE_IDS.weaponizationRequest,
 ]);
+
+const RULE_PRECEDENCE: ReadonlyArray<SafetyRuleId> = [
+    SAFETY_RULE_IDS.selfHarmCrisisIntent,
+    SAFETY_RULE_IDS.weaponizationRequest,
+    SAFETY_RULE_IDS.medicalOrLegalAdvice,
+];
 
 const SELF_HARM_CRISIS_PATTERNS: ReadonlyArray<RegExp> = [
     /\b(kill myself|end my life|want to die|hurt myself|self[- ]harm)\b/i,
@@ -151,26 +157,33 @@ const matchesAnyPattern = (
 const selectDeterministicWinner = (
     matchedRuleIds: SafetyRuleId[]
 ): { safetyTier: SafetyTier; ruleId: SafetyRuleId | null } => {
-    if (matchedRuleIds.some((candidate) => HIGH_RISK_RULE_IDS.has(candidate))) {
+    if (matchedRuleIds.length === 0) {
         return {
-            safetyTier: 'High',
-            ruleId:
-                matchedRuleIds.find((candidate) =>
-                    HIGH_RISK_RULE_IDS.has(candidate)
-                ) ?? null,
+            safetyTier: 'Low',
+            ruleId: null,
         };
     }
 
-    if (matchedRuleIds.length > 0) {
+    const matchedSet = new Set(matchedRuleIds);
+    const winningRule =
+        RULE_PRECEDENCE.find((ruleId) => matchedSet.has(ruleId)) ?? null;
+    if (!winningRule) {
         return {
-            safetyTier: 'Medium',
-            ruleId: matchedRuleIds[0] ?? null,
+            safetyTier: 'Low',
+            ruleId: null,
+        };
+    }
+
+    if (HIGH_SAFETY_RULE_IDS.has(winningRule)) {
+        return {
+            safetyTier: 'High',
+            ruleId: winningRule,
         };
     }
 
     return {
-        safetyTier: 'Low',
-        ruleId: null,
+        safetyTier: 'Medium',
+        ruleId: winningRule,
     };
 };
 
@@ -208,11 +221,11 @@ export function evaluateSafetyDeterministic(
         const matchedRuleIds: SafetyRuleId[] = [];
 
         if (matchesAnyPattern(combinedText, SELF_HARM_CRISIS_PATTERNS)) {
-            matchedRuleIds.push(RISK_RULE_IDS.selfHarmCrisisIntent);
+            matchedRuleIds.push(SAFETY_RULE_IDS.selfHarmCrisisIntent);
         }
 
         if (matchesAnyPattern(combinedText, WEAPONIZATION_PATTERNS)) {
-            matchedRuleIds.push(RISK_RULE_IDS.weaponizationRequest);
+            matchedRuleIds.push(SAFETY_RULE_IDS.weaponizationRequest);
         }
 
         const requestsActionableAdvice = matchesAnyPattern(
@@ -224,7 +237,7 @@ export function evaluateSafetyDeterministic(
             matchesAnyPattern(combinedText, LEGAL_DOMAIN_PATTERNS);
 
         if (requestsActionableAdvice && matchesMedicalOrLegalDomain) {
-            matchedRuleIds.push(RISK_RULE_IDS.medicalOrLegalAdvice);
+            matchedRuleIds.push(SAFETY_RULE_IDS.medicalOrLegalAdvice);
         }
 
         const { safetyTier, ruleId } =
@@ -248,9 +261,10 @@ export function evaluateSafetyDeterministic(
             reason: ruleDecision.reason,
         };
     } catch (error) {
-        logger.warn(
-            `[evaluateSafetyDeterministic] Failed-open to allow/Low: ${error instanceof Error ? error.message : String(error)}`
-        );
+        logger.warn('Failed-open to allow/Low', {
+            event: 'evaluateSafetyDeterministic.failOpen',
+            error,
+        });
         return {
             action: 'allow',
             safetyTier: 'Low',

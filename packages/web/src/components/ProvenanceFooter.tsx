@@ -36,7 +36,7 @@ const ProvenanceFooter = ({
     // Extract safety tier color based on safetyTier (matching ethics-core)
     const safetyTierColor =
         SAFETY_TIER_COLORS[metadata.safetyTier] || SAFETY_TIER_COLORS.Low;
-    const riskStyle = { '--risk-color': safetyTierColor } as CSSProperties;
+    const safetyStyle = { '--safety-color': safetyTierColor } as CSSProperties;
 
     // Format trade-offs text if any
     const tradeOffsText =
@@ -92,7 +92,7 @@ const ProvenanceFooter = ({
             className="provenance-footer"
             role="complementary"
             aria-label="Response provenance and metadata"
-            style={riskStyle}
+            style={safetyStyle}
         >
             <div className="provenance-header">
                 Reasoning - {metadata.provenance}

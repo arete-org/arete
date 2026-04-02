@@ -1,4 +1,4 @@
-# Risk Evaluation And Breakers
+# Safety Evaluation And Breakers
 
 ## Purpose
 
@@ -47,7 +47,7 @@ Breaker rules should be deterministic and testable.
 Starter rule families:
 
 - self-harm or crisis escalation,
-- medical and legal high-risk guidance,
+- medical and legal high-safety guidance,
 - dangerous or weaponization guidance,
 - privacy or identity misuse,
 - explicit policy refusal categories.
@@ -62,7 +62,7 @@ Each rule should produce:
 
 The planner may:
 
-- suggest a higher risk tier,
+- suggest a higher safety tier,
 - provide context that a rule may use,
 - help shape a safer allowed response.
 
@@ -70,7 +70,7 @@ The planner may not:
 
 - bypass a breaker trip,
 - downgrade a deterministic refusal rule,
-- become the only source of risk classification.
+- become the only source of safety classification.
 
 ## Enforcement Point
 
@@ -115,7 +115,7 @@ This metadata should be compact and privacy-safe.
 Realistic failures to design for:
 
 - A breaker rule silently fails and the pipeline sends a normal answer.
-- Planner output labels content `Low` risk and the pipeline trusts it over a deterministic rule.
+- Planner output labels content `Low` safety and the pipeline trusts it over a deterministic rule.
 - A refusal path returns an empty or malformed user-facing message.
 - Breaker logs omit `ruleId`, making later review impossible.
 

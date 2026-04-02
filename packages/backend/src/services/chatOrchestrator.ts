@@ -935,60 +935,55 @@ export const createChatOrchestrator = ({
                 }
             );
         }
-        chatOrchestratorLogger.info(
-            JSON.stringify({
-                event: 'chat.orchestration.timing',
-                surface: normalizedRequest.surface,
-                plannerStatus: plannerExecution.status,
-                plannerReasonCode: plannerExecution.reasonCode,
-                plannerDurationMs: plannerExecution.durationMs,
-                evaluatorStatus: evaluatorExecutionContext?.status,
-                evaluatorReasonCode: evaluatorExecutionContext?.reasonCode,
-                evaluatorSafetyTier:
-                    evaluatorExecutionContext?.outcome?.safetyDecision
-                        .safetyTier,
-                evaluatorProvenance:
-                    evaluatorExecutionContext?.outcome?.provenance,
-                evaluatorMode: evaluatorExecutionContext?.outcome?.mode,
-                generationDurationMs: response.generationDurationMs,
-                totalDurationMs,
-                plannerProfileId: plannerProfile.id,
-                incomingBotPersonaId:
-                    normalizedRequest.botPersonaId?.trim() || null,
-                personaProfileId: personaProfile.id,
-                personaDisplayName: personaProfile.displayName,
-                personaOverlaySource: personaProfile.promptOverlay.source,
-                personaOverlayLength: personaProfile.promptOverlay.length,
-                responseProfileId: selectedResponseProfile.id,
-                originalProfileId: originalSelectedProfileId,
-                effectiveProfileId: effectiveSelectedProfileId,
-                searchRequested: generationForExecution.search !== undefined,
-                toolName: response.finalToolExecutionTelemetry?.toolName,
-                toolStatus: response.finalToolExecutionTelemetry?.status,
-                toolReasonCode:
-                    response.finalToolExecutionTelemetry?.reasonCode,
-                toolEligible: response.finalToolExecutionTelemetry?.eligible,
-                toolRequestReasonCode:
-                    response.finalToolExecutionTelemetry?.requestReasonCode,
-                rerouteApplied,
-                fallbackApplied:
-                    plannerExecution.status === 'failed' ||
-                    fallbackReasons.length > 0,
-                fallbackReasons,
-                responseId: response.metadata.responseId,
-                responseAction: 'message',
-                responseModality: executionPlan.modality,
-                responseProvenance: response.metadata.provenance,
-                responseSafetyTier: response.metadata.safetyTier,
-                responseModelVersion: response.metadata.modelVersion,
-                responseCitationCount: response.metadata.citations.length,
-                responseMessageLength: response.message.length,
-                correlation: buildCorrelationIds(
-                    normalizedRequest,
-                    response.metadata.responseId
-                ),
-            })
-        );
+        chatOrchestratorLogger.info({
+            event: 'chat.orchestration.timing',
+            surface: normalizedRequest.surface,
+            plannerStatus: plannerExecution.status,
+            plannerReasonCode: plannerExecution.reasonCode,
+            plannerDurationMs: plannerExecution.durationMs,
+            evaluatorStatus: evaluatorExecutionContext?.status,
+            evaluatorReasonCode: evaluatorExecutionContext?.reasonCode,
+            evaluatorSafetyTier:
+                evaluatorExecutionContext?.outcome?.safetyDecision.safetyTier,
+            evaluatorProvenance: evaluatorExecutionContext?.outcome?.provenance,
+            evaluatorMode: evaluatorExecutionContext?.outcome?.mode,
+            generationDurationMs: response.generationDurationMs,
+            totalDurationMs,
+            plannerProfileId: plannerProfile.id,
+            incomingBotPersonaId:
+                normalizedRequest.botPersonaId?.trim() || null,
+            personaProfileId: personaProfile.id,
+            personaDisplayName: personaProfile.displayName,
+            personaOverlaySource: personaProfile.promptOverlay.source,
+            personaOverlayLength: personaProfile.promptOverlay.length,
+            responseProfileId: selectedResponseProfile.id,
+            originalProfileId: originalSelectedProfileId,
+            effectiveProfileId: effectiveSelectedProfileId,
+            searchRequested: generationForExecution.search !== undefined,
+            toolName: response.finalToolExecutionTelemetry?.toolName,
+            toolStatus: response.finalToolExecutionTelemetry?.status,
+            toolReasonCode: response.finalToolExecutionTelemetry?.reasonCode,
+            toolEligible: response.finalToolExecutionTelemetry?.eligible,
+            toolRequestReasonCode:
+                response.finalToolExecutionTelemetry?.requestReasonCode,
+            rerouteApplied,
+            fallbackApplied:
+                plannerExecution.status === 'failed' ||
+                fallbackReasons.length > 0,
+            fallbackReasons,
+            responseId: response.metadata.responseId,
+            responseAction: 'message',
+            responseModality: executionPlan.modality,
+            responseProvenance: response.metadata.provenance,
+            responseSafetyTier: response.metadata.safetyTier,
+            responseModelVersion: response.metadata.modelVersion,
+            responseCitationCount: response.metadata.citations.length,
+            responseMessageLength: response.message.length,
+            correlation: buildCorrelationIds(
+                normalizedRequest,
+                response.metadata.responseId
+            ),
+        });
 
         // Message action is the only branch that returns provenance metadata.
         return {
