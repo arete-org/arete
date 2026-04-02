@@ -7,7 +7,11 @@
  */
 
 import { envDefaultValues } from '@footnote/config-spec';
-import { parseOptionalTrimmedString, parsePositiveIntEnv } from '../parsers.js';
+import {
+    parseBooleanEnv,
+    parseOptionalTrimmedString,
+    parsePositiveIntEnv,
+} from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
 /**
@@ -17,7 +21,7 @@ import type { RuntimeConfig, WarningSink } from '../types.js';
 export const buildServiceSections = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink
-): Pick<RuntimeConfig, 'reflect' | 'trace'> => ({
+): Pick<RuntimeConfig, 'reflect' | 'trace' | 'chatWorkflow'> => ({
     reflect: {
         serviceToken: parseOptionalTrimmedString(env.REFLECT_SERVICE_TOKEN),
         maxBodyBytes: parsePositiveIntEnv(
@@ -33,6 +37,26 @@ export const buildServiceSections = (
             env.TRACE_API_MAX_BODY_BYTES,
             envDefaultValues.TRACE_API_MAX_BODY_BYTES,
             'TRACE_API_MAX_BODY_BYTES',
+            warn
+        ),
+    },
+    chatWorkflow: {
+        reviewLoopEnabled: parseBooleanEnv(
+            env.CHAT_REVIEW_LOOP_ENABLED,
+            false,
+            'CHAT_REVIEW_LOOP_ENABLED',
+            warn
+        ),
+        maxIterations: parsePositiveIntEnv(
+            env.CHAT_REVIEW_LOOP_MAX_ITERATIONS,
+            2,
+            'CHAT_REVIEW_LOOP_MAX_ITERATIONS',
+            warn
+        ),
+        maxDurationMs: parsePositiveIntEnv(
+            env.CHAT_REVIEW_LOOP_MAX_DURATION_MS,
+            15000,
+            'CHAT_REVIEW_LOOP_MAX_DURATION_MS',
             warn
         ),
     },

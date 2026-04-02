@@ -276,6 +276,85 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
     assert.equal(parsed.success, true);
 });
 
+test('ResponseMetadataSchema accepts workflow lineage metadata', () => {
+    const now = new Date().toISOString();
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        workflow: {
+            workflowId: 'wf_123',
+            workflowName: 'message_with_review_loop_v1',
+            status: 'completed',
+            iterations: 2,
+            maxIterations: 2,
+            maxDurationMs: 15000,
+            terminationReason: 'finalized_by_reviewer',
+            steps: [
+                {
+                    stepId: 'step_1',
+                    iteration: 1,
+                    stepName: 'draft_generation',
+                    status: 'executed',
+                    startedAt: now,
+                    finishedAt: now,
+                    durationMs: 10,
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 20,
+                        totalTokens: 30,
+                    },
+                    cost: {
+                        inputCostUsd: 0.00001,
+                        outputCostUsd: 0.00002,
+                        totalCostUsd: 0.00003,
+                    },
+                },
+                {
+                    stepId: 'step_2',
+                    parentStepId: 'step_1',
+                    iteration: 1,
+                    stepName: 'self_review_gate',
+                    status: 'executed',
+                    startedAt: now,
+                    finishedAt: now,
+                    durationMs: 5,
+                },
+            ],
+        },
+    });
+
+    assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema rejects workflow lineage with invalid termination reason', () => {
+    const now = new Date().toISOString();
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        workflow: {
+            workflowId: 'wf_123',
+            workflowName: 'message_with_review_loop_v1',
+            status: 'completed',
+            iterations: 1,
+            maxIterations: 2,
+            maxDurationMs: 15000,
+            terminationReason: 'unknown_reason',
+            steps: [
+                {
+                    stepId: 'step_1',
+                    iteration: 1,
+                    stepName: 'draft_generation',
+                    status: 'executed',
+                    startedAt: now,
+                    finishedAt: now,
+                    durationMs: 10,
+                },
+            ],
+        },
+    });
+
+    assert.equal(parsed.success, false);
+});
+
 test('ResponseMetadataSchema rejects non-canonical safety decision rule tuples', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,

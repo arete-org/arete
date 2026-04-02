@@ -283,6 +283,50 @@ export type GenerationExecutionEvent = ProfileExecutionEvent & {
     reasonCode?: GenerationExecutionReasonCode;
 };
 
+export type WorkflowStepStatus = 'executed' | 'skipped' | 'failed';
+
+export type WorkflowTerminationReason =
+    | 'finalized_by_reviewer'
+    | 'max_iterations_reached'
+    | 'max_duration_reached'
+    | 'review_runtime_error'
+    | 'review_invalid_output'
+    | 'revision_runtime_error';
+
+export type WorkflowStep = {
+    stepId: string;
+    parentStepId?: string;
+    iteration: number;
+    stepName: string;
+    status: WorkflowStepStatus;
+    reasonCode?: ExecutionReasonCode;
+    startedAt: string;
+    finishedAt: string;
+    durationMs: number;
+    model?: string;
+    usage?: {
+        promptTokens?: number;
+        completionTokens?: number;
+        totalTokens?: number;
+    };
+    cost?: {
+        inputCostUsd: number;
+        outputCostUsd: number;
+        totalCostUsd: number;
+    };
+};
+
+export type WorkflowLineage = {
+    workflowId: string;
+    workflowName: string;
+    status: 'completed' | 'degraded';
+    iterations: number;
+    maxIterations: number;
+    maxDurationMs: number;
+    terminationReason: WorkflowTerminationReason;
+    steps: WorkflowStep[];
+};
+
 /**
  * Shared correlation envelope for structured backend telemetry.
  * Fields are nullable so callers can keep fail-open behavior.
@@ -360,6 +404,7 @@ export type ResponseMetadata = {
     totalDurationMs?: number; // End-to-end orchestration duration when available.
     citations: Citation[]; // Sources used for the answer.
     execution?: ExecutionEvent[]; // Canonical execution timeline for model/tool visibility.
+    workflow?: WorkflowLineage; // Optional multi-step lineage for bounded workflow execution.
     evaluator?: EvaluatorOutcome; // Deterministic evaluator decision captured before breaker enforcement.
     imageDescriptions?: string[]; // Optional captions for any images used.
     evidenceScore?: TraceAxisScore; // Optional TRACE evidence chip score (1..5).

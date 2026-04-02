@@ -247,6 +247,57 @@ const ExecutionEventSchema = z
     })
     .strict();
 
+const WorkflowStepSchema = z
+    .object({
+        stepId: z.string().min(1),
+        parentStepId: z.string().min(1).optional(),
+        iteration: z.number().int().nonnegative(),
+        stepName: z.string().min(1),
+        status: z.enum(['executed', 'skipped', 'failed']),
+        reasonCode: ExecutionReasonCodeSchema.optional(),
+        startedAt: z.string().datetime(),
+        finishedAt: z.string().datetime(),
+        durationMs: z.number().int().nonnegative(),
+        model: z.string().min(1).optional(),
+        usage: z
+            .object({
+                promptTokens: z.number().int().nonnegative().optional(),
+                completionTokens: z.number().int().nonnegative().optional(),
+                totalTokens: z.number().int().nonnegative().optional(),
+            })
+            .strict()
+            .optional(),
+        cost: z
+            .object({
+                inputCostUsd: z.number().nonnegative(),
+                outputCostUsd: z.number().nonnegative(),
+                totalCostUsd: z.number().nonnegative(),
+            })
+            .strict()
+            .optional(),
+    })
+    .strict();
+
+const WorkflowLineageSchema = z
+    .object({
+        workflowId: z.string().min(1),
+        workflowName: z.string().min(1),
+        status: z.enum(['completed', 'degraded']),
+        iterations: z.number().int().positive(),
+        maxIterations: z.number().int().positive(),
+        maxDurationMs: z.number().int().positive(),
+        terminationReason: z.enum([
+            'finalized_by_reviewer',
+            'max_iterations_reached',
+            'max_duration_reached',
+            'review_runtime_error',
+            'review_invalid_output',
+            'revision_runtime_error',
+        ]),
+        steps: z.array(WorkflowStepSchema),
+    })
+    .strict();
+
 const responseMetadataShape = {
     responseId: z.string().min(1),
     provenance: ProvenanceSchema,
@@ -260,6 +311,7 @@ const responseMetadataShape = {
     totalDurationMs: z.number().int().nonnegative().optional(),
     citations: z.array(CitationSchema),
     execution: z.array(ExecutionEventSchema).optional(),
+    workflow: WorkflowLineageSchema.optional(),
     evaluator: EvaluatorOutcomeSchema.optional(),
     imageDescriptions: z.array(z.string()).optional(),
     evidenceScore: TraceAxisScoreSchema.optional(),

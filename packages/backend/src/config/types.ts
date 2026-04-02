@@ -92,6 +92,11 @@ export type RuntimeConfig = {
         apiToken: string | null;
         maxBodyBytes: number;
     };
+    chatWorkflow: {
+        reviewLoopEnabled: boolean;
+        maxIterations: number;
+        maxDurationMs: number;
+    };
     turnstile: {
         secretKey: string | null;
         siteKey: string | null;

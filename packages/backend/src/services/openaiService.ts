@@ -28,6 +28,7 @@ import type {
     ToolExecutionContext,
     ToolInvocationReasonCode,
     TraceAxisScore,
+    WorkflowLineage,
 } from '@footnote/contracts/ethics-core';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -670,6 +671,7 @@ type ResponseMetadataRuntimeContext = {
             durationMs?: ToolExecutionContext['durationMs'];
         };
     };
+    workflow?: WorkflowLineage;
 };
 
 const normalizePlannerReasonCode = (
@@ -942,6 +944,9 @@ const buildResponseMetadata = (
             totalDurationMs: runtimeContext.totalDurationMs,
         }),
         ...(execution.length > 0 && { execution }),
+        ...(runtimeContext.workflow !== undefined && {
+            workflow: runtimeContext.workflow,
+        }),
         ...(evaluatorExecution?.outcome !== undefined && {
             evaluator: evaluatorExecution.outcome,
         }),

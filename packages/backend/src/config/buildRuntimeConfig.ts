@@ -41,7 +41,7 @@ export const buildRuntimeConfig = (
     );
     const voltagent = buildVoltAgentSection(env, warn);
     const web = buildWebSection(env, warn);
-    const { reflect, trace } = buildServiceSections(env, warn);
+    const { reflect, trace, chatWorkflow } = buildServiceSections(env, warn);
     const turnstile = buildTurnstileSection(env, warn);
     const rateLimits = buildRateLimitsSection(env, warn);
     const webhook = buildWebhookSection(env, warn);
@@ -65,6 +65,7 @@ export const buildRuntimeConfig = (
         csp: web.csp,
         reflect,
         trace,
+        chatWorkflow,
         turnstile,
         rateLimits,
         webhook,
