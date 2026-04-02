@@ -150,6 +150,12 @@ function escapeMarkdownLinkUrl(value: string): string {
     return value.replace(/\\/g, '\\\\').replace(/\)/g, '\\)');
 }
 
+/**
+ * Builds the Markdown "Summary" section for provenance details displayed in Discord.
+ *
+ * @param payload - Either validated provenance `ResponseMetadata` or a `DetailsFallbackPayload` used when metadata is unavailable.
+ * @returns A Markdown-formatted string containing the Summary section: the response ID plus either provenance fields (provenance, safety tier, tradeoffs, model, stale-after) or an unavailable notice with a reason.
+ */
 function formatSummarySection(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {

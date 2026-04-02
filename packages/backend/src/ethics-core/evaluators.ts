@@ -78,11 +78,10 @@ export function computeProvenanceSignals(context: string[]): ProvenanceSignals {
 }
 
 /**
- * Computes the provenance type for a given context.
+ * Determine the provenance category for the provided message context.
  *
- * @param context - Array of recent message strings
- * @returns Deterministic provenance classification with conservative precedence
- * Retrieved > Speculative > Inferred.
+ * @param context - Recent message strings used to assess provenance
+ * @returns `'Retrieved'` if context indicates sourced/retrieved content; `'Speculative'` if context indicates hedging/speculation or no context is present; otherwise `'Inferred'`
  */
 export function computeProvenance(context: string[]): Provenance {
     const signals = computeProvenanceSignals(context);
@@ -187,6 +186,12 @@ const selectDeterministicWinner = (
     };
 };
 
+/**
+ * Constructs a SafetyDecision from a SafetyEvaluationResult.
+ *
+ * @param evaluation - The safety evaluation result to convert into a decision
+ * @returns A SafetyDecision reflecting `evaluation`; if `evaluation.action` is `allow` the decision will set `ruleId` to `null` and include only `action` and `safetyTier`, otherwise it will include `action`, `safetyTier`, `ruleId`, `reasonCode`, and `reason`
+ */
 export function buildSafetyDecision(
     evaluation: SafetyEvaluationResult
 ): SafetyDecision {
@@ -208,8 +213,19 @@ export function buildSafetyDecision(
 }
 
 /**
- * Canonical deterministic safety evaluation path.
- * Fail-open policy: evaluator failures return an allow/low result.
+ * Deterministically evaluates the safety of the latest user input using rule-based regex matching.
+ *
+ * Performs pattern matching against the trimmed `input.latestUserInput` to detect safety rule triggers
+ * (e.g., self-harm crisis intent, weaponization requests, actionable medical/legal advice) and selects
+ * a single deterministic outcome. On internal errors the function fails open and returns an allow/Low result.
+ *
+ * @param input - Evaluation input containing `latestUserInput`; only the trimmed `latestUserInput` is used for matching.
+ * @returns A SafetyEvaluationResult describing the decision:
+ *          - `action`: the resulting action (e.g., `'allow'` or a blocking action)
+ *          - `safetyTier`: the computed tier (`'High' | 'Medium' | 'Low'`)
+ *          - `ruleId`: the winning `SafetyRuleId` or `null` when no rule applies
+ *          - `matchedRuleIds`: all rule IDs that matched the input
+ *          - `reasonCode` and `reason`: included when a specific rule wins to explain the decision
  */
 export function evaluateSafetyDeterministic(
     input: SafetyEvaluationInput
