@@ -240,7 +240,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Include API Client and Prompts as first-class package pages because they now carry shared transport and prompt ownership used across web, discord, and backend.",
+                    "content": "Include API Client and Prompts as first-class pages. They now own shared transport and prompt behavior used by web, Discord, and backend.",
                     "author": "Maintainer"
                 }
             ]
@@ -282,7 +282,7 @@
         },
         {
             "title": "API Client",
-            "purpose": "Document the shared HTTP client package used by web and Discord to call backend APIs with consistent auth headers, error handling, and typed request/response helpers.",
+            "purpose": "Document the shared HTTP client package used by web and Discord to call backend APIs with consistent auth, error handling, and typed helpers.",
             "parent": "Packages",
             "entrypoints": [
                 "packages/api-client/src/index.ts",
@@ -296,18 +296,18 @@
             ],
             "page_notes": [
                 {
-                    "content": "Keep this page focused on shared transport behavior and backend boundary rules, not UI-level usage details.",
+                    "content": "Keep this page focused on shared transport behavior and backend boundary rules. Skip UI details.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Show how web and Discord wrappers compose these factories so auth and error semantics stay aligned across clients.",
+                    "content": "Show how web and Discord wrappers compose these factories so auth and error behavior stay aligned.",
                     "author": "Maintainer"
                 }
             ]
         },
         {
             "title": "Prompts",
-            "purpose": "Document shared prompt ownership in @footnote/prompts, including defaults catalog loading, key-based overrides, and profile overlay composition hooks consumed by backend and Discord.",
+            "purpose": "Document shared prompt ownership in @footnote/prompts, including defaults loading, key-based overrides, and profile overlay composition used by backend and Discord.",
             "parent": "Packages",
             "entrypoints": [
                 "packages/prompts/src/index.ts",
@@ -324,7 +324,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Call out that prompt semantics are shared across backend and Discord so behavior parity is intentional and testable.",
+                    "content": "Call out that prompt behavior is shared across backend and Discord so parity is intentional and testable.",
                     "author": "Maintainer"
                 }
             ]
@@ -397,7 +397,7 @@
         },
         {
             "title": "Internal Tasks",
-            "purpose": "Document trusted internal backend routes for text, image, and voice task execution, including auth headers, rate-limit boundaries, and fail-open behavior when providers are unavailable.",
+            "purpose": "Document trusted internal backend routes for text, image, and voice tasks, including auth headers, rate limits, and fail-open behavior when providers are unavailable.",
             "parent": "Backend",
             "entrypoints": [
                 "packages/backend/src/handlers/internalText.ts",
@@ -412,18 +412,18 @@
             ],
             "page_notes": [
                 {
-                    "content": "Make trusted auth requirements explicit: these routes require x-service-token or x-trace-token and are not public chat endpoints.",
+                    "content": "Make trusted auth requirements explicit. These routes require x-service-token or x-trace-token and are not public chat endpoints.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Include failure modes for provider-offline states and how callers should handle 429/503 behavior.",
+                    "content": "Include failure modes for provider-offline states and how callers should handle 429/503 responses.",
                     "author": "Maintainer"
                 }
             ]
         },
         {
             "title": "Trace Cards",
-            "purpose": "Document trace-card generation and asset retrieval routes, including creation from direct metadata or from stored trace response ids.",
+            "purpose": "Document trace-card generation and asset retrieval routes, including creation from direct metadata or a stored trace response id.",
             "parent": "Backend",
             "entrypoints": [
                 "packages/backend/src/handlers/trace.ts",
@@ -433,18 +433,18 @@
             ],
             "page_notes": [
                 {
-                    "content": "Explain the difference between trace upsert, trace fetch, and trace-card generation flows so callers choose the right route.",
+                    "content": "Explain the difference between trace upsert, trace fetch, and trace-card generation so callers choose the right route.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Show token requirements for write routes and public behavior for read-only asset retrieval.",
+                    "content": "Show token requirements for write routes and public behavior for read-only asset fetches.",
                     "author": "Maintainer"
                 }
             ]
         },
         {
             "title": "Webhook & Blog Ingestion",
-            "purpose": "Document backend webhook ingestion and blog content serving, including GitHub signature validation, storage behavior, and web consumption paths.",
+            "purpose": "Document backend webhook ingestion and blog serving, including GitHub signature validation, storage behavior, and web consumption paths.",
             "parent": "Backend",
             "entrypoints": [
                 "packages/backend/src/handlers/webhook.ts",
@@ -455,7 +455,7 @@
             ],
             "page_notes": [
                 {
-                    "content": "Keep this page operational: show what is trusted input, what is persisted, and how malformed webhook payloads are handled safely.",
+                    "content": "Keep this page operational. Show trusted input, persisted fields, and how malformed webhook payloads are handled safely.",
                     "author": "Maintainer"
                 },
                 {
