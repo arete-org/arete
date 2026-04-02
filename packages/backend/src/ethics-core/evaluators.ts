@@ -8,10 +8,13 @@
 import type {
     Provenance,
     ProvenanceSignals,
-    RiskEvaluationResult,
-    RiskRuleId,
-    RiskTier,
+    SafetyRuleId,
+    SafetyTier,
+    SafetyDecision,
+    SafetyEvaluationInput,
+    SafetyEvaluationResult,
 } from '@footnote/contracts/ethics-core';
+import { SAFETY_RULE_METADATA } from '@footnote/contracts/ethics-core';
 import { logger } from '../utils/logger.js';
 
 const RETRIEVAL_PATTERNS: readonly RegExp[] = [
@@ -103,24 +106,13 @@ export function computeProvenance(context: string[]): Provenance {
     return provenance;
 }
 
-/**
- * Computes the risk tier for a given message.
- *
- * @param content - The message content being evaluated
- * @param context - Array of recent message strings
- * @returns RiskTier classification
- */
-export function computeRiskTier(content: string, context: string[]): RiskTier {
-    return evaluateRiskTierDeterministic(content, context).riskTier;
-}
-
 const RISK_RULE_IDS = {
-    selfHarmCrisisIntent: 'risk.self_harm.crisis_intent.v1',
-    weaponizationRequest: 'risk.safety.weaponization_request.v1',
-    medicalOrLegalAdvice: 'risk.professional.medical_or_legal_advice.v1',
-} as const satisfies Record<string, RiskRuleId>;
+    selfHarmCrisisIntent: 'safety.self_harm.crisis_intent.v1',
+    weaponizationRequest: 'safety.weaponization_request.v1',
+    medicalOrLegalAdvice: 'safety.professional.medical_or_legal_advice.v1',
+} as const satisfies Record<string, SafetyRuleId>;
 
-const HIGH_RISK_RULE_IDS: ReadonlySet<RiskRuleId> = new Set<RiskRuleId>([
+const HIGH_RISK_RULE_IDS: ReadonlySet<SafetyRuleId> = new Set<SafetyRuleId>([
     RISK_RULE_IDS.selfHarmCrisisIntent,
     RISK_RULE_IDS.weaponizationRequest,
 ]);
@@ -156,17 +148,64 @@ const matchesAnyPattern = (
     patterns: ReadonlyArray<RegExp>
 ): boolean => patterns.some((pattern) => pattern.test(text));
 
+const selectDeterministicWinner = (
+    matchedRuleIds: SafetyRuleId[]
+): { safetyTier: SafetyTier; ruleId: SafetyRuleId | null } => {
+    if (matchedRuleIds.some((candidate) => HIGH_RISK_RULE_IDS.has(candidate))) {
+        return {
+            safetyTier: 'High',
+            ruleId:
+                matchedRuleIds.find((candidate) =>
+                    HIGH_RISK_RULE_IDS.has(candidate)
+                ) ?? null,
+        };
+    }
+
+    if (matchedRuleIds.length > 0) {
+        return {
+            safetyTier: 'Medium',
+            ruleId: matchedRuleIds[0] ?? null,
+        };
+    }
+
+    return {
+        safetyTier: 'Low',
+        ruleId: null,
+    };
+};
+
+export function buildSafetyDecision(
+    evaluation: SafetyEvaluationResult
+): SafetyDecision {
+    if (evaluation.action === 'allow') {
+        return {
+            action: 'allow',
+            safetyTier: evaluation.safetyTier,
+            ruleId: null,
+        };
+    }
+
+    return {
+        action: evaluation.action,
+        safetyTier: evaluation.safetyTier,
+        ruleId: evaluation.ruleId,
+        reasonCode: evaluation.reasonCode,
+        reason: evaluation.reason,
+    };
+}
+
 /**
- * Deterministic risk evaluator with stable rule IDs.
- * Fail-open policy: evaluator failures degrade to low risk.
+ * Canonical deterministic safety evaluation path.
+ * Fail-open policy: evaluator failures return an allow/low result.
  */
-export function evaluateRiskTierDeterministic(
-    content: string,
-    context: string[]
-): RiskEvaluationResult {
+export function evaluateSafetyDeterministic(
+    input: SafetyEvaluationInput
+): SafetyEvaluationResult {
     try {
-        const combinedText = [content, ...context].join('\n');
-        const matchedRuleIds: RiskRuleId[] = [];
+        const combinedText = input.latestUserInput.trim();
+        // TODO(v2-safety-rules): Expand to role-aware conversation context once
+        // conversation lifecycle and summarization contracts are finalized.
+        const matchedRuleIds: SafetyRuleId[] = [];
 
         if (matchesAnyPattern(combinedText, SELF_HARM_CRISIS_PATTERNS)) {
             matchedRuleIds.push(RISK_RULE_IDS.selfHarmCrisisIntent);
@@ -188,33 +227,33 @@ export function evaluateRiskTierDeterministic(
             matchedRuleIds.push(RISK_RULE_IDS.medicalOrLegalAdvice);
         }
 
-        let riskTier: RiskTier = 'Low';
-        let ruleId: RiskRuleId | null = null;
-        if (
-            matchedRuleIds.some((candidate) =>
-                HIGH_RISK_RULE_IDS.has(candidate)
-            )
-        ) {
-            riskTier = 'High';
-            ruleId =
-                matchedRuleIds.find((candidate) =>
-                    HIGH_RISK_RULE_IDS.has(candidate)
-                ) ?? null;
-        } else if (matchedRuleIds.length > 0) {
-            riskTier = 'Medium';
-            ruleId = matchedRuleIds[0] ?? null;
+        const { safetyTier, ruleId } =
+            selectDeterministicWinner(matchedRuleIds);
+        if (!ruleId) {
+            return {
+                action: 'allow',
+                safetyTier,
+                ruleId: null,
+                matchedRuleIds,
+            };
         }
 
-        logger.debug(
-            `[evaluateRiskTierDeterministic] tier=${riskTier} ruleId=${ruleId ?? 'none'} matchCount=${matchedRuleIds.length}`
-        );
-        return { riskTier, ruleId, matchedRuleIds };
+        const ruleDecision = SAFETY_RULE_METADATA[ruleId];
+        return {
+            action: ruleDecision.action,
+            safetyTier: ruleDecision.safetyTier,
+            ruleId,
+            matchedRuleIds,
+            reasonCode: ruleDecision.reasonCode,
+            reason: ruleDecision.reason,
+        };
     } catch (error) {
         logger.warn(
-            `[evaluateRiskTierDeterministic] Failed-open to Low risk: ${error instanceof Error ? error.message : String(error)}`
+            `[evaluateSafetyDeterministic] Failed-open to allow/Low: ${error instanceof Error ? error.message : String(error)}`
         );
         return {
-            riskTier: 'Low',
+            action: 'allow',
+            safetyTier: 'Low',
             ruleId: null,
             matchedRuleIds: [],
         };

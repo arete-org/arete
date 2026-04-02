@@ -22,7 +22,7 @@ import {
 import type {
     ExecutionReasonCode,
     ExecutionStatus,
-    RiskTier,
+    SafetyTier,
     ResponseTemperament,
     TraceAxisScore,
 } from '@footnote/contracts/ethics-core';
@@ -82,7 +82,7 @@ export type ChatPlan = {
     profileId?: string;
     reaction?: string;
     imageRequest?: ChatImageRequest;
-    riskTier: RiskTier;
+    safetyTier: SafetyTier;
     reasoning: string;
     generation: ChatGenerationPlan;
 };
@@ -169,9 +169,9 @@ const TOPIC_HINT_MAX_COUNT = 5;
 const TOPIC_HINT_MAX_LENGTH = 40;
 
 /**
- * Coerces arbitrary planner output into the RiskTier contract.
+ * Coerces arbitrary planner output into the SafetyTier contract.
  */
-const normalizeRiskTier = (value: unknown): RiskTier => {
+const normalizeSafetyTier = (value: unknown): SafetyTier => {
     if (value === 'Low' || value === 'Medium' || value === 'High') {
         return value;
     }
@@ -527,7 +527,7 @@ const buildFallbackPlan = (
     return {
         action: fallbackAction,
         modality: 'text',
-        riskTier: 'Low',
+        safetyTier: 'Low',
         reasoning: reason,
         // Intentionally omit fallback TRACE temperament.
         // Missing axes are rendered in red in the trace card to signal
@@ -774,7 +774,7 @@ const normalizePlan = (
         action: actionCandidate,
         modality: normalizeModality(candidate.modality, capabilities),
         profileId: normalizeProfileId(candidate.profileId),
-        riskTier: normalizeRiskTier(candidate.riskTier),
+        safetyTier: normalizeSafetyTier(candidate.safetyTier),
         reasoning:
             typeof candidate.reasoning === 'string' &&
             candidate.reasoning.trim()
@@ -916,7 +916,7 @@ const normalizePlan = (
                 ...fallbackPlan,
                 action: 'message',
                 modality: normalizedPlan.modality,
-                riskTier: normalizedPlan.riskTier,
+                safetyTier: normalizedPlan.safetyTier,
                 reasoning:
                     `${normalizedPlan.reasoning} Planner omitted required TRACE temperament, so the backend fell back safely.`.trim(),
             },
@@ -1137,7 +1137,7 @@ export const createChatPlanner = ({
                     `Chat planner decision summary: ${requestSummary}`
                 );
                 logger.debug(
-                    `Chat planner chose action=${normalizedPlan.action} modality=${normalizedPlan.modality} riskTier=${normalizedPlan.riskTier}`
+                    `Chat planner chose action=${normalizedPlan.action} modality=${normalizedPlan.modality} safetyTier=${normalizedPlan.safetyTier}`
                 );
                 logger.debug(
                     `Chat planner generation search=${normalizedPlan.generation.search ? 'enabled' : 'disabled'} reasoningEffort=${normalizedPlan.generation.reasoningEffort} verbosity=${normalizedPlan.generation.verbosity}`

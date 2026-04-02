@@ -12,6 +12,7 @@ Footnote keeps docs in three buckets:
 - [Incident Storage And Audit](./architecture/incident-storage-and-audit.md): Defines the durable incident model, audit trail, and privacy boundary.
 - [Incident And Breaker Logging](./architecture/incident-and-breaker-logging.md): Defines the structured logging schema and examples for incident lifecycle and breaker events.
 - [Risk Evaluation And Breakers](./architecture/risk-evaluation-and-breakers.md): Defines the target deterministic safety layer and enforcement point.
+- [Deterministic Breaker Evaluator V1 (Draft)](./architecture/deterministic-breaker-evaluator-v1.md): Proposes the concrete evaluator contract, rule model, action mapping, and validation gates for issue #75.
 - [Prompt Resolution](./architecture/prompt-resolution.md): Defines how prompt layers and overrides resolve at runtime.
 
 ## Decisions

@@ -24,8 +24,8 @@ type BreakerAction =
     | 'safe_partial'
     | 'human_review';
 
-type RiskEvaluationResult = {
-    riskTier: 'Low' | 'Medium' | 'High';
+type SafetyEvaluationResult = {
+    safetyTier: 'Low' | 'Medium' | 'High';
     action: BreakerAction;
     ruleId: string | null;
     notes: string[];

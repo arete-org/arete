@@ -14,7 +14,7 @@ import { assertValidResponseMetadata } from '../src/storage/traces/traceStoreUti
 const baseMetadata = {
     responseId: 'response_123',
     provenance: 'Retrieved',
-    riskTier: 'Low',
+    safetyTier: 'Low',
     tradeoffCount: 2,
     chainHash: 'chain_hash',
     licenseContext: 'MIT + HL3',

@@ -214,7 +214,7 @@ chat:
                     "outputFormat"?: "png" | "webp" | "jpeg",
                     "outputCompression"?: number
                   },
-                  "riskTier": "Low" | "Medium" | "High",
+                  "safetyTier": "Low" | "Medium" | "High",
                   "reasoning": "one short sentence",
                   "generation": {
                     "reasoningEffort": "minimal" | "low" | "medium" | "high",

@@ -52,7 +52,7 @@ type CreateTestServerOptions = {
 const createMetadata = (): ResponseMetadata => ({
     responseId: 'chat_test_response',
     provenance: 'Inferred',
-    riskTier: 'Low',
+    safetyTier: 'Low',
     tradeoffCount: 0,
     chainHash: 'abc123def456',
     licenseContext: 'MIT + HL3',
@@ -125,7 +125,7 @@ const createTestServer = (
                         TEST_PLANNER_MAX_COMPLETION_TOKENS
                     ) {
                         return {
-                            text: '{"action":"message","modality":"text","riskTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',
+                            text: '{"action":"message","modality":"text","safetyTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',
                             model: 'gpt-5-mini',
                         };
                     }

@@ -201,7 +201,7 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
                         provenance: 'Inferred',
                         safetyDecision: {
                             action: 'allow',
-                            riskTier: 'Low',
+                            safetyTier: 'Low',
                             ruleId: null,
                         },
                     },
@@ -240,7 +240,7 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
                 provenance: 'Inferred',
                 safetyDecision: {
                     action: 'allow',
-                    riskTier: 'Low',
+                    safetyTier: 'Low',
                     ruleId: null,
                 },
             },
@@ -266,7 +266,7 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
         provenance: 'Inferred',
         safetyDecision: {
             action: 'allow',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             ruleId: null,
         },
     });

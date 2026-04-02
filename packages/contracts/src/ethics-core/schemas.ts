@@ -7,16 +7,19 @@
  */
 
 import { z } from 'zod';
+import { SAFETY_RULE_METADATA } from './safetyRuleMetadata.js';
 
-const RiskTierSchema = z.enum(['Low', 'Medium', 'High']);
+const SafetyTierSchema = z.enum(['Low', 'Medium', 'High']);
 
-export const RiskRuleIdSchema = z.enum([
-    'risk.self_harm.crisis_intent.v1',
-    'risk.safety.weaponization_request.v1',
-    'risk.professional.medical_or_legal_advice.v1',
-]);
+export const SafetyRuleIdSchema = z.custom<keyof typeof SAFETY_RULE_METADATA>(
+    (value) =>
+        typeof value === 'string' && Object.hasOwn(SAFETY_RULE_METADATA, value),
+    {
+        message: 'Unknown deterministic safety rule id.',
+    }
+);
 
-export const SafetyBreakerActionSchema = z.enum([
+export const SafetyActionSchema = z.enum([
     'allow',
     'block',
     'redirect',
@@ -24,38 +27,17 @@ export const SafetyBreakerActionSchema = z.enum([
     'human_review',
 ]);
 
-export const SafetyBreakerReasonCodeSchema = z.enum([
+export const SafetyReasonCodeSchema = z.enum([
     'self_harm_crisis_intent',
     'weaponization_request',
     'professional_advice_guardrail',
 ]);
 
-const RULE_METADATA_MAP: Record<
-    z.infer<typeof RiskRuleIdSchema>,
-    {
-        riskTier: z.infer<typeof RiskTierSchema>;
-        reasonCode: z.infer<typeof SafetyBreakerReasonCodeSchema>;
-    }
-> = {
-    'risk.self_harm.crisis_intent.v1': {
-        riskTier: 'High',
-        reasonCode: 'self_harm_crisis_intent',
-    },
-    'risk.safety.weaponization_request.v1': {
-        riskTier: 'High',
-        reasonCode: 'weaponization_request',
-    },
-    'risk.professional.medical_or_legal_advice.v1': {
-        riskTier: 'Medium',
-        reasonCode: 'professional_advice_guardrail',
-    },
-};
-
 export const SafetyDecisionSchema = z.discriminatedUnion('action', [
     z
         .object({
             action: z.literal('allow'),
-            riskTier: RiskTierSchema,
+            safetyTier: SafetyTierSchema,
             ruleId: z.null(),
         })
         .strict(),
@@ -67,22 +49,30 @@ export const SafetyDecisionSchema = z.discriminatedUnion('action', [
                 'safe_partial',
                 'human_review',
             ]),
-            riskTier: RiskTierSchema,
-            ruleId: RiskRuleIdSchema,
-            reasonCode: SafetyBreakerReasonCodeSchema,
+            safetyTier: SafetyTierSchema,
+            ruleId: SafetyRuleIdSchema,
+            reasonCode: SafetyReasonCodeSchema,
             reason: z.string().min(1),
         })
         .superRefine((value, context) => {
-            const expected = RULE_METADATA_MAP[value.ruleId];
+            const expected = SAFETY_RULE_METADATA[value.ruleId];
             if (!expected) {
                 return;
             }
 
-            if (value.riskTier !== expected.riskTier) {
+            if (value.safetyTier !== expected.safetyTier) {
                 context.addIssue({
                     code: z.ZodIssueCode.custom,
-                    path: ['riskTier'],
-                    message: `riskTier "${value.riskTier}" does not match canonical rule tuple for "${value.ruleId}" (expected "${expected.riskTier}").`,
+                    path: ['safetyTier'],
+                    message: `safetyTier "${value.safetyTier}" does not match canonical rule tuple for "${value.ruleId}" (expected "${expected.safetyTier}").`,
+                });
+            }
+
+            if (value.action !== expected.action) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ['action'],
+                    message: `action "${value.action}" does not match canonical rule tuple for "${value.ruleId}" (expected "${expected.action}").`,
                 });
             }
 

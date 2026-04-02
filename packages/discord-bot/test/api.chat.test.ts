@@ -58,7 +58,7 @@ test('chatViaApi posts to /api/chat with X-Trace-Token and returns parsed data',
                 metadata: {
                     responseId: 'resp_123',
                     provenance: 'Inferred',
-                    riskTier: 'Low',
+                    safetyTier: 'Low',
                     tradeoffCount: 0,
                     chainHash: 'hash_123',
                     licenseContext: 'MIT + HL3',
