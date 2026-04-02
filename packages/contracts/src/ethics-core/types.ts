@@ -285,20 +285,37 @@ export type GenerationExecutionEvent = ProfileExecutionEvent & {
 
 export type WorkflowStepStatus = 'executed' | 'skipped' | 'failed';
 
-export type WorkflowTerminationReason =
-    | 'finalized_by_reviewer'
-    | 'max_iterations_reached'
-    | 'max_duration_reached'
-    | 'review_runtime_error'
-    | 'review_invalid_output'
-    | 'revision_runtime_error';
+export type WorkflowStepKind =
+    | 'plan'
+    | 'tool'
+    | 'generate'
+    | 'assess'
+    | 'revise'
+    | 'finalize';
 
-export type WorkflowStep = {
+export type WorkflowTerminationReason =
+    | 'goal_satisfied'
+    | 'budget_exhausted_steps'
+    | 'budget_exhausted_tokens'
+    | 'budget_exhausted_time'
+    | 'transition_blocked_by_policy'
+    | 'max_tool_calls_reached'
+    | 'max_deliberation_calls_reached'
+    | 'executor_error_fail_open';
+
+export type StepOutcome = {
+    status: WorkflowStepStatus;
+    summary: string;
+    artifacts?: string[];
+    signals?: Record<string, string | number | boolean | null>;
+    recommendations?: string[];
+};
+
+export type StepRecord = {
     stepId: string;
     parentStepId?: string;
-    iteration: number;
-    stepName: string;
-    status: WorkflowStepStatus;
+    attempt: number;
+    stepKind: WorkflowStepKind;
     reasonCode?: ExecutionReasonCode;
     startedAt: string;
     finishedAt: string;
@@ -314,17 +331,18 @@ export type WorkflowStep = {
         outputCostUsd: number;
         totalCostUsd: number;
     };
+    outcome: StepOutcome;
 };
 
-export type WorkflowLineage = {
+export type WorkflowRecord = {
     workflowId: string;
     workflowName: string;
     status: 'completed' | 'degraded';
-    iterations: number;
-    maxIterations: number;
-    maxDurationMs: number;
     terminationReason: WorkflowTerminationReason;
-    steps: WorkflowStep[];
+    stepCount: number;
+    maxSteps: number;
+    maxDurationMs: number;
+    steps: StepRecord[];
 };
 
 /**
@@ -404,7 +422,7 @@ export type ResponseMetadata = {
     totalDurationMs?: number; // End-to-end orchestration duration when available.
     citations: Citation[]; // Sources used for the answer.
     execution?: ExecutionEvent[]; // Canonical execution timeline for model/tool visibility.
-    workflow?: WorkflowLineage; // Optional multi-step lineage for bounded workflow execution.
+    workflow?: WorkflowRecord; // Optional workflow provenance record for bounded multi-step execution.
     evaluator?: EvaluatorOutcome; // Deterministic evaluator decision captured before breaker enforcement.
     imageDescriptions?: string[]; // Optional captions for any images used.
     evidenceScore?: TraceAxisScore; // Optional TRACE evidence chip score (1..5).

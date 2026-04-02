@@ -17,10 +17,10 @@ import type {
     PartialResponseTemperament,
     ResponseMetadata,
     SafetyTier,
+    StepRecord,
     ToolExecutionContext,
     ToolInvocationRequest,
-    WorkflowLineage,
-    WorkflowStep,
+    WorkflowRecord,
     WorkflowTerminationReason,
 } from '@footnote/contracts/ethics-core';
 import type {
@@ -328,7 +328,7 @@ export const createChatService = ({
             normalizedGeneration,
             generationRequest.model
         );
-        let workflowLineage: WorkflowLineage | undefined;
+        let workflowLineage: WorkflowRecord | undefined;
 
         const reviewLoopEnabled = runtimeConfig.chatWorkflow.reviewLoopEnabled;
         const reviewLoopMaxIterations = Math.max(
@@ -342,20 +342,21 @@ export const createChatService = ({
         if (reviewLoopEnabled) {
             const workflowStartedAt = Date.now();
             const workflowId = `wf_${workflowStartedAt.toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-            const workflowSteps: WorkflowStep[] = [];
+            const workflowSteps: StepRecord[] = [];
             let stepCounter = 0;
             let terminationReason: WorkflowTerminationReason =
-                'max_iterations_reached';
-            let workflowStatus: WorkflowLineage['status'] = 'degraded';
-            let iterationsExecuted = 0;
+                'budget_exhausted_steps';
+            let workflowStatus: WorkflowRecord['status'] = 'degraded';
+            let stepsExecuted = 0;
             let draftResult: GenerationResult = generationResult;
             let draftParentStepId: string | undefined;
             let latestReviewReason = '';
             let shouldStop = false;
 
             const captureStep = (input: {
-                stepName: string;
-                status: WorkflowStep['status'];
+                stepKind: StepRecord['stepKind'];
+                status: StepRecord['outcome']['status'];
+                summary: string;
                 startedAtMs: number;
                 finishedAtMs: number;
                 model?: string;
@@ -363,7 +364,9 @@ export const createChatService = ({
                 estimatedCost?: ReturnType<typeof estimateBackendTextCost>;
                 reasonCode?: ExecutionReasonCode;
                 parentStepId?: string;
-                iteration: number;
+                attempt: number;
+                signals?: Record<string, string | number | boolean | null>;
+                recommendations?: string[];
             }): string => {
                 stepCounter += 1;
                 const stepId = `step_${stepCounter}`;
@@ -372,9 +375,8 @@ export const createChatService = ({
                     ...(input.parentStepId !== undefined && {
                         parentStepId: input.parentStepId,
                     }),
-                    iteration: input.iteration,
-                    stepName: input.stepName,
-                    status: input.status,
+                    attempt: input.attempt,
+                    stepKind: input.stepKind,
                     ...(input.reasonCode !== undefined && {
                         reasonCode: input.reasonCode,
                     }),
@@ -399,7 +401,18 @@ export const createChatService = ({
                             totalCostUsd: input.estimatedCost.totalCostUsd,
                         },
                     }),
+                    outcome: {
+                        status: input.status,
+                        summary: input.summary,
+                        ...(input.signals !== undefined && {
+                            signals: input.signals,
+                        }),
+                        ...(input.recommendations !== undefined && {
+                            recommendations: input.recommendations,
+                        }),
+                    },
                 });
+                stepsExecuted += 1;
                 return stepId;
             };
 
@@ -408,14 +421,15 @@ export const createChatService = ({
                 generationRequest.model
             );
             const initialDraftStepId = captureStep({
-                stepName: 'draft_generation',
+                stepKind: 'generate',
                 status: 'executed',
+                summary: 'Generated initial draft response.',
                 startedAtMs: generationStartedAt,
                 finishedAtMs: Date.now(),
                 model: initialDraftUsage.model,
                 usage: draftResult.usage,
                 estimatedCost: initialDraftUsage.estimatedCost,
-                iteration: 1,
+                attempt: 1,
             });
             draftParentStepId = initialDraftStepId;
 
@@ -424,10 +438,9 @@ export const createChatService = ({
                 iteration <= reviewLoopMaxIterations && !shouldStop;
                 iteration += 1
             ) {
-                iterationsExecuted = iteration;
                 const elapsedMs = Date.now() - workflowStartedAt;
                 if (elapsedMs >= reviewLoopMaxDurationMs) {
-                    terminationReason = 'max_duration_reached';
+                    terminationReason = 'budget_exhausted_time';
                     break;
                 }
 
@@ -462,19 +475,21 @@ export const createChatService = ({
                         generationRequest.model
                     );
                     const reviewStepId = captureStep({
-                        stepName: 'self_review_gate',
+                        stepKind: 'assess',
                         status: 'executed',
+                        summary:
+                            'Assessment step evaluated draft quality and goal completion.',
                         startedAtMs: reviewStartedAt,
                         finishedAtMs: reviewFinishedAt,
                         model: reviewUsage.model,
                         usage: reviewResult.usage,
                         estimatedCost: reviewUsage.estimatedCost,
                         parentStepId: draftParentStepId,
-                        iteration,
+                        attempt: iteration,
                     });
                     const decision = parseReviewDecision(reviewResult.text);
                     if (!decision) {
-                        terminationReason = 'review_invalid_output';
+                        terminationReason = 'executor_error_fail_open';
                         workflowStatus = 'degraded';
                         shouldStop = true;
                         break;
@@ -482,14 +497,14 @@ export const createChatService = ({
 
                     latestReviewReason = decision.reason;
                     if (decision.decision === 'finalize') {
-                        terminationReason = 'finalized_by_reviewer';
+                        terminationReason = 'goal_satisfied';
                         workflowStatus = 'completed';
                         shouldStop = true;
                         break;
                     }
 
                     if (iteration >= reviewLoopMaxIterations) {
-                        terminationReason = 'max_iterations_reached';
+                        terminationReason = 'budget_exhausted_steps';
                         workflowStatus = 'degraded';
                         shouldStop = true;
                         break;
@@ -499,7 +514,7 @@ export const createChatService = ({
                         Date.now() - workflowStartedAt >=
                         reviewLoopMaxDurationMs
                     ) {
-                        terminationReason = 'max_duration_reached';
+                        terminationReason = 'budget_exhausted_time';
                         workflowStatus = 'degraded';
                         shouldStop = true;
                         break;
@@ -529,45 +544,54 @@ export const createChatService = ({
                             generationRequest.model
                         );
                         const revisionStepId = captureStep({
-                            stepName: 'revision_generation',
+                            stepKind: 'revise',
                             status: 'executed',
+                            summary:
+                                'Revision step produced improved draft from assessment guidance.',
                             startedAtMs: revisionStartedAt,
                             finishedAtMs: revisionFinishedAt,
                             model: revisionUsage.model,
                             usage: revisionResult.usage,
                             estimatedCost: revisionUsage.estimatedCost,
                             parentStepId: reviewStepId,
-                            iteration,
+                            attempt: iteration,
+                            signals: {
+                                reviewReason: latestReviewReason,
+                            },
                         });
                         draftResult = revisionResult;
                         draftParentStepId = revisionStepId;
                     } catch {
                         const revisionFinishedAt = Date.now();
                         captureStep({
-                            stepName: 'revision_generation',
+                            stepKind: 'revise',
                             status: 'failed',
+                            summary:
+                                'Revision step failed; fail-open returned latest successful draft.',
                             reasonCode: 'generation_runtime_error',
                             startedAtMs: revisionStartedAt,
                             finishedAtMs: revisionFinishedAt,
                             parentStepId: reviewStepId,
-                            iteration,
+                            attempt: iteration,
                         });
-                        terminationReason = 'revision_runtime_error';
+                        terminationReason = 'executor_error_fail_open';
                         workflowStatus = 'degraded';
                         shouldStop = true;
                     }
                 } catch {
                     const reviewFinishedAt = Date.now();
                     captureStep({
-                        stepName: 'self_review_gate',
+                        stepKind: 'assess',
                         status: 'failed',
+                        summary:
+                            'Assessment step failed; fail-open returned latest successful draft.',
                         reasonCode: 'generation_runtime_error',
                         startedAtMs: reviewStartedAt,
                         finishedAtMs: reviewFinishedAt,
                         parentStepId: draftParentStepId,
-                        iteration,
+                        attempt: iteration,
                     });
-                    terminationReason = 'review_runtime_error';
+                    terminationReason = 'executor_error_fail_open';
                     workflowStatus = 'degraded';
                     shouldStop = true;
                 }
@@ -583,8 +607,8 @@ export const createChatService = ({
                 workflowId,
                 workflowName: REVIEW_WORKFLOW_NAME,
                 status: workflowStatus,
-                iterations: iterationsExecuted,
-                maxIterations: reviewLoopMaxIterations,
+                stepCount: stepsExecuted,
+                maxSteps: reviewLoopMaxIterations * 2 + 1,
                 maxDurationMs: reviewLoopMaxDurationMs,
                 terminationReason,
                 steps: workflowSteps,

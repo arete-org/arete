@@ -247,13 +247,34 @@ const ExecutionEventSchema = z
     })
     .strict();
 
-const WorkflowStepSchema = z
+const StepOutcomeSchema = z
+    .object({
+        status: z.enum(['executed', 'skipped', 'failed']),
+        summary: z.string().min(1),
+        artifacts: z.array(z.string()).optional(),
+        signals: z
+            .record(
+                z.string(),
+                z.union([z.string(), z.number(), z.boolean(), z.null()])
+            )
+            .optional(),
+        recommendations: z.array(z.string()).optional(),
+    })
+    .strict();
+
+const StepRecordSchema = z
     .object({
         stepId: z.string().min(1),
         parentStepId: z.string().min(1).optional(),
-        iteration: z.number().int().nonnegative(),
-        stepName: z.string().min(1),
-        status: z.enum(['executed', 'skipped', 'failed']),
+        attempt: z.number().int().positive(),
+        stepKind: z.enum([
+            'plan',
+            'tool',
+            'generate',
+            'assess',
+            'revise',
+            'finalize',
+        ]),
         reasonCode: ExecutionReasonCodeSchema.optional(),
         startedAt: z.string().datetime(),
         finishedAt: z.string().datetime(),
@@ -275,26 +296,29 @@ const WorkflowStepSchema = z
             })
             .strict()
             .optional(),
+        outcome: StepOutcomeSchema,
     })
     .strict();
 
-const WorkflowLineageSchema = z
+const WorkflowRecordSchema = z
     .object({
         workflowId: z.string().min(1),
         workflowName: z.string().min(1),
         status: z.enum(['completed', 'degraded']),
-        iterations: z.number().int().positive(),
-        maxIterations: z.number().int().positive(),
+        stepCount: z.number().int().nonnegative(),
+        maxSteps: z.number().int().positive(),
         maxDurationMs: z.number().int().positive(),
         terminationReason: z.enum([
-            'finalized_by_reviewer',
-            'max_iterations_reached',
-            'max_duration_reached',
-            'review_runtime_error',
-            'review_invalid_output',
-            'revision_runtime_error',
+            'goal_satisfied',
+            'budget_exhausted_steps',
+            'budget_exhausted_tokens',
+            'budget_exhausted_time',
+            'transition_blocked_by_policy',
+            'max_tool_calls_reached',
+            'max_deliberation_calls_reached',
+            'executor_error_fail_open',
         ]),
-        steps: z.array(WorkflowStepSchema),
+        steps: z.array(StepRecordSchema),
     })
     .strict();
 
@@ -311,7 +335,7 @@ const responseMetadataShape = {
     totalDurationMs: z.number().int().nonnegative().optional(),
     citations: z.array(CitationSchema),
     execution: z.array(ExecutionEventSchema).optional(),
-    workflow: WorkflowLineageSchema.optional(),
+    workflow: WorkflowRecordSchema.optional(),
     evaluator: EvaluatorOutcomeSchema.optional(),
     imageDescriptions: z.array(z.string()).optional(),
     evidenceScore: TraceAxisScoreSchema.optional(),

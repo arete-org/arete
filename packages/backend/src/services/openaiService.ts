@@ -28,7 +28,7 @@ import type {
     ToolExecutionContext,
     ToolInvocationReasonCode,
     TraceAxisScore,
-    WorkflowLineage,
+    WorkflowRecord,
 } from '@footnote/contracts/ethics-core';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -671,7 +671,7 @@ type ResponseMetadataRuntimeContext = {
             durationMs?: ToolExecutionContext['durationMs'];
         };
     };
-    workflow?: WorkflowLineage;
+    workflow?: WorkflowRecord;
 };
 
 const normalizePlannerReasonCode = (

@@ -11,140 +11,104 @@
 - `packages/prompts`
 - `docs`
 
-## Scope
+## Purpose
 
-Track the implementation plan for migrating from specialized bounded loops to a general workflow engine shape with first-class provenance records.
+Track current rollout state for moving from a specialized bounded review loop
+to a general workflow-engine shape with first-class workflow provenance records.
 
 Architecture reference:
 `docs/architecture/workflow-engine-and-provenance-v1.md`
 
 ## Current Snapshot
 
-- Bounded review loop exists and is useful groundwork.
-- Optional workflow lineage metadata exists in response metadata.
-- Current runtime shape is still specialized and not yet engine-general.
+- Workflow metadata is now aligned to `WorkflowRecord` + `StepRecord`.
+- Step outcomes now have explicit machine-readable control signals.
+- Canonical workflow termination reasons are now contract-level.
+- Backend now has a workflow-engine scaffold (`WorkflowPolicy`,
+  `ExecutionLimits`, transition checks, and state/limit helpers).
+- Chat runtime path still uses the existing bounded review loop behavior, now
+  emitting the new record shape.
 
-## Phases
+## What Is Landed
 
-### Phase 0: Alignment And Naming
+### 1) Contract Baseline (Core)
+
+Status: `landed`
+
+- Replaced workflow lineage naming with `WorkflowRecord` + `StepRecord`.
+- Added `StepOutcome` with:
+    - `status`
+    - `summary`
+    - `artifacts` (optional)
+    - `signals` (optional, machine-readable)
+    - `recommendations` (optional, advisory)
+- Added explicit step kind vocabulary:
+    - `plan`, `tool`, `generate`, `assess`, `revise`, `finalize`
+- Added canonical termination reason vocabulary:
+    - `goal_satisfied`
+    - `budget_exhausted_steps`
+    - `budget_exhausted_tokens`
+    - `budget_exhausted_time`
+    - `transition_blocked_by_policy`
+    - `max_tool_calls_reached`
+    - `max_deliberation_calls_reached`
+    - `executor_error_fail_open`
+
+### 2) Schema + Validation Baseline (Core)
+
+Status: `landed`
+
+- Updated web metadata schemas to validate the new workflow record shape.
+- Updated contracts schema tests for valid/invalid workflow record payloads.
+- Kept `ResponseMetadataSchema` tolerant for forward compatibility.
+
+### 3) Engine Skeleton (Backend)
+
+Status: `landed`
+
+- Added `workflowEngine.ts` primitives:
+    - `WorkflowPolicy`
+    - `ExecutionLimits`
+    - `WorkflowState`
+    - legal transition checks
+    - execution limit checks
+    - state update helpers
+- This slice is behavior-safe scaffolding; no full routing migration yet.
+
+## What Is Open
+
+### 1) Replace Specialized Loop With Engine-Driven Step Routing
 
 Status: `in_progress`
 
-Goals:
+Current reality:
 
-- lock core names (`WorkflowEngine`, `WorkflowPolicy`, `ExecutionLimits`, `WorkflowState`, `WorkflowRecord`, `StepRecord`, `StepExecutor`),
-- lock `tool` step boundary (`calls[]` + `execution` only),
-- lock canonical termination reasons.
+- Chat still executes a specialized bounded loop.
+- It now emits `WorkflowRecord`, but routing is not yet delegated to a generic
+  `WorkflowEngine` loop.
 
-Deliverables:
-
-- architecture document finalized,
-- this status tracker initialized.
-
-### Phase 1: Contract Baseline
+### 2) Tool Step Generalization
 
 Status: `pending`
 
-Goals:
+Goal:
 
-- refine workflow metadata contract for engine-style records,
-- keep data serializable and explicit,
-- avoid mini-language drift in step payloads.
+- Introduce bounded `tool` step execution with `calls[]` and
+  `execution: sequential | parallel` while recording each concrete call attempt.
 
-Planned tasks:
-
-- define v1 `WorkflowRecord` and `StepRecord` fields,
-- standardize `StepRecord.outcome` fields (`status`, `summary`, `artifacts`, machine-readable `signals`, optional advisory `recommendations`),
-- define step kind union (`plan`, `tool`, `generate`, `assess`, `revise`, `finalize`),
-- define canonical termination reason enum.
-
-Acceptance:
-
-- contracts compile,
-- schema tests cover valid and invalid records,
-- no ambiguous optional blobs required for basic execution.
-
-### Phase 2: Engine Skeleton In Backend
+### 3) Deliberation Gating By Policy/Limits
 
 Status: `pending`
 
-Goals:
+Goal:
 
-- introduce engine abstractions without changing public route behavior yet.
+- Ensure model-backed deliberation is invoked only for allowed step kinds and
+  within `maxDeliberationCalls`.
 
-Planned tasks:
+## Policy And Limits Boundary
 
-- add `WorkflowEngine` orchestration loop shell,
-- add `WorkflowPolicy` transition legality checks,
-- add `ExecutionLimits` counters and hard-stop enforcement,
-- add `StepExecutor` interface and default implementation.
-
-Acceptance:
-
-- existing chat behavior parity under default policy,
-- deterministic termination under all limit rails,
-- fail-open behavior preserved where currently expected.
-
-### Phase 3: Migrate Current Loop To Step Execution
-
-Status: `pending`
-
-Goals:
-
-- replace specialized draft/review/revise path with engine step flow.
-
-Planned tasks:
-
-- map current logic into `generate`/`assess`/`revise`/`finalize`,
-- keep review/revision optional through policy toggles,
-- keep backend cost ownership intact for all steps.
-
-Acceptance:
-
-- prior loop tests adapted to step model,
-- lineage records generated through engine path,
-- no loss of existing fail-open semantics.
-
-### Phase 4: Tool Step Generalization
-
-Status: `pending`
-
-Goals:
-
-- support bounded multi-call tool execution in one `tool` step.
-
-Planned tasks:
-
-- add `tool.calls[]` and `tool.execution` policy path,
-- support sequential and parallel modes where policy allows,
-- record each concrete tool attempt for telemetry and cost accounting,
-- normalize outputs into one step outcome.
-
-Acceptance:
-
-- tool caps enforced (`maxToolCalls`),
-- retries and failures are traceable in records,
-- no subworkflow mini-language appears in the `tool` step payload.
-
-### Phase 5: Deliberation Gating And Modes
-
-Status: `pending`
-
-Goals:
-
-- make model-assisted decision points explicit and bounded.
-
-Planned tasks:
-
-- wire optional model-backed deliberation only for allowed step kinds,
-- enforce `maxDeliberationCalls`,
-- support plan-only, no-tools, single-check, and revision-disabled modes via policy.
-
-Acceptance:
-
-- policy toggles behave deterministically,
-- model can recommend transitions only where allowed,
-- backend remains authority over final legal transition.
+- `WorkflowPolicy` owns capability toggles and legal transition rules.
+- `ExecutionLimits` owns hard quantitative caps.
 
 ## Planned Runtime Controls
 
@@ -159,31 +123,23 @@ Acceptance:
 - `maxTokensTotal`
 - `maxDurationMs`
 
-## Canonical Termination Reasons (Target)
+## Next Gates
 
-- `goal_satisfied`
-- `budget_exhausted_steps`
-- `budget_exhausted_tokens`
-- `budget_exhausted_time`
-- `transition_blocked_by_policy`
-- `max_tool_calls_reached`
-- `max_deliberation_calls_reached`
-- `executor_error_fail_open`
+1. Route current bounded loop through shared engine transition checks.
+2. Move tool execution to `tool` step shape (`calls[]` + execution mode).
+3. Split provenance-facing workflow record from optional deeper debug log detail.
+4. Add policy matrix tests for illegal transition blocking and fail-open fallback.
 
 ## Open Questions
 
-- Should `WorkflowRecord` live entirely in metadata, or split metadata/log detail by size sensitivity?
-- Which step kinds are model-backed in first release by default?
-- What is the default parallel tool execution policy per tool class?
+- Should `WorkflowRecord` stay fully in response metadata, or move deeper
+  details to internal logs referenced by `workflowId`/`stepId`?
+- Which step kinds are model-backed by default in first release profile?
+- Which tool classes permit parallel mode by default?
 
-## Policy And Limits Boundary
+## Validation Baseline
 
-- `WorkflowPolicy` owns capability toggles and legal transition rules.
-- `ExecutionLimits` owns hard quantitative caps.
-
-## Validation Plan
-
-After each implementation slice:
+After edits:
 
 - `pnpm lint:fix`
 
@@ -197,4 +153,5 @@ Before merge/handoff:
 
 ## Update Rule
 
-Update this document in the same PR that changes workflow engine behavior, step contracts, or rollout phase status.
+Update this document in the same PR that changes workflow behavior, step
+contracts, policy/limits semantics, or rollout gate status.

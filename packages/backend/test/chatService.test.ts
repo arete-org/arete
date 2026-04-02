@@ -871,10 +871,7 @@ test('runChatMessages executes bounded review loop and forwards workflow lineage
             capturedWorkflow?.workflowName,
             'message_with_review_loop_v1'
         );
-        assert.equal(
-            capturedWorkflow?.terminationReason,
-            'finalized_by_reviewer'
-        );
+        assert.equal(capturedWorkflow?.terminationReason, 'goal_satisfied');
         assert.equal(capturedWorkflow?.status, 'completed');
         assert.ok((capturedWorkflow?.steps.length ?? 0) >= 2);
     } finally {
@@ -961,7 +958,7 @@ test('runChatMessages fails open when review output is invalid', async () => {
         assert.equal(capturedWorkflow?.status, 'degraded');
         assert.equal(
             capturedWorkflow?.terminationReason,
-            'review_invalid_output'
+            'executor_error_fail_open'
         );
     } finally {
         mutableRuntimeConfig.chatWorkflow.reviewLoopEnabled = previousEnabled;
