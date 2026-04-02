@@ -45,7 +45,6 @@ Footnote now needs a general workflow engine that can support:
 - `StepExecutor`: Executes one step.
 - `WorkflowRecord`: Curated structured artifact for provenance and operators.
 - `StepRecord`: One step entry inside the workflow record.
-- `DeliberationService`: Optional model-backed service for allowed deliberative steps.
 
 ## Control And Work Separation
 
@@ -70,6 +69,8 @@ V1 step kinds:
 Some steps may be deterministic.
 Some may invoke model deliberation.
 That choice is controlled by `WorkflowPolicy` and `ExecutionLimits`.
+Model-backed deliberation is treated as an optional capability of certain steps,
+not a top-level orchestration authority.
 
 ## Tool Step Boundary
 
@@ -98,16 +99,21 @@ Each `StepRecord` includes an `outcome` with minimal typed fields:
 - `recommendations` (optional)
 
 This keeps handoff data explicit without a separate top-level handoff type.
+`signals` means machine-readable control indicators used by transition logic
+(for example `goalMet`, `needsMoreEvidence`, `toolResultQuality`), not generic telemetry.
+`recommendations` is advisory only and never overrides backend legality checks.
 
 ## Transition Legality
 
 `WorkflowPolicy` defines legal next steps from current state.
+`WorkflowPolicy` also owns capability toggles (for example plan/revise/tool enablement).
 Model outputs can recommend transitions only where policy allows.
 Final transition legality remains backend-owned.
 
 ## Limits And Budgeting
 
 `ExecutionLimits` is separate from `WorkflowPolicy`.
+`ExecutionLimits` owns hard quantitative caps only.
 Examples:
 
 - `maxWorkflowSteps`
@@ -135,6 +141,9 @@ Initial canonical reasons:
 
 `WorkflowRecord` is the primary orchestration provenance artifact.
 Execution metadata should progressively align around it.
+`WorkflowRecord` is the provenance-facing curated record.
+Deeper runtime/debug execution detail can remain in internal logs keyed by
+`workflowId` and `stepId`.
 
 Legacy fields may exist temporarily during migration, but they are not the target model.
 

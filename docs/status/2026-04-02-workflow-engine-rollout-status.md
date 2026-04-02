@@ -54,7 +54,7 @@ Goals:
 Planned tasks:
 
 - define v1 `WorkflowRecord` and `StepRecord` fields,
-- standardize `StepRecord.outcome` fields (`status`, `summary`, `artifacts`, `signals`, optional `recommendations`),
+- standardize `StepRecord.outcome` fields (`status`, `summary`, `artifacts`, machine-readable `signals`, optional advisory `recommendations`),
 - define step kind union (`plan`, `tool`, `generate`, `assess`, `revise`, `finalize`),
 - define canonical termination reason enum.
 
@@ -136,7 +136,7 @@ Goals:
 
 Planned tasks:
 
-- wire optional `DeliberationService` only for allowed step kinds,
+- wire optional model-backed deliberation only for allowed step kinds,
 - enforce `maxDeliberationCalls`,
 - support plan-only, no-tools, single-check, and revision-disabled modes via policy.
 
@@ -175,6 +175,11 @@ Acceptance:
 - Should `WorkflowRecord` live entirely in metadata, or split metadata/log detail by size sensitivity?
 - Which step kinds are model-backed in first release by default?
 - What is the default parallel tool execution policy per tool class?
+
+## Policy And Limits Boundary
+
+- `WorkflowPolicy` owns capability toggles and legal transition rules.
+- `ExecutionLimits` owns hard quantitative caps.
 
 ## Validation Plan
 
