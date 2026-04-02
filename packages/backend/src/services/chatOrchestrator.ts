@@ -855,7 +855,7 @@ export const createChatOrchestrator = ({
                     action: executionPlan.action,
                     modality: executionPlan.modality,
                     profileId: executionPlan.profileId,
-                    safetyTier: executionPlan.safetyTier,
+                    safetyTier: orchestrationSafetyTier,
                     generation: plannerGenerationForPrompt,
                     toolIntent,
                     toolRequest: toolRequestContext,

@@ -95,6 +95,14 @@ export const SafetyDecisionSchema = z.discriminatedUnion('action', [
                     message: `reasonCode "${value.reasonCode}" does not match canonical rule tuple for "${value.ruleId}" (expected "${expected.reasonCode}").`,
                 });
             }
+
+            if (value.reason !== expected.reason) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ['reason'],
+                    message: `reason "${value.reason}" does not match canonical rule tuple for "${value.ruleId}" (expected "${expected.reason}").`,
+                });
+            }
         })
         .strict(),
 ]);
