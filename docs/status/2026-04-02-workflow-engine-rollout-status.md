@@ -192,6 +192,8 @@ Before merge/handoff:
 - `pnpm lint`
 - `pnpm validate-footnote-tags`
 - `pnpm validate-openapi-links` (if API boundary touched)
+- `pnpm review` (cross-cutting or review-ready changes)
+- `docker compose -f deploy/compose.yml build` (deploy/runtime packaging impact)
 
 ## Update Rule
 
