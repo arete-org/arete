@@ -74,7 +74,7 @@ test('/chat forwards prompt/profile/generation options and renders message actio
             metadata: {
                 responseId: 'resp_123',
                 provenance: 'Inferred',
-                riskTier: 'Low',
+                safetyTier: 'Low',
                 tradeoffCount: 0,
                 chainHash: 'hash_123',
                 licenseContext: 'MIT + HL3',

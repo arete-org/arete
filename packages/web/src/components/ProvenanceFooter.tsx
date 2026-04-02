@@ -10,7 +10,7 @@ import type { CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import type {
     ResponseMetadata,
-    RiskTier,
+    SafetyTier,
     Citation,
 } from '@footnote/contracts/ethics-core';
 import { formatExecutionTimelineSummary } from '@footnote/contracts/ethics-core';
@@ -19,8 +19,8 @@ interface ProvenanceFooterProps {
     metadata?: ResponseMetadata | null;
 }
 
-// Risk tier colors matching the ethics-core constants
-const RISK_TIER_COLORS: Record<RiskTier, string> = {
+// Safety tier colors matching the ethics-core constants
+const SAFETY_TIER_COLORS: Record<SafetyTier, string> = {
     Low: '#7FDCA4', // Sage green
     Medium: '#F8E37C', // Warm gold
     High: '#E27C7C', // Soft coral
@@ -33,10 +33,10 @@ const ProvenanceFooter = ({
         return null;
     }
 
-    // Extract risk tier color based on riskTier (matching ethics-core)
-    const riskTierColor =
-        RISK_TIER_COLORS[metadata.riskTier] || RISK_TIER_COLORS.Low;
-    const riskStyle = { '--risk-color': riskTierColor } as CSSProperties;
+    // Extract safety tier color based on safetyTier (matching ethics-core)
+    const safetyTierColor =
+        SAFETY_TIER_COLORS[metadata.safetyTier] || SAFETY_TIER_COLORS.Low;
+    const safetyStyle = { '--safety-color': safetyTierColor } as CSSProperties;
 
     // Format trade-offs text if any
     const tradeOffsText =
@@ -92,7 +92,7 @@ const ProvenanceFooter = ({
             className="provenance-footer"
             role="complementary"
             aria-label="Response provenance and metadata"
-            style={riskStyle}
+            style={safetyStyle}
         >
             <div className="provenance-header">
                 Reasoning - {metadata.provenance}
@@ -111,10 +111,10 @@ const ProvenanceFooter = ({
                         <span className="provenance-separator"> • </span>
                     </>
                 )}
-                {metadata.riskTier && (
+                {metadata.safetyTier && (
                     <>
                         <span className="provenance-risktier">
-                            {metadata.riskTier} risk
+                            {metadata.safetyTier} safety
                         </span>
                     </>
                 )}
@@ -123,7 +123,7 @@ const ProvenanceFooter = ({
                         <span className="provenance-separator"> • </span>
                         <span className="provenance-tradeoffs">
                             {safetyDecision
-                                ? `eval ${safetyDecision.riskTier}/${evaluatorOutcome.provenance}/${safetyDecision.action}${
+                                ? `eval ${safetyDecision.safetyTier}/${evaluatorOutcome.provenance}/${safetyDecision.action}${
                                       hasNonAllowSafetyDecision
                                           ? ` (${safetyDecision.ruleId}/${safetyDecision.reasonCode})`
                                           : ''

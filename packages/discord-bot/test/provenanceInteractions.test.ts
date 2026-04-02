@@ -95,7 +95,7 @@ test('resolveProvenanceMetadata rejects mismatched trace payload response IDs', 
             data: {
                 responseId: 'resp_other',
                 provenance: 'Retrieved',
-                riskTier: 'Low',
+                safetyTier: 'Low',
                 tradeoffCount: 1,
                 chainHash: 'hash_123',
                 licenseContext: 'MIT',

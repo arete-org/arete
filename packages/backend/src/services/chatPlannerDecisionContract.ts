@@ -56,7 +56,7 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
             },
             required: ['prompt'],
         },
-        riskTier: {
+        safetyTier: {
             type: 'string',
             enum: ['Low', 'Medium', 'High'],
         },
@@ -203,7 +203,7 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
             required: ['reasoningEffort', 'verbosity'],
         },
     },
-    required: ['action', 'modality', 'riskTier', 'reasoning', 'generation'],
+    required: ['action', 'modality', 'safetyTier', 'reasoning', 'generation'],
 };
 
 /**

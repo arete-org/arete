@@ -17,7 +17,7 @@ const createMetadata = (
 ): ResponseMetadata => ({
     responseId: 'trace_service_response_123',
     provenance: 'Retrieved',
-    riskTier: 'Low',
+    safetyTier: 'Low',
     tradeoffCount: 1,
     chainHash: 'chain_hash',
     licenseContext: 'MIT + HL3',

@@ -1254,7 +1254,7 @@ div.interaction-status:not(.interaction-status-visible) *,
     margin-top: 1rem;
     padding: 1rem 1.2rem;
     border-radius: 8px;
-    border-left: 4px solid var(--risk-color);
+    border-left: 4px solid var(--safety-color);
     background-color: color-mix(
         in srgb,
         var(--bg-soft) 95%,

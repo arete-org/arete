@@ -36,7 +36,7 @@ test('handleIncidentReportButton opens a consent prompt and cancel clears it', a
         data: {
             responseId: 'response_123',
             provenance: 'Inferred',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             tradeoffCount: 0,
             chainHash: 'hash_abc',
             licenseContext: 'MIT + HL3',
@@ -117,7 +117,7 @@ test('incident report modal stores the incident and remediation outcome', async 
         data: {
             responseId: 'response_123',
             provenance: 'Inferred',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             tradeoffCount: 0,
             chainHash: 'hash_abc',
             licenseContext: 'MIT + HL3',
@@ -282,7 +282,7 @@ test('incident report modal replies explicitly on backend failure', async () => 
         data: {
             responseId: 'response_123',
             provenance: 'Inferred',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             tradeoffCount: 0,
             chainHash: 'hash_abc',
             licenseContext: 'MIT + HL3',
@@ -360,7 +360,7 @@ test('incident report modal keeps the deferred reply open when remediation persi
         data: {
             responseId: 'response_123',
             provenance: 'Inferred',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             tradeoffCount: 0,
             chainHash: 'hash_abc',
             licenseContext: 'MIT + HL3',
@@ -466,7 +466,7 @@ test('incident report retry resumes remediation persistence without creating a d
         data: {
             responseId: 'response_123',
             provenance: 'Inferred',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             tradeoffCount: 0,
             chainHash: 'hash_abc',
             licenseContext: 'MIT + HL3',

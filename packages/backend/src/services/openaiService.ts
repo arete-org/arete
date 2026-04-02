@@ -24,7 +24,7 @@ import type {
     PlannerExecutionReasonCode,
     Provenance,
     ResponseMetadata,
-    RiskTier,
+    SafetyTier,
     ToolExecutionContext,
     ToolInvocationReasonCode,
     TraceAxisScore,
@@ -821,7 +821,7 @@ const buildResponseMetadata = (
         );
     }
 
-    const riskTier: RiskTier = 'Low';
+    const safetyTier: SafetyTier = 'Low';
     const licenseContext = 'MIT + HL3';
     const execution: ExecutionEvent[] = [];
     const plannerExecution = runtimeContext.executionContext?.planner;
@@ -924,7 +924,7 @@ const buildResponseMetadata = (
     return {
         responseId,
         provenance,
-        riskTier,
+        safetyTier,
         tradeoffCount,
         chainHash,
         licenseContext,

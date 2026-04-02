@@ -622,7 +622,7 @@ const createTraceHandlers = ({
                 const syntheticTrace: ResponseMetadata = {
                     responseId,
                     provenance: 'Speculative',
-                    riskTier: 'Low',
+                    safetyTier: 'Low',
                     tradeoffCount: 0,
                     chainHash: syntheticChainHash,
                     licenseContext: 'Trace card preview placeholder',

@@ -13,9 +13,8 @@
 // Ethics Core contracts (provenance/risk metadata)
 export type {
     Provenance,
-    RiskTier,
-    RiskRuleId,
-    RiskEvaluationResult,
+    SafetyTier,
+    SafetyRuleId,
     Citation,
     ExecutionStatus,
     ExecutionReasonCode,
@@ -26,8 +25,10 @@ export type {
     ToolExecutionContext,
     CorrelationEnvelope,
     EvaluatorDecisionMode,
-    SafetyBreakerAction,
-    SafetyBreakerReasonCode,
+    SafetyAction,
+    SafetyReasonCode,
+    SafetyEvaluationInput,
+    SafetyEvaluationResult,
     SafetyDecision,
     EvaluatorOutcome,
     ExecutionEvent,
@@ -38,10 +39,14 @@ export type {
 } from './ethics-core/index.js';
 export { formatExecutionTimelineSummary } from './ethics-core/index.js';
 export {
-    RiskRuleIdSchema,
-    SafetyBreakerActionSchema,
-    SafetyBreakerReasonCodeSchema,
+    SafetyRuleIdSchema,
+    SafetyActionSchema,
+    SafetyReasonCodeSchema,
     SafetyDecisionSchema,
+} from './ethics-core/index.js';
+export {
+    SAFETY_RULE_METADATA,
+    type SafetyRuleMetadata,
 } from './ethics-core/index.js';
 
 // Web API contracts (request/response envelopes)

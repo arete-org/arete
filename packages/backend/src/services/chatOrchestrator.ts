@@ -17,21 +17,19 @@ import type {
     CorrelationEnvelope,
 } from '@footnote/contracts';
 import type {
-    SafetyBreakerAction,
-    SafetyDecision,
-    SafetyBreakerReasonCode,
     ToolExecutionContext,
     ToolInvocationReasonCode,
     ToolInvocationRequest,
     ExecutionReasonCode,
     ExecutionStatus,
     EvaluatorOutcome,
-    RiskTier,
-    RiskRuleId,
+    SafetyTier,
+    SafetyEvaluationInput,
 } from '@footnote/contracts/ethics-core';
 import {
+    buildSafetyDecision,
     computeProvenance,
-    evaluateRiskTierDeterministic,
+    evaluateSafetyDeterministic,
 } from '../ethics-core/evaluators.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
@@ -192,52 +190,6 @@ const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
 });
 
-const buildSafetyDecision = (ruleId: RiskRuleId | null): SafetyDecision => {
-    if (!ruleId) {
-        return {
-            action: 'allow',
-            riskTier: 'Low',
-            ruleId: null,
-        };
-    }
-
-    const reasonCodeByRuleId: Record<RiskRuleId, SafetyBreakerReasonCode> = {
-        'risk.self_harm.crisis_intent.v1': 'self_harm_crisis_intent',
-        'risk.safety.weaponization_request.v1': 'weaponization_request',
-        'risk.professional.medical_or_legal_advice.v1':
-            'professional_advice_guardrail',
-    };
-    const actionByRuleId: Record<
-        RiskRuleId,
-        Exclude<SafetyBreakerAction, 'allow'>
-    > = {
-        'risk.self_harm.crisis_intent.v1': 'block',
-        'risk.safety.weaponization_request.v1': 'block',
-        'risk.professional.medical_or_legal_advice.v1': 'safe_partial',
-    };
-    const riskTierByRuleId: Record<RiskRuleId, RiskTier> = {
-        'risk.self_harm.crisis_intent.v1': 'High',
-        'risk.safety.weaponization_request.v1': 'High',
-        'risk.professional.medical_or_legal_advice.v1': 'Medium',
-    };
-    const reasonByRuleId: Record<RiskRuleId, string> = {
-        'risk.self_harm.crisis_intent.v1':
-            'Deterministic crisis-intent rule matched.',
-        'risk.safety.weaponization_request.v1':
-            'Deterministic weaponization-request rule matched.',
-        'risk.professional.medical_or_legal_advice.v1':
-            'Deterministic professional-advice guardrail rule matched.',
-    };
-
-    return {
-        action: actionByRuleId[ruleId],
-        riskTier: riskTierByRuleId[ruleId],
-        ruleId,
-        reasonCode: reasonCodeByRuleId[ruleId],
-        reason: reasonByRuleId[ruleId],
-    };
-};
-
 /**
  * Packs the normalized planner decision into one structured system payload.
  *
@@ -254,7 +206,7 @@ const buildPlannerPayload = (
         profileId: plan.profileId,
         reaction: plan.reaction,
         imageRequest: plan.imageRequest,
-        riskTier: plan.riskTier,
+        safetyTier: plan.safetyTier,
         reasoning: plan.reasoning,
         generation: plan.generation,
         ...(surfacePolicy && { surfacePolicy }),
@@ -415,30 +367,31 @@ export const createChatOrchestrator = ({
                   durationMs: number;
               }
             | undefined;
-        let evaluatorRiskTierHint: RiskTier | undefined;
+        let evaluatorSafetyTierHint: SafetyTier | undefined;
         try {
             const evaluatorContext = normalizedConversation.map(
                 (message) => message.content
             );
-            const riskEvaluation = evaluateRiskTierDeterministic(
-                normalizedRequest.latestUserInput,
-                evaluatorContext
+            const safetyEvaluationInput: SafetyEvaluationInput = {
+                latestUserInput: normalizedRequest.latestUserInput,
+                conversation: normalizedConversation,
+            };
+            const safetyEvaluation = evaluateSafetyDeterministic(
+                safetyEvaluationInput
             );
-            const safetyDecision = buildSafetyDecision(riskEvaluation.ruleId);
+            const safetyDecision = buildSafetyDecision(safetyEvaluation);
             const evaluatorOutcome: EvaluatorOutcome = {
                 mode: 'observe_only',
                 provenance: computeProvenance(evaluatorContext),
-                safetyDecision: {
-                    ...safetyDecision,
-                    riskTier: riskEvaluation.riskTier,
-                },
+                safetyDecision,
             };
             evaluatorExecutionContext = {
                 status: 'executed',
                 outcome: evaluatorOutcome,
                 durationMs: Math.max(0, Date.now() - evaluatorStartedAt),
             };
-            evaluatorRiskTierHint = evaluatorOutcome.safetyDecision.riskTier;
+            evaluatorSafetyTierHint =
+                evaluatorOutcome.safetyDecision.safetyTier;
             if (evaluatorOutcome.safetyDecision.action !== 'allow') {
                 chatOrchestratorLogger.warn(
                     'deterministic breaker signaled a non-allow action in observe-only mode',
@@ -449,7 +402,7 @@ export const createChatOrchestrator = ({
                         ruleId: evaluatorOutcome.safetyDecision.ruleId,
                         reasonCode: evaluatorOutcome.safetyDecision.reasonCode,
                         reason: evaluatorOutcome.safetyDecision.reason,
-                        riskTier: evaluatorOutcome.safetyDecision.riskTier,
+                        safetyTier: evaluatorOutcome.safetyDecision.safetyTier,
                         surface: normalizedRequest.surface,
                         triggerKind: normalizedRequest.trigger.kind,
                         correlation: buildCorrelationIds(normalizedRequest),
@@ -880,17 +833,17 @@ export const createChatOrchestrator = ({
                 ].join('\n'),
             },
         ];
-        const riskTierRank: Record<RiskTier, number> = {
+        const safetyTierRank: Record<SafetyTier, number> = {
             Low: 1,
             Medium: 2,
             High: 3,
         };
-        const orchestrationRiskTier =
-            evaluatorRiskTierHint &&
-            riskTierRank[evaluatorRiskTierHint] >
-                riskTierRank[executionPlan.riskTier]
-                ? evaluatorRiskTierHint
-                : executionPlan.riskTier;
+        const orchestrationSafetyTier =
+            evaluatorSafetyTierHint &&
+            safetyTierRank[evaluatorSafetyTierHint] >
+                safetyTierRank[executionPlan.safetyTier]
+                ? evaluatorSafetyTierHint
+                : executionPlan.safetyTier;
 
         // Generation receives resolved provider/capabilities from the active
         // default model profile instead of relying on provider-name checks.
@@ -902,7 +855,7 @@ export const createChatOrchestrator = ({
                     action: executionPlan.action,
                     modality: executionPlan.modality,
                     profileId: executionPlan.profileId,
-                    riskTier: executionPlan.riskTier,
+                    safetyTier: orchestrationSafetyTier,
                     generation: plannerGenerationForPrompt,
                     toolIntent,
                     toolRequest: toolRequestContext,
@@ -911,7 +864,7 @@ export const createChatOrchestrator = ({
             }),
             orchestrationStartedAtMs: orchestrationStartedAt,
             plannerTemperament: executionPlan.generation.temperament,
-            riskTier: orchestrationRiskTier,
+            safetyTier: orchestrationSafetyTier,
             model: selectedResponseProfile.providerModel,
             provider: selectedResponseProfile.provider,
             capabilities: selectedResponseProfile.capabilities,
@@ -971,7 +924,7 @@ export const createChatOrchestrator = ({
                     ruleId: breakerDecision.ruleId,
                     reasonCode: breakerDecision.reasonCode,
                     reason: breakerDecision.reason,
-                    riskTier: breakerDecision.riskTier,
+                    safetyTier: breakerDecision.safetyTier,
                     enforcement: 'observe_only',
                     responseAction: 'message',
                     responseModality: executionPlan.modality,
@@ -982,59 +935,55 @@ export const createChatOrchestrator = ({
                 }
             );
         }
-        chatOrchestratorLogger.info(
-            JSON.stringify({
-                event: 'chat.orchestration.timing',
-                surface: normalizedRequest.surface,
-                plannerStatus: plannerExecution.status,
-                plannerReasonCode: plannerExecution.reasonCode,
-                plannerDurationMs: plannerExecution.durationMs,
-                evaluatorStatus: evaluatorExecutionContext?.status,
-                evaluatorReasonCode: evaluatorExecutionContext?.reasonCode,
-                evaluatorRiskTier:
-                    evaluatorExecutionContext?.outcome?.safetyDecision.riskTier,
-                evaluatorProvenance:
-                    evaluatorExecutionContext?.outcome?.provenance,
-                evaluatorMode: evaluatorExecutionContext?.outcome?.mode,
-                generationDurationMs: response.generationDurationMs,
-                totalDurationMs,
-                plannerProfileId: plannerProfile.id,
-                incomingBotPersonaId:
-                    normalizedRequest.botPersonaId?.trim() || null,
-                personaProfileId: personaProfile.id,
-                personaDisplayName: personaProfile.displayName,
-                personaOverlaySource: personaProfile.promptOverlay.source,
-                personaOverlayLength: personaProfile.promptOverlay.length,
-                responseProfileId: selectedResponseProfile.id,
-                originalProfileId: originalSelectedProfileId,
-                effectiveProfileId: effectiveSelectedProfileId,
-                searchRequested: generationForExecution.search !== undefined,
-                toolName: response.finalToolExecutionTelemetry?.toolName,
-                toolStatus: response.finalToolExecutionTelemetry?.status,
-                toolReasonCode:
-                    response.finalToolExecutionTelemetry?.reasonCode,
-                toolEligible: response.finalToolExecutionTelemetry?.eligible,
-                toolRequestReasonCode:
-                    response.finalToolExecutionTelemetry?.requestReasonCode,
-                rerouteApplied,
-                fallbackApplied:
-                    plannerExecution.status === 'failed' ||
-                    fallbackReasons.length > 0,
-                fallbackReasons,
-                responseId: response.metadata.responseId,
-                responseAction: 'message',
-                responseModality: executionPlan.modality,
-                responseProvenance: response.metadata.provenance,
-                responseRiskTier: response.metadata.riskTier,
-                responseModelVersion: response.metadata.modelVersion,
-                responseCitationCount: response.metadata.citations.length,
-                responseMessageLength: response.message.length,
-                correlation: buildCorrelationIds(
-                    normalizedRequest,
-                    response.metadata.responseId
-                ),
-            })
-        );
+        chatOrchestratorLogger.info({
+            event: 'chat.orchestration.timing',
+            surface: normalizedRequest.surface,
+            plannerStatus: plannerExecution.status,
+            plannerReasonCode: plannerExecution.reasonCode,
+            plannerDurationMs: plannerExecution.durationMs,
+            evaluatorStatus: evaluatorExecutionContext?.status,
+            evaluatorReasonCode: evaluatorExecutionContext?.reasonCode,
+            evaluatorSafetyTier:
+                evaluatorExecutionContext?.outcome?.safetyDecision.safetyTier,
+            evaluatorProvenance: evaluatorExecutionContext?.outcome?.provenance,
+            evaluatorMode: evaluatorExecutionContext?.outcome?.mode,
+            generationDurationMs: response.generationDurationMs,
+            totalDurationMs,
+            plannerProfileId: plannerProfile.id,
+            incomingBotPersonaId:
+                normalizedRequest.botPersonaId?.trim() || null,
+            personaProfileId: personaProfile.id,
+            personaDisplayName: personaProfile.displayName,
+            personaOverlaySource: personaProfile.promptOverlay.source,
+            personaOverlayLength: personaProfile.promptOverlay.length,
+            responseProfileId: selectedResponseProfile.id,
+            originalProfileId: originalSelectedProfileId,
+            effectiveProfileId: effectiveSelectedProfileId,
+            searchRequested: generationForExecution.search !== undefined,
+            toolName: response.finalToolExecutionTelemetry?.toolName,
+            toolStatus: response.finalToolExecutionTelemetry?.status,
+            toolReasonCode: response.finalToolExecutionTelemetry?.reasonCode,
+            toolEligible: response.finalToolExecutionTelemetry?.eligible,
+            toolRequestReasonCode:
+                response.finalToolExecutionTelemetry?.requestReasonCode,
+            rerouteApplied,
+            fallbackApplied:
+                plannerExecution.status === 'failed' ||
+                fallbackReasons.length > 0,
+            fallbackReasons,
+            responseId: response.metadata.responseId,
+            responseAction: 'message',
+            responseModality: executionPlan.modality,
+            responseProvenance: response.metadata.provenance,
+            responseSafetyTier: response.metadata.safetyTier,
+            responseModelVersion: response.metadata.modelVersion,
+            responseCitationCount: response.metadata.citations.length,
+            responseMessageLength: response.message.length,
+            correlation: buildCorrelationIds(
+                normalizedRequest,
+                response.metadata.responseId
+            ),
+        });
 
         // Message action is the only branch that returns provenance metadata.
         return {

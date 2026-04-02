@@ -214,7 +214,7 @@ chat:
                     "outputFormat"?: "png" | "webp" | "jpeg",
                     "outputCompression"?: number
                   },
-                  "riskTier": "Low" | "Medium" | "High",
+                  "safetyTier": "Low" | "Medium" | "High",
                   "reasoning": "one short sentence",
                   "generation": {
                     "reasoningEffort": "minimal" | "low" | "medium" | "high",
@@ -293,7 +293,7 @@ chat:
                   - When in doubt, pick a safe message response instead of a more surprising action.
                   - profileId: required when action is "message" (one profile id from Planner profile options).
 
-                Risk guidance:
-                  - Low: everyday or low-stakes requests.
-                  - Medium: sensitive, ambiguous, or elevated-risk topics requiring caution.
-                  - High: disallowed, harmful, or extremely sensitive content that warrants refusal or escalation.
+                Safety guidance:
+                  - Low: everyday or low-stakes requests with low safety concern.
+                  - Medium: sensitive or ambiguous topics that need elevated safety care.
+                  - High: disallowed, harmful, or extremely sensitive content requiring refusal or escalation.

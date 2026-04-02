@@ -72,14 +72,14 @@ const BlogProvenance = ({ post }: BlogProvenanceProps): JSX.Element => {
     const relativeCreated = formatRelativeTime(post.createdAt);
     const relativeUpdated = formatRelativeTime(post.updatedAt);
     const isUpdated = post.createdAt !== post.updatedAt;
-    const riskStyle = { '--risk-color': '#7FDCA4' } as CSSProperties;
+    const safetyStyle = { '--safety-color': '#7FDCA4' } as CSSProperties;
 
     return (
         <aside
             className="provenance-footer"
             role="complementary"
             aria-label="Blog post provenance and metadata"
-            style={riskStyle} // Use sage green for blog posts
+            style={safetyStyle} // Use sage green for blog posts
         >
             <div className="provenance-header">
                 Blog Post - Discussion #{post.number}

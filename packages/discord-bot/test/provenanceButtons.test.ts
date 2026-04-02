@@ -44,7 +44,7 @@ test('details action renders markdown sections with execution table and trace vi
         data: {
             responseId: 'resp_details_sections',
             provenance: 'Retrieved',
-            riskTier: 'Low',
+            safetyTier: 'Low',
             tradeoffCount: 2,
             chainHash: 'hash_123',
             licenseContext: 'MIT',
@@ -88,8 +88,8 @@ test('details action renders markdown sections with execution table and trace vi
                         provenance: 'Inferred',
                         safetyDecision: {
                             action: 'block',
-                            riskTier: 'High',
-                            ruleId: 'risk.safety.weaponization_request.v1',
+                            safetyTier: 'High',
+                            ruleId: 'safety.weaponization_request.v1',
                             reasonCode: 'weaponization_request',
                             reason: 'Deterministic weaponization-request rule matched.',
                         },
@@ -146,7 +146,7 @@ test('details action truncates oversized payloads while preserving section reada
         data: {
             responseId: 'resp_details_long',
             provenance: 'Inferred',
-            riskTier: 'Medium',
+            safetyTier: 'Medium',
             tradeoffCount: 9,
             chainHash: 'hash_long',
             licenseContext: 'MIT',

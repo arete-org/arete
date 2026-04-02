@@ -9,14 +9,16 @@
 // Re-export public types from the shared contracts package.
 export type {
     Provenance,
-    RiskTier,
+    SafetyTier,
+    SafetyEvaluationInput,
+    SafetyEvaluationResult,
     Citation,
     ResponseMetadata,
 } from '@footnote/contracts/ethics-core';
 
 // Export functions
 export {
+    buildSafetyDecision,
     computeProvenance,
-    computeRiskTier,
-    evaluateRiskTierDeterministic,
+    evaluateSafetyDeterministic,
 } from './evaluators.js';

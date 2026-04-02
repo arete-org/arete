@@ -1,5 +1,5 @@
 /**
- * @description: Shared type contracts for response provenance, risk, and metadata.
+ * @description: Shared type contracts for response provenance, safety, and metadata.
  * @footnote-scope: interface
  * @footnote-module: EthicsCoreContracts
  * @footnote-risk: low - Incorrect shapes can break UI assumptions or validation.
@@ -10,28 +10,19 @@
 // It is intentionally "types only": no functions and no runtime behavior.
 
 /**
- * RiskTier labels how sensitive a response is.
+ * SafetyTier labels how sensitive a response is.
  * The UI uses this to choose colors and display warnings.
  */
-export type RiskTier = 'Low' | 'Medium' | 'High';
+export type SafetyTier = 'Low' | 'Medium' | 'High';
 
 /**
  * Stable deterministic rule IDs emitted by the backend risk evaluator.
  * Values are versioned so future rule changes can roll forward safely.
  */
-export type RiskRuleId =
-    | 'risk.self_harm.crisis_intent.v1'
-    | 'risk.safety.weaponization_request.v1'
-    | 'risk.professional.medical_or_legal_advice.v1';
-
-/**
- * Deterministic risk evaluation output used for audit and tests.
- */
-export type RiskEvaluationResult = {
-    riskTier: RiskTier;
-    ruleId: RiskRuleId | null;
-    matchedRuleIds: RiskRuleId[];
-};
+export type SafetyRuleId =
+    | 'safety.self_harm.crisis_intent.v1'
+    | 'safety.weaponization_request.v1'
+    | 'safety.professional.medical_or_legal_advice.v1';
 
 /**
  * Provenance describes where the answer "came from" at a high level.
@@ -127,29 +118,67 @@ export type GenerationExecutionReasonCode = Extract<
 
 export type EvaluatorDecisionMode = 'observe_only' | 'enforced';
 
-export type SafetyBreakerAction =
+export type SafetyAction =
     | 'allow'
     | 'block'
     | 'redirect'
     | 'safe_partial'
     | 'human_review';
 
-export type SafetyBreakerReasonCode =
+export type SafetyReasonCode =
     | 'self_harm_crisis_intent'
     | 'weaponization_request'
     | 'professional_advice_guardrail';
 
+/**
+ * V1 keeps evaluator input intentionally narrow.
+ * TODO(v2-safety-rules): Add trigger/surface/attachment/correlation fields
+ * once deterministic rules consume them.
+ */
+export type SafetyEvaluationInput = {
+    latestUserInput: string;
+    conversation: Array<{
+        role: 'system' | 'user' | 'assistant';
+        content: string;
+    }>;
+};
+
+type SafetyEvaluationMetadata = Record<
+    string,
+    string | number | boolean | null | string[]
+>;
+
+export type SafetyEvaluationResult =
+    | {
+          action: 'allow';
+          safetyTier: SafetyTier;
+          ruleId: null;
+          matchedRuleIds: SafetyRuleId[];
+          reasonCode?: never;
+          reason?: never;
+          metadata?: SafetyEvaluationMetadata;
+      }
+    | {
+          action: Exclude<SafetyAction, 'allow'>;
+          safetyTier: SafetyTier;
+          ruleId: SafetyRuleId;
+          matchedRuleIds: SafetyRuleId[];
+          reasonCode: SafetyReasonCode;
+          reason: string;
+          metadata?: SafetyEvaluationMetadata;
+      };
+
 export type SafetyDecision =
     | {
           action: 'allow';
-          riskTier: RiskTier;
+          safetyTier: SafetyTier;
           ruleId: null;
       }
     | {
-          action: Exclude<SafetyBreakerAction, 'allow'>;
-          riskTier: RiskTier;
-          ruleId: RiskRuleId;
-          reasonCode: SafetyBreakerReasonCode;
+          action: Exclude<SafetyAction, 'allow'>;
+          safetyTier: SafetyTier;
+          ruleId: SafetyRuleId;
+          reasonCode: SafetyReasonCode;
           reason: string;
       };
 
@@ -321,7 +350,7 @@ export type ExecutionEvent = {
 export type ResponseMetadata = {
     responseId: string; // Short id for trace lookups and links.
     provenance: Provenance; // High-level origin label for the response.
-    riskTier: RiskTier; // Sensitivity level used by UI and reviewers.
+    safetyTier: SafetyTier; // Sensitivity level used by UI and reviewers.
     tradeoffCount: number; // Number of trade-offs the model surfaced.
     chainHash: string; // Short hash to help detect tampering.
     licenseContext: string; // Human-readable license label.

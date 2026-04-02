@@ -17,7 +17,7 @@ import {
 } from '../providers.js';
 
 const ProvenanceSchema = z.enum(['Retrieved', 'Inferred', 'Speculative']);
-const RiskTierSchema = z.enum(['Low', 'Medium', 'High']);
+const SafetyTierSchema = z.enum(['Low', 'Medium', 'High']);
 const IncidentStatusSchema = z.enum([
     'new',
     'under_review',
@@ -250,7 +250,7 @@ const ExecutionEventSchema = z
 const responseMetadataShape = {
     responseId: z.string().min(1),
     provenance: ProvenanceSchema,
-    riskTier: RiskTierSchema,
+    safetyTier: SafetyTierSchema,
     tradeoffCount: z.number().nonnegative(),
     chainHash: z.string(),
     licenseContext: z.string(),

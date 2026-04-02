@@ -72,7 +72,7 @@ const openApiSource = fs.readFileSync(
 const baseMetadata = {
     responseId: 'response_123',
     provenance: 'Retrieved',
-    riskTier: 'Low',
+    safetyTier: 'Low',
     tradeoffCount: 2,
     chainHash: 'hash_abc',
     licenseContext: 'MIT + HL3',
@@ -226,7 +226,7 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
             provenance: 'Inferred',
             safetyDecision: {
                 action: 'allow',
-                riskTier: 'Low',
+                safetyTier: 'Low',
                 ruleId: null,
             },
         },
@@ -254,7 +254,7 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
                     provenance: 'Inferred',
                     safetyDecision: {
                         action: 'allow',
-                        riskTier: 'Low',
+                        safetyTier: 'Low',
                         ruleId: null,
                     },
                 },
@@ -284,8 +284,8 @@ test('ResponseMetadataSchema rejects non-canonical safety decision rule tuples',
             provenance: 'Inferred',
             safetyDecision: {
                 action: 'block',
-                riskTier: 'Low',
-                ruleId: 'risk.safety.weaponization_request.v1',
+                safetyTier: 'Low',
+                ruleId: 'safety.weaponization_request.v1',
                 reasonCode: 'self_harm_crisis_intent',
                 reason: 'Invalid tuple for test coverage.',
             },
@@ -414,7 +414,7 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
             provenance: 'Inferred',
             safetyDecision: {
                 action: 'allow',
-                riskTier: 'Low',
+                safetyTier: 'Low',
                 ruleId: null,
             },
         },
@@ -428,8 +428,8 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
             provenance: 'Inferred',
             safetyDecision: {
                 action: 'block',
-                riskTier: 'High',
-                ruleId: 'risk.safety.weaponization_request.v1',
+                safetyTier: 'High',
+                ruleId: 'safety.weaponization_request.v1',
                 reasonCode: 'weaponization_request',
             },
         },
@@ -443,8 +443,8 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
             provenance: 'Inferred',
             safetyDecision: {
                 action: 'block',
-                riskTier: 'High',
-                ruleId: 'risk.safety.weaponization_request.v1',
+                safetyTier: 'High',
+                ruleId: 'safety.weaponization_request.v1',
                 reasonCode: 'weaponization_request',
                 reason: 'Deterministic weaponization-request rule matched.',
             },
