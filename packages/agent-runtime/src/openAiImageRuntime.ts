@@ -650,7 +650,8 @@ const createOpenAiImageRuntime = ({
                     error.name === 'AbortError'
                 ) {
                     throw new Error(
-                        `Image-generation request timed out after ${requestTimeoutMs}ms`
+                        `Image-generation request timed out after ${requestTimeoutMs}ms`,
+                        { cause: error }
                     );
                 }
 

@@ -151,6 +151,11 @@ export type CreateChatServiceOptions = {
     defaultProvider?: SupportedProvider;
     defaultCapabilities?: ModelProfileCapabilities;
     recordUsage?: (record: BackendLLMCostRecord) => void;
+    chatWorkflowConfig?: {
+        reviewLoopEnabled: boolean;
+        maxIterations: number;
+        maxDurationMs: number;
+    };
 };
 
 /**
@@ -198,6 +203,7 @@ export const createChatService = ({
     defaultProvider,
     defaultCapabilities,
     recordUsage = recordBackendLLMUsage,
+    chatWorkflowConfig = runtimeConfig.chatWorkflow,
 }: CreateChatServiceOptions) => {
     /**
      * Normalizes one runtime result into the metadata shape backend already
@@ -340,14 +346,14 @@ export const createChatService = ({
         );
         let workflowLineage: WorkflowRecord | undefined;
 
-        const reviewLoopEnabled = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+        const reviewLoopEnabled = chatWorkflowConfig.reviewLoopEnabled;
         const reviewLoopMaxIterations = Math.max(
             1,
-            runtimeConfig.chatWorkflow.maxIterations
+            chatWorkflowConfig.maxIterations
         );
         const reviewLoopMaxDurationMs = Math.max(
             1,
-            runtimeConfig.chatWorkflow.maxDurationMs
+            chatWorkflowConfig.maxDurationMs
         );
         if (reviewLoopEnabled) {
             const workflowStartedAt = Date.now();
@@ -359,7 +365,7 @@ export const createChatService = ({
             let workflowStatus: WorkflowRecord['status'] = 'degraded';
             let draftResult: GenerationResult = generationResult;
             let draftParentStepId: string | undefined;
-            let latestReviewReason = '';
+            let latestReviewReason: string | undefined;
             let shouldStop = false;
             const workflowPolicy: WorkflowPolicy = {
                 enablePlanning: false,
@@ -627,7 +633,7 @@ export const createChatService = ({
                                     },
                                     {
                                         role: 'system',
-                                        content: `${REVISION_PROMPT_PREFIX}\nReview guidance: ${latestReviewReason}`,
+                                        content: `${REVISION_PROMPT_PREFIX}\nReview guidance: ${latestReviewReason ?? 'No additional guidance provided.'}`,
                                     },
                                 ],
                             }
@@ -650,7 +656,9 @@ export const createChatService = ({
                             parentStepId: reviewStepId,
                             attempt: iteration,
                             signals: {
-                                reviewReason: latestReviewReason,
+                                        reviewReason:
+                                            latestReviewReason ??
+                                            'No additional guidance provided.',
                             },
                         });
                         workflowState = applyStepExecutionToState(

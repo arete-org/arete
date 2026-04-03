@@ -196,5 +196,10 @@ export const mapExhaustedLimitToTerminationReason = (
         return 'max_tool_calls_reached';
     }
 
-    return 'max_deliberation_calls_reached';
+    if (exhaustedBy === 'maxDeliberationCalls') {
+        return 'max_deliberation_calls_reached';
+    }
+
+    const exhaustiveCheck: never = exhaustedBy;
+    throw new Error(`Unsupported exhausted execution limit: ${exhaustiveCheck}`);
 };

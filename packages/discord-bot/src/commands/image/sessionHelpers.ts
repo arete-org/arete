@@ -359,7 +359,7 @@ export function buildImageResultPresentation(
         return truncated;
     };
 
-    let promptTruncated = false;
+    let promptTruncated: boolean;
     let originalTruncated = false;
 
     const originalLabel = followUpContext.allowPromptAdjustment

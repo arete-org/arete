@@ -508,11 +508,14 @@ class SimpleOpenAIService implements OpenAIService {
                 if (error instanceof Error && error.name === 'AbortError') {
                     if (abortContext.didTimeout()) {
                         throw new Error(
-                            `OpenAI request timed out after ${this.requestTimeoutMs}ms`
+                            `OpenAI request timed out after ${this.requestTimeoutMs}ms`,
+                            { cause: error }
                         );
                     }
 
-                    throw new Error('OpenAI request was aborted by caller');
+                    throw new Error('OpenAI request was aborted by caller', {
+                        cause: error,
+                    });
                 }
 
                 if (attempt < this.retryAttempts) {

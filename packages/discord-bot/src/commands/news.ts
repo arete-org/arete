@@ -102,13 +102,11 @@ const newsCommand: Command = {
         });
 
         // Immediately acknowledge the interaction
-        let isDeferred = false;
         try {
             logger.info(
                 `About to call deferReply() for interaction ${interaction.id}`
             );
             await interaction.deferReply();
-            isDeferred = true;
             logger.info(`Successfully deferred interaction ${interaction.id}`);
         } catch (deferError) {
             logger.error(
@@ -237,17 +235,9 @@ const newsCommand: Command = {
         } catch (error) {
             logger.error(`Error in news command: ${error}`);
             try {
-                if (isDeferred) {
-                    await interaction.editReply(
-                        'An error occurred while fetching news. Please try again later.'
-                    );
-                } else {
-                    await interaction.reply({
-                        content:
-                            'An error occurred while fetching news. Please try again later.',
-                        flags: [1 << 6], // EPHEMERAL
-                    });
-                }
+                await interaction.editReply(
+                    'An error occurred while fetching news. Please try again later.'
+                );
             } catch (editError) {
                 logger.error(`Failed to respond to interaction: ${editError}`);
             }

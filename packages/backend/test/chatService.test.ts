@@ -19,7 +19,6 @@ import {
     type ResponseMetadataRetrievalContext,
     type ResponseMetadataRuntimeContext,
 } from '../src/services/openaiService.js';
-import { runtimeConfig } from '../src/config.js';
 import { createChatService } from '../src/services/chatService.js';
 import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
 
@@ -794,16 +793,6 @@ test('runChatMessages stores evidence and freshness chips for retrieved search r
 });
 
 test('runChatMessages executes bounded review loop and forwards workflow lineage', async () => {
-    const mutableRuntimeConfig = runtimeConfig as typeof runtimeConfig;
-    const previousEnabled = mutableRuntimeConfig.chatWorkflow.reviewLoopEnabled;
-    const previousMaxIterations =
-        mutableRuntimeConfig.chatWorkflow.maxIterations;
-    const previousMaxDurationMs =
-        mutableRuntimeConfig.chatWorkflow.maxDurationMs;
-    mutableRuntimeConfig.chatWorkflow.reviewLoopEnabled = true;
-    mutableRuntimeConfig.chatWorkflow.maxIterations = 2;
-    mutableRuntimeConfig.chatWorkflow.maxDurationMs = 15000;
-
     let callCount = 0;
     let capturedWorkflow:
         | ResponseMetadataRuntimeContext['workflow']
@@ -844,54 +833,40 @@ test('runChatMessages executes bounded review loop and forwards workflow lineage
         },
     };
 
-    try {
-        const chatService = createChatService({
-            generationRuntime,
-            storeTrace: async () => undefined,
-            buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
-                capturedWorkflow = runtimeContext.workflow;
-                return createMetadata();
-            },
-            defaultModel: 'gpt-5-mini',
-            recordUsage: () => undefined,
-        });
+    const chatService = createChatService({
+        generationRuntime,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedWorkflow = runtimeContext.workflow;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+    });
 
-        const response = await chatService.runChatMessages({
-            messages: [{ role: 'user', content: 'Summarize this.' }],
-            conversationSnapshot: 'Summarize this.',
-            generation: {
-                reasoningEffort: 'low',
-                verbosity: 'low',
-            },
-        });
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+        },
+    });
 
-        assert.equal(response.message, 'initial draft');
-        assert.equal(callCount, 2);
-        assert.equal(
-            capturedWorkflow?.workflowName,
-            'message_with_review_loop_v1'
-        );
-        assert.equal(capturedWorkflow?.terminationReason, 'goal_satisfied');
-        assert.equal(capturedWorkflow?.status, 'completed');
-        assert.ok((capturedWorkflow?.steps.length ?? 0) >= 2);
-    } finally {
-        mutableRuntimeConfig.chatWorkflow.reviewLoopEnabled = previousEnabled;
-        mutableRuntimeConfig.chatWorkflow.maxIterations = previousMaxIterations;
-        mutableRuntimeConfig.chatWorkflow.maxDurationMs = previousMaxDurationMs;
-    }
+    assert.equal(response.message, 'initial draft');
+    assert.equal(callCount, 2);
+    assert.equal(capturedWorkflow?.workflowName, 'message_with_review_loop_v1');
+    assert.equal(capturedWorkflow?.terminationReason, 'goal_satisfied');
+    assert.equal(capturedWorkflow?.status, 'completed');
+    assert.ok((capturedWorkflow?.steps.length ?? 0) >= 2);
 });
 
 test('runChatMessages fails open when review output is invalid', async () => {
-    const mutableRuntimeConfig = runtimeConfig as typeof runtimeConfig;
-    const previousEnabled = mutableRuntimeConfig.chatWorkflow.reviewLoopEnabled;
-    const previousMaxIterations =
-        mutableRuntimeConfig.chatWorkflow.maxIterations;
-    const previousMaxDurationMs =
-        mutableRuntimeConfig.chatWorkflow.maxDurationMs;
-    mutableRuntimeConfig.chatWorkflow.reviewLoopEnabled = true;
-    mutableRuntimeConfig.chatWorkflow.maxIterations = 2;
-    mutableRuntimeConfig.chatWorkflow.maxDurationMs = 15000;
-
     let callCount = 0;
     let capturedWorkflow:
         | ResponseMetadataRuntimeContext['workflow']
@@ -932,37 +907,36 @@ test('runChatMessages fails open when review output is invalid', async () => {
         },
     };
 
-    try {
-        const chatService = createChatService({
-            generationRuntime,
-            storeTrace: async () => undefined,
-            buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
-                capturedWorkflow = runtimeContext.workflow;
-                return createMetadata();
-            },
-            defaultModel: 'gpt-5-mini',
-            recordUsage: () => undefined,
-        });
+    const chatService = createChatService({
+        generationRuntime,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedWorkflow = runtimeContext.workflow;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+    });
 
-        const response = await chatService.runChatMessages({
-            messages: [{ role: 'user', content: 'Summarize this.' }],
-            conversationSnapshot: 'Summarize this.',
-            generation: {
-                reasoningEffort: 'low',
-                verbosity: 'low',
-            },
-        });
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+        },
+    });
 
-        assert.equal(response.message, 'draft that should still be returned');
-        assert.equal(callCount, 2);
-        assert.equal(capturedWorkflow?.status, 'degraded');
-        assert.equal(
-            capturedWorkflow?.terminationReason,
-            'executor_error_fail_open'
-        );
-    } finally {
-        mutableRuntimeConfig.chatWorkflow.reviewLoopEnabled = previousEnabled;
-        mutableRuntimeConfig.chatWorkflow.maxIterations = previousMaxIterations;
-        mutableRuntimeConfig.chatWorkflow.maxDurationMs = previousMaxDurationMs;
-    }
+    assert.equal(response.message, 'draft that should still be returned');
+    assert.equal(callCount, 2);
+    assert.equal(capturedWorkflow?.status, 'degraded');
+    assert.equal(
+        capturedWorkflow?.terminationReason,
+        'executor_error_fail_open'
+    );
 });

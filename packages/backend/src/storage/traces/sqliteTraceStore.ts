@@ -159,7 +159,8 @@ export class SqliteTraceStore {
                         url = new URL(citation.url).toString();
                     } catch (error) {
                         throw new Error(
-                            `Cannot serialize citation URL "${citation.url}" for response "${metadata.responseId}": ${error instanceof Error ? error.message : String(error)}`
+                            `Cannot serialize citation URL "${citation.url}" for response "${metadata.responseId}": ${error instanceof Error ? error.message : String(error)}`,
+                            { cause: error }
                         );
                     }
                 } else {

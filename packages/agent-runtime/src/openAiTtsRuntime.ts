@@ -263,7 +263,8 @@ export const createOpenAiTtsRuntime = ({
                     error.name === 'AbortError'
                 ) {
                     throw new Error(
-                        `TTS request timed out after ${requestTimeoutMs}ms`
+                        `TTS request timed out after ${requestTimeoutMs}ms`,
+                        { cause: error }
                     );
                 }
 

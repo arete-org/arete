@@ -347,7 +347,7 @@ const validateSafeImageUrl = async (
         return parsedUrl;
     }
 
-    let resolvedAddresses: Array<{ address: string }> = [];
+    let resolvedAddresses: Array<{ address: string }>;
     try {
         const lookupResult = await lookupImpl(hostname, {
             all: true,
@@ -358,7 +358,8 @@ const validateSafeImageUrl = async (
             : [lookupResult];
     } catch (error) {
         throw new Error(
-            `Could not resolve image host "${hostname}": ${error instanceof Error ? error.message : String(error)}`
+            `Could not resolve image host "${hostname}": ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error }
         );
     }
 
@@ -614,7 +615,8 @@ export const createOpenAiImageDescriptionAdapter = ({
         } catch (error) {
             if (error instanceof Error && error.name === 'AbortError') {
                 throw new Error(
-                    `Image-description request timed out after ${requestTimeoutMs}ms`
+                    `Image-description request timed out after ${requestTimeoutMs}ms`,
+                    { cause: error }
                 );
             }
             throw error;

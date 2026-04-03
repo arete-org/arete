@@ -150,6 +150,31 @@ export const parsePositiveIntEnv = (
 };
 
 /**
+ * Parses non-negative integer env values used for counters where zero is
+ * meaningful (for example disabling bounded retries).
+ */
+export const parseNonNegativeIntEnv = (
+    value: string | undefined,
+    fallback: number,
+    key: string,
+    warn: WarningSink
+): number => {
+    if (value === undefined) {
+        return fallback;
+    }
+
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+        return parsed;
+    }
+
+    warn(
+        `Ignoring invalid non-negative integer for ${key}: "${value}". Using default (${fallback}).`
+    );
+    return fallback;
+};
+
+/**
  * Validates string env values against an allowed set and falls back safely when
  * operators provide an unsupported option.
  */

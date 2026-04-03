@@ -9,6 +9,7 @@
 import { envDefaultValues } from '@footnote/config-spec';
 import {
     parseBooleanEnv,
+    parseNonNegativeIntEnv,
     parseOptionalTrimmedString,
     parsePositiveIntEnv,
 } from '../parsers.js';
@@ -47,7 +48,7 @@ export const buildServiceSections = (
             'CHAT_REVIEW_LOOP_ENABLED',
             warn
         ),
-        maxIterations: parsePositiveIntEnv(
+        maxIterations: parseNonNegativeIntEnv(
             env.CHAT_REVIEW_LOOP_MAX_ITERATIONS,
             2,
             'CHAT_REVIEW_LOOP_MAX_ITERATIONS',
