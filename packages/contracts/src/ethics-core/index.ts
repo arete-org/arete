@@ -51,6 +51,11 @@ export type {
     ExecutionEvent,
     ResponseMetadata,
 } from './types.js';
+export {
+    WORKFLOW_STEP_STATUSES,
+    WORKFLOW_STEP_KINDS,
+    WORKFLOW_TERMINATION_REASONS,
+} from './types.js';
 export { formatExecutionTimelineSummary } from './executionFormatting.js';
 export {
     SafetyRuleIdSchema,

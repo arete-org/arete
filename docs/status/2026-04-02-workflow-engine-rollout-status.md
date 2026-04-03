@@ -24,10 +24,12 @@ Architecture reference:
 - Workflow metadata is now aligned to `WorkflowRecord` + `StepRecord`.
 - Step outcomes now have explicit machine-readable control signals.
 - Canonical workflow termination reasons are now contract-level.
+- Workflow vocabulary now uses one shared contract source for type + schema
+  derivation (`WORKFLOW_STEP_*`, `WORKFLOW_TERMINATION_REASONS`).
 - Backend now has a workflow-engine scaffold (`WorkflowPolicy`,
   `ExecutionLimits`, transition checks, and state/limit helpers).
-- Chat runtime path still uses the existing bounded review loop behavior, now
-  emitting the new record shape.
+- Chat bounded review loop now consults shared engine transition/limit helpers
+  while preserving current behavior and fail-open semantics.
 
 ## What Is Landed
 
@@ -53,6 +55,8 @@ Status: `landed`
     - `max_tool_calls_reached`
     - `max_deliberation_calls_reached`
     - `executor_error_fail_open`
+- Added exported canonical workflow constants so unions and schema enums share
+  one source of truth.
 
 ### 2) Schema + Validation Baseline (Core)
 
@@ -61,6 +65,9 @@ Status: `landed`
 - Updated web metadata schemas to validate the new workflow record shape.
 - Updated contracts schema tests for valid/invalid workflow record payloads.
 - Kept `ResponseMetadataSchema` tolerant for forward compatibility.
+- Added lightweight workflow invariants:
+    - `stepCount === steps.length`
+    - `parentStepId` must reference a step in the same workflow
 
 ### 3) Engine Skeleton (Backend)
 
@@ -73,7 +80,8 @@ Status: `landed`
     - legal transition checks
     - execution limit checks
     - state update helpers
-- This slice is behavior-safe scaffolding; no full routing migration yet.
+- Added termination reason mapping from exhausted limits.
+- Added direct unit tests for engine legality and budget invariants.
 
 ## What Is Open
 
@@ -83,9 +91,10 @@ Status: `in_progress`
 
 Current reality:
 
-- Chat still executes a specialized bounded loop.
-- It now emits `WorkflowRecord`, but routing is not yet delegated to a generic
-  `WorkflowEngine` loop.
+- Chat still executes a specialized bounded loop shape.
+- Transition legality and limit checks are now shared with `workflowEngine`.
+- Step routing itself is still embedded in `chatService` and not yet delegated
+  to a generic engine loop.
 
 ### 2) Tool Step Generalization
 
@@ -98,7 +107,7 @@ Goal:
 
 ### 3) Deliberation Gating By Policy/Limits
 
-Status: `pending`
+Status: `in_progress`
 
 Goal:
 
@@ -125,10 +134,12 @@ Goal:
 
 ## Next Gates
 
-1. Route current bounded loop through shared engine transition checks.
+1. Delegate bounded review loop routing from `chatService` into reusable engine
+   execution flow (not only helper checks).
 2. Move tool execution to `tool` step shape (`calls[]` + execution mode).
 3. Split provenance-facing workflow record from optional deeper debug log detail.
-4. Add policy matrix tests for illegal transition blocking and fail-open fallback.
+4. Expand policy matrix tests to include full step-route scenarios and
+   fail-open decision branches.
 
 ## Open Questions
 

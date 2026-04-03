@@ -283,25 +283,38 @@ export type GenerationExecutionEvent = ProfileExecutionEvent & {
     reasonCode?: GenerationExecutionReasonCode;
 };
 
-export type WorkflowStepStatus = 'executed' | 'skipped' | 'failed';
+export const WORKFLOW_STEP_STATUSES = [
+    'executed',
+    'skipped',
+    'failed',
+] as const;
 
-export type WorkflowStepKind =
-    | 'plan'
-    | 'tool'
-    | 'generate'
-    | 'assess'
-    | 'revise'
-    | 'finalize';
+export type WorkflowStepStatus = (typeof WORKFLOW_STEP_STATUSES)[number];
+
+export const WORKFLOW_STEP_KINDS = [
+    'plan',
+    'tool',
+    'generate',
+    'assess',
+    'revise',
+    'finalize',
+] as const;
+
+export type WorkflowStepKind = (typeof WORKFLOW_STEP_KINDS)[number];
+
+export const WORKFLOW_TERMINATION_REASONS = [
+    'goal_satisfied',
+    'budget_exhausted_steps',
+    'budget_exhausted_tokens',
+    'budget_exhausted_time',
+    'transition_blocked_by_policy',
+    'max_tool_calls_reached',
+    'max_deliberation_calls_reached',
+    'executor_error_fail_open',
+] as const;
 
 export type WorkflowTerminationReason =
-    | 'goal_satisfied'
-    | 'budget_exhausted_steps'
-    | 'budget_exhausted_tokens'
-    | 'budget_exhausted_time'
-    | 'transition_blocked_by_policy'
-    | 'max_tool_calls_reached'
-    | 'max_deliberation_calls_reached'
-    | 'executor_error_fail_open';
+    (typeof WORKFLOW_TERMINATION_REASONS)[number];
 
 export type StepOutcome = {
     status: WorkflowStepStatus;

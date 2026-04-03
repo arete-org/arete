@@ -7,7 +7,12 @@
  */
 
 import { z } from 'zod';
-import type { TraceAxisScore } from '../ethics-core/index.js';
+import {
+    WORKFLOW_STEP_KINDS,
+    WORKFLOW_STEP_STATUSES,
+    WORKFLOW_TERMINATION_REASONS,
+    type TraceAxisScore,
+} from '../ethics-core/index.js';
 import { SafetyDecisionSchema } from '../ethics-core/schemas.js';
 import type { ApiResponseValidationResult } from './client-core.js';
 import {
@@ -138,7 +143,7 @@ const ResponseTemperamentSchema = z
     })
     .strict();
 const PartialResponseTemperamentSchema = ResponseTemperamentSchema.partial();
-const ExecutionStatusSchema = z.enum(['executed', 'skipped', 'failed']);
+const ExecutionStatusSchema = z.enum(WORKFLOW_STEP_STATUSES);
 const ExecutionReasonCodeSchema = z.enum([
     'planner_runtime_error',
     'planner_invalid_output',
@@ -249,7 +254,7 @@ const ExecutionEventSchema = z
 
 const StepOutcomeSchema = z
     .object({
-        status: z.enum(['executed', 'skipped', 'failed']),
+        status: z.enum(WORKFLOW_STEP_STATUSES),
         summary: z.string().min(1),
         artifacts: z.array(z.string()).optional(),
         signals: z
@@ -267,14 +272,7 @@ const StepRecordSchema = z
         stepId: z.string().min(1),
         parentStepId: z.string().min(1).optional(),
         attempt: z.number().int().positive(),
-        stepKind: z.enum([
-            'plan',
-            'tool',
-            'generate',
-            'assess',
-            'revise',
-            'finalize',
-        ]),
+        stepKind: z.enum(WORKFLOW_STEP_KINDS),
         reasonCode: ExecutionReasonCodeSchema.optional(),
         startedAt: z.string().datetime(),
         finishedAt: z.string().datetime(),
@@ -308,17 +306,33 @@ const WorkflowRecordSchema = z
         stepCount: z.number().int().nonnegative(),
         maxSteps: z.number().int().positive(),
         maxDurationMs: z.number().int().positive(),
-        terminationReason: z.enum([
-            'goal_satisfied',
-            'budget_exhausted_steps',
-            'budget_exhausted_tokens',
-            'budget_exhausted_time',
-            'transition_blocked_by_policy',
-            'max_tool_calls_reached',
-            'max_deliberation_calls_reached',
-            'executor_error_fail_open',
-        ]),
+        terminationReason: z.enum(WORKFLOW_TERMINATION_REASONS),
         steps: z.array(StepRecordSchema),
+    })
+    .superRefine((value, context) => {
+        if (value.stepCount !== value.steps.length) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'stepCount must equal steps.length.',
+            });
+        }
+
+        const seenStepIds = new Set<string>();
+        for (const step of value.steps) {
+            seenStepIds.add(step.stepId);
+        }
+
+        for (const step of value.steps) {
+            if (
+                step.parentStepId !== undefined &&
+                !seenStepIds.has(step.parentStepId)
+            ) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `parentStepId "${step.parentStepId}" must reference a stepId in the same workflow.`,
+                });
+            }
+        }
     })
     .strict();
 

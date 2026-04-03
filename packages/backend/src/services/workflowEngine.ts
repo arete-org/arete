@@ -6,6 +6,7 @@
  * @footnote-ethics: high - Workflow control determines whether model-deliberative paths remain bounded and auditable.
  */
 import type { WorkflowStepKind } from '@footnote/contracts/ethics-core';
+import type { WorkflowTerminationReason } from '@footnote/contracts/ethics-core';
 
 export type WorkflowPolicy = {
     enablePlanning: boolean;
@@ -22,6 +23,13 @@ export type ExecutionLimits = {
     maxTokensTotal: number;
     maxDurationMs: number;
 };
+
+export type ExhaustedLimit =
+    | 'maxWorkflowSteps'
+    | 'maxToolCalls'
+    | 'maxDeliberationCalls'
+    | 'maxTokensTotal'
+    | 'maxDurationMs';
 
 export type WorkflowState = {
     workflowId: string;
@@ -127,12 +135,7 @@ export const isWithinExecutionLimits = (
     nowMs: number
 ): {
     withinLimits: boolean;
-    exhaustedBy?:
-        | 'maxWorkflowSteps'
-        | 'maxToolCalls'
-        | 'maxDeliberationCalls'
-        | 'maxTokensTotal'
-        | 'maxDurationMs';
+    exhaustedBy?: ExhaustedLimit;
 } => {
     if (state.stepCount >= limits.maxWorkflowSteps) {
         return {
@@ -172,4 +175,26 @@ export const isWithinExecutionLimits = (
     return {
         withinLimits: true,
     };
+};
+
+export const mapExhaustedLimitToTerminationReason = (
+    exhaustedBy: ExhaustedLimit
+): WorkflowTerminationReason => {
+    if (exhaustedBy === 'maxWorkflowSteps') {
+        return 'budget_exhausted_steps';
+    }
+
+    if (exhaustedBy === 'maxTokensTotal') {
+        return 'budget_exhausted_tokens';
+    }
+
+    if (exhaustedBy === 'maxDurationMs') {
+        return 'budget_exhausted_time';
+    }
+
+    if (exhaustedBy === 'maxToolCalls') {
+        return 'max_tool_calls_reached';
+    }
+
+    return 'max_deliberation_calls_reached';
 };

@@ -41,6 +41,15 @@ import {
 import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
+import {
+    applyStepExecutionToState,
+    createInitialWorkflowState,
+    isTransitionAllowed,
+    isWithinExecutionLimits,
+    mapExhaustedLimitToTerminationReason,
+    type ExecutionLimits,
+    type WorkflowPolicy,
+} from './workflowEngine.js';
 import { logger } from '../utils/logger.js';
 import { runtimeConfig } from '../config.js';
 
@@ -347,11 +356,29 @@ export const createChatService = ({
             let terminationReason: WorkflowTerminationReason =
                 'budget_exhausted_steps';
             let workflowStatus: WorkflowRecord['status'] = 'degraded';
-            let stepsExecuted = 0;
             let draftResult: GenerationResult = generationResult;
             let draftParentStepId: string | undefined;
             let latestReviewReason = '';
             let shouldStop = false;
+            const workflowPolicy: WorkflowPolicy = {
+                enablePlanning: false,
+                enableToolUse: false,
+                enableReplanning: false,
+                enableAssessment: true,
+                enableRevision: true,
+            };
+            const executionLimits: ExecutionLimits = {
+                maxWorkflowSteps: reviewLoopMaxIterations * 2 + 1,
+                maxToolCalls: Number.MAX_SAFE_INTEGER,
+                maxDeliberationCalls: reviewLoopMaxIterations * 2,
+                maxTokensTotal: Number.MAX_SAFE_INTEGER,
+                maxDurationMs: reviewLoopMaxDurationMs,
+            };
+            let workflowState = createInitialWorkflowState({
+                workflowId,
+                workflowName: REVIEW_WORKFLOW_NAME,
+                startedAtMs: workflowStartedAt,
+            });
 
             const captureStep = (input: {
                 stepKind: StepRecord['stepKind'];
@@ -412,7 +439,6 @@ export const createChatService = ({
                         }),
                     },
                 });
-                stepsExecuted += 1;
                 return stepId;
             };
 
@@ -420,6 +446,17 @@ export const createChatService = ({
                 draftResult,
                 generationRequest.model
             );
+            if (
+                !isTransitionAllowed(
+                    workflowState.currentStepKind,
+                    'generate',
+                    workflowPolicy
+                )
+            ) {
+                terminationReason = 'transition_blocked_by_policy';
+                workflowStatus = 'degraded';
+                shouldStop = true;
+            }
             const initialDraftStepId = captureStep({
                 stepKind: 'generate',
                 status: 'executed',
@@ -432,15 +469,53 @@ export const createChatService = ({
                 attempt: 1,
             });
             draftParentStepId = initialDraftStepId;
+            workflowState = applyStepExecutionToState(
+                workflowState,
+                'generate',
+                initialDraftUsage.totalTokens,
+                0,
+                0
+            );
+
+            const stopIfOverLimits = (): boolean => {
+                const limitsCheck = isWithinExecutionLimits(
+                    workflowState,
+                    executionLimits,
+                    Date.now()
+                );
+                if (limitsCheck.withinLimits) {
+                    return false;
+                }
+
+                terminationReason =
+                    limitsCheck.exhaustedBy !== undefined
+                        ? mapExhaustedLimitToTerminationReason(
+                              limitsCheck.exhaustedBy
+                          )
+                        : 'budget_exhausted_steps';
+                workflowStatus = 'degraded';
+                shouldStop = true;
+                return true;
+            };
 
             for (
                 let iteration = 1;
                 iteration <= reviewLoopMaxIterations && !shouldStop;
                 iteration += 1
             ) {
-                const elapsedMs = Date.now() - workflowStartedAt;
-                if (elapsedMs >= reviewLoopMaxDurationMs) {
-                    terminationReason = 'budget_exhausted_time';
+                if (
+                    !isTransitionAllowed(
+                        workflowState.currentStepKind,
+                        'assess',
+                        workflowPolicy
+                    )
+                ) {
+                    terminationReason = 'transition_blocked_by_policy';
+                    workflowStatus = 'degraded';
+                    break;
+                }
+
+                if (stopIfOverLimits()) {
                     break;
                 }
 
@@ -487,6 +562,13 @@ export const createChatService = ({
                         parentStepId: draftParentStepId,
                         attempt: iteration,
                     });
+                    workflowState = applyStepExecutionToState(
+                        workflowState,
+                        'assess',
+                        reviewUsage.totalTokens,
+                        0,
+                        1
+                    );
                     const decision = parseReviewDecision(reviewResult.text);
                     if (!decision) {
                         terminationReason = 'executor_error_fail_open';
@@ -511,12 +593,19 @@ export const createChatService = ({
                     }
 
                     if (
-                        Date.now() - workflowStartedAt >=
-                        reviewLoopMaxDurationMs
+                        !isTransitionAllowed(
+                            workflowState.currentStepKind,
+                            'revise',
+                            workflowPolicy
+                        )
                     ) {
-                        terminationReason = 'budget_exhausted_time';
+                        terminationReason = 'transition_blocked_by_policy';
                         workflowStatus = 'degraded';
                         shouldStop = true;
+                        break;
+                    }
+
+                    if (stopIfOverLimits()) {
                         break;
                     }
 
@@ -559,6 +648,13 @@ export const createChatService = ({
                                 reviewReason: latestReviewReason,
                             },
                         });
+                        workflowState = applyStepExecutionToState(
+                            workflowState,
+                            'revise',
+                            revisionUsage.totalTokens,
+                            0,
+                            1
+                        );
                         draftResult = revisionResult;
                         draftParentStepId = revisionStepId;
                     } catch {
@@ -574,6 +670,13 @@ export const createChatService = ({
                             parentStepId: reviewStepId,
                             attempt: iteration,
                         });
+                        workflowState = applyStepExecutionToState(
+                            workflowState,
+                            'revise',
+                            0,
+                            0,
+                            1
+                        );
                         terminationReason = 'executor_error_fail_open';
                         workflowStatus = 'degraded';
                         shouldStop = true;
@@ -591,6 +694,13 @@ export const createChatService = ({
                         parentStepId: draftParentStepId,
                         attempt: iteration,
                     });
+                    workflowState = applyStepExecutionToState(
+                        workflowState,
+                        'assess',
+                        0,
+                        0,
+                        1
+                    );
                     terminationReason = 'executor_error_fail_open';
                     workflowStatus = 'degraded';
                     shouldStop = true;
@@ -607,8 +717,8 @@ export const createChatService = ({
                 workflowId,
                 workflowName: REVIEW_WORKFLOW_NAME,
                 status: workflowStatus,
-                stepCount: stepsExecuted,
-                maxSteps: reviewLoopMaxIterations * 2 + 1,
+                stepCount: workflowState.stepCount,
+                maxSteps: executionLimits.maxWorkflowSteps,
                 maxDurationMs: reviewLoopMaxDurationMs,
                 terminationReason,
                 steps: workflowSteps,
