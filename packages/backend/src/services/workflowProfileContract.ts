@@ -33,6 +33,11 @@ export type WorkflowProfileExecutionLimitsContract = {
     maxDurationMs: number;
 };
 
+/**
+ * Canonical no-generation reason labels used before profile registry rollout.
+ * Trigger: workflow completes without emitting a generation payload.
+ * Consequence: chatService maps these labels to surfaced/internal handling.
+ */
 export type WorkflowNoGenerationReasonCode =
     | 'blocked_by_policy_before_generate'
     | 'generation_disabled_by_profile'
@@ -51,6 +56,11 @@ export type WorkflowNoGenerationHandling = {
     terminationReason: WorkflowTerminationReason;
 };
 
+/**
+ * Single source of truth for no-generation disposition decisions.
+ * Trigger: chatService classifies a workflow no-generation termination.
+ * Consequence: determines whether we surface a fixed response or run internal fallback generation.
+ */
 export const WORKFLOW_NO_GENERATION_HANDLING_MAP: Readonly<
     Record<WorkflowNoGenerationReasonCode, WorkflowNoGenerationHandling>
 > = {
@@ -97,6 +107,11 @@ export type NoGenerationHandlingResolution =
           terminationReason: WorkflowTerminationReason;
       };
 
+/**
+ * Exhaustive resolver from workflow termination reason to no-generation handling.
+ * Trigger: a workflow returns outcome `no_generation`.
+ * Consequence: unsupported reasons are explicit and never silently coerced.
+ */
 export const resolveNoGenerationHandlingFromTermination = (input: {
     terminationReason: WorkflowTerminationReason;
     generationEnabledByPolicy: boolean;
