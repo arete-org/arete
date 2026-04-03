@@ -93,6 +93,7 @@ export type RuntimeConfig = {
         maxBodyBytes: number;
     };
     chatWorkflow: {
+        profileId: 'bounded-review' | 'generate-only';
         reviewLoopEnabled: boolean;
         maxIterations: number;
         maxDurationMs: number;
