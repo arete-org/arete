@@ -270,7 +270,7 @@ test('runBoundedReviewWorkflow enforces legality before initial generate executi
         messagesWithHints: [{ role: 'user', content: 'hi' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop_v1',
+            workflowName: 'message_with_review_loop',
             maxIterations: 2,
             maxDurationMs: 15000,
         },
@@ -342,7 +342,7 @@ test('runBoundedReviewWorkflow normalizes invalid config bounds and keeps lineag
         messagesWithHints: [{ role: 'user', content: 'hi' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop_v1',
+            workflowName: 'message_with_review_loop',
             maxIterations: Number.NaN,
             maxDurationMs: Number.NaN,
         },
@@ -395,7 +395,7 @@ test('runBoundedReviewWorkflow classifies initial generate runtime failure as no
         messagesWithHints: [{ role: 'user', content: 'hi' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop_v1',
+            workflowName: 'message_with_review_loop',
             maxIterations: 2,
             maxDurationMs: 15000,
         },

@@ -15,8 +15,8 @@ import type {
  * Stable workflow-profile identifier used by backend orchestration config.
  */
 export type WorkflowProfileId =
-    | 'bounded-review-v1'
-    | 'generate-only-v1'
+    | 'bounded-review'
+    | 'generate-only'
     | (string & {});
 
 /**
@@ -182,7 +182,7 @@ export const resolveNoGenerationHandlingFromTermination = (input: {
  * Required hooks define minimal runtime behavior; optional extensions carry
  * profile-specific strategy details (for example review/revision prompts).
  */
-export type WorkflowProfileContractV1 = {
+export type WorkflowProfileContract = {
     profileId: WorkflowProfileId;
     profileVersion: 'v1';
     displayName: string;

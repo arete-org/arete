@@ -108,12 +108,11 @@ export type BoundedReviewProfileStrategy = {
     parseReviewDecision: (text: string) => ReviewDecision | null;
 };
 
-export const BOUNDED_REVIEW_PROFILE_STRATEGY_V1: BoundedReviewProfileStrategy =
-    {
-        reviewDecisionPrompt: DEFAULT_REVIEW_DECISION_PROMPT,
-        revisionPromptPrefix: DEFAULT_REVISION_PROMPT_PREFIX,
-        parseReviewDecision: parseReviewDecisionText,
-    };
+export const BOUNDED_REVIEW_PROFILE_STRATEGY: BoundedReviewProfileStrategy = {
+    reviewDecisionPrompt: DEFAULT_REVIEW_DECISION_PROMPT,
+    revisionPromptPrefix: DEFAULT_REVISION_PROMPT_PREFIX,
+    parseReviewDecision: parseReviewDecisionText,
+};
 
 export type ReviewWorkflowRuntimeConfig = {
     workflowName: string;
@@ -351,7 +350,7 @@ export const runBoundedReviewWorkflow = async ({
     generationStartedAtMs,
     workflowConfig,
     workflowPolicy,
-    profileStrategy = BOUNDED_REVIEW_PROFILE_STRATEGY_V1,
+    profileStrategy = BOUNDED_REVIEW_PROFILE_STRATEGY,
     reviewDecisionPrompt,
     revisionPromptPrefix,
     parseReviewDecision,

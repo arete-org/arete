@@ -862,7 +862,7 @@ test('runChatMessages executes bounded review loop and forwards workflow lineage
 
     assert.equal(response.message, 'initial draft');
     assert.equal(callCount, 2);
-    assert.equal(capturedWorkflow?.workflowName, 'message_with_review_loop_v1');
+    assert.equal(capturedWorkflow?.workflowName, 'message_with_review_loop');
     assert.equal(capturedWorkflow?.terminationReason, 'goal_satisfied');
     assert.equal(capturedWorkflow?.status, 'completed');
     assert.ok((capturedWorkflow?.steps.length ?? 0) >= 2);
@@ -1035,7 +1035,7 @@ test('runChatMessages handles surfaced no-generation reasons without runtime fal
                     outcome: 'no_generation',
                     workflowLineage: {
                         workflowId: `wf_surface_${terminationReason}`,
-                        workflowName: 'message_with_review_loop_v1',
+                        workflowName: 'message_with_review_loop',
                         status: 'degraded',
                         terminationReason,
                         stepCount: 0,
@@ -1130,7 +1130,7 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
                     outcome: 'no_generation',
                     workflowLineage: {
                         workflowId: `wf_internal_${terminationReason}`,
-                        workflowName: 'message_with_review_loop_v1',
+                        workflowName: 'message_with_review_loop',
                         status: 'degraded',
                         terminationReason,
                         stepCount: 0,

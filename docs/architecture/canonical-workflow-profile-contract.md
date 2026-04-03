@@ -1,4 +1,4 @@
-# Canonical Workflow Profile Contract V1
+# Canonical Workflow Profile Contract
 
 ## Purpose
 
@@ -29,7 +29,7 @@ Type baseline (low risk, backend-local):
 
 Required fields:
 
-- `profileId`: stable key (for example `bounded-review-v1`, `generate-only-v1`).
+- `profileId`: stable key (for example `bounded-review`, `generate-only`).
 - `profileVersion`: currently fixed to `v1`.
 - `displayName`: human-readable name.
 - `workflowName`: provenance-facing workflow identifier.

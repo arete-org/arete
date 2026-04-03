@@ -50,7 +50,7 @@ import {
 import { logger } from '../utils/logger.js';
 import { runtimeConfig } from '../config.js';
 
-const REVIEW_WORKFLOW_NAME = 'message_with_review_loop_v1';
+const REVIEW_WORKFLOW_NAME = 'message_with_review_loop';
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
 
