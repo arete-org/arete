@@ -350,13 +350,22 @@ export const createChatService = ({
                 captureUsage: (result, requestedModel) =>
                     recordUsageForStep(result, requestedModel),
             });
-            if (workflowResult.outcome === 'no_generation') {
-                throw new Error(
-                    `Workflow terminated before generation: ${workflowResult.workflowLineage.terminationReason}`
-                );
+            switch (workflowResult.outcome) {
+                case 'generated':
+                    generationResult = workflowResult.generationResult;
+                    workflowLineage = workflowResult.workflowLineage;
+                    break;
+                case 'no_generation':
+                    throw new Error(
+                        `Workflow terminated before generation: ${workflowResult.workflowLineage.terminationReason}`
+                    );
+                default: {
+                    const exhaustiveCheck: never = workflowResult;
+                    throw new Error(
+                        `Unsupported workflow outcome: ${JSON.stringify(exhaustiveCheck)}`
+                    );
+                }
             }
-            generationResult = workflowResult.generationResult;
-            workflowLineage = workflowResult.workflowLineage;
         } else {
             generationResult =
                 await generationRuntime.generate(generationRequest);
@@ -414,6 +423,9 @@ export const createChatService = ({
                   ? generationResult.toolExecution
                   : hasSearchIntent
                     ? ({
+                          // TODO(backend): Replace retrieval-signal inference
+                          // with explicit runtime tool execution signals once
+                          // they are always present for search requests.
                           // When search was requested, infer tool execution from
                           // retrieval usage signals reported by the runtime.
                           toolName: 'web_search',

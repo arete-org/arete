@@ -102,6 +102,19 @@ export const parseReviewDecisionText = (
     }
 };
 
+export type BoundedReviewProfileStrategy = {
+    reviewDecisionPrompt: string;
+    revisionPromptPrefix: string;
+    parseReviewDecision: (text: string) => ReviewDecision | null;
+};
+
+export const BOUNDED_REVIEW_PROFILE_STRATEGY_V1: BoundedReviewProfileStrategy =
+    {
+        reviewDecisionPrompt: DEFAULT_REVIEW_DECISION_PROMPT,
+        revisionPromptPrefix: DEFAULT_REVISION_PROMPT_PREFIX,
+        parseReviewDecision: parseReviewDecisionText,
+    };
+
 export type ReviewWorkflowRuntimeConfig = {
     workflowName: string;
     maxIterations: number;
@@ -127,6 +140,7 @@ export type RunBoundedReviewWorkflowInput = {
     generationStartedAtMs: number;
     workflowConfig: ReviewWorkflowRuntimeConfig;
     workflowPolicy: WorkflowPolicy;
+    profileStrategy?: BoundedReviewProfileStrategy;
     reviewDecisionPrompt?: string;
     revisionPromptPrefix?: string;
     parseReviewDecision?: (text: string) => ReviewDecision | null;
@@ -337,9 +351,10 @@ export const runBoundedReviewWorkflow = async ({
     generationStartedAtMs,
     workflowConfig,
     workflowPolicy,
-    reviewDecisionPrompt = DEFAULT_REVIEW_DECISION_PROMPT,
-    revisionPromptPrefix = DEFAULT_REVISION_PROMPT_PREFIX,
-    parseReviewDecision = parseReviewDecisionText,
+    profileStrategy = BOUNDED_REVIEW_PROFILE_STRATEGY_V1,
+    reviewDecisionPrompt,
+    revisionPromptPrefix,
+    parseReviewDecision,
     captureUsage,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
     const UNBOUNDED_LIMIT = Number.MAX_SAFE_INTEGER;
@@ -381,6 +396,12 @@ export const runBoundedReviewWorkflow = async ({
     let draftParentStepId: string | undefined;
     let latestReviewReason: string | undefined;
     let shouldStop = false;
+    const effectiveReviewDecisionPrompt =
+        reviewDecisionPrompt ?? profileStrategy.reviewDecisionPrompt;
+    const effectiveRevisionPromptPrefix =
+        revisionPromptPrefix ?? profileStrategy.revisionPromptPrefix;
+    const effectiveParseReviewDecision =
+        parseReviewDecision ?? profileStrategy.parseReviewDecision;
 
     const executionLimits: ExecutionLimits = {
         maxWorkflowSteps: normalizedMaxIterations * 2 + 1,
@@ -547,7 +568,7 @@ export const runBoundedReviewWorkflow = async ({
                     },
                     {
                         role: 'system',
-                        content: reviewDecisionPrompt,
+                        content: effectiveReviewDecisionPrompt,
                     },
                 ],
                 model: generationRequest.model,
@@ -586,7 +607,7 @@ export const runBoundedReviewWorkflow = async ({
                 0,
                 1
             );
-            const decision = parseReviewDecision(reviewResult.text);
+            const decision = effectiveParseReviewDecision(reviewResult.text);
             if (!decision) {
                 terminationReason = 'executor_error_fail_open';
                 workflowStatus = 'degraded';
@@ -638,7 +659,7 @@ export const runBoundedReviewWorkflow = async ({
                         },
                         {
                             role: 'system',
-                            content: `${revisionPromptPrefix}\nReview guidance: ${latestReviewReason ?? 'No additional guidance provided.'}`,
+                            content: `${effectiveRevisionPromptPrefix}\nReview guidance: ${latestReviewReason ?? 'No additional guidance provided.'}`,
                         },
                     ],
                 });
