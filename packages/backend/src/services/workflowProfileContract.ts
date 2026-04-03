@@ -20,7 +20,7 @@ export type WorkflowProfilePolicyContract = {
     enablePlanning: boolean;
     enableToolUse: boolean;
     enableReplanning: boolean;
-    enableGeneration: boolean;
+    enableGeneration?: boolean;
     enableAssessment: boolean;
     enableRevision: boolean;
 };
@@ -84,6 +84,35 @@ export const WORKFLOW_NO_GENERATION_HANDLING_MAP: Readonly<
         disposition: 'surface_to_caller',
         terminationReason: 'executor_error_fail_open',
     },
+};
+
+export const getNoGenerationReasonCodeFromTermination = (input: {
+    terminationReason: WorkflowTerminationReason;
+    generationEnabledByPolicy: boolean;
+}): WorkflowNoGenerationReasonCode => {
+    if (input.terminationReason === 'transition_blocked_by_policy') {
+        return input.generationEnabledByPolicy
+            ? 'blocked_by_policy_before_generate'
+            : 'generation_disabled_by_profile';
+    }
+
+    if (input.terminationReason === 'budget_exhausted_steps') {
+        return 'budget_exhausted_steps_before_generate';
+    }
+
+    if (input.terminationReason === 'budget_exhausted_tokens') {
+        return 'budget_exhausted_tokens_before_generate';
+    }
+
+    if (input.terminationReason === 'budget_exhausted_time') {
+        return 'budget_exhausted_time_before_generate';
+    }
+
+    if (input.terminationReason === 'executor_error_fail_open') {
+        return 'executor_error_before_generate';
+    }
+
+    return 'blocked_by_policy_before_generate';
 };
 
 export type WorkflowProfileContractV1 = {

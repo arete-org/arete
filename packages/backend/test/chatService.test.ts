@@ -985,10 +985,9 @@ test('runChatMessages skips review loop when enabled but maxIterations is zero',
     assert.equal(callCount, 1);
 });
 
-test('runChatMessages fails explicitly when workflow blocks initial generation and records no usage', async () => {
+test('runChatMessages returns surfaced no-generation response with preserved workflow lineage and no usage', async () => {
     let generationCalls = 0;
-    let metadataBuildCalls = 0;
-    let traceCalls = 0;
+    let traceMetadata: ResponseMetadata | undefined;
     const usageRecords: BackendLLMCostRecord[] = [];
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
@@ -1010,13 +1009,10 @@ test('runChatMessages fails explicitly when workflow blocks initial generation a
 
     const chatService = createChatService({
         generationRuntime,
-        storeTrace: async () => {
-            traceCalls += 1;
+        storeTrace: async (metadata) => {
+            traceMetadata = metadata;
         },
-        buildResponseMetadata: () => {
-            metadataBuildCalls += 1;
-            return createMetadata();
-        },
+        buildResponseMetadata,
         defaultModel: 'gpt-5-mini',
         recordUsage: (record) => {
             usageRecords.push(record);
@@ -1042,19 +1038,97 @@ test('runChatMessages fails explicitly when workflow blocks initial generation a
             }) satisfies RunBoundedReviewWorkflowResult,
     });
 
-    await assert.rejects(
-        () =>
-            chatService.runChatMessages({
-                messages: [{ role: 'user', content: 'Summarize this.' }],
-                conversationSnapshot: 'Summarize this.',
-            }),
-        /Workflow terminated before generation: transition_blocked_by_policy/
-    );
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+    });
 
     assert.equal(generationCalls, 0);
     assert.equal(usageRecords.length, 0);
-    assert.equal(metadataBuildCalls, 0);
-    assert.equal(traceCalls, 0);
+    assert.equal(
+        response.message,
+        'I could not generate a response for this request.'
+    );
+    assert.equal(
+        response.metadata.workflow?.terminationReason,
+        'transition_blocked_by_policy'
+    );
+    assert.equal(response.metadata.workflow?.status, 'degraded');
+    assert.equal(
+        traceMetadata?.workflow?.terminationReason,
+        'transition_blocked_by_policy'
+    );
+});
+
+test('runChatMessages treats internal-only no-generation as workflow fallback and still preserves lineage', async () => {
+    let generationCalls = 0;
+    const usageRecords: BackendLLMCostRecord[] = [];
+    let traceMetadata: ResponseMetadata | undefined;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            return {
+                text: 'fallback single-pass response',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 18,
+                    completionTokens: 9,
+                    totalTokens: 27,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const chatService = createChatService({
+        generationRuntime,
+        storeTrace: async (metadata) => {
+            traceMetadata = metadata;
+        },
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: (record) => {
+            usageRecords.push(record);
+        },
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        runReviewWorkflow: async () =>
+            ({
+                outcome: 'no_generation',
+                workflowLineage: {
+                    workflowId: 'wf_internal_budget',
+                    workflowName: 'message_with_review_loop_v1',
+                    status: 'degraded',
+                    terminationReason: 'budget_exhausted_steps',
+                    stepCount: 0,
+                    maxSteps: 3,
+                    maxDurationMs: 15000,
+                    steps: [],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+    });
+
+    assert.equal(generationCalls, 1);
+    assert.equal(usageRecords.length, 1);
+    assert.equal(response.message, 'fallback single-pass response');
+    assert.equal(
+        response.metadata.workflow?.terminationReason,
+        'budget_exhausted_steps'
+    );
+    assert.equal(
+        traceMetadata?.workflow?.terminationReason,
+        'budget_exhausted_steps'
+    );
 });
 
 test('runChatMessages emits schema-safe workflow metadata bounds under invalid injected config values', async () => {

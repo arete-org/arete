@@ -39,6 +39,10 @@ import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
+    WORKFLOW_NO_GENERATION_HANDLING_MAP,
+    getNoGenerationReasonCodeFromTermination,
+} from './workflowProfileContract.js';
+import {
     runBoundedReviewWorkflow,
     type RunBoundedReviewWorkflowResult,
     type WorkflowPolicy,
@@ -47,6 +51,8 @@ import { logger } from '../utils/logger.js';
 import { runtimeConfig } from '../config.js';
 
 const REVIEW_WORKFLOW_NAME = 'message_with_review_loop_v1';
+const SURFACED_NO_GENERATION_MESSAGE =
+    'I could not generate a response for this request.';
 
 const sanitizeNonNegativeInteger = (
     value: number,
@@ -355,10 +361,39 @@ export const createChatService = ({
                     generationResult = workflowResult.generationResult;
                     workflowLineage = workflowResult.workflowLineage;
                     break;
-                case 'no_generation':
-                    throw new Error(
-                        `Workflow terminated before generation: ${workflowResult.workflowLineage.terminationReason}`
-                    );
+                case 'no_generation': {
+                    workflowLineage = workflowResult.workflowLineage;
+                    const noGenerationReasonCode =
+                        getNoGenerationReasonCodeFromTermination({
+                            terminationReason:
+                                workflowResult.workflowLineage
+                                    .terminationReason,
+                            generationEnabledByPolicy:
+                                workflowPolicy.enableGeneration !== false,
+                        });
+                    const handling =
+                        WORKFLOW_NO_GENERATION_HANDLING_MAP[
+                            noGenerationReasonCode
+                        ];
+
+                    if (handling.disposition === 'internal_termination') {
+                        generationResult =
+                            await generationRuntime.generate(generationRequest);
+                        recordUsageForStep(
+                            generationResult,
+                            generationRequest.model
+                        );
+                        break;
+                    }
+
+                    generationResult = {
+                        text: SURFACED_NO_GENERATION_MESSAGE,
+                        model: generationRequest.model,
+                        provenance: 'Inferred',
+                        citations: [],
+                    };
+                    break;
+                }
                 default: {
                     const exhaustiveCheck: never = workflowResult;
                     throw new Error(

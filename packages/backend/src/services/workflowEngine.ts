@@ -506,31 +506,56 @@ export const runBoundedReviewWorkflow = async ({
     } else {
         if (!stopIfOverLimits()) {
             const initialDraftStartedAt = generationStartedAtMs;
-            draftResult = await generationRuntime.generate(generationRequest);
-            const initialDraftFinishedAt = Date.now();
-            const initialDraftUsage = captureUsage(
-                draftResult,
-                generationRequest.model
-            );
-            const initialDraftStepId = captureStep({
-                stepKind: 'generate',
-                status: 'executed',
-                summary: 'Generated initial draft response.',
-                startedAtMs: initialDraftStartedAt,
-                finishedAtMs: initialDraftFinishedAt,
-                model: initialDraftUsage.model,
-                usage: draftResult.usage,
-                estimatedCost: initialDraftUsage.estimatedCost,
-                attempt: 1,
-            });
-            draftParentStepId = initialDraftStepId;
-            workflowState = applyStepExecutionToState(
-                workflowState,
-                'generate',
-                initialDraftUsage.totalTokens,
-                0,
-                0
-            );
+            try {
+                draftResult =
+                    await generationRuntime.generate(generationRequest);
+                const initialDraftFinishedAt = Date.now();
+                const initialDraftUsage = captureUsage(
+                    draftResult,
+                    generationRequest.model
+                );
+                const initialDraftStepId = captureStep({
+                    stepKind: 'generate',
+                    status: 'executed',
+                    summary: 'Generated initial draft response.',
+                    startedAtMs: initialDraftStartedAt,
+                    finishedAtMs: initialDraftFinishedAt,
+                    model: initialDraftUsage.model,
+                    usage: draftResult.usage,
+                    estimatedCost: initialDraftUsage.estimatedCost,
+                    attempt: 1,
+                });
+                draftParentStepId = initialDraftStepId;
+                workflowState = applyStepExecutionToState(
+                    workflowState,
+                    'generate',
+                    initialDraftUsage.totalTokens,
+                    0,
+                    0
+                );
+            } catch {
+                const initialDraftFinishedAt = Date.now();
+                captureStep({
+                    stepKind: 'generate',
+                    status: 'failed',
+                    summary:
+                        'Initial generation failed; workflow returned classified no-generation outcome.',
+                    reasonCode: 'generation_runtime_error',
+                    startedAtMs: initialDraftStartedAt,
+                    finishedAtMs: initialDraftFinishedAt,
+                    attempt: 1,
+                });
+                workflowState = applyStepExecutionToState(
+                    workflowState,
+                    'generate',
+                    0,
+                    0,
+                    0
+                );
+                terminationReason = 'executor_error_fail_open';
+                workflowStatus = 'degraded';
+                shouldStop = true;
+            }
         }
     }
     if (!shouldStop && normalizedMaxIterations === 0) {

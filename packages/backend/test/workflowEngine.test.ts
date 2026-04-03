@@ -374,3 +374,69 @@ test('runBoundedReviewWorkflow normalizes invalid config bounds and keeps lineag
     assert.ok(result.workflowLineage.maxDurationMs > 0);
     assert.equal(result.workflowLineage.stepCount, 1);
 });
+
+test('runBoundedReviewWorkflow classifies initial generate runtime failure as no_generation with lineage', async () => {
+    let generationCalls = 0;
+    let usageCaptures = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            throw new Error('runtime unavailable');
+        },
+    };
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'hi' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'hi' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop_v1',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: () => {
+            usageCaptures += 1;
+            return {
+                model: 'gpt-5-mini',
+                promptTokens: 0,
+                completionTokens: 0,
+                totalTokens: 0,
+                estimatedCost: {
+                    inputCostUsd: 0,
+                    outputCostUsd: 0,
+                    totalCostUsd: 0,
+                },
+            };
+        },
+    });
+
+    assert.equal(generationCalls, 1);
+    assert.equal(usageCaptures, 0);
+    assert.equal(result.outcome, 'no_generation');
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'executor_error_fail_open'
+    );
+    assert.equal(result.workflowLineage.status, 'degraded');
+    assert.equal(result.workflowLineage.stepCount, 1);
+    assert.equal(result.workflowLineage.steps.length, 1);
+    assert.equal(result.workflowLineage.steps[0].stepKind, 'generate');
+    assert.equal(result.workflowLineage.steps[0].outcome.status, 'failed');
+    assert.equal(
+        result.workflowLineage.steps[0].reasonCode,
+        'generation_runtime_error'
+    );
+});
