@@ -1,0 +1,134 @@
+- generic [ref=e3]:
+  - link "Skip to main content":
+    - /url: "#main-content"
+  - main [ref=e4]:
+    - region "AI you can inspect and steer." [ref=e5]:
+      - generic "Site header" [ref=e6]:
+        - generic [ref=e7]:
+          - link "Footnote" [ref=e9] [cursor=pointer]:
+            - /url: /
+            - paragraph [ref=e10]: Footnote
+          - generic [ref=e11]:
+            - link "Setup" [ref=e12] [cursor=pointer]:
+              - /url: /invite/
+            - link "Blog" [ref=e13] [cursor=pointer]:
+              - /url: /blog
+            - link "View Footnote project on GitHub (opens in new tab)" [ref=e14] [cursor=pointer]:
+              - /url: https://github.com/footnote-ai/footnote
+              - text: GitHub ↗
+            - button "💡 Dark" [ref=e15] [cursor=pointer]
+      - generic [ref=e16]:
+        - heading "AI you can inspect and steer." [level=1] [ref=e17]
+        - paragraph [ref=e18]: A transparency-first framework for people who want more than a black-box answer.
+        - generic "Footnote, at a glance" [ref=e19]:
+          - generic [ref=e20]:
+            - 'img "Footnote logo - A circle with 5 even-spaced solid color wedges. From top-left, clockwise: Teal, rose, amber, copper, emerald." [ref=e22]'
+            - generic [ref=e23]:
+              - heading "Footnote, at a glance" [level=2] [ref=e24]
+              - paragraph [ref=e25]: Footnote pairs model output with inspectable metadata, including confidence, sources, trade-offs, and applied constraints. Run it locally, self-host it, or bring it into Discord while keeping human oversight in the loop.
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - heading "Ask me anything" [level=2] [ref=e28]
+            - generic [ref=e29]:
+              - 'button "Use prompt suggestion: Why do online fights feel so personal?" [ref=e31] [cursor=pointer]':
+                - generic [ref=e32]: Why do online fights feel so personal?
+              - button "Shuffle prompt suggestions" [ref=e33] [cursor=pointer]:
+                - img [ref=e35]
+          - generic [ref=e38]:
+            - generic [ref=e39]: Ask a question
+            - textbox "Question input field" [ref=e41]:
+              - /placeholder: What should we talk about?
+            - button "Submit question" [ref=e42] [cursor=pointer]: Go
+    - region "What Footnote surfaces" [ref=e44]:
+      - heading "What Footnote surfaces" [level=2] [ref=e45]
+      - generic [ref=e46]:
+        - article "Chat" [ref=e47]:
+          - generic [ref=e48]:
+            - heading "Chat" [level=3] [ref=e49]
+            - paragraph [ref=e50]: Get answers with confidence signals, trade-offs, and traceable context.
+          - generic [ref=e51]:
+            - img [ref=e52] [cursor=pointer]
+            - button "Expand image" [ref=e53] [cursor=pointer]:
+              - img [ref=e54]
+        - article "Realtime search" [ref=e56]:
+          - generic [ref=e57]:
+            - heading "Realtime search" [level=3] [ref=e58]
+            - paragraph [ref=e59]: Pull fresh web context and show which sources shaped the response.
+          - generic [ref=e60]:
+            - img [ref=e61] [cursor=pointer]
+            - button "Expand image" [ref=e62] [cursor=pointer]:
+              - img [ref=e63]
+        - article "/call" [ref=e65]:
+          - generic [ref=e66]:
+            - heading "/call" [level=3] [ref=e67]
+            - paragraph [ref=e68]: Run live voice sessions in Discord while preserving inspectable output.
+          - generic [ref=e69]:
+            - img [ref=e70] [cursor=pointer]
+            - button "Expand image" [ref=e71] [cursor=pointer]:
+              - img [ref=e72]
+        - article "Image understanding" [ref=e74]:
+          - generic [ref=e75]:
+            - heading "Image understanding" [level=3] [ref=e76]
+            - paragraph [ref=e77]: Analyze visual inputs and fold findings into grounded, auditable replies.
+          - generic [ref=e78]:
+            - img [ref=e79] [cursor=pointer]
+            - button "Expand image" [ref=e80] [cursor=pointer]:
+              - img [ref=e81]
+        - article "/image" [ref=e83]:
+          - generic [ref=e84]:
+            - heading "/image" [level=3] [ref=e85]
+            - paragraph [ref=e86]: Generate visual artifacts that support discussion and decision workflows.
+          - button "Expand image" [ref=e87] [cursor=pointer]:
+            - img [ref=e88]
+    - region "Built to be inspectable" [ref=e91]:
+      - heading "Built to be inspectable" [level=2] [ref=e92]
+      - list [ref=e93]:
+        - listitem [ref=e94]:
+          - heading "Open source" [level=3] [ref=e95]
+          - paragraph [ref=e96]: Inspect the implementation, trace decisions, and adapt Footnote to your governance model.
+          - link "Repository (opens in new tab)" [ref=e97] [cursor=pointer]:
+            - /url: https://github.com/footnote-ai/footnote/tree/main
+            - text: Repository ↗
+        - listitem [ref=e98]:
+          - heading "Self-hosted first" [level=3] [ref=e99]
+          - paragraph [ref=e100]: Keep control of credentials, runtime, and policy boundaries in your own environment.
+          - link "Quickstart setup ()" [ref=e101] [cursor=pointer]:
+            - /url: /invite/
+            - text: Quickstart setup
+        - listitem [ref=e102]:
+          - heading "Dual license" [level=3] [ref=e103]
+          - paragraph [ref=e104]: Dual-licensed under MIT and Hippocratic License v3 (HL3-CORE) for practical use with explicit guardrails.
+          - link "License strategy (opens in new tab)" [ref=e105] [cursor=pointer]:
+            - /url: https://github.com/footnote-ai/footnote/blob/main/docs/LICENSE_STRATEGY.md
+            - text: License strategy ↗
+    - region "Run Footnote in your environment" [ref=e107]:
+      - heading "Run Footnote in your environment" [level=2] [ref=e108]
+      - list [ref=e109]:
+        - listitem [ref=e110]:
+          - heading "1. Prepare" [level=3] [ref=e111]
+          - paragraph [ref=e112]: "Install dependencies and copy `.env.example` to `.env`."
+        - listitem [ref=e113]:
+          - heading "2. Deploy" [level=3] [ref=e114]
+          - paragraph [ref=e115]: "Set required secrets, including `OPENAI_API_KEY` and `INCIDENT_PSEUDONYMIZATION_SECRET`."
+        - listitem [ref=e116]:
+          - heading "3. Invite" [level=3] [ref=e117]
+          - paragraph [ref=e118]: "Run `pnpm dev` for web + backend, or `pnpm start:all` to include Discord."
+      - link "View setup instructions" [ref=e119] [cursor=pointer]:
+        - /url: /invite/
+        - generic [ref=e120]: 🛠
+        - text: Open Setup Guide
+    - generic [ref=e122]:
+      - link "View Footnote project on GitHub (opens in new tab)" [ref=e123] [cursor=pointer]:
+        - /url: https://github.com/footnote-ai/footnote
+        - generic [ref=e124]: ↗
+        - text: GitHub
+      - generic [ref=e125]: ·
+      - link "Join the discussion on GitHub (opens in new tab)" [ref=e126] [cursor=pointer]:
+        - /url: https://github.com/footnote-ai/footnote/discussions
+        - generic [ref=e127]: ↗
+        - text: Join the discussion
+      - generic [ref=e128]: ·
+      - link "Read Footnote philosophy document (opens in new tab)" [ref=e129] [cursor=pointer]:
+        - /url: https://github.com/footnote-ai/footnote/blob/main/docs/Philosophy.md
+        - generic [ref=e130]: ↗
+        - text: Philosophy
