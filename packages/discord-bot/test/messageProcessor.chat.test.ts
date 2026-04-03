@@ -673,6 +673,42 @@ test('executeChatAction enforces block breaker outcome before send and logs rati
     assert.match(breakerPayload?.rationale ?? '', /weaponization-request/i);
 });
 
+test('executeChatAction uses configured deterministic safety fallback text for enforced block outcomes', async () => {
+    const processor = new MessageProcessor({
+        safetyFallbackMessages: {
+            block: 'Safety override: request blocked.',
+        },
+    });
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const sentMessages: string[] = [];
+
+    await processorAccess.executeChatAction(
+        createMessage(),
+        {
+            async sendMessage(content: string) {
+                sentMessages.push(content);
+                return { id: 'sent-breaker-custom' } as never;
+            },
+        },
+        {
+            action: 'message',
+            message: 'unsafe payload should not be sent',
+            modality: 'text',
+            metadata: createBreakerMetadata({
+                mode: 'enforced',
+                action: 'block',
+                reasonCode: 'weaponization_request',
+                reason: 'Deterministic weaponization-request rule matched.',
+                ruleId: 'safety.weaponization_request.v1',
+            }),
+        },
+        true,
+        null
+    );
+
+    assert.deepEqual(sentMessages, ['Safety override: request blocked.']);
+});
+
 test('executeChatAction preserves fail-open behavior for observe-only breaker outcomes', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;

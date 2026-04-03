@@ -66,6 +66,7 @@ import type {
 
 type MessageProcessorOptions = {
     systemPrompt?: string;
+    safetyFallbackMessages?: Partial<Record<SafetyResponseBehavior, string>>;
 };
 
 type ChatMessageAction = {
@@ -175,6 +176,16 @@ const VALID_IMAGE_STYLES = new Set<ImageStylePreset>([
 // Use shared defaults so the bot and backend remain aligned on voice style.
 const DEFAULT_TTS_OUTPUT_FORMAT = DEFAULT_INTERNAL_TTS_OUTPUT_FORMAT;
 const DEFAULT_TTS_OPTIONS = DEFAULT_INTERNAL_TTS_OPTIONS;
+const DEFAULT_SAFETY_FALLBACK_MESSAGES: Readonly<
+    Record<SafetyResponseBehavior, string>
+> = {
+    block: "I can't help with that request.",
+    safe_response:
+        "I can't provide that directly. I can help with safer, high-level guidance instead.",
+    redirect:
+        "I can't provide that directly. Share your underlying goal and I can help with a safer alternative.",
+    review: "I can't answer that automatically right now. Please request human review.",
+};
 
 const clampOutputCompression = (value: number | undefined | null): number => {
     if (!Number.isFinite(value)) {
@@ -191,42 +202,35 @@ const hasResponseMetadata = (value: unknown): value is ResponseMetadata =>
     );
 
 /**
- * Maps one safety decision into Discord response behavior plus fallback text.
+ * Maps one safety decision into Discord response behavior.
  *
  * Trigger: called only for enforced restricted outcomes before outbound send.
- * Consequence: original model output is replaced with bounded safe copy.
+ * Consequence: the adapter can choose deterministic fallback copy for that
+ * behavior without re-deriving policy meaning.
  */
 const mapSafetyDecisionToResponseBehavior = (
     decision: BreakerDecisionContext['safetyDecision']
-): { responseBehavior: SafetyResponseBehavior; outboundMessage: string } => {
+): { responseBehavior: SafetyResponseBehavior } => {
     switch (decision.action) {
         case 'block':
             return {
                 responseBehavior: 'block',
-                outboundMessage: "I can't help with that request.",
             };
         case 'safe_partial':
             return {
                 responseBehavior: 'safe_response',
-                outboundMessage:
-                    "I can't provide that directly. I can help with safer, high-level guidance instead.",
             };
         case 'redirect':
             return {
                 responseBehavior: 'redirect',
-                outboundMessage:
-                    "I can't provide that directly. Share your underlying goal and I can help with a safer alternative.",
             };
         case 'human_review':
             return {
                 responseBehavior: 'review',
-                outboundMessage:
-                    "I can't answer that automatically right now. Please request human review.",
             };
         case 'allow':
             return {
                 responseBehavior: 'safe_response',
-                outboundMessage: '',
             };
     }
 };
@@ -373,13 +377,20 @@ const formatChatFailureForDiscord = (error: unknown): string => {
  * Discord-side executor for backend chat decisions.
  */
 export class MessageProcessor {
+    private readonly safetyFallbackMessages: Readonly<
+        Record<SafetyResponseBehavior, string>
+    >;
     private readonly rateLimiters: {
         user?: RateLimiter;
         channel?: RateLimiter;
         guild?: RateLimiter;
     };
 
-    constructor(_options: MessageProcessorOptions = {}) {
+    constructor(options: MessageProcessorOptions = {}) {
+        this.safetyFallbackMessages = {
+            ...DEFAULT_SAFETY_FALLBACK_MESSAGES,
+            ...(options.safetyFallbackMessages ?? {}),
+        };
         this.rateLimiters = {};
         if (runtimeConfig.rateLimits.user.enabled) {
             this.rateLimiters.user = new RateLimiter({
@@ -955,7 +966,8 @@ export class MessageProcessor {
             kind: 'enforced',
             decision,
             responseBehavior: mapped.responseBehavior,
-            outboundMessage: mapped.outboundMessage,
+            outboundMessage:
+                this.safetyFallbackMessages[mapped.responseBehavior],
         };
     }
 
