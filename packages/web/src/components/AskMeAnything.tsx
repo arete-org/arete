@@ -53,6 +53,7 @@ const AskMeAnything = (): JSX.Element => {
     const turnstileRef = useRef<TurnstileInstance | null>(null);
     const isTurnstileExecutingRef = useRef(false);
     const hasInteractedRef = useRef(false); // Track if user has interacted to prevent initial status flash
+    const hasAttemptedRuntimeConfigRef = useRef(false);
 
     // Random prompt selection
     const getRandomPrompt = (): string => {
@@ -92,25 +93,29 @@ const AskMeAnything = (): JSX.Element => {
         }
     };
 
-    useEffect(() => {
-        let isMounted = true;
-
-        loadRuntimeConfig()
-            .then((config) => {
-                if (isMounted) {
-                    setTurnstileSiteKey(config.turnstileSiteKey);
-                }
-            })
-            .catch(() => {
-                if (isMounted) {
-                    setTurnstileSiteKey('');
-                }
-            });
-
-        return () => {
-            isMounted = false;
-        };
-    }, []);
+    const ensureRuntimeConfigLoaded = async (): Promise<string> => {
+        if (hasAttemptedRuntimeConfigRef.current) {
+            return turnstileSiteKey;
+        }
+        hasAttemptedRuntimeConfigRef.current = true;
+        if (
+            import.meta.env.DEV &&
+            (window.location.hostname === 'localhost' ||
+                window.location.hostname === '127.0.0.1')
+        ) {
+            setTurnstileSiteKey('');
+            return '';
+        }
+        try {
+            const config = await loadRuntimeConfig();
+            const siteKey = config.turnstileSiteKey || '';
+            setTurnstileSiteKey(siteKey);
+            return siteKey;
+        } catch {
+            setTurnstileSiteKey('');
+            return '';
+        }
+    };
 
     // Check if Turnstile site key is valid (not empty or missing)
     const hasValidSiteKey =
@@ -392,12 +397,23 @@ const AskMeAnything = (): JSX.Element => {
             return;
         }
 
+        // Load runtime config lazily on interaction to avoid noisy startup 404s
+        // when the backend is not present.
+        let runtimeSiteKey = turnstileSiteKey;
+        if (!runtimeSiteKey) {
+            runtimeSiteKey = await ensureRuntimeConfigLoaded();
+        }
+
+        const captchaDisabledForRequest = !(
+            runtimeSiteKey && runtimeSiteKey.trim().length > 0
+        );
+
         // Fallback: trigger execution if token isn't pre-fetched to avoid deadlock
         let resolvedToken = turnstileToken;
-        if (!isCaptchaDisabled && !resolvedToken) {
+        if (!captchaDisabledForRequest && !resolvedToken) {
             if (
                 shouldExecuteTurnstileChallenge('submit', {
-                    isCaptchaDisabled,
+                    isCaptchaDisabled: captchaDisabledForRequest,
                     hasToken: Boolean(resolvedToken),
                     hasError: Boolean(turnstileError),
                     hasWidget: Boolean(turnstileRef.current),
@@ -478,7 +494,7 @@ const AskMeAnything = (): JSX.Element => {
                 },
                 {
                     turnstileToken:
-                        !isCaptchaDisabled && resolvedToken
+                        !captchaDisabledForRequest && resolvedToken
                             ? resolvedToken
                             : undefined,
                     signal: controller.signal,
@@ -664,6 +680,9 @@ const AskMeAnything = (): JSX.Element => {
                             ref={inputRef}
                             aria-label="Question input field"
                             rows={1}
+                            onFocus={() => {
+                                void ensureRuntimeConfigLoaded();
+                            }}
                         />
                         {question && (
                             <button

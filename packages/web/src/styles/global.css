@@ -11,12 +11,12 @@
     --bg-alt: #f4f1ea;
     --bg-accent: #f9f8f6;
     --text: #2b2a27;
-    --subtle-text: #5b574f;
+    --subtle-text: #4d4a43;
     --accent: #4a7c59;
     --accent-muted: #7ea089;
     --highlight: #c1a057;
     --rust: #a97b63;
-    --link: #546a7b;
+    --link: #3f6075;
     --accent-hover: #5b8f6a;
     --link-hover: #6b8796;
     --border: #e3ddd2;
@@ -289,6 +289,20 @@ main > section {
     box-shadow: 0 20px 44px var(--shadow);
 }
 
+.section-container--showcase {
+    background-color: color-mix(in srgb, var(--bg-soft) 83%, #f4efe5 17%);
+}
+
+.section-container--principles {
+    background-color: color-mix(in srgb, var(--bg-soft) 77%, #eef3ea 23%);
+    border-color: color-mix(in srgb, var(--border) 68%, var(--accent) 32%);
+}
+
+.section-container--setup {
+    background-color: color-mix(in srgb, var(--bg-soft) 81%, #f3eee4 19%);
+    box-shadow: 0 16px 34px var(--shadow);
+}
+
 [data-theme='dark'] .section-container {
     background-color: color-mix(
         in srgb,
@@ -429,13 +443,13 @@ a:focus {
     }
 
     .header-button {
-        padding: 0.55rem 0.8rem;
-        font-size: 0.85rem;
+        padding: 0.6rem 0.9rem;
+        font-size: 0.92rem;
     }
 
     .theme-toggle {
-        padding: 0.55rem 0.8rem;
-        font-size: 0.85rem;
+        padding: 0.6rem 0.9rem;
+        font-size: 0.92rem;
     }
 }
 
@@ -452,8 +466,8 @@ a:focus {
     background-color: color-mix(in srgb, var(--bg) 92%, var(--accent) 8%);
     color: var(--text);
     font-family: var(--mono-font);
-    font-size: 0.95rem;
-    padding: 0.55rem 1.2rem;
+    font-size: 1rem;
+    padding: 0.62rem 1.25rem;
     text-decoration: none;
     text-align: center;
     cursor: pointer;
@@ -493,12 +507,12 @@ a:focus {
 }
 
 .site-mark {
-    font-size: 1.75rem;
-    letter-spacing: 0.24em;
+    font-size: 1.8rem;
+    letter-spacing: 0.15em;
     text-transform: uppercase;
     margin: 0;
     font-family: var(--mono-font);
-    font-weight: 600;
+    font-weight: 650;
     color: color-mix(in srgb, var(--text) 85%, var(--accent) 15%);
     line-height: 1.1;
 }
@@ -522,8 +536,8 @@ a:focus {
     background-color: color-mix(in srgb, var(--bg) 92%, var(--accent) 8%);
     color: var(--text);
     font-family: var(--mono-font);
-    font-size: 0.95rem;
-    padding: 0.55rem 1.2rem;
+    font-size: 1rem;
+    padding: 0.62rem 1.25rem;
     cursor: pointer;
     min-width: 120px;
     text-align: center;
@@ -594,7 +608,7 @@ section:has(.site-header-sticky) {
 }
 
 .hero-copy__subtitle {
-    margin-bottom: clamp(1.5rem, 3vw, 2.25rem);
+    margin-bottom: clamp(1.25rem, 2.5vw, 1.9rem);
 }
 
 .cta-group {
@@ -1863,7 +1877,7 @@ div.interaction-status:not(.interaction-status-visible) *,
     margin-top: clamp(3rem, 6vw, 4.5rem);
     border-top: 1px solid var(--border);
     padding-top: clamp(1.25rem, 2vw, 1.8rem);
-    font-size: clamp(0.8rem, 1vw, 0.86rem);
+    font-size: clamp(0.9rem, 1.1vw, 0.96rem);
     color: var(--subtle-text);
     display: flex;
     flex-direction: column;
@@ -2919,14 +2933,14 @@ kbd {
     }
 
     .header-button {
-        padding: 0.55rem 0.9rem;
-        font-size: 0.85rem;
+        padding: 0.58rem 0.92rem;
+        font-size: 0.92rem;
     }
 
     .theme-toggle {
         min-width: auto;
         width: auto;
-        padding: 0.55rem 0.75rem;
+        padding: 0.58rem 0.82rem;
         font-size: 1rem;
     }
 
@@ -3059,13 +3073,13 @@ kbd {
     .header-button {
         white-space: normal;
         width: auto;
-        padding: 0.55rem 0.9rem;
+        padding: 0.58rem 0.9rem;
         flex: 0 0 auto;
     }
 
     .theme-toggle {
         width: auto;
-        padding: 0.55rem 0.9rem;
+        padding: 0.58rem 0.9rem;
         flex: 0 0 auto;
     }
 }
@@ -3093,7 +3107,7 @@ kbd {
     .theme-toggle {
         width: auto;
         flex: 0 0 auto;
-        padding: 0.55rem 0.9rem;
+        padding: 0.58rem 0.9rem;
     }
 }
 

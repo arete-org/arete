@@ -24,6 +24,14 @@ const Hero = (): JSX.Element => {
                     A transparency-first framework for people who want more than
                     a black-box answer.
                 </p>
+                <div className="cta-group" aria-label="Primary actions">
+                    <a className="cta-button primary" href="#question-input">
+                        Try the assistant
+                    </a>
+                    <a className="cta-button secondary" href="/invite/">
+                        Self-host setup
+                    </a>
+                </div>
 
                 <div className="intro-card" aria-labelledby="intro-card-title">
                     <div className="intro-card-background" aria-hidden="true">
