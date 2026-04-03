@@ -347,15 +347,9 @@ export const createChatService = ({
         let workflowLineage: WorkflowRecord | undefined;
 
         const reviewLoopEnabled = chatWorkflowConfig.reviewLoopEnabled;
-        const reviewLoopMaxIterations = Math.max(
-            1,
-            chatWorkflowConfig.maxIterations
-        );
-        const reviewLoopMaxDurationMs = Math.max(
-            1,
-            chatWorkflowConfig.maxDurationMs
-        );
-        if (reviewLoopEnabled) {
+        const reviewLoopMaxIterations = chatWorkflowConfig.maxIterations;
+        const reviewLoopMaxDurationMs = chatWorkflowConfig.maxDurationMs;
+        if (reviewLoopEnabled && reviewLoopMaxIterations > 0) {
             const workflowStartedAt = Date.now();
             const workflowId = `wf_${workflowStartedAt.toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
             const workflowSteps: StepRecord[] = [];

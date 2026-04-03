@@ -119,15 +119,31 @@ export const applyStepExecutionToState = (
     usageTokens: number,
     toolCallsExecuted: number,
     deliberationCallsExecuted: number
-): WorkflowState => ({
-    ...state,
-    currentStepKind: stepKind,
-    stepCount: state.stepCount + 1,
-    toolCallCount: state.toolCallCount + toolCallsExecuted,
-    deliberationCallCount:
-        state.deliberationCallCount + deliberationCallsExecuted,
-    totalTokens: state.totalTokens + usageTokens,
-});
+): WorkflowState => {
+    const sanitizeDelta = (value: number): number => {
+        if (!Number.isFinite(value)) {
+            return 0;
+        }
+
+        return Math.max(0, Math.floor(value));
+    };
+
+    const sanitizedUsageTokens = sanitizeDelta(usageTokens);
+    const sanitizedToolCallsExecuted = sanitizeDelta(toolCallsExecuted);
+    const sanitizedDeliberationCallsExecuted = sanitizeDelta(
+        deliberationCallsExecuted
+    );
+
+    return {
+        ...state,
+        currentStepKind: stepKind,
+        stepCount: state.stepCount + 1,
+        toolCallCount: state.toolCallCount + sanitizedToolCallsExecuted,
+        deliberationCallCount:
+            state.deliberationCallCount + sanitizedDeliberationCallsExecuted,
+        totalTokens: state.totalTokens + sanitizedUsageTokens,
+    };
+};
 
 export const isWithinExecutionLimits = (
     state: WorkflowState,
