@@ -66,6 +66,7 @@ Do not include markdown or extra keys.`;
 
 const REVISION_PROMPT_PREFIX =
     'Revise the prior draft using the review guidance while preserving factual grounding and provenance boundaries.';
+const UNBOUNDED_LIMIT = Number.MAX_SAFE_INTEGER;
 
 type ReviewDecision = {
     decision: 'finalize' | 'revise';
@@ -369,9 +370,13 @@ export const createChatService = ({
             };
             const executionLimits: ExecutionLimits = {
                 maxWorkflowSteps: reviewLoopMaxIterations * 2 + 1,
-                maxToolCalls: Number.MAX_SAFE_INTEGER,
+                // Review-loop profile has no tool phase yet; keep tool limits inert
+                // until `tool` steps are routed through the engine.
+                maxToolCalls: UNBOUNDED_LIMIT,
                 maxDeliberationCalls: reviewLoopMaxIterations * 2,
-                maxTokensTotal: Number.MAX_SAFE_INTEGER,
+                // Token caps are intentionally deferred in this profile; current
+                // bounded behavior is steps + deliberation calls + duration.
+                maxTokensTotal: UNBOUNDED_LIMIT,
                 maxDurationMs: reviewLoopMaxDurationMs,
             };
             let workflowState = createInitialWorkflowState({

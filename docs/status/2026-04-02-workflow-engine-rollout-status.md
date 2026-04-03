@@ -127,18 +127,26 @@ Goal:
 - `WorkflowPolicy` owns capability toggles and legal transition rules.
 - `ExecutionLimits` owns hard quantitative caps.
 
-## Planned Runtime Controls
+## Runtime Controls (Current Chat Profile)
+
+Active in current bounded review-loop execution:
+
+- `maxWorkflowSteps`
+- `maxDeliberationCalls`
+- `maxDurationMs`
+
+Present in shared types but intentionally inert/deferred in this PR:
+
+- `maxToolCalls` (no `tool` step routed in current chat loop)
+- `maxTokensTotal` (no total-token cap wiring in current chat loop)
+
+Planned policy capability toggles (not yet active in current chat loop):
 
 - `enablePlanning`
 - `enableToolUse`
 - `enableReplanning`
 - `enableAssessment`
 - `enableRevision`
-- `maxWorkflowSteps`
-- `maxToolCalls`
-- `maxDeliberationCalls`
-- `maxTokensTotal`
-- `maxDurationMs`
 
 ## Next Gates
 
