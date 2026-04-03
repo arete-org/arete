@@ -653,7 +653,7 @@ test('executeChatAction enforces block breaker outcome before send and logs rati
 
     assert.equal(messageActionCalls, 0);
     assert.equal(sentMessages.length, 1);
-    assert.equal(sentMessages[0], "I can't help with that request.");
+    assert.equal(sentMessages[0], "I can't help with that.");
 
     const breakerPayload = warnPayloads.find((entry) => {
         const payload = entry as

@@ -179,12 +179,12 @@ const DEFAULT_TTS_OPTIONS = DEFAULT_INTERNAL_TTS_OPTIONS;
 const DEFAULT_SAFETY_FALLBACK_MESSAGES: Readonly<
     Record<SafetyResponseBehavior, string>
 > = {
-    block: "I can't help with that request.",
+    block: "I can't help with that.",
     safe_response:
-        "I can't provide that directly. I can help with safer, high-level guidance instead.",
+        "I can't help with that directly, but I can still help in a safer way.",
     redirect:
-        "I can't provide that directly. Share your underlying goal and I can help with a safer alternative.",
-    review: "I can't answer that automatically right now. Please request human review.",
+        "I can't help with that as written due to safety concerns. If you share what you're trying to do, I can help find a safer way.",
+    review: "I can't answer that automatically due to safety concerns. Please ask another person to review this.",
 };
 
 const clampOutputCompression = (value: number | undefined | null): number => {
