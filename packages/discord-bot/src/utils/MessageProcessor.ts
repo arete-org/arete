@@ -8,7 +8,11 @@
 
 import fs from 'fs';
 import { Message } from 'discord.js';
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type {
+    BreakerDecisionContext,
+    ResponseMetadata,
+} from '@footnote/contracts/ethics-core';
+import { resolveBreakerDecisionContext } from '@footnote/contracts/ethics-core';
 import type {
     PostChatRequest,
     ChatImageRequest,
@@ -62,6 +66,7 @@ import type {
 
 type MessageProcessorOptions = {
     systemPrompt?: string;
+    safetyFallbackMessages?: Partial<Record<SafetyResponseBehavior, string>>;
 };
 
 type ChatMessageAction = {
@@ -80,6 +85,39 @@ type ChatImageAction = {
     action: 'image';
     imageRequest: ChatImageRequest;
 };
+
+/**
+ * Discord-local response behavior labels used for safety-enforcement logs.
+ */
+type SafetyResponseBehavior = 'block' | 'safe_response' | 'redirect' | 'review';
+
+/**
+ * Decision result from pre-send safety evaluation.
+ *
+ * - none: no evaluator data found, continue normal action dispatch.
+ * - allow: explicit allow found, log and continue.
+ * - fail_open: non-allow decision in observe-only mode, log and continue.
+ * - enforced: non-allow decision in enforced mode, override outbound behavior.
+ *
+ * Fail open means we allow normal dispatch when safety metadata is missing or
+ * malformed, and we log why enforcement was skipped.
+ */
+type PreSendSafetyOutcome =
+    | { kind: 'none' }
+    | {
+          kind: 'allow';
+          decision: BreakerDecisionContext;
+      }
+    | {
+          kind: 'fail_open';
+          decision: BreakerDecisionContext;
+      }
+    | {
+          kind: 'enforced';
+          decision: BreakerDecisionContext;
+          responseBehavior: SafetyResponseBehavior;
+          outboundMessage: string;
+      };
 
 /**
  * Provenance assets prepared for either a combined response send or a later
@@ -138,6 +176,16 @@ const VALID_IMAGE_STYLES = new Set<ImageStylePreset>([
 // Use shared defaults so the bot and backend remain aligned on voice style.
 const DEFAULT_TTS_OUTPUT_FORMAT = DEFAULT_INTERNAL_TTS_OUTPUT_FORMAT;
 const DEFAULT_TTS_OPTIONS = DEFAULT_INTERNAL_TTS_OPTIONS;
+const DEFAULT_SAFETY_FALLBACK_MESSAGES: Readonly<
+    Record<SafetyResponseBehavior, string>
+> = {
+    block: "I can't help with that.",
+    safe_response:
+        "I can't help with that directly, but I can still help in a safer way.",
+    redirect:
+        "I can't help with that as written due to safety concerns. If you share what you're trying to do, I can help find a safer way.",
+    review: "I can't answer that automatically due to safety concerns. Please ask another person to review this.",
+};
 
 const clampOutputCompression = (value: number | undefined | null): number => {
     if (!Number.isFinite(value)) {
@@ -152,6 +200,62 @@ const hasResponseMetadata = (value: unknown): value is ResponseMetadata =>
         typeof value === 'object' &&
         typeof (value as { responseId?: unknown }).responseId === 'string'
     );
+
+/**
+ * Maps one safety decision into Discord response behavior.
+ *
+ * Trigger: called only for enforced restricted outcomes before outbound send.
+ * Consequence: the adapter can choose deterministic fallback copy for that
+ * behavior without re-deriving policy meaning.
+ */
+const mapSafetyDecisionToResponseBehavior = (
+    decision: BreakerDecisionContext['safetyDecision']
+): { responseBehavior: SafetyResponseBehavior } => {
+    switch (decision.action) {
+        case 'block':
+            return {
+                responseBehavior: 'block',
+            };
+        case 'safe_partial':
+            return {
+                responseBehavior: 'safe_response',
+            };
+        case 'redirect':
+            return {
+                responseBehavior: 'redirect',
+            };
+        case 'human_review':
+            return {
+                responseBehavior: 'review',
+            };
+        case 'allow':
+            return {
+                responseBehavior: 'safe_response',
+            };
+    }
+};
+
+/**
+ * Normalizes optional reason fields for structured logging.
+ *
+ * Allow outcomes intentionally omit reason metadata; restricted outcomes carry
+ * deterministic reasonCode + rationale from ethics-core.
+ */
+const getSafetyReasonDetails = (
+    decision: BreakerDecisionContext['safetyDecision']
+): { reasonCode: string | null; rationale: string | null } => {
+    if (decision.action === 'allow') {
+        return {
+            reasonCode: null,
+            rationale: null,
+        };
+    }
+
+    return {
+        reasonCode: decision.reasonCode,
+        rationale: decision.reason,
+    };
+};
 
 const isChatMessageAction = (
     value: DiscordChatApiResponse
@@ -273,13 +377,20 @@ const formatChatFailureForDiscord = (error: unknown): string => {
  * Discord-side executor for backend chat decisions.
  */
 export class MessageProcessor {
+    private readonly safetyFallbackMessages: Readonly<
+        Record<SafetyResponseBehavior, string>
+    >;
     private readonly rateLimiters: {
         user?: RateLimiter;
         channel?: RateLimiter;
         guild?: RateLimiter;
     };
 
-    constructor(_options: MessageProcessorOptions = {}) {
+    constructor(options: MessageProcessorOptions = {}) {
+        this.safetyFallbackMessages = {
+            ...DEFAULT_SAFETY_FALLBACK_MESSAGES,
+            ...(options.safetyFallbackMessages ?? {}),
+        };
         this.rateLimiters = {};
         if (runtimeConfig.rateLimits.user.enabled) {
             this.rateLimiters.user = new RateLimiter({
@@ -667,6 +778,10 @@ export class MessageProcessor {
     /**
      * Unknown actions intentionally warn and no-op so backend-first action
      * additions do not crash the bot before the executor learns about them.
+     *
+     * Before dispatching any local action, this method also applies the
+     * pre-send safety hook so enforced restricted outcomes cannot emit the
+     * original unsafe planner output.
      */
     private async executeChatAction(
         message: Message,
@@ -675,6 +790,70 @@ export class MessageProcessor {
         directReply: boolean,
         recoveredImageContext: RecoveredImageContext | null
     ): Promise<void> {
+        const preSendSafetyOutcome =
+            this.resolvePreSendSafetyOutcome(chatResponse);
+        if (preSendSafetyOutcome.kind === 'allow') {
+            const reasonDetails = getSafetyReasonDetails(
+                preSendSafetyOutcome.decision.safetyDecision
+            );
+            logger.info('discord.chat.breaker_action_applied', {
+                event: 'discord.chat.breaker_action_applied',
+                messageId: message.id,
+                plannerAction: chatResponse.action,
+                appliedAction: 'allow',
+                enforcement: 'allow',
+                mode: preSendSafetyOutcome.decision.mode,
+                source: preSendSafetyOutcome.decision.source,
+                safetyTier:
+                    preSendSafetyOutcome.decision.safetyDecision.safetyTier,
+                ruleId: preSendSafetyOutcome.decision.safetyDecision.ruleId,
+                reasonCode: reasonDetails.reasonCode,
+                rationale: reasonDetails.rationale,
+            });
+        } else if (preSendSafetyOutcome.kind === 'fail_open') {
+            const reasonDetails = getSafetyReasonDetails(
+                preSendSafetyOutcome.decision.safetyDecision
+            );
+            logger.warn('discord.chat.breaker_action_applied', {
+                event: 'discord.chat.breaker_action_applied',
+                messageId: message.id,
+                plannerAction: chatResponse.action,
+                appliedAction: 'allow_fail_open',
+                enforcement: 'observe_only',
+                mode: preSendSafetyOutcome.decision.mode,
+                source: preSendSafetyOutcome.decision.source,
+                safetyTier:
+                    preSendSafetyOutcome.decision.safetyDecision.safetyTier,
+                ruleId: preSendSafetyOutcome.decision.safetyDecision.ruleId,
+                reasonCode: reasonDetails.reasonCode,
+                rationale: reasonDetails.rationale,
+            });
+        } else if (preSendSafetyOutcome.kind === 'enforced') {
+            const reasonDetails = getSafetyReasonDetails(
+                preSendSafetyOutcome.decision.safetyDecision
+            );
+            logger.warn('discord.chat.breaker_action_applied', {
+                event: 'discord.chat.breaker_action_applied',
+                messageId: message.id,
+                plannerAction: chatResponse.action,
+                appliedAction: preSendSafetyOutcome.responseBehavior,
+                enforcement: 'enforced',
+                mode: preSendSafetyOutcome.decision.mode,
+                source: preSendSafetyOutcome.decision.source,
+                safetyTier:
+                    preSendSafetyOutcome.decision.safetyDecision.safetyTier,
+                ruleId: preSendSafetyOutcome.decision.safetyDecision.ruleId,
+                reasonCode: reasonDetails.reasonCode,
+                rationale: reasonDetails.rationale,
+            });
+            await responseHandler.sendMessage(
+                preSendSafetyOutcome.outboundMessage,
+                [],
+                directReply
+            );
+            return;
+        }
+
         switch (chatResponse.action) {
             case 'ignore':
                 logger.debug(
@@ -745,6 +924,51 @@ export class MessageProcessor {
                 );
                 return;
         }
+    }
+
+    /**
+     * Evaluates whether this response should be overridden by breaker policy.
+     *
+     * Keep this as a pure resolver so tests can assert policy behavior without
+     * touching Discord transport side effects.
+     */
+    private resolvePreSendSafetyOutcome(
+        chatResponse: DiscordChatApiResponse
+    ): PreSendSafetyOutcome {
+        const metadataValue = (chatResponse as { metadata?: unknown }).metadata;
+        if (!hasResponseMetadata(metadataValue)) {
+            return { kind: 'none' };
+        }
+
+        const decision = resolveBreakerDecisionContext(metadataValue);
+        if (!decision) {
+            return { kind: 'none' };
+        }
+
+        if (decision.safetyDecision.action === 'allow') {
+            return {
+                kind: 'allow',
+                decision,
+            };
+        }
+
+        if (decision.mode !== 'enforced') {
+            return {
+                kind: 'fail_open',
+                decision,
+            };
+        }
+
+        const mapped = mapSafetyDecisionToResponseBehavior(
+            decision.safetyDecision
+        );
+        return {
+            kind: 'enforced',
+            decision,
+            responseBehavior: mapped.responseBehavior,
+            outboundMessage:
+                this.safetyFallbackMessages[mapped.responseBehavior],
+        };
     }
 
     private async executeChatMessageAction(

@@ -33,6 +33,54 @@ const createMetadata = (): ResponseMetadata => ({
     citations: [],
 });
 
+const createBreakerMetadata = (
+    overrides:
+        | {
+              mode: 'observe_only' | 'enforced';
+              action: 'allow';
+          }
+        | {
+              mode: 'observe_only' | 'enforced';
+              action: 'block' | 'redirect' | 'safe_partial' | 'human_review';
+              reasonCode:
+                  | 'self_harm_crisis_intent'
+                  | 'weaponization_request'
+                  | 'professional_advice_guardrail';
+              reason: string;
+              ruleId:
+                  | 'safety.self_harm.crisis_intent.v1'
+                  | 'safety.weaponization_request.v1'
+                  | 'safety.professional.medical_or_legal_advice.v1';
+          }
+): ResponseMetadata => ({
+    ...createMetadata(),
+    evaluator:
+        overrides.action === 'allow'
+            ? {
+                  mode: overrides.mode,
+                  provenance: 'Inferred',
+                  safetyDecision: {
+                      action: 'allow',
+                      safetyTier: 'Low',
+                      ruleId: null,
+                  },
+              }
+            : {
+                  mode: overrides.mode,
+                  provenance: 'Inferred',
+                  safetyDecision: {
+                      action: overrides.action,
+                      safetyTier:
+                          overrides.action === 'safe_partial'
+                              ? 'Medium'
+                              : 'High',
+                      ruleId: overrides.ruleId,
+                      reasonCode: overrides.reasonCode,
+                      reason: overrides.reason,
+                  },
+              },
+});
+
 const createProcessor = () => new MessageProcessor();
 
 const createMessage = () =>
@@ -529,6 +577,174 @@ test('executeChatAction warns and no-ops for unknown actions', async () => {
 
     assert.equal(warnings.length, 1);
     assert.match(warnings[0], /unsupported action "video"/i);
+});
+
+test('executeChatAction keeps message dispatch when breaker action is allow', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    let messageActionCalls = 0;
+
+    processorAccess.executeChatMessageAction = async () => {
+        messageActionCalls += 1;
+    };
+
+    await processorAccess.executeChatAction(
+        createMessage(),
+        {},
+        {
+            action: 'message',
+            message: 'allowed response',
+            modality: 'text',
+            metadata: createBreakerMetadata({
+                mode: 'enforced',
+                action: 'allow',
+            }),
+        },
+        true,
+        null
+    );
+
+    assert.equal(messageActionCalls, 1);
+});
+
+test('executeChatAction enforces block breaker outcome before send and logs rationale', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const originalWarn = logger.warn;
+    const warnPayloads: unknown[] = [];
+    let messageActionCalls = 0;
+    const sentMessages: string[] = [];
+
+    logger.warn = ((_: string, payload?: unknown) => {
+        warnPayloads.push(payload);
+        return logger;
+    }) as typeof logger.warn;
+    processorAccess.executeChatMessageAction = async () => {
+        messageActionCalls += 1;
+    };
+
+    try {
+        await processorAccess.executeChatAction(
+            createMessage(),
+            {
+                async sendMessage(content: string) {
+                    sentMessages.push(content);
+                    return { id: 'sent-breaker-block' } as never;
+                },
+            },
+            {
+                action: 'message',
+                message: 'unsafe payload should not be sent',
+                modality: 'text',
+                metadata: createBreakerMetadata({
+                    mode: 'enforced',
+                    action: 'block',
+                    reasonCode: 'weaponization_request',
+                    reason: 'Deterministic weaponization-request rule matched.',
+                    ruleId: 'safety.weaponization_request.v1',
+                }),
+            },
+            true,
+            null
+        );
+    } finally {
+        logger.warn = originalWarn;
+    }
+
+    assert.equal(messageActionCalls, 0);
+    assert.equal(sentMessages.length, 1);
+    assert.equal(sentMessages[0], "I can't help with that.");
+
+    const breakerPayload = warnPayloads.find((entry) => {
+        const payload = entry as
+            | {
+                  event?: string;
+              }
+            | undefined;
+        return payload?.event === 'discord.chat.breaker_action_applied';
+    }) as
+        | {
+              appliedAction?: string;
+              rationale?: string | null;
+          }
+        | undefined;
+
+    assert.equal(breakerPayload?.appliedAction, 'block');
+    assert.match(breakerPayload?.rationale ?? '', /weaponization-request/i);
+});
+
+test('executeChatAction uses configured deterministic safety fallback text for enforced block outcomes', async () => {
+    const processor = new MessageProcessor({
+        safetyFallbackMessages: {
+            block: 'Safety override: request blocked.',
+        },
+    });
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const sentMessages: string[] = [];
+
+    await processorAccess.executeChatAction(
+        createMessage(),
+        {
+            async sendMessage(content: string) {
+                sentMessages.push(content);
+                return { id: 'sent-breaker-custom' } as never;
+            },
+        },
+        {
+            action: 'message',
+            message: 'unsafe payload should not be sent',
+            modality: 'text',
+            metadata: createBreakerMetadata({
+                mode: 'enforced',
+                action: 'block',
+                reasonCode: 'weaponization_request',
+                reason: 'Deterministic weaponization-request rule matched.',
+                ruleId: 'safety.weaponization_request.v1',
+            }),
+        },
+        true,
+        null
+    );
+
+    assert.deepEqual(sentMessages, ['Safety override: request blocked.']);
+});
+
+test('executeChatAction preserves fail-open behavior for observe-only breaker outcomes', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    let messageActionCalls = 0;
+    let sendMessageCalls = 0;
+
+    processorAccess.executeChatMessageAction = async () => {
+        messageActionCalls += 1;
+    };
+
+    await processorAccess.executeChatAction(
+        createMessage(),
+        {
+            async sendMessage() {
+                sendMessageCalls += 1;
+                return { id: 'sent-observe-only' } as never;
+            },
+        },
+        {
+            action: 'message',
+            message: 'observe-only should not enforce',
+            modality: 'text',
+            metadata: createBreakerMetadata({
+                mode: 'observe_only',
+                action: 'block',
+                reasonCode: 'weaponization_request',
+                reason: 'Deterministic weaponization-request rule matched.',
+                ruleId: 'safety.weaponization_request.v1',
+            }),
+        },
+        true,
+        null
+    );
+
+    assert.equal(messageActionCalls, 1);
+    assert.equal(sendMessageCalls, 0);
 });
 
 test('executeChatMessageAction reports empty backend message payload as an error block', async () => {
