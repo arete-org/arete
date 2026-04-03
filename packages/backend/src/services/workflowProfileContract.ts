@@ -11,11 +11,18 @@ import type {
     WorkflowStepKind,
 } from '@footnote/contracts/ethics-core';
 
+/**
+ * Stable workflow-profile identifier used by backend orchestration config.
+ */
 export type WorkflowProfileId =
     | 'bounded-review-v1'
     | 'generate-only-v1'
     | (string & {});
 
+/**
+ * Backend policy toggles that control which workflow step kinds are legal.
+ * `enableGeneration` is optional to match existing engine semantics.
+ */
 export type WorkflowProfilePolicyContract = {
     enablePlanning: boolean;
     enableToolUse: boolean;
@@ -25,6 +32,9 @@ export type WorkflowProfilePolicyContract = {
     enableRevision: boolean;
 };
 
+/**
+ * Quantitative workflow limits used by profile defaults.
+ */
 export type WorkflowProfileExecutionLimitsContract = {
     maxWorkflowSteps: number;
     maxToolCalls: number;
@@ -41,10 +51,17 @@ export type WorkflowNoGenerationReasonCode =
     | 'budget_exhausted_time_before_generate' // Time budget ended before first generate step could run.
     | 'executor_error_before_generate'; // Runtime/executor failed before any successful generation.
 
+/**
+ * Whether a no-generation outcome should be surfaced directly or handled
+ * internally with deterministic fallback behavior.
+ */
 export type WorkflowNoGenerationDisposition =
     | 'surface_to_caller'
     | 'internal_termination';
 
+/**
+ * Resolved no-generation handling decision for one canonical reason code.
+ */
 export type WorkflowNoGenerationHandling = {
     reasonCode: WorkflowNoGenerationReasonCode;
     disposition: WorkflowNoGenerationDisposition;
@@ -86,6 +103,12 @@ export const WORKFLOW_NO_GENERATION_HANDLING_MAP: Readonly<
     },
 };
 
+/**
+ * Result shape returned by the termination-reason resolver.
+ * `mapped` means runtime behavior can be selected directly from the map.
+ * `unsupported_termination_reason` means the caller must choose an explicit
+ * deterministic fallback path (no silent coercion).
+ */
 export type NoGenerationHandlingResolution =
     | {
           kind: 'mapped';
@@ -154,6 +177,11 @@ export const resolveNoGenerationHandlingFromTermination = (input: {
     };
 };
 
+/**
+ * Canonical v1 workflow profile contract shape.
+ * Required hooks define minimal runtime behavior; optional extensions carry
+ * profile-specific strategy details (for example review/revision prompts).
+ */
 export type WorkflowProfileContractV1 = {
     profileId: WorkflowProfileId;
     profileVersion: 'v1';
