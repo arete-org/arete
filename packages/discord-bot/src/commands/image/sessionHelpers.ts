@@ -230,11 +230,14 @@ export interface ImageResultPresentation {
 }
 
 /**
- * Builds the embed, attachments, and follow-up controls that should be sent
- * when an image generation task finishes. The resulting embed always embeds
- * machine-readable fields (model, prompt sections, etc.) to make reboot
- * recovery possible via Discord's native message history.
- */
+ * Build a Discord-ready presentation (embed, attachments, components) and a follow-up context for a completed image generation.
+ *
+ * Produces an embed containing machine-readable metadata and visible fields, any required image attachments, optional variation/retry components, and a follow-up context that captures the normalized prompts, selected models/style, and prompt-adjustment setting for future retries or recovery.
+ *
+ * @param context - The original image generation context (user-visible settings and flags).
+ * @param artifacts - Normalized results from the image generation pipeline (final image buffer/URL, models, prompts, annotations, costs, timing, and IDs).
+ * @param followUpResponseId - Optional upstream response ID to include as the Input ID field and in the follow-up context.
+ * @returns An ImageResultPresentation containing the prepared embed, attachments, component rows, and follow-up context suitable for sending to Discord.
 export function buildImageResultPresentation(
     context: ImageGenerationContext,
     artifacts: ImageGenerationArtifacts,
