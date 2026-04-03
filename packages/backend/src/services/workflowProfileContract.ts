@@ -33,18 +33,13 @@ export type WorkflowProfileExecutionLimitsContract = {
     maxDurationMs: number;
 };
 
-/**
- * Canonical no-generation reason labels used before profile registry rollout.
- * Trigger: workflow completes without emitting a generation payload.
- * Consequence: chatService maps these labels to surfaced/internal handling.
- */
 export type WorkflowNoGenerationReasonCode =
-    | 'blocked_by_policy_before_generate'
-    | 'generation_disabled_by_profile'
-    | 'budget_exhausted_steps_before_generate'
-    | 'budget_exhausted_tokens_before_generate'
-    | 'budget_exhausted_time_before_generate'
-    | 'executor_error_before_generate';
+    | 'blocked_by_policy_before_generate' // A policy transition check blocked generate before first draft.
+    | 'generation_disabled_by_profile' // Profile-level config disabled generation for this workflow.
+    | 'budget_exhausted_steps_before_generate' // Step budget ended before first generate step could run.
+    | 'budget_exhausted_tokens_before_generate' // Token budget ended before first generate step could run.
+    | 'budget_exhausted_time_before_generate' // Time budget ended before first generate step could run.
+    | 'executor_error_before_generate'; // Runtime/executor failed before any successful generation.
 
 export type WorkflowNoGenerationDisposition =
     | 'surface_to_caller'
@@ -56,42 +51,37 @@ export type WorkflowNoGenerationHandling = {
     terminationReason: WorkflowTerminationReason;
 };
 
-/**
- * Single source of truth for no-generation disposition decisions.
- * Trigger: chatService classifies a workflow no-generation termination.
- * Consequence: determines whether we surface a fixed response or run internal fallback generation.
- */
 export const WORKFLOW_NO_GENERATION_HANDLING_MAP: Readonly<
     Record<WorkflowNoGenerationReasonCode, WorkflowNoGenerationHandling>
 > = {
     blocked_by_policy_before_generate: {
         reasonCode: 'blocked_by_policy_before_generate',
-        disposition: 'surface_to_caller',
+        disposition: 'surface_to_caller', // Caller should see explicit blocked/no-generation response.
         terminationReason: 'transition_blocked_by_policy',
     },
     generation_disabled_by_profile: {
         reasonCode: 'generation_disabled_by_profile',
-        disposition: 'surface_to_caller',
+        disposition: 'surface_to_caller', // Caller should see explicit blocked/no-generation response.
         terminationReason: 'transition_blocked_by_policy',
     },
     budget_exhausted_steps_before_generate: {
         reasonCode: 'budget_exhausted_steps_before_generate',
-        disposition: 'internal_termination',
+        disposition: 'internal_termination', // Backend should attempt deterministic internal fallback generation.
         terminationReason: 'budget_exhausted_steps',
     },
     budget_exhausted_tokens_before_generate: {
         reasonCode: 'budget_exhausted_tokens_before_generate',
-        disposition: 'internal_termination',
+        disposition: 'internal_termination', // Backend should attempt deterministic internal fallback generation.
         terminationReason: 'budget_exhausted_tokens',
     },
     budget_exhausted_time_before_generate: {
         reasonCode: 'budget_exhausted_time_before_generate',
-        disposition: 'internal_termination',
+        disposition: 'internal_termination', // Backend should attempt deterministic internal fallback generation.
         terminationReason: 'budget_exhausted_time',
     },
     executor_error_before_generate: {
         reasonCode: 'executor_error_before_generate',
-        disposition: 'surface_to_caller',
+        disposition: 'surface_to_caller', // Caller should see explicit surfaced response for pre-generation failure.
         terminationReason: 'executor_error_fail_open',
     },
 };
@@ -107,11 +97,6 @@ export type NoGenerationHandlingResolution =
           terminationReason: WorkflowTerminationReason;
       };
 
-/**
- * Exhaustive resolver from workflow termination reason to no-generation handling.
- * Trigger: a workflow returns outcome `no_generation`.
- * Consequence: unsupported reasons are explicit and never silently coerced.
- */
 export const resolveNoGenerationHandlingFromTermination = (input: {
     terminationReason: WorkflowTerminationReason;
     generationEnabledByPolicy: boolean;
