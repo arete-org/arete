@@ -1,6 +1,0 @@
-[      57ms] [WARNING] A preload for 'http://localhost:5173/src/main.tsx' is found, but is not used because the request credentials mode does not match. Consider taking a look at crossorigin attribute. @ http://localhost:5173/:0
-[     563ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=806c81b1:14337
-[     813ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/config.json:0
-[    3840ms] [WARNING] The resource http://localhost:5173/src/main.tsx was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ http://localhost:5173/:0
-[    3840ms] [WARNING] The resource http://localhost:5173/_next/static/media/e4af272ccee01ff0-s.p.woff2 was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ http://localhost:5173/:0
-[  727286ms] [LOG] [vite] server connection lost. Polling for restart... @ http://localhost:5173/@vite/client:968
