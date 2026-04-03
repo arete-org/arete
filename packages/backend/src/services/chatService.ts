@@ -492,6 +492,9 @@ export const createChatService = ({
                     : undefined;
 
         const usageModel = assistantMetadata.model || defaultModel;
+        type GenerationExecutionContext = NonNullable<
+            NonNullable<ResponseMetadataRuntimeContext['executionContext']>['generation']
+        >;
         const effectiveGenerationExecutionContext = executionContext?.generation
             ? {
                   ...executionContext.generation,
@@ -499,13 +502,13 @@ export const createChatService = ({
                   durationMs: generationDurationMs,
               }
             : fallbackAfterInternalNoGeneration
-              ? {
+              ? ({
                     status: 'executed',
                     profileId: 'workflow_internal_fallback',
                     provider: 'internal',
                     model: usageModel,
                     durationMs: generationDurationMs,
-                }
+                } satisfies GenerationExecutionContext)
               : undefined;
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
