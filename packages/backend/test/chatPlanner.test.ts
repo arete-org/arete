@@ -719,3 +719,186 @@ test('react plans with non-emoji payload fall back safely', async () => {
     assert.equal(plan.generation.temperament, undefined);
     assert.match(plan.reasoning, /not a valid emoji token/i);
 });
+
+test('chatPlanner adopts expanded attempt when initial marks context as insufficient', async () => {
+    const seenMessageCounts: number[] = [];
+    let callCount = 0;
+    const planner = createChatPlanner({
+        executePlanner: async ({ messages }) => {
+            callCount += 1;
+            seenMessageCounts.push(messages.length);
+            if (callCount === 1) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        contextNeed: 'needs_more_context',
+                        contextTier: 'expanded_recent',
+                        safetyTier: 'Low',
+                        reasoning: 'Need more context before selecting search.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    contextNeed: 'sufficient',
+                    safetyTier: 'Low',
+                    reasoning: 'Expanded context supports retrieval.',
+                    generation: {
+                        reasoningEffort: 'low',
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 4,
+                            rationale: 3,
+                            attribution: 4,
+                            caution: 3,
+                            extent: 4,
+                        },
+                        search: {
+                            query: 'latest changes',
+                            contextSize: 'low',
+                            intent: 'current_facts',
+                        },
+                    },
+                }),
+                model: 'gpt-5-mini',
+            };
+        },
+    });
+
+    const response = await planner.planChat(
+        createChatRequest({
+            conversation: Array.from({ length: 10 }, (_value, index) => ({
+                role: index % 2 === 0 ? 'user' : 'assistant',
+                content: `message ${index + 1}`,
+            })),
+        })
+    );
+
+    assert.equal(response.execution.selectedAttempt, 'expanded');
+    assert.equal(response.execution.contextTier, 'expanded_recent');
+    assert.equal(
+        response.execution.contextReasonCode,
+        'planner_context_expanded'
+    );
+    assert.equal(response.execution.plannerAttemptIndex, 2);
+    assert.ok(response.plan.generation.search);
+    assert.equal(callCount, 2);
+    assert.ok(seenMessageCounts[1] > seenMessageCounts[0]);
+});
+
+test('chatPlanner keeps initial plan when expanded attempt is invalid', async () => {
+    let callCount = 0;
+    const planner = createChatPlanner({
+        executePlanner: async () => {
+            callCount += 1;
+            if (callCount === 1) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        contextNeed: 'needs_more_context',
+                        contextTier: 'expanded_recent',
+                        safetyTier: 'Low',
+                        reasoning: 'Need more context.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            return {
+                text: '{"action":"message"',
+                model: 'gpt-5-mini',
+            };
+        },
+    });
+
+    const response = await planner.planChat(
+        createChatRequest({
+            conversation: Array.from({ length: 8 }, (_value, index) => ({
+                role: index % 2 === 0 ? 'user' : 'assistant',
+                content: `message ${index + 1}`,
+            })),
+        })
+    );
+
+    assert.equal(response.execution.selectedAttempt, 'initial');
+    assert.equal(
+        response.execution.contextReasonCode,
+        'planner_expansion_invalid_fallback_initial'
+    );
+    assert.equal(response.execution.plannerAttemptIndex, 2);
+    assert.equal(response.plan.generation.search, undefined);
+    assert.equal(callCount, 2);
+});
+
+test('chatPlanner marks budget exhausted when expansion is requested with no extra context budget', async () => {
+    let callCount = 0;
+    const planner = createChatPlanner({
+        executePlanner: async () => {
+            callCount += 1;
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    contextNeed: 'needs_more_context',
+                    contextTier: 'expanded_recent',
+                    safetyTier: 'Low',
+                    reasoning: 'Need more context.',
+                    generation: {
+                        reasoningEffort: 'low',
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 4,
+                            rationale: 3,
+                            attribution: 4,
+                            caution: 3,
+                            extent: 4,
+                        },
+                    },
+                }),
+                model: 'gpt-5-mini',
+            };
+        },
+    });
+
+    const response = await planner.planChat(
+        createChatRequest({
+            conversation: [{ role: 'user', content: 'single message only' }],
+        })
+    );
+
+    assert.equal(response.execution.selectedAttempt, 'initial');
+    assert.equal(
+        response.execution.contextReasonCode,
+        'planner_context_budget_exhausted'
+    );
+    assert.equal(response.execution.plannerAttemptIndex, 1);
+    assert.equal(callCount, 1);
+});

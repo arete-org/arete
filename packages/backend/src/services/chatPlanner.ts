@@ -50,6 +50,10 @@ export type ChatPlannerExecution = {
     reasonCode?: ExecutionReasonCode;
     // Planner call + parse/normalize duration in milliseconds.
     durationMs: number;
+    plannerAttemptIndex?: number;
+    contextTier?: PlannerContextTier;
+    selectedAttempt?: PlannerSelectedAttempt;
+    contextReasonCode?: PlannerContextReasonCode;
 };
 
 export type ChatPlannerResult = {
@@ -60,11 +64,25 @@ export type ChatPlannerResult = {
 };
 
 type PlannerFallbackTier = 'none' | 'field_corrections' | 'safe_default_plan';
+type PlannerContextNeed = 'sufficient' | 'needs_more_context';
+type PlannerContextTier =
+    | 'current_window'
+    | 'expanded_recent'
+    | 'expanded_with_summary';
+type PlannerSelectedAttempt = 'initial' | 'expanded';
+type PlannerContextReasonCode =
+    | 'planner_context_expanded'
+    | 'planner_expansion_rejected'
+    | 'planner_expansion_invalid_fallback_initial'
+    | 'planner_context_budget_exhausted'
+    | 'planner_context_timeout_fail_open';
 
 type PlannerNormalizationResult = {
     plan: ChatPlan;
     fallbackTier: PlannerFallbackTier;
     correctionCodes: string[];
+    contextNeed: PlannerContextNeed;
+    contextTier: PlannerContextTier;
 };
 
 const REPO_HINT_SET = new Set<ChatRepoSearchHint>(chatRepoSearchHints);
@@ -155,6 +173,8 @@ type ChatPlannerExecutionMode = 'structured' | 'text_json';
 export type PlannerCandidate = Partial<ChatPlan> & {
     profileId?: unknown;
     reasoning?: unknown;
+    contextNeed?: unknown;
+    contextTier?: unknown;
     generation?: Partial<ChatGenerationPlan> & {
         search?: Partial<ChatGenerationSearch> & {
             repoHints?: unknown;
@@ -167,6 +187,8 @@ export type PlannerCandidate = Partial<ChatPlan> & {
 
 const TOPIC_HINT_MAX_COUNT = 5;
 const TOPIC_HINT_MAX_LENGTH = 40;
+const CURRENT_WINDOW_MESSAGE_LIMIT = 6;
+const EXPANDED_RECENT_MESSAGE_LIMIT = 20;
 
 /**
  * Coerces arbitrary planner output into the SafetyTier contract.
@@ -506,6 +528,40 @@ const normalizeProfileId = (value: unknown): string | undefined => {
     return normalized.length > 0 ? normalized : undefined;
 };
 
+const normalizePlannerContextNeed = (value: unknown): PlannerContextNeed =>
+    value === 'needs_more_context' ? 'needs_more_context' : 'sufficient';
+
+const normalizePlannerContextTier = (value: unknown): PlannerContextTier => {
+    if (
+        value === 'current_window' ||
+        value === 'expanded_recent' ||
+        value === 'expanded_with_summary'
+    ) {
+        return value;
+    }
+
+    return 'current_window';
+};
+
+const summarizeConversationWindow = (
+    conversation: PostChatRequest['conversation']
+): string => {
+    const slicedMessages = conversation.slice(-4);
+    if (slicedMessages.length === 0) {
+        return 'No prior conversation context was available.';
+    }
+
+    return slicedMessages
+        .map((message, index) => {
+            const compactContent = message.content
+                .replace(/\s+/g, ' ')
+                .trim()
+                .slice(0, 140);
+            return `[${index + 1}] ${message.role}: ${compactContent}`;
+        })
+        .join(' | ');
+};
+
 /**
  * Keeps react actions strict so downstream transport never receives plain text
  * where an emoji token is expected.
@@ -554,6 +610,96 @@ const summarizeRequest = (request: PostChatRequest): string =>
         ),
         capabilities: request.capabilities,
     });
+
+const buildPlannerConversationSlice = (
+    request: PostChatRequest,
+    contextTier: PlannerContextTier
+): PostChatRequest['conversation'] => {
+    const conversationLimit =
+        contextTier === 'current_window'
+            ? CURRENT_WINDOW_MESSAGE_LIMIT
+            : EXPANDED_RECENT_MESSAGE_LIMIT;
+    return request.conversation.slice(-conversationLimit);
+};
+
+const buildPlannerMessages = (input: {
+    plannerPrompt: string;
+    plannerProfileContext: string;
+    requestSummary: string;
+    request: PostChatRequest;
+    contextTier: PlannerContextTier;
+}): RuntimeMessage[] => [
+    { role: 'system', content: input.plannerPrompt },
+    {
+        role: 'system',
+        content: `Planner profile options (bounded): ${input.plannerProfileContext}`,
+    },
+    {
+        role: 'system',
+        content: `Planner request summary: ${input.requestSummary}`,
+    },
+    {
+        role: 'system',
+        content: `This request was triggered because ${input.request.trigger.kind}.`,
+    },
+    {
+        role: 'system',
+        content: `Planner context tier: ${input.contextTier}`,
+    },
+    ...(input.contextTier === 'expanded_with_summary'
+        ? [
+              {
+                  role: 'system' as const,
+                  content: `Conversation digest: ${summarizeConversationWindow(input.request.conversation)}`,
+              },
+          ]
+        : []),
+    ...buildPlannerConversationSlice(input.request, input.contextTier).map(
+        (message: PostChatRequest['conversation'][number]) => ({
+            role: message.role,
+            content: message.content,
+        })
+    ),
+];
+
+const hasContextExpansionBudget = (
+    request: PostChatRequest,
+    contextTier: PlannerContextTier
+): boolean => {
+    if (contextTier === 'expanded_with_summary') {
+        return true;
+    }
+
+    return request.conversation.length > CURRENT_WINDOW_MESSAGE_LIMIT;
+};
+
+const hasMaterialPlanChange = (
+    initialPlan: ChatPlan,
+    expandedPlan: ChatPlan
+): boolean => {
+    if (
+        initialPlan.action !== expandedPlan.action ||
+        initialPlan.modality !== expandedPlan.modality ||
+        initialPlan.profileId !== expandedPlan.profileId
+    ) {
+        return true;
+    }
+
+    if (
+        initialPlan.generation.reasoningEffort !==
+            expandedPlan.generation.reasoningEffort ||
+        initialPlan.generation.verbosity !== expandedPlan.generation.verbosity
+    ) {
+        return true;
+    }
+
+    return (
+        JSON.stringify(initialPlan.generation.search) !==
+            JSON.stringify(expandedPlan.generation.search) ||
+        JSON.stringify(initialPlan.generation.weather) !==
+            JSON.stringify(expandedPlan.generation.weather)
+    );
+};
 
 /**
  * Validates and normalizes image-generation settings from planner output.
@@ -757,10 +903,14 @@ const normalizePlan = (
             },
             fallbackTier: 'safe_default_plan',
             correctionCodes: ['candidate_not_object'],
+            contextNeed: 'sufficient',
+            contextTier: 'current_window',
         };
     }
 
     const correctionCodes: string[] = [];
+    const contextNeed = normalizePlannerContextNeed(candidate.contextNeed);
+    const contextTier = normalizePlannerContextTier(candidate.contextTier);
     const capabilities = request.capabilities;
     const actionCandidate =
         candidate.action === 'message' ||
@@ -804,6 +954,8 @@ const normalizePlan = (
                 },
                 fallbackTier: 'safe_default_plan',
                 correctionCodes: [...correctionCodes, 'react_not_allowed'],
+                contextNeed,
+                contextTier,
             };
         }
 
@@ -819,6 +971,8 @@ const normalizePlan = (
                 },
                 fallbackTier: 'safe_default_plan',
                 correctionCodes: [...correctionCodes, 'react_missing_emoji'],
+                contextNeed,
+                contextTier,
             };
         }
         const trimmedReaction = candidate.reaction.trim();
@@ -831,6 +985,8 @@ const normalizePlan = (
                 },
                 fallbackTier: 'safe_default_plan',
                 correctionCodes: [...correctionCodes, 'react_invalid_emoji'],
+                contextNeed,
+                contextTier,
             };
         }
 
@@ -847,6 +1003,8 @@ const normalizePlan = (
             fallbackTier:
                 correctionCodes.length > 0 ? 'field_corrections' : 'none',
             correctionCodes,
+            contextNeed,
+            contextTier,
         };
     }
 
@@ -860,6 +1018,8 @@ const normalizePlan = (
                 },
                 fallbackTier: 'safe_default_plan',
                 correctionCodes: [...correctionCodes, 'image_not_allowed'],
+                contextNeed,
+                contextTier,
             };
         }
 
@@ -873,6 +1033,8 @@ const normalizePlan = (
                 },
                 fallbackTier: 'safe_default_plan',
                 correctionCodes: [...correctionCodes, 'image_request_invalid'],
+                contextNeed,
+                contextTier,
             };
         }
 
@@ -890,6 +1052,8 @@ const normalizePlan = (
             fallbackTier:
                 correctionCodes.length > 0 ? 'field_corrections' : 'none',
             correctionCodes,
+            contextNeed,
+            contextTier,
         };
     }
 
@@ -907,6 +1071,8 @@ const normalizePlan = (
             fallbackTier:
                 correctionCodes.length > 0 ? 'field_corrections' : 'none',
             correctionCodes,
+            contextNeed,
+            contextTier,
         };
     }
 
@@ -922,6 +1088,8 @@ const normalizePlan = (
             },
             fallbackTier: 'safe_default_plan',
             correctionCodes: [...correctionCodes, 'temperament_missing'],
+            contextNeed,
+            contextTier,
         };
     }
 
@@ -929,6 +1097,8 @@ const normalizePlan = (
         plan: normalizedPlan,
         fallbackTier: correctionCodes.length > 0 ? 'field_corrections' : 'none',
         correctionCodes,
+        contextNeed,
+        contextTier,
     };
 };
 
@@ -978,29 +1148,13 @@ export const createChatPlanner = ({
         let plannerStructuredArguments: string | undefined;
         const plannerPrompt = renderPrompt('chat.planner.system').content;
         const requestSummary = summarizeRequest(request);
-        const plannerMessages: RuntimeMessage[] = [
-            { role: 'system', content: plannerPrompt },
-            {
-                // The prompt instructs planner to choose one id from this list.
-                // The orchestrator still validates the chosen id before use.
-                role: 'system',
-                content: `Planner profile options (bounded): ${plannerProfileContext}`,
-            },
-            {
-                role: 'system',
-                content: `Planner request summary: ${requestSummary}`,
-            },
-            {
-                role: 'system',
-                content: `This request was triggered because ${request.trigger.kind}.`,
-            },
-            ...request.conversation.map(
-                (message: PostChatRequest['conversation'][number]) => ({
-                    role: message.role,
-                    content: message.content,
-                })
-            ),
-        ];
+        const plannerMessages = buildPlannerMessages({
+            plannerPrompt,
+            plannerProfileContext,
+            requestSummary,
+            request,
+            contextTier: 'current_window',
+        });
 
         const requestPayload: ChatPlannerExecutionRequest = {
             messages: plannerMessages,
@@ -1037,6 +1191,151 @@ export const createChatPlanner = ({
                         `Chat planner usage recording failed: ${error instanceof Error ? error.message : String(error)}`
                     );
                 }
+            }
+        };
+
+        const runExpandedTextJsonAttempt = async (
+            contextTier: PlannerContextTier
+        ): Promise<PlannerNormalizationResult | null> => {
+            if (!executePlanner) {
+                return null;
+            }
+
+            const expandedMessages = buildPlannerMessages({
+                plannerPrompt,
+                plannerProfileContext,
+                requestSummary,
+                request,
+                contextTier,
+            });
+            const expandedRequestPayload: ChatPlannerExecutionRequest = {
+                messages: expandedMessages,
+                model: defaultModel,
+                maxOutputTokens: 1200,
+                reasoningEffort: 'low',
+            };
+            const expandedResponse = await executePlanner(
+                expandedRequestPayload
+            );
+            plannerResponseText = expandedResponse.text;
+            recordPlannerUsage(
+                expandedResponse.model || defaultModel,
+                expandedResponse.usage
+            );
+            const expandedCandidate = parsePlannerCandidateFromTextJson(
+                expandedResponse.text
+            );
+            return normalizePlan(request, expandedCandidate);
+        };
+
+        const resolveAdaptivePlan = async (
+            initialNormalization: PlannerNormalizationResult,
+            initialExecution: {
+                status: ChatPlannerExecution['status'];
+                reasonCode?: ExecutionReasonCode;
+            }
+        ): Promise<ChatPlannerResult> => {
+            const baseExecution: ChatPlannerExecution = {
+                ...initialExecution,
+                durationMs: Date.now() - plannerStartedAt,
+                plannerAttemptIndex: 1,
+                contextTier: 'current_window',
+                selectedAttempt: 'initial',
+            };
+
+            if (
+                initialExecution.status !== 'executed' ||
+                initialNormalization.contextNeed !== 'needs_more_context'
+            ) {
+                return {
+                    plan: initialNormalization.plan,
+                    execution: baseExecution,
+                };
+            }
+
+            const expandedTier =
+                initialNormalization.contextTier === 'current_window'
+                    ? 'expanded_recent'
+                    : initialNormalization.contextTier;
+            if (!hasContextExpansionBudget(request, expandedTier)) {
+                return {
+                    plan: initialNormalization.plan,
+                    execution: {
+                        ...baseExecution,
+                        contextReasonCode: 'planner_context_budget_exhausted',
+                    },
+                };
+            }
+
+            try {
+                const expandedNormalization =
+                    await runExpandedTextJsonAttempt(expandedTier);
+                if (!expandedNormalization) {
+                    return {
+                        plan: initialNormalization.plan,
+                        execution: {
+                            ...baseExecution,
+                            contextReasonCode:
+                                'planner_expansion_invalid_fallback_initial',
+                        },
+                    };
+                }
+
+                if (
+                    expandedNormalization.fallbackTier === 'safe_default_plan'
+                ) {
+                    return {
+                        plan: initialNormalization.plan,
+                        execution: {
+                            ...baseExecution,
+                            plannerAttemptIndex: 2,
+                            contextReasonCode:
+                                'planner_expansion_invalid_fallback_initial',
+                        },
+                    };
+                }
+
+                const shouldAdoptExpandedPlan =
+                    expandedNormalization.contextNeed === 'sufficient' ||
+                    hasMaterialPlanChange(
+                        initialNormalization.plan,
+                        expandedNormalization.plan
+                    );
+                if (shouldAdoptExpandedPlan) {
+                    return {
+                        plan: expandedNormalization.plan,
+                        execution: {
+                            status: 'executed',
+                            durationMs: Date.now() - plannerStartedAt,
+                            plannerAttemptIndex: 2,
+                            contextTier: expandedTier,
+                            selectedAttempt: 'expanded',
+                            contextReasonCode: 'planner_context_expanded',
+                        },
+                    };
+                }
+
+                return {
+                    plan: initialNormalization.plan,
+                    execution: {
+                        ...baseExecution,
+                        plannerAttemptIndex: 2,
+                        contextReasonCode: 'planner_expansion_rejected',
+                    },
+                };
+            } catch (error) {
+                const timeoutExpansion =
+                    error instanceof Error && /timed out/i.test(error.message);
+                return {
+                    plan: initialNormalization.plan,
+                    execution: {
+                        ...baseExecution,
+                        plannerAttemptIndex: 2,
+                        contextReasonCode: timeoutExpansion
+                            ? 'planner_context_timeout_fail_open'
+                            : 'planner_expansion_invalid_fallback_initial',
+                    },
+                };
             }
         };
 
@@ -1097,23 +1396,15 @@ export const createChatPlanner = ({
                                 plannerStructuredArguments?.length,
                         }
                     );
-                    return {
-                        plan: normalization.plan,
-                        execution: {
-                            status: 'failed',
-                            reasonCode: 'planner_invalid_output',
-                            durationMs: Date.now() - plannerStartedAt,
-                        },
-                    };
+                    return resolveAdaptivePlan(normalization, {
+                        status: 'failed',
+                        reasonCode: 'planner_invalid_output',
+                    });
                 }
 
-                return {
-                    plan: normalization.plan,
-                    execution: {
-                        status: 'executed',
-                        durationMs: Date.now() - plannerStartedAt,
-                    },
-                };
+                return resolveAdaptivePlan(normalization, {
+                    status: 'executed',
+                });
             }
 
             if (!executePlanner) {
@@ -1154,21 +1445,17 @@ export const createChatPlanner = ({
             }
             */
 
-            return {
-                plan: normalization.plan,
-                execution: {
-                    status:
-                        normalization.fallbackTier === 'safe_default_plan'
-                            ? 'failed'
-                            : 'executed',
-                    ...(normalization.fallbackTier === 'safe_default_plan'
-                        ? {
-                              reasonCode: 'planner_invalid_output' as const,
-                          }
-                        : {}),
-                    durationMs: Date.now() - plannerStartedAt,
-                },
-            };
+            return resolveAdaptivePlan(normalization, {
+                status:
+                    normalization.fallbackTier === 'safe_default_plan'
+                        ? 'failed'
+                        : 'executed',
+                ...(normalization.fallbackTier === 'safe_default_plan'
+                    ? {
+                          reasonCode: 'planner_invalid_output' as const,
+                      }
+                    : {}),
+            });
         } catch (error) {
             let resolvedError: unknown = error;
             const shouldAttemptCompatibilityFallback =
@@ -1218,24 +1505,17 @@ export const createChatPlanner = ({
                         textJsonResponse.text
                     );
                     const normalization = normalizePlan(request, parsed);
-                    return {
-                        plan: normalization.plan,
-                        execution: {
-                            status:
-                                normalization.fallbackTier ===
-                                'safe_default_plan'
-                                    ? 'failed'
-                                    : 'executed',
-                            ...(normalization.fallbackTier ===
-                            'safe_default_plan'
-                                ? {
-                                      reasonCode:
-                                          'planner_invalid_output' as const,
-                                  }
-                                : {}),
-                            durationMs: Date.now() - plannerStartedAt,
-                        },
-                    };
+                    return resolveAdaptivePlan(normalization, {
+                        status:
+                            normalization.fallbackTier === 'safe_default_plan'
+                                ? 'failed'
+                                : 'executed',
+                        ...(normalization.fallbackTier === 'safe_default_plan'
+                            ? {
+                                  reasonCode: 'planner_invalid_output' as const,
+                              }
+                            : {}),
+                    });
                 } catch (textJsonError) {
                     resolvedError = textJsonError;
                 }

@@ -28,6 +28,18 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
         profileId: {
             type: 'string',
         },
+        contextNeed: {
+            type: 'string',
+            enum: ['sufficient', 'needs_more_context'],
+        },
+        contextTier: {
+            type: 'string',
+            enum: [
+                'current_window',
+                'expanded_recent',
+                'expanded_with_summary',
+            ],
+        },
         reaction: {
             type: 'string',
         },
