@@ -316,6 +316,36 @@ main > section {
     );
 }
 
+[data-theme='dark'] .section-container--showcase {
+    background-color: color-mix(
+        in srgb,
+        var(--bg-alt) 78%,
+        rgba(255, 255, 255, 0.14) 22%
+    );
+}
+
+[data-theme='dark'] .section-container--principles {
+    background-color: color-mix(
+        in srgb,
+        var(--bg-soft) 74%,
+        rgba(120, 165, 132, 0.2) 26%
+    );
+    border-color: color-mix(
+        in srgb,
+        var(--border) 58%,
+        rgba(166, 206, 176, 0.42) 42%
+    );
+}
+
+[data-theme='dark'] .section-container--setup {
+    background-color: color-mix(
+        in srgb,
+        var(--bg-alt) 72%,
+        rgba(186, 140, 110, 0.2) 28%
+    );
+    box-shadow: 0 16px 34px color-mix(in srgb, var(--shadow) 70%, #000 30%);
+}
+
 /* Remove extra spacing from sections inside containers */
 .section-container > section {
     margin-bottom: 0;
@@ -648,15 +678,15 @@ section:has(.site-header-sticky) {
     background-color: color-mix(in srgb, var(--bg) 90%, var(--hover-bg) 10%);
 }
 
-.cta-button:hover,
-.cta-button:focus {
+.cta-button:not(:disabled):not([aria-disabled='true']):hover,
+.cta-button:not(:disabled):not([aria-disabled='true']):focus {
     background-color: var(--hover-bg);
     border-color: color-mix(in srgb, var(--accent) 55%, var(--border) 45%);
     color: var(--text);
 }
 
-.cta-button.primary:hover,
-.cta-button.primary:focus {
+.cta-button.primary:not(:disabled):not([aria-disabled='true']):hover,
+.cta-button.primary:not(:disabled):not([aria-disabled='true']):focus {
     background-color: var(--accent-hover);
     border-color: color-mix(
         in srgb,
@@ -672,6 +702,7 @@ section:has(.site-header-sticky) {
 .cta-button[aria-disabled='true'] {
     cursor: not-allowed;
     opacity: 0.7;
+    pointer-events: none;
 }
 
 .cta-button:focus-visible {

@@ -21,12 +21,14 @@ const Hero = (): JSX.Element => {
         }
 
         event.preventDefault();
+        const currentTab =
+            event.currentTarget.id === 'hero-tab-setup' ? 'setup' : 'try';
         const nextTab =
             event.key === 'ArrowRight'
-                ? activeTab === 'try'
+                ? currentTab === 'try'
                     ? 'setup'
                     : 'try'
-                : activeTab === 'setup'
+                : currentTab === 'setup'
                   ? 'try'
                   : 'setup';
 
@@ -58,6 +60,7 @@ const Hero = (): JSX.Element => {
                             role="tab"
                             aria-controls="hero-panel-try"
                             aria-selected={activeTab === 'try'}
+                            tabIndex={activeTab === 'try' ? 0 : -1}
                             className={`hero-action-tab${activeTab === 'try' ? ' is-active' : ''}`}
                             onClick={() => setActiveTab('try')}
                             onKeyDown={handleKeyDown}
@@ -75,6 +78,7 @@ const Hero = (): JSX.Element => {
                             role="tab"
                             aria-controls="hero-panel-setup"
                             aria-selected={activeTab === 'setup'}
+                            tabIndex={activeTab === 'setup' ? 0 : -1}
                             className={`hero-action-tab${activeTab === 'setup' ? ' is-active' : ''}`}
                             onClick={() => setActiveTab('setup')}
                             onKeyDown={handleKeyDown}
@@ -87,23 +91,21 @@ const Hero = (): JSX.Element => {
                             </span>
                         </button>
                     </div>
-                    <div
-                        id={
-                            activeTab === 'try'
-                                ? 'hero-panel-try'
-                                : 'hero-panel-setup'
-                        }
-                        role="tabpanel"
-                        aria-labelledby={
-                            activeTab === 'try'
-                                ? 'hero-tab-try'
-                                : 'hero-tab-setup'
-                        }
-                        className="hero-action-panel"
-                    >
-                        {activeTab === 'try' ? (
+                    <div className="hero-action-panel">
+                        <div
+                            id="hero-panel-try"
+                            role="tabpanel"
+                            aria-labelledby="hero-tab-try"
+                            hidden={activeTab !== 'try'}
+                        >
                             <AskMeAnything />
-                        ) : (
+                        </div>
+                        <div
+                            id="hero-panel-setup"
+                            role="tabpanel"
+                            aria-labelledby="hero-tab-setup"
+                            hidden={activeTab !== 'setup'}
+                        >
                             <section
                                 className="setup-quickstart"
                                 aria-labelledby="setup-quickstart-title"
@@ -125,7 +127,7 @@ const Hero = (): JSX.Element => {
                                     <span aria-hidden="true">↗</span>
                                 </a>
                             </section>
-                        )}
+                        </div>
                     </div>
                 </div>
 
