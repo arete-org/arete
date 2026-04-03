@@ -613,8 +613,15 @@ export const createChatOrchestrator = ({
             generationForExecution.search &&
             !selectedResponseProfile.capabilities.canUseSearch
         ) {
+            const searchPolicySelectionSource: PlannerSelectionSource =
+                selectedCapabilityDecision.reasonCode ===
+                'planner_requested_capability_profile_no_floor_match'
+                    ? 'planner'
+                    : profileSelectionSource;
             const fallbackPolicy =
-                searchFallbackPolicyBySelectionSource[profileSelectionSource];
+                searchFallbackPolicyBySelectionSource[
+                    searchPolicySelectionSource
+                ];
             const rankedFallbackCandidates = rankSearchFallbackProfiles(
                 selectedResponseProfile,
                 searchCapableProfiles.filter(
@@ -647,7 +654,7 @@ export const createChatOrchestrator = ({
                         reasonCode: fallbackPolicy.rerouteReasonCode,
                         originalProfileId: originalSelectedProfileId,
                         effectiveProfileId: effectiveSelectedProfileId,
-                        selectionSource: profileSelectionSource,
+                        selectionSource: searchPolicySelectionSource,
                         rankingPolicy: searchFallbackRankingPolicy.steps,
                         rankedFallbackProfileIds: rankedFallbackCandidates.map(
                             (profile) => profile.id
@@ -672,7 +679,7 @@ export const createChatOrchestrator = ({
                     status: 'skipped',
                     reasonCode: fallbackPolicy.skipReasonCode,
                 };
-                if (profileSelectionSource === 'planner') {
+                if (searchPolicySelectionSource === 'planner') {
                     fallbackReasons.push('search_dropped_no_fallback_profile');
                 } else {
                     fallbackReasons.push(
@@ -685,14 +692,14 @@ export const createChatOrchestrator = ({
                         event: 'chat.orchestration.profile_fallback',
                         policy: SEARCH_REROUTE_FALLBACK_POLICY,
                         stage:
-                            profileSelectionSource === 'planner'
+                            searchPolicySelectionSource === 'planner'
                                 ? 'search_dropped_no_search_capable_fallback'
                                 : 'search_dropped_by_selection_policy',
                         originalProfileId: originalSelectedProfileId,
                         effectiveProfileId: effectiveSelectedProfileId,
                         rerouteApplied,
                         reasonCode: fallbackPolicy.skipReasonCode,
-                        selectionSource: profileSelectionSource,
+                        selectionSource: searchPolicySelectionSource,
                         fallbackOrder: searchFallbackOrder,
                         rankingPolicy: searchFallbackRankingPolicy.steps,
                         rankedFallbackProfileIds: rankedFallbackCandidates.map(

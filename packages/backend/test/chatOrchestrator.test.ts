@@ -952,7 +952,7 @@ test('planner capability selection chooses search-capable profile without rerout
     );
 });
 
-test('planner-selected non-search profile skips search when no tool-capable fallback exists', async () => {
+test('planner-selected non-search profile reports no tool-capable fallback when search floor cannot be met', async () => {
     let observedSearch: unknown;
     let capturedExecutionContext:
         | ResponseMetadataRuntimeContext['executionContext']
@@ -1033,7 +1033,7 @@ test('planner-selected non-search profile skips search when no tool-capable fall
     assert.deepEqual(capturedExecutionContext?.tool, {
         toolName: 'web_search',
         status: 'skipped',
-        reasonCode: 'search_reroute_not_permitted_by_selection_source',
+        reasonCode: 'search_reroute_no_tool_capable_fallback_available',
     });
 });
 
@@ -1260,7 +1260,7 @@ test('search drop path exposes reason codes in response execution metadata', asy
         assert.equal(capturedExecutionContext?.tool?.status, 'skipped');
         assert.equal(
             capturedExecutionContext?.tool?.reasonCode,
-            'search_reroute_not_permitted_by_selection_source'
+            'search_reroute_no_tool_capable_fallback_available'
         );
         assert.equal(response.metadata?.provenance, 'Inferred');
     } finally {
