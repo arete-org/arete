@@ -81,6 +81,50 @@ type ChatImageAction = {
     imageRequest: ChatImageRequest;
 };
 
+type BreakerSafetyAction =
+    | 'allow'
+    | 'block'
+    | 'redirect'
+    | 'safe_partial'
+    | 'human_review';
+
+type BreakerSafetyDecision = {
+    action: BreakerSafetyAction;
+    safetyTier: 'Low' | 'Medium' | 'High';
+    ruleId: string | null;
+    reasonCode?: string;
+    reason?: string;
+};
+
+type BreakerDecisionContext = {
+    source: 'metadata.evaluator' | 'metadata.execution';
+    mode: 'observe_only' | 'enforced';
+    safetyDecision: BreakerSafetyDecision;
+};
+
+type BreakerEnforcementMapping =
+    | 'block'
+    | 'safe_response'
+    | 'redirect'
+    | 'review';
+
+type PreSendBreakerOutcome =
+    | { kind: 'none' }
+    | {
+          kind: 'allow';
+          decision: BreakerDecisionContext;
+      }
+    | {
+          kind: 'fail_open';
+          decision: BreakerDecisionContext;
+      }
+    | {
+          kind: 'enforced';
+          decision: BreakerDecisionContext;
+          mappedAction: BreakerEnforcementMapping;
+          outboundMessage: string;
+      };
+
 /**
  * Provenance assets prepared for either a combined response send or a later
  * follow-up send. Keeping this payload serializable makes the "wait briefly,
@@ -152,6 +196,138 @@ const hasResponseMetadata = (value: unknown): value is ResponseMetadata =>
         typeof value === 'object' &&
         typeof (value as { responseId?: unknown }).responseId === 'string'
     );
+
+const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null;
+
+const isBreakerSafetyDecision = (
+    value: unknown
+): value is BreakerSafetyDecision => {
+    if (!isObjectRecord(value)) {
+        return false;
+    }
+
+    const action = value.action;
+    const safetyTier = value.safetyTier;
+    const ruleId = value.ruleId;
+
+    if (
+        action !== 'allow' &&
+        action !== 'block' &&
+        action !== 'redirect' &&
+        action !== 'safe_partial' &&
+        action !== 'human_review'
+    ) {
+        return false;
+    }
+
+    if (
+        safetyTier !== 'Low' &&
+        safetyTier !== 'Medium' &&
+        safetyTier !== 'High'
+    ) {
+        return false;
+    }
+
+    if (action === 'allow') {
+        return ruleId === null;
+    }
+
+    return (
+        typeof ruleId === 'string' &&
+        ruleId.length > 0 &&
+        typeof value.reasonCode === 'string' &&
+        value.reasonCode.length > 0 &&
+        typeof value.reason === 'string' &&
+        value.reason.length > 0
+    );
+};
+
+const toBreakerDecisionContext = (
+    value: unknown,
+    source: BreakerDecisionContext['source']
+): BreakerDecisionContext | null => {
+    if (!isObjectRecord(value)) {
+        return null;
+    }
+
+    const mode = value.mode;
+    const safetyDecision = value.safetyDecision;
+    if (
+        (mode !== 'observe_only' && mode !== 'enforced') ||
+        !isBreakerSafetyDecision(safetyDecision)
+    ) {
+        return null;
+    }
+
+    return {
+        source,
+        mode,
+        safetyDecision,
+    };
+};
+
+const resolveBreakerDecisionContext = (
+    metadata: ResponseMetadata
+): BreakerDecisionContext | null => {
+    const directEvaluator = toBreakerDecisionContext(
+        metadata.evaluator,
+        'metadata.evaluator'
+    );
+    if (directEvaluator) {
+        return directEvaluator;
+    }
+
+    for (const executionEvent of metadata.execution ?? []) {
+        if (executionEvent.kind !== 'evaluator') {
+            continue;
+        }
+        const executionEvaluator = toBreakerDecisionContext(
+            executionEvent.evaluator,
+            'metadata.execution'
+        );
+        if (executionEvaluator) {
+            return executionEvaluator;
+        }
+    }
+
+    return null;
+};
+
+const mapBreakerDecisionToEnforcement = (
+    decision: BreakerSafetyDecision
+): { mappedAction: BreakerEnforcementMapping; outboundMessage: string } => {
+    switch (decision.action) {
+        case 'block':
+            return {
+                mappedAction: 'block',
+                outboundMessage: "I can't help with that request.",
+            };
+        case 'safe_partial':
+            return {
+                mappedAction: 'safe_response',
+                outboundMessage:
+                    "I can't provide that directly. I can help with safer, high-level guidance instead.",
+            };
+        case 'redirect':
+            return {
+                mappedAction: 'redirect',
+                outboundMessage:
+                    "I can't provide that directly. Share your underlying goal and I can help with a safer alternative.",
+            };
+        case 'human_review':
+            return {
+                mappedAction: 'review',
+                outboundMessage:
+                    "I can't answer that automatically right now. Please request human review.",
+            };
+        case 'allow':
+            return {
+                mappedAction: 'safe_response',
+                outboundMessage: '',
+            };
+    }
+};
 
 const isChatMessageAction = (
     value: DiscordChatApiResponse
@@ -675,6 +851,73 @@ export class MessageProcessor {
         directReply: boolean,
         recoveredImageContext: RecoveredImageContext | null
     ): Promise<void> {
+        const preSendBreakerOutcome =
+            this.resolvePreSendBreakerOutcome(chatResponse);
+        if (preSendBreakerOutcome.kind === 'allow') {
+            logger.info('discord.chat.breaker_action_applied', {
+                event: 'discord.chat.breaker_action_applied',
+                messageId: message.id,
+                plannerAction: chatResponse.action,
+                appliedAction: 'allow',
+                enforcement: 'allow',
+                mode: preSendBreakerOutcome.decision.mode,
+                source: preSendBreakerOutcome.decision.source,
+                safetyTier:
+                    preSendBreakerOutcome.decision.safetyDecision.safetyTier,
+                ruleId: preSendBreakerOutcome.decision.safetyDecision.ruleId,
+                reasonCode:
+                    preSendBreakerOutcome.decision.safetyDecision.reasonCode ??
+                    null,
+                rationale:
+                    preSendBreakerOutcome.decision.safetyDecision.reason ??
+                    null,
+            });
+        } else if (preSendBreakerOutcome.kind === 'fail_open') {
+            logger.warn('discord.chat.breaker_action_applied', {
+                event: 'discord.chat.breaker_action_applied',
+                messageId: message.id,
+                plannerAction: chatResponse.action,
+                appliedAction: 'allow_fail_open',
+                enforcement: 'observe_only',
+                mode: preSendBreakerOutcome.decision.mode,
+                source: preSendBreakerOutcome.decision.source,
+                safetyTier:
+                    preSendBreakerOutcome.decision.safetyDecision.safetyTier,
+                ruleId: preSendBreakerOutcome.decision.safetyDecision.ruleId,
+                reasonCode:
+                    preSendBreakerOutcome.decision.safetyDecision.reasonCode ??
+                    null,
+                rationale:
+                    preSendBreakerOutcome.decision.safetyDecision.reason ??
+                    null,
+            });
+        } else if (preSendBreakerOutcome.kind === 'enforced') {
+            logger.warn('discord.chat.breaker_action_applied', {
+                event: 'discord.chat.breaker_action_applied',
+                messageId: message.id,
+                plannerAction: chatResponse.action,
+                appliedAction: preSendBreakerOutcome.mappedAction,
+                enforcement: 'enforced',
+                mode: preSendBreakerOutcome.decision.mode,
+                source: preSendBreakerOutcome.decision.source,
+                safetyTier:
+                    preSendBreakerOutcome.decision.safetyDecision.safetyTier,
+                ruleId: preSendBreakerOutcome.decision.safetyDecision.ruleId,
+                reasonCode:
+                    preSendBreakerOutcome.decision.safetyDecision.reasonCode ??
+                    null,
+                rationale:
+                    preSendBreakerOutcome.decision.safetyDecision.reason ??
+                    null,
+            });
+            await responseHandler.sendMessage(
+                preSendBreakerOutcome.outboundMessage,
+                [],
+                directReply
+            );
+            return;
+        }
+
         switch (chatResponse.action) {
             case 'ignore':
                 logger.debug(
@@ -745,6 +988,42 @@ export class MessageProcessor {
                 );
                 return;
         }
+    }
+
+    private resolvePreSendBreakerOutcome(
+        chatResponse: DiscordChatApiResponse
+    ): PreSendBreakerOutcome {
+        const metadataValue = (chatResponse as { metadata?: unknown }).metadata;
+        if (!hasResponseMetadata(metadataValue)) {
+            return { kind: 'none' };
+        }
+
+        const decision = resolveBreakerDecisionContext(metadataValue);
+        if (!decision) {
+            return { kind: 'none' };
+        }
+
+        if (decision.safetyDecision.action === 'allow') {
+            return {
+                kind: 'allow',
+                decision,
+            };
+        }
+
+        if (decision.mode !== 'enforced') {
+            return {
+                kind: 'fail_open',
+                decision,
+            };
+        }
+
+        const mapped = mapBreakerDecisionToEnforcement(decision.safetyDecision);
+        return {
+            kind: 'enforced',
+            decision,
+            mappedAction: mapped.mappedAction,
+            outboundMessage: mapped.outboundMessage,
+        };
     }
 
     private async executeChatMessageAction(
