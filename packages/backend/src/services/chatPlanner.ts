@@ -1059,7 +1059,8 @@ export const createChatPlanner = ({
                         structuredAbortContext.timedOut()
                     ) {
                         throw new Error(
-                            `Planner structured call timed out after ${structuredExecutionTimeoutMs}ms`
+                            `Planner structured call timed out after ${structuredExecutionTimeoutMs}ms`,
+                            { cause: structuredError }
                         );
                     }
 

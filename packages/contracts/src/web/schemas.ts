@@ -7,7 +7,12 @@
  */
 
 import { z } from 'zod';
-import type { TraceAxisScore } from '../ethics-core/index.js';
+import {
+    WORKFLOW_STEP_KINDS,
+    WORKFLOW_STEP_STATUSES,
+    WORKFLOW_TERMINATION_REASONS,
+    type TraceAxisScore,
+} from '../ethics-core/index.js';
 import { SafetyDecisionSchema } from '../ethics-core/schemas.js';
 import type { ApiResponseValidationResult } from './client-core.js';
 import {
@@ -138,7 +143,7 @@ const ResponseTemperamentSchema = z
     })
     .strict();
 const PartialResponseTemperamentSchema = ResponseTemperamentSchema.partial();
-const ExecutionStatusSchema = z.enum(['executed', 'skipped', 'failed']);
+const ExecutionStatusSchema = z.enum(WORKFLOW_STEP_STATUSES);
 const ExecutionReasonCodeSchema = z.enum([
     'planner_runtime_error',
     'planner_invalid_output',
@@ -247,6 +252,107 @@ const ExecutionEventSchema = z
     })
     .strict();
 
+const StepOutcomeSchema = z
+    .object({
+        status: z.enum(WORKFLOW_STEP_STATUSES),
+        summary: z.string().min(1),
+        artifacts: z.array(z.string()).optional(),
+        signals: z
+            .record(
+                z.string(),
+                z.union([z.string(), z.number(), z.boolean(), z.null()])
+            )
+            .optional(),
+        recommendations: z.array(z.string()).optional(),
+    })
+    .strict();
+
+const StepRecordSchema = z
+    .object({
+        stepId: z.string().min(1),
+        parentStepId: z.string().min(1).optional(),
+        attempt: z.number().int().positive(),
+        stepKind: z.enum(WORKFLOW_STEP_KINDS),
+        reasonCode: ExecutionReasonCodeSchema.optional(),
+        startedAt: z.string().datetime(),
+        finishedAt: z.string().datetime(),
+        durationMs: z.number().int().nonnegative(),
+        model: z.string().min(1).optional(),
+        usage: z
+            .object({
+                promptTokens: z.number().int().nonnegative().optional(),
+                completionTokens: z.number().int().nonnegative().optional(),
+                totalTokens: z.number().int().nonnegative().optional(),
+            })
+            .strict()
+            .optional(),
+        cost: z
+            .object({
+                inputCostUsd: z.number().nonnegative(),
+                outputCostUsd: z.number().nonnegative(),
+                totalCostUsd: z.number().nonnegative(),
+            })
+            .strict()
+            .optional(),
+        outcome: StepOutcomeSchema,
+    })
+    .strict();
+
+const WorkflowRecordSchema = z
+    .object({
+        workflowId: z.string().min(1),
+        workflowName: z.string().min(1),
+        status: z.enum(['completed', 'degraded']),
+        stepCount: z.number().int().nonnegative(),
+        maxSteps: z.number().int().positive(),
+        maxDurationMs: z.number().int().positive(),
+        terminationReason: z.enum(WORKFLOW_TERMINATION_REASONS),
+        steps: z.array(StepRecordSchema),
+    })
+    .superRefine((value, context) => {
+        if (value.stepCount !== value.steps.length) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'stepCount must equal steps.length.',
+            });
+        }
+
+        const seenStepIds = new Set<string>();
+        for (const step of value.steps) {
+            if (seenStepIds.has(step.stepId)) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `stepId "${step.stepId}" must be unique within a workflow.`,
+                });
+            }
+
+            if (
+                step.parentStepId !== undefined &&
+                step.parentStepId === step.stepId
+            ) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `stepId "${step.stepId}" cannot self-reference as parentStepId.`,
+                });
+            }
+
+            seenStepIds.add(step.stepId);
+        }
+
+        for (const step of value.steps) {
+            if (
+                step.parentStepId !== undefined &&
+                !seenStepIds.has(step.parentStepId)
+            ) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `parentStepId "${step.parentStepId}" must reference a stepId in the same workflow.`,
+                });
+            }
+        }
+    })
+    .strict();
+
 const responseMetadataShape = {
     responseId: z.string().min(1),
     provenance: ProvenanceSchema,
@@ -260,6 +366,7 @@ const responseMetadataShape = {
     totalDurationMs: z.number().int().nonnegative().optional(),
     citations: z.array(CitationSchema),
     execution: z.array(ExecutionEventSchema).optional(),
+    workflow: WorkflowRecordSchema.optional(),
     evaluator: EvaluatorOutcomeSchema.optional(),
     imageDescriptions: z.array(z.string()).optional(),
     evidenceScore: TraceAxisScoreSchema.optional(),

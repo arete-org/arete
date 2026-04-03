@@ -213,7 +213,8 @@ export const createInternalImageApi = (
                     const message =
                         error instanceof Error ? error.message : String(error);
                     throw new Error(
-                        `Internal image stream payload was invalid: body Malformed JSON (${message})`
+                        `Internal image stream payload was invalid: body Malformed JSON (${message})`,
+                        { cause: error }
                     );
                 }
 

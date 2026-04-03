@@ -365,7 +365,7 @@ export const createWeatherGovForecastTool = ({
         const requestedAt = now().toISOString();
         const horizonPeriods = clampHorizonPeriods(request.horizonPeriods);
 
-        let forecastEndpoint: string | null = null;
+        let forecastEndpoint: string | undefined;
         let resolvedFromEndpoint: string | undefined;
         let locationName: string | undefined;
         let timezone: string | undefined;
@@ -403,9 +403,10 @@ export const createWeatherGovForecastTool = ({
                     : typeof pointProperties?.forecastHourly === 'string'
                       ? pointProperties.forecastHourly
                       : undefined;
-            forecastEndpoint = forecastUrlRaw
+            const normalizedForecastEndpoint = forecastUrlRaw
                 ? toAbsoluteWeatherGovUrl(forecastUrlRaw)
                 : null;
+            forecastEndpoint = normalizedForecastEndpoint ?? undefined;
             office =
                 typeof pointProperties?.gridId === 'string'
                     ? pointProperties.gridId

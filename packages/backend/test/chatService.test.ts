@@ -791,3 +791,152 @@ test('runChatMessages stores evidence and freshness chips for retrieved search r
     assert.equal(storedMetadata?.evidenceScore, 4);
     assert.equal(storedMetadata?.freshnessScore, 4);
 });
+
+test('runChatMessages executes bounded review loop and forwards workflow lineage', async () => {
+    let callCount = 0;
+    let capturedWorkflow:
+        | ResponseMetadataRuntimeContext['workflow']
+        | undefined;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(_request) {
+            callCount += 1;
+            if (callCount === 1) {
+                return {
+                    text: 'initial draft',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 30,
+                        completionTokens: 20,
+                        totalTokens: 50,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+
+            if (callCount === 2) {
+                return {
+                    text: '{"decision":"finalize","reason":"Draft is complete and clear."}',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 8,
+                        totalTokens: 18,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+
+            throw new Error(`Unexpected generation call ${callCount}`);
+        },
+    };
+
+    const chatService = createChatService({
+        generationRuntime,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedWorkflow = runtimeContext.workflow;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+        },
+    });
+
+    assert.equal(response.message, 'initial draft');
+    assert.equal(callCount, 2);
+    assert.equal(capturedWorkflow?.workflowName, 'message_with_review_loop_v1');
+    assert.equal(capturedWorkflow?.terminationReason, 'goal_satisfied');
+    assert.equal(capturedWorkflow?.status, 'completed');
+    assert.ok((capturedWorkflow?.steps.length ?? 0) >= 2);
+});
+
+test('runChatMessages fails open when review output is invalid', async () => {
+    let callCount = 0;
+    let capturedWorkflow:
+        | ResponseMetadataRuntimeContext['workflow']
+        | undefined;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            callCount += 1;
+            if (callCount === 1) {
+                return {
+                    text: 'draft that should still be returned',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 20,
+                        completionTokens: 10,
+                        totalTokens: 30,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+
+            if (callCount === 2) {
+                return {
+                    text: 'not-json',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 5,
+                        totalTokens: 15,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+
+            throw new Error(`Unexpected generation call ${callCount}`);
+        },
+    };
+
+    const chatService = createChatService({
+        generationRuntime,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedWorkflow = runtimeContext.workflow;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+        },
+    });
+
+    assert.equal(response.message, 'draft that should still be returned');
+    assert.equal(callCount, 2);
+    assert.equal(capturedWorkflow?.status, 'degraded');
+    assert.equal(
+        capturedWorkflow?.terminationReason,
+        'executor_error_fail_open'
+    );
+});

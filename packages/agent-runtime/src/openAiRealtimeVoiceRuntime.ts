@@ -773,7 +773,8 @@ export const createOpenAiRealtimeVoiceRuntime = ({
                     error.name === 'AbortError'
                 ) {
                     throw new Error(
-                        `Realtime connection timed out after ${requestTimeoutMs}ms`
+                        `Realtime connection timed out after ${requestTimeoutMs}ms`,
+                        { cause: error }
                     );
                 }
                 logger?.error?.('Realtime session creation failed.', {

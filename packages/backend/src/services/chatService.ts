@@ -13,11 +13,15 @@ import type {
     RuntimeMessage,
 } from '@footnote/agent-runtime';
 import type {
+    ExecutionReasonCode,
     PartialResponseTemperament,
     ResponseMetadata,
     SafetyTier,
+    StepRecord,
     ToolExecutionContext,
     ToolInvocationRequest,
+    WorkflowRecord,
+    WorkflowTerminationReason,
 } from '@footnote/contracts/ethics-core';
 import type {
     ModelProfileCapabilities,
@@ -37,8 +41,65 @@ import {
 import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
+import {
+    applyStepExecutionToState,
+    createInitialWorkflowState,
+    isTransitionAllowed,
+    isWithinExecutionLimits,
+    mapExhaustedLimitToTerminationReason,
+    type ExecutionLimits,
+    type WorkflowPolicy,
+} from './workflowEngine.js';
 import { logger } from '../utils/logger.js';
 import { runtimeConfig } from '../config.js';
+
+const REVIEW_WORKFLOW_NAME = 'message_with_review_loop_v1';
+const REVIEW_DECISION_PROMPT = `Return plain JSON only.
+Schema:
+{
+  "decision": "finalize" | "revise",
+  "reason": "one short sentence"
+}
+Choose "finalize" when the draft is complete, accurate, and ready.
+Choose "revise" only when one additional revision would materially improve quality.
+Do not include markdown or extra keys.`;
+
+const REVISION_PROMPT_PREFIX =
+    'Revise the prior draft using the review guidance while preserving factual grounding and provenance boundaries.';
+const UNBOUNDED_LIMIT = Number.MAX_SAFE_INTEGER;
+
+type ReviewDecision = {
+    decision: 'finalize' | 'revise';
+    reason: string;
+};
+
+const parseReviewDecision = (text: string): ReviewDecision | null => {
+    const trimmed = text.trim();
+    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+        return null;
+    }
+
+    try {
+        const parsed = JSON.parse(trimmed) as {
+            decision?: unknown;
+            reason?: unknown;
+        };
+        if (
+            (parsed.decision !== 'finalize' && parsed.decision !== 'revise') ||
+            typeof parsed.reason !== 'string' ||
+            parsed.reason.trim().length === 0
+        ) {
+            return null;
+        }
+
+        return {
+            decision: parsed.decision,
+            reason: parsed.reason.trim(),
+        };
+    } catch {
+        return null;
+    }
+};
 
 /**
  * Search is optional, but if it is present it needs a real query. Blank values
@@ -90,6 +151,11 @@ export type CreateChatServiceOptions = {
     defaultProvider?: SupportedProvider;
     defaultCapabilities?: ModelProfileCapabilities;
     recordUsage?: (record: BackendLLMCostRecord) => void;
+    chatWorkflowConfig?: {
+        reviewLoopEnabled: boolean;
+        maxIterations: number;
+        maxDurationMs: number;
+    };
 };
 
 /**
@@ -137,6 +203,7 @@ export const createChatService = ({
     defaultProvider,
     defaultCapabilities,
     recordUsage = recordBackendLLMUsage,
+    chatWorkflowConfig = runtimeConfig.chatWorkflow,
 }: CreateChatServiceOptions) => {
     /**
      * Normalizes one runtime result into the metadata shape backend already
@@ -165,6 +232,55 @@ export const createChatService = ({
             verbosity: generation?.verbosity,
             provenance: generationResult.provenance,
             citations: generationResult.citations ?? [],
+        };
+    };
+
+    const recordUsageForStep = (
+        result: GenerationResult,
+        requestedModel: string | undefined
+    ): {
+        model: string;
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+        estimatedCost: ReturnType<typeof estimateBackendTextCost>;
+    } => {
+        const usageModel = result.model ?? requestedModel ?? defaultModel;
+        const promptTokens = result.usage?.promptTokens ?? 0;
+        const completionTokens = result.usage?.completionTokens ?? 0;
+        const totalTokens =
+            result.usage?.totalTokens ?? promptTokens + completionTokens;
+        const estimatedCost = estimateBackendTextCost(
+            usageModel,
+            promptTokens,
+            completionTokens
+        );
+
+        if (recordUsage) {
+            try {
+                recordUsage({
+                    feature: 'chat',
+                    model: usageModel,
+                    promptTokens,
+                    completionTokens,
+                    totalTokens,
+                    ...estimatedCost,
+                    timestamp: Date.now(),
+                });
+            } catch (error) {
+                // Cost telemetry should never block user responses.
+                logger.warn(
+                    `Chat usage recording failed: ${error instanceof Error ? error.message : String(error)}`
+                );
+            }
+        }
+
+        return {
+            model: usageModel,
+            promptTokens,
+            completionTokens,
+            totalTokens,
+            estimatedCost,
         };
     };
 
@@ -221,10 +337,403 @@ export const createChatService = ({
                 search: normalizedGeneration.search,
             }),
         };
-
-        // One runtime call produces both user-visible text and metadata inputs.
-        const generationResult =
+        let generationResult =
             await generationRuntime.generate(generationRequest);
+        let assistantMetadata = buildAssistantMetadata(
+            generationResult,
+            normalizedGeneration,
+            generationRequest.model
+        );
+        let workflowLineage: WorkflowRecord | undefined;
+
+        const reviewLoopEnabled = chatWorkflowConfig.reviewLoopEnabled;
+        const reviewLoopMaxIterations = chatWorkflowConfig.maxIterations;
+        const reviewLoopMaxDurationMs = chatWorkflowConfig.maxDurationMs;
+        if (reviewLoopEnabled && reviewLoopMaxIterations > 0) {
+            const workflowStartedAt = Date.now();
+            const workflowId = `wf_${workflowStartedAt.toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+            const workflowSteps: StepRecord[] = [];
+            let stepCounter = 0;
+            let terminationReason: WorkflowTerminationReason =
+                'budget_exhausted_steps';
+            let workflowStatus: WorkflowRecord['status'] = 'degraded';
+            let draftResult: GenerationResult = generationResult;
+            let draftParentStepId: string | undefined;
+            let latestReviewReason: string | undefined;
+            let shouldStop = false;
+            const workflowPolicy: WorkflowPolicy = {
+                enablePlanning: false,
+                enableToolUse: false,
+                enableReplanning: false,
+                enableAssessment: true,
+                enableRevision: true,
+            };
+            const executionLimits: ExecutionLimits = {
+                maxWorkflowSteps: reviewLoopMaxIterations * 2 + 1,
+                // Review-loop profile has no tool phase yet; keep tool limits inert
+                // until `tool` steps are routed through the engine.
+                maxToolCalls: UNBOUNDED_LIMIT,
+                maxDeliberationCalls: reviewLoopMaxIterations * 2,
+                // Token caps are intentionally deferred in this profile; current
+                // bounded behavior is steps + deliberation calls + duration.
+                maxTokensTotal: UNBOUNDED_LIMIT,
+                maxDurationMs: reviewLoopMaxDurationMs,
+            };
+            let workflowState = createInitialWorkflowState({
+                workflowId,
+                workflowName: REVIEW_WORKFLOW_NAME,
+                startedAtMs: workflowStartedAt,
+            });
+
+            const captureStep = (input: {
+                stepKind: StepRecord['stepKind'];
+                status: StepRecord['outcome']['status'];
+                summary: string;
+                startedAtMs: number;
+                finishedAtMs: number;
+                model?: string;
+                usage?: GenerationResult['usage'];
+                estimatedCost?: ReturnType<typeof estimateBackendTextCost>;
+                reasonCode?: ExecutionReasonCode;
+                parentStepId?: string;
+                attempt: number;
+                signals?: Record<string, string | number | boolean | null>;
+                recommendations?: string[];
+            }): string => {
+                stepCounter += 1;
+                const stepId = `step_${stepCounter}`;
+                workflowSteps.push({
+                    stepId,
+                    ...(input.parentStepId !== undefined && {
+                        parentStepId: input.parentStepId,
+                    }),
+                    attempt: input.attempt,
+                    stepKind: input.stepKind,
+                    ...(input.reasonCode !== undefined && {
+                        reasonCode: input.reasonCode,
+                    }),
+                    startedAt: new Date(input.startedAtMs).toISOString(),
+                    finishedAt: new Date(input.finishedAtMs).toISOString(),
+                    durationMs: Math.max(
+                        0,
+                        input.finishedAtMs - input.startedAtMs
+                    ),
+                    ...(input.model !== undefined && { model: input.model }),
+                    ...(input.usage !== undefined && {
+                        usage: {
+                            promptTokens: input.usage.promptTokens,
+                            completionTokens: input.usage.completionTokens,
+                            totalTokens: input.usage.totalTokens,
+                        },
+                    }),
+                    ...(input.estimatedCost !== undefined && {
+                        cost: {
+                            inputCostUsd: input.estimatedCost.inputCostUsd,
+                            outputCostUsd: input.estimatedCost.outputCostUsd,
+                            totalCostUsd: input.estimatedCost.totalCostUsd,
+                        },
+                    }),
+                    outcome: {
+                        status: input.status,
+                        summary: input.summary,
+                        ...(input.signals !== undefined && {
+                            signals: input.signals,
+                        }),
+                        ...(input.recommendations !== undefined && {
+                            recommendations: input.recommendations,
+                        }),
+                    },
+                });
+                return stepId;
+            };
+
+            const initialDraftUsage = recordUsageForStep(
+                draftResult,
+                generationRequest.model
+            );
+            if (
+                !isTransitionAllowed(
+                    workflowState.currentStepKind,
+                    'generate',
+                    workflowPolicy
+                )
+            ) {
+                terminationReason = 'transition_blocked_by_policy';
+                workflowStatus = 'degraded';
+                shouldStop = true;
+            }
+            const initialDraftStepId = captureStep({
+                stepKind: 'generate',
+                status: 'executed',
+                summary: 'Generated initial draft response.',
+                startedAtMs: generationStartedAt,
+                finishedAtMs: Date.now(),
+                model: initialDraftUsage.model,
+                usage: draftResult.usage,
+                estimatedCost: initialDraftUsage.estimatedCost,
+                attempt: 1,
+            });
+            draftParentStepId = initialDraftStepId;
+            workflowState = applyStepExecutionToState(
+                workflowState,
+                'generate',
+                initialDraftUsage.totalTokens,
+                0,
+                0
+            );
+
+            const stopIfOverLimits = (): boolean => {
+                const limitsCheck = isWithinExecutionLimits(
+                    workflowState,
+                    executionLimits,
+                    Date.now()
+                );
+                if (limitsCheck.withinLimits) {
+                    return false;
+                }
+
+                terminationReason =
+                    limitsCheck.exhaustedBy !== undefined
+                        ? mapExhaustedLimitToTerminationReason(
+                              limitsCheck.exhaustedBy
+                          )
+                        : 'budget_exhausted_steps';
+                workflowStatus = 'degraded';
+                shouldStop = true;
+                return true;
+            };
+
+            for (
+                let iteration = 1;
+                iteration <= reviewLoopMaxIterations && !shouldStop;
+                iteration += 1
+            ) {
+                if (
+                    !isTransitionAllowed(
+                        workflowState.currentStepKind,
+                        'assess',
+                        workflowPolicy
+                    )
+                ) {
+                    terminationReason = 'transition_blocked_by_policy';
+                    workflowStatus = 'degraded';
+                    break;
+                }
+
+                if (stopIfOverLimits()) {
+                    break;
+                }
+
+                const reviewStartedAt = Date.now();
+                try {
+                    const reviewResult = await generationRuntime.generate({
+                        messages: [
+                            ...messagesWithHints,
+                            {
+                                role: 'assistant',
+                                content: draftResult.text,
+                            },
+                            {
+                                role: 'system',
+                                content: REVIEW_DECISION_PROMPT,
+                            },
+                        ],
+                        model: generationRequest.model,
+                        ...(generationRequest.provider !== undefined && {
+                            provider: generationRequest.provider,
+                        }),
+                        ...(generationRequest.capabilities !== undefined && {
+                            capabilities: generationRequest.capabilities,
+                        }),
+                        maxOutputTokens: 200,
+                        reasoningEffort: 'low',
+                        verbosity: 'low',
+                    });
+                    const reviewFinishedAt = Date.now();
+                    const reviewUsage = recordUsageForStep(
+                        reviewResult,
+                        generationRequest.model
+                    );
+                    const reviewStepId = captureStep({
+                        stepKind: 'assess',
+                        status: 'executed',
+                        summary:
+                            'Assessment step evaluated draft quality and goal completion.',
+                        startedAtMs: reviewStartedAt,
+                        finishedAtMs: reviewFinishedAt,
+                        model: reviewUsage.model,
+                        usage: reviewResult.usage,
+                        estimatedCost: reviewUsage.estimatedCost,
+                        parentStepId: draftParentStepId,
+                        attempt: iteration,
+                    });
+                    workflowState = applyStepExecutionToState(
+                        workflowState,
+                        'assess',
+                        reviewUsage.totalTokens,
+                        0,
+                        1
+                    );
+                    const decision = parseReviewDecision(reviewResult.text);
+                    if (!decision) {
+                        terminationReason = 'executor_error_fail_open';
+                        workflowStatus = 'degraded';
+                        shouldStop = true;
+                        break;
+                    }
+
+                    latestReviewReason = decision.reason;
+                    if (decision.decision === 'finalize') {
+                        terminationReason = 'goal_satisfied';
+                        workflowStatus = 'completed';
+                        shouldStop = true;
+                        break;
+                    }
+
+                    if (iteration >= reviewLoopMaxIterations) {
+                        terminationReason = 'budget_exhausted_steps';
+                        workflowStatus = 'degraded';
+                        shouldStop = true;
+                        break;
+                    }
+
+                    if (
+                        !isTransitionAllowed(
+                            workflowState.currentStepKind,
+                            'revise',
+                            workflowPolicy
+                        )
+                    ) {
+                        terminationReason = 'transition_blocked_by_policy';
+                        workflowStatus = 'degraded';
+                        shouldStop = true;
+                        break;
+                    }
+
+                    if (stopIfOverLimits()) {
+                        break;
+                    }
+
+                    const revisionStartedAt = Date.now();
+                    try {
+                        const revisionResult = await generationRuntime.generate(
+                            {
+                                ...generationRequest,
+                                messages: [
+                                    ...messagesWithHints,
+                                    {
+                                        role: 'assistant',
+                                        content: draftResult.text,
+                                    },
+                                    {
+                                        role: 'system',
+                                        content: `${REVISION_PROMPT_PREFIX}\nReview guidance: ${latestReviewReason ?? 'No additional guidance provided.'}`,
+                                    },
+                                ],
+                            }
+                        );
+                        const revisionFinishedAt = Date.now();
+                        const revisionUsage = recordUsageForStep(
+                            revisionResult,
+                            generationRequest.model
+                        );
+                        const revisionStepId = captureStep({
+                            stepKind: 'revise',
+                            status: 'executed',
+                            summary:
+                                'Revision step produced improved draft from assessment guidance.',
+                            startedAtMs: revisionStartedAt,
+                            finishedAtMs: revisionFinishedAt,
+                            model: revisionUsage.model,
+                            usage: revisionResult.usage,
+                            estimatedCost: revisionUsage.estimatedCost,
+                            parentStepId: reviewStepId,
+                            attempt: iteration,
+                            signals: {
+                                        reviewReason:
+                                            latestReviewReason ??
+                                            'No additional guidance provided.',
+                            },
+                        });
+                        workflowState = applyStepExecutionToState(
+                            workflowState,
+                            'revise',
+                            revisionUsage.totalTokens,
+                            0,
+                            1
+                        );
+                        draftResult = revisionResult;
+                        draftParentStepId = revisionStepId;
+                    } catch {
+                        const revisionFinishedAt = Date.now();
+                        captureStep({
+                            stepKind: 'revise',
+                            status: 'failed',
+                            summary:
+                                'Revision step failed; fail-open returned latest successful draft.',
+                            reasonCode: 'generation_runtime_error',
+                            startedAtMs: revisionStartedAt,
+                            finishedAtMs: revisionFinishedAt,
+                            parentStepId: reviewStepId,
+                            attempt: iteration,
+                        });
+                        workflowState = applyStepExecutionToState(
+                            workflowState,
+                            'revise',
+                            0,
+                            0,
+                            1
+                        );
+                        terminationReason = 'executor_error_fail_open';
+                        workflowStatus = 'degraded';
+                        shouldStop = true;
+                    }
+                } catch {
+                    const reviewFinishedAt = Date.now();
+                    captureStep({
+                        stepKind: 'assess',
+                        status: 'failed',
+                        summary:
+                            'Assessment step failed; fail-open returned latest successful draft.',
+                        reasonCode: 'generation_runtime_error',
+                        startedAtMs: reviewStartedAt,
+                        finishedAtMs: reviewFinishedAt,
+                        parentStepId: draftParentStepId,
+                        attempt: iteration,
+                    });
+                    workflowState = applyStepExecutionToState(
+                        workflowState,
+                        'assess',
+                        0,
+                        0,
+                        1
+                    );
+                    terminationReason = 'executor_error_fail_open';
+                    workflowStatus = 'degraded';
+                    shouldStop = true;
+                }
+            }
+
+            generationResult = draftResult;
+            assistantMetadata = buildAssistantMetadata(
+                generationResult,
+                normalizedGeneration,
+                generationRequest.model
+            );
+            workflowLineage = {
+                workflowId,
+                workflowName: REVIEW_WORKFLOW_NAME,
+                status: workflowStatus,
+                stepCount: workflowState.stepCount,
+                maxSteps: executionLimits.maxWorkflowSteps,
+                maxDurationMs: reviewLoopMaxDurationMs,
+                terminationReason,
+                steps: workflowSteps,
+            };
+        } else {
+            recordUsageForStep(generationResult, generationRequest.model);
+        }
+
         // Generation duration is measured at the runtime boundary only.
         // It intentionally excludes planner time and pre/post processing.
         const generationDurationMs = Date.now() - generationStartedAt;
@@ -232,11 +741,6 @@ export const createChatService = ({
             orchestrationStartedAtMs !== undefined
                 ? Math.max(0, Date.now() - orchestrationStartedAtMs)
                 : undefined;
-        const assistantMetadata = buildAssistantMetadata(
-            generationResult,
-            normalizedGeneration,
-            generationRequest.model
-        );
         const retrievalUsed =
             generationResult.retrieval?.used === true ||
             generationResult.provenance === 'Retrieved' ||
@@ -296,40 +800,15 @@ export const createChatService = ({
                   durationMs: generationDurationMs,
               }
             : undefined;
-        const promptTokens = assistantMetadata.usage?.promptTokens ?? 0;
-        const completionTokens = assistantMetadata.usage?.completionTokens ?? 0;
-        const totalTokens =
-            assistantMetadata.usage?.totalTokens ??
-            promptTokens + completionTokens;
-        const estimatedCost = estimateBackendTextCost(
-            usageModel,
-            promptTokens,
-            completionTokens
-        );
-        if (recordUsage) {
-            try {
-                recordUsage({
-                    feature: 'chat',
-                    model: usageModel,
-                    promptTokens,
-                    completionTokens,
-                    totalTokens,
-                    ...estimatedCost,
-                    timestamp: Date.now(),
-                });
-            } catch (error) {
-                // Cost telemetry should never block user responses.
-                logger.warn(
-                    `Chat usage recording failed: ${error instanceof Error ? error.message : String(error)}`
-                );
-            }
-        }
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
             conversationSnapshot: `${conversationSnapshot}\n\n${generationResult.text}`,
             ...(totalDurationMs !== undefined && { totalDurationMs }),
             plannerTemperament,
+            ...(workflowLineage !== undefined && {
+                workflow: workflowLineage,
+            }),
             executionContext: {
                 // Preserve upstream execution context and overlay runtime facts
                 // (for example, generation duration + final resolved model).

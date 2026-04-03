@@ -311,7 +311,7 @@ const callCommand: Command = {
                 const errorMessage = `Failed to connect to voice channel ${voiceChannel.name}: ${error}`;
                 logger.error(errorMessage, error);
                 await safeReply(interaction, errorMessage);
-                throw new Error(errorMessage);
+                throw new Error(errorMessage, { cause: error });
             }
 
             // Handle disconnections

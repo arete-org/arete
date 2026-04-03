@@ -283,6 +283,81 @@ export type GenerationExecutionEvent = ProfileExecutionEvent & {
     reasonCode?: GenerationExecutionReasonCode;
 };
 
+export const WORKFLOW_STEP_STATUSES = [
+    'executed',
+    'skipped',
+    'failed',
+] as const;
+
+export type WorkflowStepStatus = (typeof WORKFLOW_STEP_STATUSES)[number];
+
+export const WORKFLOW_STEP_KINDS = [
+    'plan',
+    'tool',
+    'generate',
+    'assess',
+    'revise',
+    'finalize',
+] as const;
+
+export type WorkflowStepKind = (typeof WORKFLOW_STEP_KINDS)[number];
+
+export const WORKFLOW_TERMINATION_REASONS = [
+    'goal_satisfied',
+    'budget_exhausted_steps',
+    'budget_exhausted_tokens',
+    'budget_exhausted_time',
+    'transition_blocked_by_policy',
+    'max_tool_calls_reached',
+    'max_deliberation_calls_reached',
+    'executor_error_fail_open',
+] as const;
+
+export type WorkflowTerminationReason =
+    (typeof WORKFLOW_TERMINATION_REASONS)[number];
+
+export type StepOutcome = {
+    status: WorkflowStepStatus;
+    summary: string;
+    artifacts?: string[];
+    signals?: Record<string, string | number | boolean | null>;
+    recommendations?: string[];
+};
+
+export type StepRecord = {
+    stepId: string;
+    parentStepId?: string;
+    attempt: number;
+    stepKind: WorkflowStepKind;
+    reasonCode?: ExecutionReasonCode;
+    startedAt: string;
+    finishedAt: string;
+    durationMs: number;
+    model?: string;
+    usage?: {
+        promptTokens?: number;
+        completionTokens?: number;
+        totalTokens?: number;
+    };
+    cost?: {
+        inputCostUsd: number;
+        outputCostUsd: number;
+        totalCostUsd: number;
+    };
+    outcome: StepOutcome;
+};
+
+export type WorkflowRecord = {
+    workflowId: string;
+    workflowName: string;
+    status: 'completed' | 'degraded';
+    terminationReason: WorkflowTerminationReason;
+    stepCount: number;
+    maxSteps: number;
+    maxDurationMs: number;
+    steps: StepRecord[];
+};
+
 /**
  * Shared correlation envelope for structured backend telemetry.
  * Fields are nullable so callers can keep fail-open behavior.
@@ -360,6 +435,7 @@ export type ResponseMetadata = {
     totalDurationMs?: number; // End-to-end orchestration duration when available.
     citations: Citation[]; // Sources used for the answer.
     execution?: ExecutionEvent[]; // Canonical execution timeline for model/tool visibility.
+    workflow?: WorkflowRecord; // Optional workflow provenance record for bounded multi-step execution.
     evaluator?: EvaluatorOutcome; // Deterministic evaluator decision captured before breaker enforcement.
     imageDescriptions?: string[]; // Optional captions for any images used.
     evidenceScore?: TraceAxisScore; // Optional TRACE evidence chip score (1..5).

@@ -247,7 +247,8 @@ const extractJsonPayload = (rawText: string): unknown => {
             const parseMessage =
                 error instanceof Error ? ` ${error.message}` : '';
             throw new Error(
-                `Internal text task did not return a JSON object.${parseMessage}`
+                `Internal text task did not return a JSON object.${parseMessage}`,
+                { cause: error }
             );
         }
     }

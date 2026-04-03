@@ -124,7 +124,9 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
                 });
             } catch (error) {
                 if (error instanceof Error && error.name === 'AbortError') {
-                    throw new Error('Planner structured call was aborted');
+                    throw new Error('Planner structured call was aborted', {
+                        cause: error,
+                    });
                 }
 
                 if (attempt < retryAttempts) {
@@ -181,7 +183,8 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
                 .replace(/\s+/g, ' ')
                 .slice(0, 280);
             throw new SyntaxError(
-                `Failed structured planner argument parsing (length=${functionCallItem.arguments.length}): ${parserMessage}. preview=${argumentPreview}`
+                `Failed structured planner argument parsing (length=${functionCallItem.arguments.length}): ${parserMessage}. preview=${argumentPreview}`,
+                { cause: error }
             );
         }
         return {
