@@ -30,13 +30,13 @@ const App = (): JSX.Element => (
                 element={
                     <main id="main-content">
                         <Hero />
-                        <div className="section-container">
+                        <div className="section-container section-container--showcase">
                             <Services />
                         </div>
-                        <div className="section-container">
+                        <div className="section-container section-container--principles">
                             <OpenAccountable />
                         </div>
-                        <div className="section-container">
+                        <div className="section-container section-container--setup">
                             <Invite />
                         </div>
                         <Footer />

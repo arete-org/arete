@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - The hero sets user expectations about privacy, honesty, and transparency.
  */
 
+import { useState, type KeyboardEvent } from 'react';
 import Header from './Header';
 import AskMeAnything from './AskMeAnything';
 
@@ -13,6 +14,33 @@ import AskMeAnything from './AskMeAnything';
 const Hero = (): JSX.Element => {
     // No breadcrumbs on home page
     const breadcrumbItems: never[] = [];
+    const [activeTab, setActiveTab] = useState<'try' | 'setup'>('try');
+    const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+            return;
+        }
+
+        event.preventDefault();
+        const currentTab =
+            event.currentTarget.id === 'hero-tab-setup' ? 'setup' : 'try';
+        const nextTab =
+            event.key === 'ArrowRight'
+                ? currentTab === 'try'
+                    ? 'setup'
+                    : 'try'
+                : currentTab === 'setup'
+                  ? 'try'
+                  : 'setup';
+
+        setActiveTab(nextTab);
+
+        const nextTabElement = document.getElementById(
+            nextTab === 'try' ? 'hero-tab-try' : 'hero-tab-setup'
+        );
+        if (nextTabElement instanceof HTMLButtonElement) {
+            nextTabElement.focus();
+        }
+    };
 
     return (
         <section className="hero" aria-labelledby="hero-title">
@@ -24,6 +52,84 @@ const Hero = (): JSX.Element => {
                     A transparency-first framework for people who want more than
                     a black-box answer.
                 </p>
+                <div className="hero-action-hub">
+                    <div className="hero-action-tabs" role="tablist">
+                        <button
+                            id="hero-tab-try"
+                            type="button"
+                            role="tab"
+                            aria-controls="hero-panel-try"
+                            aria-selected={activeTab === 'try'}
+                            tabIndex={activeTab === 'try' ? 0 : -1}
+                            className={`hero-action-tab${activeTab === 'try' ? ' is-active' : ''}`}
+                            onClick={() => setActiveTab('try')}
+                            onKeyDown={handleKeyDown}
+                        >
+                            <span className="hero-action-tab__title">
+                                Try it out
+                            </span>
+                            <span className="hero-action-tab__hint">
+                                Ask a question right here
+                            </span>
+                        </button>
+                        <button
+                            id="hero-tab-setup"
+                            type="button"
+                            role="tab"
+                            aria-controls="hero-panel-setup"
+                            aria-selected={activeTab === 'setup'}
+                            tabIndex={activeTab === 'setup' ? 0 : -1}
+                            className={`hero-action-tab${activeTab === 'setup' ? ' is-active' : ''}`}
+                            onClick={() => setActiveTab('setup')}
+                            onKeyDown={handleKeyDown}
+                        >
+                            <span className="hero-action-tab__title">
+                                Set it up
+                            </span>
+                            <span className="hero-action-tab__hint">
+                                Minimal self-host quickstart
+                            </span>
+                        </button>
+                    </div>
+                    <div className="hero-action-panel">
+                        <div
+                            id="hero-panel-try"
+                            role="tabpanel"
+                            aria-labelledby="hero-tab-try"
+                            hidden={activeTab !== 'try'}
+                        >
+                            <AskMeAnything />
+                        </div>
+                        <div
+                            id="hero-panel-setup"
+                            role="tabpanel"
+                            aria-labelledby="hero-tab-setup"
+                            hidden={activeTab !== 'setup'}
+                        >
+                            <section
+                                className="setup-quickstart"
+                                aria-labelledby="setup-quickstart-title"
+                            >
+                                <h3 id="setup-quickstart-title">Quick setup</h3>
+                                <ol>
+                                    <li>
+                                        <code>pnpm install</code>
+                                    </li>
+                                    <li>
+                                        <code>cp .env.example .env</code>
+                                    </li>
+                                    <li>
+                                        <code>pnpm dev</code>
+                                    </li>
+                                </ol>
+                                <a href="/invite/" className="inline-cta">
+                                    Full setup guide
+                                    <span aria-hidden="true">↗</span>
+                                </a>
+                            </section>
+                        </div>
+                    </div>
+                </div>
 
                 <div className="intro-card" aria-labelledby="intro-card-title">
                     <div className="intro-card-background" aria-hidden="true">
@@ -62,8 +168,6 @@ const Hero = (): JSX.Element => {
                         </div>
                     </div>
                 </div>
-
-                <AskMeAnything />
             </div>
         </section>
     );
