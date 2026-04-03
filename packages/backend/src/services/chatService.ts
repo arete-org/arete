@@ -393,7 +393,7 @@ export const createChatService = ({
                             noGenerationResolution.reasonCode
                         ];
 
-                    if (handling.disposition === 'internal_termination') {
+                    if (handling.runtimeAction === 'run_fallback_generation') {
                         generationResult =
                             await generationRuntime.generate(generationRequest);
                         recordUsageForStep(

@@ -22,43 +22,45 @@ test('resolveNoGenerationHandlingFromTermination maps every no-generation termin
             | 'budget_exhausted_tokens_before_generate'
             | 'budget_exhausted_time_before_generate'
             | 'executor_error_before_generate';
-        expectedDisposition: 'surface_to_caller' | 'internal_termination';
+        expectedRuntimeAction:
+            | 'return_no_generation'
+            | 'run_fallback_generation';
     }> = [
         {
             terminationReason: 'transition_blocked_by_policy',
             generationEnabledByPolicy: true,
             expectedReasonCode: 'blocked_by_policy_before_generate',
-            expectedDisposition: 'surface_to_caller',
+            expectedRuntimeAction: 'return_no_generation',
         },
         {
             terminationReason: 'transition_blocked_by_policy',
             generationEnabledByPolicy: false,
             expectedReasonCode: 'generation_disabled_by_profile',
-            expectedDisposition: 'surface_to_caller',
+            expectedRuntimeAction: 'return_no_generation',
         },
         {
             terminationReason: 'budget_exhausted_steps',
             generationEnabledByPolicy: true,
             expectedReasonCode: 'budget_exhausted_steps_before_generate',
-            expectedDisposition: 'internal_termination',
+            expectedRuntimeAction: 'run_fallback_generation',
         },
         {
             terminationReason: 'budget_exhausted_tokens',
             generationEnabledByPolicy: true,
             expectedReasonCode: 'budget_exhausted_tokens_before_generate',
-            expectedDisposition: 'internal_termination',
+            expectedRuntimeAction: 'run_fallback_generation',
         },
         {
             terminationReason: 'budget_exhausted_time',
             generationEnabledByPolicy: true,
             expectedReasonCode: 'budget_exhausted_time_before_generate',
-            expectedDisposition: 'internal_termination',
+            expectedRuntimeAction: 'run_fallback_generation',
         },
         {
             terminationReason: 'executor_error_fail_open',
             generationEnabledByPolicy: true,
             expectedReasonCode: 'executor_error_before_generate',
-            expectedDisposition: 'surface_to_caller',
+            expectedRuntimeAction: 'return_no_generation',
         },
     ];
 
@@ -72,8 +74,8 @@ test('resolveNoGenerationHandlingFromTermination maps every no-generation termin
         if (resolution.kind === 'mapped') {
             assert.equal(resolution.reasonCode, mappedCase.expectedReasonCode);
             assert.equal(
-                resolution.handling.disposition,
-                mappedCase.expectedDisposition
+                resolution.handling.runtimeAction,
+                mappedCase.expectedRuntimeAction
             );
             assert.equal(
                 resolution.handling.terminationReason,

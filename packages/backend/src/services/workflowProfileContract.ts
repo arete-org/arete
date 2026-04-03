@@ -68,15 +68,15 @@ export type WorkflowNoGenerationReasonCode =
     | 'executor_error_before_generate'; // Runtime/executor failed before any successful generation.
 
 /**
- * Disposition for a no-generation outcome.
+ * Runtime action for a no-generation outcome.
  *
- * `surface_to_caller` returns an explicit blocked/no-generation response.
- * `internal_termination` keeps the original termination reason in lineage while
- * the backend performs a deterministic fallback.
+ * `return_no_generation` returns an explicit blocked/no-generation response.
+ * `run_fallback_generation` records the original stop reason in lineage, then
+ * allows chat runtime to generate a deterministic fallback response.
  */
-export type WorkflowNoGenerationDisposition =
-    | 'surface_to_caller'
-    | 'internal_termination';
+export type WorkflowNoGenerationRuntimeAction =
+    | 'return_no_generation'
+    | 'run_fallback_generation';
 
 /**
  * Handling directive resolved for one no-generation reason code.
@@ -85,7 +85,7 @@ export type WorkflowNoGenerationDisposition =
  */
 export type WorkflowNoGenerationHandling = {
     reasonCode: WorkflowNoGenerationReasonCode;
-    disposition: WorkflowNoGenerationDisposition;
+    runtimeAction: WorkflowNoGenerationRuntimeAction;
     terminationReason: WorkflowTerminationReason;
 };
 
@@ -97,38 +97,44 @@ export const WORKFLOW_NO_GENERATION_HANDLING_MAP: Readonly<
 > = {
     blocked_by_policy_before_generate: {
         reasonCode: 'blocked_by_policy_before_generate',
-        // Preserve this as a visible no-generation outcome; no fallback generation.
-        disposition: 'surface_to_caller',
+        // Policy blocked the first draft, so return no-generation directly.
+        // Keep the policy stop reason in lineage; do not synthesize fallback output.
+        runtimeAction: 'return_no_generation',
         terminationReason: 'transition_blocked_by_policy',
     },
     generation_disabled_by_profile: {
         reasonCode: 'generation_disabled_by_profile',
-        // Profile intentionally cannot generate, so return the no-generation outcome directly.
-        disposition: 'surface_to_caller',
+        // This profile does not allow generation, so return no-generation directly.
+        // Keep the policy stop reason in lineage for accurate operator context.
+        runtimeAction: 'return_no_generation',
         terminationReason: 'transition_blocked_by_policy',
     },
     budget_exhausted_steps_before_generate: {
         reasonCode: 'budget_exhausted_steps_before_generate',
-        // Keep the budget stop in lineage, then let chat runtime use fallback generation.
-        disposition: 'internal_termination',
+        // Step budget ran out before first draft, so fallback may still answer briefly.
+        // Preserve the budget stop reason in lineage even when fallback succeeds.
+        runtimeAction: 'run_fallback_generation',
         terminationReason: 'budget_exhausted_steps',
     },
     budget_exhausted_tokens_before_generate: {
         reasonCode: 'budget_exhausted_tokens_before_generate',
-        // Keep the budget stop in lineage, then let chat runtime use fallback generation.
-        disposition: 'internal_termination',
+        // Token budget ran out before first draft, so fallback may still answer briefly.
+        // Preserve the budget stop reason in lineage even when fallback succeeds.
+        runtimeAction: 'run_fallback_generation',
         terminationReason: 'budget_exhausted_tokens',
     },
     budget_exhausted_time_before_generate: {
         reasonCode: 'budget_exhausted_time_before_generate',
-        // Keep the timeout stop in lineage, then let chat runtime use fallback generation.
-        disposition: 'internal_termination',
+        // Time budget expired before first draft, so fallback may still answer briefly.
+        // Preserve the timeout reason in lineage even when fallback succeeds.
+        runtimeAction: 'run_fallback_generation',
         terminationReason: 'budget_exhausted_time',
     },
     executor_error_before_generate: {
         reasonCode: 'executor_error_before_generate',
-        // Surface the executor failure as no-generation; there is no prior draft to fall back to.
-        disposition: 'surface_to_caller',
+        // Execution failed before first draft, so return no-generation directly.
+        // Keep executor failure in lineage so debugging does not depend on transport.
+        runtimeAction: 'return_no_generation',
         terminationReason: 'executor_error_fail_open',
     },
 };
@@ -165,6 +171,8 @@ export const resolveNoGenerationHandlingFromTermination = (input: {
     terminationReason: WorkflowTerminationReason;
     generationEnabledByPolicy: boolean;
 }): NoGenerationHandlingResolution => {
+    // A single policy termination reason can come from two causes:
+    // generation explicitly disabled by profile, or another policy block before generate.
     if (input.terminationReason === 'transition_blocked_by_policy') {
         const reasonCode = input.generationEnabledByPolicy
             ? 'blocked_by_policy_before_generate'
@@ -246,7 +254,10 @@ export type WorkflowProfileContract = {
         initialStep: WorkflowStepKind;
         /** Indicates whether this profile can ever emit a generation step. */
         canEmitGeneration: () => boolean;
-        /** Maps a no-generation reason code to its required handling directive. */
+        /**
+         * Resolves no-generation handling from the shared reason-code map.
+         * Profile implementations should not invent transport-only behavior here.
+         */
         classifyNoGeneration: (
             reasonCode: WorkflowNoGenerationReasonCode
         ) => WorkflowNoGenerationHandling;
