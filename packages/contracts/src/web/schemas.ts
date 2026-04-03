@@ -319,6 +319,23 @@ const WorkflowRecordSchema = z
 
         const seenStepIds = new Set<string>();
         for (const step of value.steps) {
+            if (seenStepIds.has(step.stepId)) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `stepId "${step.stepId}" must be unique within a workflow.`,
+                });
+            }
+
+            if (
+                step.parentStepId !== undefined &&
+                step.parentStepId === step.stepId
+            ) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `stepId "${step.stepId}" cannot self-reference as parentStepId.`,
+                });
+            }
+
             seenStepIds.add(step.stepId);
         }
 

@@ -68,6 +68,14 @@ Status: `landed`
 - Added lightweight workflow invariants:
     - `stepCount === steps.length`
     - `parentStepId` must reference a step in the same workflow
+    - `stepId` must be unique in each workflow
+    - `parentStepId` cannot self-reference `stepId`
+- Added explicit schema tests for pass/fail invariant coverage:
+    - valid invariant-passing record
+    - duplicate `stepId` rejection
+    - missing parent rejection
+    - self-parent rejection
+    - `stepCount` mismatch rejection
 
 ### 3) Engine Skeleton (Backend)
 
