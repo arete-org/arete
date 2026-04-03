@@ -404,9 +404,9 @@ export const runBoundedReviewWorkflow = async ({
         parseReviewDecision ?? profileStrategy.parseReviewDecision;
 
     const executionLimits: ExecutionLimits = {
-        maxWorkflowSteps: normalizedMaxIterations * 2 + 1,
+        maxWorkflowSteps: Math.max(1, normalizedMaxIterations * 2),
         maxToolCalls: UNBOUNDED_LIMIT,
-        maxDeliberationCalls: normalizedMaxIterations * 2,
+        maxDeliberationCalls: Math.max(1, normalizedMaxIterations * 2),
         maxTokensTotal: UNBOUNDED_LIMIT,
         maxDurationMs: normalizedMaxDurationMs,
     };
@@ -504,32 +504,34 @@ export const runBoundedReviewWorkflow = async ({
         terminationReason = 'transition_blocked_by_policy';
         shouldStop = true;
     } else {
-        const initialDraftStartedAt = generationStartedAtMs;
-        draftResult = await generationRuntime.generate(generationRequest);
-        const initialDraftFinishedAt = Date.now();
-        const initialDraftUsage = captureUsage(
-            draftResult,
-            generationRequest.model
-        );
-        const initialDraftStepId = captureStep({
-            stepKind: 'generate',
-            status: 'executed',
-            summary: 'Generated initial draft response.',
-            startedAtMs: initialDraftStartedAt,
-            finishedAtMs: initialDraftFinishedAt,
-            model: initialDraftUsage.model,
-            usage: draftResult.usage,
-            estimatedCost: initialDraftUsage.estimatedCost,
-            attempt: 1,
-        });
-        draftParentStepId = initialDraftStepId;
-        workflowState = applyStepExecutionToState(
-            workflowState,
-            'generate',
-            initialDraftUsage.totalTokens,
-            0,
-            0
-        );
+        if (!stopIfOverLimits()) {
+            const initialDraftStartedAt = generationStartedAtMs;
+            draftResult = await generationRuntime.generate(generationRequest);
+            const initialDraftFinishedAt = Date.now();
+            const initialDraftUsage = captureUsage(
+                draftResult,
+                generationRequest.model
+            );
+            const initialDraftStepId = captureStep({
+                stepKind: 'generate',
+                status: 'executed',
+                summary: 'Generated initial draft response.',
+                startedAtMs: initialDraftStartedAt,
+                finishedAtMs: initialDraftFinishedAt,
+                model: initialDraftUsage.model,
+                usage: draftResult.usage,
+                estimatedCost: initialDraftUsage.estimatedCost,
+                attempt: 1,
+            });
+            draftParentStepId = initialDraftStepId;
+            workflowState = applyStepExecutionToState(
+                workflowState,
+                'generate',
+                initialDraftUsage.totalTokens,
+                0,
+                0
+            );
+        }
     }
     if (!shouldStop && normalizedMaxIterations === 0) {
         terminationReason = 'goal_satisfied';

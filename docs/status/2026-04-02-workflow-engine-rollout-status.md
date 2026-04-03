@@ -140,11 +140,14 @@ Present in shared types but intentionally inert/deferred in this PR:
 - `maxToolCalls` (no `tool` step routed in current chat loop)
 - `maxTokensTotal` (no total-token cap wiring in current chat loop)
 
-Planned policy capability toggles (not yet active in current chat loop):
+Planned/inactive policy capability toggles in current chat loop:
 
 - `enablePlanning`
 - `enableToolUse`
 - `enableReplanning`
+
+Active policy capability toggles in current chat loop:
+
 - `enableAssessment` (active with current profile policy = `true`)
 - `enableRevision` (active with current profile policy = `true`)
 
