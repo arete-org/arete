@@ -86,9 +86,6 @@ type ChatImageAction = {
 };
 
 /**
- * Canonical breaker actions emitted by ethics-core safety evaluation.
- */
-/**
  * Discord-local response behavior labels used for safety-enforcement logs.
  */
 type SafetyResponseBehavior = 'block' | 'safe_response' | 'redirect' | 'review';
@@ -194,12 +191,12 @@ const hasResponseMetadata = (value: unknown): value is ResponseMetadata =>
     );
 
 /**
- * Maps ethics-core non-allow actions into user-facing Discord-safe text.
+ * Maps one safety decision into Discord response behavior plus fallback text.
  *
- * These strings intentionally avoid procedural detail and keep the response
- * bounded to safe, redirective guidance.
+ * Trigger: called only for enforced restricted outcomes before outbound send.
+ * Consequence: original model output is replaced with bounded safe copy.
  */
-const mapBreakerDecisionToEnforcement = (
+const mapSafetyDecisionToResponseBehavior = (
     decision: BreakerDecisionContext['safetyDecision']
 ): { responseBehavior: SafetyResponseBehavior; outboundMessage: string } => {
     switch (decision.action) {
@@ -234,6 +231,12 @@ const mapBreakerDecisionToEnforcement = (
     }
 };
 
+/**
+ * Normalizes optional reason fields for structured logging.
+ *
+ * Allow outcomes intentionally omit reason metadata; restricted outcomes carry
+ * deterministic reasonCode + rationale from ethics-core.
+ */
 const getSafetyReasonDetails = (
     decision: BreakerDecisionContext['safetyDecision']
 ): { reasonCode: string | null; rationale: string | null } => {
@@ -945,7 +948,9 @@ export class MessageProcessor {
             };
         }
 
-        const mapped = mapBreakerDecisionToEnforcement(decision.safetyDecision);
+        const mapped = mapSafetyDecisionToResponseBehavior(
+            decision.safetyDecision
+        );
         return {
             kind: 'enforced',
             decision,
