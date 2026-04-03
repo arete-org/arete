@@ -28,8 +28,8 @@ Architecture reference:
   derivation (`WORKFLOW_STEP_*`, `WORKFLOW_TERMINATION_REASONS`).
 - Backend now has a workflow-engine scaffold (`WorkflowPolicy`,
   `ExecutionLimits`, transition checks, and state/limit helpers).
-- Chat bounded review loop now consults shared engine transition/limit helpers
-  while preserving current behavior and fail-open semantics.
+- Chat bounded review loop routing is now delegated through
+  `runBoundedReviewWorkflow`, with legality enforced before each bounded step.
 
 ## What Is Landed
 
@@ -95,14 +95,14 @@ Status: `landed`
 
 ### 1) Replace Specialized Loop With Engine-Driven Step Routing
 
-Status: `in_progress`
+Status: `landed`
 
 Current reality:
 
-- Chat still executes a specialized bounded loop shape.
-- Transition legality and limit checks are now shared with `workflowEngine`.
-- Step routing itself is still embedded in `chatService` and not yet delegated
-  to a generic engine loop.
+- Current bounded review routing and termination now execute via
+  `workflowEngine` runtime entrypoint.
+- `chatService` remains the adapter layer for request composition and metadata
+  assembly.
 
 ### 2) Tool Step Generalization
 
@@ -145,13 +145,13 @@ Planned policy capability toggles (not yet active in current chat loop):
 - `enablePlanning`
 - `enableToolUse`
 - `enableReplanning`
-- `enableAssessment`
-- `enableRevision`
+- `enableAssessment` (active with current profile policy = `true`)
+- `enableRevision` (active with current profile policy = `true`)
 
 ## Next Gates
 
 1. Delegate bounded review loop routing from `chatService` into reusable engine
-   execution flow (not only helper checks).
+   execution flow (not only helper checks). ✅
 2. Move tool execution to `tool` step shape (`calls[]` + execution mode).
 3. Split provenance-facing workflow record from optional deeper debug log detail.
 4. Expand policy matrix tests to include full step-route scenarios and

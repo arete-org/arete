@@ -40,57 +40,13 @@ import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
     runBoundedReviewWorkflow,
+    type RunBoundedReviewWorkflowResult,
     type WorkflowPolicy,
 } from './workflowEngine.js';
 import { logger } from '../utils/logger.js';
 import { runtimeConfig } from '../config.js';
 
 const REVIEW_WORKFLOW_NAME = 'message_with_review_loop_v1';
-const REVIEW_DECISION_PROMPT = `Return plain JSON only.
-Schema:
-{
-  "decision": "finalize" | "revise",
-  "reason": "one short sentence"
-}
-Choose "finalize" when the draft is complete, accurate, and ready.
-Choose "revise" only when one additional revision would materially improve quality.
-Do not include markdown or extra keys.`;
-
-const REVISION_PROMPT_PREFIX =
-    'Revise the prior draft using the review guidance while preserving factual grounding and provenance boundaries.';
-
-type ReviewDecision = {
-    decision: 'finalize' | 'revise';
-    reason: string;
-};
-
-const parseReviewDecision = (text: string): ReviewDecision | null => {
-    const trimmed = text.trim();
-    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
-        return null;
-    }
-
-    try {
-        const parsed = JSON.parse(trimmed) as {
-            decision?: unknown;
-            reason?: unknown;
-        };
-        if (
-            (parsed.decision !== 'finalize' && parsed.decision !== 'revise') ||
-            typeof parsed.reason !== 'string' ||
-            parsed.reason.trim().length === 0
-        ) {
-            return null;
-        }
-
-        return {
-            decision: parsed.decision,
-            reason: parsed.reason.trim(),
-        };
-    } catch {
-        return null;
-    }
-};
 
 const sanitizeNonNegativeInteger = (
     value: number,
@@ -166,6 +122,9 @@ export type CreateChatServiceOptions = {
         maxIterations: number;
         maxDurationMs: number;
     };
+    runReviewWorkflow?: (
+        input: Parameters<typeof runBoundedReviewWorkflow>[0]
+    ) => Promise<RunBoundedReviewWorkflowResult>;
 };
 
 /**
@@ -214,6 +173,7 @@ export const createChatService = ({
     defaultCapabilities,
     recordUsage = recordBackendLLMUsage,
     chatWorkflowConfig = runtimeConfig.chatWorkflow,
+    runReviewWorkflow = runBoundedReviewWorkflow,
 }: CreateChatServiceOptions) => {
     /**
      * Normalizes one runtime result into the metadata shape backend already
@@ -376,7 +336,7 @@ export const createChatService = ({
                 enableAssessment: true,
                 enableRevision: true,
             };
-            const workflowResult = await runBoundedReviewWorkflow({
+            const workflowResult = await runReviewWorkflow({
                 generationRuntime,
                 generationRequest,
                 messagesWithHints,
@@ -387,25 +347,15 @@ export const createChatService = ({
                     maxDurationMs: reviewLoopMaxDurationMs,
                 },
                 workflowPolicy,
-                reviewDecisionPrompt: REVIEW_DECISION_PROMPT,
-                revisionPromptPrefix: REVISION_PROMPT_PREFIX,
-                parseReviewDecision,
                 captureUsage: (result, requestedModel) =>
                     recordUsageForStep(result, requestedModel),
             });
-            generationResult =
-                workflowResult.generationResult ??
-                ({
-                    text: '',
-                    model: generationRequest.model,
-                    usage: {
-                        promptTokens: 0,
-                        completionTokens: 0,
-                        totalTokens: 0,
-                    },
-                    provenance: 'Inferred',
-                    citations: [],
-                } satisfies GenerationResult);
+            if (workflowResult.outcome === 'no_generation') {
+                throw new Error(
+                    `Workflow terminated before generation: ${workflowResult.workflowLineage.terminationReason}`
+                );
+            }
+            generationResult = workflowResult.generationResult;
             workflowLineage = workflowResult.workflowLineage;
         } else {
             generationResult =

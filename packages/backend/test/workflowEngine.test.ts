@@ -306,11 +306,71 @@ test('runBoundedReviewWorkflow enforces legality before initial generate executi
 
     assert.equal(generationCalls, 0);
     assert.equal(usageCaptures, 0);
-    assert.equal(result.generationResult, null);
+    assert.equal(result.outcome, 'no_generation');
     assert.equal(
         result.workflowLineage.terminationReason,
         'transition_blocked_by_policy'
     );
     assert.equal(result.workflowLineage.stepCount, 0);
     assert.equal(result.workflowLineage.steps.length, 0);
+});
+
+test('runBoundedReviewWorkflow normalizes invalid config bounds and keeps lineage schema-safe', async () => {
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            return {
+                text: 'draft',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'hi' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'hi' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop_v1',
+            maxIterations: Number.NaN,
+            maxDurationMs: Number.NaN,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: () => ({
+            model: 'gpt-5-mini',
+            promptTokens: 10,
+            completionTokens: 5,
+            totalTokens: 15,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.workflowLineage.status, 'completed');
+    assert.equal(result.workflowLineage.terminationReason, 'goal_satisfied');
+    assert.equal(result.workflowLineage.maxSteps, 1);
+    assert.ok(result.workflowLineage.maxDurationMs > 0);
+    assert.equal(result.workflowLineage.stepCount, 1);
 });

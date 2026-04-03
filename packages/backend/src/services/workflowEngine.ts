@@ -59,6 +59,49 @@ export type ReviewDecision = {
     reason: string;
 };
 
+export const DEFAULT_REVIEW_DECISION_PROMPT = `Return plain JSON only.
+Schema:
+{
+  "decision": "finalize" | "revise",
+  "reason": "one short sentence"
+}
+Choose "finalize" when the draft is complete, accurate, and ready.
+Choose "revise" only when one additional revision would materially improve quality.
+Do not include markdown or extra keys.`;
+
+export const DEFAULT_REVISION_PROMPT_PREFIX =
+    'Revise the prior draft using the review guidance while preserving factual grounding and provenance boundaries.';
+
+export const parseReviewDecisionText = (
+    text: string
+): ReviewDecision | null => {
+    const trimmed = text.trim();
+    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+        return null;
+    }
+
+    try {
+        const parsed = JSON.parse(trimmed) as {
+            decision?: unknown;
+            reason?: unknown;
+        };
+        if (
+            (parsed.decision !== 'finalize' && parsed.decision !== 'revise') ||
+            typeof parsed.reason !== 'string' ||
+            parsed.reason.trim().length === 0
+        ) {
+            return null;
+        }
+
+        return {
+            decision: parsed.decision,
+            reason: parsed.reason.trim(),
+        };
+    } catch {
+        return null;
+    }
+};
+
 export type ReviewWorkflowRuntimeConfig = {
     workflowName: string;
     maxIterations: number;
@@ -84,19 +127,25 @@ export type RunBoundedReviewWorkflowInput = {
     generationStartedAtMs: number;
     workflowConfig: ReviewWorkflowRuntimeConfig;
     workflowPolicy: WorkflowPolicy;
-    reviewDecisionPrompt: string;
-    revisionPromptPrefix: string;
-    parseReviewDecision: (text: string) => ReviewDecision | null;
+    reviewDecisionPrompt?: string;
+    revisionPromptPrefix?: string;
+    parseReviewDecision?: (text: string) => ReviewDecision | null;
     captureUsage: (
         result: GenerationResult,
         requestedModel: string | undefined
     ) => ReviewWorkflowUsageSummary;
 };
 
-export type RunBoundedReviewWorkflowResult = {
-    generationResult: GenerationResult | null;
-    workflowLineage: WorkflowRecord;
-};
+export type RunBoundedReviewWorkflowResult =
+    | {
+          outcome: 'generated';
+          generationResult: GenerationResult;
+          workflowLineage: WorkflowRecord;
+      }
+    | {
+          outcome: 'no_generation';
+          workflowLineage: WorkflowRecord;
+      };
 
 const LEGAL_TRANSITIONS: Record<
     WorkflowStepKind,
@@ -288,12 +337,40 @@ export const runBoundedReviewWorkflow = async ({
     generationStartedAtMs,
     workflowConfig,
     workflowPolicy,
-    reviewDecisionPrompt,
-    revisionPromptPrefix,
-    parseReviewDecision,
+    reviewDecisionPrompt = DEFAULT_REVIEW_DECISION_PROMPT,
+    revisionPromptPrefix = DEFAULT_REVISION_PROMPT_PREFIX,
+    parseReviewDecision = parseReviewDecisionText,
     captureUsage,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
     const UNBOUNDED_LIMIT = Number.MAX_SAFE_INTEGER;
+    const sanitizeNonNegativeInteger = (
+        value: number,
+        fallback: number
+    ): number => {
+        if (!Number.isFinite(value)) {
+            return Math.max(0, Math.floor(fallback));
+        }
+
+        return Math.max(0, Math.floor(value));
+    };
+    const sanitizePositiveInteger = (
+        value: number,
+        fallback: number
+    ): number => {
+        if (!Number.isFinite(value)) {
+            return Math.max(1, Math.floor(fallback));
+        }
+
+        return Math.max(1, Math.floor(value));
+    };
+    const normalizedMaxIterations = sanitizeNonNegativeInteger(
+        workflowConfig.maxIterations,
+        0
+    );
+    const normalizedMaxDurationMs = sanitizePositiveInteger(
+        workflowConfig.maxDurationMs,
+        15000
+    );
     const workflowStartedAt = Date.now();
     const workflowId = `wf_${workflowStartedAt.toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     const workflowSteps: StepRecord[] = [];
@@ -306,11 +383,11 @@ export const runBoundedReviewWorkflow = async ({
     let shouldStop = false;
 
     const executionLimits: ExecutionLimits = {
-        maxWorkflowSteps: workflowConfig.maxIterations * 2 + 1,
+        maxWorkflowSteps: normalizedMaxIterations * 2 + 1,
         maxToolCalls: UNBOUNDED_LIMIT,
-        maxDeliberationCalls: workflowConfig.maxIterations * 2,
+        maxDeliberationCalls: normalizedMaxIterations * 2,
         maxTokensTotal: UNBOUNDED_LIMIT,
-        maxDurationMs: workflowConfig.maxDurationMs,
+        maxDurationMs: normalizedMaxDurationMs,
     };
     let workflowState = createInitialWorkflowState({
         workflowId,
@@ -433,10 +510,14 @@ export const runBoundedReviewWorkflow = async ({
             0
         );
     }
+    if (!shouldStop && normalizedMaxIterations === 0) {
+        terminationReason = 'goal_satisfied';
+        workflowStatus = 'completed';
+    }
 
     for (
         let iteration = 1;
-        iteration <= workflowConfig.maxIterations && !shouldStop;
+        iteration <= normalizedMaxIterations && !shouldStop;
         iteration += 1
     ) {
         if (
@@ -521,7 +602,7 @@ export const runBoundedReviewWorkflow = async ({
                 break;
             }
 
-            if (iteration >= workflowConfig.maxIterations) {
+            if (iteration >= normalizedMaxIterations) {
                 terminationReason = 'budget_exhausted_steps';
                 workflowStatus = 'degraded';
                 shouldStop = true;
@@ -654,7 +735,15 @@ export const runBoundedReviewWorkflow = async ({
         steps: workflowSteps,
     };
 
+    if (draftResult === null) {
+        return {
+            outcome: 'no_generation',
+            workflowLineage,
+        };
+    }
+
     return {
+        outcome: 'generated',
         generationResult: draftResult,
         workflowLineage,
     };
