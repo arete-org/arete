@@ -1,5 +1,5 @@
 /**
- * @description: Verifies canonical no-generation handling resolution behavior.
+ * @description: Verifies no-generation handling resolution behavior.
  * @footnote-scope: test
  * @footnote-module: WorkflowProfileContractTests
  * @footnote-risk: medium - Missing mapping coverage can cause surfaced/internal no-generation drift.
@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import type { WorkflowTerminationReason } from '@footnote/contracts/ethics-core';
 import { resolveNoGenerationHandlingFromTermination } from '../src/services/workflowProfileContract.js';
 
-test('resolveNoGenerationHandlingFromTermination maps every canonical no-generation termination reason deterministically', () => {
+test('resolveNoGenerationHandlingFromTermination maps every no-generation termination reason deterministically', () => {
     const mappedCases: Array<{
         terminationReason: WorkflowTerminationReason;
         generationEnabledByPolicy: boolean;

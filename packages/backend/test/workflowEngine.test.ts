@@ -217,7 +217,7 @@ test('isWithinExecutionLimits reports each exhausted limit key', () => {
     assert.equal(exhaustedByDuration.exhaustedBy, 'maxDurationMs');
 });
 
-test('mapExhaustedLimitToTerminationReason maps to canonical reasons', () => {
+test('mapExhaustedLimitToTerminationReason maps to expected reasons', () => {
     assert.equal(
         mapExhaustedLimitToTerminationReason('maxWorkflowSteps'),
         'budget_exhausted_steps'

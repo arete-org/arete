@@ -1,4 +1,4 @@
-# Canonical Workflow Profile Contract
+# Workflow Profile Contract
 
 ## Purpose
 
@@ -10,7 +10,7 @@ This removes ambiguity for blocked/no-generation handling and provenance.
 
 This document defines:
 
-- canonical profile contract shape,
+- profile contract shape,
 - blocked/no-generation behavior matrix,
 - required termination-reason mapping,
 - provenance requirements for blocked-before-generation and no-generation,
@@ -22,7 +22,7 @@ Out of scope:
 - plan-and-generate or tool-assisted profile implementation,
 - blocked-state UI redesign.
 
-## Canonical Contract Shape
+## Contract Shape
 
 Type baseline (low risk, backend-local):
 `packages/backend/src/services/workflowProfileContract.ts`
@@ -48,7 +48,7 @@ Optional extensions:
 
 Contract rule:
 
-- optional extensions cannot override canonical no-generation classification,
+- optional extensions cannot override required no-generation classification,
   disposition, or termination-reason mapping.
 
 ## Blocked / No-Generation Behavior Matrix
@@ -67,11 +67,11 @@ Notes:
 - “Surface to caller” means the caller receives an explicit no-generation
   failure result (or equivalent error) instead of a generated assistant message.
 - “Internal termination” means the workflow record always terminates with a
-  canonical reason, even when not surfaced as a dedicated blocked UI state.
+  reason code, even when not surfaced as a dedicated blocked UI state.
 
 ## Required No-Generation Reason Mapping
 
-Canonical reason-code mapping is defined in:
+Reason-code mapping is defined in:
 `WORKFLOW_NO_GENERATION_HANDLING_MAP`
 (`packages/backend/src/services/workflowProfileContract.ts`).
 
@@ -97,7 +97,7 @@ produce a valid `WorkflowRecord` with:
 - `workflowId`, `workflowName`
 - `status='degraded'` (unless a future profile formally introduces a completed
   no-output mode with a new reason vocabulary)
-- canonical `terminationReason` from the required map
+- `terminationReason` from the required map
 - `stepCount` equal to `steps.length`
 - `maxSteps`, `maxDurationMs`
 

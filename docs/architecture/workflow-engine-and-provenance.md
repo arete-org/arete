@@ -124,9 +124,9 @@ Examples:
 
 These limits are hard stops enforced by backend code.
 
-## Canonical Termination Reasons
+## Termination Reasons
 
-Initial canonical reasons:
+Initial reasons:
 
 - `goal_satisfied`
 - `budget_exhausted_steps`

@@ -1,5 +1,5 @@
 /**
- * @description: Defines the canonical workflow profile contract and no-generation
+ * @description: Defines the workflow profile contract and no-generation
  * handling taxonomy used before profile-registry rollout.
  * @footnote-scope: interface
  * @footnote-module: WorkflowProfileContract
@@ -60,7 +60,7 @@ export type WorkflowNoGenerationDisposition =
     | 'internal_termination';
 
 /**
- * Resolved no-generation handling decision for one canonical reason code.
+ * Resolved no-generation handling decision for one reason code.
  */
 export type WorkflowNoGenerationHandling = {
     reasonCode: WorkflowNoGenerationReasonCode;
@@ -178,7 +178,7 @@ export const resolveNoGenerationHandlingFromTermination = (input: {
 };
 
 /**
- * Canonical v1 workflow profile contract shape.
+ * Workflow profile contract shape.
  * Required hooks define minimal runtime behavior; optional extensions carry
  * profile-specific strategy details (for example review/revision prompts).
  */
