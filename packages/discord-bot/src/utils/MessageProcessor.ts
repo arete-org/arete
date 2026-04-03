@@ -8,7 +8,11 @@
 
 import fs from 'fs';
 import { Message } from 'discord.js';
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type {
+    BreakerDecisionContext,
+    ResponseMetadata,
+} from '@footnote/contracts/ethics-core';
+import { resolveBreakerDecisionContext } from '@footnote/contracts/ethics-core';
 import type {
     PostChatRequest,
     ChatImageRequest,
@@ -84,39 +88,6 @@ type ChatImageAction = {
 /**
  * Canonical breaker actions emitted by ethics-core safety evaluation.
  */
-type BreakerSafetyAction =
-    | 'allow'
-    | 'block'
-    | 'redirect'
-    | 'safe_partial'
-    | 'human_review';
-
-/**
- * Minimal breaker decision payload we need at Discord send time.
- *
- * Keep this local shape narrow so malformed payloads fail open instead of
- * crashing message dispatch.
- */
-type BreakerSafetyDecision = {
-    action: BreakerSafetyAction;
-    safetyTier: 'Low' | 'Medium' | 'High';
-    ruleId: string | null;
-    reasonCode?: string;
-    reason?: string;
-};
-
-/**
- * One resolved evaluator decision plus where it was read from.
- *
- * Source precedence matters: metadata.evaluator is preferred over execution[]
- * entries because that top-level field is the intended compact surface payload.
- */
-type BreakerDecisionContext = {
-    source: 'metadata.evaluator' | 'metadata.execution';
-    mode: 'observe_only' | 'enforced';
-    safetyDecision: BreakerSafetyDecision;
-};
-
 /**
  * Discord-local action labels used for breaker enforcement logs.
  */
@@ -223,115 +194,6 @@ const hasResponseMetadata = (value: unknown): value is ResponseMetadata =>
         typeof (value as { responseId?: unknown }).responseId === 'string'
     );
 
-const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === 'object' && value !== null;
-
-/**
- * Runtime validator for safetyDecision payloads.
- *
- * This protects Discord from malformed metadata while preserving fail-open
- * behavior when evaluator data is absent or invalid.
- */
-const isBreakerSafetyDecision = (
-    value: unknown
-): value is BreakerSafetyDecision => {
-    if (!isObjectRecord(value)) {
-        return false;
-    }
-
-    const action = value.action;
-    const safetyTier = value.safetyTier;
-    const ruleId = value.ruleId;
-
-    if (
-        action !== 'allow' &&
-        action !== 'block' &&
-        action !== 'redirect' &&
-        action !== 'safe_partial' &&
-        action !== 'human_review'
-    ) {
-        return false;
-    }
-
-    if (
-        safetyTier !== 'Low' &&
-        safetyTier !== 'Medium' &&
-        safetyTier !== 'High'
-    ) {
-        return false;
-    }
-
-    if (action === 'allow') {
-        return ruleId === null;
-    }
-
-    return (
-        typeof ruleId === 'string' &&
-        ruleId.length > 0 &&
-        typeof value.reasonCode === 'string' &&
-        value.reasonCode.length > 0 &&
-        typeof value.reason === 'string' &&
-        value.reason.length > 0
-    );
-};
-
-const toBreakerDecisionContext = (
-    value: unknown,
-    source: BreakerDecisionContext['source']
-): BreakerDecisionContext | null => {
-    if (!isObjectRecord(value)) {
-        return null;
-    }
-
-    const mode = value.mode;
-    const safetyDecision = value.safetyDecision;
-    if (
-        (mode !== 'observe_only' && mode !== 'enforced') ||
-        !isBreakerSafetyDecision(safetyDecision)
-    ) {
-        return null;
-    }
-
-    return {
-        source,
-        mode,
-        safetyDecision,
-    };
-};
-
-/**
- * Resolves the evaluator decision used by the Discord pre-send breaker.
- *
- * Trigger: called once per backend chat response before local action execution.
- * Consequence: determines whether Discord should enforce, fail open, or bypass.
- */
-const resolveBreakerDecisionContext = (
-    metadata: ResponseMetadata
-): BreakerDecisionContext | null => {
-    const directEvaluator = toBreakerDecisionContext(
-        metadata.evaluator,
-        'metadata.evaluator'
-    );
-    if (directEvaluator) {
-        return directEvaluator;
-    }
-
-    for (const executionEvent of metadata.execution ?? []) {
-        if (executionEvent.kind !== 'evaluator') {
-            continue;
-        }
-        const executionEvaluator = toBreakerDecisionContext(
-            executionEvent.evaluator,
-            'metadata.execution'
-        );
-        if (executionEvaluator) {
-            return executionEvaluator;
-        }
-    }
-
-    return null;
-};
-
 /**
  * Maps ethics-core non-allow actions into user-facing Discord-safe text.
  *
@@ -339,7 +201,7 @@ const resolveBreakerDecisionContext = (
  * bounded to safe, redirective guidance.
  */
 const mapBreakerDecisionToEnforcement = (
-    decision: BreakerSafetyDecision
+    decision: BreakerDecisionContext['safetyDecision']
 ): { mappedAction: BreakerEnforcementMapping; outboundMessage: string } => {
     switch (decision.action) {
         case 'block':

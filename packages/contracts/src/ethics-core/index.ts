@@ -67,3 +67,8 @@ export {
     SAFETY_RULE_METADATA,
     type SafetyRuleMetadata,
 } from './safetyRuleMetadata.js';
+export {
+    resolveBreakerDecisionContext,
+    type BreakerDecisionSource,
+    type BreakerDecisionContext,
+} from './breakerDecision.js';
