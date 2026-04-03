@@ -185,7 +185,9 @@ export const resolveNoGenerationHandlingFromTermination = (input: {
     }
 
     if (input.terminationReason === 'budget_exhausted_steps') {
-        const reasonCode = 'budget_exhausted_steps_before_generate';
+        const reasonCode = input.generationEnabledByPolicy
+            ? 'budget_exhausted_steps_before_generate'
+            : 'generation_disabled_by_profile';
         return {
             kind: 'mapped',
             reasonCode,
@@ -194,7 +196,9 @@ export const resolveNoGenerationHandlingFromTermination = (input: {
     }
 
     if (input.terminationReason === 'budget_exhausted_tokens') {
-        const reasonCode = 'budget_exhausted_tokens_before_generate';
+        const reasonCode = input.generationEnabledByPolicy
+            ? 'budget_exhausted_tokens_before_generate'
+            : 'generation_disabled_by_profile';
         return {
             kind: 'mapped',
             reasonCode,
@@ -203,7 +207,9 @@ export const resolveNoGenerationHandlingFromTermination = (input: {
     }
 
     if (input.terminationReason === 'budget_exhausted_time') {
-        const reasonCode = 'budget_exhausted_time_before_generate';
+        const reasonCode = input.generationEnabledByPolicy
+            ? 'budget_exhausted_time_before_generate'
+            : 'generation_disabled_by_profile';
         return {
             kind: 'mapped',
             reasonCode,
@@ -227,14 +233,10 @@ export const resolveNoGenerationHandlingFromTermination = (input: {
 };
 
 /**
- * Workflow profile contract shape.
+ * Serializable workflow profile contract shape.
  *
- * Think of this as the profile-to-engine seam: policy and limits define what the
- * engine may do, while hooks provide the profile-specific decisions the engine
- * cannot infer on its own.
- *
- * Required hooks are engine-facing behavior. Optional extensions carry
- * profile-specific strategy details such as review prompts and parsers.
+ * This exported type is data-only so it can cross process/API boundaries
+ * without carrying executable hooks.
  */
 export type WorkflowProfileContract = {
     /** Stable id used by config and profile selection logic. */
@@ -249,30 +251,35 @@ export type WorkflowProfileContract = {
     policy: WorkflowProfilePolicyContract;
     /** Default execution ceilings applied when request-specific limits are absent. */
     defaultLimits: WorkflowProfileExecutionLimitsContract;
-    requiredHooks: {
-        /** First step kind when this profile starts execution. */
-        initialStep: WorkflowStepKind;
-        /** Indicates whether this profile can ever emit a generation step. */
-        canEmitGeneration: () => boolean;
-        /**
-         * Resolves no-generation handling from the shared reason-code map.
-         * Profile implementations should not invent transport-only behavior here.
-         */
-        classifyNoGeneration: (
-            reasonCode: WorkflowNoGenerationReasonCode
-        ) => WorkflowNoGenerationHandling;
-    };
     optionalExtensions?: {
         /** Optional review prompt template used by review-enabled strategies. */
         reviewDecisionPrompt?: string;
         /** Optional revision prefix injected before rewrite attempts. */
         revisionPromptPrefix?: string;
-        /** Optional parser for profile-specific review outputs. */
-        parseReviewDecision?: (text: string) => {
-            decision: 'finalize' | 'revise';
-            reason: string;
-        } | null;
         /** Extensible serialized metadata for profile-specific diagnostics. */
         metadata?: Record<string, string | number | boolean | null>;
     };
 };
+
+/**
+ * Internal runtime-only hooks for profile execution.
+ *
+ * Keep this separate from `WorkflowProfileContract` so public types remain
+ * serializable and transport-safe.
+ */
+type WorkflowProfileRuntimeHooks = {
+    requiredHooks: {
+        initialStep: WorkflowStepKind;
+        canEmitGeneration: () => boolean;
+        classifyNoGeneration: (
+            reasonCode: WorkflowNoGenerationReasonCode
+        ) => WorkflowNoGenerationReasonCode;
+    };
+    parseReviewDecision?: (text: string) => {
+        decision: 'finalize' | 'revise';
+        reason: string;
+    } | null;
+};
+
+export type RuntimeWorkflowProfile = WorkflowProfileContract &
+    WorkflowProfileRuntimeHooks;

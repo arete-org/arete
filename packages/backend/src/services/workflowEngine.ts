@@ -18,6 +18,7 @@ import type {
     GenerationRuntime,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
+import { logger } from '../utils/logger.js';
 
 export type WorkflowPolicy = {
     enablePlanning: boolean;
@@ -532,8 +533,23 @@ export const runBoundedReviewWorkflow = async ({
                     0,
                     0
                 );
-            } catch {
+            } catch (error) {
                 const initialDraftFinishedAt = Date.now();
+                logger.error(
+                    'Initial workflow generation failed; returning classified no-generation outcome.',
+                    {
+                        stepKind: 'generate',
+                        reasonCode: 'generation_runtime_error',
+                        startedAtMs: initialDraftStartedAt,
+                        finishedAtMs: initialDraftFinishedAt,
+                        workflowName: workflowState.workflowName,
+                        workflowId: workflowState.workflowId,
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    }
+                );
                 captureStep({
                     stepKind: 'generate',
                     status: 'failed',

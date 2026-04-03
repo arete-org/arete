@@ -22,6 +22,7 @@ test('resolveNoGenerationHandlingFromTermination maps every no-generation termin
             | 'budget_exhausted_tokens_before_generate'
             | 'budget_exhausted_time_before_generate'
             | 'executor_error_before_generate';
+        expectedTerminationReason: WorkflowTerminationReason;
         expectedRuntimeAction:
             | 'return_no_generation'
             | 'run_fallback_generation';
@@ -30,36 +31,63 @@ test('resolveNoGenerationHandlingFromTermination maps every no-generation termin
             terminationReason: 'transition_blocked_by_policy',
             generationEnabledByPolicy: true,
             expectedReasonCode: 'blocked_by_policy_before_generate',
+            expectedTerminationReason: 'transition_blocked_by_policy',
             expectedRuntimeAction: 'return_no_generation',
         },
         {
             terminationReason: 'transition_blocked_by_policy',
             generationEnabledByPolicy: false,
             expectedReasonCode: 'generation_disabled_by_profile',
+            expectedTerminationReason: 'transition_blocked_by_policy',
             expectedRuntimeAction: 'return_no_generation',
         },
         {
             terminationReason: 'budget_exhausted_steps',
             generationEnabledByPolicy: true,
             expectedReasonCode: 'budget_exhausted_steps_before_generate',
+            expectedTerminationReason: 'budget_exhausted_steps',
             expectedRuntimeAction: 'run_fallback_generation',
+        },
+        {
+            terminationReason: 'budget_exhausted_steps',
+            generationEnabledByPolicy: false,
+            expectedReasonCode: 'generation_disabled_by_profile',
+            expectedTerminationReason: 'transition_blocked_by_policy',
+            expectedRuntimeAction: 'return_no_generation',
         },
         {
             terminationReason: 'budget_exhausted_tokens',
             generationEnabledByPolicy: true,
             expectedReasonCode: 'budget_exhausted_tokens_before_generate',
+            expectedTerminationReason: 'budget_exhausted_tokens',
             expectedRuntimeAction: 'run_fallback_generation',
+        },
+        {
+            terminationReason: 'budget_exhausted_tokens',
+            generationEnabledByPolicy: false,
+            expectedReasonCode: 'generation_disabled_by_profile',
+            expectedTerminationReason: 'transition_blocked_by_policy',
+            expectedRuntimeAction: 'return_no_generation',
         },
         {
             terminationReason: 'budget_exhausted_time',
             generationEnabledByPolicy: true,
             expectedReasonCode: 'budget_exhausted_time_before_generate',
+            expectedTerminationReason: 'budget_exhausted_time',
             expectedRuntimeAction: 'run_fallback_generation',
+        },
+        {
+            terminationReason: 'budget_exhausted_time',
+            generationEnabledByPolicy: false,
+            expectedReasonCode: 'generation_disabled_by_profile',
+            expectedTerminationReason: 'transition_blocked_by_policy',
+            expectedRuntimeAction: 'return_no_generation',
         },
         {
             terminationReason: 'executor_error_fail_open',
             generationEnabledByPolicy: true,
             expectedReasonCode: 'executor_error_before_generate',
+            expectedTerminationReason: 'executor_error_fail_open',
             expectedRuntimeAction: 'return_no_generation',
         },
     ];
@@ -79,7 +107,7 @@ test('resolveNoGenerationHandlingFromTermination maps every no-generation termin
             );
             assert.equal(
                 resolution.handling.terminationReason,
-                mappedCase.terminationReason
+                mappedCase.expectedTerminationReason
             );
         }
     }

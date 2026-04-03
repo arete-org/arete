@@ -131,8 +131,3 @@ Upcoming `generate-only` profile:
   `enableAssessment=false`, `enableRevision=false`.
 - should reuse the same no-generation mapping and provenance invariants.
 - should not introduce profile-specific blocked-state semantics.
-
-## Follow-Up Implementation Issues
-
-- [Profile Registry v1](https://github.com/footnote-ai/footnote/issues?q=is%3Aissue%20Profile%20Registry%20v1)
-- [Generate-Only Profile](https://github.com/footnote-ai/footnote/issues?q=is%3Aissue%20Generate-Only%20Profile)

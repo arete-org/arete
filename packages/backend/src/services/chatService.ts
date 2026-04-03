@@ -377,7 +377,13 @@ export const createChatService = ({
                         'unsupported_termination_reason'
                     ) {
                         logger.error(
-                            `Unsupported no-generation termination reason: ${noGenerationResolution.terminationReason}`
+                            'Unsupported no-generation termination reason.',
+                            {
+                                workflowName: REVIEW_WORKFLOW_NAME,
+                                terminationReason:
+                                    noGenerationResolution.terminationReason,
+                                noGenerationResolution,
+                            }
                         );
                         generationResult = {
                             text: SURFACED_NO_GENERATION_MESSAGE,
@@ -394,12 +400,38 @@ export const createChatService = ({
                         ];
 
                     if (handling.runtimeAction === 'run_fallback_generation') {
-                        generationResult =
-                            await generationRuntime.generate(generationRequest);
-                        recordUsageForStep(
-                            generationResult,
-                            generationRequest.model
-                        );
+                        try {
+                            generationResult =
+                                await generationRuntime.generate(
+                                    generationRequest
+                                );
+                            recordUsageForStep(
+                                generationResult,
+                                generationRequest.model
+                            );
+                        } catch (error) {
+                            logger.warn(
+                                'Fallback generation after internal no-generation failed; preserving no-generation lineage.',
+                                {
+                                    workflowName: REVIEW_WORKFLOW_NAME,
+                                    reasonCode:
+                                        noGenerationResolution.reasonCode,
+                                    terminationReason:
+                                        workflowResult.workflowLineage
+                                            .terminationReason,
+                                    error:
+                                        error instanceof Error
+                                            ? error.message
+                                            : String(error),
+                                }
+                            );
+                            generationResult = {
+                                text: SURFACED_NO_GENERATION_MESSAGE,
+                                model: generationRequest.model,
+                                provenance: 'Inferred',
+                                citations: [],
+                            };
+                        }
                         fallbackAfterInternalNoGeneration = true;
                         break;
                     }
@@ -493,11 +525,29 @@ export const createChatService = ({
 
         const usageModel = assistantMetadata.model || defaultModel;
         type GenerationExecutionContext = NonNullable<
-            NonNullable<ResponseMetadataRuntimeContext['executionContext']>['generation']
+            NonNullable<
+                ResponseMetadataRuntimeContext['executionContext']
+            >['generation']
         >;
-        const effectiveGenerationExecutionContext = executionContext?.generation
+        const upstreamGenerationExecutionContext = executionContext?.generation;
+        const effectiveGenerationProfileId = fallbackAfterInternalNoGeneration
+            ? 'workflow_internal_fallback'
+            : (upstreamGenerationExecutionContext?.effectiveProfileId ??
+              upstreamGenerationExecutionContext?.profileId);
+        const effectiveGenerationExecutionContext:
+            | GenerationExecutionContext
+            | undefined = upstreamGenerationExecutionContext
             ? {
-                  ...executionContext.generation,
+                  ...upstreamGenerationExecutionContext,
+                  ...(upstreamGenerationExecutionContext.originalProfileId !==
+                      undefined && {
+                      originalProfileId:
+                          upstreamGenerationExecutionContext.originalProfileId,
+                  }),
+                  ...(effectiveGenerationProfileId !== undefined && {
+                      profileId: effectiveGenerationProfileId,
+                      effectiveProfileId: effectiveGenerationProfileId,
+                  }),
                   model: usageModel,
                   durationMs: generationDurationMs,
               }
@@ -505,6 +555,7 @@ export const createChatService = ({
               ? ({
                     status: 'executed',
                     profileId: 'workflow_internal_fallback',
+                    effectiveProfileId: 'workflow_internal_fallback',
                     provider: 'internal',
                     model: usageModel,
                     durationMs: generationDurationMs,
