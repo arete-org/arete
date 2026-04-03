@@ -14,6 +14,7 @@ import type {
 } from '@footnote/agent-runtime';
 import { createVoltAgentRuntime } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import { ResponseMetadataSchema } from '@footnote/contracts/web';
 import {
     buildResponseMetadata,
     type ResponseMetadataRetrievalContext,
@@ -938,5 +939,113 @@ test('runChatMessages fails open when review output is invalid', async () => {
     assert.equal(
         capturedWorkflow?.terminationReason,
         'executor_error_fail_open'
+    );
+});
+
+test('runChatMessages skips review loop when enabled but maxIterations is zero', async () => {
+    let callCount = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            callCount += 1;
+            return {
+                text: 'single pass response',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 20,
+                    completionTokens: 10,
+                    totalTokens: 30,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const chatService = createChatService({
+        generationRuntime,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: 0,
+            maxDurationMs: 15000,
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+    });
+
+    assert.equal(response.message, 'single pass response');
+    assert.equal(callCount, 1);
+});
+
+test('runChatMessages emits schema-safe workflow metadata bounds under invalid injected config values', async () => {
+    let callCount = 0;
+    let capturedMetadata: ResponseMetadata | undefined;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            callCount += 1;
+            if (callCount === 1) {
+                return {
+                    text: 'initial draft',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 20,
+                        completionTokens: 10,
+                        totalTokens: 30,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+
+            return {
+                text: '{"decision":"finalize","reason":"Done."}',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 5,
+                    completionTokens: 5,
+                    totalTokens: 10,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const chatService = createChatService({
+        generationRuntime,
+        storeTrace: async (metadata) => {
+            capturedMetadata = metadata;
+        },
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: Number.POSITIVE_INFINITY,
+            maxDurationMs: Number.NaN,
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+    });
+
+    const parseResult = ResponseMetadataSchema.safeParse(response.metadata);
+    assert.equal(parseResult.success, true);
+    assert.equal(callCount, 2);
+    assert.ok((response.metadata.workflow?.maxSteps ?? 0) > 0);
+    assert.ok((response.metadata.workflow?.maxDurationMs ?? 0) > 0);
+    assert.equal(
+        ResponseMetadataSchema.safeParse(capturedMetadata).success,
+        true
     );
 });
