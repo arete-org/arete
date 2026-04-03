@@ -14,8 +14,12 @@ Footnote keeps docs in three buckets:
 - [Safety Evaluation And Breakers](./architecture/risk-evaluation-and-breakers.md): Defines the target deterministic safety layer and enforcement point.
 - [Deterministic Breaker Evaluator V1 (Draft)](./architecture/deterministic-breaker-evaluator-v1.md): Proposes the concrete evaluator contract, rule model, action mapping, and validation gates for issue #75.
 - [Prompt Resolution](./architecture/prompt-resolution.md): Defines how prompt layers and overrides resolve at runtime.
+<<<<<<< 9808-canonical-workfl
+- [Workflow Profile Contract](./architecture/workflow-profile-contract.md): Defines required profile hooks/fields and blocked/no-generation behavior + provenance expectations.
+=======
 - [Workflow Engine And Provenance V1](./architecture/workflow-engine-and-provenance-v1.md): Defines the high-level workflow engine direction, step model, and provenance record shape.
 - [Workflow Profiles V1 RFC: Engine Core vs Profile Semantics](./architecture/workflow-profiles-v1-engine-vs-profile-semantics.md): Defines ownership boundaries and invariants for single-pass and bounded-review profiles.
+>>>>>>> main
 
 ## Decisions
 

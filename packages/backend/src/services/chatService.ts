@@ -39,6 +39,10 @@ import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
+    WORKFLOW_NO_GENERATION_HANDLING_MAP,
+    resolveNoGenerationHandlingFromTermination,
+} from './workflowProfileContract.js';
+import {
     runBoundedReviewWorkflow,
     type RunBoundedReviewWorkflowResult,
     type WorkflowPolicy,
@@ -46,7 +50,9 @@ import {
 import { logger } from '../utils/logger.js';
 import { runtimeConfig } from '../config.js';
 
-const REVIEW_WORKFLOW_NAME = 'message_with_review_loop_v1';
+const REVIEW_WORKFLOW_NAME = 'message_with_review_loop';
+const SURFACED_NO_GENERATION_MESSAGE =
+    'I could not generate a response for this request.';
 
 const sanitizeNonNegativeInteger = (
     value: number,
@@ -327,6 +333,7 @@ export const createChatService = ({
 
         let generationResult: GenerationResult;
         let workflowLineage: WorkflowRecord | undefined;
+        let fallbackAfterInternalNoGeneration = false;
         if (reviewLoopEnabled && reviewLoopMaxIterations > 0) {
             const workflowPolicy: WorkflowPolicy = {
                 enablePlanning: false,
@@ -355,10 +362,88 @@ export const createChatService = ({
                     generationResult = workflowResult.generationResult;
                     workflowLineage = workflowResult.workflowLineage;
                     break;
-                case 'no_generation':
-                    throw new Error(
-                        `Workflow terminated before generation: ${workflowResult.workflowLineage.terminationReason}`
-                    );
+                case 'no_generation': {
+                    workflowLineage = workflowResult.workflowLineage;
+                    const noGenerationResolution =
+                        resolveNoGenerationHandlingFromTermination({
+                            terminationReason:
+                                workflowResult.workflowLineage
+                                    .terminationReason,
+                            generationEnabledByPolicy:
+                                workflowPolicy.enableGeneration !== false,
+                        });
+                    if (
+                        noGenerationResolution.kind ===
+                        'unsupported_termination_reason'
+                    ) {
+                        logger.error(
+                            'Unsupported no-generation termination reason.',
+                            {
+                                workflowName: REVIEW_WORKFLOW_NAME,
+                                terminationReason:
+                                    noGenerationResolution.terminationReason,
+                                noGenerationResolution,
+                            }
+                        );
+                        generationResult = {
+                            text: SURFACED_NO_GENERATION_MESSAGE,
+                            model: generationRequest.model,
+                            provenance: 'Inferred',
+                            citations: [],
+                        };
+                        break;
+                    }
+
+                    const handling =
+                        WORKFLOW_NO_GENERATION_HANDLING_MAP[
+                            noGenerationResolution.reasonCode
+                        ];
+
+                    if (handling.runtimeAction === 'run_fallback_generation') {
+                        try {
+                            generationResult =
+                                await generationRuntime.generate(
+                                    generationRequest
+                                );
+                            recordUsageForStep(
+                                generationResult,
+                                generationRequest.model
+                            );
+                        } catch (error) {
+                            logger.warn(
+                                'Fallback generation after internal no-generation failed; preserving no-generation lineage.',
+                                {
+                                    workflowName: REVIEW_WORKFLOW_NAME,
+                                    reasonCode:
+                                        noGenerationResolution.reasonCode,
+                                    terminationReason:
+                                        workflowResult.workflowLineage
+                                            .terminationReason,
+                                    error:
+                                        error instanceof Error
+                                            ? error.message
+                                            : String(error),
+                                }
+                            );
+                            generationResult = {
+                                text: SURFACED_NO_GENERATION_MESSAGE,
+                                model: generationRequest.model,
+                                provenance: 'Inferred',
+                                citations: [],
+                            };
+                        }
+                        fallbackAfterInternalNoGeneration = true;
+                        break;
+                    }
+
+                    generationResult = {
+                        text: SURFACED_NO_GENERATION_MESSAGE,
+                        model: generationRequest.model,
+                        provenance: 'Inferred',
+                        citations: [],
+                    };
+                    break;
+                }
                 default: {
                     const exhaustiveCheck: never = workflowResult;
                     throw new Error(
@@ -439,13 +524,43 @@ export const createChatService = ({
                     : undefined;
 
         const usageModel = assistantMetadata.model || defaultModel;
-        const effectiveGenerationExecutionContext = executionContext?.generation
+        type GenerationExecutionContext = NonNullable<
+            NonNullable<
+                ResponseMetadataRuntimeContext['executionContext']
+            >['generation']
+        >;
+        const upstreamGenerationExecutionContext = executionContext?.generation;
+        const effectiveGenerationProfileId = fallbackAfterInternalNoGeneration
+            ? 'workflow_internal_fallback'
+            : (upstreamGenerationExecutionContext?.effectiveProfileId ??
+              upstreamGenerationExecutionContext?.profileId);
+        const effectiveGenerationExecutionContext:
+            | GenerationExecutionContext
+            | undefined = upstreamGenerationExecutionContext
             ? {
-                  ...executionContext.generation,
+                  ...upstreamGenerationExecutionContext,
+                  ...(upstreamGenerationExecutionContext.originalProfileId !==
+                      undefined && {
+                      originalProfileId:
+                          upstreamGenerationExecutionContext.originalProfileId,
+                  }),
+                  ...(effectiveGenerationProfileId !== undefined && {
+                      profileId: effectiveGenerationProfileId,
+                      effectiveProfileId: effectiveGenerationProfileId,
+                  }),
                   model: usageModel,
                   durationMs: generationDurationMs,
               }
-            : undefined;
+            : fallbackAfterInternalNoGeneration
+              ? ({
+                    status: 'executed',
+                    profileId: 'workflow_internal_fallback',
+                    effectiveProfileId: 'workflow_internal_fallback',
+                    provider: 'internal',
+                    model: usageModel,
+                    durationMs: generationDurationMs,
+                } satisfies GenerationExecutionContext)
+              : undefined;
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,

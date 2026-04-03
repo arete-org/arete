@@ -280,7 +280,7 @@ const createValidWorkflowMetadataPayload = (now: string) => ({
     ...baseMetadata,
     workflow: {
         workflowId: 'wf_123',
-        workflowName: 'message_with_review_loop_v1',
+        workflowName: 'message_with_review_loop',
         status: 'completed',
         stepCount: 2,
         maxSteps: 5,
@@ -381,7 +381,7 @@ test('ResponseMetadataSchema rejects workflow lineage with invalid termination r
         ...baseMetadata,
         workflow: {
             workflowId: 'wf_123',
-            workflowName: 'message_with_review_loop_v1',
+            workflowName: 'message_with_review_loop',
             status: 'completed',
             stepCount: 1,
             maxSteps: 2,

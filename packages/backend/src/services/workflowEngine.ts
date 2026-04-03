@@ -18,6 +18,7 @@ import type {
     GenerationRuntime,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
+import { logger } from '../utils/logger.js';
 
 export type WorkflowPolicy = {
     enablePlanning: boolean;
@@ -108,12 +109,11 @@ export type BoundedReviewProfileStrategy = {
     parseReviewDecision: (text: string) => ReviewDecision | null;
 };
 
-export const BOUNDED_REVIEW_PROFILE_STRATEGY_V1: BoundedReviewProfileStrategy =
-    {
-        reviewDecisionPrompt: DEFAULT_REVIEW_DECISION_PROMPT,
-        revisionPromptPrefix: DEFAULT_REVISION_PROMPT_PREFIX,
-        parseReviewDecision: parseReviewDecisionText,
-    };
+export const BOUNDED_REVIEW_PROFILE_STRATEGY: BoundedReviewProfileStrategy = {
+    reviewDecisionPrompt: DEFAULT_REVIEW_DECISION_PROMPT,
+    revisionPromptPrefix: DEFAULT_REVISION_PROMPT_PREFIX,
+    parseReviewDecision: parseReviewDecisionText,
+};
 
 export type ReviewWorkflowRuntimeConfig = {
     workflowName: string;
@@ -351,7 +351,7 @@ export const runBoundedReviewWorkflow = async ({
     generationStartedAtMs,
     workflowConfig,
     workflowPolicy,
-    profileStrategy = BOUNDED_REVIEW_PROFILE_STRATEGY_V1,
+    profileStrategy = BOUNDED_REVIEW_PROFILE_STRATEGY,
     reviewDecisionPrompt,
     revisionPromptPrefix,
     parseReviewDecision,
@@ -506,31 +506,71 @@ export const runBoundedReviewWorkflow = async ({
     } else {
         if (!stopIfOverLimits()) {
             const initialDraftStartedAt = generationStartedAtMs;
-            draftResult = await generationRuntime.generate(generationRequest);
-            const initialDraftFinishedAt = Date.now();
-            const initialDraftUsage = captureUsage(
-                draftResult,
-                generationRequest.model
-            );
-            const initialDraftStepId = captureStep({
-                stepKind: 'generate',
-                status: 'executed',
-                summary: 'Generated initial draft response.',
-                startedAtMs: initialDraftStartedAt,
-                finishedAtMs: initialDraftFinishedAt,
-                model: initialDraftUsage.model,
-                usage: draftResult.usage,
-                estimatedCost: initialDraftUsage.estimatedCost,
-                attempt: 1,
-            });
-            draftParentStepId = initialDraftStepId;
-            workflowState = applyStepExecutionToState(
-                workflowState,
-                'generate',
-                initialDraftUsage.totalTokens,
-                0,
-                0
-            );
+            try {
+                draftResult =
+                    await generationRuntime.generate(generationRequest);
+                const initialDraftFinishedAt = Date.now();
+                const initialDraftUsage = captureUsage(
+                    draftResult,
+                    generationRequest.model
+                );
+                const initialDraftStepId = captureStep({
+                    stepKind: 'generate',
+                    status: 'executed',
+                    summary: 'Generated initial draft response.',
+                    startedAtMs: initialDraftStartedAt,
+                    finishedAtMs: initialDraftFinishedAt,
+                    model: initialDraftUsage.model,
+                    usage: draftResult.usage,
+                    estimatedCost: initialDraftUsage.estimatedCost,
+                    attempt: 1,
+                });
+                draftParentStepId = initialDraftStepId;
+                workflowState = applyStepExecutionToState(
+                    workflowState,
+                    'generate',
+                    initialDraftUsage.totalTokens,
+                    0,
+                    0
+                );
+            } catch (error) {
+                const initialDraftFinishedAt = Date.now();
+                logger.error(
+                    'Initial workflow generation failed; returning classified no-generation outcome.',
+                    {
+                        stepKind: 'generate',
+                        reasonCode: 'generation_runtime_error',
+                        startedAtMs: initialDraftStartedAt,
+                        finishedAtMs: initialDraftFinishedAt,
+                        workflowName: workflowState.workflowName,
+                        workflowId: workflowState.workflowId,
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    }
+                );
+                captureStep({
+                    stepKind: 'generate',
+                    status: 'failed',
+                    summary:
+                        'Initial generation failed; workflow returned classified no-generation outcome.',
+                    reasonCode: 'generation_runtime_error',
+                    startedAtMs: initialDraftStartedAt,
+                    finishedAtMs: initialDraftFinishedAt,
+                    attempt: 1,
+                });
+                workflowState = applyStepExecutionToState(
+                    workflowState,
+                    'generate',
+                    0,
+                    0,
+                    0
+                );
+                terminationReason = 'executor_error_fail_open';
+                workflowStatus = 'degraded';
+                shouldStop = true;
+            }
         }
     }
     if (!shouldStop && normalizedMaxIterations === 0) {

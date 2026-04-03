@@ -1,4 +1,4 @@
-# Workflow Engine And Provenance V1
+# Workflow Engine And Provenance
 
 ## Purpose
 
@@ -57,7 +57,7 @@ This is a responsibility split, not a 2D axis model.
 
 ## Step Model
 
-V1 step kinds:
+Step kinds:
 
 - `plan`
 - `tool`
@@ -124,9 +124,9 @@ Examples:
 
 These limits are hard stops enforced by backend code.
 
-## Canonical Termination Reasons
+## Termination Reasons
 
-Initial canonical reasons:
+Initial reasons:
 
 - `goal_satisfied`
 - `budget_exhausted_steps`
@@ -147,7 +147,7 @@ Deeper runtime/debug execution detail can remain in internal logs keyed by
 
 Legacy fields may exist temporarily during migration, but they are not the target model.
 
-## Non-Goals For V1
+## Non-Goals
 
 - full generalized graph language,
 - unlimited nested orchestration,
