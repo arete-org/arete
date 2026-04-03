@@ -611,6 +611,75 @@ section:has(.site-header-sticky) {
     margin-bottom: clamp(1.25rem, 2.5vw, 1.9rem);
 }
 
+/* Shared CTA utility styles used across multiple web pages. */
+.cta-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(0.75rem, 2vw, 0.85rem);
+    margin-top: clamp(1.5rem, 3vw, 2rem);
+}
+
+.cta-button {
+    border: 1px solid var(--border);
+    padding: 0.85rem 1.6rem;
+    text-decoration: none;
+    font-family: var(--mono-font);
+    font-size: 0.95rem;
+    color: var(--text);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: all var(--transition-speed) ease;
+    min-height: 2.8rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: color-mix(in srgb, var(--bg) 90%, var(--hover-bg) 10%);
+}
+
+.cta-button.primary {
+    background-color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 78%, var(--border) 22%);
+    color: #f0ede6;
+    box-shadow: 0 4px 12px
+        color-mix(in srgb, var(--accent) 28%, transparent 72%);
+}
+
+.cta-button.secondary {
+    background-color: color-mix(in srgb, var(--bg) 90%, var(--hover-bg) 10%);
+}
+
+.cta-button:hover,
+.cta-button:focus {
+    background-color: var(--hover-bg);
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--border) 45%);
+    color: var(--text);
+}
+
+.cta-button.primary:hover,
+.cta-button.primary:focus {
+    background-color: var(--accent-hover);
+    border-color: color-mix(
+        in srgb,
+        var(--accent-hover) 80%,
+        var(--border) 20%
+    );
+    color: #f0ede6;
+    box-shadow: 0 6px 16px
+        color-mix(in srgb, var(--accent-hover) 32%, transparent 68%);
+}
+
+.cta-button:disabled,
+.cta-button[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.cta-button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px
+        color-mix(in srgb, var(--accent-hover) 55%, transparent 45%);
+}
+
 .hero-action-hub {
     margin: 0 0 clamp(2rem, 4vw, 2.8rem);
 }
@@ -2953,6 +3022,15 @@ kbd {
 
     .interaction-submit {
         width: 100%;
+    }
+
+    .cta-group {
+        flex-direction: column;
+    }
+
+    .cta-button {
+        width: 100%;
+        text-align: center;
     }
 
     .hero-action-tabs {

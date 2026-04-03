@@ -6,7 +6,7 @@
  * @footnote-ethics: medium - The hero sets user expectations about privacy, honesty, and transparency.
  */
 
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import Header from './Header';
 import AskMeAnything from './AskMeAnything';
 
@@ -15,6 +15,30 @@ const Hero = (): JSX.Element => {
     // No breadcrumbs on home page
     const breadcrumbItems: never[] = [];
     const [activeTab, setActiveTab] = useState<'try' | 'setup'>('try');
+    const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+            return;
+        }
+
+        event.preventDefault();
+        const nextTab =
+            event.key === 'ArrowRight'
+                ? activeTab === 'try'
+                    ? 'setup'
+                    : 'try'
+                : activeTab === 'setup'
+                  ? 'try'
+                  : 'setup';
+
+        setActiveTab(nextTab);
+
+        const nextTabElement = document.getElementById(
+            nextTab === 'try' ? 'hero-tab-try' : 'hero-tab-setup'
+        );
+        if (nextTabElement instanceof HTMLButtonElement) {
+            nextTabElement.focus();
+        }
+    };
 
     return (
         <section className="hero" aria-labelledby="hero-title">
@@ -36,6 +60,7 @@ const Hero = (): JSX.Element => {
                             aria-selected={activeTab === 'try'}
                             className={`hero-action-tab${activeTab === 'try' ? ' is-active' : ''}`}
                             onClick={() => setActiveTab('try')}
+                            onKeyDown={handleKeyDown}
                         >
                             <span className="hero-action-tab__title">
                                 Try it out
@@ -52,6 +77,7 @@ const Hero = (): JSX.Element => {
                             aria-selected={activeTab === 'setup'}
                             className={`hero-action-tab${activeTab === 'setup' ? ' is-active' : ''}`}
                             onClick={() => setActiveTab('setup')}
+                            onKeyDown={handleKeyDown}
                         >
                             <span className="hero-action-tab__title">
                                 Set it up

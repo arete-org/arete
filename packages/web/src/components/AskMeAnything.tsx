@@ -53,7 +53,6 @@ const AskMeAnything = (): JSX.Element => {
     const turnstileRef = useRef<TurnstileInstance | null>(null);
     const isTurnstileExecutingRef = useRef(false);
     const hasInteractedRef = useRef(false); // Track if user has interacted to prevent initial status flash
-    const hasAttemptedRuntimeConfigRef = useRef(false);
 
     // Random prompt selection
     const getRandomPrompt = (): string => {
@@ -94,10 +93,6 @@ const AskMeAnything = (): JSX.Element => {
     };
 
     const ensureRuntimeConfigLoaded = async (): Promise<string> => {
-        if (hasAttemptedRuntimeConfigRef.current) {
-            return turnstileSiteKey;
-        }
-        hasAttemptedRuntimeConfigRef.current = true;
         if (
             import.meta.env.DEV &&
             (window.location.hostname === 'localhost' ||
