@@ -40,7 +40,7 @@ import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
     WORKFLOW_NO_GENERATION_HANDLING_MAP,
-    getNoGenerationReasonCodeFromTermination,
+    resolveNoGenerationHandlingFromTermination,
 } from './workflowProfileContract.js';
 import {
     runBoundedReviewWorkflow,
@@ -333,6 +333,7 @@ export const createChatService = ({
 
         let generationResult: GenerationResult;
         let workflowLineage: WorkflowRecord | undefined;
+        let fallbackAfterInternalNoGeneration = false;
         if (reviewLoopEnabled && reviewLoopMaxIterations > 0) {
             const workflowPolicy: WorkflowPolicy = {
                 enablePlanning: false,
@@ -363,17 +364,33 @@ export const createChatService = ({
                     break;
                 case 'no_generation': {
                     workflowLineage = workflowResult.workflowLineage;
-                    const noGenerationReasonCode =
-                        getNoGenerationReasonCodeFromTermination({
+                    const noGenerationResolution =
+                        resolveNoGenerationHandlingFromTermination({
                             terminationReason:
                                 workflowResult.workflowLineage
                                     .terminationReason,
                             generationEnabledByPolicy:
                                 workflowPolicy.enableGeneration !== false,
                         });
+                    if (
+                        noGenerationResolution.kind ===
+                        'unsupported_termination_reason'
+                    ) {
+                        logger.error(
+                            `Unsupported no-generation termination reason: ${noGenerationResolution.terminationReason}`
+                        );
+                        generationResult = {
+                            text: SURFACED_NO_GENERATION_MESSAGE,
+                            model: generationRequest.model,
+                            provenance: 'Inferred',
+                            citations: [],
+                        };
+                        break;
+                    }
+
                     const handling =
                         WORKFLOW_NO_GENERATION_HANDLING_MAP[
-                            noGenerationReasonCode
+                            noGenerationResolution.reasonCode
                         ];
 
                     if (handling.disposition === 'internal_termination') {
@@ -383,6 +400,7 @@ export const createChatService = ({
                             generationResult,
                             generationRequest.model
                         );
+                        fallbackAfterInternalNoGeneration = true;
                         break;
                     }
 
@@ -480,7 +498,15 @@ export const createChatService = ({
                   model: usageModel,
                   durationMs: generationDurationMs,
               }
-            : undefined;
+            : fallbackAfterInternalNoGeneration
+              ? {
+                    status: 'executed',
+                    profileId: 'workflow_internal_fallback',
+                    provider: 'internal',
+                    model: usageModel,
+                    durationMs: generationDurationMs,
+                }
+              : undefined;
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,

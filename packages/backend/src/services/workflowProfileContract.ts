@@ -86,33 +86,72 @@ export const WORKFLOW_NO_GENERATION_HANDLING_MAP: Readonly<
     },
 };
 
-export const getNoGenerationReasonCodeFromTermination = (input: {
+export type NoGenerationHandlingResolution =
+    | {
+          kind: 'mapped';
+          reasonCode: WorkflowNoGenerationReasonCode;
+          handling: WorkflowNoGenerationHandling;
+      }
+    | {
+          kind: 'unsupported_termination_reason';
+          terminationReason: WorkflowTerminationReason;
+      };
+
+export const resolveNoGenerationHandlingFromTermination = (input: {
     terminationReason: WorkflowTerminationReason;
     generationEnabledByPolicy: boolean;
-}): WorkflowNoGenerationReasonCode => {
+}): NoGenerationHandlingResolution => {
     if (input.terminationReason === 'transition_blocked_by_policy') {
-        return input.generationEnabledByPolicy
+        const reasonCode = input.generationEnabledByPolicy
             ? 'blocked_by_policy_before_generate'
             : 'generation_disabled_by_profile';
+        return {
+            kind: 'mapped',
+            reasonCode,
+            handling: WORKFLOW_NO_GENERATION_HANDLING_MAP[reasonCode],
+        };
     }
 
     if (input.terminationReason === 'budget_exhausted_steps') {
-        return 'budget_exhausted_steps_before_generate';
+        const reasonCode = 'budget_exhausted_steps_before_generate';
+        return {
+            kind: 'mapped',
+            reasonCode,
+            handling: WORKFLOW_NO_GENERATION_HANDLING_MAP[reasonCode],
+        };
     }
 
     if (input.terminationReason === 'budget_exhausted_tokens') {
-        return 'budget_exhausted_tokens_before_generate';
+        const reasonCode = 'budget_exhausted_tokens_before_generate';
+        return {
+            kind: 'mapped',
+            reasonCode,
+            handling: WORKFLOW_NO_GENERATION_HANDLING_MAP[reasonCode],
+        };
     }
 
     if (input.terminationReason === 'budget_exhausted_time') {
-        return 'budget_exhausted_time_before_generate';
+        const reasonCode = 'budget_exhausted_time_before_generate';
+        return {
+            kind: 'mapped',
+            reasonCode,
+            handling: WORKFLOW_NO_GENERATION_HANDLING_MAP[reasonCode],
+        };
     }
 
     if (input.terminationReason === 'executor_error_fail_open') {
-        return 'executor_error_before_generate';
+        const reasonCode = 'executor_error_before_generate';
+        return {
+            kind: 'mapped',
+            reasonCode,
+            handling: WORKFLOW_NO_GENERATION_HANDLING_MAP[reasonCode],
+        };
     }
 
-    return 'blocked_by_policy_before_generate';
+    return {
+        kind: 'unsupported_termination_reason',
+        terminationReason: input.terminationReason,
+    };
 };
 
 export type WorkflowProfileContractV1 = {
