@@ -234,10 +234,11 @@ export interface ImageResultPresentation {
  *
  * Produces an embed containing machine-readable metadata and visible fields, any required image attachments, optional variation/retry components, and a follow-up context that captures the normalized prompts, selected models/style, and prompt-adjustment setting for future retries or recovery.
  *
- * @param context - The original image generation context (user-visible settings and flags).
- * @param artifacts - Normalized results from the image generation pipeline (final image buffer/URL, models, prompts, annotations, costs, timing, and IDs).
- * @param followUpResponseId - Optional upstream response ID to include as the Input ID field and in the follow-up context.
- * @returns An ImageResultPresentation containing the prepared embed, attachments, component rows, and follow-up context suitable for sending to Discord.
+ * `@param` context - The original image generation context (user-visible settings and flags).
+ * `@param` artifacts - Normalized results from the image generation pipeline (final image buffer/URL, models, prompts, annotations, costs, timing, and IDs).
+ * `@param` options - Optional presentation options.
+ * `@param` options.followUpResponseId - Optional upstream response ID to include as the Input ID field and in the follow-up context.
+ * `@returns` An ImageResultPresentation containing the prepared embed, attachments, component rows, and follow-up context suitable for sending to Discord.
  */
 export function buildImageResultPresentation(
     context: ImageGenerationContext,
