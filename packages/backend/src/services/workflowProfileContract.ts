@@ -97,32 +97,38 @@ export const WORKFLOW_NO_GENERATION_HANDLING_MAP: Readonly<
 > = {
     blocked_by_policy_before_generate: {
         reasonCode: 'blocked_by_policy_before_generate',
-        disposition: 'surface_to_caller', // Caller should see explicit blocked/no-generation response.
+        // Preserve this as a visible no-generation outcome; no fallback generation.
+        disposition: 'surface_to_caller',
         terminationReason: 'transition_blocked_by_policy',
     },
     generation_disabled_by_profile: {
         reasonCode: 'generation_disabled_by_profile',
-        disposition: 'surface_to_caller', // Caller should see explicit blocked/no-generation response.
+        // Profile intentionally cannot generate, so return the no-generation outcome directly.
+        disposition: 'surface_to_caller',
         terminationReason: 'transition_blocked_by_policy',
     },
     budget_exhausted_steps_before_generate: {
         reasonCode: 'budget_exhausted_steps_before_generate',
-        disposition: 'internal_termination', // Backend should attempt deterministic internal fallback generation.
+        // Keep the budget stop in lineage, then let chat runtime use fallback generation.
+        disposition: 'internal_termination',
         terminationReason: 'budget_exhausted_steps',
     },
     budget_exhausted_tokens_before_generate: {
         reasonCode: 'budget_exhausted_tokens_before_generate',
-        disposition: 'internal_termination', // Backend should attempt deterministic internal fallback generation.
+        // Keep the budget stop in lineage, then let chat runtime use fallback generation.
+        disposition: 'internal_termination',
         terminationReason: 'budget_exhausted_tokens',
     },
     budget_exhausted_time_before_generate: {
         reasonCode: 'budget_exhausted_time_before_generate',
-        disposition: 'internal_termination', // Backend should attempt deterministic internal fallback generation.
+        // Keep the timeout stop in lineage, then let chat runtime use fallback generation.
+        disposition: 'internal_termination',
         terminationReason: 'budget_exhausted_time',
     },
     executor_error_before_generate: {
         reasonCode: 'executor_error_before_generate',
-        disposition: 'surface_to_caller', // Caller should see explicit surfaced response for pre-generation failure.
+        // Surface the executor failure as no-generation; there is no prior draft to fall back to.
+        disposition: 'surface_to_caller',
         terminationReason: 'executor_error_fail_open',
     },
 };
