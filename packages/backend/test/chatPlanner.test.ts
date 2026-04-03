@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import {
     createChatPlanner,
-    type ChatPlannerProfileOption,
+    type ChatPlannerCapabilityProfileOption,
 } from '../src/services/chatPlanner.js';
 import { logger } from '../src/utils/logger.js';
 
@@ -32,19 +32,19 @@ const createChatRequest = (
 
 const createPlanner = (
     normalizedText: string,
-    availableProfiles: ChatPlannerProfileOption[] = []
+    availableCapabilityProfiles: ChatPlannerCapabilityProfileOption[] = []
 ) =>
     createChatPlanner({
         executePlanner: async () => ({
             text: normalizedText,
             model: 'gpt-5-mini',
         }),
-        availableProfiles,
+        availableCapabilityProfiles,
     });
 
 const createStructuredPlanner = (
     decision: unknown,
-    availableProfiles: ChatPlannerProfileOption[] = []
+    availableCapabilityProfiles: ChatPlannerCapabilityProfileOption[] = []
 ) =>
     createChatPlanner({
         executePlannerStructured: async () => ({
@@ -57,7 +57,7 @@ const createStructuredPlanner = (
             },
             rawArguments: JSON.stringify(decision),
         }),
-        availableProfiles,
+        availableCapabilityProfiles,
     });
 
 test('chatPlanner parses plain JSON output from the backend-native planner prompt', async () => {
@@ -65,7 +65,7 @@ test('chatPlanner parses plain JSON output from the backend-native planner promp
         JSON.stringify({
             action: 'message',
             modality: 'text',
-            profileId: 'openai-text-medium',
+            requestedCapabilityProfile: 'balanced-general',
             safetyTier: 'Low',
             reasoning: 'The user is asking a question that needs a reply.',
             generation: {
@@ -89,7 +89,7 @@ test('chatPlanner parses plain JSON output from the backend-native planner promp
     const { plan, execution } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
-    assert.equal(plan.profileId, 'openai-text-medium');
+    assert.equal(plan.requestedCapabilityProfile, 'balanced-general');
     assert.ok(plan.generation.search);
     assert.equal(
         plan.generation.search?.query,
@@ -105,7 +105,7 @@ test('chatPlanner parses fenced JSON output', async () => {
 ${JSON.stringify({
     action: 'message',
     modality: 'text',
-    profileId: 'openai-text-medium',
+    requestedCapabilityProfile: 'balanced-general',
     safetyTier: 'Low',
     reasoning: 'The user needs a normal reply.',
     generation: {
@@ -125,7 +125,7 @@ ${JSON.stringify({
     const { plan, execution } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
-    assert.equal(plan.profileId, 'openai-text-medium');
+    assert.equal(plan.requestedCapabilityProfile, 'balanced-general');
     assert.equal(execution.status, 'executed');
 });
 
@@ -133,7 +133,7 @@ test('chatPlanner accepts structured planner decisions without text JSON parsing
     const planner = createStructuredPlanner({
         action: 'message',
         modality: 'text',
-        profileId: 'openai-text-fast',
+        requestedCapabilityProfile: 'structured-cheap',
         safetyTier: 'Low',
         reasoning: 'Reply should be a normal message.',
         generation: {
@@ -152,7 +152,7 @@ test('chatPlanner accepts structured planner decisions without text JSON parsing
     const { plan, execution } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
-    assert.equal(plan.profileId, 'openai-text-fast');
+    assert.equal(plan.requestedCapabilityProfile, 'structured-cheap');
     assert.equal(execution.status, 'executed');
 });
 
@@ -174,34 +174,28 @@ test('chatPlanner marks structured policy-invalid decisions as failed with inval
     assert.equal(execution.reasonCode, 'planner_invalid_output');
 });
 
-test('chatPlanner forwards bounded profile options context and normalizes blank profileId', async () => {
+test('chatPlanner forwards bounded capability options context and normalizes blank requested capability', async () => {
     let capturedMessages: Array<{ role: string; content: string }> = [];
-    const availableProfiles: ChatPlannerProfileOption[] = [
+    const availableCapabilityProfiles: ChatPlannerCapabilityProfileOption[] = [
         {
-            id: 'openai-text-fast',
-            description: 'Fast profile for short planner tasks.',
-            costClass: 'low',
-            latencyClass: 'low',
-            capabilities: { canUseSearch: false },
+            id: 'structured-cheap',
+            description: 'Fast structured routing profile.',
         },
         {
-            id: 'openai-text-medium',
-            description: 'Balanced profile for chat responses.',
-            costClass: 'medium',
-            latencyClass: 'medium',
-            capabilities: { canUseSearch: true },
+            id: 'balanced-general',
+            description: 'Balanced generation profile.',
         },
     ];
 
     const planner = createChatPlanner({
-        availableProfiles,
+        availableCapabilityProfiles,
         executePlanner: async ({ messages }) => {
             capturedMessages = messages;
             return {
                 text: JSON.stringify({
                     action: 'message',
                     modality: 'text',
-                    profileId: '   ',
+                    requestedCapabilityProfile: '   ',
                     safetyTier: 'Low',
                     reasoning: 'Use safe defaults.',
                     generation: {
@@ -223,23 +217,25 @@ test('chatPlanner forwards bounded profile options context and normalizes blank 
 
     const { plan } = await planner.planChat(createChatRequest());
 
-    assert.equal(plan.profileId, undefined);
+    assert.equal(plan.requestedCapabilityProfile, undefined);
     const profileContextMessage =
         capturedMessages.find((message) =>
-            message.content.startsWith('Planner profile options (bounded): ')
+            message.content.startsWith(
+                'Planner capability profiles (bounded): '
+            )
         )?.content ?? '';
     assert.match(
         profileContextMessage,
-        /^Planner profile options \(bounded\): \[/
+        /^Planner capability profiles \(bounded\): \[/
     );
     const encodedProfiles = profileContextMessage.replace(
-        'Planner profile options (bounded): ',
+        'Planner capability profiles (bounded): ',
         ''
     );
     const parsedProfiles = JSON.parse(
         encodedProfiles
-    ) as ChatPlannerProfileOption[];
-    assert.deepEqual(parsedProfiles, availableProfiles);
+    ) as ChatPlannerCapabilityProfileOption[];
+    assert.deepEqual(parsedProfiles, availableCapabilityProfiles);
 });
 
 test('chatPlanner fails open to a valid fallback generation config when planner JSON is invalid', async () => {
