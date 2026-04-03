@@ -81,6 +81,9 @@ type ChatImageAction = {
     imageRequest: ChatImageRequest;
 };
 
+/**
+ * Canonical breaker actions emitted by ethics-core safety evaluation.
+ */
 type BreakerSafetyAction =
     | 'allow'
     | 'block'
@@ -88,6 +91,12 @@ type BreakerSafetyAction =
     | 'safe_partial'
     | 'human_review';
 
+/**
+ * Minimal breaker decision payload we need at Discord send time.
+ *
+ * Keep this local shape narrow so malformed payloads fail open instead of
+ * crashing message dispatch.
+ */
 type BreakerSafetyDecision = {
     action: BreakerSafetyAction;
     safetyTier: 'Low' | 'Medium' | 'High';
@@ -96,18 +105,35 @@ type BreakerSafetyDecision = {
     reason?: string;
 };
 
+/**
+ * One resolved evaluator decision plus where it was read from.
+ *
+ * Source precedence matters: metadata.evaluator is preferred over execution[]
+ * entries because that top-level field is the intended compact surface payload.
+ */
 type BreakerDecisionContext = {
     source: 'metadata.evaluator' | 'metadata.execution';
     mode: 'observe_only' | 'enforced';
     safetyDecision: BreakerSafetyDecision;
 };
 
+/**
+ * Discord-local action labels used for breaker enforcement logs.
+ */
 type BreakerEnforcementMapping =
     | 'block'
     | 'safe_response'
     | 'redirect'
     | 'review';
 
+/**
+ * Decision result from pre-send breaker evaluation.
+ *
+ * - none: no evaluator data found, continue normal action dispatch.
+ * - allow: explicit allow found, log and continue.
+ * - fail_open: non-allow decision in observe-only mode, log and continue.
+ * - enforced: non-allow decision in enforced mode, override outbound behavior.
+ */
 type PreSendBreakerOutcome =
     | { kind: 'none' }
     | {
@@ -200,6 +226,12 @@ const hasResponseMetadata = (value: unknown): value is ResponseMetadata =>
 const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null;
 
+/**
+ * Runtime validator for safetyDecision payloads.
+ *
+ * This protects Discord from malformed metadata while preserving fail-open
+ * behavior when evaluator data is absent or invalid.
+ */
 const isBreakerSafetyDecision = (
     value: unknown
 ): value is BreakerSafetyDecision => {
@@ -267,6 +299,12 @@ const toBreakerDecisionContext = (
     };
 };
 
+/**
+ * Resolves the evaluator decision used by the Discord pre-send breaker.
+ *
+ * Trigger: called once per backend chat response before local action execution.
+ * Consequence: determines whether Discord should enforce, fail open, or bypass.
+ */
 const resolveBreakerDecisionContext = (
     metadata: ResponseMetadata
 ): BreakerDecisionContext | null => {
@@ -294,6 +332,12 @@ const resolveBreakerDecisionContext = (
     return null;
 };
 
+/**
+ * Maps ethics-core non-allow actions into user-facing Discord-safe text.
+ *
+ * These strings intentionally avoid procedural detail and keep the response
+ * bounded to safe, redirective guidance.
+ */
 const mapBreakerDecisionToEnforcement = (
     decision: BreakerSafetyDecision
 ): { mappedAction: BreakerEnforcementMapping; outboundMessage: string } => {
@@ -843,6 +887,10 @@ export class MessageProcessor {
     /**
      * Unknown actions intentionally warn and no-op so backend-first action
      * additions do not crash the bot before the executor learns about them.
+     *
+     * Before dispatching any local action, this method also applies the
+     * pre-send breaker hook so enforced non-allow outcomes cannot emit the
+     * original unsafe planner output.
      */
     private async executeChatAction(
         message: Message,
@@ -990,6 +1038,12 @@ export class MessageProcessor {
         }
     }
 
+    /**
+     * Evaluates whether this response should be overridden by breaker policy.
+     *
+     * Keep this as a pure resolver so tests can assert policy behavior without
+     * touching Discord transport side effects.
+     */
     private resolvePreSendBreakerOutcome(
         chatResponse: DiscordChatApiResponse
     ): PreSendBreakerOutcome {
