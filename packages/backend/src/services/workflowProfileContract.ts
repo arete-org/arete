@@ -1,0 +1,112 @@
+/**
+ * @description: Defines the canonical workflow profile contract and no-generation
+ * handling taxonomy used before profile-registry rollout.
+ * @footnote-scope: interface
+ * @footnote-module: WorkflowProfileContract
+ * @footnote-risk: low - Type-only contract drift can misalign implementation planning across profiles.
+ * @footnote-ethics: medium - Incorrect no-generation semantics can hide blocked outcomes from callers and operators.
+ */
+import type {
+    WorkflowTerminationReason,
+    WorkflowStepKind,
+} from '@footnote/contracts/ethics-core';
+
+export type WorkflowProfileId =
+    | 'bounded-review-v1'
+    | 'generate-only-v1'
+    | (string & {});
+
+export type WorkflowProfilePolicyContract = {
+    enablePlanning: boolean;
+    enableToolUse: boolean;
+    enableReplanning: boolean;
+    enableGeneration: boolean;
+    enableAssessment: boolean;
+    enableRevision: boolean;
+};
+
+export type WorkflowProfileExecutionLimitsContract = {
+    maxWorkflowSteps: number;
+    maxToolCalls: number;
+    maxDeliberationCalls: number;
+    maxTokensTotal: number;
+    maxDurationMs: number;
+};
+
+export type WorkflowNoGenerationReasonCode =
+    | 'blocked_by_policy_before_generate'
+    | 'generation_disabled_by_profile'
+    | 'budget_exhausted_steps_before_generate'
+    | 'budget_exhausted_tokens_before_generate'
+    | 'budget_exhausted_time_before_generate'
+    | 'executor_error_before_generate';
+
+export type WorkflowNoGenerationDisposition =
+    | 'surface_to_caller'
+    | 'internal_termination';
+
+export type WorkflowNoGenerationHandling = {
+    reasonCode: WorkflowNoGenerationReasonCode;
+    disposition: WorkflowNoGenerationDisposition;
+    terminationReason: WorkflowTerminationReason;
+};
+
+export const WORKFLOW_NO_GENERATION_HANDLING_MAP: Readonly<
+    Record<WorkflowNoGenerationReasonCode, WorkflowNoGenerationHandling>
+> = {
+    blocked_by_policy_before_generate: {
+        reasonCode: 'blocked_by_policy_before_generate',
+        disposition: 'surface_to_caller',
+        terminationReason: 'transition_blocked_by_policy',
+    },
+    generation_disabled_by_profile: {
+        reasonCode: 'generation_disabled_by_profile',
+        disposition: 'surface_to_caller',
+        terminationReason: 'transition_blocked_by_policy',
+    },
+    budget_exhausted_steps_before_generate: {
+        reasonCode: 'budget_exhausted_steps_before_generate',
+        disposition: 'internal_termination',
+        terminationReason: 'budget_exhausted_steps',
+    },
+    budget_exhausted_tokens_before_generate: {
+        reasonCode: 'budget_exhausted_tokens_before_generate',
+        disposition: 'internal_termination',
+        terminationReason: 'budget_exhausted_tokens',
+    },
+    budget_exhausted_time_before_generate: {
+        reasonCode: 'budget_exhausted_time_before_generate',
+        disposition: 'internal_termination',
+        terminationReason: 'budget_exhausted_time',
+    },
+    executor_error_before_generate: {
+        reasonCode: 'executor_error_before_generate',
+        disposition: 'surface_to_caller',
+        terminationReason: 'executor_error_fail_open',
+    },
+};
+
+export type WorkflowProfileContractV1 = {
+    profileId: WorkflowProfileId;
+    profileVersion: 'v1';
+    displayName: string;
+    workflowName: string;
+    policy: WorkflowProfilePolicyContract;
+    defaultLimits: WorkflowProfileExecutionLimitsContract;
+    requiredHooks: {
+        initialStep: WorkflowStepKind;
+        canEmitGeneration: () => boolean;
+        classifyNoGeneration: (
+            reasonCode: WorkflowNoGenerationReasonCode
+        ) => WorkflowNoGenerationHandling;
+    };
+    optionalExtensions?: {
+        reviewDecisionPrompt?: string;
+        revisionPromptPrefix?: string;
+        parseReviewDecision?: (text: string) => {
+            decision: 'finalize' | 'revise';
+            reason: string;
+        } | null;
+        metadata?: Record<string, string | number | boolean | null>;
+    };
+};

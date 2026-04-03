@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-04-02
+2026-04-03
 
 ## Owners
 
@@ -24,6 +24,8 @@ Architecture reference:
 - Workflow metadata is now aligned to `WorkflowRecord` + `StepRecord`.
 - Step outcomes now have explicit machine-readable control signals.
 - Canonical workflow termination reasons are now contract-level.
+- Canonical workflow profile contract V1 now documents required profile hooks,
+  blocked/no-generation behavior, and no-generation provenance invariants.
 - Workflow vocabulary now uses one shared contract source for type + schema
   derivation (`WORKFLOW_STEP_*`, `WORKFLOW_TERMINATION_REASONS`).
 - Backend now has a workflow-engine scaffold (`WorkflowPolicy`,
