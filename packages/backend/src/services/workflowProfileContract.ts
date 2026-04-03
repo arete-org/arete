@@ -1,6 +1,11 @@
 /**
  * @description: Defines the workflow profile contract and no-generation
  * handling taxonomy used before profile-registry rollout.
+ *
+ * A workflow is one bounded backend execution loop: generate, optionally assess,
+ * optionally revise, then terminate with lineage metadata. A workflow profile is
+ * the config and hook bundle that selects which of those steps are allowed and
+ * how "no generation happened" should be classified.
  * @footnote-scope: interface
  * @footnote-module: WorkflowProfileContract
  * @footnote-risk: low - Type-only contract drift can misalign implementation planning across profiles.
@@ -209,6 +214,10 @@ export const resolveNoGenerationHandlingFromTermination = (input: {
 
 /**
  * Workflow profile contract shape.
+ *
+ * Think of this as the profile-to-engine seam: policy and limits define what the
+ * engine may do, while hooks provide the profile-specific decisions the engine
+ * cannot infer on its own.
  *
  * Required hooks are engine-facing behavior. Optional extensions carry
  * profile-specific strategy details such as review prompts and parsers.
