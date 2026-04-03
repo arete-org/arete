@@ -14,9 +14,8 @@ import type {
 /**
  * Stable workflow profile identifier.
  *
- * Why this is open-ended:
- * we keep known built-in ids as a literal union for autocomplete and safety,
- * but also allow string extension for profile ids introduced outside this file.
+ * Built-in ids stay literal for autocomplete. The string extension leaves room
+ * for new profile ids before a registry exists.
  */
 export type WorkflowProfileId =
     | 'bounded-review'
@@ -24,18 +23,10 @@ export type WorkflowProfileId =
     | (string & {});
 
 /**
- * Policy switches that decide which workflow actions are legal at runtime.
+ * Policy switches checked by the engine before each workflow transition.
  *
- * Trigger:
- * the workflow engine checks these flags before allowing each transition.
- *
- * Consequence:
- * disabled capabilities terminate or redirect execution before unsafe/unsupported
- * steps run.
- *
- * Note:
- * `enableGeneration` stays optional to match existing engine behavior where some
- * call sites still omit it.
+ * `enableGeneration` stays optional because current callers still rely on the
+ * engine default when that flag is omitted.
  */
 export type WorkflowProfilePolicyContract = {
     enablePlanning: boolean;
@@ -60,12 +51,8 @@ export type WorkflowProfileExecutionLimitsContract = {
 /**
  * Reason codes for "no output was generated" workflow outcomes.
  *
- * Each code answers one question:
- * "What stopped the first successful generate step from happening?"
- *
- * The goal is deterministic provenance. Operators and callers should be able to
- * distinguish policy blocks, budget exhaustion, and executor failures without
- * reading internal logs.
+ * Each code names what stopped the first successful generate step, so lineage
+ * can distinguish policy blocks, budget exhaustion, and executor failures.
  */
 export type WorkflowNoGenerationReasonCode =
     | 'blocked_by_policy_before_generate' // A policy transition check blocked generate before first draft.
@@ -78,9 +65,9 @@ export type WorkflowNoGenerationReasonCode =
 /**
  * Disposition for a no-generation outcome.
  *
- * - `surface_to_caller`: return an explicit no-generation/blocked response path.
- * - `internal_termination`: handle internally (for example deterministic fallback
- *   generation) while preserving lineage of why the original flow ended.
+ * `surface_to_caller` returns an explicit blocked/no-generation response.
+ * `internal_termination` keeps the original termination reason in lineage while
+ * the backend performs a deterministic fallback.
  */
 export type WorkflowNoGenerationDisposition =
     | 'surface_to_caller'
@@ -89,8 +76,7 @@ export type WorkflowNoGenerationDisposition =
 /**
  * Handling directive resolved for one no-generation reason code.
  *
- * `terminationReason` must stay aligned with workflow lineage enums so metadata
- * can be serialized and validated consistently across backend and contracts.
+ * `terminationReason` is the value persisted into workflow lineage metadata.
  */
 export type WorkflowNoGenerationHandling = {
     reasonCode: WorkflowNoGenerationReasonCode;
@@ -99,11 +85,7 @@ export type WorkflowNoGenerationHandling = {
 };
 
 /**
- * Required no-generation handling matrix.
- *
- * This is the single source of truth for how each reason code behaves:
- * what callers see (`disposition`) and which lineage reason is recorded
- * (`terminationReason`).
+ * Required handling matrix for every no-generation reason code.
  */
 export const WORKFLOW_NO_GENERATION_HANDLING_MAP: Readonly<
     Record<WorkflowNoGenerationReasonCode, WorkflowNoGenerationHandling>
@@ -143,45 +125,30 @@ export const WORKFLOW_NO_GENERATION_HANDLING_MAP: Readonly<
 /**
  * Result of mapping a workflow termination reason to no-generation handling.
  *
- * - `mapped`: this termination reason is supported and has explicit handling.
- * - `unsupported_termination_reason`: this reason is outside the no-generation
- *   map. Caller must choose a deterministic path explicitly; no silent remap.
+ * `unsupported_termination_reason` is explicit so callers do not silently
+ * coerce an unmapped workflow reason into the wrong no-generation behavior.
  */
 export type NoGenerationHandlingResolution =
     | {
-          /**
-           * Successful deterministic mapping.
-           */
+          /** This termination reason has an explicit map entry. */
           kind: 'mapped';
-          /**
-           * No-generation reason selected by the resolver.
-           */
+          /** Reason code selected from termination reason + generation policy. */
           reasonCode: WorkflowNoGenerationReasonCode;
-          /**
-           * Handling directive pulled directly from the required map.
-           */
+          /** Handling directive read from `WORKFLOW_NO_GENERATION_HANDLING_MAP`. */
           handling: WorkflowNoGenerationHandling;
       }
     | {
-          /**
-           * Explicit signal that no mapping exists for this termination reason.
-           */
+          /** No no-generation mapping exists for this termination reason. */
           kind: 'unsupported_termination_reason';
-          /**
-           * Original reason preserved for provenance and deterministic fallback.
-           */
+          /** Original workflow reason preserved for lineage and fallback logic. */
           terminationReason: WorkflowTerminationReason;
       };
 
 /**
  * Resolves a workflow termination reason into a no-generation handling decision.
  *
- * Trigger:
- * call this when a workflow ended before any successful generation.
- *
- * Consequence:
- * runtime can deterministically decide whether to surface a no-generation
- * outcome to callers or continue with internal fallback behavior.
+ * Call this only when the workflow ended before any successful generation. The
+ * result tells chat runtime whether to surface that outcome or run fallback.
  */
 export const resolveNoGenerationHandlingFromTermination = (input: {
     terminationReason: WorkflowTerminationReason;
@@ -243,9 +210,8 @@ export const resolveNoGenerationHandlingFromTermination = (input: {
 /**
  * Workflow profile contract shape.
  *
- * Required hooks define behavior the engine depends on for all profiles.
- * Optional extensions add profile-specific strategy details (for example
- * review/revision prompts) without changing base contract guarantees.
+ * Required hooks are engine-facing behavior. Optional extensions carry
+ * profile-specific strategy details such as review prompts and parsers.
  */
 export type WorkflowProfileContract = {
     /** Stable id used by config and profile selection logic. */
