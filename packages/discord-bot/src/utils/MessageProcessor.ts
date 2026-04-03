@@ -235,6 +235,22 @@ const mapBreakerDecisionToEnforcement = (
     }
 };
 
+const getBreakerReasonDetails = (
+    decision: BreakerDecisionContext['safetyDecision']
+): { reasonCode: string | null; rationale: string | null } => {
+    if (decision.action === 'allow') {
+        return {
+            reasonCode: null,
+            rationale: null,
+        };
+    }
+
+    return {
+        reasonCode: decision.reasonCode,
+        rationale: decision.reason,
+    };
+};
+
 const isChatMessageAction = (
     value: DiscordChatApiResponse
 ): value is ChatMessageAction =>
@@ -764,6 +780,9 @@ export class MessageProcessor {
         const preSendBreakerOutcome =
             this.resolvePreSendBreakerOutcome(chatResponse);
         if (preSendBreakerOutcome.kind === 'allow') {
+            const reasonDetails = getBreakerReasonDetails(
+                preSendBreakerOutcome.decision.safetyDecision
+            );
             logger.info('discord.chat.breaker_action_applied', {
                 event: 'discord.chat.breaker_action_applied',
                 messageId: message.id,
@@ -775,14 +794,13 @@ export class MessageProcessor {
                 safetyTier:
                     preSendBreakerOutcome.decision.safetyDecision.safetyTier,
                 ruleId: preSendBreakerOutcome.decision.safetyDecision.ruleId,
-                reasonCode:
-                    preSendBreakerOutcome.decision.safetyDecision.reasonCode ??
-                    null,
-                rationale:
-                    preSendBreakerOutcome.decision.safetyDecision.reason ??
-                    null,
+                reasonCode: reasonDetails.reasonCode,
+                rationale: reasonDetails.rationale,
             });
         } else if (preSendBreakerOutcome.kind === 'fail_open') {
+            const reasonDetails = getBreakerReasonDetails(
+                preSendBreakerOutcome.decision.safetyDecision
+            );
             logger.warn('discord.chat.breaker_action_applied', {
                 event: 'discord.chat.breaker_action_applied',
                 messageId: message.id,
@@ -794,14 +812,13 @@ export class MessageProcessor {
                 safetyTier:
                     preSendBreakerOutcome.decision.safetyDecision.safetyTier,
                 ruleId: preSendBreakerOutcome.decision.safetyDecision.ruleId,
-                reasonCode:
-                    preSendBreakerOutcome.decision.safetyDecision.reasonCode ??
-                    null,
-                rationale:
-                    preSendBreakerOutcome.decision.safetyDecision.reason ??
-                    null,
+                reasonCode: reasonDetails.reasonCode,
+                rationale: reasonDetails.rationale,
             });
         } else if (preSendBreakerOutcome.kind === 'enforced') {
+            const reasonDetails = getBreakerReasonDetails(
+                preSendBreakerOutcome.decision.safetyDecision
+            );
             logger.warn('discord.chat.breaker_action_applied', {
                 event: 'discord.chat.breaker_action_applied',
                 messageId: message.id,
@@ -813,12 +830,8 @@ export class MessageProcessor {
                 safetyTier:
                     preSendBreakerOutcome.decision.safetyDecision.safetyTier,
                 ruleId: preSendBreakerOutcome.decision.safetyDecision.ruleId,
-                reasonCode:
-                    preSendBreakerOutcome.decision.safetyDecision.reasonCode ??
-                    null,
-                rationale:
-                    preSendBreakerOutcome.decision.safetyDecision.reason ??
-                    null,
+                reasonCode: reasonDetails.reasonCode,
+                rationale: reasonDetails.rationale,
             });
             await responseHandler.sendMessage(
                 preSendBreakerOutcome.outboundMessage,
