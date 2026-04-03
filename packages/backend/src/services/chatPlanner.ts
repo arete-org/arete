@@ -533,11 +533,16 @@ const normalizePlannerContextTier = (value: unknown): PlannerContextTier => {
 };
 
 const summarizeConversationWindow = (
-    conversation: PostChatRequest['conversation']
+    conversation: PostChatRequest['conversation'],
+    retainedRecentWindowSize: number
 ): string => {
-    const slicedMessages = conversation.slice(-4);
+    const droppedMessageCount = Math.max(
+        0,
+        conversation.length - retainedRecentWindowSize
+    );
+    const slicedMessages = conversation.slice(0, droppedMessageCount);
     if (slicedMessages.length === 0) {
-        return 'No prior conversation context was available.';
+        return 'No older conversation context was dropped.';
     }
 
     return slicedMessages
@@ -639,7 +644,7 @@ const buildPlannerMessages = (input: {
         ? [
               {
                   role: 'system' as const,
-                  content: `Conversation digest: ${summarizeConversationWindow(input.request.conversation)}`,
+                  content: `Conversation digest: ${summarizeConversationWindow(input.request.conversation, EXPANDED_RECENT_MESSAGE_LIMIT)}`,
               },
           ]
         : []),
@@ -666,9 +671,15 @@ const hasMaterialPlanChange = (
     initialPlan: ChatPlan,
     expandedPlan: ChatPlan
 ): boolean => {
+    const initialPlanRecord = initialPlan as unknown as Record<string, unknown>;
+    const expandedPlanRecord = expandedPlan as unknown as Record<
+        string,
+        unknown
+    >;
     if (
         initialPlan.action !== expandedPlan.action ||
         initialPlan.modality !== expandedPlan.modality ||
+        initialPlan.safetyTier !== expandedPlan.safetyTier ||
         initialPlan.requestedCapabilityProfile !==
             expandedPlan.requestedCapabilityProfile
     ) {
@@ -678,12 +689,25 @@ const hasMaterialPlanChange = (
     if (
         initialPlan.generation.reasoningEffort !==
             expandedPlan.generation.reasoningEffort ||
-        initialPlan.generation.verbosity !== expandedPlan.generation.verbosity
+        initialPlan.generation.verbosity !==
+            expandedPlan.generation.verbosity ||
+        JSON.stringify(initialPlan.generation.temperament) !==
+            JSON.stringify(expandedPlan.generation.temperament)
     ) {
         return true;
     }
 
     return (
+        JSON.stringify({
+            traceEnabled: initialPlanRecord.traceEnabled,
+            requestTrace: initialPlanRecord.requestTrace,
+            trace: initialPlanRecord.trace,
+        }) !==
+            JSON.stringify({
+                traceEnabled: expandedPlanRecord.traceEnabled,
+                requestTrace: expandedPlanRecord.requestTrace,
+                trace: expandedPlanRecord.trace,
+            }) ||
         JSON.stringify(initialPlan.generation.search) !==
             JSON.stringify(expandedPlan.generation.search) ||
         JSON.stringify(initialPlan.generation.weather) !==
@@ -902,6 +926,10 @@ const normalizePlan = (
     const contextNeed = normalizePlannerContextNeed(candidate.contextNeed);
     const contextTier = normalizePlannerContextTier(candidate.contextTier);
     const capabilities = request.capabilities;
+    const rawRequestedCapabilityProfile =
+        typeof candidate.requestedCapabilityProfile === 'string'
+            ? candidate.requestedCapabilityProfile.trim()
+            : '';
     const actionCandidate =
         candidate.action === 'message' ||
         candidate.action === 'react' ||
@@ -1064,6 +1092,28 @@ const normalizePlan = (
             fallbackTier:
                 correctionCodes.length > 0 ? 'field_corrections' : 'none',
             correctionCodes,
+            contextNeed,
+            contextTier,
+        };
+    }
+
+    if (!normalizedPlan.requestedCapabilityProfile) {
+        return {
+            plan: {
+                ...fallbackPlan,
+                action: 'message',
+                modality: normalizedPlan.modality,
+                safetyTier: normalizedPlan.safetyTier,
+                reasoning:
+                    `${normalizedPlan.reasoning} Planner omitted required requestedCapabilityProfile for message action, so the backend fell back safely.`.trim(),
+            },
+            fallbackTier: 'safe_default_plan',
+            correctionCodes: [
+                ...correctionCodes,
+                rawRequestedCapabilityProfile
+                    ? 'requested_capability_profile_invalid'
+                    : 'requested_capability_profile_missing',
+            ],
             contextNeed,
             contextTier,
         };

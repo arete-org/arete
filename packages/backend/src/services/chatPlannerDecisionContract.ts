@@ -217,6 +217,19 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
             required: ['reasoningEffort', 'verbosity'],
         },
     },
+    allOf: [
+        {
+            if: {
+                properties: {
+                    action: { const: 'message' },
+                },
+                required: ['action'],
+            },
+            then: {
+                required: ['requestedCapabilityProfile'],
+            },
+        },
+    ],
     required: ['action', 'modality', 'safetyTier', 'reasoning', 'generation'],
 };
 

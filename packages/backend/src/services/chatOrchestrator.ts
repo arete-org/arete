@@ -605,6 +605,8 @@ export const createChatOrchestrator = ({
         const originalSelectedProfileId = selectedResponseProfile.id;
         let effectiveSelectedProfileId = selectedResponseProfile.id;
         let rerouteApplied = false;
+        let fallbackRollupSelectionSource: PlannerSelectionSource =
+            profileSelectionSource;
         let webSearchToolRequestContextOverride:
             | ToolInvocationRequest
             | undefined;
@@ -618,6 +620,7 @@ export const createChatOrchestrator = ({
                 'planner_requested_capability_profile_no_floor_match'
                     ? 'planner'
                     : profileSelectionSource;
+            fallbackRollupSelectionSource = searchPolicySelectionSource;
             const fallbackPolicy =
                 searchFallbackPolicyBySelectionSource[
                     searchPolicySelectionSource
@@ -732,7 +735,7 @@ export const createChatOrchestrator = ({
 
         // Non-message actions return early and skip model generation.
         if (executionPlan.action === 'ignore') {
-            emitFallbackRollup(profileSelectionSource);
+            emitFallbackRollup(fallbackRollupSelectionSource);
             return {
                 action: 'ignore',
                 metadata: null,
@@ -740,7 +743,7 @@ export const createChatOrchestrator = ({
         }
 
         if (executionPlan.action === 'react') {
-            emitFallbackRollup(profileSelectionSource);
+            emitFallbackRollup(fallbackRollupSelectionSource);
             return {
                 action: 'react',
                 reaction: executionPlan.reaction ?? '👍',
@@ -749,7 +752,7 @@ export const createChatOrchestrator = ({
         }
 
         if (executionPlan.action === 'image' && executionPlan.imageRequest) {
-            emitFallbackRollup(profileSelectionSource);
+            emitFallbackRollup(fallbackRollupSelectionSource);
             return {
                 action: 'image',
                 imageRequest: executionPlan.imageRequest,
@@ -763,7 +766,7 @@ export const createChatOrchestrator = ({
             chatOrchestratorLogger.warn(
                 `Chat planner returned image without imageRequest; falling back to ignore. surface=${normalizedRequest.surface} trigger=${normalizedRequest.trigger.kind} latestUserInputLength=${normalizedRequest.latestUserInput.length}`
             );
-            emitFallbackRollup(profileSelectionSource);
+            emitFallbackRollup(fallbackRollupSelectionSource);
             return {
                 action: 'ignore',
                 metadata: null,
@@ -928,7 +931,7 @@ export const createChatOrchestrator = ({
         const totalDurationMs =
             response.metadata.totalDurationMs ??
             Math.max(0, Date.now() - orchestrationStartedAt);
-        emitFallbackRollup(profileSelectionSource);
+        emitFallbackRollup(fallbackRollupSelectionSource);
         const breakerDecision =
             evaluatorExecutionContext?.outcome?.safetyDecision;
         if (

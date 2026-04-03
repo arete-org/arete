@@ -126,7 +126,7 @@ const matchesCapabilityProfile = (
     if (capabilityProfile === 'strict-review') {
         return (
             profile.tierBindings.includes('text-quality') ||
-            profile.costClass !== 'low'
+            (profile.costClass !== undefined && profile.costClass !== 'low')
         );
     }
 

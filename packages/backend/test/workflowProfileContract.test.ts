@@ -143,6 +143,16 @@ test('resolveRuntimeWorkflowProfile returns bounded-review fallback and concrete
     assert.equal(fallbackProfile.policy.enableAssessment, true);
     assert.equal(fallbackProfile.policy.enableRevision, true);
 
+    const unknownProfileFallback =
+        resolveRuntimeWorkflowProfile('unknown-profile');
+    assert.equal(unknownProfileFallback.profileId, 'bounded-review');
+    assert.equal(
+        unknownProfileFallback.workflowName,
+        'message_with_review_loop'
+    );
+    assert.equal(unknownProfileFallback.policy.enableAssessment, true);
+    assert.equal(unknownProfileFallback.policy.enableRevision, true);
+
     const generateOnlyProfile = resolveRuntimeWorkflowProfile('generate-only');
     assert.equal(generateOnlyProfile.profileId, 'generate-only');
     assert.equal(generateOnlyProfile.workflowName, 'message_generate_only');
