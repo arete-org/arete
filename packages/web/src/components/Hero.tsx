@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - The hero sets user expectations about privacy, honesty, and transparency.
  */
 
+import { useState } from 'react';
 import Header from './Header';
 import AskMeAnything from './AskMeAnything';
 
@@ -13,6 +14,7 @@ import AskMeAnything from './AskMeAnything';
 const Hero = (): JSX.Element => {
     // No breadcrumbs on home page
     const breadcrumbItems: never[] = [];
+    const [activeTab, setActiveTab] = useState<'try' | 'setup'>('try');
 
     return (
         <section className="hero" aria-labelledby="hero-title">
@@ -24,13 +26,81 @@ const Hero = (): JSX.Element => {
                     A transparency-first framework for people who want more than
                     a black-box answer.
                 </p>
-                <div className="cta-group" aria-label="Primary actions">
-                    <a className="cta-button primary" href="#question-input">
-                        Try the assistant
-                    </a>
-                    <a className="cta-button secondary" href="/invite/">
-                        Self-host setup
-                    </a>
+                <div className="hero-action-hub">
+                    <div className="hero-action-tabs" role="tablist">
+                        <button
+                            id="hero-tab-try"
+                            type="button"
+                            role="tab"
+                            aria-controls="hero-panel-try"
+                            aria-selected={activeTab === 'try'}
+                            className={`hero-action-tab${activeTab === 'try' ? ' is-active' : ''}`}
+                            onClick={() => setActiveTab('try')}
+                        >
+                            <span className="hero-action-tab__title">
+                                Try it out
+                            </span>
+                            <span className="hero-action-tab__hint">
+                                Ask a question right here
+                            </span>
+                        </button>
+                        <button
+                            id="hero-tab-setup"
+                            type="button"
+                            role="tab"
+                            aria-controls="hero-panel-setup"
+                            aria-selected={activeTab === 'setup'}
+                            className={`hero-action-tab${activeTab === 'setup' ? ' is-active' : ''}`}
+                            onClick={() => setActiveTab('setup')}
+                        >
+                            <span className="hero-action-tab__title">
+                                Set it up
+                            </span>
+                            <span className="hero-action-tab__hint">
+                                Minimal self-host quickstart
+                            </span>
+                        </button>
+                    </div>
+                    <div
+                        id={
+                            activeTab === 'try'
+                                ? 'hero-panel-try'
+                                : 'hero-panel-setup'
+                        }
+                        role="tabpanel"
+                        aria-labelledby={
+                            activeTab === 'try'
+                                ? 'hero-tab-try'
+                                : 'hero-tab-setup'
+                        }
+                        className="hero-action-panel"
+                    >
+                        {activeTab === 'try' ? (
+                            <AskMeAnything />
+                        ) : (
+                            <section
+                                className="setup-quickstart"
+                                aria-labelledby="setup-quickstart-title"
+                            >
+                                <h3 id="setup-quickstart-title">Quick setup</h3>
+                                <ol>
+                                    <li>
+                                        <code>pnpm install</code>
+                                    </li>
+                                    <li>
+                                        <code>cp .env.example .env</code>
+                                    </li>
+                                    <li>
+                                        <code>pnpm dev</code>
+                                    </li>
+                                </ol>
+                                <a href="/invite/" className="inline-cta">
+                                    Full setup guide
+                                    <span aria-hidden="true">↗</span>
+                                </a>
+                            </section>
+                        )}
+                    </div>
                 </div>
 
                 <div className="intro-card" aria-labelledby="intro-card-title">
@@ -70,8 +140,6 @@ const Hero = (): JSX.Element => {
                         </div>
                     </div>
                 </div>
-
-                <AskMeAnything />
             </div>
         </section>
     );

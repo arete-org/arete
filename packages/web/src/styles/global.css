@@ -611,66 +611,121 @@ section:has(.site-header-sticky) {
     margin-bottom: clamp(1.25rem, 2.5vw, 1.9rem);
 }
 
-.cta-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: clamp(0.75rem, 2vw, 0.85rem);
-    margin-top: clamp(1.5rem, 3vw, 2rem);
+.hero-action-hub {
+    margin: 0 0 clamp(2rem, 4vw, 2.8rem);
 }
 
-.cta-button {
-    border: 1px solid var(--border);
-    padding: 0.85rem 1.6rem;
-    text-decoration: none;
+.hero-action-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin: 0;
+}
+
+.hero-action-tab {
+    border: 1px solid color-mix(in srgb, var(--border) 75%, var(--accent) 25%);
+    border-bottom: none;
+    border-radius: 14px 14px 0 0;
+    background-color: color-mix(in srgb, var(--bg-soft) 86%, var(--bg) 14%);
+    color: var(--text);
+    padding: 0.85rem 1rem 0.95rem;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        transform 180ms ease,
+        box-shadow 180ms ease,
+        border-color 180ms ease,
+        background-color 180ms ease;
+    display: grid;
+    gap: 0.3rem;
+}
+
+.hero-action-tab__title {
     font-family: var(--mono-font);
-    font-size: 0.95rem;
-    color: var(--text);
-    font-weight: 600;
-    letter-spacing: 0.01em;
-    transition: all var(--transition-speed) ease;
-    min-height: 2.8rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    font-size: 1rem;
+    font-weight: 700;
 }
 
-.cta-button.primary {
-    background-color: var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 78%, var(--border) 22%);
-    color: #f0ede6;
-    box-shadow: 0 4px 12px
-        color-mix(in srgb, var(--accent) 28%, transparent 72%);
+.hero-action-tab__hint {
+    font-size: 0.9rem;
+    color: var(--subtle-text);
 }
 
-.cta-button.secondary {
-    background-color: color-mix(in srgb, var(--bg) 90%, var(--hover-bg) 10%);
-}
-
-.cta-button:hover,
-.cta-button:focus {
-    background-color: var(--hover-bg);
+.hero-action-tab:hover,
+.hero-action-tab:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px var(--shadow);
     border-color: color-mix(in srgb, var(--accent) 55%, var(--border) 45%);
-    color: var(--text);
 }
 
-.cta-button.primary:hover,
-.cta-button.primary:focus {
-    background-color: var(--accent-hover);
-    border-color: color-mix(
-        in srgb,
-        var(--accent-hover) 80%,
-        var(--border) 20%
-    );
-    color: #f0ede6;
-    box-shadow: 0 6px 16px
-        color-mix(in srgb, var(--accent-hover) 32%, transparent 68%);
-}
-
-/* Improve focus visibility without neon glow */
-.cta-button:focus-visible {
+.hero-action-tab:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px
-        color-mix(in srgb, var(--accent-hover) 55%, transparent 45%);
+}
+
+.hero-action-tab.is-active {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 20px var(--shadow);
+    border-color: color-mix(in srgb, var(--accent) 60%, var(--border) 40%);
+    background-color: color-mix(in srgb, var(--bg) 86%, var(--hover-bg) 14%);
+}
+
+.hero-action-panel {
+    border: 1px solid color-mix(in srgb, var(--border) 75%, var(--accent) 25%);
+    border-radius: 0 14px 14px 14px;
+    background-color: color-mix(in srgb, var(--bg) 89%, var(--bg-soft) 11%);
+    padding: clamp(1rem, 2vw, 1.4rem);
+    box-shadow: 0 14px 28px var(--shadow);
+}
+
+.hero-action-panel .interaction {
+    margin-top: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
+}
+
+.setup-quickstart h3 {
+    margin-bottom: 0.9rem;
+}
+
+.setup-quickstart ol {
+    margin: 0 0 1rem;
+    padding-left: 1.2rem;
+    display: grid;
+    gap: 0.55rem;
+}
+
+.setup-quickstart code {
+    display: inline-block;
+    padding: 0.16rem 0.35rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background-color: color-mix(in srgb, var(--bg-soft) 88%, var(--bg) 12%);
+}
+
+[data-theme='dark'] .hero-action-tab {
+    background-color: color-mix(
+        in srgb,
+        var(--bg-alt) 78%,
+        rgba(255, 255, 255, 0.08) 22%
+    );
+}
+
+[data-theme='dark'] .hero-action-tab.is-active {
+    background-color: color-mix(
+        in srgb,
+        var(--bg-soft) 70%,
+        rgba(255, 255, 255, 0.14) 30%
+    );
+}
+
+[data-theme='dark'] .hero-action-panel {
+    background-color: color-mix(
+        in srgb,
+        var(--bg-alt) 82%,
+        rgba(255, 255, 255, 0.08) 18%
+    );
 }
 
 /* ===== MEET FOOTNOTE ===== */
@@ -2900,13 +2955,19 @@ kbd {
         width: 100%;
     }
 
-    .cta-group {
-        flex-direction: column;
+    .hero-action-tabs {
+        grid-template-columns: 1fr;
+        gap: 0.45rem;
     }
 
-    .cta-button {
-        width: 100%;
-        text-align: center;
+    .hero-action-tab {
+        border-bottom: 1px solid
+            color-mix(in srgb, var(--border) 75%, var(--accent) 25%);
+        border-radius: 12px;
+    }
+
+    .hero-action-panel {
+        border-radius: 12px;
     }
 
     .site-header-sticky__inner {
