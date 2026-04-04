@@ -37,11 +37,14 @@ export type BreakerAlertEvent = {
     type: 'breaker';
     action: 'chat.orchestration.breaker_action_applied';
     surface: 'web' | 'discord';
+    enforcement: 'observe_only' | 'enforced';
     breakerAction: string;
     ruleId: string;
     reasonCode: string;
     reason: string;
     safetyTier: string;
+    responseAction: 'message' | 'ignore' | 'react' | 'image';
+    responseModality: 'text' | 'tts';
     responseId: string | null;
     correlation: CorrelationEnvelope;
 };
@@ -119,11 +122,14 @@ const formatDiscordMessage = (event: IncidentAlertEventPayload): string => {
             `Footnote breaker alert`,
             `action=${event.action}`,
             `surface=${event.surface}`,
+            `enforcement=${event.enforcement}`,
             `breakerAction=${event.breakerAction}`,
             `ruleId=${event.ruleId}`,
             `reasonCode=${event.reasonCode}`,
             `reason=${event.reason}`,
             `safetyTier=${event.safetyTier}`,
+            `responseAction=${event.responseAction}`,
+            `responseModality=${event.responseModality}`,
             `responseId=${event.responseId ?? 'none'}`,
             formatCorrelation(event.correlation),
         ].join('\n')
@@ -156,11 +162,14 @@ const formatEmail = (
             'Footnote breaker alert',
             `action: ${event.action}`,
             `surface: ${event.surface}`,
+            `enforcement: ${event.enforcement}`,
             `breakerAction: ${event.breakerAction}`,
             `ruleId: ${event.ruleId}`,
             `reasonCode: ${event.reasonCode}`,
             `reason: ${event.reason}`,
             `safetyTier: ${event.safetyTier}`,
+            `responseAction: ${event.responseAction}`,
+            `responseModality: ${event.responseModality}`,
             `responseId: ${event.responseId ?? 'none'}`,
             `correlation: ${formatCorrelation(event.correlation)}`,
         ].join('\n'),
@@ -293,26 +302,35 @@ export const createIncidentAlertRouter = ({
             config.discord.channelId
         ) {
             deliveries.push(
-                sendDiscord({
-                    botToken: config.discord.botToken,
-                    channelId: config.discord.channelId,
-                    roleId: config.discord.roleId,
-                    content: discordMessage,
-                }).catch((error: unknown) => {
-                    const errorMessage =
-                        error instanceof Error ? error.message : String(error);
-                    const failureMeta = {
-                        alertChannel: 'discord' as const,
-                        alertType: event.type,
-                        alertAction: event.action,
-                        error: errorMessage,
-                    };
-                    incidentAlertLogger.warn('incident alert delivery failed', {
-                        event: 'incident.alert.delivery_failed',
-                        ...failureMeta,
-                    });
-                    notifyFailureCallback(failureMeta);
-                })
+                Promise.resolve()
+                    .then(() =>
+                        sendDiscord({
+                            botToken: config.discord.botToken!,
+                            channelId: config.discord.channelId!,
+                            roleId: config.discord.roleId,
+                            content: discordMessage,
+                        })
+                    )
+                    .catch((error: unknown) => {
+                        const errorMessage =
+                            error instanceof Error
+                                ? error.message
+                                : String(error);
+                        const failureMeta = {
+                            alertChannel: 'discord' as const,
+                            alertType: event.type,
+                            alertAction: event.action,
+                            error: errorMessage,
+                        };
+                        incidentAlertLogger.warn(
+                            'incident alert delivery failed',
+                            {
+                                event: 'incident.alert.delivery_failed',
+                                ...failureMeta,
+                            }
+                        );
+                        notifyFailureCallback(failureMeta);
+                    })
             );
         }
 
@@ -323,31 +341,40 @@ export const createIncidentAlertRouter = ({
             config.email.to.length > 0
         ) {
             deliveries.push(
-                sendEmail({
-                    smtpHost: config.email.smtpHost,
-                    smtpPort: config.email.smtpPort,
-                    smtpSecure: config.email.smtpSecure,
-                    smtpUsername: config.email.smtpUsername,
-                    smtpPassword: config.email.smtpPassword,
-                    from: config.email.from,
-                    to: config.email.to,
-                    subject: emailContent.subject,
-                    text: emailContent.text,
-                }).catch((error: unknown) => {
-                    const errorMessage =
-                        error instanceof Error ? error.message : String(error);
-                    const failureMeta = {
-                        alertChannel: 'email' as const,
-                        alertType: event.type,
-                        alertAction: event.action,
-                        error: errorMessage,
-                    };
-                    incidentAlertLogger.warn('incident alert delivery failed', {
-                        event: 'incident.alert.delivery_failed',
-                        ...failureMeta,
-                    });
-                    notifyFailureCallback(failureMeta);
-                })
+                Promise.resolve()
+                    .then(() =>
+                        sendEmail({
+                            smtpHost: config.email.smtpHost!,
+                            smtpPort: config.email.smtpPort,
+                            smtpSecure: config.email.smtpSecure,
+                            smtpUsername: config.email.smtpUsername,
+                            smtpPassword: config.email.smtpPassword,
+                            from: config.email.from!,
+                            to: config.email.to,
+                            subject: emailContent.subject,
+                            text: emailContent.text,
+                        })
+                    )
+                    .catch((error: unknown) => {
+                        const errorMessage =
+                            error instanceof Error
+                                ? error.message
+                                : String(error);
+                        const failureMeta = {
+                            alertChannel: 'email' as const,
+                            alertType: event.type,
+                            alertAction: event.action,
+                            error: errorMessage,
+                        };
+                        incidentAlertLogger.warn(
+                            'incident alert delivery failed',
+                            {
+                                event: 'incident.alert.delivery_failed',
+                                ...failureMeta,
+                            }
+                        );
+                        notifyFailureCallback(failureMeta);
+                    })
             );
         }
 

@@ -376,6 +376,10 @@ export const createChatOrchestrator = ({
                 normalizedRequest,
                 input.responseId
             );
+            const enforcement: 'observe_only' | 'enforced' =
+                evaluatorExecutionContext.outcome?.mode === 'observe_only'
+                    ? 'observe_only'
+                    : 'enforced';
             chatOrchestratorLogger.info(
                 'chat.orchestration.breaker_action_applied',
                 {
@@ -386,7 +390,7 @@ export const createChatOrchestrator = ({
                     reasonCode: breakerDecision.reasonCode,
                     reason: breakerDecision.reason,
                     safetyTier: breakerDecision.safetyTier,
-                    enforcement: 'observe_only',
+                    enforcement,
                     responseAction: input.responseAction,
                     responseModality: input.responseModality,
                     correlation,
@@ -397,11 +401,14 @@ export const createChatOrchestrator = ({
                     type: 'breaker',
                     action: 'chat.orchestration.breaker_action_applied',
                     surface: normalizedRequest.surface,
+                    enforcement,
                     breakerAction: breakerDecision.action,
                     ruleId: breakerDecision.ruleId,
                     reasonCode: breakerDecision.reasonCode,
                     reason: breakerDecision.reason,
                     safetyTier: breakerDecision.safetyTier,
+                    responseAction: input.responseAction,
+                    responseModality: input.responseModality,
                     responseId: input.responseId,
                     correlation,
                 });

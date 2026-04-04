@@ -31,11 +31,14 @@ const breakerEvent = {
     type: 'breaker' as const,
     action: 'chat.orchestration.breaker_action_applied' as const,
     surface: 'discord' as const,
+    enforcement: 'observe_only' as const,
     breakerAction: 'block',
     ruleId: 'safety.rule.v1',
     reasonCode: 'test_reason',
     reason: 'test breaker reason',
     safetyTier: 'High',
+    responseAction: 'message' as const,
+    responseModality: 'text' as const,
     responseId: null,
     correlation: {
         conversationId: null,
@@ -91,6 +94,8 @@ test('router delivers incident and breaker alerts and forwards configured Discor
     assert.match(emailCalls[1]?.subject ?? '', /\[Footnote\]\[Breaker\]/);
     assert.match(emailCalls[0]?.text ?? '', /incidentId: abcd1234/);
     assert.match(emailCalls[1]?.text ?? '', /breakerAction: block/);
+    assert.match(emailCalls[1]?.text ?? '', /enforcement: observe_only/);
+    assert.match(emailCalls[1]?.text ?? '', /responseAction: message/);
 });
 
 test('router stays fail-open and reports structured failure metadata', async () => {
