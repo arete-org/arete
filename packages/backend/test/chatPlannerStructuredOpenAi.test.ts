@@ -92,6 +92,19 @@ test('structured planner executor parses function_call arguments', async () => {
                 capturedRequestBody?.tools?.length,
             1
         );
+        const structuredTool = (
+            capturedRequestBody?.tools as Array<Record<string, unknown>>
+        )?.[0];
+        const parameterSchema = structuredTool?.parameters as
+            | Record<string, unknown>
+            | undefined;
+        assert.equal(parameterSchema?.type, 'object');
+        assert.ok(
+            typeof parameterSchema?.properties === 'object' &&
+                parameterSchema?.properties !== null
+        );
+        assert.ok(Array.isArray(parameterSchema?.required));
+        assert.equal('allOf' in (parameterSchema ?? {}), false);
         const inputMessages = capturedRequestBody?.input as
             | Array<{ role?: string; content?: unknown }>
             | undefined;

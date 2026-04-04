@@ -7,6 +7,7 @@
  */
 import { chatRepoSearchHints } from '@footnote/contracts';
 import { capabilityProfileIds } from './modelCapabilityPolicy.js';
+import { projectPlannerSchemaForProvider } from './plannerSchemaAdapter.js';
 
 export const CHAT_PLANNER_TOOL_NAME = 'submit_planner_decision';
 
@@ -217,19 +218,6 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
             required: ['reasoningEffort', 'verbosity'],
         },
     },
-    allOf: [
-        {
-            if: {
-                properties: {
-                    action: { const: 'message' },
-                },
-                required: ['action'],
-            },
-            then: {
-                required: ['requestedCapabilityProfile'],
-            },
-        },
-    ],
     required: ['action', 'modality', 'safetyTier', 'reasoning', 'generation'],
 };
 
@@ -242,5 +230,7 @@ export const chatPlannerDecisionTool = {
     description:
         'Submit one planner decision object for the backend chat orchestrator.',
     strict: false,
-    parameters: chatPlannerDecisionParametersSchema,
+    parameters: projectPlannerSchemaForProvider(
+        chatPlannerDecisionParametersSchema
+    ),
 };
