@@ -523,6 +523,11 @@ export const createChatOrchestrator = ({
         //   request.profileId.
         // - Non-submit requests defer to planner-selected capability profile.
         // - Startup default profile remains final fail-open fallback.
+        // Fallback ownership:
+        // - workflow profile fallback: workflowProfileRegistry
+        // - model selector/default fallback: modelProfileResolver
+        // - planner output fallback: chatPlanner
+        // Keep each fallback policy in its owner; do not duplicate here.
         // Runtime resolution stays authoritative and fail-open:
         // unknown/disabled selections never hard-fail the request.
         // Request-level generation overrides are advisory knobs from callers

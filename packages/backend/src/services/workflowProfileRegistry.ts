@@ -80,6 +80,10 @@ const GENERATE_ONLY_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
     },
 };
 
+// Extension checklist (workflow profiles):
+// 1) Add runtime profile entry here (contract + requiredHooks).
+// 2) Keep unknown-id fail-open behavior in this module.
+// 3) Add/adjust registry + chatService tests for execution/fallback behavior.
 const BUILTIN_RUNTIME_WORKFLOW_PROFILES: Readonly<
     Record<BuiltinWorkflowProfileId, RuntimeWorkflowProfile>
 > = {

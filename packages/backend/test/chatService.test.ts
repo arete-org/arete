@@ -273,7 +273,7 @@ test('runChatMessages passes non-retrieval facts for plain VoltAgent-backed runs
     });
 });
 
-test('runChatMessages forwards execution context into metadata runtime context', async () => {
+test('runChatMessages forwards execution context into metadata runtime context (metadata extension seam)', async () => {
     let capturedExecutionContext:
         | ResponseMetadataRuntimeContext['executionContext']
         | undefined;
