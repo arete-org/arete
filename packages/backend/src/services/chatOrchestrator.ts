@@ -64,9 +64,11 @@ import {
 } from './tools/toolRegistry.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
+import type { IncidentAlertRouter } from './incidentAlerts.js';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
     weatherForecastTool?: WeatherForecastTool;
+    alertRouter?: IncidentAlertRouter;
 };
 
 type PlannerWeatherFailureMarker = {
@@ -239,6 +241,7 @@ export const createChatOrchestrator = ({
     defaultModel = runtimeConfig.modelProfiles.defaultProfileId,
     recordUsage,
     weatherForecastTool,
+    alertRouter,
 }: CreateChatOrchestratorOptions) => {
     const chatOrchestratorLogger =
         typeof logger.child === 'function'
@@ -353,6 +356,63 @@ export const createChatOrchestrator = ({
         const normalizedRequest: PostChatRequest = {
             ...request,
             conversation: normalizedConversation,
+        };
+        const notifyBreakerEvent = (input: {
+            responseId: string | null;
+            responseAction: 'message' | 'ignore' | 'react' | 'image';
+            responseModality: ChatPlan['modality'];
+        }): void => {
+            const breakerDecision =
+                evaluatorExecutionContext?.outcome?.safetyDecision;
+            if (
+                evaluatorExecutionContext?.status !== 'executed' ||
+                !breakerDecision ||
+                breakerDecision.action === 'allow'
+            ) {
+                return;
+            }
+
+            const correlation = buildCorrelationIds(
+                normalizedRequest,
+                input.responseId
+            );
+            const enforcement: 'observe_only' | 'enforced' =
+                evaluatorExecutionContext.outcome?.mode === 'observe_only'
+                    ? 'observe_only'
+                    : 'enforced';
+            chatOrchestratorLogger.info(
+                'chat.orchestration.breaker_action_applied',
+                {
+                    event: 'chat.orchestration.breaker_action_applied',
+                    mode: evaluatorExecutionContext.outcome?.mode,
+                    action: breakerDecision.action,
+                    ruleId: breakerDecision.ruleId,
+                    reasonCode: breakerDecision.reasonCode,
+                    reason: breakerDecision.reason,
+                    safetyTier: breakerDecision.safetyTier,
+                    enforcement,
+                    responseAction: input.responseAction,
+                    responseModality: input.responseModality,
+                    correlation,
+                }
+            );
+            if (alertRouter) {
+                void alertRouter.notify({
+                    type: 'breaker',
+                    action: 'chat.orchestration.breaker_action_applied',
+                    surface: normalizedRequest.surface,
+                    enforcement,
+                    breakerAction: breakerDecision.action,
+                    ruleId: breakerDecision.ruleId,
+                    reasonCode: breakerDecision.reasonCode,
+                    reason: breakerDecision.reason,
+                    safetyTier: breakerDecision.safetyTier,
+                    responseAction: input.responseAction,
+                    responseModality: input.responseModality,
+                    responseId: input.responseId,
+                    correlation,
+                });
+            }
         };
         // Planner and generation both consume this normalized request shape.
         const evaluatorStartedAt = Date.now();
@@ -735,6 +795,11 @@ export const createChatOrchestrator = ({
 
         // Non-message actions return early and skip model generation.
         if (executionPlan.action === 'ignore') {
+            notifyBreakerEvent({
+                responseId: null,
+                responseAction: 'ignore',
+                responseModality: executionPlan.modality,
+            });
             emitFallbackRollup(fallbackRollupSelectionSource);
             return {
                 action: 'ignore',
@@ -743,6 +808,11 @@ export const createChatOrchestrator = ({
         }
 
         if (executionPlan.action === 'react') {
+            notifyBreakerEvent({
+                responseId: null,
+                responseAction: 'react',
+                responseModality: executionPlan.modality,
+            });
             emitFallbackRollup(fallbackRollupSelectionSource);
             return {
                 action: 'react',
@@ -752,6 +822,11 @@ export const createChatOrchestrator = ({
         }
 
         if (executionPlan.action === 'image' && executionPlan.imageRequest) {
+            notifyBreakerEvent({
+                responseId: null,
+                responseAction: 'image',
+                responseModality: executionPlan.modality,
+            });
             emitFallbackRollup(fallbackRollupSelectionSource);
             return {
                 action: 'image',
@@ -766,6 +841,11 @@ export const createChatOrchestrator = ({
             chatOrchestratorLogger.warn(
                 `Chat planner returned image without imageRequest; falling back to ignore. surface=${normalizedRequest.surface} trigger=${normalizedRequest.trigger.kind} latestUserInputLength=${normalizedRequest.latestUserInput.length}`
             );
+            notifyBreakerEvent({
+                responseId: null,
+                responseAction: 'ignore',
+                responseModality: executionPlan.modality,
+            });
             emitFallbackRollup(fallbackRollupSelectionSource);
             return {
                 action: 'ignore',
@@ -932,33 +1012,11 @@ export const createChatOrchestrator = ({
             response.metadata.totalDurationMs ??
             Math.max(0, Date.now() - orchestrationStartedAt);
         emitFallbackRollup(fallbackRollupSelectionSource);
-        const breakerDecision =
-            evaluatorExecutionContext?.outcome?.safetyDecision;
-        if (
-            evaluatorExecutionContext?.status === 'executed' &&
-            breakerDecision &&
-            breakerDecision.action !== 'allow'
-        ) {
-            chatOrchestratorLogger.info(
-                'chat.orchestration.breaker_action_applied',
-                {
-                    event: 'chat.orchestration.breaker_action_applied',
-                    mode: evaluatorExecutionContext.outcome?.mode,
-                    action: breakerDecision.action,
-                    ruleId: breakerDecision.ruleId,
-                    reasonCode: breakerDecision.reasonCode,
-                    reason: breakerDecision.reason,
-                    safetyTier: breakerDecision.safetyTier,
-                    enforcement: 'observe_only',
-                    responseAction: 'message',
-                    responseModality: executionPlan.modality,
-                    correlation: buildCorrelationIds(
-                        normalizedRequest,
-                        response.metadata.responseId
-                    ),
-                }
-            );
-        }
+        notifyBreakerEvent({
+            responseId: response.metadata.responseId,
+            responseAction: 'message',
+            responseModality: executionPlan.modality,
+        });
         chatOrchestratorLogger.info({
             event: 'chat.orchestration.timing',
             surface: normalizedRequest.surface,

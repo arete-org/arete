@@ -130,5 +130,23 @@ export type RuntimeConfig = {
         replicaUrl: string | null;
         latestSnapshotAt: string | null;
     };
+    alerts: {
+        discord: {
+            enabled: boolean;
+            botToken: string | null;
+            channelId: string | null;
+            roleId: string | null;
+        };
+        email: {
+            enabled: boolean;
+            smtpHost: string | null;
+            smtpPort: number;
+            smtpSecure: boolean;
+            smtpUsername: string | null;
+            smtpPassword: string | null;
+            from: string | null;
+            to: string[];
+        };
+    };
     profile: BotProfileConfig;
 };

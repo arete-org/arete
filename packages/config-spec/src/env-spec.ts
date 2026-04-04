@@ -119,6 +119,171 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'INCIDENT_ALERTS_DISCORD_ENABLED',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'alerts',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'Enable incident/breaker alerts to a Discord channel target.',
+        defaultValue: literal(false),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'INCIDENT_ALERTS_DISCORD_BOT_TOKEN',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'alerts',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description:
+            'Discord bot token used to send incident alerts into the configured channel.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'INCIDENT_ALERTS_DISCORD_CHANNEL_ID',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'alerts',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Discord channel ID used as the incident alert destination.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'INCIDENT_ALERTS_DISCORD_ROLE_ID',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'alerts',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Optional Discord role ID to mention in incident alert messages.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'INCIDENT_ALERTS_EMAIL_ENABLED',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'alerts',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'Enable incident/breaker alerts to the configured admin email recipients.',
+        defaultValue: literal(false),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'INCIDENT_ALERTS_EMAIL_SMTP_HOST',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'alerts',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description: 'SMTP host for admin email alert delivery.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'INCIDENT_ALERTS_EMAIL_SMTP_PORT',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'alerts',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description: 'SMTP port for admin email alert delivery.',
+        defaultValue: literal(587),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'INCIDENT_ALERTS_EMAIL_SMTP_SECURE',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'alerts',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'When true, uses implicit TLS for SMTP alert delivery (typically port 465).',
+        defaultValue: literal(false),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'INCIDENT_ALERTS_EMAIL_SMTP_USERNAME',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'alerts',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Optional SMTP username for authenticated admin email alert delivery.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'INCIDENT_ALERTS_EMAIL_SMTP_PASSWORD',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'alerts',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description:
+            'Optional SMTP password for authenticated admin email alert delivery.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'INCIDENT_ALERTS_EMAIL_FROM',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'alerts',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description: 'From-address used for admin email alerts.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'INCIDENT_ALERTS_EMAIL_TO',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'alerts',
+        required: false,
+        secret: false,
+        kind: 'csv',
+        description:
+            'Comma-separated admin recipient addresses for incident alert emails.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'LOG_DIR',
         owner: 'shared',
         stage: 'runtime',

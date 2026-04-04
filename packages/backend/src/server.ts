@@ -39,6 +39,7 @@ import { createIncidentHandlers } from './handlers/incidents.js';
 import { createWebhookHandler } from './handlers/webhook.js';
 import { createRuntimeConfigHandler } from './handlers/config.js';
 import { createIncidentService } from './services/incidents.js';
+import { createIncidentAlertRouter } from './services/incidentAlerts.js';
 import {
     createInternalImageDescriptionTaskService,
     createInternalNewsTaskService,
@@ -361,7 +362,13 @@ const { handleBlogIndexRequest, handleBlogPostRequest } = createBlogHandlers({
 if (!incidentStore) {
     throw new Error('Incident store did not initialize correctly.');
 }
-const incidentService = createIncidentService({ incidentStore });
+const incidentAlertRouter = createIncidentAlertRouter({
+    config: runtimeConfig.alerts,
+});
+const incidentService = createIncidentService({
+    incidentStore,
+    alertRouter: incidentAlertRouter,
+});
 const {
     handleIncidentReportRequest,
     handleIncidentListRequest,
@@ -460,6 +467,7 @@ const wantsJsonResponse = (req: http.IncomingMessage): boolean => {
 // Chat is the backend-standardized conversation interface (adapter-facing, Turnstile + rate-limited for public web calls).
 const handleChatRequest = createChatHandler({
     generationRuntime,
+    alertRouter: incidentAlertRouter,
     weatherForecastTool: weatherForecastTool ?? undefined,
     ipRateLimiter,
     sessionRateLimiter,
