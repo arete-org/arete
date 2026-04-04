@@ -176,6 +176,12 @@ test('chatPlanner marks structured policy-invalid decisions as failed with inval
 
 test('chatPlanner forwards bounded capability options context and rejects blank requested capability for message action', async () => {
     let capturedMessages: Array<{ role: string; content: string }> = [];
+    const warnings: Array<{ message: string; meta?: unknown }> = [];
+    const originalWarn = logger.warn;
+    logger.warn = ((message: string, meta?: unknown) => {
+        warnings.push({ message, meta });
+        return logger;
+    }) as typeof logger.warn;
     const availableCapabilityProfiles: ChatPlannerCapabilityProfileOption[] = [
         {
             id: 'structured-cheap',
@@ -187,56 +193,125 @@ test('chatPlanner forwards bounded capability options context and rejects blank 
         },
     ];
 
-    const planner = createChatPlanner({
-        availableCapabilityProfiles,
-        executePlanner: async ({ messages }) => {
-            capturedMessages = messages;
-            return {
-                text: JSON.stringify({
-                    action: 'message',
-                    modality: 'text',
-                    requestedCapabilityProfile: '   ',
-                    safetyTier: 'Low',
-                    reasoning: 'Use safe defaults.',
-                    generation: {
-                        reasoningEffort: 'low',
-                        verbosity: 'low',
-                        temperament: {
-                            tightness: 4,
-                            rationale: 3,
-                            attribution: 4,
-                            caution: 3,
-                            extent: 4,
+    try {
+        const planner = createChatPlanner({
+            availableCapabilityProfiles,
+            executePlanner: async ({ messages }) => {
+                capturedMessages = messages;
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        requestedCapabilityProfile: '   ',
+                        safetyTier: 'Low',
+                        reasoning: 'Use safe defaults.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
                         },
-                    },
-                }),
-                model: 'gpt-5-mini',
-            };
-        },
-    });
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            },
+        });
 
-    const { execution } = await planner.planChat(createChatRequest());
+        const { execution } = await planner.planChat(createChatRequest());
 
-    assert.equal(execution.status, 'failed');
-    assert.equal(execution.reasonCode, 'planner_invalid_output');
-    const profileContextMessage =
-        capturedMessages.find((message) =>
-            message.content.startsWith(
-                'Planner capability profiles (bounded): '
-            )
-        )?.content ?? '';
-    assert.match(
-        profileContextMessage,
-        /^Planner capability profiles \(bounded\): \[/
-    );
-    const encodedProfiles = profileContextMessage.replace(
-        'Planner capability profiles (bounded): ',
-        ''
-    );
-    const parsedProfiles = JSON.parse(
-        encodedProfiles
-    ) as ChatPlannerCapabilityProfileOption[];
-    assert.deepEqual(parsedProfiles, availableCapabilityProfiles);
+        assert.equal(execution.status, 'failed');
+        assert.equal(execution.reasonCode, 'planner_invalid_output');
+        const profileContextMessage =
+            capturedMessages.find((message) =>
+                message.content.startsWith(
+                    'Planner capability profiles (bounded): '
+                )
+            )?.content ?? '';
+        assert.match(
+            profileContextMessage,
+            /^Planner capability profiles \(bounded\): \[/
+        );
+        const encodedProfiles = profileContextMessage.replace(
+            'Planner capability profiles (bounded): ',
+            ''
+        );
+        const parsedProfiles = JSON.parse(
+            encodedProfiles
+        ) as ChatPlannerCapabilityProfileOption[];
+        assert.deepEqual(parsedProfiles, availableCapabilityProfiles);
+        const fallbackWarning = warnings.find(
+            (warning) =>
+                (warning.meta as { event?: string } | undefined)?.event ===
+                'chat.planner.fallback'
+        );
+        assert.ok(fallbackWarning);
+        assert.deepEqual(
+            (
+                fallbackWarning?.meta as
+                    | { correctionCodes?: string[] }
+                    | undefined
+            )?.correctionCodes,
+            ['requested_capability_profile_missing']
+        );
+    } finally {
+        logger.warn = originalWarn;
+    }
+});
+
+test('chatPlanner marks unknown requested capability profile as invalid planner output for message action', async () => {
+    const warnings: Array<{ message: string; meta?: unknown }> = [];
+    const originalWarn = logger.warn;
+    logger.warn = ((message: string, meta?: unknown) => {
+        warnings.push({ message, meta });
+        return logger;
+    }) as typeof logger.warn;
+
+    try {
+        const planner = createStructuredPlanner({
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'unknown-profile',
+            safetyTier: 'Low',
+            reasoning: 'Reply with a standard capability profile.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+            },
+        });
+
+        const { execution } = await planner.planChat(createChatRequest());
+
+        assert.equal(execution.status, 'failed');
+        assert.equal(execution.reasonCode, 'planner_invalid_output');
+        const fallbackWarning = warnings.find(
+            (warning) =>
+                (warning.meta as { event?: string } | undefined)?.event ===
+                'chat.planner.fallback'
+        );
+        assert.ok(fallbackWarning);
+        assert.deepEqual(
+            (
+                fallbackWarning?.meta as
+                    | { correctionCodes?: string[] }
+                    | undefined
+            )?.correctionCodes,
+            ['requested_capability_profile_invalid']
+        );
+    } finally {
+        logger.warn = originalWarn;
+    }
 });
 
 test('chatPlanner fails open to a valid fallback generation config when planner JSON is invalid', async () => {

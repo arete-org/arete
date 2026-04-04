@@ -1234,6 +1234,41 @@ export const createChatPlanner = ({
             }
         };
 
+        const logPolicyInvalidFallback = ({
+            normalization,
+            mode,
+        }: {
+            normalization: PlannerNormalizationResult;
+            mode: ChatPlannerExecutionMode;
+        }) => {
+            logger.warn(
+                'chat planner returned policy-invalid decision; using fallback telemetry class',
+                {
+                    event: 'chat.planner.fallback',
+                    plannerMode: mode,
+                    fallbackFrom: mode,
+                    fallbackTo: 'safe_default_plan',
+                    fallbackTier: normalization.fallbackTier,
+                    correctionCodes: normalization.correctionCodes,
+                    reasonCode: 'planner_invalid_output',
+                    failureClass: 'policy_invalid',
+                    surface: request.surface,
+                    triggerKind: request.trigger.kind,
+                    plannerStructuredPreviewPresent:
+                        mode === 'structured' &&
+                        plannerStructuredArguments !== undefined,
+                    plannerStructuredPreviewLength:
+                        mode === 'structured'
+                            ? plannerStructuredArguments?.length
+                            : undefined,
+                    plannerResponseTextLength:
+                        mode === 'text_json'
+                            ? plannerResponseText?.length
+                            : undefined,
+                }
+            );
+        };
+
         const runExpandedTextJsonAttempt = async (
             contextTier: PlannerContextTier
         ): Promise<PlannerNormalizationResult | null> => {
@@ -1417,25 +1452,10 @@ export const createChatPlanner = ({
                     structuredResponse.decision as PlannerCandidate
                 );
                 if (normalization.fallbackTier === 'safe_default_plan') {
-                    logger.warn(
-                        'chat planner returned policy-invalid structured decision; using fallback telemetry class',
-                        {
-                            event: 'chat.planner.fallback',
-                            plannerMode: 'structured',
-                            fallbackFrom: 'structured',
-                            fallbackTo: 'safe_default_plan',
-                            fallbackTier: normalization.fallbackTier,
-                            correctionCodes: normalization.correctionCodes,
-                            reasonCode: 'planner_invalid_output',
-                            failureClass: 'policy_invalid',
-                            surface: request.surface,
-                            triggerKind: request.trigger.kind,
-                            plannerStructuredPreviewPresent:
-                                plannerStructuredArguments !== undefined,
-                            plannerStructuredPreviewLength:
-                                plannerStructuredArguments?.length,
-                        }
-                    );
+                    logPolicyInvalidFallback({
+                        normalization,
+                        mode: 'structured',
+                    });
                     return resolveAdaptivePlan(normalization, {
                         status: 'failed',
                         reasonCode: 'planner_invalid_output',
@@ -1484,6 +1504,12 @@ export const createChatPlanner = ({
                 );
             }
             */
+            if (normalization.fallbackTier === 'safe_default_plan') {
+                logPolicyInvalidFallback({
+                    normalization,
+                    mode: 'text_json',
+                });
+            }
 
             return resolveAdaptivePlan(normalization, {
                 status:
@@ -1545,6 +1571,12 @@ export const createChatPlanner = ({
                         textJsonResponse.text
                     );
                     const normalization = normalizePlan(request, parsed);
+                    if (normalization.fallbackTier === 'safe_default_plan') {
+                        logPolicyInvalidFallback({
+                            normalization,
+                            mode: 'text_json',
+                        });
+                    }
                     return resolveAdaptivePlan(normalization, {
                         status:
                             normalization.fallbackTier === 'safe_default_plan'
