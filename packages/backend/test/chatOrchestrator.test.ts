@@ -14,6 +14,7 @@ import type { PostChatRequest } from '@footnote/contracts/web';
 import type { BotProfileConfig } from '../src/config/profile.js';
 import { runtimeConfig } from '../src/config.js';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
+import { selectModelProfileForWorkflowStep } from '../src/services/modelCapabilityPolicy.js';
 import type { ResponseMetadataRuntimeContext } from '../src/services/openaiService.js';
 import { renderConversationPromptLayers } from '../src/services/prompts/conversationPromptLayers.js';
 import type { WeatherForecastTool } from '../src/services/weatherGovForecastTool.js';
@@ -314,7 +315,7 @@ test('request-level generation overrides replace planner reasoning effort and ve
     assert.equal(observedVerbosity, 'medium');
 });
 
-test('planner-selected profile id controls response model selection', async () => {
+test('planner-selected capability profile controls response model selection', async () => {
     let observedResponseModel: string | undefined;
     let capturedExecutionContext:
         | ResponseMetadataRuntimeContext['executionContext']
@@ -333,7 +334,7 @@ test('planner-selected profile id controls response model selection', async () =
                     text: JSON.stringify({
                         action: 'message',
                         modality: 'text',
-                        profileId: selectedProfile.id,
+                        requestedCapabilityProfile: 'expressive-generation',
                         safetyTier: 'Low',
                         reasoning:
                             'Use a richer response profile for this request.',
@@ -627,7 +628,7 @@ test('request profileId override controls response model selection', async () =>
                     text: JSON.stringify({
                         action: 'message',
                         modality: 'text',
-                        profileId: 'openai-text-fast',
+                        requestedCapabilityProfile: 'structured-cheap',
                         safetyTier: 'Low',
                         reasoning:
                             'Planner selected a different profile, but request override should win.',
@@ -656,6 +657,7 @@ test('request profileId override controls response model selection', async () =>
 
     const response = await orchestrator.runChat(
         createChatRequest({
+            trigger: { kind: 'submit' },
             profileId: selectedProfile.id,
         })
     );
@@ -719,7 +721,7 @@ test('request profileId with ollama profile forwards provider/model to generatio
     assert.equal(observedModel, ollamaProfile.providerModel);
 });
 
-test('invalid planner-selected profile id falls back to default response profile', async () => {
+test('invalid planner-requested capability profile falls back to policy-selected compatible profile', async () => {
     let observedResponseModel: string | undefined;
     const warnings: Array<{ message: string; meta?: unknown }> = [];
     const originalWarn = logger.warn;
@@ -728,14 +730,15 @@ test('invalid planner-selected profile id falls back to default response profile
         return logger;
     }) as typeof logger.warn;
 
-    const defaultProfile =
-        runtimeConfig.modelProfiles.catalog.find(
-            (profile) =>
-                profile.id === runtimeConfig.modelProfiles.defaultProfileId &&
-                profile.enabled
-        ) ??
-        runtimeConfig.modelProfiles.catalog.find((profile) => profile.enabled);
-    assert.ok(defaultProfile);
+    const expectedCapabilitySelection = selectModelProfileForWorkflowStep({
+        step: 'generation',
+        requestedCapabilityProfile: 'missing-capability',
+        profiles: runtimeConfig.modelProfiles.catalog.filter(
+            (profile) => profile.enabled
+        ),
+        requiresSearch: false,
+    });
+    assert.ok(expectedCapabilitySelection.selectedProfile);
 
     try {
         const orchestrator = createChatOrchestrator({
@@ -745,9 +748,10 @@ test('invalid planner-selected profile id falls back to default response profile
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
-                            profileId: 'missing-profile-id',
+                            requestedCapabilityProfile: 'missing-capability',
                             safetyTier: 'Low',
-                            reasoning: 'Try a profile that does not exist.',
+                            reasoning:
+                                'Try a capability profile that does not exist.',
                             generation: {
                                 reasoningEffort: 'low',
                                 verbosity: 'low',
@@ -782,24 +786,17 @@ test('invalid planner-selected profile id falls back to default response profile
         logger.warn = originalWarn;
     }
 
-    assert.equal(observedResponseModel, defaultProfile.providerModel);
+    assert.equal(
+        observedResponseModel,
+        expectedCapabilitySelection.selectedProfile?.providerModel
+    );
     const fallbackWarning = warnings.find((warning) =>
         /invalid or disabled; continuing fallback order/i.test(warning.message)
     );
-    assert.ok(fallbackWarning);
-    assert.deepEqual(fallbackWarning.meta, {
-        event: 'chat.orchestration.profile_fallback',
-        policy: 'response_profile_fallback_v1',
-        stage: 'invalid_profile_candidate',
-        source: 'planner',
-        selectedProfileId: 'missing-profile-id',
-        defaultProfileId: defaultProfile.id,
-        fallbackOrder: ['planner', 'default'],
-        surface: 'discord',
-    });
+    assert.equal(fallbackWarning, undefined);
 });
 
-test('planner-selected non-search profile reroutes to search-capable fallback', async () => {
+test('planner capability selection chooses search-capable profile without reroute', async () => {
     let observedSearch: unknown;
     let capturedExecutionContext:
         | ResponseMetadataRuntimeContext['executionContext']
@@ -880,7 +877,7 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
-                            profileId: 'openai-text-fast',
+                            requestedCapabilityProfile: 'structured-cheap',
                             safetyTier: 'Low',
                             reasoning:
                                 'Use search even though selected profile cannot search.',
@@ -941,23 +938,13 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
     const mismatchWarning = warnings.find((warning) =>
         /tool-capable fallback profile/i.test(warning.message)
     );
-    assert.ok(mismatchWarning);
-    assert.equal(
-        (mismatchWarning?.meta as { policy?: string } | undefined)?.policy,
-        'search_reroute_profile_fallback_v1'
-    );
-    assert.equal(
-        (mismatchWarning?.meta as { stage?: string } | undefined)?.stage,
-        'search_rerouted'
-    );
-    assert.deepEqual(capturedExecutionContext?.tool, {
-        toolName: 'web_search',
-        status: 'executed',
-        reasonCode: 'search_rerouted_to_fallback_profile',
-    });
+    assert.equal(mismatchWarning, undefined);
+    assert.equal(capturedExecutionContext?.tool?.toolName, 'web_search');
+    assert.equal(capturedExecutionContext?.tool?.status, 'executed');
+    assert.equal(capturedExecutionContext?.tool?.reasonCode, undefined);
     assert.equal(
         capturedExecutionContext?.generation?.originalProfileId,
-        'openai-text-fast'
+        expectedFallbackProfile.id
     );
     assert.equal(
         capturedExecutionContext?.generation?.effectiveProfileId,
@@ -965,7 +952,7 @@ test('planner-selected non-search profile reroutes to search-capable fallback', 
     );
 });
 
-test('planner-selected non-search profile skips search when no tool-capable fallback exists', async () => {
+test('planner-selected non-search profile reports no tool-capable fallback when search floor cannot be met', async () => {
     let observedSearch: unknown;
     let capturedExecutionContext:
         | ResponseMetadataRuntimeContext['executionContext']
@@ -995,7 +982,7 @@ test('planner-selected non-search profile skips search when no tool-capable fall
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
-                            profileId: 'openai-text-fast',
+                            requestedCapabilityProfile: 'structured-cheap',
                             safetyTier: 'Low',
                             reasoning:
                                 'Attempt search with a planner-selected profile.',
@@ -1088,7 +1075,7 @@ test('request-selected non-search profile can still reroute when planner confirm
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
-                            profileId: requestSelectedProfile.id,
+                            requestedCapabilityProfile: 'structured-cheap',
                             safetyTier: 'Low',
                             reasoning: 'Request profile override should win.',
                             generation: {
@@ -1131,6 +1118,7 @@ test('request-selected non-search profile can still reroute when planner confirm
 
         await orchestrator.runChat(
             createChatRequest({
+                trigger: { kind: 'submit' },
                 profileId: requestSelectedProfile.id,
             })
         );
@@ -1138,24 +1126,20 @@ test('request-selected non-search profile can still reroute when planner confirm
         runtimeConfigMutable.modelProfiles = originalModelProfiles;
     }
 
-    assert.deepEqual(observedSearch, {
-        query: 'latest OpenAI policy update',
-        contextSize: 'low',
-        intent: 'current_facts',
-    });
+    assert.equal(observedSearch, undefined);
     assert.ok(capturedExecutionContext);
     assert.ok(capturedExecutionContext.tool);
     const toolExecution = capturedExecutionContext.tool;
     assert.deepEqual(toolExecution, {
         toolName: 'web_search',
         status: 'skipped',
-        reasonCode: 'search_rerouted_to_fallback_profile',
+        reasonCode: 'search_reroute_not_permitted_by_selection_source',
     });
     assert.equal(
         capturedExecutionContext?.generation?.originalProfileId,
         requestSelectedProfile.id
     );
-    assert.notEqual(
+    assert.equal(
         capturedExecutionContext?.generation?.effectiveProfileId,
         requestSelectedProfile.id
     );
@@ -1231,7 +1215,7 @@ test('search drop path exposes reason codes in response execution metadata', asy
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
-                            profileId: 'openai-text-fast',
+                            requestedCapabilityProfile: 'structured-cheap',
                             safetyTier: 'Low',
                             reasoning:
                                 'Search will be dropped because no profile can use tools.',
@@ -1856,12 +1840,12 @@ test('discord requests are trimmed/formatted in backend before planner and gener
     assert.equal(
         plannerConversation.filter((message) => message.role !== 'system')
             .length,
-        24
+        6
     );
     assert.match(
         plannerConversation.find((message) => message.role !== 'system')
             ?.content ?? '',
-        /^\[0\] At \d{4}-\d{2}-\d{2} \d{2}:\d{2} Jordan said:/
+        /^\[\d+\] At \d{4}-\d{2}-\d{2} \d{2}:\d{2} Jordan said:/
     );
     assert.match(
         generationConversation.find((message) => message.role === 'assistant')

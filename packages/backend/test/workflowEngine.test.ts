@@ -80,6 +80,34 @@ test('isTransitionAllowed gates plan-to-plan on enableReplanning', () => {
     );
 });
 
+test('isTransitionAllowed makes assess/revise unreachable under generate-only policy', () => {
+    const generateOnlyPolicy: WorkflowPolicy = {
+        enablePlanning: false,
+        enableToolUse: false,
+        enableReplanning: false,
+        enableGeneration: true,
+        enableAssessment: false,
+        enableRevision: false,
+    };
+
+    assert.equal(
+        isTransitionAllowed('generate', 'assess', generateOnlyPolicy),
+        false
+    );
+    assert.equal(
+        isTransitionAllowed('assess', 'revise', generateOnlyPolicy),
+        false
+    );
+    assert.equal(
+        isTransitionAllowed('generate', 'revise', generateOnlyPolicy),
+        false
+    );
+    assert.equal(
+        isTransitionAllowed(null, 'generate', generateOnlyPolicy),
+        true
+    );
+});
+
 test('applyStepExecutionToState increments counters deterministically', () => {
     const initial = createInitialWorkflowState({
         workflowId: 'wf_1',

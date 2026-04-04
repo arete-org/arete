@@ -6,6 +6,7 @@
  * @footnote-ethics: high - Planner contract integrity affects action choice, retrieval grounding, and user trust.
  */
 import { chatRepoSearchHints } from '@footnote/contracts';
+import { capabilityProfileIds } from './modelCapabilityPolicy.js';
 
 export const CHAT_PLANNER_TOOL_NAME = 'submit_planner_decision';
 
@@ -25,8 +26,21 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
             type: 'string',
             enum: ['text', 'tts'],
         },
-        profileId: {
+        requestedCapabilityProfile: {
             type: 'string',
+            enum: capabilityProfileIds,
+        },
+        contextNeed: {
+            type: 'string',
+            enum: ['sufficient', 'needs_more_context'],
+        },
+        contextTier: {
+            type: 'string',
+            enum: [
+                'current_window',
+                'expanded_recent',
+                'expanded_with_summary',
+            ],
         },
         reaction: {
             type: 'string',
@@ -203,6 +217,19 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
             required: ['reasoningEffort', 'verbosity'],
         },
     },
+    allOf: [
+        {
+            if: {
+                properties: {
+                    action: { const: 'message' },
+                },
+                required: ['action'],
+            },
+            then: {
+                required: ['requestedCapabilityProfile'],
+            },
+        },
+    ],
     required: ['action', 'modality', 'safetyTier', 'reasoning', 'generation'],
 };
 

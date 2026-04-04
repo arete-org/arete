@@ -39,8 +39,10 @@ import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
-    WORKFLOW_NO_GENERATION_HANDLING_MAP,
+    DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID,
+    resolveRuntimeWorkflowProfile,
     resolveNoGenerationHandlingFromTermination,
+    type WorkflowProfileId,
 } from './workflowProfileContract.js';
 import {
     runBoundedReviewWorkflow,
@@ -50,7 +52,6 @@ import {
 import { logger } from '../utils/logger.js';
 import { runtimeConfig } from '../config.js';
 
-const REVIEW_WORKFLOW_NAME = 'message_with_review_loop';
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
 
@@ -71,6 +72,21 @@ const sanitizePositiveInteger = (value: number, fallback: number): number => {
     }
 
     return Math.max(1, Math.floor(value));
+};
+
+const deriveDefaultMaxIterationsFromWorkflowSteps = (
+    maxWorkflowSteps: number
+): number => {
+    if (!Number.isFinite(maxWorkflowSteps)) {
+        return 0;
+    }
+
+    const normalizedSteps = Math.max(1, Math.floor(maxWorkflowSteps));
+    if (normalizedSteps <= 1) {
+        return 0;
+    }
+
+    return Math.ceil(normalizedSteps / 2);
 };
 
 /**
@@ -124,6 +140,7 @@ export type CreateChatServiceOptions = {
     defaultCapabilities?: ModelProfileCapabilities;
     recordUsage?: (record: BackendLLMCostRecord) => void;
     chatWorkflowConfig?: {
+        profileId?: WorkflowProfileId;
         reviewLoopEnabled: boolean;
         maxIterations: number;
         maxDurationMs: number;
@@ -313,45 +330,46 @@ export const createChatService = ({
                 search: normalizedGeneration.search,
             }),
         };
-        const defaultWorkflowMaxIterations = sanitizeNonNegativeInteger(
-            runtimeConfig.chatWorkflow.maxIterations,
-            0
+        const requestedWorkflowProfileId =
+            chatWorkflowConfig.profileId ?? DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID;
+        const workflowProfile = resolveRuntimeWorkflowProfile(
+            requestedWorkflowProfileId
         );
-        const defaultWorkflowMaxDurationMs = sanitizePositiveInteger(
-            runtimeConfig.chatWorkflow.maxDurationMs,
-            15000
-        );
-        const reviewLoopEnabled = chatWorkflowConfig.reviewLoopEnabled === true;
-        const reviewLoopMaxIterations = sanitizeNonNegativeInteger(
-            chatWorkflowConfig.maxIterations,
-            defaultWorkflowMaxIterations
-        );
-        const reviewLoopMaxDurationMs = sanitizePositiveInteger(
+        const workflowExecutionEnabled =
+            workflowProfile.profileId === 'generate-only' ||
+            chatWorkflowConfig.reviewLoopEnabled === true;
+        const profileDefaultMaxIterations =
+            workflowProfile.profileId === 'generate-only'
+                ? 0
+                : deriveDefaultMaxIterationsFromWorkflowSteps(
+                      workflowProfile.defaultLimits.maxWorkflowSteps
+                  );
+        const workflowMaxIterations =
+            workflowProfile.profileId === 'generate-only'
+                ? 0
+                : sanitizeNonNegativeInteger(
+                      chatWorkflowConfig.maxIterations,
+                      profileDefaultMaxIterations
+                  );
+        const workflowMaxDurationMs = sanitizePositiveInteger(
             chatWorkflowConfig.maxDurationMs,
-            defaultWorkflowMaxDurationMs
+            workflowProfile.defaultLimits.maxDurationMs
         );
 
         let generationResult: GenerationResult;
         let workflowLineage: WorkflowRecord | undefined;
         let fallbackAfterInternalNoGeneration = false;
-        if (reviewLoopEnabled && reviewLoopMaxIterations > 0) {
-            const workflowPolicy: WorkflowPolicy = {
-                enablePlanning: false,
-                enableToolUse: false,
-                enableReplanning: false,
-                enableGeneration: true,
-                enableAssessment: true,
-                enableRevision: true,
-            };
+        if (workflowExecutionEnabled) {
+            const workflowPolicy: WorkflowPolicy = workflowProfile.policy;
             const workflowResult = await runReviewWorkflow({
                 generationRuntime,
                 generationRequest,
                 messagesWithHints,
                 generationStartedAtMs: generationStartedAt,
                 workflowConfig: {
-                    workflowName: REVIEW_WORKFLOW_NAME,
-                    maxIterations: reviewLoopMaxIterations,
-                    maxDurationMs: reviewLoopMaxDurationMs,
+                    workflowName: workflowProfile.workflowName,
+                    maxIterations: workflowMaxIterations,
+                    maxDurationMs: workflowMaxDurationMs,
                 },
                 workflowPolicy,
                 captureUsage: (result, requestedModel) =>
@@ -379,7 +397,7 @@ export const createChatService = ({
                         logger.error(
                             'Unsupported no-generation termination reason.',
                             {
-                                workflowName: REVIEW_WORKFLOW_NAME,
+                                workflowName: workflowProfile.workflowName,
                                 terminationReason:
                                     noGenerationResolution.terminationReason,
                                 noGenerationResolution,
@@ -394,10 +412,7 @@ export const createChatService = ({
                         break;
                     }
 
-                    const handling =
-                        WORKFLOW_NO_GENERATION_HANDLING_MAP[
-                            noGenerationResolution.reasonCode
-                        ];
+                    const handling = noGenerationResolution.handling;
 
                     if (handling.runtimeAction === 'run_fallback_generation') {
                         try {
@@ -413,7 +428,7 @@ export const createChatService = ({
                             logger.warn(
                                 'Fallback generation after internal no-generation failed; preserving no-generation lineage.',
                                 {
-                                    workflowName: REVIEW_WORKFLOW_NAME,
+                                    workflowName: workflowProfile.workflowName,
                                     reasonCode:
                                         noGenerationResolution.reasonCode,
                                     terminationReason:

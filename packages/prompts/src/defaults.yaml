@@ -201,7 +201,7 @@ chat:
                 {
                   "action": "message" | "react" | "ignore" | "image",
                   "modality": "text" | "tts",
-                  "profileId": "required when action is 'message' (one profile id from Planner profile options)",
+                  "requestedCapabilityProfile": "required when action is 'message' (one id from Planner capability profiles)",
                   "reaction"?: "emoji-only text when action is react",
                   "imageRequest"?: {
                     "prompt": string,
@@ -258,12 +258,11 @@ chat:
 
                 Retrieval guidance:
                   - Include generation.search when the answer depends on facts that may change over time or when retrieval would materially improve reliability, specificity, grounding, or source quality.
-                  - When you include generation.search, select a profileId whose capabilities.canUseSearch is true.
-                  - Prefer this deterministic profile selection order for message actions:
-                    1) a profile that satisfies required capabilities (for example search),
-                    2) then lower latency class,
-                    3) then lower cost class,
-                    4) then lexicographically smallest id for ties.
+                  - When you include generation.search, choose requestedCapabilityProfile that supports search-capable profile resolution.
+                  - Prefer this deterministic capability selection order for message actions:
+                    1) select requestedCapabilityProfile that satisfies required capabilities (for example search),
+                    2) then prefer lower-latency/lower-cost compatible model profiles,
+                    3) then lexicographically smallest profile id for ties.
                   - For questions about Footnote itself, its packages, architecture, provenance, trace flow, observability, prompts, onboarding, or where to start, use search.intent "repo_explainer".
                   - For current external facts such as current news, releases, compatibility, pricing, availability, support status, benchmarks, or office-holders, use search.intent "current_facts".
                   - If you include generation.search, always include a concise, non-empty search.query.
@@ -291,7 +290,7 @@ chat:
                   - The request summary will tell you which surface is calling.
                   - Web requests still need an internal plan, but the final user-visible output must be suitable for a message response.
                   - When in doubt, pick a safe message response instead of a more surprising action.
-                  - profileId: required when action is "message" (one profile id from Planner profile options).
+                  - requestedCapabilityProfile: required when action is "message" (one id from Planner capability profiles).
 
                 Safety guidance:
                   - Low: everyday or low-stakes requests with low safety concern.

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import {
     createChatPlanner,
-    type ChatPlannerProfileOption,
+    type ChatPlannerCapabilityProfileOption,
 } from '../src/services/chatPlanner.js';
 import { logger } from '../src/utils/logger.js';
 
@@ -32,19 +32,19 @@ const createChatRequest = (
 
 const createPlanner = (
     normalizedText: string,
-    availableProfiles: ChatPlannerProfileOption[] = []
+    availableCapabilityProfiles: ChatPlannerCapabilityProfileOption[] = []
 ) =>
     createChatPlanner({
         executePlanner: async () => ({
             text: normalizedText,
             model: 'gpt-5-mini',
         }),
-        availableProfiles,
+        availableCapabilityProfiles,
     });
 
 const createStructuredPlanner = (
     decision: unknown,
-    availableProfiles: ChatPlannerProfileOption[] = []
+    availableCapabilityProfiles: ChatPlannerCapabilityProfileOption[] = []
 ) =>
     createChatPlanner({
         executePlannerStructured: async () => ({
@@ -57,7 +57,7 @@ const createStructuredPlanner = (
             },
             rawArguments: JSON.stringify(decision),
         }),
-        availableProfiles,
+        availableCapabilityProfiles,
     });
 
 test('chatPlanner parses plain JSON output from the backend-native planner prompt', async () => {
@@ -65,7 +65,7 @@ test('chatPlanner parses plain JSON output from the backend-native planner promp
         JSON.stringify({
             action: 'message',
             modality: 'text',
-            profileId: 'openai-text-medium',
+            requestedCapabilityProfile: 'balanced-general',
             safetyTier: 'Low',
             reasoning: 'The user is asking a question that needs a reply.',
             generation: {
@@ -89,7 +89,7 @@ test('chatPlanner parses plain JSON output from the backend-native planner promp
     const { plan, execution } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
-    assert.equal(plan.profileId, 'openai-text-medium');
+    assert.equal(plan.requestedCapabilityProfile, 'balanced-general');
     assert.ok(plan.generation.search);
     assert.equal(
         plan.generation.search?.query,
@@ -105,7 +105,7 @@ test('chatPlanner parses fenced JSON output', async () => {
 ${JSON.stringify({
     action: 'message',
     modality: 'text',
-    profileId: 'openai-text-medium',
+    requestedCapabilityProfile: 'balanced-general',
     safetyTier: 'Low',
     reasoning: 'The user needs a normal reply.',
     generation: {
@@ -125,7 +125,7 @@ ${JSON.stringify({
     const { plan, execution } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
-    assert.equal(plan.profileId, 'openai-text-medium');
+    assert.equal(plan.requestedCapabilityProfile, 'balanced-general');
     assert.equal(execution.status, 'executed');
 });
 
@@ -133,7 +133,7 @@ test('chatPlanner accepts structured planner decisions without text JSON parsing
     const planner = createStructuredPlanner({
         action: 'message',
         modality: 'text',
-        profileId: 'openai-text-fast',
+        requestedCapabilityProfile: 'structured-cheap',
         safetyTier: 'Low',
         reasoning: 'Reply should be a normal message.',
         generation: {
@@ -152,7 +152,7 @@ test('chatPlanner accepts structured planner decisions without text JSON parsing
     const { plan, execution } = await planner.planChat(createChatRequest());
 
     assert.equal(plan.action, 'message');
-    assert.equal(plan.profileId, 'openai-text-fast');
+    assert.equal(plan.requestedCapabilityProfile, 'structured-cheap');
     assert.equal(execution.status, 'executed');
 });
 
@@ -174,34 +174,28 @@ test('chatPlanner marks structured policy-invalid decisions as failed with inval
     assert.equal(execution.reasonCode, 'planner_invalid_output');
 });
 
-test('chatPlanner forwards bounded profile options context and normalizes blank profileId', async () => {
+test('chatPlanner forwards bounded capability options context and rejects blank requested capability for message action', async () => {
     let capturedMessages: Array<{ role: string; content: string }> = [];
-    const availableProfiles: ChatPlannerProfileOption[] = [
+    const availableCapabilityProfiles: ChatPlannerCapabilityProfileOption[] = [
         {
-            id: 'openai-text-fast',
-            description: 'Fast profile for short planner tasks.',
-            costClass: 'low',
-            latencyClass: 'low',
-            capabilities: { canUseSearch: false },
+            id: 'structured-cheap',
+            description: 'Fast structured routing profile.',
         },
         {
-            id: 'openai-text-medium',
-            description: 'Balanced profile for chat responses.',
-            costClass: 'medium',
-            latencyClass: 'medium',
-            capabilities: { canUseSearch: true },
+            id: 'balanced-general',
+            description: 'Balanced generation profile.',
         },
     ];
 
     const planner = createChatPlanner({
-        availableProfiles,
+        availableCapabilityProfiles,
         executePlanner: async ({ messages }) => {
             capturedMessages = messages;
             return {
                 text: JSON.stringify({
                     action: 'message',
                     modality: 'text',
-                    profileId: '   ',
+                    requestedCapabilityProfile: '   ',
                     safetyTier: 'Low',
                     reasoning: 'Use safe defaults.',
                     generation: {
@@ -221,25 +215,28 @@ test('chatPlanner forwards bounded profile options context and normalizes blank 
         },
     });
 
-    const { plan } = await planner.planChat(createChatRequest());
+    const { execution } = await planner.planChat(createChatRequest());
 
-    assert.equal(plan.profileId, undefined);
+    assert.equal(execution.status, 'failed');
+    assert.equal(execution.reasonCode, 'planner_invalid_output');
     const profileContextMessage =
         capturedMessages.find((message) =>
-            message.content.startsWith('Planner profile options (bounded): ')
+            message.content.startsWith(
+                'Planner capability profiles (bounded): '
+            )
         )?.content ?? '';
     assert.match(
         profileContextMessage,
-        /^Planner profile options \(bounded\): \[/
+        /^Planner capability profiles \(bounded\): \[/
     );
     const encodedProfiles = profileContextMessage.replace(
-        'Planner profile options (bounded): ',
+        'Planner capability profiles (bounded): ',
         ''
     );
     const parsedProfiles = JSON.parse(
         encodedProfiles
-    ) as ChatPlannerProfileOption[];
-    assert.deepEqual(parsedProfiles, availableProfiles);
+    ) as ChatPlannerCapabilityProfileOption[];
+    assert.deepEqual(parsedProfiles, availableCapabilityProfiles);
 });
 
 test('chatPlanner fails open to a valid fallback generation config when planner JSON is invalid', async () => {
@@ -287,6 +284,7 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
         JSON.stringify({
             action: 'message',
             modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
             safetyTier: 'Low',
             reasoning: 'This is a Footnote architecture question.',
             generation: {
@@ -330,6 +328,7 @@ test('search topicHints are bounded, deduped, and normalized fail-open', async (
         JSON.stringify({
             action: 'message',
             modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
             safetyTier: 'Low',
             reasoning: 'Use focused retrieval hints for ranking.',
             generation: {
@@ -376,6 +375,7 @@ test('invalid web_search query downgrades safely to none', async () => {
         JSON.stringify({
             action: 'message',
             modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
             safetyTier: 'Low',
             reasoning: 'This could have used search.',
             generation: {
@@ -408,6 +408,7 @@ test('planner weather request is normalized when location contract is valid', as
         JSON.stringify({
             action: 'message',
             modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
             safetyTier: 'Low',
             reasoning: 'Forecast details are needed.',
             generation: {
@@ -448,6 +449,7 @@ test('invalid weather request is disabled safely', async () => {
         JSON.stringify({
             action: 'message',
             modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
             safetyTier: 'Low',
             reasoning: 'Need weather data.',
             generation: {
@@ -480,6 +482,7 @@ test('out-of-range lat/lon weather request is disabled safely', async () => {
         JSON.stringify({
             action: 'message',
             modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
             safetyTier: 'Low',
             reasoning: 'Need weather data.',
             generation: {
@@ -513,6 +516,7 @@ test('non-positive gridpoint weather request is disabled safely', async () => {
         JSON.stringify({
             action: 'message',
             modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
             safetyTier: 'Low',
             reasoning: 'Need weather data.',
             generation: {
@@ -547,6 +551,7 @@ test('mixed lat/lon and gridpoint weather location is disabled safely', async ()
         JSON.stringify({
             action: 'message',
             modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
             safetyTier: 'Low',
             reasoning: 'Need weather data.',
             generation: {
@@ -583,6 +588,7 @@ test('invalid weather request does not suppress valid search normalization', asy
         JSON.stringify({
             action: 'message',
             modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
             safetyTier: 'Low',
             reasoning: 'Need weather and current facts.',
             generation: {
@@ -624,6 +630,7 @@ test('planner temperament is accepted when all TRACE axes are integer 1..5', asy
         JSON.stringify({
             action: 'message',
             modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
             safetyTier: 'Low',
             reasoning: 'This should include TRACE temperament guidance.',
             generation: {
@@ -655,6 +662,7 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
         JSON.stringify({
             action: 'message',
             modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
             safetyTier: 'Low',
             reasoning: 'This should include TRACE temperament guidance.',
             generation: {
@@ -718,4 +726,351 @@ test('react plans with non-emoji payload fall back safely', async () => {
     assert.equal(plan.generation.search, undefined);
     assert.equal(plan.generation.temperament, undefined);
     assert.match(plan.reasoning, /not a valid emoji token/i);
+});
+
+test('expanded_with_summary digest summarizes dropped older context, not recent window', async () => {
+    const digestMessages: string[] = [];
+    let callCount = 0;
+    const planner = createChatPlanner({
+        executePlanner: async ({ messages }) => {
+            callCount += 1;
+            const digestMessage = messages.find((message) =>
+                message.content.startsWith('Conversation digest: ')
+            );
+            if (digestMessage) {
+                digestMessages.push(digestMessage.content);
+            }
+
+            if (callCount === 1) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        requestedCapabilityProfile: 'balanced-general',
+                        contextNeed: 'needs_more_context',
+                        contextTier: 'expanded_with_summary',
+                        safetyTier: 'Low',
+                        reasoning: 'Need expanded context with digest.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    requestedCapabilityProfile: 'balanced-general',
+                    contextNeed: 'sufficient',
+                    safetyTier: 'Low',
+                    reasoning: 'Expanded context is sufficient.',
+                    generation: {
+                        reasoningEffort: 'low',
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 4,
+                            rationale: 3,
+                            attribution: 4,
+                            caution: 3,
+                            extent: 4,
+                        },
+                    },
+                }),
+                model: 'gpt-5-mini',
+            };
+        },
+    });
+
+    await planner.planChat(
+        createChatRequest({
+            conversation: Array.from({ length: 24 }, (_value, index) => ({
+                role: index % 2 === 0 ? 'user' : 'assistant',
+                content: `message ${index + 1}`,
+            })),
+        })
+    );
+
+    assert.equal(callCount, 2);
+    assert.equal(digestMessages.length, 1);
+    const digest = digestMessages[0];
+    assert.match(digest, /message 1/i);
+    assert.doesNotMatch(digest, /message 24/i);
+});
+
+test('chatPlanner treats expanded safety and TRACE temperament changes as material', async () => {
+    let callCount = 0;
+    const planner = createChatPlanner({
+        executePlanner: async () => {
+            callCount += 1;
+            if (callCount === 1) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        requestedCapabilityProfile: 'balanced-general',
+                        contextNeed: 'needs_more_context',
+                        contextTier: 'expanded_recent',
+                        safetyTier: 'Low',
+                        reasoning: 'Need more context.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 3,
+                                rationale: 3,
+                                attribution: 3,
+                                caution: 3,
+                                extent: 3,
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    requestedCapabilityProfile: 'balanced-general',
+                    contextNeed: 'sufficient',
+                    safetyTier: 'Medium',
+                    reasoning: 'Expanded plan tightens safety/temperament.',
+                    generation: {
+                        reasoningEffort: 'low',
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 4,
+                            rationale: 4,
+                            attribution: 4,
+                            caution: 4,
+                            extent: 4,
+                        },
+                    },
+                }),
+                model: 'gpt-5-mini',
+            };
+        },
+    });
+
+    const response = await planner.planChat(
+        createChatRequest({
+            conversation: Array.from({ length: 10 }, (_value, index) => ({
+                role: index % 2 === 0 ? 'user' : 'assistant',
+                content: `message ${index + 1}`,
+            })),
+        })
+    );
+
+    assert.equal(response.execution.selectedAttempt, 'expanded');
+    assert.equal(
+        response.execution.contextReasonCode,
+        'planner_context_expanded'
+    );
+    assert.equal(response.plan.safetyTier, 'Medium');
+    assert.deepEqual(response.plan.generation.temperament, {
+        tightness: 4,
+        rationale: 4,
+        attribution: 4,
+        caution: 4,
+        extent: 4,
+    });
+});
+
+test('chatPlanner adopts expanded attempt when initial marks context as insufficient', async () => {
+    const seenMessageCounts: number[] = [];
+    let callCount = 0;
+    const planner = createChatPlanner({
+        executePlanner: async ({ messages }) => {
+            callCount += 1;
+            seenMessageCounts.push(messages.length);
+            if (callCount === 1) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        requestedCapabilityProfile: 'balanced-general',
+                        contextNeed: 'needs_more_context',
+                        contextTier: 'expanded_recent',
+                        safetyTier: 'Low',
+                        reasoning: 'Need more context before selecting search.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    requestedCapabilityProfile: 'balanced-general',
+                    contextNeed: 'sufficient',
+                    safetyTier: 'Low',
+                    reasoning: 'Expanded context supports retrieval.',
+                    generation: {
+                        reasoningEffort: 'low',
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 4,
+                            rationale: 3,
+                            attribution: 4,
+                            caution: 3,
+                            extent: 4,
+                        },
+                        search: {
+                            query: 'latest changes',
+                            contextSize: 'low',
+                            intent: 'current_facts',
+                        },
+                    },
+                }),
+                model: 'gpt-5-mini',
+            };
+        },
+    });
+
+    const response = await planner.planChat(
+        createChatRequest({
+            conversation: Array.from({ length: 10 }, (_value, index) => ({
+                role: index % 2 === 0 ? 'user' : 'assistant',
+                content: `message ${index + 1}`,
+            })),
+        })
+    );
+
+    assert.equal(response.execution.selectedAttempt, 'expanded');
+    assert.equal(response.execution.contextTier, 'expanded_recent');
+    assert.equal(
+        response.execution.contextReasonCode,
+        'planner_context_expanded'
+    );
+    assert.equal(response.execution.plannerAttemptIndex, 2);
+    assert.ok(response.plan.generation.search);
+    assert.equal(callCount, 2);
+    assert.ok(seenMessageCounts[1] > seenMessageCounts[0]);
+});
+
+test('chatPlanner keeps initial plan when expanded attempt is invalid', async () => {
+    let callCount = 0;
+    const planner = createChatPlanner({
+        executePlanner: async () => {
+            callCount += 1;
+            if (callCount === 1) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        requestedCapabilityProfile: 'balanced-general',
+                        contextNeed: 'needs_more_context',
+                        contextTier: 'expanded_recent',
+                        safetyTier: 'Low',
+                        reasoning: 'Need more context.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            return {
+                text: '{"action":"message"',
+                model: 'gpt-5-mini',
+            };
+        },
+    });
+
+    const response = await planner.planChat(
+        createChatRequest({
+            conversation: Array.from({ length: 8 }, (_value, index) => ({
+                role: index % 2 === 0 ? 'user' : 'assistant',
+                content: `message ${index + 1}`,
+            })),
+        })
+    );
+
+    assert.equal(response.execution.selectedAttempt, 'initial');
+    assert.equal(
+        response.execution.contextReasonCode,
+        'planner_expansion_invalid_fallback_initial'
+    );
+    assert.equal(response.execution.plannerAttemptIndex, 2);
+    assert.equal(response.plan.generation.search, undefined);
+    assert.equal(callCount, 2);
+});
+
+test('chatPlanner marks budget exhausted when expansion is requested with no extra context budget', async () => {
+    let callCount = 0;
+    const planner = createChatPlanner({
+        executePlanner: async () => {
+            callCount += 1;
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    requestedCapabilityProfile: 'balanced-general',
+                    contextNeed: 'needs_more_context',
+                    contextTier: 'expanded_recent',
+                    safetyTier: 'Low',
+                    reasoning: 'Need more context.',
+                    generation: {
+                        reasoningEffort: 'low',
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 4,
+                            rationale: 3,
+                            attribution: 4,
+                            caution: 3,
+                            extent: 4,
+                        },
+                    },
+                }),
+                model: 'gpt-5-mini',
+            };
+        },
+    });
+
+    const response = await planner.planChat(
+        createChatRequest({
+            conversation: [{ role: 'user', content: 'single message only' }],
+        })
+    );
+
+    assert.equal(response.execution.selectedAttempt, 'initial');
+    assert.equal(
+        response.execution.contextReasonCode,
+        'planner_context_budget_exhausted'
+    );
+    assert.equal(response.execution.plannerAttemptIndex, 1);
+    assert.equal(callCount, 1);
 });

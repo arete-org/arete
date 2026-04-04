@@ -12,8 +12,16 @@ import {
     parseNonNegativeIntEnv,
     parseOptionalTrimmedString,
     parsePositiveIntEnv,
+    parseStringUnionEnv,
 } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
+
+type ChatWorkflowProfileId = RuntimeConfig['chatWorkflow']['profileId'];
+
+const CHAT_WORKFLOW_PROFILE_IDS: ReadonlySet<ChatWorkflowProfileId> = new Set([
+    'bounded-review',
+    'generate-only',
+]);
 
 /**
  * Resolves auth tokens and body-size limits for trusted backend-only service
@@ -42,6 +50,13 @@ export const buildServiceSections = (
         ),
     },
     chatWorkflow: {
+        profileId: parseStringUnionEnv<ChatWorkflowProfileId>(
+            env.CHAT_WORKFLOW_PROFILE_ID,
+            'bounded-review',
+            'CHAT_WORKFLOW_PROFILE_ID',
+            CHAT_WORKFLOW_PROFILE_IDS,
+            warn
+        ),
         reviewLoopEnabled: parseBooleanEnv(
             env.CHAT_REVIEW_LOOP_ENABLED,
             false,

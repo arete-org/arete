@@ -985,6 +985,102 @@ test('runChatMessages skips review loop when enabled but maxIterations is zero',
     assert.equal(callCount, 1);
 });
 
+test('runChatMessages executes generate-only workflow profile with lineage and no assess/revise execution', async () => {
+    let generationCalls = 0;
+    let capturedWorkflow:
+        | ResponseMetadataRuntimeContext['workflow']
+        | undefined;
+    let capturedWorkflowRunConfig:
+        | {
+              workflowName: string;
+              maxIterations: number;
+              maxDurationMs: number;
+          }
+        | undefined;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            return {
+                text: 'generate-only response',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 12,
+                    completionTokens: 6,
+                    totalTokens: 18,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const chatService = createChatService({
+        generationRuntime,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedWorkflow = runtimeContext.workflow;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            profileId: 'generate-only',
+            reviewLoopEnabled: false,
+            maxIterations: 9,
+            maxDurationMs: 15000,
+        },
+        runReviewWorkflow: async (input) => {
+            capturedWorkflowRunConfig = input.workflowConfig;
+            return {
+                outcome: 'generated',
+                generationResult: await generationRuntime.generate(
+                    input.generationRequest
+                ),
+                workflowLineage: {
+                    workflowId: 'wf_generate_only',
+                    workflowName: input.workflowConfig.workflowName,
+                    status: 'completed',
+                    terminationReason: 'goal_satisfied',
+                    stepCount: 1,
+                    maxSteps: 1,
+                    maxDurationMs: input.workflowConfig.maxDurationMs,
+                    steps: [
+                        {
+                            stepId: 'step_1',
+                            attempt: 1,
+                            stepKind: 'generate',
+                            startedAt: new Date().toISOString(),
+                            finishedAt: new Date().toISOString(),
+                            durationMs: 1,
+                            outcome: {
+                                status: 'executed',
+                                summary: 'Generated initial draft response.',
+                            },
+                        },
+                    ],
+                },
+            } satisfies RunBoundedReviewWorkflowResult;
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+    });
+
+    assert.equal(response.message, 'generate-only response');
+    assert.equal(generationCalls, 1);
+    assert.equal(
+        capturedWorkflowRunConfig?.workflowName,
+        'message_generate_only'
+    );
+    assert.equal(capturedWorkflowRunConfig?.maxIterations, 0);
+    assert.equal(capturedWorkflow?.workflowName, 'message_generate_only');
+    assert.equal(capturedWorkflow?.stepCount, 1);
+    assert.equal(capturedWorkflow?.steps[0]?.stepKind, 'generate');
+});
+
 test('runChatMessages handles surfaced no-generation reasons without runtime fallback generation', async () => {
     const surfacedReasons: Array<
         Extract<

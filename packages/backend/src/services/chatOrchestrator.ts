@@ -48,6 +48,10 @@ import {
 import { coercePlanForSurface } from './chatSurfacePolicy.js';
 import { createModelProfileResolver } from './modelProfileResolver.js';
 import {
+    listCapabilityProfileOptionsForStep,
+    selectModelProfileForWorkflowStep,
+} from './modelCapabilityPolicy.js';
+import {
     createPlannerFallbackTelemetryRollup,
     type PlannerFallbackReason,
     type PlannerSelectionSource,
@@ -204,6 +208,8 @@ const buildPlannerPayload = (
         action: plan.action,
         modality: plan.modality,
         profileId: plan.profileId,
+        requestedCapabilityProfile: plan.requestedCapabilityProfile,
+        selectedCapabilityProfile: plan.selectedCapabilityProfile,
         reaction: plan.reaction,
         imageRequest: plan.imageRequest,
         safetyTier: plan.safetyTier,
@@ -261,20 +267,11 @@ export const createChatOrchestrator = ({
         runtimeConfig.modelProfiles.plannerProfileId
     );
     // Startup fallback profile for end-user response generation.
-    // Planner may override this per-request with one catalog profile id.
+    // Planner may request a capability profile that resolves to one catalog profile.
     const defaultResponseProfile = modelProfileResolver.resolve(defaultModel);
 
-    // Bounded profile payload sent to planner prompt context.
-    // Description is trimmed to keep planner context predictable.
-    const plannerProfileOptions = enabledProfiles.map((profile) => ({
-        id: profile.id,
-        description: profile.description.slice(0, 180),
-        costClass: profile.costClass,
-        latencyClass: profile.latencyClass,
-        capabilities: {
-            canUseSearch: profile.capabilities.canUseSearch,
-        },
-    }));
+    const plannerCapabilityOptions =
+        listCapabilityProfileOptionsForStep('generation');
     // TODO(phase-5-provider-tool-registry): Add deterministic fallback ranking
     // metadata for planner/executor handoff (for example, preferred
     // search-capable backup profile ids by policy).
@@ -290,7 +287,7 @@ export const createChatOrchestrator = ({
         recordUsage,
     });
     const chatPlanner = createChatPlanner({
-        availableProfiles: plannerProfileOptions,
+        availableCapabilityProfiles: plannerCapabilityOptions,
         ...(runtimeConfig.openai.plannerStructuredOutputEnabled &&
             plannerProfile.provider === 'openai' &&
             runtimeConfig.openai.apiKey &&
@@ -464,16 +461,49 @@ export const createChatOrchestrator = ({
         // Profile selection precedence:
         // - `/chat` style submit requests may explicitly override via
         //   request.profileId.
-        // - Non-submit requests defer to planner-selected profileId.
+        // - Non-submit requests defer to planner-selected capability profile.
         // - Startup default profile remains final fail-open fallback.
         // Runtime resolution stays authoritative and fail-open:
-        // unknown/disabled profile ids never hard-fail the request.
+        // unknown/disabled selections never hard-fail the request.
+        // Request-level generation overrides are advisory knobs from callers
+        // like `/chat` that want quick side-by-side runs without changing
+        // planner prompt semantics.
+        const requestGeneration = normalizedRequest.generation;
+        let generationForExecution: ChatGenerationPlan = {
+            ...plan.generation,
+            ...(requestGeneration?.reasoningEffort
+                ? { reasoningEffort: requestGeneration.reasoningEffort }
+                : {}),
+            ...(requestGeneration?.verbosity
+                ? { verbosity: requestGeneration.verbosity }
+                : {}),
+        };
+        const toolPolicyDecision = applySingleToolPolicy(
+            generationForExecution
+        );
+        generationForExecution = toolPolicyDecision.generation;
+        if (toolPolicyDecision.logEvent) {
+            chatOrchestratorLogger.warn(
+                'planner requested both weather and search; applying single-tool policy with weather priority',
+                {
+                    ...toolPolicyDecision.logEvent,
+                    surface: normalizedRequest.surface,
+                }
+            );
+        }
         let selectedResponseProfile = defaultResponseProfile;
         let profileSelectionSource: PlannerSelectionSource = 'default';
         const requestedProfileId = normalizedRequest.profileId?.trim();
-        const plannerSelectedProfileId = plan.profileId?.trim();
         const allowRequestProfileOverride =
             normalizedRequest.trigger.kind === 'submit';
+        const selectedCapabilityDecision = selectModelProfileForWorkflowStep({
+            step: 'generation',
+            requestedCapabilityProfile: plan.requestedCapabilityProfile,
+            profiles: enabledProfiles,
+            requiresSearch: generationForExecution.search !== undefined,
+        });
+        const plannerSelectedProfileId =
+            selectedCapabilityDecision.selectedProfile?.id.trim();
         const profileSelectionOrder: Array<{
             source: PlannerSelectionSource;
             profileId?: string;
@@ -521,14 +551,22 @@ export const createChatOrchestrator = ({
                 break;
             }
 
+            const candidateStage =
+                candidate.source === 'planner'
+                    ? 'invalid_capability_candidate'
+                    : 'invalid_profile_candidate';
             chatOrchestratorLogger.warn(
                 'chat profile selection candidate is invalid or disabled; continuing fallback order',
                 {
                     event: 'chat.orchestration.profile_fallback',
                     policy: RESPONSE_PROFILE_FALLBACK_POLICY,
-                    stage: 'invalid_profile_candidate',
+                    stage: candidateStage,
                     source: candidate.source,
                     selectedProfileId: candidate.profileId,
+                    requestedCapabilityProfile: plan.requestedCapabilityProfile,
+                    selectedCapabilityProfile:
+                        selectedCapabilityDecision.selectedCapabilityProfile,
+                    capabilityReasonCode: selectedCapabilityDecision.reasonCode,
                     defaultProfileId: defaultResponseProfile.id,
                     fallbackOrder: profileSelectionOrder.map(
                         (entry) => entry.source
@@ -545,54 +583,30 @@ export const createChatOrchestrator = ({
 
         if (
             profileSelectionSource === 'request' &&
-            plan.profileId &&
-            plan.profileId !== selectedResponseProfile.id
+            plannerSelectedProfileId &&
+            plannerSelectedProfileId !== selectedResponseProfile.id
         ) {
             chatOrchestratorLogger.warn(
-                'chat request profile override superseded planner profile selection',
+                'chat request profile override superseded planner capability selection',
                 {
                     event: 'chat.orchestration.profile_fallback',
                     policy: RESPONSE_PROFILE_FALLBACK_POLICY,
                     stage: 'request_override_superseded_planner',
                     requestedProfileId: selectedResponseProfile.id,
-                    plannerProfileId: plan.profileId,
+                    plannerProfileId: plannerSelectedProfileId,
+                    requestedCapabilityProfile: plan.requestedCapabilityProfile,
+                    selectedCapabilityProfile:
+                        selectedCapabilityDecision.selectedCapabilityProfile,
+                    capabilityReasonCode: selectedCapabilityDecision.reasonCode,
                     surface: normalizedRequest.surface,
                 }
             );
         }
-
-        // Capability policy for this branch:
-        // keep the selected profile, but drop search when capabilities disallow
-        // it, instead of silently switching to a different profile/model.
-        // Request-level generation overrides are advisory knobs from callers
-        // like `/chat` that want quick side-by-side runs without changing
-        // planner prompt semantics.
-        const requestGeneration = normalizedRequest.generation;
         const originalSelectedProfileId = selectedResponseProfile.id;
         let effectiveSelectedProfileId = selectedResponseProfile.id;
         let rerouteApplied = false;
-        let generationForExecution: ChatGenerationPlan = {
-            ...plan.generation,
-            ...(requestGeneration?.reasoningEffort
-                ? { reasoningEffort: requestGeneration.reasoningEffort }
-                : {}),
-            ...(requestGeneration?.verbosity
-                ? { verbosity: requestGeneration.verbosity }
-                : {}),
-        };
-        const toolPolicyDecision = applySingleToolPolicy(
-            generationForExecution
-        );
-        generationForExecution = toolPolicyDecision.generation;
-        if (toolPolicyDecision.logEvent) {
-            chatOrchestratorLogger.warn(
-                'planner requested both weather and search; applying single-tool policy with weather priority',
-                {
-                    ...toolPolicyDecision.logEvent,
-                    surface: normalizedRequest.surface,
-                }
-            );
-        }
+        let fallbackRollupSelectionSource: PlannerSelectionSource =
+            profileSelectionSource;
         let webSearchToolRequestContextOverride:
             | ToolInvocationRequest
             | undefined;
@@ -601,8 +615,16 @@ export const createChatOrchestrator = ({
             generationForExecution.search &&
             !selectedResponseProfile.capabilities.canUseSearch
         ) {
+            const searchPolicySelectionSource: PlannerSelectionSource =
+                selectedCapabilityDecision.reasonCode ===
+                'planner_requested_capability_profile_no_floor_match'
+                    ? 'planner'
+                    : profileSelectionSource;
+            fallbackRollupSelectionSource = searchPolicySelectionSource;
             const fallbackPolicy =
-                searchFallbackPolicyBySelectionSource[profileSelectionSource];
+                searchFallbackPolicyBySelectionSource[
+                    searchPolicySelectionSource
+                ];
             const rankedFallbackCandidates = rankSearchFallbackProfiles(
                 selectedResponseProfile,
                 searchCapableProfiles.filter(
@@ -635,7 +657,7 @@ export const createChatOrchestrator = ({
                         reasonCode: fallbackPolicy.rerouteReasonCode,
                         originalProfileId: originalSelectedProfileId,
                         effectiveProfileId: effectiveSelectedProfileId,
-                        selectionSource: profileSelectionSource,
+                        selectionSource: searchPolicySelectionSource,
                         rankingPolicy: searchFallbackRankingPolicy.steps,
                         rankedFallbackProfileIds: rankedFallbackCandidates.map(
                             (profile) => profile.id
@@ -660,7 +682,7 @@ export const createChatOrchestrator = ({
                     status: 'skipped',
                     reasonCode: fallbackPolicy.skipReasonCode,
                 };
-                if (profileSelectionSource === 'planner') {
+                if (searchPolicySelectionSource === 'planner') {
                     fallbackReasons.push('search_dropped_no_fallback_profile');
                 } else {
                     fallbackReasons.push(
@@ -673,14 +695,14 @@ export const createChatOrchestrator = ({
                         event: 'chat.orchestration.profile_fallback',
                         policy: SEARCH_REROUTE_FALLBACK_POLICY,
                         stage:
-                            profileSelectionSource === 'planner'
+                            searchPolicySelectionSource === 'planner'
                                 ? 'search_dropped_no_search_capable_fallback'
                                 : 'search_dropped_by_selection_policy',
                         originalProfileId: originalSelectedProfileId,
                         effectiveProfileId: effectiveSelectedProfileId,
                         rerouteApplied,
                         reasonCode: fallbackPolicy.skipReasonCode,
-                        selectionSource: profileSelectionSource,
+                        selectionSource: searchPolicySelectionSource,
                         fallbackOrder: searchFallbackOrder,
                         rankingPolicy: searchFallbackRankingPolicy.steps,
                         rankedFallbackProfileIds: rankedFallbackCandidates.map(
@@ -707,11 +729,13 @@ export const createChatOrchestrator = ({
             ...plan,
             generation: generationForExecution,
             profileId: selectedResponseProfile.id,
+            selectedCapabilityProfile:
+                selectedCapabilityDecision.selectedCapabilityProfile,
         };
 
         // Non-message actions return early and skip model generation.
         if (executionPlan.action === 'ignore') {
-            emitFallbackRollup(profileSelectionSource);
+            emitFallbackRollup(fallbackRollupSelectionSource);
             return {
                 action: 'ignore',
                 metadata: null,
@@ -719,7 +743,7 @@ export const createChatOrchestrator = ({
         }
 
         if (executionPlan.action === 'react') {
-            emitFallbackRollup(profileSelectionSource);
+            emitFallbackRollup(fallbackRollupSelectionSource);
             return {
                 action: 'react',
                 reaction: executionPlan.reaction ?? '👍',
@@ -728,7 +752,7 @@ export const createChatOrchestrator = ({
         }
 
         if (executionPlan.action === 'image' && executionPlan.imageRequest) {
-            emitFallbackRollup(profileSelectionSource);
+            emitFallbackRollup(fallbackRollupSelectionSource);
             return {
                 action: 'image',
                 imageRequest: executionPlan.imageRequest,
@@ -742,7 +766,7 @@ export const createChatOrchestrator = ({
             chatOrchestratorLogger.warn(
                 `Chat planner returned image without imageRequest; falling back to ignore. surface=${normalizedRequest.surface} trigger=${normalizedRequest.trigger.kind} latestUserInputLength=${normalizedRequest.latestUserInput.length}`
             );
-            emitFallbackRollup(profileSelectionSource);
+            emitFallbackRollup(fallbackRollupSelectionSource);
             return {
                 action: 'ignore',
                 metadata: null,
@@ -907,7 +931,7 @@ export const createChatOrchestrator = ({
         const totalDurationMs =
             response.metadata.totalDurationMs ??
             Math.max(0, Date.now() - orchestrationStartedAt);
-        emitFallbackRollup(profileSelectionSource);
+        emitFallbackRollup(fallbackRollupSelectionSource);
         const breakerDecision =
             evaluatorExecutionContext?.outcome?.safetyDecision;
         if (
@@ -959,6 +983,10 @@ export const createChatOrchestrator = ({
             responseProfileId: selectedResponseProfile.id,
             originalProfileId: originalSelectedProfileId,
             effectiveProfileId: effectiveSelectedProfileId,
+            requestedCapabilityProfile: plan.requestedCapabilityProfile,
+            selectedCapabilityProfile:
+                selectedCapabilityDecision.selectedCapabilityProfile,
+            capabilityReasonCode: selectedCapabilityDecision.reasonCode,
             searchRequested: generationForExecution.search !== undefined,
             toolName: response.finalToolExecutionTelemetry?.toolName,
             toolStatus: response.finalToolExecutionTelemetry?.status,
