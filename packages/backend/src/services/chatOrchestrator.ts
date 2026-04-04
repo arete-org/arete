@@ -64,9 +64,11 @@ import {
 } from './tools/toolRegistry.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
+import type { IncidentAlertRouter } from './incidentAlerts.js';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
     weatherForecastTool?: WeatherForecastTool;
+    alertRouter?: IncidentAlertRouter;
 };
 
 type PlannerWeatherFailureMarker = {
@@ -239,6 +241,7 @@ export const createChatOrchestrator = ({
     defaultModel = runtimeConfig.modelProfiles.defaultProfileId,
     recordUsage,
     weatherForecastTool,
+    alertRouter,
 }: CreateChatOrchestratorOptions) => {
     const chatOrchestratorLogger =
         typeof logger.child === 'function'
@@ -939,6 +942,10 @@ export const createChatOrchestrator = ({
             breakerDecision &&
             breakerDecision.action !== 'allow'
         ) {
+            const correlation = buildCorrelationIds(
+                normalizedRequest,
+                response.metadata.responseId
+            );
             chatOrchestratorLogger.info(
                 'chat.orchestration.breaker_action_applied',
                 {
@@ -952,12 +959,23 @@ export const createChatOrchestrator = ({
                     enforcement: 'observe_only',
                     responseAction: 'message',
                     responseModality: executionPlan.modality,
-                    correlation: buildCorrelationIds(
-                        normalizedRequest,
-                        response.metadata.responseId
-                    ),
+                    correlation,
                 }
             );
+            if (alertRouter) {
+                void alertRouter.notify({
+                    type: 'breaker',
+                    action: 'chat.orchestration.breaker_action_applied',
+                    surface: normalizedRequest.surface,
+                    breakerAction: breakerDecision.action,
+                    ruleId: breakerDecision.ruleId,
+                    reasonCode: breakerDecision.reasonCode,
+                    reason: breakerDecision.reason,
+                    safetyTier: breakerDecision.safetyTier,
+                    responseId: response.metadata.responseId,
+                    correlation,
+                });
+            }
         }
         chatOrchestratorLogger.info({
             event: 'chat.orchestration.timing',

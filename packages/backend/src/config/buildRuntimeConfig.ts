@@ -15,6 +15,7 @@ import { readBotProfileConfig } from './profile.js';
 import { buildRateLimitsSection } from './sections/rateLimits.js';
 import { buildRuntimeSections } from './sections/runtime.js';
 import { buildServiceSections } from './sections/services.js';
+import { buildAlertsSection } from './sections/alerts.js';
 import { buildStorageSection } from './sections/storage.js';
 import { buildTurnstileSection } from './sections/turnstile.js';
 import { buildVoltAgentSection } from './sections/voltagent.js';
@@ -48,6 +49,7 @@ export const buildRuntimeConfig = (
     const storage = buildStorageSection(env, warn);
     const logging = buildLoggingSection(env, warn);
     const litestream = buildLitestreamSection(env);
+    const alerts = buildAlertsSection(env, warn);
     const profile = readBotProfileConfig({
         env,
         projectRoot: runtime.projectRoot,
@@ -72,6 +74,7 @@ export const buildRuntimeConfig = (
         storage,
         logging,
         litestream,
+        alerts,
         profile,
     };
 };

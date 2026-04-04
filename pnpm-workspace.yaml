@@ -48,6 +48,7 @@ catalog:
     jsonwebtoken: ^9.0.3
     mime-types: ^3.0.2
     node-fetch: ^3.3.2
+    nodemailer: ^7.0.10
     only: ^0.0.2
     openai: ^6.33.0
     opusscript: ^0.1.1

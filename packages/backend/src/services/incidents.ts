@@ -23,6 +23,7 @@ import type {
     IncidentRecord,
 } from '../storage/incidents/sqliteIncidentStore.js';
 import type { IncidentStore } from '../storage/incidents/incidentStore.js';
+import type { IncidentAlertRouter } from './incidentAlerts.js';
 
 const incidentServiceLogger =
     typeof logger.child === 'function'
@@ -42,6 +43,7 @@ export class IncidentNotFoundError extends Error {
 
 type CreateIncidentServiceOptions = {
     incidentStore: IncidentStore;
+    alertRouter?: IncidentAlertRouter;
 };
 
 /**
@@ -138,7 +140,40 @@ const logIncidentEvent = (
  */
 export const createIncidentService = ({
     incidentStore,
+    alertRouter,
 }: CreateIncidentServiceOptions) => {
+    const emitAlert = (event: {
+        action:
+            | 'incident.created'
+            | 'incident.status_changed'
+            | 'incident.note_added'
+            | 'incident.remediated';
+        incident: IncidentRecord;
+    }): void => {
+        if (!alertRouter) {
+            return;
+        }
+
+        const correlation: CorrelationEnvelope = {
+            conversationId: event.incident.pointers.responseId ?? null,
+            requestId: event.incident.pointers.messageId ?? null,
+            incidentId: event.incident.shortId,
+            responseId: event.incident.pointers.responseId ?? null,
+        };
+
+        void alertRouter.notify({
+            type: 'incident',
+            action: event.action,
+            incidentId: event.incident.shortId,
+            status: event.incident.status,
+            responseId: event.incident.pointers.responseId ?? null,
+            tags: event.incident.tags,
+            description: event.incident.description ?? null,
+            remediationState: event.incident.remediationState,
+            correlation,
+        });
+    };
+
     /**
      * Resolves one incident by short ID and centralizes the not-found path.
      */
@@ -198,6 +233,10 @@ export const createIncidentService = ({
             logIncidentEvent('incident.created', incident, {
                 action: 'incident.created',
             });
+            emitAlert({
+                action: 'incident.created',
+                incident,
+            });
 
             return {
                 incident: detail.incident,
@@ -247,6 +286,10 @@ export const createIncidentService = ({
                     action: 'incident.status_changed',
                 });
             }
+            emitAlert({
+                action: 'incident.status_changed',
+                incident: updatedIncident,
+            });
 
             return getIncidentDetail(incidentId);
         },
@@ -265,6 +308,10 @@ export const createIncidentService = ({
             const updatedIncident = await getIncidentRecord(incidentId);
             logIncidentEvent('incident.updated', updatedIncident, {
                 action: 'incident.note_added',
+            });
+            emitAlert({
+                action: 'incident.note_added',
+                incident: updatedIncident,
             });
             return getIncidentDetail(incidentId);
         },
@@ -296,6 +343,10 @@ export const createIncidentService = ({
             if (request.state === 'applied') {
                 logIncidentEvent('incident.remediated', updatedIncident, {
                     action: 'incident.remediated',
+                });
+                emitAlert({
+                    action: 'incident.remediated',
+                    incident: updatedIncident,
                 });
             }
             logIncidentEvent('incident.updated', updatedIncident, {

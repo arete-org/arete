@@ -106,3 +106,38 @@ Example `chat.orchestration.breaker_action_applied`:
     }
 }
 ```
+
+## Alert Routing Configuration
+
+Incident and breaker events can fan out to Discord and/or admin email targets.
+Each target is independently configurable and can be disabled without affecting
+the primary request flow.
+
+### Discord Alert Target
+
+- `INCIDENT_ALERTS_DISCORD_ENABLED` (default: `false`)
+- `INCIDENT_ALERTS_DISCORD_BOT_TOKEN` (required when enabled)
+- `INCIDENT_ALERTS_DISCORD_CHANNEL_ID` (required when enabled)
+- `INCIDENT_ALERTS_DISCORD_ROLE_ID` (optional role mention)
+
+### Email Alert Target (SMTP)
+
+- `INCIDENT_ALERTS_EMAIL_ENABLED` (default: `false`)
+- `INCIDENT_ALERTS_EMAIL_SMTP_HOST` (required when enabled)
+- `INCIDENT_ALERTS_EMAIL_SMTP_PORT` (default: `587`)
+- `INCIDENT_ALERTS_EMAIL_SMTP_SECURE` (default: `false`)
+- `INCIDENT_ALERTS_EMAIL_SMTP_USERNAME` (optional, must be paired with password)
+- `INCIDENT_ALERTS_EMAIL_SMTP_PASSWORD` (optional, must be paired with username)
+- `INCIDENT_ALERTS_EMAIL_FROM` (required when enabled)
+- `INCIDENT_ALERTS_EMAIL_TO` (required when enabled; comma-separated recipients)
+
+### Fail-Open Delivery Contract
+
+- Alert delivery runs as side-effect telemetry and never blocks incident writes
+  or chat response generation.
+- Delivery failures are logged as structured warning events with:
+    - `event=incident.alert.delivery_failed`
+    - `alertChannel` (`discord` or `email`)
+    - `alertType` (`incident` or `breaker`)
+    - `alertAction` (for example `incident.created`)
+    - `error` (delivery error summary)
