@@ -1,6 +1,6 @@
 /**
- * @description: Defines the workflow profile contract and no-generation
- * handling taxonomy used before profile-registry rollout.
+ * @description: Defines serializable workflow profile contracts and the
+ * no-generation handling taxonomy.
  *
  * A workflow is one bounded backend execution loop: generate, optionally assess,
  * optionally revise, then terminate with lineage metadata. A workflow profile is
@@ -15,11 +15,6 @@ import type {
     WorkflowTerminationReason,
     WorkflowStepKind,
 } from '@footnote/contracts/ethics-core';
-import {
-    DEFAULT_REVIEW_DECISION_PROMPT,
-    DEFAULT_REVISION_PROMPT_PREFIX,
-    parseReviewDecisionText,
-} from './workflowEngine.js';
 
 /**
  * Stable workflow profile identifier.
@@ -288,88 +283,3 @@ type WorkflowProfileRuntimeHooks = {
 
 export type RuntimeWorkflowProfile = WorkflowProfileContract &
     WorkflowProfileRuntimeHooks;
-
-const BOUNDED_REVIEW_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
-    profileId: 'bounded-review',
-    profileVersion: 'v1',
-    displayName: 'Bounded Review',
-    workflowName: 'message_with_review_loop',
-    policy: {
-        enablePlanning: false,
-        enableToolUse: false,
-        enableReplanning: false,
-        enableGeneration: true,
-        enableAssessment: true,
-        enableRevision: true,
-    },
-    defaultLimits: {
-        maxWorkflowSteps: 4,
-        maxToolCalls: 0,
-        maxDeliberationCalls: 4,
-        maxTokensTotal: Number.MAX_SAFE_INTEGER,
-        maxDurationMs: 15000,
-    },
-    optionalExtensions: {
-        reviewDecisionPrompt: DEFAULT_REVIEW_DECISION_PROMPT,
-        revisionPromptPrefix: DEFAULT_REVISION_PROMPT_PREFIX,
-    },
-    requiredHooks: {
-        initialStep: 'generate',
-        canEmitGeneration: () => true,
-        classifyNoGeneration: (reasonCode) => reasonCode,
-    },
-    parseReviewDecision: parseReviewDecisionText,
-};
-
-const GENERATE_ONLY_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
-    profileId: 'generate-only',
-    profileVersion: 'v1',
-    displayName: 'Generate Only',
-    workflowName: 'message_generate_only',
-    policy: {
-        enablePlanning: false,
-        enableToolUse: false,
-        enableReplanning: false,
-        enableGeneration: true,
-        enableAssessment: false,
-        enableRevision: false,
-    },
-    defaultLimits: {
-        maxWorkflowSteps: 1,
-        maxToolCalls: 0,
-        maxDeliberationCalls: 0,
-        maxTokensTotal: Number.MAX_SAFE_INTEGER,
-        maxDurationMs: 15000,
-    },
-    requiredHooks: {
-        initialStep: 'generate',
-        canEmitGeneration: () => true,
-        classifyNoGeneration: (reasonCode) => reasonCode,
-    },
-};
-
-export const BUILTIN_RUNTIME_WORKFLOW_PROFILES: Readonly<
-    Record<'bounded-review' | 'generate-only', RuntimeWorkflowProfile>
-> = {
-    'bounded-review': BOUNDED_REVIEW_WORKFLOW_PROFILE,
-    'generate-only': GENERATE_ONLY_WORKFLOW_PROFILE,
-};
-
-export const DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID: keyof typeof BUILTIN_RUNTIME_WORKFLOW_PROFILES =
-    'bounded-review';
-
-const isBuiltinWorkflowProfileId = (
-    value: string
-): value is keyof typeof BUILTIN_RUNTIME_WORKFLOW_PROFILES =>
-    value in BUILTIN_RUNTIME_WORKFLOW_PROFILES;
-
-export const resolveRuntimeWorkflowProfile = (
-    profileId: string | null | undefined
-): RuntimeWorkflowProfile =>
-    profileId !== null &&
-    profileId !== undefined &&
-    isBuiltinWorkflowProfileId(profileId)
-        ? BUILTIN_RUNTIME_WORKFLOW_PROFILES[profileId]
-        : BUILTIN_RUNTIME_WORKFLOW_PROFILES[
-              DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID
-          ];
