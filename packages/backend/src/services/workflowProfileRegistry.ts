@@ -45,6 +45,7 @@ const BOUNDED_REVIEW_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
     },
     requiredHooks: {
         initialStep: 'generate',
+        forceWorkflowExecution: false,
         canEmitGeneration: () => true,
         classifyNoGeneration: (reasonCode) => reasonCode,
     },
@@ -73,6 +74,7 @@ const GENERATE_ONLY_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
     },
     requiredHooks: {
         initialStep: 'generate',
+        forceWorkflowExecution: true,
         canEmitGeneration: () => true,
         classifyNoGeneration: (reasonCode) => reasonCode,
     },
@@ -202,7 +204,7 @@ export const resolveWorkflowRuntimeConfig = (input: {
         resolveWorkflowProfileRegistry(requestedProfileId);
     const workflowProfile = profileResolution.runtimeProfile;
     const workflowExecutionEnabled =
-        workflowProfile.policy.enableAssessment === false ||
+        workflowProfile.requiredHooks.forceWorkflowExecution ||
         input.reviewLoopEnabled === true;
     const profileDefaultMaxIterations = workflowProfile.policy.enableAssessment
         ? deriveDefaultMaxIterationsFromWorkflowSteps(

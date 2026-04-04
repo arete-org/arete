@@ -270,6 +270,7 @@ export type WorkflowProfileContract = {
 type WorkflowProfileRuntimeHooks = {
     requiredHooks: {
         initialStep: WorkflowStepKind;
+        forceWorkflowExecution: boolean;
         canEmitGeneration: () => boolean;
         classifyNoGeneration: (
             reasonCode: WorkflowNoGenerationReasonCode

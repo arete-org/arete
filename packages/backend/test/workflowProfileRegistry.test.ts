@@ -47,9 +47,21 @@ test('resolveWorkflowProfileRegistry resolves known profile ids and fail-open fa
     );
 });
 
+test('resolveWorkflowProfileRegistry trims profile ids before lookup', () => {
+    const trimmedProfile = resolveWorkflowProfileRegistry('  generate-only  ');
+    assert.equal(trimmedProfile.isKnownProfileId, true);
+    assert.equal(trimmedProfile.requestedProfileId, 'generate-only');
+    assert.equal(trimmedProfile.runtimeProfile.profileId, 'generate-only');
+    assert.equal(trimmedProfile.profileContract.profileId, 'generate-only');
+});
+
 test('resolveWorkflowProfileRegistry keeps public contract serializable while runtime profile includes hooks', () => {
     const resolution = resolveWorkflowProfileRegistry('bounded-review');
 
+    assert.equal(
+        typeof resolution.runtimeProfile.requiredHooks.forceWorkflowExecution,
+        'boolean'
+    );
     assert.equal(
         typeof resolution.runtimeProfile.requiredHooks.canEmitGeneration,
         'function'
