@@ -52,6 +52,9 @@ catalogs:
         '@types/node':
             specifier: ^25.5.0
             version: 25.5.0
+        '@types/nodemailer':
+            specifier: ^7.0.3
+            version: 7.0.11
         '@types/ws':
             specifier: ^8.18.1
             version: 8.18.1
@@ -352,6 +355,9 @@ importers:
             '@types/node':
                 specifier: 'catalog:'
                 version: 25.5.0
+            '@types/nodemailer':
+                specifier: 'catalog:'
+                version: 7.0.11
             typescript:
                 specifier: 'catalog:'
                 version: 5.9.3
@@ -2889,6 +2895,12 @@ packages:
         resolution:
             {
                 integrity: sha512-jp2P3tQMSxWugkCUKLRPVUpGaL5MVFwF8RDuSRztfwgN1wmqJeMSbKlnEtQqU8UrhTmzEmZdu2I6v2dpp7XIxw==,
+            }
+
+    '@types/nodemailer@7.0.11':
+        resolution:
+            {
+                integrity: sha512-E+U4RzR2dKrx+u3N4DlsmLaDC6mMZOM/TPROxA0UAPiTgI0y4CEFBmZE+coGWTjakDriRsXG368lNk1u9Q0a2g==,
             }
 
     '@types/qs@6.14.0':
@@ -8714,6 +8726,10 @@ snapshots:
     '@types/node@25.5.0':
         dependencies:
             undici-types: 7.18.2
+
+    '@types/nodemailer@7.0.11':
+        dependencies:
+            '@types/node': 25.5.0
 
     '@types/qs@6.14.0': {}
 

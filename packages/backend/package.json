@@ -23,6 +23,7 @@
     },
     "devDependencies": {
         "@types/better-sqlite3": "catalog:",
+        "@types/nodemailer": "catalog:",
         "@types/node": "catalog:",
         "typescript": "catalog:"
     }
