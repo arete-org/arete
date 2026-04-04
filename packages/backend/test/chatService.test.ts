@@ -273,7 +273,7 @@ test('runChatMessages passes non-retrieval facts for plain VoltAgent-backed runs
     });
 });
 
-test('runChatMessages forwards execution context into metadata runtime context', async () => {
+test('runChatMessages forwards execution context into metadata runtime context (metadata extension seam)', async () => {
     let capturedExecutionContext:
         | ResponseMetadataRuntimeContext['executionContext']
         | undefined;
@@ -983,6 +983,76 @@ test('runChatMessages skips review loop when enabled but maxIterations is zero',
 
     assert.equal(response.message, 'single pass response');
     assert.equal(callCount, 1);
+});
+
+test('runChatMessages uses bounded-review fail-open workflow for unknown workflow profile id', async () => {
+    let capturedWorkflow:
+        | ResponseMetadataRuntimeContext['workflow']
+        | undefined;
+    let capturedWorkflowRunConfig:
+        | {
+              workflowName: string;
+              maxIterations: number;
+              maxDurationMs: number;
+          }
+        | undefined;
+
+    const chatService = createChatService({
+        generationRuntime: createRuntime(),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedWorkflow = runtimeContext.workflow;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            profileId: 'unknown-profile',
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        runReviewWorkflow: async (input) => {
+            capturedWorkflowRunConfig = input.workflowConfig;
+            return {
+                outcome: 'generated',
+                generationResult: {
+                    text: 'bounded-review fallback response',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 5,
+                        totalTokens: 15,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                },
+                workflowLineage: {
+                    workflowId: 'wf_unknown_profile_fallback',
+                    workflowName: input.workflowConfig.workflowName,
+                    status: 'completed',
+                    terminationReason: 'goal_satisfied',
+                    stepCount: 1,
+                    maxSteps: 3,
+                    maxDurationMs: input.workflowConfig.maxDurationMs,
+                    steps: [],
+                },
+            } satisfies RunBoundedReviewWorkflowResult;
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+    });
+
+    assert.equal(response.message, 'bounded-review fallback response');
+    assert.equal(
+        capturedWorkflowRunConfig?.workflowName,
+        'message_with_review_loop'
+    );
+    assert.equal(capturedWorkflowRunConfig?.maxIterations, 2);
+    assert.equal(capturedWorkflow?.workflowName, 'message_with_review_loop');
 });
 
 test('runChatMessages executes generate-only workflow profile with lineage and no assess/revise execution', async () => {

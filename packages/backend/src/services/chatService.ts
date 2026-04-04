@@ -38,12 +38,9 @@ import {
 import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
-import {
-    DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID,
-    resolveRuntimeWorkflowProfile,
-    resolveNoGenerationHandlingFromTermination,
-    type WorkflowProfileId,
-} from './workflowProfileContract.js';
+import { resolveNoGenerationHandlingFromTermination } from './workflowProfileContract.js';
+import { resolveWorkflowRuntimeConfig } from './workflowProfileRegistry.js';
+import type { WorkflowProfileId } from './workflowProfileContract.js';
 import {
     runBoundedReviewWorkflow,
     type RunBoundedReviewWorkflowResult,
@@ -54,40 +51,6 @@ import { runtimeConfig } from '../config.js';
 
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
-
-const sanitizeNonNegativeInteger = (
-    value: number,
-    fallback: number
-): number => {
-    if (!Number.isFinite(value)) {
-        return Math.max(0, Math.floor(fallback));
-    }
-
-    return Math.max(0, Math.floor(value));
-};
-
-const sanitizePositiveInteger = (value: number, fallback: number): number => {
-    if (!Number.isFinite(value)) {
-        return Math.max(1, Math.floor(fallback));
-    }
-
-    return Math.max(1, Math.floor(value));
-};
-
-const deriveDefaultMaxIterationsFromWorkflowSteps = (
-    maxWorkflowSteps: number
-): number => {
-    if (!Number.isFinite(maxWorkflowSteps)) {
-        return 0;
-    }
-
-    const normalizedSteps = Math.max(1, Math.floor(maxWorkflowSteps));
-    if (normalizedSteps <= 1) {
-        return 0;
-    }
-
-    return Math.ceil(normalizedSteps / 2);
-};
 
 /**
  * Search is optional, but if it is present it needs a real query. Blank values
@@ -330,31 +293,19 @@ export const createChatService = ({
                 search: normalizedGeneration.search,
             }),
         };
-        const requestedWorkflowProfileId =
-            chatWorkflowConfig.profileId ?? DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID;
-        const workflowProfile = resolveRuntimeWorkflowProfile(
-            requestedWorkflowProfileId
-        );
+        const workflowRuntimeConfig = resolveWorkflowRuntimeConfig({
+            profileId: chatWorkflowConfig.profileId,
+            reviewLoopEnabled: chatWorkflowConfig.reviewLoopEnabled,
+            maxIterations: chatWorkflowConfig.maxIterations,
+            maxDurationMs: chatWorkflowConfig.maxDurationMs,
+        });
+        const workflowProfile = workflowRuntimeConfig.runtimeProfile;
         const workflowExecutionEnabled =
-            workflowProfile.profileId === 'generate-only' ||
-            chatWorkflowConfig.reviewLoopEnabled === true;
-        const profileDefaultMaxIterations =
-            workflowProfile.profileId === 'generate-only'
-                ? 0
-                : deriveDefaultMaxIterationsFromWorkflowSteps(
-                      workflowProfile.defaultLimits.maxWorkflowSteps
-                  );
+            workflowRuntimeConfig.workflowExecutionEnabled;
         const workflowMaxIterations =
-            workflowProfile.profileId === 'generate-only'
-                ? 0
-                : sanitizeNonNegativeInteger(
-                      chatWorkflowConfig.maxIterations,
-                      profileDefaultMaxIterations
-                  );
-        const workflowMaxDurationMs = sanitizePositiveInteger(
-            chatWorkflowConfig.maxDurationMs,
-            workflowProfile.defaultLimits.maxDurationMs
-        );
+            workflowRuntimeConfig.workflowMaxIterations;
+        const workflowMaxDurationMs =
+            workflowRuntimeConfig.workflowMaxDurationMs;
 
         let generationResult: GenerationResult;
         let workflowLineage: WorkflowRecord | undefined;
