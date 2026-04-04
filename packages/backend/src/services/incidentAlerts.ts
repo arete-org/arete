@@ -12,6 +12,10 @@ import type { RuntimeConfig } from '../config/types.js';
 import { logger } from '../utils/logger.js';
 
 const DISCORD_MESSAGE_CHAR_LIMIT = 1900;
+const DISCORD_REQUEST_TIMEOUT_MS = 10_000;
+const SMTP_CONNECTION_TIMEOUT_MS = 10_000;
+const SMTP_GREETING_TIMEOUT_MS = 10_000;
+const SMTP_SOCKET_TIMEOUT_MS = 15_000;
 
 export type IncidentAlertEvent = {
     type: 'incident';
@@ -170,10 +174,12 @@ const defaultDiscordSender = async ({
     content,
 }: DiscordDeliveryInput): Promise<void> => {
     const messageContent = roleId ? `<@&${roleId}> ${content}` : content;
+    const signal = AbortSignal.timeout(DISCORD_REQUEST_TIMEOUT_MS);
     const response = await fetch(
         `https://discord.com/api/v10/channels/${channelId}/messages`,
         {
             method: 'POST',
+            signal,
             headers: {
                 Authorization: `Bot ${botToken}`,
                 'Content-Type': 'application/json',
@@ -215,6 +221,9 @@ const defaultEmailSender = async ({
         host: smtpHost,
         port: smtpPort,
         secure: smtpSecure,
+        connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
+        greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
+        socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
         ...(smtpUsername && smtpPassword
             ? {
                   auth: {
@@ -242,6 +251,37 @@ export const createIncidentAlertRouter = ({
     sendEmail = defaultEmailSender,
     onDeliveryFailure,
 }: CreateIncidentAlertRouterOptions) => {
+    const notifyFailureCallback = (meta: {
+        alertChannel: 'discord' | 'email';
+        alertType: IncidentAlertEventPayload['type'];
+        alertAction: IncidentAlertEventPayload['action'];
+        error: string;
+    }): void => {
+        if (!onDeliveryFailure) {
+            return;
+        }
+
+        setImmediate(() => {
+            try {
+                onDeliveryFailure(meta);
+            } catch (callbackError) {
+                incidentAlertLogger.warn(
+                    'incident alert failure callback threw',
+                    {
+                        event: 'incident.alert.failure_callback_error',
+                        alertChannel: meta.alertChannel,
+                        alertType: meta.alertType,
+                        alertAction: meta.alertAction,
+                        error:
+                            callbackError instanceof Error
+                                ? callbackError.message
+                                : String(callbackError),
+                    }
+                );
+            }
+        });
+    };
+
     const notify = async (event: IncidentAlertEventPayload): Promise<void> => {
         const deliveries: Promise<void>[] = [];
         const discordMessage = formatDiscordMessage(event);
@@ -267,11 +307,11 @@ export const createIncidentAlertRouter = ({
                         alertAction: event.action,
                         error: errorMessage,
                     };
-                    onDeliveryFailure?.(failureMeta);
                     incidentAlertLogger.warn('incident alert delivery failed', {
                         event: 'incident.alert.delivery_failed',
                         ...failureMeta,
                     });
+                    notifyFailureCallback(failureMeta);
                 })
             );
         }
@@ -302,11 +342,11 @@ export const createIncidentAlertRouter = ({
                         alertAction: event.action,
                         error: errorMessage,
                     };
-                    onDeliveryFailure?.(failureMeta);
                     incidentAlertLogger.warn('incident alert delivery failed', {
                         event: 'incident.alert.delivery_failed',
                         ...failureMeta,
                     });
+                    notifyFailureCallback(failureMeta);
                 })
             );
         }

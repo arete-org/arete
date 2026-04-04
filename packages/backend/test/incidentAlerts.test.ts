@@ -27,8 +27,26 @@ const incidentEvent = {
     },
 };
 
-test('router delivers one incident alert to discord and email when enabled', async () => {
-    const discordCalls: Array<{ content: string }> = [];
+const breakerEvent = {
+    type: 'breaker' as const,
+    action: 'chat.orchestration.breaker_action_applied' as const,
+    surface: 'discord' as const,
+    breakerAction: 'block',
+    ruleId: 'safety.rule.v1',
+    reasonCode: 'test_reason',
+    reason: 'test breaker reason',
+    safetyTier: 'High',
+    responseId: null,
+    correlation: {
+        conversationId: null,
+        requestId: 'message_999',
+        incidentId: null,
+        responseId: null,
+    },
+};
+
+test('router delivers incident and breaker alerts and forwards configured Discord roleId', async () => {
+    const discordCalls: Array<{ content: string; roleId: string | null }> = [];
     const emailCalls: Array<{ subject: string; text: string }> = [];
     const router = createIncidentAlertRouter({
         config: {
@@ -50,7 +68,10 @@ test('router delivers one incident alert to discord and email when enabled', asy
             },
         },
         sendDiscord: async (input) => {
-            discordCalls.push({ content: input.content });
+            discordCalls.push({
+                content: input.content,
+                roleId: input.roleId,
+            });
         },
         sendEmail: async (input) => {
             emailCalls.push({ subject: input.subject, text: input.text });
@@ -58,12 +79,18 @@ test('router delivers one incident alert to discord and email when enabled', asy
     });
 
     await router.notify(incidentEvent);
+    await router.notify(breakerEvent);
 
-    assert.equal(discordCalls.length, 1);
+    assert.equal(discordCalls.length, 2);
     assert.match(discordCalls[0]?.content ?? '', /Footnote incident alert/);
-    assert.equal(emailCalls.length, 1);
+    assert.match(discordCalls[1]?.content ?? '', /Footnote breaker alert/);
+    assert.equal(discordCalls[0]?.roleId, '876543210987654321');
+    assert.equal(discordCalls[1]?.roleId, '876543210987654321');
+    assert.equal(emailCalls.length, 2);
     assert.match(emailCalls[0]?.subject ?? '', /\[Footnote\]\[Incident\]/);
+    assert.match(emailCalls[1]?.subject ?? '', /\[Footnote\]\[Breaker\]/);
     assert.match(emailCalls[0]?.text ?? '', /incidentId: abcd1234/);
+    assert.match(emailCalls[1]?.text ?? '', /breakerAction: block/);
 });
 
 test('router stays fail-open and reports structured failure metadata', async () => {
@@ -106,10 +133,46 @@ test('router stays fail-open and reports structured failure metadata', async () 
     await assert.doesNotReject(async () => {
         await router.notify(incidentEvent);
     });
+    await new Promise<void>((resolve) => {
+        setImmediate(() => resolve());
+    });
     assert.deepEqual(failures.map((failure) => failure.alertChannel).sort(), [
         'discord',
         'email',
     ]);
     assert.equal(failures[0]?.alertType, 'incident');
     assert.equal(failures[0]?.alertAction, 'incident.created');
+});
+
+test('router stays fail-open when onDeliveryFailure throws', async () => {
+    const router = createIncidentAlertRouter({
+        config: {
+            discord: {
+                enabled: true,
+                botToken: 'bot-token',
+                channelId: '123456789012345678',
+                roleId: null,
+            },
+            email: {
+                enabled: false,
+                smtpHost: null,
+                smtpPort: 587,
+                smtpSecure: false,
+                smtpUsername: null,
+                smtpPassword: null,
+                from: null,
+                to: [],
+            },
+        },
+        sendDiscord: async () => {
+            throw new Error('discord fail');
+        },
+        onDeliveryFailure: () => {
+            throw new Error('failure callback boom');
+        },
+    });
+
+    await assert.doesNotReject(async () => {
+        await router.notify(incidentEvent);
+    });
 });

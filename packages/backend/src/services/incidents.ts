@@ -155,7 +155,7 @@ export const createIncidentService = ({
         }
 
         const correlation: CorrelationEnvelope = {
-            conversationId: event.incident.pointers.responseId ?? null,
+            conversationId: null,
             requestId: event.incident.pointers.messageId ?? null,
             incidentId: event.incident.shortId,
             responseId: event.incident.pointers.responseId ?? null,

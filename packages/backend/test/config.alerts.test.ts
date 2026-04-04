@@ -57,3 +57,19 @@ test('email alerts require host/from/to and paired auth credentials', () => {
         /SMTP_USERNAME and INCIDENT_ALERTS_EMAIL_SMTP_PASSWORD must be set together/i
     );
 });
+
+test('email alerts force-disable when enabled without host/from/to routing values', () => {
+    const warnings: string[] = [];
+    const config = buildRuntimeConfig(
+        {
+            INCIDENT_ALERTS_EMAIL_ENABLED: 'true',
+        },
+        (message) => warnings.push(message)
+    );
+
+    assert.equal(config.alerts.email.enabled, false);
+    assert.match(
+        warnings.join('\n'),
+        /INCIDENT_ALERTS_EMAIL_ENABLED is true but required email target values are missing/i
+    );
+});
