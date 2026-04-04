@@ -553,7 +553,12 @@ export const createChatOrchestrator = ({
         }
         let selectedResponseProfile = defaultResponseProfile;
         let profileSelectionSource: PlannerSelectionSource = 'default';
-        const requestedProfileId = normalizedRequest.profileId?.trim();
+        // Profile domains at this seam:
+        // - workflow profile: workflow engine behavior (bounded-review, generate-only)
+        // - capability profile: planner intent for model-selection posture
+        // - model profile: concrete provider/model execution target
+        // Planner selects capability intent; orchestrator resolves model profile.
+        const requestedModelProfileId = normalizedRequest.profileId?.trim();
         const allowRequestProfileOverride =
             normalizedRequest.trigger.kind === 'submit';
         const selectedCapabilityDecision = selectModelProfileForWorkflowStep({
@@ -562,7 +567,7 @@ export const createChatOrchestrator = ({
             profiles: enabledProfiles,
             requiresSearch: generationForExecution.search !== undefined,
         });
-        const plannerSelectedProfileId =
+        const plannerSelectedModelProfileId =
             selectedCapabilityDecision.selectedProfile?.id.trim();
         const profileSelectionOrder: Array<{
             source: PlannerSelectionSource;
@@ -571,11 +576,11 @@ export const createChatOrchestrator = ({
             ? [
                   {
                       source: 'request',
-                      profileId: requestedProfileId,
+                      profileId: requestedModelProfileId,
                   },
                   {
                       source: 'planner',
-                      profileId: plannerSelectedProfileId,
+                      profileId: plannerSelectedModelProfileId,
                   },
                   {
                       source: 'default',
@@ -585,7 +590,7 @@ export const createChatOrchestrator = ({
             : [
                   {
                       source: 'planner',
-                      profileId: plannerSelectedProfileId,
+                      profileId: plannerSelectedModelProfileId,
                   },
                   {
                       source: 'default',
@@ -604,9 +609,11 @@ export const createChatOrchestrator = ({
                 break;
             }
 
-            const matchedProfile = enabledProfilesById.get(candidate.profileId);
-            if (matchedProfile) {
-                selectedResponseProfile = matchedProfile;
+            const matchedModelProfile = enabledProfilesById.get(
+                candidate.profileId
+            );
+            if (matchedModelProfile) {
+                selectedResponseProfile = matchedModelProfile;
                 profileSelectionSource = candidate.source;
                 break;
             }
@@ -643,8 +650,8 @@ export const createChatOrchestrator = ({
 
         if (
             profileSelectionSource === 'request' &&
-            plannerSelectedProfileId &&
-            plannerSelectedProfileId !== selectedResponseProfile.id
+            plannerSelectedModelProfileId &&
+            plannerSelectedModelProfileId !== selectedResponseProfile.id
         ) {
             chatOrchestratorLogger.warn(
                 'chat request profile override superseded planner capability selection',
@@ -653,7 +660,7 @@ export const createChatOrchestrator = ({
                     policy: RESPONSE_PROFILE_FALLBACK_POLICY,
                     stage: 'request_override_superseded_planner',
                     requestedProfileId: selectedResponseProfile.id,
-                    plannerProfileId: plannerSelectedProfileId,
+                    plannerProfileId: plannerSelectedModelProfileId,
                     requestedCapabilityProfile: plan.requestedCapabilityProfile,
                     selectedCapabilityProfile:
                         selectedCapabilityDecision.selectedCapabilityProfile,

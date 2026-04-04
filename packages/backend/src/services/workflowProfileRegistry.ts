@@ -150,6 +150,15 @@ export type WorkflowProfileRegistryResolution = {
     profileContract: WorkflowProfileContract;
 };
 
+/**
+ * Resolves one workflow profile id into both runtime and serializable shapes.
+ *
+ * Invariants:
+ * - Input is trimmed before lookup.
+ * - Unknown/blank ids fail open to `DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID`.
+ * - `requestedProfileId` may differ from `runtimeProfile.profileId` when
+ *   fallback is applied.
+ */
 export const resolveWorkflowProfileRegistry = (
     profileId: string | null | undefined
 ): WorkflowProfileRegistryResolution => {
@@ -192,6 +201,16 @@ export type ResolvedWorkflowRuntimeConfig = {
     workflowMaxDurationMs: number;
 };
 
+/**
+ * Resolves chat workflow runtime execution settings from config + profile
+ * policy.
+ *
+ * Invariants:
+ * - This is the single workflow-execution gating surface for chat runtime.
+ * - Callers should not branch on workflow profile ids directly.
+ * - `forceWorkflowExecution` is the explicit profile-level override for
+ *   workflow execution when review-loop gating would otherwise disable it.
+ */
 export const resolveWorkflowRuntimeConfig = (input: {
     profileId: string | null | undefined;
     reviewLoopEnabled: boolean;

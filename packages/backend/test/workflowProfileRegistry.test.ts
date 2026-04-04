@@ -106,7 +106,7 @@ test('resolveWorkflowProfileRegistry keeps public contract serializable while ru
     );
 });
 
-test('resolveWorkflowRuntimeConfig centralizes profile-specific runtime defaults', () => {
+test('resolveWorkflowRuntimeConfig applies forceWorkflowExecution and review-loop gating', () => {
     const generateOnlyRuntimeConfig = resolveWorkflowRuntimeConfig({
         profileId: 'generate-only',
         reviewLoopEnabled: true,

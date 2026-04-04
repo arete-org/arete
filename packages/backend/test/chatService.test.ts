@@ -985,7 +985,7 @@ test('runChatMessages skips review loop when enabled but maxIterations is zero',
     assert.equal(callCount, 1);
 });
 
-test('runChatMessages fails open to bounded-review workflow when profile id is unknown', async () => {
+test('runChatMessages uses bounded-review fail-open workflow for unknown workflow profile id', async () => {
     let capturedWorkflow:
         | ResponseMetadataRuntimeContext['workflow']
         | undefined;
