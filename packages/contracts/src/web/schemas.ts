@@ -353,6 +353,91 @@ const WorkflowRecordSchema = z
     })
     .strict();
 
+const TrustGraphProvenanceReasonCodeSchema = z.enum([
+    'external_scope_validation_failed',
+    'adapter_scope_mismatch',
+    'adapter_disabled',
+    'adapter_timeout',
+    'adapter_timeout_cancellation_requested',
+    'adapter_error',
+    'poisoned_evidence_dropped',
+    'aggregate_signals_neutralized_after_filtering',
+    'ownership_validation_explicitly_none_denied',
+    'ownership_validation_explicitly_none_allowed_non_production',
+]);
+
+const TrustGraphScopeTupleSchema = z
+    .object({
+        userId: z.string().min(1),
+        projectId: z.string().min(1).optional(),
+        collectionId: z.string().min(1).optional(),
+    })
+    .strict();
+
+const TrustGraphScopeValidationResultSchema = z.discriminatedUnion('ok', [
+    z
+        .object({
+            ok: z.literal(true),
+            normalizedScope: TrustGraphScopeTupleSchema,
+        })
+        .strict(),
+    z
+        .object({
+            ok: z.literal(false),
+            reasonCode: z.literal('external_scope_validation_failed'),
+            details: z.string().min(1),
+        })
+        .strict(),
+]);
+
+const TrustGraphMetadataSchema = z
+    .object({
+        adapterStatus: z.enum([
+            'off',
+            'scope_denied',
+            'success',
+            'timeout',
+            'error',
+        ]),
+        scopeValidation: TrustGraphScopeValidationResultSchema,
+        terminalAuthority: z.literal('backend_execution_contract'),
+        failOpenBehavior: z.literal('local_behavior'),
+        verificationRequired: z.literal(true),
+        advisoryEvidenceItemCount: z.number().int().nonnegative(),
+        droppedEvidenceCount: z.number().int().nonnegative(),
+        droppedEvidenceIds: z.array(z.string().min(1)),
+        provenanceReasonCodes: z.array(TrustGraphProvenanceReasonCodeSchema),
+        sufficiencyView: z
+            .object({
+                coverageValue: z.number().nonnegative().optional(),
+                coverageEvaluationUnit: z
+                    .enum(['claim', 'subquestion', 'source'])
+                    .optional(),
+                conflictSignals: z.array(z.string().min(1)),
+            })
+            .strict(),
+        evidenceView: z
+            .object({
+                sourceRefs: z.array(z.string().min(1)),
+                provenancePathRefs: z.array(z.string().min(1)),
+                traceRefs: z.array(z.string().min(1)),
+            })
+            .strict(),
+        provenanceJoin: z
+            .object({
+                externalEvidenceBundleId: z.string().min(1),
+                externalTraceRefs: z.array(z.string().min(1)),
+                adapterVersion: z.string().min(1),
+                consumedGovernedFieldPaths: z.array(z.string().min(1)),
+                consumedByConsumers: z.array(z.enum(['P_SUFF', 'P_EVID'])),
+                droppedEvidenceIds: z.array(z.string().min(1)),
+                reasonCodes: z.array(TrustGraphProvenanceReasonCodeSchema),
+            })
+            .strict()
+            .optional(),
+    })
+    .strict();
+
 const responseMetadataShape = {
     responseId: z.string().min(1),
     provenance: ProvenanceSchema,
@@ -372,6 +457,7 @@ const responseMetadataShape = {
     evidenceScore: TraceAxisScoreSchema.optional(),
     freshnessScore: TraceAxisScoreSchema.optional(),
     temperament: PartialResponseTemperamentSchema.optional(),
+    trustGraph: TrustGraphMetadataSchema.optional(),
 } as const;
 
 const TraceCardChipDataSchema = z

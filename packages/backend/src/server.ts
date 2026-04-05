@@ -54,6 +54,7 @@ import { createInternalVoiceRealtimeHandler } from './handlers/internalVoiceReal
 import { buildRealtimeInstructions } from './services/prompts/realtimePromptComposer.js';
 import { createChatProfilesHandler } from './handlers/chatProfiles.js';
 import { createWeatherGovForecastTool } from './services/weatherGovForecastTool.js';
+import { resolveExecutionContractTrustGraphRuntimeOptions } from './services/executionContractTrustGraph/index.js';
 
 /**
  * @footnote-logger: openAiRealtimeVoiceRuntime
@@ -465,6 +466,11 @@ const wantsJsonResponse = (req: http.IncomingMessage): boolean => {
     return true;
 };
 // Chat is the backend-standardized conversation interface (adapter-facing, Turnstile + rate-limited for public web calls).
+const executionContractTrustGraphRuntimeOptions =
+    resolveExecutionContractTrustGraphRuntimeOptions(
+        runtimeConfig.executionContractTrustGraph
+    );
+
 const handleChatRequest = createChatHandler({
     generationRuntime,
     alertRouter: incidentAlertRouter,
@@ -476,6 +482,7 @@ const handleChatRequest = createChatHandler({
     logRequest,
     buildResponseMetadata,
     maxChatBodyBytes: runtimeConfig.reflect.maxBodyBytes,
+    executionContractTrustGraph: executionContractTrustGraphRuntimeOptions,
 });
 
 // --- HTTP server ---

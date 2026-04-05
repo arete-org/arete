@@ -16,6 +16,7 @@ import type {
     PartialResponseTemperament,
     ResponseMetadata,
     SafetyTier,
+    TraceAxisScore,
     ToolExecutionContext,
     ToolInvocationRequest,
     WorkflowRecord,
@@ -46,11 +47,70 @@ import {
     type RunBoundedReviewWorkflowResult,
     type WorkflowPolicy,
 } from './workflowEngine.js';
+import { runEvidenceIngestion } from './executionContractTrustGraph/trustGraphEvidenceIngestion.js';
+import type {
+    ScopeTuple,
+    TrustGraphEvidenceAdapter,
+    TrustGraphEvidenceIngestionResult,
+    TrustGraphOwnershipValidationPolicy,
+    ScopeOwnershipValidator,
+} from './executionContractTrustGraph/trustGraphEvidenceTypes.js';
+import type { ScopeValidationPolicy } from './executionContractTrustGraph/scopeValidator.js';
 import { logger } from '../utils/logger.js';
 import { runtimeConfig } from '../config.js';
 
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
+
+type ExecutionContractTrustGraphRuntimeOptions = {
+    adapter?: TrustGraphEvidenceAdapter;
+    budget: {
+        timeoutMs: number;
+        maxCalls: number;
+    };
+    ownershipValidationPolicy: TrustGraphOwnershipValidationPolicy;
+    scopeOwnershipValidator?: ScopeOwnershipValidator;
+    scopeValidationPolicy?: Partial<
+        Pick<
+            ScopeValidationPolicy,
+            | 'requireProjectOrCollection'
+            | 'allowProjectAndCollectionTogether'
+            | 'ownershipValidationTimeoutMs'
+        >
+    >;
+};
+
+type ExecutionContractTrustGraphContext = {
+    queryIntent: string;
+    scopeTuple: ScopeTuple;
+};
+
+type TrustGraphMetadataEnvelope = {
+    adapterStatus: TrustGraphEvidenceIngestionResult['adapterStatus'];
+    scopeValidation: TrustGraphEvidenceIngestionResult['scopeValidation'];
+    terminalAuthority: TrustGraphEvidenceIngestionResult['terminalAuthority'];
+    failOpenBehavior: TrustGraphEvidenceIngestionResult['failOpenBehavior'];
+    verificationRequired: TrustGraphEvidenceIngestionResult['verificationRequired'];
+    advisoryEvidenceItemCount: TrustGraphEvidenceIngestionResult['advisoryEvidenceItemCount'];
+    droppedEvidenceCount: TrustGraphEvidenceIngestionResult['droppedEvidenceCount'];
+    droppedEvidenceIds: TrustGraphEvidenceIngestionResult['droppedEvidenceIds'];
+    provenanceReasonCodes: TrustGraphEvidenceIngestionResult['provenanceReasonCodes'];
+    sufficiencyView: {
+        coverageValue?: number;
+        coverageEvaluationUnit?: TrustGraphEvidenceIngestionResult['predicateViews']['P_SUFF']['coverageEvaluationUnit'];
+        conflictSignals: string[];
+    };
+    evidenceView: {
+        sourceRefs: string[];
+        provenancePathRefs: string[];
+        traceRefs: string[];
+    };
+    provenanceJoin?: TrustGraphEvidenceIngestionResult['provenanceJoin'];
+};
+
+type ResponseMetadataWithTrustGraph = ResponseMetadata & {
+    trustGraph?: TrustGraphMetadataEnvelope;
+};
 
 /**
  * Search is optional, but if it is present it needs a real query. Blank values
@@ -84,6 +144,167 @@ const normalizeGenerationPlan = (
     };
 };
 
+const mapCoverageToTraceAxisScore = (
+    coverageValue: number,
+    conflictSignalsCount: number
+): TraceAxisScore => {
+    const normalizedPercent =
+        coverageValue <= 1
+            ? Math.max(0, Math.min(100, coverageValue * 100))
+            : Math.max(0, Math.min(100, coverageValue));
+    const baseScore =
+        normalizedPercent >= 80
+            ? 5
+            : normalizedPercent >= 60
+              ? 4
+              : normalizedPercent >= 40
+                ? 3
+                : normalizedPercent >= 20
+                  ? 2
+                  : 1;
+
+    const conflictPenalty = conflictSignalsCount > 0 ? 1 : 0;
+    const clamped = Math.max(1, Math.min(5, baseScore - conflictPenalty));
+    return clamped as TraceAxisScore;
+};
+
+const toPublicProvenanceJoin = (
+    provenanceJoin: TrustGraphEvidenceIngestionResult['provenanceJoin']
+): TrustGraphEvidenceIngestionResult['provenanceJoin'] => {
+    if (provenanceJoin === undefined) {
+        return undefined;
+    }
+
+    const joinRecord =
+        provenanceJoin as TrustGraphEvidenceIngestionResult['provenanceJoin'] & {
+            scopeTuple?: unknown;
+        };
+    const { scopeTuple: _scopeTuple, ...publicJoin } = joinRecord;
+    return publicJoin;
+};
+
+const toPublicScopeValidation = (
+    scopeValidation: TrustGraphEvidenceIngestionResult['scopeValidation']
+): TrustGraphEvidenceIngestionResult['scopeValidation'] => {
+    if (!scopeValidation.ok) {
+        return scopeValidation;
+    }
+
+    return {
+        ok: true,
+        normalizedScope: {
+            userId: '[redacted]',
+            ...(scopeValidation.normalizedScope.projectId !== undefined && {
+                projectId: '[redacted]',
+            }),
+            ...(scopeValidation.normalizedScope.collectionId !== undefined && {
+                collectionId: '[redacted]',
+            }),
+        },
+    };
+};
+
+const toTrustGraphMetadataEnvelope = (
+    result: TrustGraphEvidenceIngestionResult
+): TrustGraphMetadataEnvelope => ({
+    adapterStatus: result.adapterStatus,
+    scopeValidation: toPublicScopeValidation(result.scopeValidation),
+    terminalAuthority: result.terminalAuthority,
+    failOpenBehavior: result.failOpenBehavior,
+    verificationRequired: result.verificationRequired,
+    advisoryEvidenceItemCount: result.advisoryEvidenceItemCount,
+    droppedEvidenceCount: result.droppedEvidenceCount,
+    droppedEvidenceIds: result.droppedEvidenceIds,
+    provenanceReasonCodes: result.provenanceReasonCodes,
+    sufficiencyView: {
+        coverageValue: result.predicateViews.P_SUFF.coverageValue,
+        coverageEvaluationUnit:
+            result.predicateViews.P_SUFF.coverageEvaluationUnit,
+        conflictSignals: result.predicateViews.P_SUFF.conflictSignals,
+    },
+    evidenceView: {
+        sourceRefs: result.predicateViews.P_EVID.sourceRefs,
+        provenancePathRefs: result.predicateViews.P_EVID.provenancePathRefs,
+        traceRefs: result.predicateViews.P_EVID.traceRefs,
+    },
+    provenanceJoin: toPublicProvenanceJoin(result.provenanceJoin),
+});
+
+const OWNERSHIP_DENIAL_PREFIXES: readonly string[] = [
+    'tenant_mismatch:',
+    'scope_not_found:',
+    'validator_error:',
+    'insufficient_data:',
+];
+
+const extractOwnershipDenialReason = (
+    details: string | undefined
+):
+    | 'tenant_mismatch'
+    | 'scope_not_found'
+    | 'validator_error'
+    | 'insufficient_data'
+    | undefined => {
+    if (typeof details !== 'string') {
+        return undefined;
+    }
+
+    const normalized = details.trim().toLowerCase();
+    for (const prefix of OWNERSHIP_DENIAL_PREFIXES) {
+        if (normalized.startsWith(prefix)) {
+            return prefix.slice(0, prefix.length - 1) as
+                | 'tenant_mismatch'
+                | 'scope_not_found'
+                | 'validator_error'
+                | 'insufficient_data';
+        }
+    }
+
+    return undefined;
+};
+
+const logTrustGraphRuntimeOutcome = (
+    result: TrustGraphEvidenceIngestionResult
+): void => {
+    const adapterInvoked =
+        result.adapterStatus === 'success' ||
+        result.adapterStatus === 'timeout' ||
+        result.adapterStatus === 'error';
+    const scopeDenied = result.scopeValidation.ok === false;
+    const ownershipDenialReason = scopeDenied
+        ? extractOwnershipDenialReason(result.scopeValidation.details)
+        : undefined;
+    const bypassDenied = result.provenanceReasonCodes.includes(
+        'ownership_validation_explicitly_none_denied'
+    );
+    const timeout = result.adapterStatus === 'timeout';
+    const adapterError = result.adapterStatus === 'error';
+
+    const logPayload = {
+        event: 'chat.execution_contract_trustgraph.runtime_outcome',
+        adapterStatus: result.adapterStatus,
+        adapterInvoked,
+        adapterSkipped: !adapterInvoked && result.adapterStatus !== 'success',
+        scopeDenied,
+        scopeDenialReasonCode: scopeDenied
+            ? result.scopeValidation.reasonCode
+            : undefined,
+        ownershipDenied: ownershipDenialReason !== undefined,
+        ownershipDenialReason,
+        bypassDenied,
+        timeout,
+        adapterError,
+        provenanceReasonCodes: result.provenanceReasonCodes,
+    };
+
+    if (scopeDenied || timeout || adapterError || bypassDenied) {
+        logger.warn(logPayload);
+        return;
+    }
+
+    logger.info(logPayload);
+};
+
 /**
  * Dependencies for the shared chat workflow.
  * The HTTP handler injects these so the core logic stays transport-agnostic.
@@ -111,6 +332,7 @@ export type CreateChatServiceOptions = {
     runReviewWorkflow?: (
         input: Parameters<typeof runBoundedReviewWorkflow>[0]
     ) => Promise<RunBoundedReviewWorkflowResult>;
+    executionContractTrustGraph?: ExecutionContractTrustGraphRuntimeOptions;
 };
 
 /**
@@ -135,6 +357,7 @@ export type RunChatMessagesInput = {
     generation?: ChatGenerationPlan;
     executionContext?: ResponseMetadataRuntimeContext['executionContext'];
     toolRequest?: ToolInvocationRequest;
+    executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
 };
 
 export type FinalToolExecutionTelemetry = {
@@ -160,6 +383,7 @@ export const createChatService = ({
     recordUsage = recordBackendLLMUsage,
     chatWorkflowConfig = runtimeConfig.chatWorkflow,
     runReviewWorkflow = runBoundedReviewWorkflow,
+    executionContractTrustGraph,
 }: CreateChatServiceOptions) => {
     /**
      * Normalizes one runtime result into the metadata shape backend already
@@ -252,6 +476,7 @@ export const createChatService = ({
         generation,
         executionContext,
         toolRequest,
+        executionContractTrustGraphContext,
     }: RunChatMessagesInput): Promise<{
         message: string;
         metadata: ResponseMetadata;
@@ -422,11 +647,56 @@ export const createChatService = ({
                 await generationRuntime.generate(generationRequest);
             recordUsageForStep(generationResult, generationRequest.model);
         }
+
+        let trustGraphResult: TrustGraphEvidenceIngestionResult | undefined;
+        if (
+            executionContractTrustGraph !== undefined &&
+            executionContractTrustGraphContext !== undefined
+        ) {
+            try {
+                trustGraphResult = await runEvidenceIngestion({
+                    queryIntent: executionContractTrustGraphContext.queryIntent,
+                    scopeTuple: executionContractTrustGraphContext.scopeTuple,
+                    budget: executionContractTrustGraph.budget,
+                    ownershipValidationPolicy:
+                        executionContractTrustGraph.ownershipValidationPolicy,
+                    scopeOwnershipValidator:
+                        executionContractTrustGraph.scopeOwnershipValidator,
+                    scopeValidationPolicy:
+                        executionContractTrustGraph.scopeValidationPolicy,
+                    adapter: executionContractTrustGraph.adapter,
+                });
+            } catch (error) {
+                logger.warn(
+                    'Execution Contract TrustGraph ingestion failed open in chat runtime.',
+                    {
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    }
+                );
+            }
+        }
+        if (trustGraphResult !== undefined) {
+            logTrustGraphRuntimeOutcome(trustGraphResult);
+        }
+
         const assistantMetadata = buildAssistantMetadata(
             generationResult,
             normalizedGeneration,
             generationRequest.model
         );
+        if (
+            trustGraphResult?.adapterStatus === 'success' &&
+            assistantMetadata.evidenceScore === undefined &&
+            trustGraphResult.predicateViews.P_SUFF.coverageValue !== undefined
+        ) {
+            assistantMetadata.evidenceScore = mapCoverageToTraceAxisScore(
+                trustGraphResult.predicateViews.P_SUFF.coverageValue,
+                trustGraphResult.predicateViews.P_SUFF.conflictSignals.length
+            );
+        }
 
         // Generation duration is measured at the runtime boundary only.
         // It intentionally excludes planner time and pre/post processing.
@@ -598,9 +868,17 @@ export const createChatService = ({
                       safetyTier,
                   }
                 : responseMetadata;
+        const metadataWithTrustGraph: ResponseMetadataWithTrustGraph =
+            trustGraphResult !== undefined
+                ? {
+                      ...normalizedResponseMetadata,
+                      trustGraph:
+                          toTrustGraphMetadataEnvelope(trustGraphResult),
+                  }
+                : normalizedResponseMetadata;
 
         // Trace writes stay fire-and-forget so a storage hiccup does not block the user response.
-        storeTrace(normalizedResponseMetadata).catch((error) => {
+        storeTrace(metadataWithTrustGraph).catch((error) => {
             logger.error(
                 `Background trace storage error: ${error instanceof Error ? error.message : String(error)}`
             );
@@ -608,7 +886,7 @@ export const createChatService = ({
 
         return {
             message: generationResult.text,
-            metadata: normalizedResponseMetadata,
+            metadata: metadataWithTrustGraph,
             generationDurationMs,
             ...(finalToolExecutionTelemetry !== undefined && {
                 finalToolExecutionTelemetry,

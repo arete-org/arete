@@ -419,6 +419,64 @@ export type ExecutionEvent = {
     durationMs?: number;
 };
 
+export type TrustGraphProvenanceReasonCode =
+    | 'external_scope_validation_failed'
+    | 'adapter_scope_mismatch'
+    | 'adapter_disabled'
+    | 'adapter_timeout'
+    | 'adapter_timeout_cancellation_requested'
+    | 'adapter_error'
+    | 'poisoned_evidence_dropped'
+    | 'aggregate_signals_neutralized_after_filtering'
+    | 'ownership_validation_explicitly_none_denied'
+    | 'ownership_validation_explicitly_none_allowed_non_production';
+
+export type TrustGraphScopeValidationResult =
+    | {
+          ok: true;
+          normalizedScope: {
+              userId: string;
+              projectId?: string;
+              collectionId?: string;
+          };
+      }
+    | {
+          ok: false;
+          reasonCode: 'external_scope_validation_failed';
+          details: string;
+      };
+
+export type TrustGraphMetadata = {
+    adapterStatus: 'off' | 'scope_denied' | 'success' | 'timeout' | 'error';
+    scopeValidation: TrustGraphScopeValidationResult;
+    terminalAuthority: 'backend_execution_contract';
+    failOpenBehavior: 'local_behavior';
+    verificationRequired: true;
+    advisoryEvidenceItemCount: number;
+    droppedEvidenceCount: number;
+    droppedEvidenceIds: string[];
+    provenanceReasonCodes: TrustGraphProvenanceReasonCode[];
+    sufficiencyView: {
+        coverageValue?: number;
+        coverageEvaluationUnit?: 'claim' | 'subquestion' | 'source';
+        conflictSignals: string[];
+    };
+    evidenceView: {
+        sourceRefs: string[];
+        provenancePathRefs: string[];
+        traceRefs: string[];
+    };
+    provenanceJoin?: {
+        externalEvidenceBundleId: string;
+        externalTraceRefs: string[];
+        adapterVersion: string;
+        consumedGovernedFieldPaths: string[];
+        consumedByConsumers: Array<'P_SUFF' | 'P_EVID'>;
+        droppedEvidenceIds: string[];
+        reasonCodes: TrustGraphProvenanceReasonCode[];
+    };
+};
+
 /**
  * ResponseMetadata is the compact record attached to a model response.
  */
@@ -443,4 +501,5 @@ export type ResponseMetadata = {
     // TODO(TRACE-rollout): Make required after TRACE ingestion and rendering
     // paths are fully implemented and validated across surfaces.
     temperament?: PartialResponseTemperament;
+    trustGraph?: TrustGraphMetadata;
 };
