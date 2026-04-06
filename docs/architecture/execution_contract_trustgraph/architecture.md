@@ -339,14 +339,14 @@ Adding a shortcut path that injects an adapter directly into a caller without go
 
 ### 7.3 Server and handler path
 
-- [server.ts](C:/Users/Jordan/Desktop/footnote/packages/backend/src/server.ts) builds runtime config and passes resolved TrustGraph options into the chat handler.
-- [chat.ts](C:/Users/Jordan/Desktop/footnote/packages/backend/src/handlers/chat.ts) keeps transport concerns separate and passes the TrustGraph options into orchestration.
+- [server.ts](../../../packages/backend/src/server.ts) builds runtime config and passes resolved TrustGraph options into the chat handler.
+- [chat.ts](../../../packages/backend/src/handlers/chat.ts) keeps transport concerns separate and passes the TrustGraph options into orchestration.
 
 Nothing about HTTP transport changes TrustGraph's role. It still remains a bounded retrieval seam.
 
 ### 7.4 Orchestrator path
 
-[chatOrchestrator.ts](C:/Users/Jordan/Desktop/footnote/packages/backend/src/services/chatOrchestrator.ts) is still the authority for action selection.
+[chatOrchestrator.ts](../../../packages/backend/src/services/chatOrchestrator.ts) is still the authority for action selection.
 
 It builds a TrustGraph scope tuple only from explicit scope-bearing request fields. It does not repurpose `sessionId` as retrieval scope. `sessionId` stays what it should be: a correlation/conversation field.
 
@@ -364,7 +364,7 @@ Using `sessionId`, message IDs, or other request correlation fields as a shortcu
 
 ### 7.5 Chat service path
 
-[chatService.ts](C:/Users/Jordan/Desktop/footnote/packages/backend/src/services/chatService.ts) calls `runEvidenceIngestion` when both of these exist:
+[chatService.ts](../../../packages/backend/src/services/chatService.ts) calls `runEvidenceIngestion` when both of these exist:
 
 - runtime TrustGraph options
 - a TrustGraph context from the orchestrator
@@ -392,12 +392,12 @@ Why this matters:
 
 The main module responsibilities are:
 
-- [scopeValidator.ts](C:/Users/Jordan/Desktop/footnote/packages/backend/src/services/executionContractTrustGraph/scopeValidator.ts): validates scope shape, ambiguity rules, ownership requirements, and ownership timeout handling
-- [tenancyOwnershipValidator.ts](C:/Users/Jordan/Desktop/footnote/packages/backend/src/services/executionContractTrustGraph/tenancyOwnershipValidator.ts): adapts a backend tenancy service into the validator contract
-- [tenancyOwnershipHttpService.ts](C:/Users/Jordan/Desktop/footnote/packages/backend/src/services/executionContractTrustGraph/tenancyOwnershipHttpService.ts): performs HTTP ownership checks with timeout and cancellation
-- [trustGraphHttpAdapter.ts](C:/Users/Jordan/Desktop/footnote/packages/backend/src/services/executionContractTrustGraph/trustGraphHttpAdapter.ts): performs the TrustGraph HTTP evidence call with response validation
-- [trustGraphEvidenceIngestion.ts](C:/Users/Jordan/Desktop/footnote/packages/backend/src/services/executionContractTrustGraph/trustGraphEvidenceIngestion.ts): runs the bounded ingestion pipeline
-- [provenanceJoin.ts](C:/Users/Jordan/Desktop/footnote/packages/backend/src/services/executionContractTrustGraph/provenanceJoin.ts): builds the reviewer-facing external artifact join
+- [scopeValidator.ts](../../../packages/backend/src/services/executionContractTrustGraph/scopeValidator.ts): validates scope shape, ambiguity rules, ownership requirements, and ownership timeout handling
+- [tenancyOwnershipValidator.ts](../../../packages/backend/src/services/executionContractTrustGraph/tenancyOwnershipValidator.ts): adapts a backend tenancy service into the validator contract
+- [tenancyOwnershipHttpService.ts](../../../packages/backend/src/services/executionContractTrustGraph/tenancyOwnershipHttpService.ts): performs HTTP ownership checks with timeout and cancellation
+- [trustGraphHttpAdapter.ts](../../../packages/backend/src/services/executionContractTrustGraph/trustGraphHttpAdapter.ts): performs the TrustGraph HTTP evidence call with response validation
+- [trustGraphEvidenceIngestion.ts](../../../packages/backend/src/services/executionContractTrustGraph/trustGraphEvidenceIngestion.ts): runs the bounded ingestion pipeline
+- [provenanceJoin.ts](../../../packages/backend/src/services/executionContractTrustGraph/provenanceJoin.ts): builds the reviewer-facing external artifact join
 
 ### 7.7 Kill switch behavior
 
@@ -454,7 +454,7 @@ This subsystem has meaningful test coverage, but it is important to separate wha
 
 ### 9.1 Seam-level contract tests
 
-[trustGraphContract.test.ts](C:/Users/Jordan/Desktop/footnote/packages/backend/test/trustGraphContract.test.ts) covers:
+[trustGraphContract.test.ts](../../../packages/backend/test/trustGraphContract.test.ts) covers:
 
 - raw adapter payload staying out of execution-facing surfaces
 - mapping registry immutability
@@ -471,9 +471,9 @@ This subsystem has meaningful test coverage, but it is important to separate wha
 
 ### 9.2 Service, orchestrator, and handler tests
 
-- [chatService.test.ts](C:/Users/Jordan/Desktop/footnote/packages/backend/test/chatService.test.ts): metadata integration, public redaction, and ON/OFF authority stability
-- [chatOrchestratorExecutionContractTrustGraph.test.ts](C:/Users/Jordan/Desktop/footnote/packages/backend/test/chatOrchestratorExecutionContractTrustGraph.test.ts): real orchestrator path behavior, including the `sessionId` regression guard
-- [chatHandler.test.ts](C:/Users/Jordan/Desktop/footnote/packages/backend/test/chatHandler.test.ts): HTTP/runtime path behavior, ownership denial, timeout/error fail-open behavior, disable/kill-switch behavior, and observability event emission
+- [chatService.test.ts](../../../packages/backend/test/chatService.test.ts): metadata integration, public redaction, and ON/OFF authority stability
+- [chatOrchestratorExecutionContractTrustGraph.test.ts](../../../packages/backend/test/chatOrchestratorExecutionContractTrustGraph.test.ts): real orchestrator path behavior, including the `sessionId` regression guard
+- [chatHandler.test.ts](../../../packages/backend/test/chatHandler.test.ts): HTTP/runtime path behavior, ownership denial, timeout/error fail-open behavior, disable/kill-switch behavior, and observability event emission
 
 ### 9.3 What is proven
 
