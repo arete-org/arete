@@ -159,7 +159,9 @@ const invokeOwnershipValidatorWithTimeout = async (input: {
         return ownershipResult;
     } catch (error: unknown) {
         if (timeoutTriggered) {
-            throw new Error(OWNERSHIP_VALIDATOR_TIMEOUT_ERROR);
+            throw new Error(OWNERSHIP_VALIDATOR_TIMEOUT_ERROR, {
+                cause: error,
+            });
         }
 
         if (
