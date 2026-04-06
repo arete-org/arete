@@ -1285,7 +1285,7 @@ test('Execution Contract TrustGraph observability emits deny timeout and error e
             }
         }
         return undefined;
-    }) as typeof logger.warn;
+    }) as unknown as typeof logger.warn;
 
     const run = async (input: {
         adapter: CreateChatServiceOptions['executionContractTrustGraph']['adapter'];
