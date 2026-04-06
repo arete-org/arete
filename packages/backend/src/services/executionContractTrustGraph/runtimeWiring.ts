@@ -87,7 +87,9 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
     }
 
     let scopeOwnershipValidator:
-        | CreateChatServiceOptions['executionContractTrustGraph']['scopeOwnershipValidator']
+        | NonNullable<
+              CreateChatServiceOptions['executionContractTrustGraph']
+          >['scopeOwnershipValidator']
         | undefined;
     if (config.ownership.bindingMode === 'http') {
         if (!isNonEmptyString(config.ownership.endpointUrl)) {
