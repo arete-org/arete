@@ -270,9 +270,16 @@ const logTrustGraphRuntimeOutcome = (
         result.adapterStatus === 'success' ||
         result.adapterStatus === 'timeout' ||
         result.adapterStatus === 'error';
-    const scopeDenied = result.scopeValidation.ok === false;
+    const scopeValidation = result.scopeValidation;
+    const scopeDenied = !scopeValidation.ok;
+    let scopeDenialReasonCode: string | undefined;
+    let scopeDenialDetails: string | undefined;
+    if (!scopeValidation.ok) {
+        scopeDenialReasonCode = scopeValidation.reasonCode;
+        scopeDenialDetails = scopeValidation.details;
+    }
     const ownershipDenialReason = scopeDenied
-        ? extractOwnershipDenialReason(result.scopeValidation.details)
+        ? extractOwnershipDenialReason(scopeDenialDetails)
         : undefined;
     const bypassDenied = result.provenanceReasonCodes.includes(
         'ownership_validation_explicitly_none_denied'
@@ -286,9 +293,7 @@ const logTrustGraphRuntimeOutcome = (
         adapterInvoked,
         adapterSkipped: !adapterInvoked && result.adapterStatus !== 'success',
         scopeDenied,
-        scopeDenialReasonCode: scopeDenied
-            ? result.scopeValidation.reasonCode
-            : undefined,
+        scopeDenialReasonCode,
         ownershipDenied: ownershipDenialReason !== undefined,
         ownershipDenialReason,
         bypassDenied,
