@@ -67,7 +67,9 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
             policyId: config.policyId,
         });
 
-    let adapter: CreateChatServiceOptions['executionContractTrustGraph']['adapter'];
+    let adapter: NonNullable<
+        CreateChatServiceOptions['executionContractTrustGraph']
+    >['adapter'];
     if (config.adapter.mode === 'http') {
         const adapterConfig = requireHttpAdapterConfig({
             endpointUrl: config.adapter.endpointUrl,
