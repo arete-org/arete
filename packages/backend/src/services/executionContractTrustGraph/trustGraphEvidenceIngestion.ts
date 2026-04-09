@@ -604,64 +604,85 @@ export const runEvidenceIngestion = async (
         };
     }
 
-    const sanitized = sanitizeEvidenceBundle(adapterBundle);
-    provenanceReasonCodes.push(...sanitized.reasonCodes);
-    if (
-        !scopesMatchExactly(
-            sanitized.bundle.scopeTuple,
-            scopeValidation.normalizedScope
-        )
-    ) {
-        provenanceReasonCodes.push('adapter_scope_mismatch');
+    let droppedEvidenceCount = 0;
+    let droppedEvidenceIds: string[] = [];
+    try {
+        const sanitized = sanitizeEvidenceBundle(adapterBundle);
+        droppedEvidenceCount = sanitized.droppedEvidenceCount;
+        droppedEvidenceIds = sanitized.droppedEvidenceIds;
+        provenanceReasonCodes.push(...sanitized.reasonCodes);
+        if (
+            !scopesMatchExactly(
+                sanitized.bundle.scopeTuple,
+                scopeValidation.normalizedScope
+            )
+        ) {
+            provenanceReasonCodes.push('adapter_scope_mismatch');
+            return {
+                adapterStatus: 'scope_denied',
+                scopeValidation: {
+                    ok: false,
+                    reasonCode: 'external_scope_validation_failed',
+                    details:
+                        'Adapter scope tuple did not match the normalized external retrieval scope.',
+                },
+                localTerminalOutcome,
+                terminalAuthority: 'backend_execution_contract',
+                failOpenBehavior: 'local_behavior',
+                verificationRequired: true,
+                advisoryEvidenceItemCount: 0,
+                droppedEvidenceCount,
+                droppedEvidenceIds,
+                provenanceReasonCodes,
+                predicateViews: createEmptyConsumerViews(),
+            };
+        }
+        let predicateViews = buildTrustGraphConsumerViews(sanitized.bundle);
+        if (sanitized.neutralizeAggregateSignals) {
+            predicateViews = neutralizeAggregateSignals(predicateViews);
+        }
+
+        const consumedGovernedFieldPaths =
+            deriveConsumedGovernedFieldPaths(predicateViews);
+        const consumedByConsumers = deriveConsumersWithSignals(predicateViews);
+        const provenanceJoin = createTrustGraphProvenanceJoin({
+            bundle: sanitized.bundle,
+            consumedGovernedFieldPaths,
+            consumedByConsumers,
+            droppedEvidenceIds,
+            reasonCodes: provenanceReasonCodes,
+        }).join;
+
         return {
-            adapterStatus: 'scope_denied',
-            scopeValidation: {
-                ok: false,
-                reasonCode: 'external_scope_validation_failed',
-                details:
-                    'Adapter scope tuple did not match the normalized external retrieval scope.',
-            },
+            adapterStatus: 'success',
+            scopeValidation,
+            localTerminalOutcome,
+            terminalAuthority: 'backend_execution_contract',
+            failOpenBehavior: 'local_behavior',
+            verificationRequired: true,
+            advisoryEvidenceItemCount: predicateViews.P_EVID.sourceRefs.length,
+            droppedEvidenceCount,
+            droppedEvidenceIds,
+            provenanceReasonCodes,
+            predicateViews,
+            provenanceJoin,
+        };
+    } catch (_error: unknown) {
+        provenanceReasonCodes.push('adapter_processing_failed');
+        return {
+            adapterStatus: 'error',
+            scopeValidation,
             localTerminalOutcome,
             terminalAuthority: 'backend_execution_contract',
             failOpenBehavior: 'local_behavior',
             verificationRequired: true,
             advisoryEvidenceItemCount: 0,
-            droppedEvidenceCount: sanitized.droppedEvidenceCount,
-            droppedEvidenceIds: sanitized.droppedEvidenceIds,
+            droppedEvidenceCount,
+            droppedEvidenceIds,
             provenanceReasonCodes,
             predicateViews: createEmptyConsumerViews(),
         };
     }
-    let predicateViews = buildTrustGraphConsumerViews(sanitized.bundle);
-    if (sanitized.neutralizeAggregateSignals) {
-        predicateViews = neutralizeAggregateSignals(predicateViews);
-    }
-
-    const consumedGovernedFieldPaths =
-        deriveConsumedGovernedFieldPaths(predicateViews);
-    const consumedByConsumers = deriveConsumersWithSignals(predicateViews);
-    const provenanceJoin = createTrustGraphProvenanceJoin({
-        bundle: sanitized.bundle,
-        consumedGovernedFieldPaths,
-        consumedByConsumers,
-        droppedEvidenceIds: sanitized.droppedEvidenceIds,
-        reasonCodes: provenanceReasonCodes,
-    }).join;
-
-    return {
-        adapterStatus: 'success',
-        scopeValidation,
-        localTerminalOutcome,
-        terminalAuthority: 'backend_execution_contract',
-        failOpenBehavior: 'local_behavior',
-        verificationRequired: true,
-        advisoryEvidenceItemCount: predicateViews.P_EVID.sourceRefs.length,
-        droppedEvidenceCount: sanitized.droppedEvidenceCount,
-        droppedEvidenceIds: sanitized.droppedEvidenceIds,
-        provenanceReasonCodes,
-        predicateViews,
-        provenanceJoin,
-    };
 };
 
 export const getRegistryMetadata = (): {
