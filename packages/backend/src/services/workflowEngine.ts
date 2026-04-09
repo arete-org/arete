@@ -13,6 +13,10 @@ import type {
     WorkflowRecord,
 } from '@footnote/contracts/ethics-core';
 import type {
+    WorkflowProfileExecutionLimitsContract,
+    WorkflowProfilePolicyContract,
+} from './workflowProfileContract.js';
+import type {
     GenerationRequest,
     GenerationResult,
     GenerationRuntime,
@@ -20,22 +24,18 @@ import type {
 } from '@footnote/agent-runtime';
 import { logger } from '../utils/logger.js';
 
-export type WorkflowPolicy = {
-    enablePlanning: boolean;
-    enableToolUse: boolean;
-    enableReplanning: boolean;
-    enableGeneration?: boolean;
-    enableAssessment: boolean;
-    enableRevision: boolean;
-};
+/**
+ * Canonical workflow-policy surface.
+ *
+ * This alias keeps existing engine call sites stable while making
+ * `WorkflowProfilePolicyContract` the single source of truth for shape.
+ */
+export type WorkflowPolicy = WorkflowProfilePolicyContract;
 
-export type ExecutionLimits = {
-    maxWorkflowSteps: number;
-    maxToolCalls: number;
-    maxDeliberationCalls: number;
-    maxTokensTotal: number;
-    maxDurationMs: number;
-};
+/**
+ * Canonical execution-limits surface used by workflow runtime checks.
+ */
+export type ExecutionLimits = WorkflowProfileExecutionLimitsContract;
 
 export type ExhaustedLimit =
     | 'maxWorkflowSteps'

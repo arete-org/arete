@@ -30,6 +30,9 @@ export type WorkflowProfileId =
 /**
  * Policy switches checked by the engine before each workflow transition.
  *
+ * This is the canonical workflow-policy shape for backend workflow execution.
+ * Engine/runtime modules should import this type instead of re-declaring fields.
+ *
  * `enableGeneration` stays optional because current callers still rely on the
  * engine default when that flag is omitted.
  */
@@ -44,6 +47,9 @@ export type WorkflowProfilePolicyContract = {
 
 /**
  * Quantitative workflow limits used by profile defaults.
+ *
+ * This is the canonical execution-limit shape shared by registry defaults and
+ * workflow runtime checks.
  */
 export type WorkflowProfileExecutionLimitsContract = {
     maxWorkflowSteps: number;
