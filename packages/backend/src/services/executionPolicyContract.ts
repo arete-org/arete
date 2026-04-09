@@ -122,7 +122,8 @@ export type ExecutionPolicyFailOpen = {
 /**
  * Lightweight routing intent seam that policy can declare.
  *
- * This is provider-neutral. Model/provider selection logic stays outside EPC.
+ * This is provider-neutral and non-authoritative assembly input only.
+ * Model/provider selection logic stays outside EPC.
  * This is not a full multi-search or evidence-acquisition strategy layer.
  */
 export type ExecutionPolicyRoutingIntent = {
@@ -133,8 +134,9 @@ export type ExecutionPolicyRoutingIntent = {
 /**
  * TrustGraph integration seam metadata.
  *
- * TrustGraph remains evidence/provenance input. It is not a second policy
- * authority and cannot block execution through this field.
+ * TrustGraph remains evidence/provenance input and non-authoritative seam
+ * metadata. It is not a second policy authority and cannot block execution
+ * through this field.
  */
 export type ExecutionPolicyTrustGraphSeam = {
     evidenceMode: 'off' | 'advisory';
@@ -180,7 +182,7 @@ export type ExecutionPolicyPresetId =
     | (string & {});
 
 /**
- * Shared override shape used by EPC presets, builders, and resolver assembly.
+ * Shared override shape used by EPC presets, builders, and resolver assembly glue.
  */
 export type ExecutionPolicyContractOverrides = Partial<
     Omit<ExecutionPolicyContract, 'policyId' | 'policyVersion' | 'displayName'>
@@ -343,6 +345,7 @@ export const EXECUTION_POLICY_PRESETS: Readonly<
 export const EXECUTION_POLICY_OUTSIDE_SCOPE: ReadonlyArray<string> = [
     'Transport-specific behavior (web/discord response shaping).',
     'TrustGraph evidence retrieval and ingestion implementation.',
+    'Workflow profile registry and runtime hook assembly glue.',
     'Operator incident workflows and alerting channels.',
     'Provider-specific model invocation details.',
     'Multi-search/evidence acquisition implementation strategy.',

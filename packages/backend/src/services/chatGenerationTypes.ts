@@ -47,9 +47,10 @@ export type ChatGenerationWeatherRequest = {
 };
 
 /**
- * Optional EPC-adjacent hint from planner to execution.
+ * Optional non-authoritative EPC hint from planner to execution assembly.
  *
- * This is intent vocabulary only. It does not execute EPC policy by itself.
+ * This is advisory vocabulary only. Canonical policy ownership stays in EPC
+ * contract resolution; this hint cannot define or override EPC ontology.
  */
 export type ChatGenerationResponseIntentHint = {
     responseMode: ExecutionResponseMode;
@@ -61,7 +62,7 @@ export type ChatGenerationResponseIntentHint = {
  * backend-owned because it feeds Footnote metadata rather than runtime execution directly.
  *
  * `reasoningEffort` and `verbosity` are generation controls, not EPC response
- * intent. Use `responseIntentHint` when callers need explicit EPC vocabulary.
+ * intent. `responseIntentHint` is advisory only and non-authoritative.
  */
 export type ChatGenerationPlan = {
     reasoningEffort: NonNullable<GenerationRequest['reasoningEffort']>;

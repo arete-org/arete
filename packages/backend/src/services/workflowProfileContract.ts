@@ -30,7 +30,9 @@ export type WorkflowProfileId =
 /**
  * EPC-aligned workflow policy preset checked before each workflow transition.
  *
- * This is the canonical workflow-policy shape for backend workflow execution.
+ * This is the canonical workflow-step gating shape for backend workflow execution.
+ * It is outside EPC response/evidence/verification ontology ownership and is
+ * used as execution assembly glue for workflow transitions only.
  * Engine/runtime modules should import this type instead of re-declaring fields.
  *
  * `enableGeneration` stays optional because current callers still rely on the
@@ -172,6 +174,7 @@ export type NoGenerationHandlingResolution =
  *
  * Call this only when the workflow ended before any successful generation. The
  * result tells chat runtime whether to surface that outcome or run fallback.
+ * This resolver is assembly glue for runtime branching, not a policy ontology owner.
  */
 export const resolveNoGenerationHandlingFromTermination = (input: {
     terminationReason: WorkflowTerminationReason;
@@ -271,7 +274,8 @@ export type WorkflowProfileContract = {
  * Internal runtime-only hooks for profile execution.
  *
  * Keep this separate from `WorkflowProfileContract` so public types remain
- * serializable and transport-safe.
+ * serializable and transport-safe. These hooks are assembly glue and remain
+ * outside EPC policy contract ownership.
  */
 type WorkflowProfileRuntimeHooks = {
     requiredHooks: {
