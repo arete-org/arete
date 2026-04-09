@@ -144,13 +144,17 @@ export class BackendTenancyOwnershipHttpService implements BackendTenancyOwnersh
             return validateResponseShape(payload);
         } catch (error: unknown) {
             if (timeoutTriggered) {
-                throw new Error('ownership_validator_timeout');
+                throw new Error('ownership_validator_timeout', {
+                    cause: error,
+                });
             }
             if (
                 forwardedAbortTriggered ||
                 (error instanceof Error && error.name === 'AbortError')
             ) {
-                throw new Error('ownership_validator_aborted');
+                throw new Error('ownership_validator_aborted', {
+                    cause: error,
+                });
             }
             throw error;
         } finally {
