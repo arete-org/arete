@@ -115,8 +115,18 @@ test('resolveWorkflowRuntimeConfig applies forceWorkflowExecution and review-loo
     });
     assert.equal(generateOnlyRuntimeConfig.profileId, 'generate-only');
     assert.equal(generateOnlyRuntimeConfig.workflowExecutionEnabled, true);
-    assert.equal(generateOnlyRuntimeConfig.workflowMaxIterations, 0);
-    assert.equal(generateOnlyRuntimeConfig.workflowMaxDurationMs, 9000);
+    assert.equal(
+        generateOnlyRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps,
+        1
+    );
+    assert.equal(
+        generateOnlyRuntimeConfig.workflowExecutionLimits.maxDeliberationCalls,
+        0
+    );
+    assert.equal(
+        generateOnlyRuntimeConfig.workflowExecutionLimits.maxDurationMs,
+        9000
+    );
 
     const boundedReviewRuntimeConfig = resolveWorkflowRuntimeConfig({
         profileId: 'bounded-review',
@@ -126,6 +136,16 @@ test('resolveWorkflowRuntimeConfig applies forceWorkflowExecution and review-loo
     });
     assert.equal(boundedReviewRuntimeConfig.profileId, 'bounded-review');
     assert.equal(boundedReviewRuntimeConfig.workflowExecutionEnabled, false);
-    assert.equal(boundedReviewRuntimeConfig.workflowMaxIterations, 5);
-    assert.equal(boundedReviewRuntimeConfig.workflowMaxDurationMs, 9000);
+    assert.equal(
+        boundedReviewRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps,
+        10
+    );
+    assert.equal(
+        boundedReviewRuntimeConfig.workflowExecutionLimits.maxDeliberationCalls,
+        10
+    );
+    assert.equal(
+        boundedReviewRuntimeConfig.workflowExecutionLimits.maxDurationMs,
+        9000
+    );
 });
