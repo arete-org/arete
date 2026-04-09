@@ -351,6 +351,14 @@ export const EXECUTION_POLICY_OUTSIDE_SCOPE: ReadonlyArray<string> = [
 ];
 
 /**
+ * Returns a safe numeric value for policy fields that must be finite and non-negative.
+ */
+const sanitizeNonNegativeFiniteNumber = (
+    value: number,
+    fallback: number
+): number => (Number.isFinite(value) && value >= 0 ? value : fallback);
+
+/**
  * Builder/factory entrypoint for one EPC instance.
  *
  * Merge order is defaults -> preset overrides -> explicit overrides so callers
@@ -375,6 +383,12 @@ export const buildExecutionPolicyContract = (
         ...EPC_DEFAULTS.evidence,
         ...presetOverrides?.evidence,
         ...input.overrides?.evidence,
+        maxEscalationRounds: sanitizeNonNegativeFiniteNumber(
+            input.overrides?.evidence?.maxEscalationRounds ??
+                presetOverrides?.evidence?.maxEscalationRounds ??
+                EPC_DEFAULTS.evidence.maxEscalationRounds,
+            EPC_DEFAULTS.evidence.maxEscalationRounds
+        ),
     };
 
     const mergedVerification: ExecutionVerificationPolicy = {
@@ -387,6 +401,36 @@ export const buildExecutionPolicyContract = (
         ...EPC_DEFAULTS.limits,
         ...presetOverrides?.limits,
         ...input.overrides?.limits,
+        maxWorkflowSteps: sanitizeNonNegativeFiniteNumber(
+            input.overrides?.limits?.maxWorkflowSteps ??
+                presetOverrides?.limits?.maxWorkflowSteps ??
+                EPC_DEFAULTS.limits.maxWorkflowSteps,
+            EPC_DEFAULTS.limits.maxWorkflowSteps
+        ),
+        maxToolCalls: sanitizeNonNegativeFiniteNumber(
+            input.overrides?.limits?.maxToolCalls ??
+                presetOverrides?.limits?.maxToolCalls ??
+                EPC_DEFAULTS.limits.maxToolCalls,
+            EPC_DEFAULTS.limits.maxToolCalls
+        ),
+        maxDeliberationCalls: sanitizeNonNegativeFiniteNumber(
+            input.overrides?.limits?.maxDeliberationCalls ??
+                presetOverrides?.limits?.maxDeliberationCalls ??
+                EPC_DEFAULTS.limits.maxDeliberationCalls,
+            EPC_DEFAULTS.limits.maxDeliberationCalls
+        ),
+        maxTokensTotal: sanitizeNonNegativeFiniteNumber(
+            input.overrides?.limits?.maxTokensTotal ??
+                presetOverrides?.limits?.maxTokensTotal ??
+                EPC_DEFAULTS.limits.maxTokensTotal,
+            EPC_DEFAULTS.limits.maxTokensTotal
+        ),
+        maxDurationMs: sanitizeNonNegativeFiniteNumber(
+            input.overrides?.limits?.maxDurationMs ??
+                presetOverrides?.limits?.maxDurationMs ??
+                EPC_DEFAULTS.limits.maxDurationMs,
+            EPC_DEFAULTS.limits.maxDurationMs
+        ),
     };
 
     const mergedFailOpen: ExecutionPolicyFailOpen = {
@@ -397,10 +441,16 @@ export const buildExecutionPolicyContract = (
         fallbackTemperature: 'deterministic',
     };
 
+    const resolvedCapabilityTags: string[] =
+        input.overrides?.routing?.capabilityTags ??
+        presetOverrides?.routing?.capabilityTags ??
+        EPC_DEFAULTS.routing.capabilityTags;
+
     const mergedRouting: ExecutionPolicyRoutingIntent = {
         ...EPC_DEFAULTS.routing,
         ...presetOverrides?.routing,
         ...input.overrides?.routing,
+        capabilityTags: [...resolvedCapabilityTags],
     };
 
     const mergedTrustGraph: ExecutionPolicyTrustGraphSeam = {
