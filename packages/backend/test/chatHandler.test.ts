@@ -63,29 +63,33 @@ const TEST_TIMESTAMP = new Date('2026-04-04T00:00:00.000Z').toISOString();
 
 const createExecutionContractTrustGraphRuntimeConfig = (
     overrides: Partial<RuntimeConfig['executionContractTrustGraph']> = {}
-): RuntimeConfig['executionContractTrustGraph'] => ({
-    enabled: true,
-    killSwitchExternalRetrieval: false,
-    policyId: 'chat_handler_runtime_policy',
-    timeoutMs: 100,
-    maxCalls: 1,
-    adapter: {
-        mode: 'none',
-        endpointUrl: null,
-        apiToken: null,
-        configRef: null,
-        stubMode: 'success',
-        ...(overrides.adapter ?? {}),
-    },
-    ownership: {
-        bindingMode: 'none',
-        validatorId: 'backend_tenancy_http_v1',
-        endpointUrl: null,
-        apiToken: null,
-        ...(overrides.ownership ?? {}),
-    },
-    ...overrides,
-});
+): RuntimeConfig['executionContractTrustGraph'] => {
+    const { adapter, ownership, ...rest } = overrides;
+
+    return {
+        enabled: true,
+        killSwitchExternalRetrieval: false,
+        policyId: 'chat_handler_runtime_policy',
+        timeoutMs: 100,
+        maxCalls: 1,
+        adapter: {
+            mode: 'none',
+            endpointUrl: null,
+            apiToken: null,
+            configRef: null,
+            stubMode: 'success',
+            ...(adapter ?? {}),
+        },
+        ownership: {
+            bindingMode: 'none',
+            validatorId: 'backend_tenancy_http_v1',
+            endpointUrl: null,
+            apiToken: null,
+            ...(ownership ?? {}),
+        },
+        ...rest,
+    };
+};
 
 const createMetadata = (): ResponseMetadata => ({
     responseId: 'chat_test_response',

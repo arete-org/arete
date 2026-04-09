@@ -426,6 +426,7 @@ export type TrustGraphProvenanceReasonCode =
     | 'adapter_timeout'
     | 'adapter_timeout_cancellation_requested'
     | 'adapter_error'
+    | 'adapter_processing_failed'
     | 'poisoned_evidence_dropped'
     | 'aggregate_signals_neutralized_after_filtering'
     | 'ownership_validation_explicitly_none_denied'

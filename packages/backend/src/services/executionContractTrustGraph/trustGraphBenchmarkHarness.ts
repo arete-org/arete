@@ -50,13 +50,26 @@ export type TrustGraphBenchmarkRow = {
     conformanceFailures: string[];
 };
 
+type BenchmarkIngestionInput = {
+    queryIntent: string;
+    scopeTuple: ScopeTuple;
+    budget: {
+        timeoutMs: number;
+        maxCalls: number;
+    };
+    ownershipValidationPolicy: TrustGraphOwnershipValidationPolicy;
+    evaluateLocalExecutionContractOutcome: () => LocalTerminalOutcome;
+};
+
 const countTraceCompleteness = (traceRefs: string[]): number =>
     traceRefs.length;
 
 const readCoverageValue = (value: number | undefined): number =>
     value === undefined ? 0 : value;
 
-const createSharedInput = (benchmarkCase: TrustGraphBenchmarkCase) => ({
+const createSharedInput = (
+    benchmarkCase: TrustGraphBenchmarkCase
+): BenchmarkIngestionInput => ({
     queryIntent: benchmarkCase.queryIntent,
     scopeTuple: benchmarkCase.scopeTuple,
     budget: {
@@ -77,7 +90,7 @@ const createSharedInput = (benchmarkCase: TrustGraphBenchmarkCase) => ({
 const runCaseForMode = async (
     benchmarkCase: TrustGraphBenchmarkCase,
     mode: TrustGraphBenchmarkMode,
-    input: ReturnType<typeof createSharedInput>,
+    input: BenchmarkIngestionInput,
     baselineTraceCompleteness: number,
     baselineCoverage: number
 ): Promise<TrustGraphBenchmarkRow> => {

@@ -361,6 +361,7 @@ const TrustGraphProvenanceReasonCodeSchema = z.enum([
     'adapter_timeout',
     'adapter_timeout_cancellation_requested',
     'adapter_error',
+    'adapter_processing_failed',
     'poisoned_evidence_dropped',
     'aggregate_signals_neutralized_after_filtering',
     'ownership_validation_explicitly_none_denied',
@@ -446,6 +447,7 @@ type _AssertTrustGraphMetadata =
             : false
         : false;
 const _assertTrustGraphMetadata: _AssertTrustGraphMetadata = true;
+void _assertTrustGraphMetadata;
 
 const responseMetadataShape = {
     responseId: z.string().min(1),
