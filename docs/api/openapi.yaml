@@ -89,6 +89,7 @@ paths:
                 - packages/web/src/utils/api.ts#chatQuestion
                 - packages/contracts/src/web/types.ts#PostChatRequest
                 - packages/contracts/src/web/types.ts#PostChatResponse
+                - packages/contracts/src/web/schemas.ts#ResponseMetadataSchema
             summary: Generate a chat response
             description: |
                 Submit a transport-neutral chat request and receive the backend-selected action.
@@ -2507,6 +2508,199 @@ components:
                             description: 1 to 5, where higher means broader options and perspectives.
                             minimum: 1
                             maximum: 5
+                    additionalProperties: false
+                trustGraph:
+                    type: object
+                    properties:
+                        adapterStatus:
+                            type: string
+                            enum: [off, scope_denied, success, timeout, error]
+                        scopeValidation:
+                            oneOf:
+                                - type: object
+                                  properties:
+                                      ok:
+                                          type: boolean
+                                          enum: [true]
+                                      normalizedScope:
+                                          type: object
+                                          properties:
+                                              userId:
+                                                  type: string
+                                                  minLength: 1
+                                              projectId:
+                                                  type: string
+                                                  minLength: 1
+                                              collectionId:
+                                                  type: string
+                                                  minLength: 1
+                                          required:
+                                              - userId
+                                          additionalProperties: false
+                                  required:
+                                      - ok
+                                      - normalizedScope
+                                  additionalProperties: false
+                                - type: object
+                                  properties:
+                                      ok:
+                                          type: boolean
+                                          enum: [false]
+                                      reasonCode:
+                                          type: string
+                                          enum: [external_scope_validation_failed]
+                                      details:
+                                          type: string
+                                          minLength: 1
+                                  required:
+                                      - ok
+                                      - reasonCode
+                                      - details
+                                  additionalProperties: false
+                        terminalAuthority:
+                            type: string
+                            enum: [backend_execution_contract]
+                        failOpenBehavior:
+                            type: string
+                            enum: [local_behavior]
+                        verificationRequired:
+                            type: boolean
+                            enum: [true]
+                        advisoryEvidenceItemCount:
+                            type: integer
+                            minimum: 0
+                        droppedEvidenceCount:
+                            type: integer
+                            minimum: 0
+                        droppedEvidenceIds:
+                            type: array
+                            items:
+                                type: string
+                                minLength: 1
+                        provenanceReasonCodes:
+                            type: array
+                            items:
+                                type: string
+                                enum:
+                                    [
+                                        external_scope_validation_failed,
+                                        adapter_scope_mismatch,
+                                        adapter_disabled,
+                                        adapter_timeout,
+                                        adapter_timeout_cancellation_requested,
+                                        adapter_error,
+                                        poisoned_evidence_dropped,
+                                        aggregate_signals_neutralized_after_filtering,
+                                        ownership_validation_explicitly_none_denied,
+                                        ownership_validation_explicitly_none_allowed_non_production,
+                                    ]
+                        sufficiencyView:
+                            type: object
+                            properties:
+                                coverageValue:
+                                    type: number
+                                    minimum: 0
+                                coverageEvaluationUnit:
+                                    type: string
+                                    enum: [claim, subquestion, source]
+                                conflictSignals:
+                                    type: array
+                                    items:
+                                        type: string
+                                        minLength: 1
+                            required:
+                                - conflictSignals
+                            additionalProperties: false
+                        evidenceView:
+                            type: object
+                            properties:
+                                sourceRefs:
+                                    type: array
+                                    items:
+                                        type: string
+                                        minLength: 1
+                                provenancePathRefs:
+                                    type: array
+                                    items:
+                                        type: string
+                                        minLength: 1
+                                traceRefs:
+                                    type: array
+                                    items:
+                                        type: string
+                                        minLength: 1
+                            required:
+                                - sourceRefs
+                                - provenancePathRefs
+                                - traceRefs
+                            additionalProperties: false
+                        provenanceJoin:
+                            type: object
+                            properties:
+                                externalEvidenceBundleId:
+                                    type: string
+                                    minLength: 1
+                                externalTraceRefs:
+                                    type: array
+                                    items:
+                                        type: string
+                                        minLength: 1
+                                adapterVersion:
+                                    type: string
+                                    minLength: 1
+                                consumedGovernedFieldPaths:
+                                    type: array
+                                    items:
+                                        type: string
+                                        minLength: 1
+                                consumedByConsumers:
+                                    type: array
+                                    items:
+                                        type: string
+                                        enum: [P_SUFF, P_EVID]
+                                droppedEvidenceIds:
+                                    type: array
+                                    items:
+                                        type: string
+                                        minLength: 1
+                                reasonCodes:
+                                    type: array
+                                    items:
+                                        type: string
+                                        enum:
+                                            [
+                                                external_scope_validation_failed,
+                                                adapter_scope_mismatch,
+                                                adapter_disabled,
+                                                adapter_timeout,
+                                                adapter_timeout_cancellation_requested,
+                                                adapter_error,
+                                                poisoned_evidence_dropped,
+                                                aggregate_signals_neutralized_after_filtering,
+                                                ownership_validation_explicitly_none_denied,
+                                                ownership_validation_explicitly_none_allowed_non_production,
+                                            ]
+                            required:
+                                - externalEvidenceBundleId
+                                - externalTraceRefs
+                                - adapterVersion
+                                - consumedGovernedFieldPaths
+                                - consumedByConsumers
+                                - droppedEvidenceIds
+                                - reasonCodes
+                            additionalProperties: false
+                    required:
+                        - adapterStatus
+                        - scopeValidation
+                        - terminalAuthority
+                        - failOpenBehavior
+                        - verificationRequired
+                        - advisoryEvidenceItemCount
+                        - droppedEvidenceCount
+                        - droppedEvidenceIds
+                        - provenanceReasonCodes
+                        - sufficiencyView
+                        - evidenceView
                     additionalProperties: false
             required:
                 - provenance
