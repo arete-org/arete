@@ -12,6 +12,10 @@ profiles:
           - text-fast
       capabilities:
           canUseSearch: true
+          toolCapabilities:
+              routing.generation.structured-cheap: true
+              routing.generation.balanced-general: true
+              routing.generation.expressive-generation: false
       maxInputTokens: 400000
       maxOutputTokens: 128000
       costClass: low
@@ -27,6 +31,10 @@ profiles:
           - text-medium
       capabilities:
           canUseSearch: true
+          toolCapabilities:
+              routing.generation.structured-cheap: true
+              routing.generation.balanced-general: true
+              routing.generation.expressive-generation: false
       maxInputTokens: 400000
       maxOutputTokens: 128000
       costClass: medium
@@ -42,6 +50,10 @@ profiles:
           - text-quality
       capabilities:
           canUseSearch: true
+          toolCapabilities:
+              routing.generation.structured-cheap: false
+              routing.generation.balanced-general: true
+              routing.generation.expressive-generation: true
       maxInputTokens: 1050000
       maxOutputTokens: 128000
       costClass: high
@@ -60,6 +72,10 @@ profiles:
           - text-quality
       capabilities:
           canUseSearch: false
+          toolCapabilities:
+              routing.generation.structured-cheap: false
+              routing.generation.balanced-general: true
+              routing.generation.expressive-generation: true
       maxInputTokens: 262144
       # maxOutputTokens:
       costClass: high
@@ -75,6 +91,10 @@ profiles:
           - text-medium
       capabilities:
           canUseSearch: false
+          toolCapabilities:
+              routing.generation.structured-cheap: true
+              routing.generation.balanced-general: true
+              routing.generation.expressive-generation: false
       maxInputTokens: 131072
       # maxOutputTokens:
       costClass: medium

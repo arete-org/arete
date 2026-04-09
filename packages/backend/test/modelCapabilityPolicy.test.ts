@@ -113,3 +113,38 @@ test('selectModelProfileForWorkflowStep chooses compatible candidate and reports
         'planner_requested_capability_profile_invalid'
     );
 });
+
+test('selectModelProfileForWorkflowStep honors explicit routing capability declarations before heuristics', () => {
+    const selection = selectModelProfileForWorkflowStep({
+        step: 'generation',
+        requestedCapabilityProfile: 'expressive-generation',
+        profiles: [
+            buildProfile({
+                id: 'openai-text-fast',
+                providerModel: 'gpt-5-mini',
+                tierBindings: ['text-fast'],
+                capabilities: {
+                    canUseSearch: true,
+                    toolCapabilities: {
+                        'routing.generation.expressive-generation': true,
+                    },
+                },
+                costClass: 'low',
+                latencyClass: 'low',
+            }),
+            buildProfile({
+                id: 'openai-text-quality',
+                providerModel: 'gpt-5.1',
+                tierBindings: ['text-quality'],
+                capabilities: { canUseSearch: true },
+                costClass: 'high',
+                latencyClass: 'high',
+            }),
+        ],
+        requiresSearch: false,
+    });
+
+    assert.equal(selection.selectedCapabilityProfile, 'expressive-generation');
+    assert.equal(selection.selectedProfile?.id, 'openai-text-fast');
+    assert.equal(selection.reasonCode, undefined);
+});
