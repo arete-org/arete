@@ -13,6 +13,7 @@ import type {
     ChatRepoSearchHint,
     ResponseTemperament,
 } from '@footnote/contracts';
+import type { ExecutionResponseMode } from './executionPolicyContract.js';
 export type { ChatRepoSearchHint } from '@footnote/contracts';
 
 /**
@@ -46,15 +47,27 @@ export type ChatGenerationWeatherRequest = {
 };
 
 /**
+ * Optional EPC-adjacent hint from planner to execution.
+ *
+ * This is intent vocabulary only. It does not execute EPC policy by itself.
+ */
+export type ChatGenerationResponseIntentHint = {
+    responseMode: ExecutionResponseMode;
+};
+
+/**
  * Chat-specific generation settings. Runtime-facing search and generation
  * knobs come from `@footnote/agent-runtime`, while TRACE temperament remains
- * backend-owned because it feeds Footnote metadata rather than runtime
- * execution directly.
+ * backend-owned because it feeds Footnote metadata rather than runtime execution directly.
+ *
+ * `reasoningEffort` and `verbosity` are generation controls, not EPC response
+ * intent. Use `responseIntentHint` when callers need explicit EPC vocabulary.
  */
 export type ChatGenerationPlan = {
     reasoningEffort: NonNullable<GenerationRequest['reasoningEffort']>;
     verbosity: NonNullable<GenerationRequest['verbosity']>;
     search?: ChatGenerationSearch;
     weather?: ChatGenerationWeatherRequest;
+    responseIntentHint?: ChatGenerationResponseIntentHint;
     temperament?: ResponseTemperament;
 };

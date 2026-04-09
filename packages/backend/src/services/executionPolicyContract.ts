@@ -171,6 +171,8 @@ export type ExecutionPolicyContract = {
  *
  * A preset is not EPC itself. It is a named override set applied by the
  * builder to make policy intent easy to read and review.
+ * Preset ids use kebab-case (`fast-direct`), while `response.responseMode`
+ * uses snake_case (`fast_direct`) for execution intent vocabulary.
  */
 export type ExecutionPolicyPresetId =
     | 'fast-direct'
