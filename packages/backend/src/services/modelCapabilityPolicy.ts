@@ -33,6 +33,10 @@ export type ModelCapabilityReasonCode =
     | 'planner_requested_capability_profile_no_floor_match';
 
 const capabilityProfileSet = new Set<CapabilityProfileId>(capabilityProfileIds);
+const capabilityProfileToolCapabilityKey = (
+    step: WorkflowModelStep,
+    capabilityProfile: CapabilityProfileId
+): string => `routing.${step}.${capabilityProfile}`;
 
 const STEP_ALLOWED_CAPABILITY_PROFILES: Readonly<
     Record<WorkflowModelStep, readonly CapabilityProfileId[]>
@@ -103,9 +107,20 @@ const normalizeCapabilityProfileId = (
 };
 
 const matchesCapabilityProfile = (
+    step: WorkflowModelStep,
     profile: ModelProfile,
     capabilityProfile: CapabilityProfileId
 ): boolean => {
+    // Catalog can explicitly declare routing fit for one capability profile.
+    // When absent, we preserve legacy heuristic matching for compatibility.
+    const explicitCapabilityValue =
+        profile.capabilities.toolCapabilities?.[
+            capabilityProfileToolCapabilityKey(step, capabilityProfile)
+        ];
+    if (explicitCapabilityValue !== undefined) {
+        return explicitCapabilityValue;
+    }
+
     if (capabilityProfile === 'structured-cheap') {
         const hasFastTier = profile.tierBindings.includes('text-fast');
         const acceptsCost =
@@ -218,7 +233,7 @@ export const selectModelProfileForWorkflowStep = (input: {
     }
 
     const compatibleCandidates = floorCandidates.filter((profile) =>
-        matchesCapabilityProfile(profile, selectedCapabilityProfile)
+        matchesCapabilityProfile(input.step, profile, selectedCapabilityProfile)
     );
     if (compatibleCandidates.length > 0) {
         return {
@@ -233,7 +248,7 @@ export const selectModelProfileForWorkflowStep = (input: {
     }
 
     const defaultCompatibleCandidates = floorCandidates.filter((profile) =>
-        matchesCapabilityProfile(profile, defaultCapabilityProfile)
+        matchesCapabilityProfile(input.step, profile, defaultCapabilityProfile)
     );
     if (defaultCompatibleCandidates.length > 0) {
         return {
