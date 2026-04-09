@@ -38,6 +38,7 @@ import {
 } from './llmCostRecorder.js';
 import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
+import type { ExecutionPolicyContract } from './executionPolicyContract.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import { resolveNoGenerationHandlingFromTermination } from './workflowProfileContract.js';
 import { resolveWorkflowRuntimeConfig } from './workflowProfileRegistry.js';
@@ -264,7 +265,11 @@ const extractOwnershipDenialReason = (
 };
 
 const logTrustGraphRuntimeOutcome = (
-    result: TrustGraphEvidenceIngestionResult
+    result: TrustGraphEvidenceIngestionResult,
+    executionPolicy?: Pick<
+        ExecutionPolicyContract,
+        'policyId' | 'policyVersion'
+    >
 ): void => {
     const adapterInvoked =
         result.adapterStatus === 'success' ||
@@ -300,6 +305,10 @@ const logTrustGraphRuntimeOutcome = (
         timeout,
         adapterError,
         provenanceReasonCodes: result.provenanceReasonCodes,
+        ...(executionPolicy !== undefined && {
+            executionPolicyId: executionPolicy.policyId,
+            executionPolicyVersion: executionPolicy.policyVersion,
+        }),
     };
 
     if (scopeDenied || timeout || adapterError || bypassDenied) {
@@ -363,6 +372,7 @@ export type RunChatMessagesInput = {
     executionContext?: ResponseMetadataRuntimeContext['executionContext'];
     toolRequest?: ToolInvocationRequest;
     executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
+    executionPolicyContract?: ExecutionPolicyContract;
 };
 
 export type FinalToolExecutionTelemetry = {
@@ -482,6 +492,7 @@ export const createChatService = ({
         executionContext,
         toolRequest,
         executionContractTrustGraphContext,
+        executionPolicyContract,
     }: RunChatMessagesInput): Promise<{
         message: string;
         metadata: ResponseMetadata;
@@ -684,7 +695,19 @@ export const createChatService = ({
             }
         }
         if (trustGraphResult !== undefined) {
-            logTrustGraphRuntimeOutcome(trustGraphResult);
+            logTrustGraphRuntimeOutcome(
+                trustGraphResult,
+                executionPolicyContract
+            );
+        }
+
+        if (executionPolicyContract !== undefined) {
+            logger.info({
+                event: 'chat.runtime.execution_policy',
+                policyId: executionPolicyContract.policyId,
+                policyVersion: executionPolicyContract.policyVersion,
+                responseMode: executionPolicyContract.response.responseMode,
+            });
         }
 
         const assistantMetadata = buildAssistantMetadata(
