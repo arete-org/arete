@@ -1287,11 +1287,12 @@ test('Execution Contract TrustGraph observability emits deny timeout and error e
         return undefined;
     }) as unknown as typeof logger.warn;
 
+    type ExecutionContractTrustGraphOptions = NonNullable<
+        CreateChatServiceOptions['executionContractTrustGraph']
+    >;
     const run = async (input: {
-        adapter: CreateChatServiceOptions['executionContractTrustGraph']['adapter'];
-        ownershipValidator: NonNullable<
-            CreateChatServiceOptions['executionContractTrustGraph']
-        >['scopeOwnershipValidator'];
+        adapter: ExecutionContractTrustGraphOptions['adapter'];
+        ownershipValidator: ExecutionContractTrustGraphOptions['scopeOwnershipValidator'];
     }) => {
         const server = await createTestServer({
             executionContractTrustGraph: {
