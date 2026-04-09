@@ -49,6 +49,7 @@ export type {
     SafetyDecision,
     EvaluatorOutcome,
     ExecutionEvent,
+    TrustGraphMetadata,
     ResponseMetadata,
 } from './types.js';
 export {

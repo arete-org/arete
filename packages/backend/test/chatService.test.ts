@@ -21,6 +21,11 @@ import {
     type ResponseMetadataRuntimeContext,
 } from '../src/services/openaiService.js';
 import { createChatService } from '../src/services/chatService.js';
+import {
+    createScopeOwnershipValidatorFromTenancyService,
+    StubTrustGraphEvidenceAdapter,
+    TrustGraphOwnershipValidationPolicy,
+} from '../src/services/executionContractTrustGraph/index.js';
 import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
 import type { RunBoundedReviewWorkflowResult } from '../src/services/workflowEngine.js';
 
@@ -55,6 +60,8 @@ const createRuntime = (
         };
     },
 });
+
+const TEST_TIMESTAMP = new Date('2026-04-04T00:00:00.000Z').toISOString();
 
 test('createChatService records backend token usage and estimated cost', async () => {
     const usageRecords: BackendLLMCostRecord[] = [];
@@ -1396,5 +1403,194 @@ test('runChatMessages emits schema-safe workflow metadata bounds under invalid i
     assert.equal(
         ResponseMetadataSchema.safeParse(capturedMetadata).success,
         true
+    );
+});
+
+test('runChatMessages integrates advisory TrustGraph evidence into metadata without exposing raw adapter payload', async () => {
+    const scopeOwnershipValidator =
+        createScopeOwnershipValidatorFromTenancyService({
+            validatorId: 'backend_tenancy_v1',
+            service: {
+                validateScopeOwnership: async () => ({
+                    owned: true,
+                    checkedAt: TEST_TIMESTAMP,
+                    evidence: ['ownership_lookup:allow'],
+                }),
+            },
+        });
+    let storedMetadata: ResponseMetadata | undefined;
+
+    const chatService = createChatService({
+        generationRuntime: createRuntime({
+            provenance: 'Inferred',
+            citations: [],
+            usage: {
+                promptTokens: 20,
+                completionTokens: 10,
+                totalTokens: 30,
+            },
+        }),
+        storeTrace: async (metadata) => {
+            storedMetadata = metadata;
+        },
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        executionContractTrustGraph: {
+            adapter: new StubTrustGraphEvidenceAdapter('success'),
+            budget: {
+                timeoutMs: 100,
+                maxCalls: 1,
+            },
+            ownershipValidationPolicy:
+                TrustGraphOwnershipValidationPolicy.required({
+                    policyId: 'chat_service_runtime_policy',
+                }),
+            scopeOwnershipValidator,
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'What changed?' }],
+        conversationSnapshot: 'What changed?',
+        executionContractTrustGraphContext: {
+            queryIntent: 'What changed?',
+            scopeTuple: {
+                userId: 'user_1',
+                projectId: 'project_1',
+            },
+        },
+    });
+
+    const trustGraph = (
+        response.metadata as ResponseMetadata & {
+            trustGraph?: Record<string, unknown>;
+        }
+    ).trustGraph as
+        | {
+              adapterStatus?: string;
+              terminalAuthority?: string;
+              failOpenBehavior?: string;
+              verificationRequired?: boolean;
+              provenanceJoin?: { externalEvidenceBundleId?: string };
+              sufficiencyView?: { coverageValue?: number };
+              adapterBundle?: unknown;
+          }
+        | undefined;
+    assert.ok(trustGraph);
+    assert.equal(trustGraph?.adapterStatus, 'success');
+    assert.equal(trustGraph?.terminalAuthority, 'backend_execution_contract');
+    assert.equal(trustGraph?.failOpenBehavior, 'local_behavior');
+    assert.equal(trustGraph?.verificationRequired, true);
+    assert.deepEqual(
+        (trustGraph as { scopeValidation?: unknown })?.scopeValidation,
+        {
+            ok: true,
+            normalizedScope: {
+                userId: '[redacted]',
+                projectId: '[redacted]',
+            },
+        }
+    );
+    assert.ok(
+        typeof trustGraph?.provenanceJoin?.externalEvidenceBundleId === 'string'
+    );
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            trustGraph?.provenanceJoin ?? {},
+            'scopeTuple'
+        ),
+        false
+    );
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(trustGraph ?? {}, 'adapterBundle'),
+        false
+    );
+    assert.ok((response.metadata.evidenceScore ?? 0) >= 1);
+    assert.equal(
+        (
+            storedMetadata as ResponseMetadata & {
+                trustGraph?: Record<string, unknown>;
+            }
+        )?.trustGraph !== undefined,
+        true
+    );
+});
+
+test('runChatMessages trustgraph ON/OFF does not change local execution authority surface', async () => {
+    const scopeOwnershipValidator =
+        createScopeOwnershipValidatorFromTenancyService({
+            validatorId: 'backend_tenancy_v1',
+            service: {
+                validateScopeOwnership: async () => ({
+                    owned: true,
+                    checkedAt: TEST_TIMESTAMP,
+                    evidence: ['ownership_lookup:allow'],
+                }),
+            },
+        });
+
+    const runWithTrustGraph = async (enabled: boolean) => {
+        const chatService = createChatService({
+            generationRuntime: createRuntime({
+                text: 'chat response',
+                provenance: 'Inferred',
+                citations: [],
+            }),
+            storeTrace: async () => undefined,
+            buildResponseMetadata,
+            defaultModel: 'gpt-5-mini',
+            recordUsage: () => undefined,
+            ...(enabled && {
+                executionContractTrustGraph: {
+                    adapter: new StubTrustGraphEvidenceAdapter('success'),
+                    budget: {
+                        timeoutMs: 100,
+                        maxCalls: 1,
+                    },
+                    ownershipValidationPolicy:
+                        TrustGraphOwnershipValidationPolicy.required({
+                            policyId: 'chat_service_runtime_policy',
+                        }),
+                    scopeOwnershipValidator,
+                },
+            }),
+        });
+
+        return await chatService.runChatMessages({
+            messages: [{ role: 'user', content: 'What changed?' }],
+            conversationSnapshot: 'What changed?',
+            ...(enabled && {
+                executionContractTrustGraphContext: {
+                    queryIntent: 'What changed?',
+                    scopeTuple: {
+                        userId: 'user_1',
+                        projectId: 'project_1',
+                    },
+                },
+            }),
+        });
+    };
+
+    const withoutTrustGraph = await runWithTrustGraph(false);
+    const withTrustGraph = await runWithTrustGraph(true);
+
+    assert.equal(withoutTrustGraph.message, withTrustGraph.message);
+    assert.equal(withoutTrustGraph.metadata.provenance, 'Inferred');
+    assert.equal(withTrustGraph.metadata.provenance, 'Inferred');
+    assert.equal(
+        (
+            withoutTrustGraph.metadata as ResponseMetadata & {
+                trustGraph?: unknown;
+            }
+        ).trustGraph,
+        undefined
+    );
+    assert.ok(
+        (
+            withTrustGraph.metadata as ResponseMetadata & {
+                trustGraph?: unknown;
+            }
+        ).trustGraph
     );
 });

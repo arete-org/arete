@@ -35,6 +35,7 @@ export type {
     TraceAxisScore,
     PartialResponseTemperament,
     ResponseTemperament,
+    TrustGraphMetadata,
     ResponseMetadata,
 } from './ethics-core/index.js';
 export { formatExecutionTimelineSummary } from './ethics-core/index.js';

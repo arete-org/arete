@@ -14,6 +14,7 @@ import type {
     AssistantResponseMetadata,
     ResponseMetadataRuntimeContext,
 } from '../services/openaiService.js';
+import type { CreateChatServiceOptions } from '../services/chatService.js';
 import { runtimeConfig } from '../config.js';
 import { createChatOrchestrator } from '../services/chatOrchestrator.js';
 import type { IncidentAlertRouter } from '../services/incidentAlerts.js';
@@ -50,6 +51,7 @@ type ChatHandlerDeps = {
     logRequest: LogRequest;
     buildResponseMetadata: BuildResponseMetadata;
     maxChatBodyBytes: number;
+    executionContractTrustGraph?: CreateChatServiceOptions['executionContractTrustGraph'];
 };
 
 // The handler keeps transport concerns here and pushes business logic into helpers/services.
@@ -143,6 +145,7 @@ const createChatHandler = ({
     logRequest,
     buildResponseMetadata,
     maxChatBodyBytes,
+    executionContractTrustGraph,
 }: ChatHandlerDeps) => {
     const chatOrchestrator = generationRuntime
         ? createChatOrchestrator({
@@ -152,6 +155,7 @@ const createChatHandler = ({
               storeTrace,
               buildResponseMetadata,
               defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+              executionContractTrustGraph,
           })
         : null;
 

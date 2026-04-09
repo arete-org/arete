@@ -98,6 +98,26 @@ export type RuntimeConfig = {
         maxIterations: number;
         maxDurationMs: number;
     };
+    executionContractTrustGraph: {
+        enabled: boolean;
+        killSwitchExternalRetrieval: boolean;
+        policyId: string;
+        timeoutMs: number;
+        maxCalls: number;
+        adapter: {
+            mode: 'none' | 'stub' | 'http';
+            endpointUrl: string | null;
+            apiToken: string | null;
+            configRef: string | null;
+            stubMode: 'success' | 'failure' | 'timeout' | 'poisoned';
+        };
+        ownership: {
+            bindingMode: 'none' | 'http';
+            validatorId: string;
+            endpointUrl: string | null;
+            apiToken: string | null;
+        };
+    };
     turnstile: {
         secretKey: string | null;
         siteKey: string | null;

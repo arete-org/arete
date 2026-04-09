@@ -95,6 +95,23 @@ Services:
     - bot: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`
     - bot (optional): `LOG_LEVEL`, `WEB_BASE_URL`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `BOT_PROFILE_ID`, `BOT_PROFILE_DISPLAY_NAME`, `BOT_PROFILE_PROMPT_OVERLAY_PATH`
 
+## Execution Contract TrustGraph Rollout Boundary
+
+- Backend `executionContractTrustGraph` runtime integration exists in this repo.
+- External TrustGraph service implementation does not exist in this repo.
+- This repo currently supports backend config hardening, runtime safety, and kill-switch rollback behavior.
+- Full local Docker and Fly rollout for TrustGraph requires a pinned external service contract (image/repo, endpoint path, auth token contract, health behavior).
+- Canonical rollback remains backend-side: set `EXECUTION_CONTRACT_TRUSTGRAPH_KILL_SWITCH=true`.
+
+### Next steps
+
+1. Pin external TrustGraph service image/repo.
+2. Pin evidence endpoint path and health/readiness contract.
+3. Pin auth token expectations and rotation approach.
+4. Add compose TrustGraph service only after the external contract is pinned.
+5. Add Fly TrustGraph app manifest only after the external contract is pinned.
+6. Validate local full-stack path and private Fly path with backend kill-switch rollback test.
+
 Template overlay paths:
 
 - `packages/prompts/src/profile-overlays/danny.md`

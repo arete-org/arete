@@ -62,6 +62,7 @@ import {
     executeSelectedTool,
     resolveToolSelection,
 } from './tools/toolRegistry.js';
+import type { ScopeTuple } from './executionContractTrustGraph/trustGraphEvidenceTypes.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import type { IncidentAlertRouter } from './incidentAlerts.js';
@@ -230,6 +231,46 @@ const buildCorrelationIds = (
     responseId,
 });
 
+const normalizeScopeValue = (value: string | undefined): string | undefined => {
+    if (typeof value !== 'string') {
+        return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const buildExecutionContractScopeTuple = (
+    request: PostChatRequest
+): ScopeTuple | undefined => {
+    const userId = normalizeScopeValue(request.surfaceContext?.userId);
+    if (userId === undefined) {
+        return undefined;
+    }
+
+    const channelProjectId = normalizeScopeValue(
+        request.surfaceContext?.channelId
+    );
+    const guildCollectionId = normalizeScopeValue(
+        request.surfaceContext?.guildId
+    );
+
+    if (channelProjectId !== undefined) {
+        return {
+            userId,
+            projectId: channelProjectId,
+        };
+    }
+    if (guildCollectionId !== undefined) {
+        return {
+            userId,
+            collectionId: guildCollectionId,
+        };
+    }
+
+    return { userId };
+};
+
 /**
  * The orchestrator keeps surface-specific policy in one place while reusing the
  * shared message-generation service for any branch that ends in text output.
@@ -240,6 +281,7 @@ export const createChatOrchestrator = ({
     buildResponseMetadata,
     defaultModel = runtimeConfig.modelProfiles.defaultProfileId,
     recordUsage,
+    executionContractTrustGraph,
     weatherForecastTool,
     alertRouter,
 }: CreateChatOrchestratorOptions) => {
@@ -288,6 +330,7 @@ export const createChatOrchestrator = ({
         defaultProvider: defaultResponseProfile.provider,
         defaultCapabilities: defaultResponseProfile.capabilities,
         recordUsage,
+        executionContractTrustGraph,
     });
     const chatPlanner = createChatPlanner({
         availableCapabilityProfiles: plannerCapabilityOptions,
@@ -960,6 +1003,8 @@ export const createChatOrchestrator = ({
                 safetyTierRank[executionPlan.safetyTier]
                 ? evaluatorSafetyTierHint
                 : executionPlan.safetyTier;
+        const executionContractScopeTuple =
+            buildExecutionContractScopeTuple(normalizedRequest);
 
         // Generation receives resolved provider/capabilities from the active
         // default model profile instead of relying on provider-name checks.
@@ -986,6 +1031,12 @@ export const createChatOrchestrator = ({
             capabilities: selectedResponseProfile.capabilities,
             generation: executionPlan.generation,
             toolRequest: toolRequestContext,
+            ...(executionContractScopeTuple !== undefined && {
+                executionContractTrustGraphContext: {
+                    queryIntent: normalizedRequest.latestUserInput,
+                    scopeTuple: executionContractScopeTuple,
+                },
+            }),
             executionContext: {
                 // Planner execution metadata is sourced from ChatPlannerResult
                 // so traces can distinguish successful planning from fallback.

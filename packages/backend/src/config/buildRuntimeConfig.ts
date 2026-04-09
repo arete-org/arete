@@ -11,6 +11,7 @@ import { buildLitestreamSection } from './sections/litestream.js';
 import { buildModelProfilesSection } from './sections/modelProfiles.js';
 import { buildOllamaSection } from './sections/ollama.js';
 import { buildOpenAISection } from './sections/openai.js';
+import { buildExecutionContractTrustGraphSection } from './sections/executionContractTrustGraph.js';
 import { readBotProfileConfig } from './profile.js';
 import { buildRateLimitsSection } from './sections/rateLimits.js';
 import { buildRuntimeSections } from './sections/runtime.js';
@@ -43,6 +44,10 @@ export const buildRuntimeConfig = (
     const voltagent = buildVoltAgentSection(env, warn);
     const web = buildWebSection(env, warn);
     const { reflect, trace, chatWorkflow } = buildServiceSections(env, warn);
+    const executionContractTrustGraph = buildExecutionContractTrustGraphSection(
+        env,
+        warn
+    );
     const turnstile = buildTurnstileSection(env, warn);
     const rateLimits = buildRateLimitsSection(env, warn);
     const webhook = buildWebhookSection(env, warn);
@@ -68,6 +73,7 @@ export const buildRuntimeConfig = (
         reflect,
         trace,
         chatWorkflow,
+        executionContractTrustGraph,
         turnstile,
         rateLimits,
         webhook,

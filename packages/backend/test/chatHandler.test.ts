@@ -17,8 +17,17 @@ import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import { createChatHandler } from '../src/handlers/chat.js';
 import { runtimeConfig } from '../src/config.js';
+import type { RuntimeConfig } from '../src/config/types.js';
 import { parseBooleanEnv } from '../src/config/parsers.js';
+import type { CreateChatServiceOptions } from '../src/services/chatService.js';
+import {
+    createScopeOwnershipValidatorFromTenancyService,
+    resolveExecutionContractTrustGraphRuntimeOptions,
+    StubTrustGraphEvidenceAdapter,
+    TrustGraphOwnershipValidationPolicy,
+} from '../src/services/executionContractTrustGraph/index.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
+import { logger } from '../src/utils/logger.js';
 
 const TEST_PLANNER_MAX_COMPLETION_TOKENS = 700;
 
@@ -42,11 +51,44 @@ type CreateTestServerOptions = {
     ipRateLimiter?: SimpleRateLimiter;
     sessionRateLimiter?: SimpleRateLimiter;
     serviceRateLimiter?: SimpleRateLimiter;
+    executionContractTrustGraph?: CreateChatServiceOptions['executionContractTrustGraph'];
     logRequest?: (
         req: http.IncomingMessage,
         res: http.ServerResponse,
         extra?: string
     ) => void;
+};
+
+const TEST_TIMESTAMP = new Date('2026-04-04T00:00:00.000Z').toISOString();
+
+const createExecutionContractTrustGraphRuntimeConfig = (
+    overrides: Partial<RuntimeConfig['executionContractTrustGraph']> = {}
+): RuntimeConfig['executionContractTrustGraph'] => {
+    const { adapter, ownership, ...rest } = overrides;
+
+    return {
+        enabled: true,
+        killSwitchExternalRetrieval: false,
+        policyId: 'chat_handler_runtime_policy',
+        timeoutMs: 100,
+        maxCalls: 1,
+        adapter: {
+            mode: 'none',
+            endpointUrl: null,
+            apiToken: null,
+            configRef: null,
+            stubMode: 'success',
+            ...(adapter ?? {}),
+        },
+        ownership: {
+            bindingMode: 'none',
+            validatorId: 'backend_tenancy_http_v1',
+            endpointUrl: null,
+            apiToken: null,
+            ...(ownership ?? {}),
+        },
+        ...rest,
+    };
 };
 
 const createMetadata = (): ResponseMetadata => ({
@@ -160,6 +202,7 @@ const createTestServer = (
             logRequest: options.logRequest ?? (() => undefined),
             buildResponseMetadata: () => createMetadata(),
             maxChatBodyBytes: 20000,
+            executionContractTrustGraph: options.executionContractTrustGraph,
         });
 
         const server = http.createServer((req, res) => {
@@ -670,5 +713,693 @@ test('chat rate limits public callers before calling Turnstile', async () => {
         env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
         env.TURNSTILE_SITE_KEY = previousTurnstileSite;
         env.TURNSTILE_ALLOWED_HOSTNAMES = previousAllowedHostnames;
+    }
+});
+
+test('chat runtime path includes advisory TrustGraph metadata when configured', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+
+    env.TRACE_API_TOKEN = 'trace-secret';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    const scopeOwnershipValidator =
+        createScopeOwnershipValidatorFromTenancyService({
+            validatorId: 'backend_tenancy_v1',
+            service: {
+                validateScopeOwnership: async () => ({
+                    owned: true,
+                    checkedAt: TEST_TIMESTAMP,
+                    evidence: ['ownership_lookup:allow'],
+                }),
+            },
+        });
+    const server = await createTestServer({
+        executionContractTrustGraph: {
+            adapter: new StubTrustGraphEvidenceAdapter('success'),
+            budget: {
+                timeoutMs: 100,
+                maxCalls: 1,
+            },
+            ownershipValidationPolicy:
+                TrustGraphOwnershipValidationPolicy.required({
+                    policyId: 'chat_handler_runtime_policy',
+                }),
+            scopeOwnershipValidator,
+        },
+    });
+
+    try {
+        const response = await fetch(`${server.url}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+            },
+            body: JSON.stringify(
+                createChatRequest({
+                    surfaceContext: {
+                        userId: 'user_1',
+                        channelId: 'project_1',
+                    },
+                })
+            ),
+        });
+
+        assert.equal(response.status, 200);
+        const payload = (await response.json()) as {
+            action: string;
+            message: string;
+            metadata: ResponseMetadata & {
+                trustGraph?: {
+                    adapterStatus?: string;
+                    terminalAuthority?: string;
+                    failOpenBehavior?: string;
+                    verificationRequired?: boolean;
+                    scopeValidation?: {
+                        ok?: boolean;
+                        normalizedScope?: {
+                            userId?: string;
+                            projectId?: string;
+                        };
+                    };
+                    adapterBundle?: unknown;
+                    provenanceJoin?: { externalEvidenceBundleId?: string };
+                };
+            };
+        };
+        assert.equal(payload.action, 'message');
+        assert.equal(payload.message, 'service response');
+        assert.equal(payload.metadata.trustGraph?.adapterStatus, 'success');
+        assert.equal(
+            payload.metadata.trustGraph?.terminalAuthority,
+            'backend_execution_contract'
+        );
+        assert.equal(
+            payload.metadata.trustGraph?.failOpenBehavior,
+            'local_behavior'
+        );
+        assert.equal(payload.metadata.trustGraph?.verificationRequired, true);
+        assert.deepEqual(payload.metadata.trustGraph?.scopeValidation, {
+            ok: true,
+            normalizedScope: {
+                userId: '[redacted]',
+                projectId: '[redacted]',
+            },
+        });
+        assert.equal(
+            Object.prototype.hasOwnProperty.call(
+                payload.metadata.trustGraph ?? {},
+                'adapterBundle'
+            ),
+            false
+        );
+        assert.ok(
+            typeof payload.metadata.trustGraph?.provenanceJoin
+                ?.externalEvidenceBundleId === 'string'
+        );
+        assert.equal(
+            Object.prototype.hasOwnProperty.call(
+                payload.metadata.trustGraph?.provenanceJoin ?? {},
+                'scopeTuple'
+            ),
+            false
+        );
+    } finally {
+        await server.close();
+        env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
+test('chat TrustGraph ON/OFF keeps action authority stable in runtime path', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+
+    env.TRACE_API_TOKEN = 'trace-secret';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    const scopeOwnershipValidator =
+        createScopeOwnershipValidatorFromTenancyService({
+            validatorId: 'backend_tenancy_v1',
+            service: {
+                validateScopeOwnership: async () => ({
+                    owned: true,
+                    checkedAt: TEST_TIMESTAMP,
+                    evidence: ['ownership_lookup:allow'],
+                }),
+            },
+        });
+
+    const runRequest = async (trustGraphEnabled: boolean) => {
+        const server = await createTestServer({
+            ...(trustGraphEnabled && {
+                executionContractTrustGraph: {
+                    adapter: new StubTrustGraphEvidenceAdapter('success'),
+                    budget: {
+                        timeoutMs: 100,
+                        maxCalls: 1,
+                    },
+                    ownershipValidationPolicy:
+                        TrustGraphOwnershipValidationPolicy.required({
+                            policyId: 'chat_handler_runtime_policy',
+                        }),
+                    scopeOwnershipValidator,
+                },
+            }),
+        });
+
+        try {
+            const response = await fetch(`${server.url}/api/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Trace-Token': 'trace-secret',
+                },
+                body: JSON.stringify(
+                    createChatRequest({
+                        surfaceContext: {
+                            userId: 'user_1',
+                            channelId: 'project_1',
+                        },
+                    })
+                ),
+            });
+
+            assert.equal(response.status, 200);
+            return (await response.json()) as {
+                action: string;
+                message: string;
+                metadata: ResponseMetadata & {
+                    trustGraph?: unknown;
+                };
+            };
+        } finally {
+            await server.close();
+        }
+    };
+
+    try {
+        const withoutTrustGraph = await runRequest(false);
+        const withTrustGraph = await runRequest(true);
+
+        assert.equal(withoutTrustGraph.action, 'message');
+        assert.equal(withTrustGraph.action, 'message');
+        assert.equal(withoutTrustGraph.message, withTrustGraph.message);
+        assert.equal(withoutTrustGraph.metadata.provenance, 'Inferred');
+        assert.equal(withTrustGraph.metadata.provenance, 'Inferred');
+        assert.equal(withoutTrustGraph.metadata.trustGraph, undefined);
+        assert.ok(withTrustGraph.metadata.trustGraph);
+    } finally {
+        env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
+test('chat TrustGraph ownership deny fails closed and skips adapter invocation', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+
+    env.TRACE_API_TOKEN = 'trace-secret';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    let adapterInvoked = false;
+    const server = await createTestServer({
+        executionContractTrustGraph: {
+            adapter: {
+                async getEvidenceBundle() {
+                    adapterInvoked = true;
+                    throw new Error(
+                        'adapter should not execute when ownership denies'
+                    );
+                },
+            },
+            budget: {
+                timeoutMs: 100,
+                maxCalls: 1,
+            },
+            ownershipValidationPolicy:
+                TrustGraphOwnershipValidationPolicy.required({
+                    policyId: 'chat_handler_runtime_policy',
+                }),
+            scopeOwnershipValidator:
+                createScopeOwnershipValidatorFromTenancyService({
+                    validatorId: 'backend_tenancy_v1',
+                    service: {
+                        validateScopeOwnership: async () => ({
+                            owned: false,
+                            checkedAt: TEST_TIMESTAMP,
+                            evidence: ['ownership_lookup:deny'],
+                            denialReason: 'tenant_mismatch',
+                            details: 'scope is outside tenant boundary',
+                        }),
+                    },
+                }),
+        },
+    });
+
+    try {
+        const response = await fetch(`${server.url}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+            },
+            body: JSON.stringify(
+                createChatRequest({
+                    surfaceContext: {
+                        userId: 'user_1',
+                        channelId: 'project_1',
+                    },
+                })
+            ),
+        });
+
+        assert.equal(response.status, 200);
+        const payload = (await response.json()) as {
+            action: string;
+            metadata: ResponseMetadata & {
+                trustGraph?: {
+                    adapterStatus?: string;
+                    scopeValidation?: {
+                        ok?: boolean;
+                        details?: string;
+                    };
+                };
+            };
+        };
+        assert.equal(payload.action, 'message');
+        assert.equal(
+            payload.metadata.trustGraph?.adapterStatus,
+            'scope_denied'
+        );
+        assert.equal(payload.metadata.trustGraph?.scopeValidation?.ok, false);
+        assert.match(
+            payload.metadata.trustGraph?.scopeValidation?.details ?? '',
+            /tenant_mismatch/i
+        );
+        assert.equal(adapterInvoked, false);
+    } finally {
+        await server.close();
+        env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
+test('chat TrustGraph adapter timeout/error still returns local response', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+
+    env.TRACE_API_TOKEN = 'trace-secret';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    const scopeOwnershipValidator =
+        createScopeOwnershipValidatorFromTenancyService({
+            validatorId: 'backend_tenancy_v1',
+            service: {
+                validateScopeOwnership: async () => ({
+                    owned: true,
+                    checkedAt: TEST_TIMESTAMP,
+                    evidence: ['ownership_lookup:allow'],
+                }),
+            },
+        });
+
+    const runCase = async (mode: 'timeout' | 'failure') => {
+        const server = await createTestServer({
+            executionContractTrustGraph: {
+                adapter: new StubTrustGraphEvidenceAdapter(mode),
+                budget: {
+                    timeoutMs: 50,
+                    maxCalls: 1,
+                },
+                ownershipValidationPolicy:
+                    TrustGraphOwnershipValidationPolicy.required({
+                        policyId: 'chat_handler_runtime_policy',
+                    }),
+                scopeOwnershipValidator,
+            },
+        });
+
+        try {
+            const response = await fetch(`${server.url}/api/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Trace-Token': 'trace-secret',
+                },
+                body: JSON.stringify(
+                    createChatRequest({
+                        surfaceContext: {
+                            userId: 'user_1',
+                            channelId: 'project_1',
+                        },
+                    })
+                ),
+            });
+
+            assert.equal(response.status, 200);
+            return (await response.json()) as {
+                action: string;
+                message: string;
+                metadata: ResponseMetadata & {
+                    trustGraph?: { adapterStatus?: string };
+                };
+            };
+        } finally {
+            await server.close();
+        }
+    };
+
+    try {
+        const timeoutPayload = await runCase('timeout');
+        assert.equal(timeoutPayload.action, 'message');
+        assert.equal(timeoutPayload.message, 'service response');
+        assert.equal(
+            timeoutPayload.metadata.trustGraph?.adapterStatus,
+            'timeout'
+        );
+
+        const errorPayload = await runCase('failure');
+        assert.equal(errorPayload.action, 'message');
+        assert.equal(errorPayload.message, 'service response');
+        assert.equal(errorPayload.metadata.trustGraph?.adapterStatus, 'error');
+    } finally {
+        env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
+test('Execution Contract TrustGraph config disabled and kill switch both remove advisory path', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+
+    env.TRACE_API_TOKEN = 'trace-secret';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    const runCase = async (
+        config: RuntimeConfig['executionContractTrustGraph']
+    ) => {
+        const resolved =
+            resolveExecutionContractTrustGraphRuntimeOptions(config);
+        const server = await createTestServer({
+            executionContractTrustGraph: resolved,
+        });
+
+        try {
+            const response = await fetch(`${server.url}/api/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Trace-Token': 'trace-secret',
+                },
+                body: JSON.stringify(
+                    createChatRequest({
+                        surfaceContext: {
+                            userId: 'user_1',
+                            channelId: 'project_1',
+                        },
+                    })
+                ),
+            });
+            assert.equal(response.status, 200);
+            return (await response.json()) as {
+                metadata: ResponseMetadata & {
+                    trustGraph?: unknown;
+                };
+            };
+        } finally {
+            await server.close();
+        }
+    };
+
+    try {
+        const disabledPayload = await runCase(
+            createExecutionContractTrustGraphRuntimeConfig({
+                enabled: false,
+                adapter: {
+                    mode: 'stub',
+                    endpointUrl: null,
+                    apiToken: null,
+                    configRef: null,
+                    stubMode: 'success',
+                },
+            })
+        );
+        assert.equal(disabledPayload.metadata.trustGraph, undefined);
+
+        const killSwitchPayload = await runCase(
+            createExecutionContractTrustGraphRuntimeConfig({
+                enabled: true,
+                killSwitchExternalRetrieval: true,
+                adapter: {
+                    mode: 'stub',
+                    endpointUrl: null,
+                    apiToken: null,
+                    configRef: null,
+                    stubMode: 'success',
+                },
+            })
+        );
+        assert.equal(killSwitchPayload.metadata.trustGraph, undefined);
+    } finally {
+        env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
+test('Execution Contract TrustGraph runtime wiring threads ownership validation timeout budget', () => {
+    const config = createExecutionContractTrustGraphRuntimeConfig({
+        enabled: true,
+        timeoutMs: 321,
+        adapter: {
+            mode: 'none',
+            endpointUrl: null,
+            apiToken: null,
+            configRef: null,
+            stubMode: 'success',
+        },
+        ownership: {
+            bindingMode: 'none',
+            validatorId: 'backend_tenancy_http_v1',
+            endpointUrl: null,
+            apiToken: null,
+        },
+    });
+
+    const resolved = resolveExecutionContractTrustGraphRuntimeOptions(config);
+    assert.equal(
+        resolved?.scopeValidationPolicy?.ownershipValidationTimeoutMs,
+        321
+    );
+});
+
+test('Execution Contract TrustGraph runtime wiring fails fast when http adapter endpoint is missing', () => {
+    const config = createExecutionContractTrustGraphRuntimeConfig({
+        enabled: true,
+        adapter: {
+            mode: 'http',
+            endpointUrl: null,
+            apiToken: 'adapter-secret',
+            configRef: null,
+            stubMode: 'success',
+        },
+    });
+
+    assert.throws(
+        () => resolveExecutionContractTrustGraphRuntimeOptions(config),
+        /execution_contract_trustgraph_http_adapter_missing_endpoint/
+    );
+});
+
+test('Execution Contract TrustGraph runtime wiring fails fast when http adapter token is missing', () => {
+    const config = createExecutionContractTrustGraphRuntimeConfig({
+        enabled: true,
+        adapter: {
+            mode: 'http',
+            endpointUrl: 'http://trustgraph.internal/evidence',
+            apiToken: null,
+            configRef: null,
+            stubMode: 'success',
+        },
+    });
+
+    assert.throws(
+        () => resolveExecutionContractTrustGraphRuntimeOptions(config),
+        /execution_contract_trustgraph_http_adapter_missing_api_token/
+    );
+});
+
+test('Execution Contract TrustGraph runtime wiring does not fail startup when feature is disabled', () => {
+    const config = createExecutionContractTrustGraphRuntimeConfig({
+        enabled: false,
+        adapter: {
+            mode: 'http',
+            endpointUrl: null,
+            apiToken: null,
+            configRef: null,
+            stubMode: 'success',
+        },
+    });
+
+    const resolved = resolveExecutionContractTrustGraphRuntimeOptions(config);
+    assert.equal(resolved, undefined);
+});
+
+test('Execution Contract TrustGraph observability emits deny timeout and error events', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+    const originalWarn = logger.warn;
+    const observedEvents: Array<Record<string, unknown>> = [];
+
+    env.TRACE_API_TOKEN = 'trace-secret';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    logger.warn = ((message: unknown) => {
+        if (typeof message === 'object' && message !== null) {
+            const payload = message as Record<string, unknown>;
+            if (
+                payload.event ===
+                'chat.execution_contract_trustgraph.runtime_outcome'
+            ) {
+                observedEvents.push(payload);
+            }
+        }
+        return undefined;
+    }) as unknown as typeof logger.warn;
+
+    type ExecutionContractTrustGraphOptions = NonNullable<
+        CreateChatServiceOptions['executionContractTrustGraph']
+    >;
+    const run = async (input: {
+        adapter: ExecutionContractTrustGraphOptions['adapter'];
+        ownershipValidator: ExecutionContractTrustGraphOptions['scopeOwnershipValidator'];
+    }) => {
+        const server = await createTestServer({
+            executionContractTrustGraph: {
+                adapter: input.adapter,
+                budget: {
+                    timeoutMs: 50,
+                    maxCalls: 1,
+                },
+                ownershipValidationPolicy:
+                    TrustGraphOwnershipValidationPolicy.required({
+                        policyId: 'chat_handler_runtime_policy',
+                    }),
+                scopeOwnershipValidator: input.ownershipValidator,
+            },
+        });
+
+        try {
+            const response = await fetch(`${server.url}/api/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Trace-Token': 'trace-secret',
+                },
+                body: JSON.stringify(
+                    createChatRequest({
+                        surfaceContext: {
+                            userId: 'user_1',
+                            channelId: 'project_1',
+                        },
+                    })
+                ),
+            });
+            assert.equal(response.status, 200);
+        } finally {
+            await server.close();
+        }
+    };
+
+    try {
+        await run({
+            adapter: new StubTrustGraphEvidenceAdapter('success'),
+            ownershipValidator: createScopeOwnershipValidatorFromTenancyService(
+                {
+                    validatorId: 'backend_tenancy_v1',
+                    service: {
+                        validateScopeOwnership: async () => ({
+                            owned: false,
+                            checkedAt: TEST_TIMESTAMP,
+                            evidence: ['ownership_lookup:deny'],
+                            denialReason: 'tenant_mismatch',
+                            details: 'scope is outside tenant boundary',
+                        }),
+                    },
+                }
+            ),
+        });
+        await run({
+            adapter: new StubTrustGraphEvidenceAdapter('timeout'),
+            ownershipValidator: createScopeOwnershipValidatorFromTenancyService(
+                {
+                    validatorId: 'backend_tenancy_v1',
+                    service: {
+                        validateScopeOwnership: async () => ({
+                            owned: true,
+                            checkedAt: TEST_TIMESTAMP,
+                            evidence: ['ownership_lookup:allow'],
+                        }),
+                    },
+                }
+            ),
+        });
+        await run({
+            adapter: new StubTrustGraphEvidenceAdapter('failure'),
+            ownershipValidator: createScopeOwnershipValidatorFromTenancyService(
+                {
+                    validatorId: 'backend_tenancy_v1',
+                    service: {
+                        validateScopeOwnership: async () => ({
+                            owned: true,
+                            checkedAt: TEST_TIMESTAMP,
+                            evidence: ['ownership_lookup:allow'],
+                        }),
+                    },
+                }
+            ),
+        });
+
+        assert.ok(
+            observedEvents.some((event) => event.scopeDenied === true),
+            'expected scope-denied observability event'
+        );
+        assert.ok(
+            observedEvents.some((event) => event.timeout === true),
+            'expected timeout observability event'
+        );
+        assert.ok(
+            observedEvents.some((event) => event.adapterError === true),
+            'expected adapter-error observability event'
+        );
+    } finally {
+        logger.warn = originalWarn;
+        env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
     }
 });
