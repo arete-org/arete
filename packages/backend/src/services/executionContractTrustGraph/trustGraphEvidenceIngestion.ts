@@ -660,7 +660,7 @@ export const runEvidenceIngestion = async (
             terminalAuthority: 'backend_execution_contract',
             failOpenBehavior: 'local_behavior',
             verificationRequired: true,
-            advisoryEvidenceItemCount: predicateViews.P_EVID.sourceRefs.length,
+            advisoryEvidenceItemCount: sanitized.bundle.items.length,
             droppedEvidenceCount,
             droppedEvidenceIds,
             provenanceReasonCodes,
