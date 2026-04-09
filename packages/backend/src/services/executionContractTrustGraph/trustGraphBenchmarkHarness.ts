@@ -56,36 +56,31 @@ const countTraceCompleteness = (traceRefs: string[]): number =>
 const readCoverageValue = (value: number | undefined): number =>
     value === undefined ? 0 : value;
 
+const createSharedInput = (benchmarkCase: TrustGraphBenchmarkCase) => ({
+    queryIntent: benchmarkCase.queryIntent,
+    scopeTuple: benchmarkCase.scopeTuple,
+    budget: {
+        timeoutMs: 30,
+        maxCalls: 1,
+    },
+    ownershipValidationPolicy:
+        TrustGraphOwnershipValidationPolicy.explicitlyNoneForNonProduction({
+            policyId: 'benchmark_harness_policy',
+            justificationCode: 'benchmark_harness',
+            bypassCapability:
+                TrustGraphOwnershipBypassCapability.forBenchmarkHarness(),
+        }),
+    evaluateLocalExecutionContractOutcome: () =>
+        benchmarkCase.expectedLocalTerminalOutcome,
+});
+
 const runCaseForMode = async (
     benchmarkCase: TrustGraphBenchmarkCase,
-    mode: TrustGraphBenchmarkMode
+    mode: TrustGraphBenchmarkMode,
+    input: ReturnType<typeof createSharedInput>,
+    baselineTraceCompleteness: number,
+    baselineCoverage: number
 ): Promise<TrustGraphBenchmarkRow> => {
-    const sharedInput = {
-        queryIntent: benchmarkCase.queryIntent,
-        scopeTuple: benchmarkCase.scopeTuple,
-        budget: {
-            timeoutMs: 30,
-            maxCalls: 1,
-        },
-        ownershipValidationPolicy:
-            TrustGraphOwnershipValidationPolicy.explicitlyNoneForNonProduction({
-                policyId: 'benchmark_harness_policy',
-                justificationCode: 'benchmark_harness',
-                bypassCapability:
-                    TrustGraphOwnershipBypassCapability.forBenchmarkHarness(),
-            }),
-        evaluateLocalExecutionContractOutcome: () =>
-            benchmarkCase.expectedLocalTerminalOutcome,
-    };
-
-    const baselineResult = await runEvidenceIngestion(sharedInput);
-    const baselineTraceCompleteness = countTraceCompleteness(
-        baselineResult.predicateViews.P_EVID.traceRefs
-    );
-    const baselineCoverage = readCoverageValue(
-        baselineResult.predicateViews.P_SUFF.coverageValue
-    );
-
     const adapter =
         mode === 'ON'
             ? new StubTrustGraphEvidenceAdapter('success')
@@ -96,7 +91,7 @@ const runCaseForMode = async (
               : undefined;
 
     const runResult = await runEvidenceIngestion({
-        ...sharedInput,
+        ...input,
         adapter,
     });
 
@@ -142,8 +137,37 @@ const runCaseForMode = async (
 
 export const runBenchmarkTriplet = async (
     benchmarkCase: TrustGraphBenchmarkCase
-): Promise<TrustGraphBenchmarkRow[]> => [
-    await runCaseForMode(benchmarkCase, 'OFF'),
-    await runCaseForMode(benchmarkCase, 'ON'),
-    await runCaseForMode(benchmarkCase, 'ON_FAIL'),
-];
+): Promise<TrustGraphBenchmarkRow[]> => {
+    const input = createSharedInput(benchmarkCase);
+    const baselineResult = await runEvidenceIngestion(input);
+    const baselineTraceCompleteness = countTraceCompleteness(
+        baselineResult.predicateViews.P_EVID.traceRefs
+    );
+    const baselineCoverage = readCoverageValue(
+        baselineResult.predicateViews.P_SUFF.coverageValue
+    );
+
+    return [
+        await runCaseForMode(
+            benchmarkCase,
+            'OFF',
+            input,
+            baselineTraceCompleteness,
+            baselineCoverage
+        ),
+        await runCaseForMode(
+            benchmarkCase,
+            'ON',
+            input,
+            baselineTraceCompleteness,
+            baselineCoverage
+        ),
+        await runCaseForMode(
+            benchmarkCase,
+            'ON_FAIL',
+            input,
+            baselineTraceCompleteness,
+            baselineCoverage
+        ),
+    ];
+};
