@@ -9,9 +9,19 @@
 import type { PostChatRequest } from '@footnote/contracts/web';
 import type { ChatPlan } from './chatPlanner.js';
 
+/**
+ * Surface-level coercion metadata.
+ *
+ * This is intentionally separate from EPC policy ownership. It records local
+ * response-shaping decisions after planning.
+ */
+export type ChatSurfacePolicyCoercion = {
+    coercedFrom: ChatPlan['action'];
+};
+
 export type ChatSurfacePolicyResult = {
     plan: ChatPlan;
-    surfacePolicy?: { coercedFrom: ChatPlan['action'] };
+    surfacePolicy?: ChatSurfacePolicyCoercion;
 };
 
 type ChatSurfacePolicyLogger = {
@@ -20,6 +30,9 @@ type ChatSurfacePolicyLogger = {
 
 /**
  * Enforces surface policy constraints after planning.
+ *
+ * This layer only applies transport/surface shaping. It does not evaluate EPC
+ * evidence or verification policy.
  * Web currently accepts message responses only.
  */
 export const coercePlanForSurface = (
