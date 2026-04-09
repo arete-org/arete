@@ -10,15 +10,9 @@ import type {
     PostChatResponse,
     ChatConversationMessage,
 } from '@footnote/contracts/web';
-import type {
-    ModelCostClass,
-    ModelLatencyClass,
-    ModelProfile,
-    CorrelationEnvelope,
-} from '@footnote/contracts';
+import type { CorrelationEnvelope } from '@footnote/contracts';
 import type {
     ToolExecutionContext,
-    ToolInvocationReasonCode,
     ToolInvocationRequest,
     ExecutionReasonCode,
     ExecutionStatus,
@@ -56,6 +50,10 @@ import {
     type PlannerFallbackReason,
     type PlannerSelectionSource,
 } from './plannerFallbackTelemetryRollup.js';
+import {
+    resolveSearchFallbackPolicy,
+    searchFallbackRankingPolicy,
+} from './searchFallbackPolicy.js';
 import type { WeatherForecastTool } from './weatherGovForecastTool.js';
 import { applySingleToolPolicy } from './tools/toolPolicy.js';
 import {
@@ -83,111 +81,6 @@ type PlannerGenerationForPrompt = Omit<ChatGenerationPlan, 'weather'> & {
 
 type PlannerPayloadChatPlan = Omit<ChatPlan, 'generation'> & {
     generation: PlannerGenerationForPrompt;
-};
-
-const searchFallbackPolicyBySelectionSource: Record<
-    PlannerSelectionSource,
-    {
-        allowReroute: boolean;
-        rerouteReasonCode: ToolInvocationReasonCode;
-        skipReasonCode: ToolInvocationReasonCode;
-    }
-> = {
-    planner: {
-        allowReroute: true,
-        rerouteReasonCode: 'search_rerouted_to_fallback_profile',
-        skipReasonCode: 'search_reroute_no_tool_capable_fallback_available',
-    },
-    request: {
-        allowReroute: false,
-        rerouteReasonCode: 'search_rerouted_to_fallback_profile',
-        skipReasonCode: 'search_reroute_not_permitted_by_selection_source',
-    },
-    default: {
-        allowReroute: false,
-        rerouteReasonCode: 'search_rerouted_to_fallback_profile',
-        skipReasonCode: 'search_reroute_not_permitted_by_selection_source',
-    },
-};
-
-const searchFallbackRankingPolicy = {
-    steps: [
-        'prefer_same_provider',
-        'prefer_shared_tier_binding',
-        'prefer_lower_latency_class',
-        'prefer_lower_cost_class',
-        'tie_break_by_profile_id_ascending',
-    ] as const,
-};
-
-const latencyClassRank: Record<ModelLatencyClass, number> = {
-    low: 0,
-    medium: 1,
-    high: 2,
-};
-
-const costClassRank: Record<ModelCostClass, number> = {
-    low: 0,
-    medium: 1,
-    high: 2,
-};
-
-const rankLatencyClass = (latencyClass: ModelLatencyClass | undefined) =>
-    latencyClass === undefined ? 3 : latencyClassRank[latencyClass];
-
-const rankCostClass = (costClass: ModelCostClass | undefined) =>
-    costClass === undefined ? 3 : costClassRank[costClass];
-
-const compareNumbers = (left: number, right: number) => left - right;
-
-const rankSearchFallbackProfiles = (
-    selectedProfile: ModelProfile,
-    candidates: ModelProfile[]
-): ModelProfile[] => {
-    const selectedTierBindings = new Set(selectedProfile.tierBindings);
-    return [...candidates].sort((left, right) => {
-        const providerRank = compareNumbers(
-            left.provider === selectedProfile.provider ? 0 : 1,
-            right.provider === selectedProfile.provider ? 0 : 1
-        );
-        if (providerRank !== 0) {
-            return providerRank;
-        }
-
-        const tierBindingRank = compareNumbers(
-            left.tierBindings.some((binding) =>
-                selectedTierBindings.has(binding)
-            )
-                ? 0
-                : 1,
-            right.tierBindings.some((binding) =>
-                selectedTierBindings.has(binding)
-            )
-                ? 0
-                : 1
-        );
-        if (tierBindingRank !== 0) {
-            return tierBindingRank;
-        }
-
-        const latencyRank = compareNumbers(
-            rankLatencyClass(left.latencyClass),
-            rankLatencyClass(right.latencyClass)
-        );
-        if (latencyRank !== 0) {
-            return latencyRank;
-        }
-
-        const costRank = compareNumbers(
-            rankCostClass(left.costClass),
-            rankCostClass(right.costClass)
-        );
-        if (costRank !== 0) {
-            return costRank;
-        }
-
-        return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
-    });
 };
 
 const RESPONSE_PROFILE_FALLBACK_POLICY = 'response_profile_fallback_v1';
@@ -736,22 +629,17 @@ export const createChatOrchestrator = ({
                     ? 'planner'
                     : profileSelectionSource;
             fallbackRollupSelectionSource = searchPolicySelectionSource;
-            const fallbackPolicy =
-                searchFallbackPolicyBySelectionSource[
-                    searchPolicySelectionSource
-                ];
-            const rankedFallbackCandidates = rankSearchFallbackProfiles(
-                selectedResponseProfile,
-                searchCapableProfiles.filter(
-                    (profile) => profile.id !== selectedResponseProfile.id
-                )
-            );
-            const fallbackProfile = fallbackPolicy.allowReroute
-                ? rankedFallbackCandidates[0]
-                : undefined;
-            const searchFallbackOrder = rankedFallbackCandidates.map(
-                (profile) => profile.id
-            );
+            const searchFallbackDecision = resolveSearchFallbackPolicy({
+                selectionSource: searchPolicySelectionSource,
+                selectedProfile: selectedResponseProfile,
+                searchCapableProfiles,
+            });
+            const {
+                fallbackPolicy,
+                rankedFallbackCandidates,
+                fallbackProfile,
+                fallbackOrder: searchFallbackOrder,
+            } = searchFallbackDecision;
 
             if (fallbackProfile) {
                 rerouteApplied = true;
