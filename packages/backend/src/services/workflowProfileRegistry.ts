@@ -11,6 +11,7 @@ import {
     DEFAULT_REVISION_PROMPT_PREFIX,
     parseReviewDecisionText,
 } from './workflowEngine.js';
+import type { ExecutionPolicyContract } from './executionPolicyContract.js';
 import type {
     RuntimeWorkflowProfile,
     WorkflowProfileContract,
@@ -233,8 +234,7 @@ export type ResolvedWorkflowRuntimeConfig = {
     runtimeProfile: RuntimeWorkflowProfile;
     profileContract: WorkflowProfileContract;
     workflowExecutionEnabled: boolean;
-    workflowMaxIterations: number;
-    workflowMaxDurationMs: number;
+    workflowExecutionLimits: RuntimeWorkflowProfile['defaultLimits'];
 };
 
 /**
@@ -254,30 +254,62 @@ export const resolveWorkflowRuntimeConfig = (input: {
     reviewLoopEnabled: boolean;
     maxIterations: number;
     maxDurationMs: number;
+    executionPolicyContract?: Pick<
+        ExecutionPolicyContract,
+        'response' | 'limits'
+    >;
 }): ResolvedWorkflowRuntimeConfig => {
     const requestedProfileId =
         input.profileId ?? DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID;
     const profileResolution =
         resolveWorkflowProfileRegistry(requestedProfileId);
     const workflowProfile = profileResolution.runtimeProfile;
+    const executionPolicy = input.executionPolicyContract;
+    const executionEnabledByPolicy =
+        executionPolicy !== undefined
+            ? executionPolicy.response.responseMode === 'quality_grounded'
+            : input.reviewLoopEnabled === true;
     const workflowExecutionEnabled =
         workflowProfile.requiredHooks.forceWorkflowExecution ||
-        input.reviewLoopEnabled === true;
-    const profileDefaultMaxIterations = workflowProfile.policy.enableAssessment
-        ? deriveDefaultMaxIterationsFromWorkflowSteps(
-              workflowProfile.defaultLimits.maxWorkflowSteps
-          )
-        : 0;
-    const workflowMaxIterations = workflowProfile.policy.enableAssessment
-        ? sanitizeNonNegativeInteger(
-              input.maxIterations,
-              profileDefaultMaxIterations
-          )
-        : 0;
-    const workflowMaxDurationMs = sanitizePositiveInteger(
-        input.maxDurationMs,
-        workflowProfile.defaultLimits.maxDurationMs
-    );
+        executionEnabledByPolicy;
+    const profileDefaultMaxIterations =
+        deriveDefaultMaxIterationsFromWorkflowSteps(
+            workflowProfile.defaultLimits.maxWorkflowSteps
+        );
+    const fallbackWorkflowStepLimit =
+        workflowProfile.policy.enableAssessment === false
+            ? 1
+            : Math.max(1, profileDefaultMaxIterations * 2);
+    const workflowExecutionLimits: RuntimeWorkflowProfile['defaultLimits'] = {
+        maxWorkflowSteps: sanitizePositiveInteger(
+            executionPolicy?.limits.maxWorkflowSteps ??
+                (workflowProfile.policy.enableAssessment === false
+                    ? 1
+                    : input.maxIterations * 2),
+            fallbackWorkflowStepLimit
+        ),
+        maxToolCalls: sanitizeNonNegativeInteger(
+            executionPolicy?.limits.maxToolCalls ??
+                workflowProfile.defaultLimits.maxToolCalls,
+            workflowProfile.defaultLimits.maxToolCalls
+        ),
+        maxDeliberationCalls: sanitizeNonNegativeInteger(
+            executionPolicy?.limits.maxDeliberationCalls ??
+                (workflowProfile.policy.enableAssessment === false
+                    ? 0
+                    : input.maxIterations * 2),
+            workflowProfile.defaultLimits.maxDeliberationCalls
+        ),
+        maxTokensTotal: sanitizeNonNegativeInteger(
+            executionPolicy?.limits.maxTokensTotal ??
+                workflowProfile.defaultLimits.maxTokensTotal,
+            workflowProfile.defaultLimits.maxTokensTotal
+        ),
+        maxDurationMs: sanitizePositiveInteger(
+            executionPolicy?.limits.maxDurationMs ?? input.maxDurationMs,
+            workflowProfile.defaultLimits.maxDurationMs
+        ),
+    };
 
     return {
         requestedProfileId,
@@ -285,7 +317,6 @@ export const resolveWorkflowRuntimeConfig = (input: {
         runtimeProfile: workflowProfile,
         profileContract: profileResolution.profileContract,
         workflowExecutionEnabled,
-        workflowMaxIterations,
-        workflowMaxDurationMs,
+        workflowExecutionLimits,
     };
 };

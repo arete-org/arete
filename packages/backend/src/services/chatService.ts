@@ -539,14 +539,19 @@ export const createChatService = ({
             reviewLoopEnabled: chatWorkflowConfig.reviewLoopEnabled,
             maxIterations: chatWorkflowConfig.maxIterations,
             maxDurationMs: chatWorkflowConfig.maxDurationMs,
+            executionPolicyContract:
+                executionPolicyContract !== undefined
+                    ? {
+                          response: executionPolicyContract.response,
+                          limits: executionPolicyContract.limits,
+                      }
+                    : undefined,
         });
         const workflowProfile = workflowRuntimeConfig.runtimeProfile;
         const workflowExecutionEnabled =
             workflowRuntimeConfig.workflowExecutionEnabled;
-        const workflowMaxIterations =
-            workflowRuntimeConfig.workflowMaxIterations;
-        const workflowMaxDurationMs =
-            workflowRuntimeConfig.workflowMaxDurationMs;
+        const workflowExecutionLimits =
+            workflowRuntimeConfig.workflowExecutionLimits;
 
         let generationResult: GenerationResult;
         let workflowLineage: WorkflowRecord | undefined;
@@ -560,8 +565,9 @@ export const createChatService = ({
                 generationStartedAtMs: generationStartedAt,
                 workflowConfig: {
                     workflowName: workflowProfile.workflowName,
-                    maxIterations: workflowMaxIterations,
-                    maxDurationMs: workflowMaxDurationMs,
+                    maxIterations: chatWorkflowConfig.maxIterations,
+                    maxDurationMs: chatWorkflowConfig.maxDurationMs,
+                    executionLimits: workflowExecutionLimits,
                 },
                 workflowPolicy,
                 captureUsage: (result, requestedModel) =>
@@ -605,8 +611,14 @@ export const createChatService = ({
                     }
 
                     const handling = noGenerationResolution.handling;
+                    const backendFailOpenAllowed =
+                        executionPolicyContract?.failOpen
+                            .allowFallbackGeneration ?? true;
 
-                    if (handling.runtimeAction === 'run_fallback_generation') {
+                    if (
+                        handling.runtimeAction === 'run_fallback_generation' &&
+                        backendFailOpenAllowed
+                    ) {
                         try {
                             generationResult =
                                 await generationRuntime.generate(
@@ -641,6 +653,24 @@ export const createChatService = ({
                         }
                         fallbackAfterInternalNoGeneration = true;
                         break;
+                    }
+                    if (
+                        handling.runtimeAction === 'run_fallback_generation' &&
+                        !backendFailOpenAllowed
+                    ) {
+                        logger.info(
+                            'Execution policy disabled fallback generation after internal no-generation outcome.',
+                            {
+                                workflowName: workflowProfile.workflowName,
+                                failOpenAuthority:
+                                    executionPolicyContract?.failOpen
+                                        .authority ?? 'backend',
+                                reasonCode: noGenerationResolution.reasonCode,
+                                terminationReason:
+                                    workflowResult.workflowLineage
+                                        .terminationReason,
+                            }
+                        );
                     }
 
                     generationResult = {
@@ -707,6 +737,9 @@ export const createChatService = ({
                 policyId: executionPolicyContract.policyId,
                 policyVersion: executionPolicyContract.policyVersion,
                 responseMode: executionPolicyContract.response.responseMode,
+                failOpenAuthority: executionPolicyContract.failOpen.authority,
+                failOpenFallbackGeneration:
+                    executionPolicyContract.failOpen.allowFallbackGeneration,
             });
         }
 

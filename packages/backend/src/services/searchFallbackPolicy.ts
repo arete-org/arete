@@ -11,6 +11,7 @@ import type {
     ModelProfile,
 } from '@footnote/contracts';
 import type { ToolInvocationReasonCode } from '@footnote/contracts/ethics-core';
+import type { ExecutionPolicyRoutingIntent } from './executionPolicyContract.js';
 import type { PlannerSelectionSource } from './plannerFallbackTelemetryRollup.js';
 
 type SearchFallbackPolicy = {
@@ -29,21 +30,16 @@ export const searchFallbackRankingPolicy = {
     ] as const,
 };
 
-const searchFallbackPolicyBySelectionSource: Record<
-    PlannerSelectionSource,
+const searchFallbackPolicyByRoutingStrategy: Record<
+    ExecutionPolicyRoutingIntent['strategy'],
     SearchFallbackPolicy
 > = {
-    planner: {
+    'capability-first': {
         allowReroute: true,
         rerouteReasonCode: 'search_rerouted_to_fallback_profile',
         skipReasonCode: 'search_reroute_no_tool_capable_fallback_available',
     },
-    request: {
-        allowReroute: false,
-        rerouteReasonCode: 'search_rerouted_to_fallback_profile',
-        skipReasonCode: 'search_reroute_not_permitted_by_selection_source',
-    },
-    default: {
+    'profile-first': {
         allowReroute: false,
         rerouteReasonCode: 'search_rerouted_to_fallback_profile',
         skipReasonCode: 'search_reroute_not_permitted_by_selection_source',
@@ -122,6 +118,7 @@ const rankSearchFallbackProfiles = (
 
 type ResolveSearchFallbackPolicyInput = {
     selectionSource: PlannerSelectionSource;
+    routingStrategy: ExecutionPolicyRoutingIntent['strategy'];
     selectedProfile: ModelProfile;
     searchCapableProfiles: ModelProfile[];
 };
@@ -137,7 +134,7 @@ export const resolveSearchFallbackPolicy = (
     input: ResolveSearchFallbackPolicyInput
 ): ResolveSearchFallbackPolicyResult => {
     const fallbackPolicy =
-        searchFallbackPolicyBySelectionSource[input.selectionSource];
+        searchFallbackPolicyByRoutingStrategy[input.routingStrategy];
     const rankedFallbackCandidates = rankSearchFallbackProfiles(
         input.selectedProfile,
         input.searchCapableProfiles.filter(

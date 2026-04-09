@@ -10,6 +10,7 @@ import type {
     ModelLatencyClass,
     ModelProfile,
 } from '@footnote/contracts';
+import type { ExecutionPolicyRoutingIntent } from './executionPolicyContract.js';
 
 export type WorkflowModelStep = 'generation';
 
@@ -29,6 +30,7 @@ export type CapabilityProfileOption = {
 
 export type ModelCapabilityReasonCode =
     | 'planner_requested_capability_profile_invalid'
+    | 'planner_requested_capability_profile_ignored_by_routing_policy'
     | 'planner_requested_capability_profile_no_compatible_model'
     | 'planner_requested_capability_profile_no_floor_match';
 
@@ -204,6 +206,10 @@ export const selectModelProfileForWorkflowStep = (input: {
     requestedCapabilityProfile?: unknown;
     profiles: readonly ModelProfile[];
     requiresSearch: boolean;
+    routingIntent?: Pick<
+        ExecutionPolicyRoutingIntent,
+        'strategy' | 'capabilityTags'
+    >;
 }): {
     selectedProfile?: ModelProfile;
     selectedCapabilityProfile: CapabilityProfileId;
@@ -211,13 +217,31 @@ export const selectModelProfileForWorkflowStep = (input: {
 } => {
     const defaultCapabilityProfile =
         STEP_DEFAULT_CAPABILITY_PROFILE[input.step];
+    const routingStrategy = input.routingIntent?.strategy ?? 'capability-first';
+    const routingCapabilityTags = input.routingIntent?.capabilityTags ?? [];
+    const routedCapabilityProfile = routingCapabilityTags.includes(
+        'verification'
+    )
+        ? 'expressive-generation'
+        : routingCapabilityTags.includes('grounding')
+          ? 'balanced-general'
+          : defaultCapabilityProfile;
+    const effectiveDefaultCapabilityProfile = isCapabilityAllowedForStep(
+        input.step,
+        routedCapabilityProfile
+    )
+        ? routedCapabilityProfile
+        : defaultCapabilityProfile;
     const normalizedRequestedCapabilityProfile =
-        normalizeRequestedCapabilityProfile(
-            input.step,
-            input.requestedCapabilityProfile
-        );
+        routingStrategy === 'profile-first'
+            ? undefined
+            : normalizeRequestedCapabilityProfile(
+                  input.step,
+                  input.requestedCapabilityProfile
+              );
     const selectedCapabilityProfile =
-        normalizedRequestedCapabilityProfile ?? defaultCapabilityProfile;
+        normalizedRequestedCapabilityProfile ??
+        effectiveDefaultCapabilityProfile;
     const rankedEnabledProfiles = rankModelProfiles(input.profiles);
     const floorCandidates = filterCapabilityFloor(
         rankedEnabledProfiles,
@@ -236,32 +260,55 @@ export const selectModelProfileForWorkflowStep = (input: {
         matchesCapabilityProfile(input.step, profile, selectedCapabilityProfile)
     );
     if (compatibleCandidates.length > 0) {
+        const ignoredByRoutingPolicy =
+            routingStrategy === 'profile-first' &&
+            input.requestedCapabilityProfile !== undefined;
         return {
             selectedProfile: compatibleCandidates[0],
             selectedCapabilityProfile,
-            ...(normalizedRequestedCapabilityProfile === undefined &&
-                input.requestedCapabilityProfile !== undefined && {
-                    reasonCode:
-                        'planner_requested_capability_profile_invalid' as const,
-                }),
+            ...(ignoredByRoutingPolicy
+                ? {
+                      reasonCode:
+                          'planner_requested_capability_profile_ignored_by_routing_policy' as const,
+                  }
+                : normalizedRequestedCapabilityProfile === undefined &&
+                    input.requestedCapabilityProfile !== undefined
+                  ? {
+                        reasonCode:
+                            'planner_requested_capability_profile_invalid' as const,
+                    }
+                  : {}),
         };
     }
 
     const defaultCompatibleCandidates = floorCandidates.filter((profile) =>
-        matchesCapabilityProfile(input.step, profile, defaultCapabilityProfile)
+        matchesCapabilityProfile(
+            input.step,
+            profile,
+            effectiveDefaultCapabilityProfile
+        )
     );
     if (defaultCompatibleCandidates.length > 0) {
+        const ignoredByRoutingPolicy =
+            routingStrategy === 'profile-first' &&
+            input.requestedCapabilityProfile !== undefined;
         return {
             selectedProfile: defaultCompatibleCandidates[0],
-            selectedCapabilityProfile: defaultCapabilityProfile,
-            reasonCode:
-                'planner_requested_capability_profile_no_compatible_model',
+            selectedCapabilityProfile: effectiveDefaultCapabilityProfile,
+            reasonCode: ignoredByRoutingPolicy
+                ? 'planner_requested_capability_profile_ignored_by_routing_policy'
+                : 'planner_requested_capability_profile_no_compatible_model',
         };
     }
 
+    const ignoredByRoutingPolicy =
+        routingStrategy === 'profile-first' &&
+        input.requestedCapabilityProfile !== undefined;
     return {
         selectedProfile: floorCandidates[0],
-        selectedCapabilityProfile: defaultCapabilityProfile,
-        reasonCode: 'planner_requested_capability_profile_no_compatible_model',
+        selectedCapabilityProfile: effectiveDefaultCapabilityProfile,
+        reasonCode: ignoredByRoutingPolicy
+            ? 'planner_requested_capability_profile_ignored_by_routing_policy'
+            : 'planner_requested_capability_profile_no_compatible_model',
     };
 };

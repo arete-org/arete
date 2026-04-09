@@ -119,6 +119,7 @@ export type ReviewWorkflowRuntimeConfig = {
     workflowName: string;
     maxIterations: number;
     maxDurationMs: number;
+    executionLimits?: ExecutionLimits;
 };
 
 export type ReviewWorkflowUsageSummary = {
@@ -404,11 +405,29 @@ export const runBoundedReviewWorkflow = async ({
         parseReviewDecision ?? profileStrategy.parseReviewDecision;
 
     const executionLimits: ExecutionLimits = {
-        maxWorkflowSteps: Math.max(1, normalizedMaxIterations * 2),
-        maxToolCalls: UNBOUNDED_LIMIT,
-        maxDeliberationCalls: Math.max(1, normalizedMaxIterations * 2),
-        maxTokensTotal: UNBOUNDED_LIMIT,
-        maxDurationMs: normalizedMaxDurationMs,
+        maxWorkflowSteps: sanitizePositiveInteger(
+            workflowConfig.executionLimits?.maxWorkflowSteps ??
+                Math.max(1, normalizedMaxIterations * 2),
+            Math.max(1, normalizedMaxIterations * 2)
+        ),
+        maxToolCalls: sanitizeNonNegativeInteger(
+            workflowConfig.executionLimits?.maxToolCalls ?? UNBOUNDED_LIMIT,
+            UNBOUNDED_LIMIT
+        ),
+        maxDeliberationCalls: sanitizeNonNegativeInteger(
+            workflowConfig.executionLimits?.maxDeliberationCalls ??
+                Math.max(1, normalizedMaxIterations * 2),
+            Math.max(1, normalizedMaxIterations * 2)
+        ),
+        maxTokensTotal: sanitizeNonNegativeInteger(
+            workflowConfig.executionLimits?.maxTokensTotal ?? UNBOUNDED_LIMIT,
+            UNBOUNDED_LIMIT
+        ),
+        maxDurationMs: sanitizePositiveInteger(
+            workflowConfig.executionLimits?.maxDurationMs ??
+                normalizedMaxDurationMs,
+            normalizedMaxDurationMs
+        ),
     };
     let workflowState = createInitialWorkflowState({
         workflowId,
