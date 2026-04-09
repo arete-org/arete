@@ -1,6 +1,6 @@
 /**
- * @description: Resolves workflow profiles by id into serializable contracts
- * and runtime-only hooks, with bounded-review fail-open fallback behavior.
+ * @description: Resolves workflow profiles by id into EPC-aligned workflow
+ * policy presets and runtime hooks, with bounded-review fail-open fallback behavior.
  * @footnote-scope: core
  * @footnote-module: WorkflowProfileRegistry
  * @footnote-risk: medium - Incorrect profile resolution can alter runtime execution paths.
@@ -19,26 +19,63 @@ import type {
 
 type BuiltinWorkflowProfileId = 'bounded-review' | 'generate-only';
 
+/**
+ * EPC workflow policy presets:
+ * - quality-grounded: generate + assess + revise
+ * - fast-direct: generate only
+ *
+ * Keep workflow policy semantics anchored to EPC language. Profiles select one
+ * preset and attach limits/hooks; they should not invent a second policy model.
+ */
+const EPC_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET: Readonly<
+    RuntimeWorkflowProfile['policy']
+> = {
+    enablePlanning: false,
+    enableToolUse: false,
+    enableReplanning: false,
+    enableGeneration: true,
+    enableAssessment: true,
+    enableRevision: true,
+};
+
+const EPC_FAST_DIRECT_WORKFLOW_POLICY_PRESET: Readonly<
+    RuntimeWorkflowProfile['policy']
+> = {
+    enablePlanning: false,
+    enableToolUse: false,
+    enableReplanning: false,
+    enableGeneration: true,
+    enableAssessment: false,
+    enableRevision: false,
+};
+
+const QUALITY_GROUNDED_DEFAULT_LIMITS: Readonly<
+    RuntimeWorkflowProfile['defaultLimits']
+> = {
+    maxWorkflowSteps: 4,
+    maxToolCalls: 0,
+    maxDeliberationCalls: 4,
+    maxTokensTotal: Number.MAX_SAFE_INTEGER,
+    maxDurationMs: 15000,
+};
+
+const FAST_DIRECT_DEFAULT_LIMITS: Readonly<
+    RuntimeWorkflowProfile['defaultLimits']
+> = {
+    maxWorkflowSteps: 1,
+    maxToolCalls: 0,
+    maxDeliberationCalls: 0,
+    maxTokensTotal: Number.MAX_SAFE_INTEGER,
+    maxDurationMs: 15000,
+};
+
 const BOUNDED_REVIEW_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
     profileId: 'bounded-review',
     profileVersion: 'v1',
     displayName: 'Bounded Review',
     workflowName: 'message_with_review_loop',
-    policy: {
-        enablePlanning: false,
-        enableToolUse: false,
-        enableReplanning: false,
-        enableGeneration: true,
-        enableAssessment: true,
-        enableRevision: true,
-    },
-    defaultLimits: {
-        maxWorkflowSteps: 4,
-        maxToolCalls: 0,
-        maxDeliberationCalls: 4,
-        maxTokensTotal: Number.MAX_SAFE_INTEGER,
-        maxDurationMs: 15000,
-    },
+    policy: EPC_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET,
+    defaultLimits: QUALITY_GROUNDED_DEFAULT_LIMITS,
     optionalExtensions: {
         reviewDecisionPrompt: DEFAULT_REVIEW_DECISION_PROMPT,
         revisionPromptPrefix: DEFAULT_REVISION_PROMPT_PREFIX,
@@ -57,21 +94,8 @@ const GENERATE_ONLY_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
     profileVersion: 'v1',
     displayName: 'Generate Only',
     workflowName: 'message_generate_only',
-    policy: {
-        enablePlanning: false,
-        enableToolUse: false,
-        enableReplanning: false,
-        enableGeneration: true,
-        enableAssessment: false,
-        enableRevision: false,
-    },
-    defaultLimits: {
-        maxWorkflowSteps: 1,
-        maxToolCalls: 0,
-        maxDeliberationCalls: 0,
-        maxTokensTotal: Number.MAX_SAFE_INTEGER,
-        maxDurationMs: 15000,
-    },
+    policy: EPC_FAST_DIRECT_WORKFLOW_POLICY_PRESET,
+    defaultLimits: FAST_DIRECT_DEFAULT_LIMITS,
     requiredHooks: {
         initialStep: 'generate',
         forceWorkflowExecution: true,
@@ -98,6 +122,15 @@ const isBuiltinWorkflowProfileId = (
     value: string
 ): value is BuiltinWorkflowProfileId =>
     value in BUILTIN_RUNTIME_WORKFLOW_PROFILES;
+
+const normalizeRequestedProfileId = (
+    profileId: string | null | undefined
+): string | undefined => {
+    const trimmedProfileId = profileId?.trim();
+    return trimmedProfileId !== undefined && trimmedProfileId.length > 0
+        ? trimmedProfileId
+        : undefined;
+};
 
 const sanitizeNonNegativeInteger = (
     value: number,
@@ -166,16 +199,15 @@ export type WorkflowProfileRegistryResolution = {
 export const resolveWorkflowProfileRegistry = (
     profileId: string | null | undefined
 ): WorkflowProfileRegistryResolution => {
-    const trimmedProfileId = profileId?.trim();
+    const requestedProfileId = normalizeRequestedProfileId(profileId);
     if (
-        trimmedProfileId !== undefined &&
-        trimmedProfileId.length > 0 &&
-        isBuiltinWorkflowProfileId(trimmedProfileId)
+        requestedProfileId !== undefined &&
+        isBuiltinWorkflowProfileId(requestedProfileId)
     ) {
         const runtimeProfile =
-            BUILTIN_RUNTIME_WORKFLOW_PROFILES[trimmedProfileId];
+            BUILTIN_RUNTIME_WORKFLOW_PROFILES[requestedProfileId];
         return {
-            requestedProfileId: trimmedProfileId,
+            requestedProfileId,
             isKnownProfileId: true,
             runtimeProfile,
             profileContract: toWorkflowProfileContract(runtimeProfile),
@@ -185,10 +217,7 @@ export const resolveWorkflowProfileRegistry = (
     const runtimeProfile =
         BUILTIN_RUNTIME_WORKFLOW_PROFILES[DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID];
     return {
-        ...(trimmedProfileId !== undefined &&
-            trimmedProfileId.length > 0 && {
-                requestedProfileId: trimmedProfileId,
-            }),
+        ...(requestedProfileId !== undefined && { requestedProfileId }),
         isKnownProfileId: false,
         runtimeProfile,
         profileContract: toWorkflowProfileContract(runtimeProfile),
