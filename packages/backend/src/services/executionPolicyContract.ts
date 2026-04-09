@@ -180,17 +180,19 @@ export type ExecutionPolicyPresetId =
     | (string & {});
 
 /**
+ * Shared override shape used by EPC presets, builders, and resolver assembly.
+ */
+export type ExecutionPolicyContractOverrides = Partial<
+    Omit<ExecutionPolicyContract, 'policyId' | 'policyVersion' | 'displayName'>
+>;
+
+/**
  * Named overrides that can be applied while building an EPC.
  */
 export type ExecutionPolicyPreset = {
     presetId: ExecutionPolicyPresetId;
     displayName: string;
-    overrides: Partial<
-        Omit<
-            ExecutionPolicyContract,
-            'policyId' | 'policyVersion' | 'displayName'
-        >
-    >;
+    overrides: ExecutionPolicyContractOverrides;
 };
 
 /**
@@ -200,12 +202,7 @@ export type ExecutionPolicyContractBuilderInput = {
     policyId: ExecutionPolicyContractId;
     displayName: string;
     preset?: ExecutionPolicyPreset;
-    overrides?: Partial<
-        Omit<
-            ExecutionPolicyContract,
-            'policyId' | 'policyVersion' | 'displayName'
-        >
-    >;
+    overrides?: ExecutionPolicyContractOverrides;
 };
 
 /**
