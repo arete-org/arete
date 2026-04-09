@@ -69,7 +69,7 @@ const invokeAdapterWithTimeout = async (input: {
         const timeoutPromise = new Promise<never>((_, reject) => {
             timeoutHandle = setTimeout(() => {
                 cancellationRequested = true;
-                abortController.abort();
+                abortController.abort(TRUSTGRAPH_ABORT_ERROR);
                 reject(new TrustGraphAdapterTimeoutError(true));
             }, timeoutMs);
         });
@@ -89,11 +89,7 @@ const invokeAdapterWithTimeout = async (input: {
         if (error instanceof TrustGraphAdapterTimeoutError) {
             throw error;
         }
-        if (
-            cancellationRequested &&
-            error instanceof Error &&
-            error.message === TRUSTGRAPH_ABORT_ERROR
-        ) {
+        if (cancellationRequested && error instanceof Error) {
             throw new TrustGraphAdapterTimeoutError(true);
         }
         throw error;
