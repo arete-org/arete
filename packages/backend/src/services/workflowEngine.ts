@@ -25,7 +25,7 @@ import type {
 import { logger } from '../utils/logger.js';
 
 /**
- * Canonical workflow-policy surface.
+ * Canonical EPC workflow-policy surface.
  *
  * This alias keeps existing engine call sites stable while making
  * `WorkflowProfilePolicyContract` the single source of truth for shape.

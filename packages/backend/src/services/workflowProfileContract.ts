@@ -28,7 +28,7 @@ export type WorkflowProfileId =
     | (string & {});
 
 /**
- * Policy switches checked by the engine before each workflow transition.
+ * EPC-aligned workflow policy preset checked before each workflow transition.
  *
  * This is the canonical workflow-policy shape for backend workflow execution.
  * Engine/runtime modules should import this type instead of re-declaring fields.
@@ -253,7 +253,7 @@ export type WorkflowProfileContract = {
     displayName: string;
     /** Workflow lineage name emitted into response metadata. */
     workflowName: string;
-    /** Policy capability toggles enforced by transition checks. */
+    /** EPC workflow policy preset enforced by transition checks. */
     policy: WorkflowProfilePolicyContract;
     /** Default execution ceilings applied when request-specific limits are absent. */
     defaultLimits: WorkflowProfileExecutionLimitsContract;
