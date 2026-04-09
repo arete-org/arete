@@ -24,8 +24,9 @@ type BuiltinWorkflowProfileId = 'bounded-review' | 'generate-only';
  * - quality-grounded: generate + assess + revise
  * - fast-direct: generate only
  *
- * Keep workflow policy semantics anchored to EPC language. Profiles select one
- * preset and attach limits/hooks; they should not invent a second policy model.
+ * Registry ownership here is assembly glue only: map profile ids to
+ * EPC-aligned workflow-step toggles plus runtime hooks. Profiles select one
+ * preset and attach limits/hooks; they do not own EPC ontology.
  */
 const EPC_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET: Readonly<
     RuntimeWorkflowProfile['policy']
@@ -195,6 +196,8 @@ export type WorkflowProfileRegistryResolution = {
  * - Unknown/blank ids fail open to `DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID`.
  * - `requestedProfileId` may differ from `runtimeProfile.profileId` when
  *   fallback is applied.
+ *
+ * This function is registry assembly glue and is not a policy ontology owner.
  */
 export const resolveWorkflowProfileRegistry = (
     profileId: string | null | undefined
@@ -239,10 +242,12 @@ export type ResolvedWorkflowRuntimeConfig = {
  * policy.
  *
  * Invariants:
- * - This is the single workflow-execution gating surface for chat runtime.
+ * - This is the single workflow-execution gating assembly surface for chat runtime.
  * - Callers should not branch on workflow profile ids directly.
  * - `forceWorkflowExecution` is the explicit profile-level override for
  *   workflow execution when review-loop gating would otherwise disable it.
+ *
+ * This resolver composes runtime config from contracts; it does not define EPC ontology.
  */
 export const resolveWorkflowRuntimeConfig = (input: {
     profileId: string | null | undefined;
