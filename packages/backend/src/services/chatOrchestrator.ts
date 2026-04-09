@@ -33,6 +33,7 @@ import {
 import { createChatPlanner, type ChatPlan } from './chatPlanner.js';
 import { createOpenAiChatPlannerStructuredExecutor } from './chatPlannerStructuredOpenAi.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
+import type { ExecutionResponseMode } from './executionPolicyContract.js';
 import { normalizeDiscordConversation } from './chatConversationNormalization.js';
 import {
     resolveActiveProfileOverlayPrompt,
@@ -54,6 +55,7 @@ import {
     resolveSearchFallbackPolicy,
     searchFallbackRankingPolicy,
 } from './searchFallbackPolicy.js';
+import { resolveExecutionPolicyContract } from './executionPolicyResolver.js';
 import type { WeatherForecastTool } from './weatherGovForecastTool.js';
 import { applySingleToolPolicy } from './tools/toolPolicy.js';
 import {
@@ -89,6 +91,11 @@ const SEARCH_REROUTE_FALLBACK_POLICY = 'search_reroute_profile_fallback_v1';
 const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
 });
+
+const resolveExecutionPolicyPresetId = (
+    responseMode: ExecutionResponseMode | undefined
+): 'fast-direct' | 'quality-grounded' =>
+    responseMode === 'quality_grounded' ? 'quality-grounded' : 'fast-direct';
 
 /**
  * Packs the normalized planner decision into one structured system payload.
@@ -735,6 +742,11 @@ export const createChatOrchestrator = ({
             selectedCapabilityProfile:
                 selectedCapabilityDecision.selectedCapabilityProfile,
         };
+        const resolvedExecutionPolicy = resolveExecutionPolicyContract({
+            presetId: resolveExecutionPolicyPresetId(
+                executionPlan.generation.responseIntentHint?.responseMode
+            ),
+        }).policyContract;
 
         // Non-message actions return early and skip model generation.
         if (executionPlan.action === 'ignore') {
@@ -910,6 +922,10 @@ export const createChatOrchestrator = ({
                     toolRequest: toolRequestContext,
                     ...(surfacePolicy && { surfacePolicy }),
                 },
+                executionPolicy: {
+                    policyId: resolvedExecutionPolicy.policyId,
+                    policyVersion: resolvedExecutionPolicy.policyVersion,
+                },
             }),
             orchestrationStartedAtMs: orchestrationStartedAt,
             plannerTemperament: executionPlan.generation.temperament,
@@ -919,6 +935,7 @@ export const createChatOrchestrator = ({
             capabilities: selectedResponseProfile.capabilities,
             generation: executionPlan.generation,
             toolRequest: toolRequestContext,
+            executionPolicyContract: resolvedExecutionPolicy,
             ...(executionContractScopeTuple !== undefined && {
                 executionContractTrustGraphContext: {
                     queryIntent: normalizedRequest.latestUserInput,
@@ -1008,6 +1025,8 @@ export const createChatOrchestrator = ({
                 plannerExecution.status === 'failed' ||
                 fallbackReasons.length > 0,
             fallbackReasons,
+            executionPolicyId: resolvedExecutionPolicy.policyId,
+            executionPolicyVersion: resolvedExecutionPolicy.policyVersion,
             responseId: response.metadata.responseId,
             responseAction: 'message',
             responseModality: executionPlan.modality,
