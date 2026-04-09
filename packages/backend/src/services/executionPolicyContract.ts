@@ -1,6 +1,6 @@
 /**
  * @description: Defines the canonical Execution Policy Contract (EPC) surface
- * for backend execution posture, evidence posture, and fail-open behavior.
+ * for backend response intent, evidence sufficiency policy, and fail-open behavior.
  * @footnote-scope: interface
  * @footnote-module: ExecutionPolicyContract
  * @footnote-risk: medium - Contract drift here can fragment policy ownership and produce inconsistent execution behavior.
@@ -25,55 +25,76 @@ export type ExecutionPolicyContractId =
     | (string & {});
 
 /**
- * High-level execution posture.
+ * High-level response mode.
  *
  * `fast_direct` favors low-latency one-pass answers.
- * `quality_grounded` favors bounded evidence-seeking before answering.
+ * `quality_grounded` favors bounded sufficiency-seeking before answering.
  */
-export type ExecutionResponsePosture = 'fast_direct' | 'quality_grounded';
+export type ExecutionResponseMode = 'fast_direct' | 'quality_grounded';
 
 /**
- * Stopping intent for one execution loop.
+ * Stopping rule for one execution loop.
  *
  * This keeps stop behavior policy-focused instead of tying it directly to step
  * toggles or implementation details.
  */
-export type ExecutionStoppingIntent =
+export type ExecutionStoppingRule =
     | 'first_sufficient_answer'
-    | 'bounded_grounded_answer';
+    | 'bounded_sufficient_answer';
 
 /**
- * Top-level posture that explains "what kind of answer path are we aiming for".
+ * Top-level response intent that explains "what kind of answer path are we aiming for".
  */
-export type ExecutionPosture = {
-    responsePosture: ExecutionResponsePosture;
-    stoppingIntent: ExecutionStoppingIntent;
+export type ExecutionResponseIntent = {
+    responseMode: ExecutionResponseMode;
+    stoppingRule: ExecutionStoppingRule;
 };
 
 /**
- * Evidence acquisition expectations for one execution loop.
+ * Evidence acquisition and sufficiency expectations for one execution loop.
  *
  * This is intentionally bounded and transport-neutral. It describes how far
  * execution may go to gather support, not how adapters fetch data.
  */
+export type EvidenceEscalationTrigger =
+    | 'missing_required_context' // Required facts are absent from current context/evidence set.
+    | 'sufficiency_not_met_within_current_evidence'; // Current evidence exists but does not satisfy policy sufficiency target.
+
+export type RequiredEvidenceLevel =
+    | 'none' // No external evidence is required; inference-only answer is allowed.
+    | 'context_support' // Supporting context/evidence is expected, but strict claim-level grounding is not required.
+    | 'grounded_support'; // Answer claims should be traceable to bounded supporting evidence.
+
+export type EvidenceSufficiencyTarget =
+    | 'answer_is_directionally_useful' // Prioritize useful answer direction quickly, with minimal evidence acquisition.
+    | 'answer_is_grounded_and_actionable'; // Prioritize grounded answer quality that is actionable within bounded search.
+
 export type ExecutionEvidencePolicy = {
     acquisitionMode: 'minimal' | 'bounded';
-    escalationTrigger: 'on_low_confidence' | 'on_missing_required_context';
-    requiredEvidenceLevel: 'none' | 'helpful' | 'grounded';
+    escalationTrigger: EvidenceEscalationTrigger;
+    requiredEvidenceLevel: RequiredEvidenceLevel;
+    sufficiencyTarget: EvidenceSufficiencyTarget;
+    maxEscalationRounds: number;
     mustTrackProvenance: boolean;
 };
 
 /**
  * Verification expectations before returning an answer.
  *
- * `none` keeps latency low. `light` runs a quick internal quality pass.
- * `grounded` expects evidence-aware checks before completion.
+ * `none` keeps latency low.
+ * `coherence_check` validates answer consistency only.
+ * `grounded_sufficiency_check` validates consistency plus evidence sufficiency.
  */
 export type ExecutionVerificationPolicy = {
-    mode: 'none' | 'light' | 'grounded';
+    mode: VerificationMode;
     requireConsistencyCheck: boolean;
     requireEvidenceBackedClaims: boolean;
 };
+
+export type VerificationMode =
+    | 'none' // Return without verification pass beyond normal generation.
+    | 'coherence_check' // Validate internal coherence/consistency only.
+    | 'grounded_sufficiency_check'; // Validate coherence plus bounded evidence sufficiency expectations.
 
 /**
  * Quantitative hard limits for one execution loop.
@@ -99,9 +120,10 @@ export type ExecutionPolicyFailOpen = {
 };
 
 /**
- * Lightweight routing intent that policy can declare.
+ * Lightweight routing intent seam that policy can declare.
  *
  * This is provider-neutral. Model/provider selection logic stays outside EPC.
+ * This is not a full multi-search or evidence-acquisition strategy layer.
  */
 export type ExecutionPolicyRoutingIntent = {
     strategy: 'capability-first' | 'profile-first';
@@ -129,13 +151,18 @@ export type ExecutionPolicyContract = {
     policyId: ExecutionPolicyContractId;
     policyVersion: ExecutionPolicyContractVersion;
     displayName: string;
-    posture: ExecutionPosture;
+    response: ExecutionResponseIntent;
     evidence: ExecutionEvidencePolicy;
     verification: ExecutionVerificationPolicy;
     limits: ExecutionPolicyLimits;
     failOpen: ExecutionPolicyFailOpen;
     routing: ExecutionPolicyRoutingIntent;
     trustGraph: ExecutionPolicyTrustGraphSeam;
+    /**
+     * Optional diagnostics metadata only.
+     *
+     * Do not store core policy semantics here. Add first-class fields instead.
+     */
     metadata?: Record<string, string | number | boolean | null>;
 };
 
@@ -182,25 +209,27 @@ export type ExecutionPolicyContractBuilderInput = {
 /**
  * Standard defaults for EPC creation.
  *
- * Defaults favor a fast direct posture so callers must opt into heavier bounded
+ * Defaults favor a fast direct response path so callers must opt into heavier bounded
  * grounding expectations explicitly.
  */
 const EPC_DEFAULTS: Omit<
     ExecutionPolicyContract,
     'policyId' | 'policyVersion' | 'displayName'
 > = {
-    posture: {
-        responsePosture: 'fast_direct',
-        stoppingIntent: 'first_sufficient_answer',
+    response: {
+        responseMode: 'fast_direct',
+        stoppingRule: 'first_sufficient_answer',
     },
     evidence: {
         acquisitionMode: 'minimal',
-        escalationTrigger: 'on_low_confidence',
-        requiredEvidenceLevel: 'helpful',
+        escalationTrigger: 'missing_required_context',
+        requiredEvidenceLevel: 'context_support',
+        sufficiencyTarget: 'answer_is_directionally_useful',
+        maxEscalationRounds: 1,
         mustTrackProvenance: true,
     },
     verification: {
-        mode: 'light',
+        mode: 'coherence_check',
         requireConsistencyCheck: true,
         requireEvidenceBackedClaims: false,
     },
@@ -227,7 +256,11 @@ const EPC_DEFAULTS: Omit<
 };
 
 /**
- * Canonical, reusable postures over EPC.
+ * Canonical, reusable response presets over EPC.
+ *
+ * Practical difference:
+ * `fast-direct` is latency-first.
+ * `quality-grounded` is bounded evidence-first.
  */
 export const EXECUTION_POLICY_PRESETS: Readonly<
     Record<'fast-direct' | 'quality-grounded', ExecutionPolicyPreset>
@@ -236,14 +269,16 @@ export const EXECUTION_POLICY_PRESETS: Readonly<
         presetId: 'fast-direct',
         displayName: 'Core Fast Direct',
         overrides: {
-            posture: {
-                responsePosture: 'fast_direct',
-                stoppingIntent: 'first_sufficient_answer',
+            response: {
+                responseMode: 'fast_direct',
+                stoppingRule: 'first_sufficient_answer',
             },
             evidence: {
                 acquisitionMode: 'minimal',
-                escalationTrigger: 'on_low_confidence',
+                escalationTrigger: 'missing_required_context',
                 requiredEvidenceLevel: 'none',
+                sufficiencyTarget: 'answer_is_directionally_useful',
+                maxEscalationRounds: 0,
                 mustTrackProvenance: true,
             },
             verification: {
@@ -268,18 +303,21 @@ export const EXECUTION_POLICY_PRESETS: Readonly<
         presetId: 'quality-grounded',
         displayName: 'Core Quality Grounded',
         overrides: {
-            posture: {
-                responsePosture: 'quality_grounded',
-                stoppingIntent: 'bounded_grounded_answer',
+            response: {
+                responseMode: 'quality_grounded',
+                stoppingRule: 'bounded_sufficient_answer',
             },
             evidence: {
                 acquisitionMode: 'bounded',
-                escalationTrigger: 'on_missing_required_context',
-                requiredEvidenceLevel: 'grounded',
+                escalationTrigger:
+                    'sufficiency_not_met_within_current_evidence',
+                requiredEvidenceLevel: 'grounded_support',
+                sufficiencyTarget: 'answer_is_grounded_and_actionable',
+                maxEscalationRounds: 2,
                 mustTrackProvenance: true,
             },
             verification: {
-                mode: 'grounded',
+                mode: 'grounded_sufficiency_check',
                 requireConsistencyCheck: true,
                 requireEvidenceBackedClaims: true,
             },
@@ -308,6 +346,7 @@ export const EXECUTION_POLICY_OUTSIDE_SCOPE: ReadonlyArray<string> = [
     'TrustGraph evidence retrieval and ingestion implementation.',
     'Operator incident workflows and alerting channels.',
     'Provider-specific model invocation details.',
+    'Multi-search/evidence acquisition implementation strategy.',
     'Prompt authoring and planner prompt wording.',
 ];
 
@@ -315,7 +354,7 @@ export const EXECUTION_POLICY_OUTSIDE_SCOPE: ReadonlyArray<string> = [
  * Builder/factory entrypoint for one EPC instance.
  *
  * Merge order is defaults -> preset overrides -> explicit overrides so callers
- * can start from a posture preset and still tune fields for one policy id.
+ * can start from a response preset and still tune fields for one policy id.
  */
 export const buildExecutionPolicyContract = (
     input: ExecutionPolicyContractBuilderInput
@@ -326,10 +365,10 @@ export const buildExecutionPolicyContract = (
         ...(input.overrides?.metadata ?? {}),
     };
 
-    const mergedPosture: ExecutionPosture = {
-        ...EPC_DEFAULTS.posture,
-        ...presetOverrides?.posture,
-        ...input.overrides?.posture,
+    const mergedResponse: ExecutionResponseIntent = {
+        ...EPC_DEFAULTS.response,
+        ...presetOverrides?.response,
+        ...input.overrides?.response,
     };
 
     const mergedEvidence: ExecutionEvidencePolicy = {
@@ -375,7 +414,7 @@ export const buildExecutionPolicyContract = (
         policyId: input.policyId,
         policyVersion: 'v1',
         displayName: input.displayName,
-        posture: mergedPosture,
+        response: mergedResponse,
         evidence: mergedEvidence,
         verification: mergedVerification,
         limits: mergedLimits,
