@@ -25,6 +25,22 @@ import type {
 const PLANNER_TOKEN_SENTINEL = 1200;
 const TEST_TIMESTAMP = new Date('2026-04-04T00:00:00.000Z').toISOString();
 
+type TrustGraphMetadata = {
+    adapterStatus?: string;
+    terminalAuthority?: string;
+    failOpenBehavior?: string;
+    verificationRequired?: boolean;
+    scopeValidation?: {
+        ok?: boolean;
+        normalizedScope?: {
+            userId?: string;
+            projectId?: string;
+        };
+    };
+    provenanceJoin?: { externalEvidenceBundleId?: string };
+    adapterBundle?: unknown;
+};
+
 const createMetadata = (): ResponseMetadata => ({
     responseId: 'chat_test_response',
     provenance: 'Inferred',
@@ -165,23 +181,7 @@ test('orchestrator runtime path integrates advisory TrustGraph metadata without 
         response.metadata as ResponseMetadata & {
             trustGraph?: Record<string, unknown>;
         }
-    ).trustGraph as
-        | {
-              adapterStatus?: string;
-              terminalAuthority?: string;
-              failOpenBehavior?: string;
-              verificationRequired?: boolean;
-              scopeValidation?: {
-                  ok?: boolean;
-                  normalizedScope?: {
-                      userId?: string;
-                      projectId?: string;
-                  };
-              };
-              provenanceJoin?: { externalEvidenceBundleId?: string };
-              adapterBundle?: unknown;
-          }
-        | undefined;
+    ).trustGraph as TrustGraphMetadata | undefined;
     assert.ok(trustGraph);
     assert.equal(trustGraph?.adapterStatus, 'success');
     assert.equal(trustGraph?.terminalAuthority, 'backend_execution_contract');
