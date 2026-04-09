@@ -12,6 +12,7 @@ import {
     WORKFLOW_STEP_STATUSES,
     WORKFLOW_TERMINATION_REASONS,
     type TraceAxisScore,
+    type TrustGraphMetadata,
 } from '../ethics-core/index.js';
 import { SafetyDecisionSchema } from '../ethics-core/schemas.js';
 import type { ApiResponseValidationResult } from './client-core.js';
@@ -437,6 +438,14 @@ const TrustGraphMetadataSchema = z
             .optional(),
     })
     .strict();
+
+type _AssertTrustGraphMetadata =
+    z.infer<typeof TrustGraphMetadataSchema> extends TrustGraphMetadata
+        ? TrustGraphMetadata extends z.infer<typeof TrustGraphMetadataSchema>
+            ? true
+            : false
+        : false;
+const _assertTrustGraphMetadata: _AssertTrustGraphMetadata = true;
 
 const responseMetadataShape = {
     responseId: z.string().min(1),
