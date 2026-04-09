@@ -50,7 +50,8 @@ const normalizePresetId = (
 
 const isBuiltinExecutionPolicyPresetId = (
     value: string
-): value is BuiltinExecutionPolicyPresetId => value in EXECUTION_POLICY_PRESETS;
+): value is BuiltinExecutionPolicyPresetId =>
+    Object.prototype.hasOwnProperty.call(EXECUTION_POLICY_PRESETS, value);
 
 export type ExecutionPolicyResolverInput = {
     presetId?: ExecutionPolicyPresetId | null;
