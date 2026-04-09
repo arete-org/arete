@@ -141,11 +141,11 @@ This distinction is the core of the design.
 
 TrustGraph is allowed to influence a narrow set of evidence-related views. It is not allowed to hold authority.
 
-### Why this rule exists
+### Why this rule exists - Influence vs authority
 
 Without this boundary, retrieval systems become stealth decision systems. The failure mode is not dramatic. It usually looks like "we only used one extra field" or "we only skipped one check when confidence was high." That is exactly how architecture drifts into something no one meant to build.
 
-### Common mistake
+### Common mistake - Influence vs authority
 
 Adding a new adapter field and threading it into runtime logic "just for ranking" or "just for better defaults." If that field is not explicitly governed, it is a design break, not a convenience.
 
@@ -196,7 +196,7 @@ Fields that are explicitly forbidden as direct control inputs include:
 - raw adapter ranking fields
 - any unregistered field
 
-### Why this rule exists
+### Why this rule exists - Confidence handling
 
 Confidence is especially easy to misuse. A confidence score looks numeric and useful, so engineers naturally want to threshold on it. But that turns opaque adapter behavior into backend policy. This design blocks that on purpose.
 
@@ -206,7 +206,7 @@ Concrete bad example:
 
 That would look harmless in a code review and would be a direct architecture violation.
 
-### Common mistake
+### Common mistake - Confidence handling
 
 Treating "confidence" as if it means "safe to trust." It does not. At best it is an advisory retrieval-side signal.
 
@@ -232,11 +232,11 @@ For example:
 - "user only" is denied when project-or-collection scope is required
 - "user + project + collection" is denied when the tuple is ambiguous
 
-### Why this rule exists
+### Why this rule exists - Scope and tenancy
 
 Scope mistakes are data boundary mistakes. If the system guesses, broadens, or silently falls back, the bug is no longer just "retrieval quality." It becomes a tenant-isolation failure.
 
-### Common mistake
+### Common mistake - Scope and tenancy
 
 Trying to improve retrieval hit rate by relaxing scope validation or by backfilling missing scope from unrelated request fields.
 
@@ -253,11 +253,11 @@ In runtime production wiring, the policy is **required** mode. That means:
 
 There is also an `explicitly_none` bypass mode in core types, but runtime production wiring does not use it.
 
-### Why this rule exists
+### Why this rule exists - Ownership validation
 
 "Optional if the caller remembers" is not a real safety boundary. If ownership validation matters, the integration seam has to enforce it.
 
-### Common mistake
+### Common mistake - Ownership validation
 
 Passing an ad hoc validator from a random call site because it matches the interface shape. The contract is stricter than shape alone. Source trust matters too.
 
@@ -279,7 +279,7 @@ If evidence items are invalid or poisoned:
 - dropped IDs are recorded
 - aggregate coverage/conflict signals are neutralized if the remaining bundle can no longer support them
 
-### Why this rule exists
+### Why this rule exists - Timeout and cancellation
 
 Two quiet failure modes are being prevented here:
 
@@ -329,11 +329,11 @@ It does a few important things:
 - threads timeout budget into ownership validation as well as adapter retrieval
 - logs how the runtime was wired
 
-### Why this rule exists
+### Why this rule exists - Runtime wiring
 
 This keeps risky enablement decisions in one place. If wiring is scattered across `server.ts`, handlers, and services, it becomes much easier to accidentally run with the wrong combination of policy, adapter, and validator.
 
-### Common mistake
+### Common mistake - Runtime wiring
 
 Adding a shortcut path that injects an adapter directly into a caller without going through runtime wiring.
 
@@ -354,11 +354,11 @@ If no valid scope input exists, the orchestrator does not invent one.
 
 This is a place where junior engineers often get tripped up: the orchestrator is allowed to decide whether retrieval is attempted, but it is not allowed to let TrustGraph decide what action the user gets back. Those are separate concerns.
 
-### Why this rule exists
+### Why this rule exists - Orchestrator scope
 
 Correlation IDs and retrieval scope mean different things. Reusing one as the other is convenient, but wrong.
 
-### Common mistake
+### Common mistake - Orchestrator scope
 
 Using `sessionId`, message IDs, or other request correlation fields as a shortcut for project scope.
 
@@ -429,7 +429,7 @@ The join records:
 
 The public metadata path does not include raw scope identifiers inside the provenance join.
 
-### Why this rule exists
+### Why this rule exists - Provenance join
 
 Without a readable join, outside influence becomes hard to audit. A trace that technically exists but is not understandable is not good enough.
 
