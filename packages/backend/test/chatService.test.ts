@@ -1367,7 +1367,9 @@ test('runChatMessages keeps no-generation surfaced when execution policy disable
         presetId: 'quality-grounded',
         overrides: {
             failOpen: {
+                authority: 'backend',
                 allowFallbackGeneration: false,
+                fallbackTemperature: 'deterministic',
             },
         },
     }).policyContract;
@@ -1497,7 +1499,7 @@ test('runChatMessages honors EPC response-mode ownership switch for workflow run
                         stepCount: 1,
                         maxSteps:
                             input.workflowConfig.executionLimits
-                                .maxWorkflowSteps,
+                                ?.maxWorkflowSteps ?? 1,
                         maxDurationMs: input.workflowConfig.maxDurationMs,
                         steps: [
                             {

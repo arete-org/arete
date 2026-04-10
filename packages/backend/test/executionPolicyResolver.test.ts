@@ -55,7 +55,13 @@ test('resolveExecutionPolicyContract sanitizes unsafe numeric overrides and keep
         displayName: 'Test Policy Display Name',
         overrides: {
             evidence: {
+                acquisitionMode: 'bounded',
+                escalationTrigger:
+                    'sufficiency_not_met_within_current_evidence',
+                requiredEvidenceLevel: 'grounded_support',
+                sufficiencyTarget: 'answer_is_grounded_and_actionable',
                 maxEscalationRounds: Number.NaN,
+                mustTrackProvenance: true,
             },
             limits: {
                 maxWorkflowSteps: -1,
@@ -65,13 +71,17 @@ test('resolveExecutionPolicyContract sanitizes unsafe numeric overrides and keep
                 maxDurationMs: -500,
             },
             failOpen: {
+                authority: 'backend',
                 allowFallbackGeneration: false,
+                fallbackTemperature: 'deterministic',
             },
             routing: {
+                strategy: 'capability-first',
                 capabilityTags,
             },
             trustGraph: {
                 evidenceMode: 'off',
+                canBlockExecution: false,
             },
         },
     });
