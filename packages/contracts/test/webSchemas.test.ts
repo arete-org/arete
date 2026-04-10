@@ -222,6 +222,7 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
         evaluator: {
+            authorityLevel: 'observe',
             mode: 'observe_only',
             provenance: 'Inferred',
             safetyDecision: {
@@ -250,6 +251,7 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
                 kind: 'evaluator',
                 status: 'executed',
                 evaluator: {
+                    authorityLevel: 'observe',
                     mode: 'observe_only',
                     provenance: 'Inferred',
                     safetyDecision: {
@@ -411,6 +413,7 @@ test('ResponseMetadataSchema rejects non-canonical safety decision rule tuples',
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
         evaluator: {
+            authorityLevel: 'influence',
             mode: 'observe_only',
             provenance: 'Inferred',
             safetyDecision: {
@@ -541,6 +544,7 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
     const invalidEvaluatorMode = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
         evaluator: {
+            authorityLevel: 'observe',
             mode: 'shadow',
             provenance: 'Inferred',
             safetyDecision: {
@@ -555,6 +559,7 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
     const invalidNonAllowBreaker = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
         evaluator: {
+            authorityLevel: 'influence',
             mode: 'observe_only',
             provenance: 'Inferred',
             safetyDecision: {
@@ -570,6 +575,7 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
     const validNonAllowBreaker = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
         evaluator: {
+            authorityLevel: 'influence',
             mode: 'observe_only',
             provenance: 'Inferred',
             safetyDecision: {

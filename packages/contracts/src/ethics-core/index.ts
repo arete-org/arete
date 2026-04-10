@@ -42,6 +42,7 @@ export type {
     StepOutcome,
     StepRecord,
     WorkflowRecord,
+    EvaluatorAuthorityLevel,
     WorkflowModeId,
     WorkflowModeSelectionSource,
     WorkflowModeEvidencePosture,

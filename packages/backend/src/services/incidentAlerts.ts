@@ -7,7 +7,10 @@
  */
 
 import nodemailer from 'nodemailer';
-import type { CorrelationEnvelope } from '@footnote/contracts';
+import type {
+    CorrelationEnvelope,
+    EvaluatorAuthorityLevel,
+} from '@footnote/contracts';
 import type { RuntimeConfig } from '../config/types.js';
 import { logger } from '../utils/logger.js';
 
@@ -37,6 +40,7 @@ export type BreakerAlertEvent = {
     type: 'breaker';
     action: 'chat.orchestration.breaker_action_applied';
     surface: 'web' | 'discord';
+    authorityLevel: EvaluatorAuthorityLevel;
     enforcement: 'observe_only' | 'enforced';
     breakerAction: string;
     ruleId: string;
@@ -122,6 +126,7 @@ const formatDiscordMessage = (event: IncidentAlertEventPayload): string => {
             `Footnote breaker alert`,
             `action=${event.action}`,
             `surface=${event.surface}`,
+            `authorityLevel=${event.authorityLevel}`,
             `enforcement=${event.enforcement}`,
             `breakerAction=${event.breakerAction}`,
             `ruleId=${event.ruleId}`,
@@ -162,6 +167,7 @@ const formatEmail = (
             'Footnote breaker alert',
             `action: ${event.action}`,
             `surface: ${event.surface}`,
+            `authorityLevel: ${event.authorityLevel}`,
             `enforcement: ${event.enforcement}`,
             `breakerAction: ${event.breakerAction}`,
             `ruleId: ${event.ruleId}`,

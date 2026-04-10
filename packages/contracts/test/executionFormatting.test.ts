@@ -53,6 +53,7 @@ test('formatExecutionTimelineSummary handles missing optional fields', () => {
             kind: 'evaluator',
             status: 'executed',
             evaluator: {
+                authorityLevel: 'observe',
                 mode: 'observe_only',
                 provenance: 'Inferred',
                 safetyDecision: {
@@ -75,7 +76,7 @@ test('formatExecutionTimelineSummary handles missing optional fields', () => {
 
     assert.equal(
         formatExecutionTimelineSummary(events),
-        'planner:unknown(executed) -> evaluator:Low/Inferred/allow(executed) -> tool:web_search(executed) -> generation:unknown(executed)'
+        'planner:unknown(executed) -> evaluator:observe/Low/Inferred/allow(executed) -> tool:web_search(executed) -> generation:unknown(executed)'
     );
 });
 
@@ -85,6 +86,7 @@ test('formatExecutionTimelineSummary includes evaluator breaker rule context for
             kind: 'evaluator',
             status: 'executed',
             evaluator: {
+                authorityLevel: 'influence',
                 mode: 'observe_only',
                 provenance: 'Inferred',
                 safetyDecision: {
@@ -101,7 +103,31 @@ test('formatExecutionTimelineSummary includes evaluator breaker rule context for
 
     assert.equal(
         summary,
-        'evaluator:High/Inferred/block/safety.weaponization_request.v1/weaponization_request(executed, 4ms)'
+        'evaluator:influence/High/Inferred/block/safety.weaponization_request.v1/weaponization_request(executed, 4ms)'
+    );
+});
+
+test('formatExecutionTimelineSummary infers influence for legacy observe-only non-allow evaluator payloads', () => {
+    const legacyEvaluatorEvent = {
+        kind: 'evaluator',
+        status: 'executed',
+        evaluator: {
+            mode: 'observe_only',
+            provenance: 'Inferred',
+            safetyDecision: {
+                action: 'block',
+                safetyTier: 'High',
+                ruleId: 'safety.weaponization_request.v1',
+                reasonCode: 'weaponization_request',
+                reason: 'Deterministic weaponization-request rule matched.',
+            },
+        },
+    } as unknown as ExecutionEvent;
+    const summary = formatExecutionTimelineSummary([legacyEvaluatorEvent]);
+
+    assert.equal(
+        summary,
+        'evaluator:influence/High/Inferred/block/safety.weaponization_request.v1/weaponization_request(executed)'
     );
 });
 

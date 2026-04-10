@@ -188,12 +188,40 @@ const ToolExecutionReasonCodeSchema = z.enum([
     'search_not_supported_by_selected_profile',
     'unspecified_tool_outcome',
 ]);
+const EvaluatorAuthorityLevelSchema = z.enum([
+    'observe',
+    'influence',
+    'enforce',
+]);
 const EvaluatorDecisionModeSchema = z.enum(['observe_only', 'enforced']);
 const EvaluatorOutcomeSchema = z
     .object({
+        authorityLevel: EvaluatorAuthorityLevelSchema,
         mode: EvaluatorDecisionModeSchema,
         provenance: ProvenanceSchema,
         safetyDecision: SafetyDecisionSchema,
+    })
+    .superRefine((value, context) => {
+        if (value.mode === 'enforced' && value.authorityLevel !== 'enforce') {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['authorityLevel'],
+                message:
+                    'authorityLevel must be "enforce" when mode is "enforced".',
+            });
+        }
+
+        if (
+            value.mode === 'observe_only' &&
+            value.authorityLevel === 'enforce'
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['authorityLevel'],
+                message:
+                    'authorityLevel cannot be "enforce" when mode is "observe_only".',
+            });
+        }
     })
     .strict();
 // Cross-field execution invariants:

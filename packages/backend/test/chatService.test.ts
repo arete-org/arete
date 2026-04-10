@@ -322,6 +322,7 @@ test('runChatMessages forwards execution context into metadata runtime context (
             evaluator: {
                 status: 'executed',
                 outcome: {
+                    authorityLevel: 'observe',
                     mode: 'observe_only',
                     provenance: 'Inferred',
                     safetyDecision: {
@@ -349,6 +350,7 @@ test('runChatMessages forwards execution context into metadata runtime context (
     assert.deepEqual(capturedExecutionContext?.evaluator, {
         status: 'executed',
         outcome: {
+            authorityLevel: 'observe',
             mode: 'observe_only',
             provenance: 'Inferred',
             safetyDecision: {

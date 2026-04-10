@@ -443,6 +443,10 @@ test('planner-selected capability profile controls response model selection', as
     assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
     assert.equal(capturedExecutionContext?.evaluator?.status, 'executed');
     assert.equal(
+        capturedExecutionContext?.evaluator?.outcome?.authorityLevel,
+        'observe'
+    );
+    assert.equal(
         capturedExecutionContext?.evaluator?.outcome?.mode,
         'observe_only'
     );
@@ -513,6 +517,10 @@ test('deterministic evaluator emits non-allow breaker metadata with rule and rea
 
     assert.equal(response.action, 'message');
     assert.equal(capturedExecutionContext?.evaluator?.status, 'executed');
+    assert.equal(
+        capturedExecutionContext?.evaluator?.outcome?.authorityLevel,
+        'influence'
+    );
     assert.equal(
         capturedExecutionContext?.evaluator?.outcome?.mode,
         'observe_only'
@@ -645,6 +653,7 @@ test('deterministic breaker logs include correlation IDs for rule fire and actio
         | {
               event?: string;
               enforcement?: string;
+              authorityLevel?: string;
               correlation?: {
                   conversationId?: string | null;
                   requestId?: string | null;
@@ -657,6 +666,7 @@ test('deterministic breaker logs include correlation IDs for rule fire and actio
         breakerActionPayload?.event,
         'chat.orchestration.breaker_action_applied'
     );
+    assert.equal(breakerActionPayload?.authorityLevel, 'influence');
     assert.equal(breakerActionPayload?.enforcement, 'observe_only');
     assert.deepEqual(breakerActionPayload?.correlation, {
         conversationId: 'session-77',
@@ -1946,6 +1956,10 @@ test('planner runtime failures emit failed planner execution metadata and still 
     );
     assert.ok((capturedExecutionContext?.planner?.durationMs ?? -1) >= 0);
     assert.equal(capturedExecutionContext?.evaluator?.status, 'executed');
+    assert.equal(
+        capturedExecutionContext?.evaluator?.outcome?.authorityLevel,
+        'observe'
+    );
     assert.equal(
         capturedExecutionContext?.evaluator?.outcome?.mode,
         'observe_only'

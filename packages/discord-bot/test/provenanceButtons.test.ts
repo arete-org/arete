@@ -84,6 +84,7 @@ test('details action renders markdown sections with execution table and trace vi
                     kind: 'evaluator',
                     status: 'executed',
                     evaluator: {
+                        authorityLevel: 'influence',
                         mode: 'observe_only',
                         provenance: 'Inferred',
                         safetyDecision: {

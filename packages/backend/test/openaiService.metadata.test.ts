@@ -270,6 +270,7 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
                 evaluator: {
                     status: 'executed',
                     outcome: {
+                        authorityLevel: 'observe',
                         mode: 'observe_only',
                         provenance: 'Inferred',
                         safetyDecision: {
@@ -309,6 +310,7 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
             kind: 'evaluator',
             status: 'executed',
             evaluator: {
+                authorityLevel: 'observe',
                 mode: 'observe_only',
                 provenance: 'Inferred',
                 safetyDecision: {
@@ -335,6 +337,7 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
         },
     ]);
     assert.deepEqual(metadata.evaluator, {
+        authorityLevel: 'observe',
         mode: 'observe_only',
         provenance: 'Inferred',
         safetyDecision: {
