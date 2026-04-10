@@ -10,6 +10,7 @@ import type {
     ToolExecutionContext,
     ToolInvocationRequest,
 } from '@footnote/contracts/ethics-core';
+import type { ModelProfile } from '@footnote/contracts';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import type { ChatPlan } from '../chatPlanner.js';
 import type { ChatGenerationPlan } from '../chatGenerationTypes.js';
@@ -31,31 +32,20 @@ import {
 const RESPONSE_PROFILE_FALLBACK_POLICY = 'response_profile_fallback_v1';
 const SEARCH_REROUTE_FALLBACK_POLICY = 'search_reroute_profile_fallback_v1';
 
-type ProfileWithSearchCapability = {
-    id: string;
-    capabilities: {
-        canUseSearch: boolean;
-    };
-};
-
-type ResolveExecutionProfileInput<
-    TProfile extends ProfileWithSearchCapability,
-> = {
+type ResolveExecutionProfileInput = {
     normalizedRequest: PostChatRequest;
     plan: ChatPlan;
-    enabledProfiles: TProfile[];
-    searchCapableProfiles: TProfile[];
-    enabledProfilesById: Map<string, TProfile>;
-    defaultResponseProfile: TProfile;
+    enabledProfiles: ModelProfile[];
+    searchCapableProfiles: ModelProfile[];
+    enabledProfilesById: Map<string, ModelProfile>;
+    defaultResponseProfile: ModelProfile;
     generationForExecution: ChatGenerationPlan;
     resolvedExecutionPolicy: ExecutionPolicyContract;
 };
 
-type ResolveExecutionProfileResult<
-    TProfile extends ProfileWithSearchCapability,
-> = {
+type ResolveExecutionProfileResult = {
     generationForExecution: ChatGenerationPlan;
-    selectedResponseProfile: TProfile;
+    selectedResponseProfile: ModelProfile;
     fallbackRollupSelectionSource: PlannerSelectionSource;
     originalSelectedProfileId: string;
     effectiveSelectedProfileId: string;
@@ -67,14 +57,12 @@ type ResolveExecutionProfileResult<
     fallbackReasons: PlannerFallbackReason[];
 };
 
-export const resolveExecutionProfile = <
-    TProfile extends ProfileWithSearchCapability,
->(
-    input: ResolveExecutionProfileInput<TProfile>,
+export const resolveExecutionProfile = (
+    input: ResolveExecutionProfileInput,
     onWarn: {
         warn: (message: string, meta?: Record<string, unknown>) => void;
     }
-): ResolveExecutionProfileResult<TProfile> => {
+): ResolveExecutionProfileResult => {
     const fallbackReasons: PlannerFallbackReason[] = [];
     const routingStrategy = input.resolvedExecutionPolicy.routing.strategy;
     let selectedResponseProfile = input.defaultResponseProfile;

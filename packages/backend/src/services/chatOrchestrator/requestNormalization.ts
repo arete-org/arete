@@ -11,6 +11,10 @@ import type { PostChatRequest } from '@footnote/contracts/web';
 import { normalizeDiscordConversation } from '../chatConversationNormalization.js';
 import type { ScopeTuple } from '../executionContractTrustGraph/trustGraphEvidenceTypes.js';
 
+type ConversationNormalizationLogger = {
+    debug: (message: string, meta?: Record<string, unknown>) => void;
+};
+
 const normalizeScopeValue = (value: string | undefined): string | undefined => {
     if (typeof value !== 'string') {
         return undefined;
@@ -22,14 +26,14 @@ const normalizeScopeValue = (value: string | undefined): string | undefined => {
 
 export const normalizeRequest = (
     request: PostChatRequest,
-    onWarn: { warn: (message: string, meta?: Record<string, unknown>) => void }
+    logger: ConversationNormalizationLogger
 ): {
     normalizedConversation: PostChatRequest['conversation'];
     normalizedRequest: PostChatRequest;
 } => {
     const normalizedConversation =
         request.surface === 'discord'
-            ? normalizeDiscordConversation(request, onWarn)
+            ? normalizeDiscordConversation(request, logger)
             : request.conversation.map(
                   (message: PostChatRequest['conversation'][number]) => ({
                       role: message.role,
