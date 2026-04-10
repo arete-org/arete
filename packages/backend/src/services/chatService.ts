@@ -565,8 +565,21 @@ export const createChatService = ({
                 generationStartedAtMs: generationStartedAt,
                 workflowConfig: {
                     workflowName: workflowProfile.workflowName,
-                    maxIterations: chatWorkflowConfig.maxIterations,
-                    maxDurationMs: chatWorkflowConfig.maxDurationMs,
+                    maxIterations: Math.max(
+                        0,
+                        Math.min(
+                            Math.ceil(
+                                workflowExecutionLimits.maxDeliberationCalls / 2
+                            ),
+                            Math.ceil(
+                                Math.max(
+                                    0,
+                                    workflowExecutionLimits.maxWorkflowSteps - 1
+                                ) / 2
+                            )
+                        )
+                    ),
+                    maxDurationMs: workflowExecutionLimits.maxDurationMs,
                     executionLimits: workflowExecutionLimits,
                 },
                 workflowPolicy,
