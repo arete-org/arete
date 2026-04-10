@@ -16,6 +16,7 @@ export type {
     SafetyTier,
     SafetyRuleId,
     Citation,
+    ProvenanceAssessment,
     TraceAxisScore,
     ResponseTemperament,
     PartialResponseTemperament,

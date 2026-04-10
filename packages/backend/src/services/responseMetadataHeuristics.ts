@@ -9,8 +9,13 @@ import type {
     GenerationSearchContextSize,
     GenerationSearchIntent,
 } from '@footnote/agent-runtime';
-import type { PartialResponseTemperament } from '@footnote/contracts/ethics-core';
-import type { TraceAxisScore } from '@footnote/contracts/ethics-core';
+import type {
+    ExecutionStatus,
+    PartialResponseTemperament,
+    Provenance,
+    ProvenanceAssessment,
+    TraceAxisScore,
+} from '@footnote/contracts/ethics-core';
 
 /**
  * Normalizes assistant-supplied tradeoff counts into schema-safe integers.
@@ -126,3 +131,105 @@ export const deriveRetrievedChips = (
     evidenceScore: deriveRetrievedEvidenceScore(context),
     freshnessScore: deriveRetrievedFreshnessScore(context),
 });
+
+type ProvenanceClassificationInput = {
+    assistantProvenance?: Provenance;
+    citationCount: number;
+    retrievalRequested: boolean;
+    retrievalUsed: boolean;
+    toolStatus?: ExecutionStatus;
+    workflowEvidence: boolean;
+    trustGraphEvidence: boolean;
+};
+
+type ProvenanceClassificationResult = {
+    provenance: Provenance;
+    assessment: ProvenanceAssessment;
+};
+
+/**
+ * Deterministic multi-signal provenance classification with explicit method
+ * disclosure, conflict signaling, and conservative uncertainty language.
+ */
+export const classifyProvenanceWithSignals = (
+    input: ProvenanceClassificationInput
+): ProvenanceClassificationResult => {
+    const citationsPresent = input.citationCount > 0;
+    const toolExecuted = input.toolStatus === 'executed';
+    const assistantDeclaredSpeculative =
+        input.assistantProvenance === 'Speculative';
+    const retrievalSignals = [
+        citationsPresent,
+        input.retrievalUsed,
+        toolExecuted,
+        input.workflowEvidence,
+        input.trustGraphEvidence,
+    ];
+    const retrievalSignalCount = retrievalSignals.filter(Boolean).length;
+    const conflicts: string[] = [];
+    const limitations: string[] = [];
+
+    if (input.retrievalUsed && !citationsPresent) {
+        conflicts.push('retrieval_used_without_citations');
+        limitations.push(
+            'Retrieval ran, but no citations were retained after normalization.'
+        );
+    }
+
+    if (citationsPresent && !input.retrievalUsed && !toolExecuted) {
+        conflicts.push('citations_without_execution_confirmation');
+        limitations.push(
+            'Citations were present without matching retrieval/tool execution evidence.'
+        );
+    }
+
+    if (assistantDeclaredSpeculative && retrievalSignalCount > 0) {
+        conflicts.push(
+            'assistant_speculative_conflicts_with_retrieval_signals'
+        );
+        limitations.push(
+            'Signals are mixed; response may combine sourced and inferred content.'
+        );
+    }
+
+    if (input.retrievalRequested && !input.retrievalUsed) {
+        limitations.push(
+            'Retrieval was requested but not used by execution, reducing grounding confidence.'
+        );
+    }
+
+    let provenance: Provenance;
+    if (assistantDeclaredSpeculative && retrievalSignalCount <= 1) {
+        provenance = 'Speculative';
+    } else if (
+        citationsPresent ||
+        input.trustGraphEvidence ||
+        retrievalSignalCount >= 2
+    ) {
+        provenance = 'Retrieved';
+    } else if (assistantDeclaredSpeculative) {
+        provenance = 'Inferred';
+    } else {
+        provenance = 'Inferred';
+    }
+
+    return {
+        provenance,
+        assessment: {
+            methodId: 'deterministic_multi_signal_v1',
+            methodLabel:
+                'Deterministic multi-signal provenance classification (backend)',
+            signals: {
+                citationsPresent,
+                retrievalRequested: input.retrievalRequested,
+                retrievalUsed: input.retrievalUsed,
+                toolExecuted,
+                workflowEvidence: input.workflowEvidence,
+                trustGraphEvidence: input.trustGraphEvidence,
+                assistantDeclaredSpeculative,
+            },
+            conflicts,
+            limitations,
+        },
+    };
+};

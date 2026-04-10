@@ -34,6 +34,7 @@ import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { buildWebSearchInstruction } from './chatGenerationHints.js';
 import {
+    classifyProvenanceWithSignals,
     deriveRetrievedChips,
     resolveTradeoffCount,
 } from './responseMetadataHeuristics.js';
@@ -640,6 +641,7 @@ type ResponseMetadataRuntimeContext = {
     totalDurationMs?: number;
     plannerTemperament?: PartialResponseTemperament;
     retrieval?: ResponseMetadataRetrievalContext;
+    trustGraphEvidence?: boolean;
     executionContext?: {
         planner?: {
             status: ExecutionStatus;
@@ -777,17 +779,17 @@ const buildResponseMetadata = (
         ? assistantMetadata.citations
         : [];
     const retrieval = runtimeContext.retrieval;
-    const provenance: Provenance =
-        assistantMetadata.provenance === 'Retrieved' ||
-        assistantMetadata.provenance === 'Inferred' ||
-        assistantMetadata.provenance === 'Speculative'
-            ? assistantMetadata.provenance
-            : retrieval?.used || citations.length > 0
-              ? 'Retrieved'
-              : 'Inferred';
-    // TODO(provenance-classification-v2): Expand provenance classification to
-    // represent mixed/partial grounding paths once execution evidence can carry
-    // per-claim provenance without overloading mode or TRACE concepts.
+    const provenanceClassification = classifyProvenanceWithSignals({
+        assistantProvenance: assistantMetadata.provenance,
+        citationCount: citations.length,
+        retrievalRequested: retrieval?.requested ?? false,
+        retrievalUsed: retrieval?.used ?? false,
+        toolStatus: runtimeContext.executionContext?.tool?.status,
+        workflowEvidence: runtimeContext.workflow !== undefined,
+        trustGraphEvidence: runtimeContext.trustGraphEvidence ?? false,
+    });
+    const provenance = provenanceClassification.provenance;
+    const provenanceAssessment = provenanceClassification.assessment;
     const tradeoffCount = resolveTradeoffCount(
         assistantMetadata.tradeoffCount,
         runtimeContext.plannerTemperament
@@ -953,6 +955,7 @@ const buildResponseMetadata = (
             runtimeConfig.openai.defaultModel,
         staleAfter: new Date(Date.now() + ninetyDaysMs).toISOString(),
         citations,
+        provenanceAssessment,
         ...(runtimeContext.totalDurationMs !== undefined && {
             totalDurationMs: runtimeContext.totalDurationMs,
         }),

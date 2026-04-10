@@ -43,11 +43,25 @@ test('buildResponseMetadata derives conservative chips for retrieved current-fac
                 intent: 'current_facts',
                 contextSize: 'low',
             },
+            executionContext: {
+                tool: {
+                    toolName: 'web_search',
+                    status: 'executed',
+                },
+            },
         })
     );
 
     assert.equal(metadata.evidenceScore, 2);
     assert.equal(metadata.freshnessScore, 3);
+    assert.equal(
+        metadata.provenanceAssessment?.methodId,
+        'deterministic_multi_signal_v1'
+    );
+    assert.equal(metadata.provenanceAssessment?.signals.retrievalUsed, true);
+    assert.deepEqual(metadata.provenanceAssessment?.conflicts, [
+        'retrieval_used_without_citations',
+    ]);
 });
 
 test('buildResponseMetadata derives chips for retrieved current-facts responses with one citation', () => {
@@ -136,7 +150,28 @@ test('buildResponseMetadata preserves explicit chip values when present', () => 
 
 test('buildResponseMetadata does not add chips for non-retrieved responses', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata({ provenance: 'Speculative' }),
+        baseAssistantMetadata({ provenance: 'Speculative', citations: [] }),
+        baseRuntimeContext({
+            retrieval: {
+                requested: true,
+                used: false,
+                intent: 'current_facts',
+                contextSize: 'low',
+            },
+        })
+    );
+
+    assert.equal(metadata.provenance, 'Speculative');
+    assert.equal(metadata.evidenceScore, undefined);
+    assert.equal(metadata.freshnessScore, undefined);
+});
+
+test('buildResponseMetadata can classify as retrieved from execution-derived signals without citations', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata({
+            provenance: 'Inferred',
+            citations: [],
+        }),
         baseRuntimeContext({
             retrieval: {
                 requested: true,
@@ -144,11 +179,19 @@ test('buildResponseMetadata does not add chips for non-retrieved responses', () 
                 intent: 'current_facts',
                 contextSize: 'low',
             },
+            executionContext: {
+                tool: {
+                    toolName: 'web_search',
+                    status: 'executed',
+                },
+            },
         })
     );
 
-    assert.equal(metadata.evidenceScore, undefined);
-    assert.equal(metadata.freshnessScore, undefined);
+    assert.equal(metadata.provenance, 'Retrieved');
+    assert.equal(metadata.evidenceScore, 2);
+    assert.equal(metadata.freshnessScore, 3);
+    assert.equal(metadata.provenanceAssessment?.signals.toolExecuted, true);
 });
 
 test('buildResponseMetadata uses planner fallback tradeoffCount when assistant metadata omits count', () => {

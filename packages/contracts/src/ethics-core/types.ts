@@ -49,6 +49,26 @@ export type Citation = {
 };
 
 /**
+ * ProvenanceAssessment records how a provenance label was chosen.
+ * This is deterministic, serializable, and intended for trace inspection.
+ */
+export type ProvenanceAssessment = {
+    methodId: 'deterministic_multi_signal_v1';
+    methodLabel: string;
+    signals: {
+        citationsPresent: boolean;
+        retrievalRequested: boolean;
+        retrievalUsed: boolean;
+        toolExecuted: boolean;
+        workflowEvidence: boolean;
+        trustGraphEvidence: boolean;
+        assistantDeclaredSpeculative: boolean;
+    };
+    conflicts: string[];
+    limitations: string[];
+};
+
+/**
  * TraceAxisScore is a single TRACE axis value on a 1..5 scale.
  * TypeScript enforces this range for typed literals.
  */
@@ -526,6 +546,7 @@ export type ResponseMetadata = {
     staleAfter: string; // ISO timestamp after which the data is stale.
     totalDurationMs?: number; // End-to-end orchestration duration when available.
     citations: Citation[]; // Sources used for the answer.
+    provenanceAssessment?: ProvenanceAssessment; // Deterministic method disclosure for provenance labeling.
     execution?: ExecutionEvent[]; // Canonical execution timeline for model/tool visibility.
     workflow?: WorkflowRecord; // Optional workflow provenance record for bounded multi-step execution.
     workflowMode?: WorkflowModeDecision; // Explicit mode routing decision and behavior mapping.

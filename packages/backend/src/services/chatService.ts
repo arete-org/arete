@@ -787,6 +787,11 @@ export const createChatService = ({
             generationResult.retrieval?.used === true ||
             generationResult.provenance === 'Retrieved' ||
             (generationResult.citations?.length ?? 0) > 0;
+        const trustGraphEvidenceAvailable =
+            trustGraphResult?.adapterStatus === 'success' &&
+            (trustGraphResult.predicateViews.P_EVID.sourceRefs.length > 0 ||
+                trustGraphResult.predicateViews.P_EVID.provenancePathRefs
+                    .length > 0);
         // TODO(workflow-mode-escalation): If runtime introduces mode transitions,
         // capture transition records here (planned mode -> effective mode) once
         // retrieval/sufficiency checks can revise an initial mode choice.
@@ -905,6 +910,7 @@ export const createChatService = ({
                 intent: normalizedGeneration?.search?.intent,
                 contextSize: normalizedGeneration?.search?.contextSize,
             },
+            trustGraphEvidence: trustGraphEvidenceAvailable,
         };
         const finalToolExecutionTelemetry:
             | FinalToolExecutionTelemetry
