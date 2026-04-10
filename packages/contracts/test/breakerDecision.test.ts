@@ -49,7 +49,6 @@ test('resolveBreakerDecisionContext prefers metadata.evaluator over execution ti
                 kind: 'evaluator',
                 status: 'executed',
                 evaluator: {
-                    authorityLevel: 'influence',
                     mode: 'observe_only',
                     provenance: 'Inferred',
                     safetyDecision: {

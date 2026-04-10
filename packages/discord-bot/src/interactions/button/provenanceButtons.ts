@@ -254,7 +254,11 @@ function formatExecutionEventLine(event: ExecutionEvent): string {
     const evaluatorAuthority =
         event.kind === 'evaluator' && event.evaluator
             ? (event.evaluator.authorityLevel ??
-              (event.evaluator.mode === 'enforced' ? 'enforce' : 'observe'))
+              (event.evaluator.mode === 'enforced'
+                  ? 'enforce'
+                  : event.evaluator.safetyDecision.action !== 'allow'
+                    ? 'influence'
+                    : 'observe'))
             : undefined;
     const target =
         event.kind === 'evaluator'

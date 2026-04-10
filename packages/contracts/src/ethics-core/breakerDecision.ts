@@ -84,7 +84,10 @@ const toBreakerDecisionContext = (
         authorityLevel === 'enforce'
             ? authorityLevel
             : mode === 'observe_only'
-              ? 'observe'
+              ? isBreakerSafetyDecision(safetyDecision) &&
+                safetyDecision.action !== 'allow'
+                  ? 'influence'
+                  : 'observe'
               : mode === 'enforced'
                 ? 'enforce'
                 : null;

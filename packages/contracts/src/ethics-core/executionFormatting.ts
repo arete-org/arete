@@ -36,7 +36,9 @@ const formatEvaluatorSummary = (event: ExecutionEvent): string => {
                 ? rawEvaluator.authorityLevel
                 : rawEvaluator.mode === 'enforced'
                   ? 'enforce'
-                  : 'observe';
+                  : safetyDecision.action !== 'allow'
+                    ? 'influence'
+                    : 'observe';
         return [
             evaluatorAuthorityLevel,
             safetyDecision.safetyTier,

@@ -218,7 +218,9 @@ export const createChatOrchestrator = ({
                 evaluatorExecutionContext.outcome?.authorityLevel ??
                 (evaluatorExecutionContext.outcome?.mode === 'enforced'
                     ? 'enforce'
-                    : 'observe');
+                    : breakerDecision.action !== 'allow'
+                      ? 'influence'
+                      : 'observe');
             const enforcement: 'observe_only' | 'enforced' =
                 authorityLevel === 'enforce' ? 'enforced' : 'observe_only';
             chatOrchestratorLogger.info(

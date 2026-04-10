@@ -86,7 +86,11 @@ const ProvenanceFooter = ({
     const safetyDecision = evaluatorOutcome?.safetyDecision;
     const evaluatorAuthority =
         evaluatorOutcome?.authorityLevel ??
-        (evaluatorOutcome?.mode === 'enforced' ? 'enforce' : 'observe');
+        (evaluatorOutcome?.mode === 'enforced'
+            ? 'enforce'
+            : safetyDecision?.action !== 'allow'
+              ? 'influence'
+              : 'observe');
     const hasNonAllowSafetyDecision =
         safetyDecision !== undefined && safetyDecision.action !== 'allow';
 
