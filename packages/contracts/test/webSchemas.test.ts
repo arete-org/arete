@@ -556,6 +556,38 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
     });
     assert.equal(invalidEvaluatorMode.success, false);
 
+    const legacyEvaluatorWithoutAuthority = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        evaluator: {
+            mode: 'observe_only',
+            provenance: 'Inferred',
+            safetyDecision: {
+                action: 'block',
+                safetyTier: 'High',
+                ruleId: 'safety.weaponization_request.v1',
+                reasonCode: 'weaponization_request',
+                reason: 'Deterministic weaponization-request rule matched.',
+            },
+        },
+    });
+    assert.equal(legacyEvaluatorWithoutAuthority.success, true);
+
+    const legacyEnforcedWithoutAuthority = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        evaluator: {
+            mode: 'enforced',
+            provenance: 'Inferred',
+            safetyDecision: {
+                action: 'block',
+                safetyTier: 'High',
+                ruleId: 'safety.weaponization_request.v1',
+                reasonCode: 'weaponization_request',
+                reason: 'Deterministic weaponization-request rule matched.',
+            },
+        },
+    });
+    assert.equal(legacyEnforcedWithoutAuthority.success, true);
+
     const invalidNonAllowBreaker = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
         evaluator: {
