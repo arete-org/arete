@@ -46,6 +46,10 @@ import {
     type PlannerContractAssessment,
     type PlannerOutputApplyOutcome,
 } from './chatPlannerOutputContract.js';
+import {
+    logPlannerOutputIngestion,
+    logPlannerPolicyInvalidFallback,
+} from './chatPlannerTelemetry.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
@@ -1291,67 +1295,6 @@ export const createChatPlanner = ({
             }
         };
 
-        const logPolicyInvalidFallback = ({
-            normalization,
-            mode,
-        }: {
-            normalization: PlannerNormalizationResult;
-            mode: ChatPlannerExecutionMode;
-        }) => {
-            logger.warn(
-                'chat planner returned policy-invalid decision; using fallback telemetry class',
-                {
-                    event: 'chat.planner.fallback',
-                    plannerMode: mode,
-                    fallbackFrom: mode,
-                    fallbackTo: 'safe_default_plan',
-                    fallbackTier: normalization.fallbackTier,
-                    correctionCodes: normalization.correctionCodes,
-                    reasonCode: 'planner_invalid_output',
-                    failureClass: 'policy_invalid',
-                    surface: request.surface,
-                    triggerKind: request.trigger.kind,
-                    plannerStructuredPreviewPresent:
-                        mode === 'structured' &&
-                        plannerStructuredArguments !== undefined,
-                    plannerStructuredPreviewLength:
-                        mode === 'structured'
-                            ? plannerStructuredArguments?.length
-                            : undefined,
-                    plannerResponseTextLength:
-                        mode === 'text_json'
-                            ? plannerResponseText?.length
-                            : undefined,
-                }
-            );
-        };
-        const logOutputIngestion = ({
-            normalization,
-            mode,
-            attempt,
-        }: {
-            normalization: PlannerNormalizationResult;
-            mode: ChatPlannerExecutionMode;
-            attempt: PlannerSelectedAttempt;
-        }) => {
-            logger.info('chat planner output ingestion applied', {
-                event: 'chat.planner.output_ingestion',
-                plannerMode: mode,
-                attempt,
-                applyOutcome: normalization.applyOutcome,
-                fallbackTier: normalization.fallbackTier,
-                correctionCodes: normalization.correctionCodes,
-                outOfContractFieldCount:
-                    normalization.outOfContractFields.length,
-                outOfContractFields: normalization.outOfContractFields,
-                authorityFieldAttemptCount:
-                    normalization.authorityFieldAttempts.length,
-                authorityFieldAttempts: normalization.authorityFieldAttempts,
-                surface: request.surface,
-                triggerKind: request.trigger.kind,
-            });
-        };
-
         const runExpandedTextJsonAttempt = async (
             contextTier: PlannerContextTier
         ): Promise<PlannerNormalizationResult | null> => {
@@ -1387,10 +1330,11 @@ export const createChatPlanner = ({
                 request,
                 expandedCandidate
             );
-            logOutputIngestion({
+            logPlannerOutputIngestion({
                 normalization: expandedNormalization,
                 mode: 'text_json',
                 attempt: 'expanded',
+                request,
             });
             return expandedNormalization;
         };
@@ -1543,15 +1487,19 @@ export const createChatPlanner = ({
                     request,
                     structuredResponse.decision
                 );
-                logOutputIngestion({
+                logPlannerOutputIngestion({
                     normalization,
                     mode: 'structured',
                     attempt: 'initial',
+                    request,
                 });
                 if (normalization.fallbackTier === 'safe_default_plan') {
-                    logPolicyInvalidFallback({
+                    logPlannerPolicyInvalidFallback({
                         normalization,
                         mode: 'structured',
+                        request,
+                        plannerStructuredArguments,
+                        plannerResponseText,
                     });
                     return resolveAdaptivePlan(normalization, {
                         status: 'failed',
@@ -1579,10 +1527,11 @@ export const createChatPlanner = ({
                 plannerResponse.text
             );
             const normalization = normalizePlan(request, parsed);
-            logOutputIngestion({
+            logPlannerOutputIngestion({
                 normalization,
                 mode: 'text_json',
                 attempt: 'initial',
+                request,
             });
 
             /*
@@ -1607,9 +1556,12 @@ export const createChatPlanner = ({
             }
             */
             if (normalization.fallbackTier === 'safe_default_plan') {
-                logPolicyInvalidFallback({
+                logPlannerPolicyInvalidFallback({
                     normalization,
                     mode: 'text_json',
+                    request,
+                    plannerStructuredArguments,
+                    plannerResponseText,
                 });
             }
 
@@ -1673,15 +1625,19 @@ export const createChatPlanner = ({
                         textJsonResponse.text
                     );
                     const normalization = normalizePlan(request, parsed);
-                    logOutputIngestion({
+                    logPlannerOutputIngestion({
                         normalization,
                         mode: 'text_json',
                         attempt: 'initial',
+                        request,
                     });
                     if (normalization.fallbackTier === 'safe_default_plan') {
-                        logPolicyInvalidFallback({
+                        logPlannerPolicyInvalidFallback({
                             normalization,
                             mode: 'text_json',
+                            request,
+                            plannerStructuredArguments,
+                            plannerResponseText,
                         });
                     }
                     return resolveAdaptivePlan(normalization, {
