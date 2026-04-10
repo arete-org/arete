@@ -174,6 +174,9 @@ const buildExecutionContractScopeTuple = (
 /**
  * The orchestrator keeps surface-specific policy in one place while reusing the
  * shared message-generation service for any branch that ends in text output.
+ *
+ * Authority split: the Execution Contract governs allowed execution shape and
+ * bounds; this orchestrator executes requests under those rules.
  */
 export const createChatOrchestrator = ({
     generationRuntime,

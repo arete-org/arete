@@ -1,9 +1,9 @@
 /**
- * @description: Verifies Execution Policy Contract resolver assembly invariants for preset mapping and sanitization.
+ * @description: Verifies Execution Contract resolver assembly invariants for preset mapping and sanitization.
  * @footnote-scope: test
  * @footnote-module: ExecutionPolicyResolverTests
- * @footnote-risk: medium - Missing resolver tests can allow EPC preset drift across runtime seams.
- * @footnote-ethics: high - EPC policy drift can silently change authority and fail-open behavior.
+ * @footnote-risk: medium - Missing resolver tests can allow Execution Contract preset drift across runtime seams.
+ * @footnote-ethics: high - Execution Contract drift can silently change authority and fail-open behavior.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -1433,7 +1433,7 @@ test('runChatMessages keeps no-generation surfaced when execution policy disable
     assert.equal(fallbackExecution, undefined);
 });
 
-test('runChatMessages honors EPC response-mode ownership switch for workflow runtime gating', async () => {
+test('runChatMessages honors Execution Contract response-mode ownership switch for workflow runtime gating', async () => {
     const runWithPolicyPreset = async (
         presetId: 'fast-direct' | 'quality-grounded'
     ): Promise<{
@@ -1804,7 +1804,7 @@ test('runChatMessages trustgraph ON/OFF does not change local execution authorit
     );
 });
 
-test('runChatMessages preserves local response authority when TrustGraph ownership denies under EPC policy carriage', async () => {
+test('runChatMessages preserves local response authority when TrustGraph ownership denies under Execution Contract policy carriage', async () => {
     const scopeOwnershipValidator =
         createScopeOwnershipValidatorFromTenancyService({
             validatorId: 'backend_tenancy_v1',

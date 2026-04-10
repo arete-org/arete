@@ -1,9 +1,9 @@
 /**
- * @description: Assembles a canonical Execution Policy Contract (EPC) from
+ * @description: Assembles a canonical Execution Contract from
  * defaults, optional built-in preset selection, and explicit overrides.
  * @footnote-scope: core
  * @footnote-module: ExecutionPolicyResolver
- * @footnote-risk: low - Resolver is a thin assembly layer over the canonical EPC builder and built-in preset map.
+ * @footnote-risk: low - Resolver is a thin assembly layer over the canonical contract builder and built-in preset map.
  * @footnote-ethics: medium - Preset-to-policy mapping affects whether runtime follows fast direct or grounded answer expectations.
  */
 import {
@@ -67,7 +67,7 @@ export type ExecutionPolicyResolverResolution = {
 };
 
 /**
- * Resolves one EPC contract deterministically from:
+ * Resolves one Execution Contract instance deterministically from:
  * 1) canonical defaults in the builder,
  * 2) optional built-in preset overrides,
  * 3) explicit call-site overrides.

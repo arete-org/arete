@@ -257,7 +257,7 @@ test('message plans pass planner generation options into chatService', async () 
     );
 });
 
-test('orchestrator carries resolved EPC policy payload through service runtime seam', async () => {
+test('orchestrator carries resolved Execution Contract policy payload through service runtime seam', async () => {
     let capturedConversationSnapshot: string | undefined;
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {

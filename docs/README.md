@@ -8,6 +8,7 @@ Footnote keeps docs in three buckets:
 
 ## Architecture
 
+- [Execution Contract Authority Map](./architecture/execution-contract-authority-map.md): Defines the governing authority model and module ownership for execution.
 - [Incident Reporting](./architecture/incident-reporting.md): Defines the consented Discord-side report flow and captured context.
 - [Incident Storage And Audit](./architecture/incident-storage-and-audit.md): Defines the durable incident model, audit trail, and privacy boundary.
 - [Incident And Breaker Logging](./architecture/incident-and-breaker-logging.md): Defines the structured logging schema and examples for incident lifecycle and breaker events.

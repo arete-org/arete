@@ -47,10 +47,12 @@ export type ChatGenerationWeatherRequest = {
 };
 
 /**
- * Optional non-authoritative EPC hint from planner to execution assembly.
+ * Optional non-authoritative Execution Contract hint from planner to execution
+ * assembly.
  *
- * This is advisory vocabulary only. Canonical policy ownership stays in EPC
- * contract resolution; this hint cannot define or override EPC ontology.
+ * This is advisory vocabulary only. Canonical policy ownership stays in
+ * Execution Contract resolution; this hint cannot define or override
+ * contract ontology.
  */
 export type ChatGenerationResponseIntentHint = {
     responseMode: ExecutionResponseMode;
@@ -61,8 +63,9 @@ export type ChatGenerationResponseIntentHint = {
  * knobs come from `@footnote/agent-runtime`, while TRACE temperament remains
  * backend-owned because it feeds Footnote metadata rather than runtime execution directly.
  *
- * `reasoningEffort` and `verbosity` are generation controls, not EPC response
- * intent. `responseIntentHint` is advisory only and non-authoritative.
+ * `reasoningEffort` and `verbosity` are generation controls, not Execution
+ * Contract response intent. `responseIntentHint` is advisory only and
+ * non-authoritative.
  */
 export type ChatGenerationPlan = {
     reasoningEffort: NonNullable<GenerationRequest['reasoningEffort']>;

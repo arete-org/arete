@@ -1,14 +1,15 @@
 /**
- * @description: Defines the canonical Execution Policy Contract (EPC) surface
+ * @description: Defines the canonical Execution Contract surface
  * for backend response intent, evidence sufficiency policy, and fail-open behavior.
  * @footnote-scope: interface
  * @footnote-module: ExecutionPolicyContract
  * @footnote-risk: medium - Contract drift here can fragment policy ownership and produce inconsistent execution behavior.
- * @footnote-ethics: high - EPC shapes whether users get quick direct output or bounded grounded output, which impacts trust and operator accountability.
+ * @footnote-ethics: high - Execution Contract shape determines whether users get quick direct output or bounded grounded output, which impacts trust and operator accountability.
  */
 
 /**
- * EPC schema version. Keep this explicit so future breaking changes are easy to
+ * Execution Contract schema version. Keep this explicit so future breaking
+ * changes are easy to
  * identify in reviews and logs.
  */
 export type ExecutionPolicyContractVersion = 'v1';
@@ -110,7 +111,7 @@ export type ExecutionPolicyLimits = {
 /**
  * Fail-open behavior remains backend-owned and explicit.
  *
- * EPC carries policy intent only. Incident response and operator controls stay
+ * Execution Contract carries policy intent only. Incident response and operator controls stay
  * outside this contract.
  */
 export type ExecutionPolicyFailOpen = {
@@ -123,7 +124,7 @@ export type ExecutionPolicyFailOpen = {
  * Lightweight routing intent seam that policy can declare.
  *
  * This is provider-neutral and non-authoritative assembly input only.
- * Model/provider selection logic stays outside EPC.
+ * Model/provider selection logic stays outside the Execution Contract.
  * This is not a full multi-search or evidence-acquisition strategy layer.
  */
 export type ExecutionPolicyRoutingIntent = {
@@ -144,9 +145,9 @@ export type ExecutionPolicyTrustGraphSeam = {
 };
 
 /**
- * Canonical internal Execution Policy Contract.
+ * Canonical internal Execution Contract type.
  *
- * EPC is the main execution-policy object for runtime decisions. Presets are
+ * This is the main execution-policy object for runtime decisions. Presets are
  * named defaults over this contract, not separate contract shapes.
  */
 export type ExecutionPolicyContract = {
@@ -169,9 +170,9 @@ export type ExecutionPolicyContract = {
 };
 
 /**
- * Preset ids for reusable EPC defaults.
+ * Preset ids for reusable Execution Contract defaults.
  *
- * A preset is not EPC itself. It is a named override set applied by the
+ * A preset is not the contract itself. It is a named override set applied by the
  * builder to make policy intent easy to read and review.
  * Preset ids use kebab-case (`fast-direct`), while `response.responseMode`
  * uses snake_case (`fast_direct`) for execution intent vocabulary.
@@ -182,14 +183,14 @@ export type ExecutionPolicyPresetId =
     | (string & {});
 
 /**
- * Shared override shape used by EPC presets, builders, and resolver assembly glue.
+ * Shared override shape used by presets, builders, and resolver assembly glue.
  */
 export type ExecutionPolicyContractOverrides = Partial<
     Omit<ExecutionPolicyContract, 'policyId' | 'policyVersion' | 'displayName'>
 >;
 
 /**
- * Named overrides that can be applied while building an EPC.
+ * Named overrides that can be applied while building one Execution Contract instance.
  */
 export type ExecutionPolicyPreset = {
     presetId: ExecutionPolicyPresetId;
@@ -198,7 +199,7 @@ export type ExecutionPolicyPreset = {
 };
 
 /**
- * Builder input for creating one EPC instance.
+ * Builder input for creating one Execution Contract instance.
  */
 export type ExecutionPolicyContractBuilderInput = {
     policyId: ExecutionPolicyContractId;
@@ -208,12 +209,12 @@ export type ExecutionPolicyContractBuilderInput = {
 };
 
 /**
- * Standard defaults for EPC creation.
+ * Standard defaults for Execution Contract creation.
  *
  * Defaults favor a fast direct response path so callers must opt into heavier bounded
  * grounding expectations explicitly.
  */
-const EPC_DEFAULTS: Omit<
+const EXECUTION_CONTRACT_DEFAULTS: Omit<
     ExecutionPolicyContract,
     'policyId' | 'policyVersion' | 'displayName'
 > = {
@@ -257,7 +258,7 @@ const EPC_DEFAULTS: Omit<
 };
 
 /**
- * Canonical, reusable response presets over EPC.
+ * Canonical, reusable response presets over the Execution Contract.
  *
  * Practical difference:
  * `fast-direct` is latency-first.
@@ -338,9 +339,9 @@ export const EXECUTION_POLICY_PRESETS: Readonly<
 };
 
 /**
- * Explicit list of concerns that stay outside EPC.
+ * Explicit list of concerns that stay outside the Execution Contract.
  *
- * Keep these boundaries visible so EPC does not become a mini framework.
+ * Keep these boundaries visible so the contract does not become a mini framework.
  */
 export const EXECUTION_POLICY_OUTSIDE_SCOPE: ReadonlyArray<string> = [
     'Transport-specific behavior (web/discord response shaping).',
@@ -361,7 +362,7 @@ const sanitizeNonNegativeFiniteNumber = (
 ): number => (Number.isFinite(value) && value >= 0 ? value : fallback);
 
 /**
- * Builder/factory entrypoint for one EPC instance.
+ * Builder/factory entrypoint for one Execution Contract instance.
  *
  * Merge order is defaults -> preset overrides -> explicit overrides so callers
  * can start from a response preset and still tune fields for one policy id.
@@ -376,67 +377,67 @@ export const buildExecutionPolicyContract = (
     };
 
     const mergedResponse: ExecutionResponseIntent = {
-        ...EPC_DEFAULTS.response,
+        ...EXECUTION_CONTRACT_DEFAULTS.response,
         ...presetOverrides?.response,
         ...input.overrides?.response,
     };
 
     const mergedEvidence: ExecutionEvidencePolicy = {
-        ...EPC_DEFAULTS.evidence,
+        ...EXECUTION_CONTRACT_DEFAULTS.evidence,
         ...presetOverrides?.evidence,
         ...input.overrides?.evidence,
         maxEscalationRounds: sanitizeNonNegativeFiniteNumber(
             input.overrides?.evidence?.maxEscalationRounds ??
                 presetOverrides?.evidence?.maxEscalationRounds ??
-                EPC_DEFAULTS.evidence.maxEscalationRounds,
-            EPC_DEFAULTS.evidence.maxEscalationRounds
+                EXECUTION_CONTRACT_DEFAULTS.evidence.maxEscalationRounds,
+            EXECUTION_CONTRACT_DEFAULTS.evidence.maxEscalationRounds
         ),
     };
 
     const mergedVerification: ExecutionVerificationPolicy = {
-        ...EPC_DEFAULTS.verification,
+        ...EXECUTION_CONTRACT_DEFAULTS.verification,
         ...presetOverrides?.verification,
         ...input.overrides?.verification,
     };
 
     const mergedLimits: ExecutionPolicyLimits = {
-        ...EPC_DEFAULTS.limits,
+        ...EXECUTION_CONTRACT_DEFAULTS.limits,
         ...presetOverrides?.limits,
         ...input.overrides?.limits,
         maxWorkflowSteps: sanitizeNonNegativeFiniteNumber(
             input.overrides?.limits?.maxWorkflowSteps ??
                 presetOverrides?.limits?.maxWorkflowSteps ??
-                EPC_DEFAULTS.limits.maxWorkflowSteps,
-            EPC_DEFAULTS.limits.maxWorkflowSteps
+                EXECUTION_CONTRACT_DEFAULTS.limits.maxWorkflowSteps,
+            EXECUTION_CONTRACT_DEFAULTS.limits.maxWorkflowSteps
         ),
         maxToolCalls: sanitizeNonNegativeFiniteNumber(
             input.overrides?.limits?.maxToolCalls ??
                 presetOverrides?.limits?.maxToolCalls ??
-                EPC_DEFAULTS.limits.maxToolCalls,
-            EPC_DEFAULTS.limits.maxToolCalls
+                EXECUTION_CONTRACT_DEFAULTS.limits.maxToolCalls,
+            EXECUTION_CONTRACT_DEFAULTS.limits.maxToolCalls
         ),
         maxDeliberationCalls: sanitizeNonNegativeFiniteNumber(
             input.overrides?.limits?.maxDeliberationCalls ??
                 presetOverrides?.limits?.maxDeliberationCalls ??
-                EPC_DEFAULTS.limits.maxDeliberationCalls,
-            EPC_DEFAULTS.limits.maxDeliberationCalls
+                EXECUTION_CONTRACT_DEFAULTS.limits.maxDeliberationCalls,
+            EXECUTION_CONTRACT_DEFAULTS.limits.maxDeliberationCalls
         ),
         maxTokensTotal: sanitizeNonNegativeFiniteNumber(
             input.overrides?.limits?.maxTokensTotal ??
                 presetOverrides?.limits?.maxTokensTotal ??
-                EPC_DEFAULTS.limits.maxTokensTotal,
-            EPC_DEFAULTS.limits.maxTokensTotal
+                EXECUTION_CONTRACT_DEFAULTS.limits.maxTokensTotal,
+            EXECUTION_CONTRACT_DEFAULTS.limits.maxTokensTotal
         ),
         maxDurationMs: sanitizeNonNegativeFiniteNumber(
             input.overrides?.limits?.maxDurationMs ??
                 presetOverrides?.limits?.maxDurationMs ??
-                EPC_DEFAULTS.limits.maxDurationMs,
-            EPC_DEFAULTS.limits.maxDurationMs
+                EXECUTION_CONTRACT_DEFAULTS.limits.maxDurationMs,
+            EXECUTION_CONTRACT_DEFAULTS.limits.maxDurationMs
         ),
     };
 
     const mergedFailOpen: ExecutionPolicyFailOpen = {
-        ...EPC_DEFAULTS.failOpen,
+        ...EXECUTION_CONTRACT_DEFAULTS.failOpen,
         ...presetOverrides?.failOpen,
         ...input.overrides?.failOpen,
         authority: 'backend',
@@ -446,17 +447,17 @@ export const buildExecutionPolicyContract = (
     const resolvedCapabilityTags: string[] =
         input.overrides?.routing?.capabilityTags ??
         presetOverrides?.routing?.capabilityTags ??
-        EPC_DEFAULTS.routing.capabilityTags;
+        EXECUTION_CONTRACT_DEFAULTS.routing.capabilityTags;
 
     const mergedRouting: ExecutionPolicyRoutingIntent = {
-        ...EPC_DEFAULTS.routing,
+        ...EXECUTION_CONTRACT_DEFAULTS.routing,
         ...presetOverrides?.routing,
         ...input.overrides?.routing,
         capabilityTags: [...resolvedCapabilityTags],
     };
 
     const mergedTrustGraph: ExecutionPolicyTrustGraphSeam = {
-        ...EPC_DEFAULTS.trustGraph,
+        ...EXECUTION_CONTRACT_DEFAULTS.trustGraph,
         ...presetOverrides?.trustGraph,
         ...input.overrides?.trustGraph,
         canBlockExecution: false,

@@ -28,10 +28,11 @@ export type WorkflowProfileId =
     | (string & {});
 
 /**
- * EPC-aligned workflow policy preset checked before each workflow transition.
+ * Execution Contract-aligned workflow policy preset checked before each
+ * workflow transition.
  *
  * This is the canonical workflow-step gating shape for backend workflow execution.
- * It is outside EPC response/evidence/verification ontology ownership and is
+ * It is outside Execution Contract response/evidence/verification ontology ownership and is
  * used as execution assembly glue for workflow transitions only.
  * Engine/runtime modules should import this type instead of re-declaring fields.
  *
@@ -256,7 +257,7 @@ export type WorkflowProfileContract = {
     displayName: string;
     /** Workflow lineage name emitted into response metadata. */
     workflowName: string;
-    /** EPC workflow policy preset enforced by transition checks. */
+    /** Execution Contract workflow policy preset enforced by transition checks. */
     policy: WorkflowProfilePolicyContract;
     /** Default execution ceilings applied when request-specific limits are absent. */
     defaultLimits: WorkflowProfileExecutionLimitsContract;
@@ -275,7 +276,7 @@ export type WorkflowProfileContract = {
  *
  * Keep this separate from `WorkflowProfileContract` so public types remain
  * serializable and transport-safe. These hooks are assembly glue and remain
- * outside EPC policy contract ownership.
+ * outside Execution Contract ownership.
  */
 type WorkflowProfileRuntimeHooks = {
     requiredHooks: {

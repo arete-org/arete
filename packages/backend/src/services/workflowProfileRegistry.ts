@@ -1,5 +1,5 @@
 /**
- * @description: Resolves workflow profiles by id into EPC-aligned workflow
+ * @description: Resolves workflow profiles by id into Execution Contract-aligned workflow
  * policy presets and runtime hooks, with bounded-review fail-open fallback behavior.
  * @footnote-scope: core
  * @footnote-module: WorkflowProfileRegistry
@@ -21,15 +21,15 @@ import type {
 type BuiltinWorkflowProfileId = 'bounded-review' | 'generate-only';
 
 /**
- * EPC workflow policy presets:
+ * Execution Contract workflow policy presets:
  * - quality-grounded: generate + assess + revise
  * - fast-direct: generate only
  *
  * Registry ownership here is assembly glue only: map profile ids to
- * EPC-aligned workflow-step toggles plus runtime hooks. Profiles select one
- * preset and attach limits/hooks; they do not own EPC ontology.
+ * contract-aligned workflow-step toggles plus runtime hooks. Profiles select one
+ * preset and attach limits/hooks; they do not own contract ontology.
  */
-const EPC_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET: Readonly<
+const EXECUTION_CONTRACT_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET: Readonly<
     RuntimeWorkflowProfile['policy']
 > = {
     enablePlanning: false,
@@ -40,7 +40,7 @@ const EPC_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET: Readonly<
     enableRevision: true,
 };
 
-const EPC_FAST_DIRECT_WORKFLOW_POLICY_PRESET: Readonly<
+const EXECUTION_CONTRACT_FAST_DIRECT_WORKFLOW_POLICY_PRESET: Readonly<
     RuntimeWorkflowProfile['policy']
 > = {
     enablePlanning: false,
@@ -76,7 +76,7 @@ const BOUNDED_REVIEW_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
     profileVersion: 'v1',
     displayName: 'Bounded Review',
     workflowName: 'message_with_review_loop',
-    policy: EPC_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET,
+    policy: EXECUTION_CONTRACT_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET,
     defaultLimits: QUALITY_GROUNDED_DEFAULT_LIMITS,
     optionalExtensions: {
         reviewDecisionPrompt: DEFAULT_REVIEW_DECISION_PROMPT,
@@ -96,7 +96,7 @@ const GENERATE_ONLY_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
     profileVersion: 'v1',
     displayName: 'Generate Only',
     workflowName: 'message_generate_only',
-    policy: EPC_FAST_DIRECT_WORKFLOW_POLICY_PRESET,
+    policy: EXECUTION_CONTRACT_FAST_DIRECT_WORKFLOW_POLICY_PRESET,
     defaultLimits: FAST_DIRECT_DEFAULT_LIMITS,
     requiredHooks: {
         initialStep: 'generate',
@@ -247,7 +247,8 @@ export type ResolvedWorkflowRuntimeConfig = {
  * - `forceWorkflowExecution` is the explicit profile-level override for
  *   workflow execution when review-loop gating would otherwise disable it.
  *
- * This resolver composes runtime config from contracts; it does not define EPC ontology.
+ * This resolver composes runtime config from contracts; it does not define
+ * Execution Contract ontology.
  */
 export const resolveWorkflowRuntimeConfig = (input: {
     profileId: string | null | undefined;
