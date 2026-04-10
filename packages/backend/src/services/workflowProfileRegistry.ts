@@ -210,6 +210,8 @@ const normalizeWorkflowModeId = (
 const inferWorkflowModeIdFromExecutionContract = (
     responseMode: ExecutionResponseMode | undefined
 ): BuiltinWorkflowModeId | undefined => {
+    // TODO(workflow-mode-response-mode-extension): If ExecutionResponseMode adds
+    // `balanced`, map it here so inference stays aligned with canonical mode ids.
     if (responseMode === 'quality_grounded') {
         return 'grounded';
     }

@@ -328,9 +328,9 @@ export const EXECUTION_CONTRACT_PRESETS: Readonly<
                 requireEvidenceBackedClaims: false,
             },
             limits: {
-                maxWorkflowSteps: 5,
+                maxWorkflowSteps: 4,
                 maxToolCalls: 1,
-                maxDeliberationCalls: 1,
+                maxDeliberationCalls: 2,
                 maxTokensTotal: 9_000,
                 maxDurationMs: 30_000,
             },
