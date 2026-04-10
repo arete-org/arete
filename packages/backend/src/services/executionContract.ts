@@ -2,7 +2,7 @@
  * @description: Defines the canonical Execution Contract surface
  * for backend response intent, evidence sufficiency policy, and fail-open behavior.
  * @footnote-scope: interface
- * @footnote-module: ExecutionPolicyContract
+ * @footnote-module: ExecutionContract
  * @footnote-risk: medium - Contract drift here can fragment policy ownership and produce inconsistent execution behavior.
  * @footnote-ethics: high - Execution Contract shape determines whether users get quick direct output or bounded grounded output, which impacts trust and operator accountability.
  */
@@ -12,7 +12,7 @@
  * changes are easy to
  * identify in reviews and logs.
  */
-export type ExecutionPolicyContractVersion = 'v1';
+export type ExecutionContractVersion = 'v1';
 
 /**
  * Stable policy identifier.
@@ -20,7 +20,7 @@ export type ExecutionPolicyContractVersion = 'v1';
  * Built-in ids stay literal for autocomplete. String extension leaves room for
  * new ids before a registry is introduced.
  */
-export type ExecutionPolicyContractId =
+export type ExecutionContractId =
     | 'core-fast-direct'
     | 'core-quality-grounded'
     | (string & {});
@@ -100,7 +100,7 @@ export type VerificationMode =
 /**
  * Quantitative hard limits for one execution loop.
  */
-export type ExecutionPolicyLimits = {
+export type ExecutionContractLimits = {
     maxWorkflowSteps: number;
     maxToolCalls: number;
     maxDeliberationCalls: number;
@@ -114,7 +114,7 @@ export type ExecutionPolicyLimits = {
  * Execution Contract carries policy intent only. Incident response and operator controls stay
  * outside this contract.
  */
-export type ExecutionPolicyFailOpen = {
+export type ExecutionContractFailOpen = {
     authority: 'backend';
     allowFallbackGeneration: boolean;
     fallbackTemperature: 'deterministic';
@@ -127,7 +127,7 @@ export type ExecutionPolicyFailOpen = {
  * Model/provider selection logic stays outside the Execution Contract.
  * This is not a full multi-search or evidence-acquisition strategy layer.
  */
-export type ExecutionPolicyRoutingIntent = {
+export type ExecutionContractRoutingIntent = {
     strategy: 'capability-first' | 'profile-first';
     capabilityTags: string[];
 };
@@ -139,7 +139,7 @@ export type ExecutionPolicyRoutingIntent = {
  * metadata. It is not a second policy authority and cannot block execution
  * through this field.
  */
-export type ExecutionPolicyTrustGraphSeam = {
+export type ExecutionContractTrustGraphSeam = {
     evidenceMode: 'off' | 'advisory';
     canBlockExecution: false;
 };
@@ -150,17 +150,17 @@ export type ExecutionPolicyTrustGraphSeam = {
  * This is the main execution-policy object for runtime decisions. Presets are
  * named defaults over this contract, not separate contract shapes.
  */
-export type ExecutionPolicyContract = {
-    policyId: ExecutionPolicyContractId;
-    policyVersion: ExecutionPolicyContractVersion;
+export type ExecutionContract = {
+    policyId: ExecutionContractId;
+    policyVersion: ExecutionContractVersion;
     displayName: string;
     response: ExecutionResponseIntent;
     evidence: ExecutionEvidencePolicy;
     verification: ExecutionVerificationPolicy;
-    limits: ExecutionPolicyLimits;
-    failOpen: ExecutionPolicyFailOpen;
-    routing: ExecutionPolicyRoutingIntent;
-    trustGraph: ExecutionPolicyTrustGraphSeam;
+    limits: ExecutionContractLimits;
+    failOpen: ExecutionContractFailOpen;
+    routing: ExecutionContractRoutingIntent;
+    trustGraph: ExecutionContractTrustGraphSeam;
     /**
      * Optional diagnostics metadata only.
      *
@@ -177,7 +177,7 @@ export type ExecutionPolicyContract = {
  * Preset ids use kebab-case (`fast-direct`), while `response.responseMode`
  * uses snake_case (`fast_direct`) for execution intent vocabulary.
  */
-export type ExecutionPolicyPresetId =
+export type ExecutionContractPresetId =
     | 'fast-direct'
     | 'quality-grounded'
     | (string & {});
@@ -185,27 +185,27 @@ export type ExecutionPolicyPresetId =
 /**
  * Shared override shape used by presets, builders, and resolver assembly glue.
  */
-export type ExecutionPolicyContractOverrides = Partial<
-    Omit<ExecutionPolicyContract, 'policyId' | 'policyVersion' | 'displayName'>
+export type ExecutionContractOverrides = Partial<
+    Omit<ExecutionContract, 'policyId' | 'policyVersion' | 'displayName'>
 >;
 
 /**
  * Named overrides that can be applied while building one Execution Contract instance.
  */
-export type ExecutionPolicyPreset = {
-    presetId: ExecutionPolicyPresetId;
+export type ExecutionContractPreset = {
+    presetId: ExecutionContractPresetId;
     displayName: string;
-    overrides: ExecutionPolicyContractOverrides;
+    overrides: ExecutionContractOverrides;
 };
 
 /**
  * Builder input for creating one Execution Contract instance.
  */
-export type ExecutionPolicyContractBuilderInput = {
-    policyId: ExecutionPolicyContractId;
+export type ExecutionContractBuilderInput = {
+    policyId: ExecutionContractId;
     displayName: string;
-    preset?: ExecutionPolicyPreset;
-    overrides?: ExecutionPolicyContractOverrides;
+    preset?: ExecutionContractPreset;
+    overrides?: ExecutionContractOverrides;
 };
 
 /**
@@ -215,7 +215,7 @@ export type ExecutionPolicyContractBuilderInput = {
  * grounding expectations explicitly.
  */
 const EXECUTION_CONTRACT_DEFAULTS: Omit<
-    ExecutionPolicyContract,
+    ExecutionContract,
     'policyId' | 'policyVersion' | 'displayName'
 > = {
     response: {
@@ -264,8 +264,8 @@ const EXECUTION_CONTRACT_DEFAULTS: Omit<
  * `fast-direct` is latency-first.
  * `quality-grounded` is bounded evidence-first.
  */
-export const EXECUTION_POLICY_PRESETS: Readonly<
-    Record<'fast-direct' | 'quality-grounded', ExecutionPolicyPreset>
+export const EXECUTION_CONTRACT_PRESETS: Readonly<
+    Record<'fast-direct' | 'quality-grounded', ExecutionContractPreset>
 > = {
     'fast-direct': {
         presetId: 'fast-direct',
@@ -343,7 +343,7 @@ export const EXECUTION_POLICY_PRESETS: Readonly<
  *
  * Keep these boundaries visible so the contract does not become a mini framework.
  */
-export const EXECUTION_POLICY_OUTSIDE_SCOPE: ReadonlyArray<string> = [
+export const EXECUTION_CONTRACT_OUTSIDE_SCOPE: ReadonlyArray<string> = [
     'Transport-specific behavior (web/discord response shaping).',
     'TrustGraph evidence retrieval and ingestion implementation.',
     'Workflow profile registry and runtime hook assembly glue.',
@@ -367,9 +367,9 @@ const sanitizeNonNegativeFiniteNumber = (
  * Merge order is defaults -> preset overrides -> explicit overrides so callers
  * can start from a response preset and still tune fields for one policy id.
  */
-export const buildExecutionPolicyContract = (
-    input: ExecutionPolicyContractBuilderInput
-): ExecutionPolicyContract => {
+export const buildExecutionContract = (
+    input: ExecutionContractBuilderInput
+): ExecutionContract => {
     const presetOverrides = input.preset?.overrides;
     const mergedMetadata = {
         ...(presetOverrides?.metadata ?? {}),
@@ -400,7 +400,7 @@ export const buildExecutionPolicyContract = (
         ...input.overrides?.verification,
     };
 
-    const mergedLimits: ExecutionPolicyLimits = {
+    const mergedLimits: ExecutionContractLimits = {
         ...EXECUTION_CONTRACT_DEFAULTS.limits,
         ...presetOverrides?.limits,
         ...input.overrides?.limits,
@@ -436,7 +436,7 @@ export const buildExecutionPolicyContract = (
         ),
     };
 
-    const mergedFailOpen: ExecutionPolicyFailOpen = {
+    const mergedFailOpen: ExecutionContractFailOpen = {
         ...EXECUTION_CONTRACT_DEFAULTS.failOpen,
         ...presetOverrides?.failOpen,
         ...input.overrides?.failOpen,
@@ -449,14 +449,14 @@ export const buildExecutionPolicyContract = (
         presetOverrides?.routing?.capabilityTags ??
         EXECUTION_CONTRACT_DEFAULTS.routing.capabilityTags;
 
-    const mergedRouting: ExecutionPolicyRoutingIntent = {
+    const mergedRouting: ExecutionContractRoutingIntent = {
         ...EXECUTION_CONTRACT_DEFAULTS.routing,
         ...presetOverrides?.routing,
         ...input.overrides?.routing,
         capabilityTags: [...resolvedCapabilityTags],
     };
 
-    const mergedTrustGraph: ExecutionPolicyTrustGraphSeam = {
+    const mergedTrustGraph: ExecutionContractTrustGraphSeam = {
         ...EXECUTION_CONTRACT_DEFAULTS.trustGraph,
         ...presetOverrides?.trustGraph,
         ...input.overrides?.trustGraph,

@@ -16,20 +16,20 @@ Target statement:
 - `trace/provenance`: evidence of what happened relative to contract-governed execution.
 
 Implementation note:
-Current code still uses `executionPolicyContract` naming for the main contract module.
+Current code still uses `ExecutionContract` naming for the main contract module.
 That module is the Execution Contract authority surface.
 
 ## Authority Map
 
-| Concern                           | Governing Authority                                                             | Runtime Executor                                       | Notes                                                                             |
-| --------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| Execution rules and legal shape   | Execution Contract (`packages/backend/src/services/executionPolicyContract.ts`) | `chatOrchestrator` + workflow runtime                  | Runtime must satisfy contract fields; runtime does not redefine ontology.         |
-| Request execution coordination    | Execution Contract (policy bounds)                                              | `packages/backend/src/services/chatOrchestrator.ts`    | Orchestrator selects/coordinates steps inside contract limits.                    |
-| Workflow/profile semantics        | Execution Contract response/limit constraints + workflow profile contract       | `workflowProfileRegistry` + `workflowEngine`           | Profiles are named execution shapes, not competing policy authorities.            |
-| Model/provider/tool selection     | Execution Contract routing intent and limits                                    | orchestrator + resolver/services + runtime adapters    | Selection details are execution assembly under contract constraints.              |
-| Trace and provenance recording    | Execution Contract requirement to track provenance                              | `chatService`, trace store, response metadata emitters | Provenance records what happened; it does not set policy.                         |
-| TrustGraph evidence intake        | Execution Contract boundary rules                                               | `executionContractTrustGraph` seam modules             | Advisory evidence can influence bounded views, never control execution authority. |
-| Breaker/safety action application | Deterministic safety contract + backend policy boundary                         | orchestrator/service enforcement path                  | Planner hints are advisory only.                                                  |
+| Concern                           | Governing Authority                                                       | Runtime Executor                                       | Notes                                                                             |
+| --------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| Execution rules and legal shape   | Execution Contract (`packages/backend/src/services/ExecutionContract.ts`) | `chatOrchestrator` + workflow runtime                  | Runtime must satisfy contract fields; runtime does not redefine ontology.         |
+| Request execution coordination    | Execution Contract (policy bounds)                                        | `packages/backend/src/services/chatOrchestrator.ts`    | Orchestrator selects/coordinates steps inside contract limits.                    |
+| Workflow/profile semantics        | Execution Contract response/limit constraints + workflow profile contract | `workflowProfileRegistry` + `workflowEngine`           | Profiles are named execution shapes, not competing policy authorities.            |
+| Model/provider/tool selection     | Execution Contract routing intent and limits                              | orchestrator + resolver/services + runtime adapters    | Selection details are execution assembly under contract constraints.              |
+| Trace and provenance recording    | Execution Contract requirement to track provenance                        | `chatService`, trace store, response metadata emitters | Provenance records what happened; it does not set policy.                         |
+| TrustGraph evidence intake        | Execution Contract boundary rules                                         | `executionContractTrustGraph` seam modules             | Advisory evidence can influence bounded views, never control execution authority. |
+| Breaker/safety action application | Deterministic safety contract + backend policy boundary                   | orchestrator/service enforcement path                  | Planner hints are advisory only.                                                  |
 
 ## Explicit Non-Goals
 

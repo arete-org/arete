@@ -300,12 +300,12 @@ test('orchestrator carries resolved Execution Contract policy payload through se
     const serializedRequestSnapshot =
         capturedConversationSnapshot?.split('\n\n')[0] ?? '';
     const parsedSnapshot = JSON.parse(serializedRequestSnapshot) as {
-        executionPolicy?: {
+        executionContract?: {
             policyId?: string;
             policyVersion?: string;
         };
     };
-    assert.deepEqual(parsedSnapshot.executionPolicy, {
+    assert.deepEqual(parsedSnapshot.executionContract, {
         policyId: 'core-fast-direct',
         policyVersion: 'v1',
     });

@@ -11,7 +11,7 @@ import {
     DEFAULT_REVISION_PROMPT_PREFIX,
     parseReviewDecisionText,
 } from './workflowEngine.js';
-import type { ExecutionPolicyContract } from './executionPolicyContract.js';
+import type { ExecutionContract } from './executionContract.js';
 import type {
     RuntimeWorkflowProfile,
     WorkflowProfileContract,
@@ -255,20 +255,17 @@ export const resolveWorkflowRuntimeConfig = (input: {
     reviewLoopEnabled: boolean;
     maxIterations: number;
     maxDurationMs: number;
-    executionPolicyContract?: Pick<
-        ExecutionPolicyContract,
-        'response' | 'limits'
-    >;
+    ExecutionContract?: Pick<ExecutionContract, 'response' | 'limits'>;
 }): ResolvedWorkflowRuntimeConfig => {
     const requestedProfileId =
         input.profileId ?? DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID;
     const profileResolution =
         resolveWorkflowProfileRegistry(requestedProfileId);
     const workflowProfile = profileResolution.runtimeProfile;
-    const executionPolicy = input.executionPolicyContract;
+    const executionContract = input.ExecutionContract;
     const executionEnabledByPolicy =
-        executionPolicy !== undefined
-            ? executionPolicy.response.responseMode === 'quality_grounded'
+        executionContract !== undefined
+            ? executionContract.response.responseMode === 'quality_grounded'
             : input.reviewLoopEnabled === true;
     const workflowExecutionEnabled =
         workflowProfile.requiredHooks.forceWorkflowExecution ||
@@ -283,31 +280,31 @@ export const resolveWorkflowRuntimeConfig = (input: {
             : Math.max(1, profileDefaultMaxIterations * 2);
     const workflowExecutionLimits: RuntimeWorkflowProfile['defaultLimits'] = {
         maxWorkflowSteps: sanitizePositiveInteger(
-            executionPolicy?.limits.maxWorkflowSteps ??
+            executionContract?.limits.maxWorkflowSteps ??
                 (workflowProfile.policy.enableAssessment === false
                     ? 1
                     : input.maxIterations * 2),
             fallbackWorkflowStepLimit
         ),
         maxToolCalls: sanitizeNonNegativeInteger(
-            executionPolicy?.limits.maxToolCalls ??
+            executionContract?.limits.maxToolCalls ??
                 workflowProfile.defaultLimits.maxToolCalls,
             workflowProfile.defaultLimits.maxToolCalls
         ),
         maxDeliberationCalls: sanitizeNonNegativeInteger(
-            executionPolicy?.limits.maxDeliberationCalls ??
+            executionContract?.limits.maxDeliberationCalls ??
                 (workflowProfile.policy.enableAssessment === false
                     ? 0
                     : input.maxIterations * 2),
             workflowProfile.defaultLimits.maxDeliberationCalls
         ),
         maxTokensTotal: sanitizeNonNegativeInteger(
-            executionPolicy?.limits.maxTokensTotal ??
+            executionContract?.limits.maxTokensTotal ??
                 workflowProfile.defaultLimits.maxTokensTotal,
             workflowProfile.defaultLimits.maxTokensTotal
         ),
         maxDurationMs: sanitizePositiveInteger(
-            executionPolicy?.limits.maxDurationMs ?? input.maxDurationMs,
+            executionContract?.limits.maxDurationMs ?? input.maxDurationMs,
             workflowProfile.defaultLimits.maxDurationMs
         ),
     };

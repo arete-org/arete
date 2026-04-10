@@ -38,7 +38,7 @@ import {
 } from './llmCostRecorder.js';
 import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
-import type { ExecutionPolicyContract } from './executionPolicyContract.js';
+import type { ExecutionContract } from './executionContract.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import { resolveNoGenerationHandlingFromTermination } from './workflowProfileContract.js';
 import { resolveWorkflowRuntimeConfig } from './workflowProfileRegistry.js';
@@ -109,7 +109,7 @@ type TrustGraphMetadataEnvelope = {
     provenanceJoin?: TrustGraphEvidenceIngestionResult['provenanceJoin'];
     evidenceMode?: 'off' | TrustGraphEvidenceIngestionResult['evidenceMode'];
     canBlockExecution?: TrustGraphEvidenceIngestionResult['canBlockExecution'];
-    verificationMode?: ExecutionPolicyContract['verification']['mode'];
+    verificationMode?: ExecutionContract['verification']['mode'];
 };
 
 /**
@@ -206,22 +206,19 @@ const toPublicScopeValidation = (
 
 const toTrustGraphMetadataEnvelope = (
     result: TrustGraphEvidenceIngestionResult,
-    executionPolicyContract?: Pick<
-        ExecutionPolicyContract,
-        'trustGraph' | 'verification'
-    >
+    ExecutionContract?: Pick<ExecutionContract, 'trustGraph' | 'verification'>
 ): TrustGraphMetadataEnvelope => ({
     evidenceMode:
-        executionPolicyContract?.trustGraph.evidenceMode ?? result.evidenceMode,
+        ExecutionContract?.trustGraph.evidenceMode ?? result.evidenceMode,
     canBlockExecution:
-        executionPolicyContract?.trustGraph.canBlockExecution ??
+        ExecutionContract?.trustGraph.canBlockExecution ??
         result.canBlockExecution,
     adapterStatus: result.adapterStatus,
     scopeValidation: toPublicScopeValidation(result.scopeValidation),
     terminalAuthority: result.terminalAuthority,
     failOpenBehavior: result.failOpenBehavior,
     verificationRequired: result.verificationRequired,
-    verificationMode: executionPolicyContract?.verification.mode,
+    verificationMode: ExecutionContract?.verification.mode,
     advisoryEvidenceItemCount: result.advisoryEvidenceItemCount,
     droppedEvidenceCount: result.droppedEvidenceCount,
     droppedEvidenceIds: result.droppedEvidenceIds,
@@ -275,10 +272,7 @@ const extractOwnershipDenialReason = (
 
 const logTrustGraphRuntimeOutcome = (
     result: TrustGraphEvidenceIngestionResult,
-    executionPolicy?: Pick<
-        ExecutionPolicyContract,
-        'policyId' | 'policyVersion'
-    >
+    executionContract?: Pick<ExecutionContract, 'policyId' | 'policyVersion'>
 ): void => {
     const adapterInvoked =
         result.adapterStatus === 'success' ||
@@ -314,9 +308,9 @@ const logTrustGraphRuntimeOutcome = (
         timeout,
         adapterError,
         provenanceReasonCodes: result.provenanceReasonCodes,
-        ...(executionPolicy !== undefined && {
-            executionPolicyId: executionPolicy.policyId,
-            executionPolicyVersion: executionPolicy.policyVersion,
+        ...(executionContract !== undefined && {
+            executionContractId: executionContract.policyId,
+            executionContractVersion: executionContract.policyVersion,
         }),
     };
 
@@ -381,7 +375,7 @@ export type RunChatMessagesInput = {
     executionContext?: ResponseMetadataRuntimeContext['executionContext'];
     toolRequest?: ToolInvocationRequest;
     executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
-    executionPolicyContract?: ExecutionPolicyContract;
+    ExecutionContract?: ExecutionContract;
 };
 
 export type FinalToolExecutionTelemetry = {
@@ -501,7 +495,7 @@ export const createChatService = ({
         executionContext,
         toolRequest,
         executionContractTrustGraphContext,
-        executionPolicyContract,
+        ExecutionContract,
     }: RunChatMessagesInput): Promise<{
         message: string;
         metadata: ResponseMetadata;
@@ -548,11 +542,11 @@ export const createChatService = ({
             reviewLoopEnabled: chatWorkflowConfig.reviewLoopEnabled,
             maxIterations: chatWorkflowConfig.maxIterations,
             maxDurationMs: chatWorkflowConfig.maxDurationMs,
-            executionPolicyContract:
-                executionPolicyContract !== undefined
+            ExecutionContract:
+                ExecutionContract !== undefined
                     ? {
-                          response: executionPolicyContract.response,
-                          limits: executionPolicyContract.limits,
+                          response: ExecutionContract.response,
+                          limits: ExecutionContract.limits,
                       }
                     : undefined,
         });
@@ -634,8 +628,8 @@ export const createChatService = ({
 
                     const handling = noGenerationResolution.handling;
                     const backendFailOpenAllowed =
-                        executionPolicyContract?.failOpen
-                            .allowFallbackGeneration ?? true;
+                        ExecutionContract?.failOpen.allowFallbackGeneration ??
+                        true;
 
                     if (
                         handling.runtimeAction === 'run_fallback_generation' &&
@@ -685,8 +679,8 @@ export const createChatService = ({
                             {
                                 workflowName: workflowProfile.workflowName,
                                 failOpenAuthority:
-                                    executionPolicyContract?.failOpen
-                                        .authority ?? 'backend',
+                                    ExecutionContract?.failOpen.authority ??
+                                    'backend',
                                 reasonCode: noGenerationResolution.reasonCode,
                                 terminationReason:
                                     workflowResult.workflowLineage
@@ -747,21 +741,18 @@ export const createChatService = ({
             }
         }
         if (trustGraphResult !== undefined) {
-            logTrustGraphRuntimeOutcome(
-                trustGraphResult,
-                executionPolicyContract
-            );
+            logTrustGraphRuntimeOutcome(trustGraphResult, ExecutionContract);
         }
 
-        if (executionPolicyContract !== undefined) {
+        if (ExecutionContract !== undefined) {
             logger.info({
                 event: 'chat.runtime.execution_policy',
-                policyId: executionPolicyContract.policyId,
-                policyVersion: executionPolicyContract.policyVersion,
-                responseMode: executionPolicyContract.response.responseMode,
-                failOpenAuthority: executionPolicyContract.failOpen.authority,
+                policyId: ExecutionContract.policyId,
+                policyVersion: ExecutionContract.policyVersion,
+                responseMode: ExecutionContract.response.responseMode,
+                failOpenAuthority: ExecutionContract.failOpen.authority,
                 failOpenFallbackGeneration:
-                    executionPolicyContract.failOpen.allowFallbackGeneration,
+                    ExecutionContract.failOpen.allowFallbackGeneration,
             });
         }
 
@@ -957,7 +948,7 @@ export const createChatService = ({
                       ...normalizedResponseMetadata,
                       trustGraph: toTrustGraphMetadataEnvelope(
                           trustGraphResult,
-                          executionPolicyContract
+                          ExecutionContract
                       ),
                   }
                 : normalizedResponseMetadata;

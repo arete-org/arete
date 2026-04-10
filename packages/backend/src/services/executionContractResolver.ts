@@ -2,29 +2,29 @@
  * @description: Assembles a canonical Execution Contract from
  * defaults, optional built-in preset selection, and explicit overrides.
  * @footnote-scope: core
- * @footnote-module: ExecutionPolicyResolver
+ * @footnote-module: ExecutionContractResolver
  * @footnote-risk: low - Resolver is a thin assembly layer over the canonical contract builder and built-in preset map.
  * @footnote-ethics: medium - Preset-to-policy mapping affects whether runtime follows fast direct or grounded answer expectations.
  */
 import {
-    EXECUTION_POLICY_PRESETS,
-    buildExecutionPolicyContract,
-    type ExecutionPolicyContract,
-    type ExecutionPolicyContractId,
-    type ExecutionPolicyContractOverrides,
-    type ExecutionPolicyPreset,
-    type ExecutionPolicyPresetId,
-} from './executionPolicyContract.js';
+    EXECUTION_CONTRACT_PRESETS,
+    buildExecutionContract,
+    type ExecutionContract,
+    type ExecutionContractId,
+    type ExecutionContractOverrides,
+    type ExecutionContractPreset,
+    type ExecutionContractPresetId,
+} from './executionContract.js';
 
-type BuiltinExecutionPolicyPresetId = keyof typeof EXECUTION_POLICY_PRESETS;
+type BuiltinExecutionContractPresetId = keyof typeof EXECUTION_CONTRACT_PRESETS;
 
-type BuiltinExecutionPolicyDescriptor = {
-    policyId: ExecutionPolicyContractId;
+type BuiltinExecutionContractDescriptor = {
+    policyId: ExecutionContractId;
     displayName: string;
 };
 
-const BUILTIN_EXECUTION_POLICY_DESCRIPTORS: Readonly<
-    Record<BuiltinExecutionPolicyPresetId, BuiltinExecutionPolicyDescriptor>
+const BUILTIN_EXECUTION_CONTRACT_DESCRIPTORS: Readonly<
+    Record<BuiltinExecutionContractPresetId, BuiltinExecutionContractDescriptor>
 > = {
     'fast-direct': {
         policyId: 'core-fast-direct',
@@ -36,8 +36,8 @@ const BUILTIN_EXECUTION_POLICY_DESCRIPTORS: Readonly<
     },
 };
 
-const DEFAULT_EXECUTION_POLICY_DESCRIPTOR: BuiltinExecutionPolicyDescriptor =
-    BUILTIN_EXECUTION_POLICY_DESCRIPTORS['fast-direct'];
+const DEFAULT_EXECUTION_CONTRACT_DESCRIPTOR: BuiltinExecutionContractDescriptor =
+    BUILTIN_EXECUTION_CONTRACT_DESCRIPTORS['fast-direct'];
 
 const normalizePresetId = (
     presetId: string | null | undefined
@@ -48,22 +48,22 @@ const normalizePresetId = (
         : undefined;
 };
 
-const isBuiltinExecutionPolicyPresetId = (
+const isBuiltinExecutionContractPresetId = (
     value: string
-): value is BuiltinExecutionPolicyPresetId =>
-    Object.prototype.hasOwnProperty.call(EXECUTION_POLICY_PRESETS, value);
+): value is BuiltinExecutionContractPresetId =>
+    Object.prototype.hasOwnProperty.call(EXECUTION_CONTRACT_PRESETS, value);
 
-export type ExecutionPolicyResolverInput = {
-    presetId?: ExecutionPolicyPresetId | null;
-    policyId?: ExecutionPolicyContractId;
+export type ExecutionContractResolverInput = {
+    presetId?: ExecutionContractPresetId | null;
+    policyId?: ExecutionContractId;
     displayName?: string;
-    overrides?: ExecutionPolicyContractOverrides;
+    overrides?: ExecutionContractOverrides;
 };
 
-export type ExecutionPolicyResolverResolution = {
-    requestedPresetId?: ExecutionPolicyPresetId;
+export type ExecutionContractResolverResolution = {
+    requestedPresetId?: ExecutionContractPresetId;
     isKnownPresetId: boolean;
-    policyContract: ExecutionPolicyContract;
+    policyContract: ExecutionContract;
 };
 
 /**
@@ -72,30 +72,30 @@ export type ExecutionPolicyResolverResolution = {
  * 2) optional built-in preset overrides,
  * 3) explicit call-site overrides.
  */
-export const resolveExecutionPolicyContract = (
-    input: ExecutionPolicyResolverInput
-): ExecutionPolicyResolverResolution => {
+export const resolveExecutionContract = (
+    input: ExecutionContractResolverInput
+): ExecutionContractResolverResolution => {
     const requestedPresetId = normalizePresetId(input.presetId);
     const knownPresetId =
         requestedPresetId !== undefined &&
-        isBuiltinExecutionPolicyPresetId(requestedPresetId)
+        isBuiltinExecutionContractPresetId(requestedPresetId)
             ? requestedPresetId
             : undefined;
-    const preset: ExecutionPolicyPreset | undefined =
+    const preset: ExecutionContractPreset | undefined =
         knownPresetId !== undefined
-            ? EXECUTION_POLICY_PRESETS[knownPresetId]
+            ? EXECUTION_CONTRACT_PRESETS[knownPresetId]
             : undefined;
     const descriptor =
         (knownPresetId !== undefined
-            ? BUILTIN_EXECUTION_POLICY_DESCRIPTORS[knownPresetId]
-            : undefined) ?? DEFAULT_EXECUTION_POLICY_DESCRIPTOR;
+            ? BUILTIN_EXECUTION_CONTRACT_DESCRIPTORS[knownPresetId]
+            : undefined) ?? DEFAULT_EXECUTION_CONTRACT_DESCRIPTOR;
 
     return {
         ...(requestedPresetId !== undefined && {
-            requestedPresetId: requestedPresetId as ExecutionPolicyPresetId,
+            requestedPresetId: requestedPresetId as ExecutionContractPresetId,
         }),
         isKnownPresetId: knownPresetId !== undefined,
-        policyContract: buildExecutionPolicyContract({
+        policyContract: buildExecutionContract({
             policyId: input.policyId ?? descriptor.policyId,
             displayName: input.displayName ?? descriptor.displayName,
             preset,

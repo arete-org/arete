@@ -13,7 +13,7 @@ import type {
     ChatRepoSearchHint,
     ResponseTemperament,
 } from '@footnote/contracts';
-import type { ExecutionResponseMode } from './executionPolicyContract.js';
+import type { ExecutionResponseMode } from './executionContract.js';
 export type { ChatRepoSearchHint } from '@footnote/contracts';
 
 /**

@@ -11,7 +11,7 @@ import type {
     ModelProfile,
 } from '@footnote/contracts';
 import type { ToolInvocationReasonCode } from '@footnote/contracts/ethics-core';
-import type { ExecutionPolicyRoutingIntent } from './executionPolicyContract.js';
+import type { ExecutionContractRoutingIntent } from './executionContract.js';
 import type { PlannerSelectionSource } from './plannerFallbackTelemetryRollup.js';
 
 type SearchFallbackPolicy = {
@@ -31,7 +31,7 @@ export const searchFallbackRankingPolicy = {
 };
 
 const searchFallbackPolicyByRoutingStrategy: Record<
-    ExecutionPolicyRoutingIntent['strategy'],
+    ExecutionContractRoutingIntent['strategy'],
     SearchFallbackPolicy
 > = {
     'capability-first': {
@@ -118,7 +118,7 @@ const rankSearchFallbackProfiles = (
 
 type ResolveSearchFallbackPolicyInput = {
     selectionSource: PlannerSelectionSource;
-    routingStrategy: ExecutionPolicyRoutingIntent['strategy'];
+    routingStrategy: ExecutionContractRoutingIntent['strategy'];
     selectedProfile: ModelProfile;
     searchCapableProfiles: ModelProfile[];
 };
