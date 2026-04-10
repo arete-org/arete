@@ -257,6 +257,60 @@ test('message plans pass planner generation options into chatService', async () 
     );
 });
 
+test('orchestrator carries resolved EPC policy payload through service runtime seam', async () => {
+    let capturedConversationSnapshot: string | undefined;
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        safetyTier: 'Low',
+                        reasoning: 'Standard message reply.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            return {
+                text: 'policy carriage response',
+                model: request.model,
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedConversationSnapshot = runtimeContext.conversationSnapshot;
+            return createMetadata();
+        },
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(createChatRequest());
+    assert.equal(response.action, 'message');
+    assert.equal(response.message, 'policy carriage response');
+
+    const serializedRequestSnapshot =
+        capturedConversationSnapshot?.split('\n\n')[0] ?? '';
+    const parsedSnapshot = JSON.parse(serializedRequestSnapshot) as {
+        executionPolicy?: {
+            policyId?: string;
+            policyVersion?: string;
+        };
+    };
+    assert.deepEqual(parsedSnapshot.executionPolicy, {
+        policyId: 'core-fast-direct',
+        policyVersion: 'v1',
+    });
+});
+
 test('request-level generation overrides replace planner reasoning effort and verbosity', async () => {
     let observedReasoningEffort: string | undefined;
     let observedVerbosity: string | undefined;
