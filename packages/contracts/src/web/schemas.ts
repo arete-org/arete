@@ -12,6 +12,7 @@ import {
     WORKFLOW_STEP_STATUSES,
     WORKFLOW_TERMINATION_REASONS,
     type ProvenanceAssessment,
+    type SteerabilityControls,
     type TraceAxisScore,
     type TrustGraphMetadata,
 } from '../ethics-core/index.js';
@@ -549,6 +550,64 @@ const WorkflowModeDecisionSchema = z
     })
     .strict();
 
+const SteerabilityControlIdSchema = z.enum([
+    'workflow_mode',
+    'evidence_strictness',
+    'review_intensity',
+    'provider_preference',
+    'persona_tone_overlay',
+    'tool_allowance',
+]);
+
+const SteerabilityControlSourceSchema = z.enum([
+    'runtime_config',
+    'execution_contract',
+    'request_override',
+    'planner_output',
+    'surface_profile',
+    'capability_policy',
+    'tool_policy',
+    'fail_open_default',
+]);
+
+const SteerabilityImpactTargetSchema = z.enum([
+    'workflow_execution',
+    'execution_contract_selection',
+    'review_loop_execution',
+    'model_profile_selection',
+    'persona_prompt_layer',
+    'tool_eligibility',
+]);
+
+const SteerabilityControlRecordSchema = z
+    .object({
+        controlId: SteerabilityControlIdSchema,
+        value: z.string().min(1),
+        source: SteerabilityControlSourceSchema,
+        rationale: z.string().min(1),
+        mattered: z.boolean(),
+        impactedTargets: z.array(SteerabilityImpactTargetSchema),
+    })
+    .strict();
+
+const SteerabilityControlsSchema = z
+    .object({
+        version: z.literal('v1'),
+        controls: z.array(SteerabilityControlRecordSchema).min(1),
+    })
+    .strict();
+
+type _AssertSteerabilityControls =
+    z.infer<typeof SteerabilityControlsSchema> extends SteerabilityControls
+        ? SteerabilityControls extends z.infer<
+              typeof SteerabilityControlsSchema
+          >
+            ? true
+            : false
+        : false;
+const _assertSteerabilityControls: _AssertSteerabilityControls = true;
+void _assertSteerabilityControls;
+
 const responseMetadataShape = {
     responseId: z.string().min(1),
     provenance: ProvenanceSchema,
@@ -565,6 +624,7 @@ const responseMetadataShape = {
     execution: z.array(ExecutionEventSchema).optional(),
     workflow: WorkflowRecordSchema.optional(),
     workflowMode: WorkflowModeDecisionSchema.optional(),
+    steerabilityControls: SteerabilityControlsSchema.optional(),
     evaluator: EvaluatorOutcomeSchema.optional(),
     imageDescriptions: z.array(z.string()).optional(),
     evidenceScore: TraceAxisScoreSchema.optional(),
