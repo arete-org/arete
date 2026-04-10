@@ -1,19 +1,25 @@
 # Steerability Foundation (Internal Controls v1)
 
-## What was done
+This document explains the first steerability foundation pass in plain language.
 
-1. Added a canonical internal control record in shared contracts.
+The key idea is simple: we want internal controls that are meaningful and inspectable now, so later user-facing controls can map cleanly to real runtime behavior. We are not building a workflow language or user scripting surface in this phase.
 
-- New `ResponseMetadata.steerabilityControls` in `@footnote/contracts/ethics-core`.
-- Record shape is serializable and explicit:
-    - control id
-    - value
-    - source
-    - rationale
-    - whether it mattered
-    - impacted execution targets
+## What v1 added
 
-2. Added bounded control concepts (v1).
+We added one backend-owned metadata bundle: `steerabilityControls`.
+
+Each control record includes:
+
+- control id
+- value
+- source
+- rationale
+- `mattered` flag
+- impacted execution targets
+
+This gives operators a compact explanation of what shaped a run, without pretending we already have a complete policy engine.
+
+## Control set (unchanged in this hardening pass)
 
 - `workflow_mode`
 - `evidence_strictness`
@@ -22,66 +28,58 @@
 - `persona_tone_overlay`
 - `tool_allowance`
 
-3. Added backend control normalization.
+## Control classes (documentation semantics, flat runtime shape)
 
-- New backend module resolves orchestration/runtime state into one control bundle.
-- Control mapping is derived from existing architecture decisions, not ad hoc flags.
-
-4. Wired controls into response metadata + traces.
-
-- `chatOrchestrator` now builds controls from resolved workflow mode, execution contract, profile routing, persona overlay source, and tool eligibility.
-- `chatService` and metadata builder pass/store the controls unchanged.
-
-5. Added validation/tests.
-
-- Contract schema now validates `steerabilityControls`.
-- Added schema tests and backend metadata/control resolver tests.
-
-## Why this matches the epic
-
-- Meaningful controls: each control maps to a real execution choice.
-- Inspectable controls: controls are emitted in metadata/traces with source + rationale.
-- Clean execution mapping: each control includes impacted targets.
-- Explainable traces: `mattered` + impacted targets show which controls affected behavior.
-
-## Control Classes (v1, flat bundle)
-
-The runtime metadata shape remains flat in v1. Control authority classes are documented here to prevent conceptual drift.
+The runtime payload stays flat in v1. We are not introducing nested classes in schema yet.  
+To avoid conceptual drift, contributors should read controls as belonging to these authority classes:
 
 - Execution controls:
     - `workflow_mode`
     - `evidence_strictness`
     - `review_intensity`
     - `tool_allowance`
-- Posture/output controls:
+- Posture/output control:
     - `persona_tone_overlay`
-- Preference/environment controls:
+- Preference/environment control:
     - `provider_preference`
 
-These classes are documentation semantics only in v1. They do not add new schema fields.
+The important point: these classes are not equal in authority. A tone overlay does not have the same authority as workflow mode or execution contract policy.
 
-## `mattered` Semantics
+## `mattered` definition (causal, not decorative)
 
 `mattered = true` means the control had an observable causal impact on this run.
 
-It is not enough that:
+It does not mean:
 
-- the control record existed
-- the control was requested
-- the control was accepted but had no material effect
+- the record existed
+- the control was merely requested
+- the control was accepted but did not materially change behavior
 
-Examples:
+Concrete examples:
 
-- Requested but not honored: `provider_preference` may still matter when policy overrides it and resolves a different profile.
-- Honored but not consequential: if no tool was requested, `tool_allowance` is present but `mattered = false`.
-- Materially consequential: `workflow_mode` selecting grounded behavior and enabling reviewed path sets `mattered = true`.
-- No downstream effect: no persona overlay keeps `persona_tone_overlay` as `mattered = false`.
+- Requested but overridden: `provider_preference` can still matter if policy resolves a different profile.
+- Not consequential: if no tool was requested, `tool_allowance` is still visible but `mattered = false`.
+- Materially consequential: `workflow_mode` selecting a reviewed path sets `mattered = true`.
+- No posture change: if no persona overlay is applied, `persona_tone_overlay` is `mattered = false`.
 
-## Provider Preference Semantics
+## `review_intensity` derivation policy
 
-`provider_preference` remains non-authoritative unless policy explicitly grants authority.
+`review_intensity` is now derived from one canonical workflow-mode helper in `workflowProfileRegistry`.
 
-v1 value/rationale encoding is explicit about resolution state:
+Why this matters: if mode behavior and metadata use different derivation paths, traces eventually drift and inspectability breaks.
+
+Current thresholds:
+
+- `none`: review path excluded/disabled
+- `light`: one deliberation pass
+- `moderate`: two or three passes
+- `high`: four or more passes
+
+## `provider_preference` semantics
+
+`provider_preference` remains non-authoritative unless policy explicitly makes it authoritative.
+
+The value/rationale now makes resolution state explicit:
 
 - `requested_honored`
 - `requested_overridden`
@@ -89,25 +87,25 @@ v1 value/rationale encoding is explicit about resolution state:
 - `advisory_overridden`
 - `fallback_resolved`
 
-This keeps traces honest about request/advisory intent vs runtime policy resolution.
+This keeps records honest about intent versus outcome.
 
-## Persona Overlay Constraint
+## `persona_tone_overlay` constraint
 
 `persona_tone_overlay` is presentation/posture only.
 
 It must not:
 
-- alter execution-contract authority
-- lower/raise evidence strictness
+- change execution-contract authority
+- change evidence strictness
 - bypass review authority
 
-Tests assert rationale language to keep this contract explicit during future edits.
+Tests assert this expectation so future edits do not quietly broaden tone semantics into execution authority.
 
-## Explicit non-goals respected
+## What this pass did not do
 
-- No workflow DSL.
-- No user scripting.
-- No open-ended rule engine.
-- No full user-facing control authoring.
+- No new controls
+- No user-facing knobs
+- No DSL or open-ended rule engine
+- No schema expansion for control classes
 
-This is a bounded internal foundation so future `/chat` controls or plain-language steering can map to stable concepts without redesigning runtime internals.
+This stays a bounded foundation pass: clearer semantics first, broader capability later.

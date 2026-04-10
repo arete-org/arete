@@ -26,15 +26,26 @@ type PersonaSelection = {
 };
 
 export type BuildSteerabilityControlsInput = {
+    // Canonical mode decision already resolved by workflow registry.
     workflowMode: WorkflowModeDecision;
+    // Effective Execution Contract response mode that governed this run.
     executionContractResponseMode: 'fast_direct' | 'quality_grounded';
+    // Optional caller-specified profile request (for example /chat override).
     requestedProfileId?: string;
+    // Optional planner advisory profile from planning phase.
     plannerSelectedProfileId?: string;
+    // Final runtime-selected profile after capability/policy fallback logic.
     selectedProfile: ProfileSelection;
+    // Effective persona selection used for prompt composition.
     persona: PersonaSelection;
+    // Orchestrator tool eligibility decision for this run.
     toolRequest: ToolInvocationRequest;
 };
 
+/**
+ * Converts workflow-mode selection source into steerability source vocabulary.
+ * This keeps mode lineage readable in one short enum field.
+ */
 const mapWorkflowModeSource = (
     selectedBy: WorkflowModeDecision['selectedBy']
 ): SteerabilityControlSource => {
@@ -59,6 +70,13 @@ type ProviderPreferenceState =
     | 'advisory_overridden'
     | 'fallback_resolved';
 
+/**
+ * Provider preference is intentionally honest about intent vs outcome:
+ * - requested/advisory origin
+ * - honored/overridden/fallback resolution
+ *
+ * This is not a policy command language; it is traceable outcome metadata.
+ */
 const buildProviderPreferenceControl = (
     input: BuildSteerabilityControlsInput
 ): SteerabilityControlRecord => {
@@ -117,6 +135,8 @@ const buildProviderPreferenceControl = (
 const buildToolAllowanceControl = (
     toolRequest: ToolInvocationRequest
 ): SteerabilityControlRecord => {
+    // If no tool was requested, the control record exists for inspectability
+    // but has no causal execution impact for this run.
     if (!toolRequest.requested) {
         return {
             controlId: 'tool_allowance',
@@ -152,6 +172,13 @@ const buildToolAllowanceControl = (
     };
 };
 
+/**
+ * Builds the flat v1 steerability bundle.
+ *
+ * The shape is intentionally compact and serializable. We keep control classes
+ * in docs for now (execution vs posture vs preference) without introducing a
+ * nested runtime schema.
+ */
 export const buildSteerabilityControls = (
     input: BuildSteerabilityControlsInput
 ): SteerabilityControls => {
