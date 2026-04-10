@@ -12,6 +12,7 @@ import type {
     ToolInvocationRequest,
     WorkflowModeDecision,
 } from '@footnote/contracts/ethics-core';
+import { deriveReviewIntensityFromWorkflowBehavior } from './workflowProfileRegistry.js';
 
 type ProfileSelection = {
     profileId: string;
@@ -46,29 +47,17 @@ const mapWorkflowModeSource = (
     return 'fail_open_default';
 };
 
-const deriveReviewIntensity = (
-    workflowMode: WorkflowModeDecision
-): 'none' | 'light' | 'moderate' | 'high' => {
-    if (
-        workflowMode.behavior.reviewPass === 'excluded' ||
-        workflowMode.behavior.workflowExecution === 'disabled'
-    ) {
-        return 'none';
-    }
-
-    if (workflowMode.behavior.maxDeliberationCalls <= 1) {
-        return 'light';
-    }
-    if (workflowMode.behavior.maxDeliberationCalls <= 3) {
-        return 'moderate';
-    }
-    return 'high';
-};
-
 const trimOptional = (value: string | undefined): string | undefined => {
     const trimmed = value?.trim();
     return trimmed && trimmed.length > 0 ? trimmed : undefined;
 };
+
+type ProviderPreferenceState =
+    | 'requested_honored'
+    | 'requested_overridden'
+    | 'advisory_honored'
+    | 'advisory_overridden'
+    | 'fallback_resolved';
 
 const buildProviderPreferenceControl = (
     input: BuildSteerabilityControlsInput
@@ -79,24 +68,36 @@ const buildProviderPreferenceControl = (
     );
 
     if (requestedProfileId !== undefined) {
+        const state: ProviderPreferenceState =
+            requestedProfileId === input.selectedProfile.profileId
+                ? 'requested_honored'
+                : 'requested_overridden';
         return {
             controlId: 'provider_preference',
-            value: `request:${requestedProfileId} -> selected:${input.selectedProfile.profileId} (${input.selectedProfile.provider}/${input.selectedProfile.model})`,
+            value: `state:${state};requested:${requestedProfileId};resolved:${input.selectedProfile.profileId}(${input.selectedProfile.provider}/${input.selectedProfile.model})`,
             source: 'request_override',
             rationale:
-                'Request profile override was present, so provider/model selection honored request routing policy with fail-open fallback.',
+                state === 'requested_honored'
+                    ? 'Caller requested a profile override and runtime honored it for provider/model selection.'
+                    : 'Caller requested a profile override, but runtime policy/capability resolution overrode it and selected a different profile.',
             mattered: true,
             impactedTargets: ['model_profile_selection'],
         };
     }
 
     if (plannerSelectedProfileId !== undefined) {
+        const state: ProviderPreferenceState =
+            plannerSelectedProfileId === input.selectedProfile.profileId
+                ? 'advisory_honored'
+                : 'advisory_overridden';
         return {
             controlId: 'provider_preference',
-            value: `planner:${plannerSelectedProfileId} -> selected:${input.selectedProfile.profileId} (${input.selectedProfile.provider}/${input.selectedProfile.model})`,
+            value: `state:${state};advisory:${plannerSelectedProfileId};resolved:${input.selectedProfile.profileId}(${input.selectedProfile.provider}/${input.selectedProfile.model})`,
             source: 'planner_output',
             rationale:
-                'Planner-selected capability profile guided provider/model selection, then capability policy resolved the final execution profile.',
+                state === 'advisory_honored'
+                    ? 'Planner advisory profile preference aligned with capability policy and was used for provider/model selection.'
+                    : 'Planner advisory profile preference was non-authoritative and runtime capability/policy resolution selected a different profile.',
             mattered: true,
             impactedTargets: ['model_profile_selection'],
         };
@@ -104,10 +105,10 @@ const buildProviderPreferenceControl = (
 
     return {
         controlId: 'provider_preference',
-        value: `selected:${input.selectedProfile.profileId} (${input.selectedProfile.provider}/${input.selectedProfile.model})`,
+        value: `state:fallback_resolved;resolved:${input.selectedProfile.profileId}(${input.selectedProfile.provider}/${input.selectedProfile.model})`,
         source: 'fail_open_default',
         rationale:
-            'No explicit request or planner profile preference was present, so runtime fallback profile selection was used.',
+            'No requested or advisory profile preference was present, so runtime fallback resolution selected the provider/model profile.',
         mattered: true,
         impactedTargets: ['model_profile_selection'],
     };
@@ -157,7 +158,9 @@ export const buildSteerabilityControls = (
     const workflowModeSource = mapWorkflowModeSource(
         input.workflowMode.selectedBy
     );
-    const reviewIntensity = deriveReviewIntensity(input.workflowMode);
+    const reviewIntensity = deriveReviewIntensityFromWorkflowBehavior(
+        input.workflowMode.behavior
+    );
     const personaHasOverlay = input.persona.overlaySource !== 'none';
 
     const controls: SteerabilityControlRecord[] = [
@@ -186,6 +189,8 @@ export const buildSteerabilityControls = (
             value: reviewIntensity,
             source: workflowModeSource,
             rationale: `Workflow mode review settings yielded intensity "${reviewIntensity}" (max deliberation calls: ${input.workflowMode.behavior.maxDeliberationCalls}).`,
+            // `mattered` means observable causal impact on this run, not just
+            // requested/present metadata.
             mattered: reviewIntensity !== 'none',
             impactedTargets:
                 reviewIntensity !== 'none' ? ['review_loop_execution'] : [],
@@ -196,8 +201,8 @@ export const buildSteerabilityControls = (
             value: `${input.persona.personaId}:${input.persona.overlaySource}`,
             source: 'surface_profile',
             rationale: personaHasOverlay
-                ? 'Backend persona overlay was applied to prompt assembly.'
-                : 'No persona overlay was applied; default persona prompt path remained active.',
+                ? 'Backend persona overlay shaped answer presentation/tone only; it did not change execution-contract authority, evidence posture, or review authority.'
+                : 'No persona overlay was applied; default persona prompt path remained active and execution-policy authority stayed unchanged.',
             mattered: personaHasOverlay,
             impactedTargets: personaHasOverlay ? ['persona_prompt_layer'] : [],
         },

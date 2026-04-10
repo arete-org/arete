@@ -44,6 +44,65 @@
 - Clean execution mapping: each control includes impacted targets.
 - Explainable traces: `mattered` + impacted targets show which controls affected behavior.
 
+## Control Classes (v1, flat bundle)
+
+The runtime metadata shape remains flat in v1. Control authority classes are documented here to prevent conceptual drift.
+
+- Execution controls:
+    - `workflow_mode`
+    - `evidence_strictness`
+    - `review_intensity`
+    - `tool_allowance`
+- Posture/output controls:
+    - `persona_tone_overlay`
+- Preference/environment controls:
+    - `provider_preference`
+
+These classes are documentation semantics only in v1. They do not add new schema fields.
+
+## `mattered` Semantics
+
+`mattered = true` means the control had an observable causal impact on this run.
+
+It is not enough that:
+
+- the control record existed
+- the control was requested
+- the control was accepted but had no material effect
+
+Examples:
+
+- Requested but not honored: `provider_preference` may still matter when policy overrides it and resolves a different profile.
+- Honored but not consequential: if no tool was requested, `tool_allowance` is present but `mattered = false`.
+- Materially consequential: `workflow_mode` selecting grounded behavior and enabling reviewed path sets `mattered = true`.
+- No downstream effect: no persona overlay keeps `persona_tone_overlay` as `mattered = false`.
+
+## Provider Preference Semantics
+
+`provider_preference` remains non-authoritative unless policy explicitly grants authority.
+
+v1 value/rationale encoding is explicit about resolution state:
+
+- `requested_honored`
+- `requested_overridden`
+- `advisory_honored`
+- `advisory_overridden`
+- `fallback_resolved`
+
+This keeps traces honest about request/advisory intent vs runtime policy resolution.
+
+## Persona Overlay Constraint
+
+`persona_tone_overlay` is presentation/posture only.
+
+It must not:
+
+- alter execution-contract authority
+- lower/raise evidence strictness
+- bypass review authority
+
+Tests assert rationale language to keep this contract explicit during future edits.
+
 ## Explicit non-goals respected
 
 - No workflow DSL.

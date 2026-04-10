@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+    deriveReviewIntensityFromWorkflowBehavior,
     resolveWorkflowModeDecision,
     resolveWorkflowProfileRegistry,
     resolveWorkflowRuntimeConfig,
@@ -197,4 +198,63 @@ test('resolveWorkflowModeDecision treats non-canonical mode ids as unknown and f
     assert.equal(legacyFast.modeDecision.modeId, 'grounded');
     assert.equal(legacyFast.modeDecision.selectedBy, 'fail_open_default');
     assert.equal(legacyFast.modeDecision.requestedModeId, 'generate-only');
+});
+
+test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity mapping', () => {
+    assert.equal(
+        deriveReviewIntensityFromWorkflowBehavior({
+            executionContractPresetId: 'fast-direct',
+            workflowProfileClass: 'direct',
+            workflowProfileId: 'generate-only',
+            workflowExecution: 'disabled',
+            reviewPass: 'excluded',
+            reviseStep: 'disallowed',
+            evidencePosture: 'minimal',
+            maxWorkflowSteps: 1,
+            maxDeliberationCalls: 0,
+        }),
+        'none'
+    );
+    assert.equal(
+        deriveReviewIntensityFromWorkflowBehavior({
+            executionContractPresetId: 'balanced',
+            workflowProfileClass: 'reviewed',
+            workflowProfileId: 'bounded-review',
+            workflowExecution: 'always',
+            reviewPass: 'included',
+            reviseStep: 'allowed',
+            evidencePosture: 'balanced',
+            maxWorkflowSteps: 4,
+            maxDeliberationCalls: 1,
+        }),
+        'light'
+    );
+    assert.equal(
+        deriveReviewIntensityFromWorkflowBehavior({
+            executionContractPresetId: 'balanced',
+            workflowProfileClass: 'reviewed',
+            workflowProfileId: 'bounded-review',
+            workflowExecution: 'always',
+            reviewPass: 'included',
+            reviseStep: 'allowed',
+            evidencePosture: 'balanced',
+            maxWorkflowSteps: 4,
+            maxDeliberationCalls: 2,
+        }),
+        'moderate'
+    );
+    assert.equal(
+        deriveReviewIntensityFromWorkflowBehavior({
+            executionContractPresetId: 'quality-grounded',
+            workflowProfileClass: 'reviewed',
+            workflowProfileId: 'bounded-review',
+            workflowExecution: 'policy_gated',
+            reviewPass: 'included',
+            reviseStep: 'allowed',
+            evidencePosture: 'strict',
+            maxWorkflowSteps: 8,
+            maxDeliberationCalls: 4,
+        }),
+        'high'
+    );
 });

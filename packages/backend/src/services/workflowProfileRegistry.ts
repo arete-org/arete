@@ -193,6 +193,31 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
     },
 };
 
+export type ReviewIntensity = 'none' | 'light' | 'moderate' | 'high';
+
+/**
+ * Canonical review-intensity derivation from workflow-mode behavior.
+ * Any metadata/reporting layer should use this helper to avoid drift.
+ */
+export const deriveReviewIntensityFromWorkflowBehavior = (
+    behavior: WorkflowModeBehavior
+): ReviewIntensity => {
+    if (
+        behavior.reviewPass === 'excluded' ||
+        behavior.workflowExecution === 'disabled'
+    ) {
+        return 'none';
+    }
+
+    if (behavior.maxDeliberationCalls <= 1) {
+        return 'light';
+    }
+    if (behavior.maxDeliberationCalls <= 3) {
+        return 'moderate';
+    }
+    return 'high';
+};
+
 const normalizeWorkflowModeId = (
     modeId: string
 ): {
