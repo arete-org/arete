@@ -44,6 +44,22 @@ const createCatalog = (): ModelProfile[] => [
     },
 ];
 
+const createOllamaCatalog = (): ModelProfile[] => [
+    {
+        id: 'ollama-text-fast',
+        description: 'Fast local profile.',
+        provider: 'ollama',
+        providerModel: 'llama3.2:3b',
+        enabled: true,
+        tierBindings: ['text-fast'],
+        capabilities: {
+            canUseSearch: false,
+        },
+        costClass: 'low',
+        latencyClass: 'low',
+    },
+];
+
 test('buildModelProfilesSection loads valid catalog YAML with profile defaults', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'model-catalog-'));
     const yamlPath = path.join(tempDir, 'catalog.yaml');
@@ -377,6 +393,48 @@ test('model profile resolver synthesizes raw profile when multiple enabled catal
     assert.match(
         warnings.map((warning) => warning.message).join('\n'),
         /multiple enabled catalog profiles matched raw selector/i
+    );
+});
+
+test('model profile resolver defaults raw model selectors to configured default provider', () => {
+    const warnings: Array<{ message: string; meta?: Record<string, unknown> }> =
+        [];
+    const resolver = createModelProfileResolver({
+        catalog: createOllamaCatalog(),
+        defaultProfileId: 'ollama-text-fast',
+        legacyDefaultModel: 'llama3.2:3b',
+        warn: (warning) => warnings.push(warning),
+    });
+
+    const resolved = resolver.resolve('qwen3.5:cloud');
+    assert.equal(resolved.provider, 'ollama');
+    assert.equal(resolved.providerModel, 'qwen3.5:cloud');
+    assert.equal(resolved.id, 'raw-ollama-qwen3-5-cloud');
+    assert.equal(warnings.length, 0);
+});
+
+test('model profile resolver legacy fallback honors configured default profile provider when catalog is disabled', () => {
+    const warnings: Array<{ message: string; meta?: Record<string, unknown> }> =
+        [];
+    const resolver = createModelProfileResolver({
+        catalog: [
+            {
+                ...createOllamaCatalog()[0],
+                enabled: false,
+            },
+        ],
+        defaultProfileId: 'ollama-text-fast',
+        legacyDefaultModel: 'llama3.2:3b',
+        warn: (warning) => warnings.push(warning),
+    });
+
+    const resolved = resolver.resolve();
+    assert.equal(resolved.id, 'legacy-default-model');
+    assert.equal(resolved.provider, 'ollama');
+    assert.equal(resolved.providerModel, 'llama3.2:3b');
+    assert.match(
+        warnings.map((warning) => warning.message).join('\n'),
+        /legacy DEFAULT_MODEL/i
     );
 });
 

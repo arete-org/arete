@@ -125,6 +125,34 @@ test('voltagent runtime uses default model when request model is blank', async (
     assert.equal(result.model, 'gpt-5-mini');
 });
 
+test('voltagent runtime infers provider from configured default model when request provider is omitted', async () => {
+    let seenModel: string | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'ollama/gpt-oss:20b-cloud',
+        createExecutor: ({ model }) => {
+            seenModel = model;
+            return {
+                async generateText() {
+                    return {
+                        text: 'default-provider reply',
+                        response: {
+                            modelId: model,
+                        },
+                    };
+                },
+            };
+        },
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        model: 'qwen3.5:cloud',
+    });
+
+    assert.equal(seenModel, 'ollama/qwen3.5:cloud');
+    assert.equal(result.model, 'qwen3.5:cloud');
+});
+
 test('voltagent runtime normalizes non-search output into GenerationResult', async () => {
     const runtime = createVoltAgentRuntime({
         defaultModel: 'gpt-5-mini',
