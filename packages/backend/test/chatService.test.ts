@@ -74,6 +74,12 @@ test('createChatService records backend token usage and estimated cost', async (
         recordUsage: (record) => {
             usageRecords.push(record);
         },
+        chatWorkflowConfig: {
+            modeId: 'fast',
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
     });
 
     const response = await chatService.runChat({
@@ -142,6 +148,12 @@ test('createChatService preserves the caller-requested model when the runtime om
         defaultModel: 'gpt-5-mini',
         recordUsage: (record) => {
             usageRecords.push(record);
+        },
+        chatWorkflowConfig: {
+            modeId: 'fast',
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15000,
         },
     });
 
@@ -515,6 +527,12 @@ test('runChatMessages adds a backend repo-explainer response hint', async () => 
             canUseSearch: true,
         },
         recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'fast',
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
     });
 
     await chatService.runChatMessages({
@@ -574,6 +592,12 @@ test('runChatMessages forwards planner-selected generation settings to Generatio
             canUseSearch: true,
         },
         recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'fast',
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
     });
 
     await chatService.runChatMessages({
@@ -716,6 +740,12 @@ test('runChatMessages records usage correctly when VoltAgent handles search dire
         defaultModel: 'gpt-5-mini',
         recordUsage: (record) => {
             usageRecords.push(record);
+        },
+        chatWorkflowConfig: {
+            modeId: 'fast',
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15000,
         },
     });
 
@@ -993,7 +1023,7 @@ test('runChatMessages skips review loop when enabled but maxIterations is zero',
     assert.equal(callCount, 1);
 });
 
-test('runChatMessages uses bounded-review fail-open workflow for unknown workflow profile id', async () => {
+test('runChatMessages falls back to reviewed workflow behavior for unknown workflow mode id', async () => {
     let capturedWorkflow:
         | ResponseMetadataRuntimeContext['workflow']
         | undefined;
@@ -1015,7 +1045,7 @@ test('runChatMessages uses bounded-review fail-open workflow for unknown workflo
         defaultModel: 'gpt-5-mini',
         recordUsage: () => undefined,
         chatWorkflowConfig: {
-            profileId: 'unknown-profile',
+            modeId: 'unknown-profile',
             reviewLoopEnabled: true,
             maxIterations: 2,
             maxDurationMs: 15000,
@@ -1063,7 +1093,7 @@ test('runChatMessages uses bounded-review fail-open workflow for unknown workflo
     assert.equal(capturedWorkflow?.workflowName, 'message_with_review_loop');
 });
 
-test('runChatMessages executes generate-only workflow profile with lineage and no assess/revise execution', async () => {
+test('runChatMessages executes fast workflow mode as direct generation without workflow lineage', async () => {
     let generationCalls = 0;
     let capturedWorkflow:
         | ResponseMetadataRuntimeContext['workflow']
@@ -1103,7 +1133,7 @@ test('runChatMessages executes generate-only workflow profile with lineage and n
         defaultModel: 'gpt-5-mini',
         recordUsage: () => undefined,
         chatWorkflowConfig: {
-            profileId: 'generate-only',
+            modeId: 'fast',
             reviewLoopEnabled: false,
             maxIterations: 9,
             maxDurationMs: 15000,
@@ -1149,14 +1179,8 @@ test('runChatMessages executes generate-only workflow profile with lineage and n
 
     assert.equal(response.message, 'generate-only response');
     assert.equal(generationCalls, 1);
-    assert.equal(
-        capturedWorkflowRunConfig?.workflowName,
-        'message_generate_only'
-    );
-    assert.equal(capturedWorkflowRunConfig?.maxIterations, 0);
-    assert.equal(capturedWorkflow?.workflowName, 'message_generate_only');
-    assert.equal(capturedWorkflow?.stepCount, 1);
-    assert.equal(capturedWorkflow?.steps[0]?.stepKind, 'generate');
+    assert.equal(capturedWorkflowRunConfig, undefined);
+    assert.equal(capturedWorkflow, undefined);
 });
 
 test('runChatMessages handles surfaced no-generation reasons without runtime fallback generation', async () => {
@@ -1433,7 +1457,7 @@ test('runChatMessages keeps no-generation surfaced when execution policy disable
     assert.equal(fallbackExecution, undefined);
 });
 
-test('runChatMessages honors Execution Contract response-mode ownership switch for workflow runtime gating', async () => {
+test('runChatMessages keeps workflow execution policy gated by the execution contract response mode', async () => {
     const runWithPolicyPreset = async (
         presetId: 'fast-direct' | 'quality-grounded'
     ): Promise<{
@@ -1471,7 +1495,7 @@ test('runChatMessages honors Execution Contract response-mode ownership switch f
             defaultModel: 'gpt-5-mini',
             recordUsage: () => undefined,
             chatWorkflowConfig: {
-                profileId: 'bounded-review',
+                modeId: 'grounded',
                 reviewLoopEnabled: false,
                 maxIterations: 2,
                 maxDurationMs: 15000,
@@ -1547,6 +1571,65 @@ test('runChatMessages honors Execution Contract response-mode ownership switch f
         directGenerationCalls: 1,
         message: 'direct runtime generation',
     });
+});
+
+test('runChatMessages records workflow mode decision in metadata and applies fast behavior', async () => {
+    let reviewWorkflowCalls = 0;
+    let directGenerationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            directGenerationCalls += 1;
+            return {
+                text: 'direct mode response',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+    const chatService = createChatService({
+        generationRuntime,
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'fast',
+            reviewLoopEnabled: true,
+            maxIterations: 3,
+            maxDurationMs: 15000,
+        },
+        runReviewWorkflow: async () => {
+            reviewWorkflowCalls += 1;
+            throw new Error(
+                'runReviewWorkflow should not execute in fast mode'
+            );
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+    });
+
+    assert.equal(response.message, 'direct mode response');
+    assert.equal(directGenerationCalls, 1);
+    assert.equal(reviewWorkflowCalls, 0);
+    assert.equal(response.metadata.workflowMode?.modeId, 'fast');
+    assert.equal(
+        response.metadata.workflowMode?.behavior.workflowExecution,
+        'disabled'
+    );
+    assert.equal(
+        response.metadata.workflowMode?.behavior.evidencePosture,
+        'minimal'
+    );
 });
 
 test('runChatMessages emits schema-safe workflow metadata bounds under invalid injected config values', async () => {

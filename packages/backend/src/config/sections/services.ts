@@ -7,6 +7,7 @@
  */
 
 import { envDefaultValues } from '@footnote/config-spec';
+import type { WorkflowModeId } from '@footnote/contracts/ethics-core';
 import {
     parseBooleanEnv,
     parseNonNegativeIntEnv,
@@ -16,11 +17,10 @@ import {
 } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
-type ChatWorkflowProfileId = RuntimeConfig['chatWorkflow']['profileId'];
-
-const CHAT_WORKFLOW_PROFILE_IDS: ReadonlySet<ChatWorkflowProfileId> = new Set([
-    'bounded-review',
-    'generate-only',
+const CHAT_WORKFLOW_MODE_IDS: ReadonlySet<WorkflowModeId> = new Set([
+    'fast',
+    'balanced',
+    'grounded',
 ]);
 
 /**
@@ -50,11 +50,11 @@ export const buildServiceSections = (
         ),
     },
     chatWorkflow: {
-        profileId: parseStringUnionEnv<ChatWorkflowProfileId>(
-            env.CHAT_WORKFLOW_PROFILE_ID,
-            'bounded-review',
-            'CHAT_WORKFLOW_PROFILE_ID',
-            CHAT_WORKFLOW_PROFILE_IDS,
+        modeId: parseStringUnionEnv<WorkflowModeId>(
+            env.CHAT_WORKFLOW_MODE_ID,
+            'grounded',
+            'CHAT_WORKFLOW_MODE_ID',
+            CHAT_WORKFLOW_MODE_IDS,
             warn
         ),
         reviewLoopEnabled: parseBooleanEnv(

@@ -30,6 +30,10 @@ const BUILTIN_EXECUTION_CONTRACT_DESCRIPTORS: Readonly<
         policyId: 'core-fast-direct',
         displayName: 'Core Fast Direct',
     },
+    balanced: {
+        policyId: 'core-balanced',
+        displayName: 'Core Balanced',
+    },
     'quality-grounded': {
         policyId: 'core-quality-grounded',
         displayName: 'Core Quality Grounded',

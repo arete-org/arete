@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+    resolveWorkflowModeDecision,
     resolveWorkflowProfileRegistry,
     resolveWorkflowRuntimeConfig,
 } from '../src/services/workflowProfileRegistry.js';
@@ -107,45 +108,93 @@ test('resolveWorkflowProfileRegistry keeps public contract serializable while ru
 });
 
 test('resolveWorkflowRuntimeConfig applies forceWorkflowExecution and review-loop gating', () => {
-    const generateOnlyRuntimeConfig = resolveWorkflowRuntimeConfig({
-        profileId: 'generate-only',
+    const fastRuntimeConfig = resolveWorkflowRuntimeConfig({
+        modeId: 'fast',
         reviewLoopEnabled: true,
         maxIterations: 5,
         maxDurationMs: 9000,
     });
-    assert.equal(generateOnlyRuntimeConfig.profileId, 'generate-only');
-    assert.equal(generateOnlyRuntimeConfig.workflowExecutionEnabled, true);
+    assert.equal(fastRuntimeConfig.profileId, 'generate-only');
+    assert.equal(fastRuntimeConfig.workflowExecutionEnabled, false);
+    assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps, 1);
     assert.equal(
-        generateOnlyRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps,
-        1
-    );
-    assert.equal(
-        generateOnlyRuntimeConfig.workflowExecutionLimits.maxDeliberationCalls,
+        fastRuntimeConfig.workflowExecutionLimits.maxDeliberationCalls,
         0
     );
-    assert.equal(
-        generateOnlyRuntimeConfig.workflowExecutionLimits.maxDurationMs,
-        9000
-    );
+    assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxDurationMs, 9000);
 
-    const boundedReviewRuntimeConfig = resolveWorkflowRuntimeConfig({
-        profileId: 'bounded-review',
+    const groundedRuntimeConfig = resolveWorkflowRuntimeConfig({
+        modeId: 'grounded',
         reviewLoopEnabled: false,
         maxIterations: 5,
         maxDurationMs: 9000,
     });
-    assert.equal(boundedReviewRuntimeConfig.profileId, 'bounded-review');
-    assert.equal(boundedReviewRuntimeConfig.workflowExecutionEnabled, false);
+    assert.equal(groundedRuntimeConfig.profileId, 'bounded-review');
+    assert.equal(groundedRuntimeConfig.workflowExecutionEnabled, false);
     assert.equal(
-        boundedReviewRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps,
-        10
+        groundedRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps,
+        8
     );
     assert.equal(
-        boundedReviewRuntimeConfig.workflowExecutionLimits.maxDeliberationCalls,
-        10
+        groundedRuntimeConfig.workflowExecutionLimits.maxDeliberationCalls,
+        4
     );
     assert.equal(
-        boundedReviewRuntimeConfig.workflowExecutionLimits.maxDurationMs,
+        groundedRuntimeConfig.workflowExecutionLimits.maxDurationMs,
         9000
     );
+});
+
+test('resolveWorkflowModeDecision maps requested mode ids and emits inspectable routing behavior', () => {
+    const requested = resolveWorkflowModeDecision({
+        modeId: 'balanced',
+        executionContractResponseMode: 'fast_direct',
+    });
+    assert.equal(requested.isKnownRequestedModeId, true);
+    assert.equal(requested.modeDecision.modeId, 'balanced');
+    assert.equal(requested.modeDecision.selectedBy, 'requested_mode');
+    assert.equal(
+        requested.modeDecision.behavior.executionContractPresetId,
+        'balanced'
+    );
+    assert.equal(
+        requested.modeDecision.behavior.workflowProfileId,
+        'bounded-review'
+    );
+    assert.equal(requested.modeDecision.behavior.reviewPass, 'included');
+    assert.equal(requested.modeDecision.behavior.reviseStep, 'allowed');
+    assert.equal(requested.modeDecision.behavior.evidencePosture, 'balanced');
+});
+
+test('resolveWorkflowModeDecision fails open by inferring from execution contract and then defaulting', () => {
+    const inferred = resolveWorkflowModeDecision({
+        modeId: 'unknown-mode',
+        executionContractResponseMode: 'quality_grounded',
+    });
+    assert.equal(inferred.isKnownRequestedModeId, false);
+    assert.equal(inferred.modeDecision.modeId, 'grounded');
+    assert.equal(
+        inferred.modeDecision.selectedBy,
+        'inferred_from_execution_contract'
+    );
+    assert.equal(
+        inferred.modeDecision.behavior.executionContractPresetId,
+        'quality-grounded'
+    );
+
+    const fallbackDefault = resolveWorkflowModeDecision({
+        modeId: 'unknown-mode',
+    });
+    assert.equal(fallbackDefault.modeDecision.modeId, 'grounded');
+    assert.equal(fallbackDefault.modeDecision.selectedBy, 'fail_open_default');
+});
+
+test('resolveWorkflowModeDecision treats non-canonical mode ids as unknown and fails open', () => {
+    const legacyFast = resolveWorkflowModeDecision({
+        modeId: 'generate-only',
+    });
+    assert.equal(legacyFast.isKnownRequestedModeId, false);
+    assert.equal(legacyFast.modeDecision.modeId, 'grounded');
+    assert.equal(legacyFast.modeDecision.selectedBy, 'fail_open_default');
+    assert.equal(legacyFast.modeDecision.requestedModeId, 'generate-only');
 });
