@@ -10,7 +10,7 @@ import type {
     ModelLatencyClass,
     ModelProfile,
 } from '@footnote/contracts';
-import type { ExecutionPolicyRoutingIntent } from './executionPolicyContract.js';
+import type { ExecutionContractRoutingIntent } from './executionContract.js';
 
 export type WorkflowModelStep = 'generation';
 
@@ -207,7 +207,7 @@ export const selectModelProfileForWorkflowStep = (input: {
     profiles: readonly ModelProfile[];
     requiresSearch: boolean;
     routingIntent?: Pick<
-        ExecutionPolicyRoutingIntent,
+        ExecutionContractRoutingIntent,
         'strategy' | 'capabilityTags'
     >;
 }): {

@@ -21,7 +21,7 @@ import {
     type ResponseMetadataRuntimeContext,
 } from '../src/services/openaiService.js';
 import { createChatService } from '../src/services/chatService.js';
-import { resolveExecutionPolicyContract } from '../src/services/executionPolicyResolver.js';
+import { resolveExecutionContract } from '../src/services/executionContractResolver.js';
 import {
     createScopeOwnershipValidatorFromTenancyService,
     StubTrustGraphEvidenceAdapter,
@@ -1363,7 +1363,7 @@ test('runChatMessages keeps no-generation surfaced when execution policy disable
         },
     };
 
-    const executionPolicyContract = resolveExecutionPolicyContract({
+    const ExecutionContract = resolveExecutionContract({
         presetId: 'quality-grounded',
         overrides: {
             failOpen: {
@@ -1408,7 +1408,7 @@ test('runChatMessages keeps no-generation surfaced when execution policy disable
     const response = await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'Summarize this.' }],
         conversationSnapshot: 'Summarize this.',
-        executionPolicyContract,
+        ExecutionContract,
     });
 
     assert.equal(generationCalls, 0);
@@ -1433,7 +1433,7 @@ test('runChatMessages keeps no-generation surfaced when execution policy disable
     assert.equal(fallbackExecution, undefined);
 });
 
-test('runChatMessages honors EPC response-mode ownership switch for workflow runtime gating', async () => {
+test('runChatMessages honors Execution Contract response-mode ownership switch for workflow runtime gating', async () => {
     const runWithPolicyPreset = async (
         presetId: 'fast-direct' | 'quality-grounded'
     ): Promise<{
@@ -1443,7 +1443,7 @@ test('runChatMessages honors EPC response-mode ownership switch for workflow run
     }> => {
         let reviewWorkflowCalls = 0;
         let directGenerationCalls = 0;
-        const executionPolicyContract = resolveExecutionPolicyContract({
+        const ExecutionContract = resolveExecutionContract({
             presetId,
         }).policyContract;
         const generationRuntime: GenerationRuntime = {
@@ -1524,7 +1524,7 @@ test('runChatMessages honors EPC response-mode ownership switch for workflow run
         const response = await chatService.runChatMessages({
             messages: [{ role: 'user', content: 'Summarize this.' }],
             conversationSnapshot: 'Summarize this.',
-            executionPolicyContract,
+            ExecutionContract,
         });
 
         return {
@@ -1804,7 +1804,7 @@ test('runChatMessages trustgraph ON/OFF does not change local execution authorit
     );
 });
 
-test('runChatMessages preserves local response authority when TrustGraph ownership denies under EPC policy carriage', async () => {
+test('runChatMessages preserves local response authority when TrustGraph ownership denies under Execution Contract policy carriage', async () => {
     const scopeOwnershipValidator =
         createScopeOwnershipValidatorFromTenancyService({
             validatorId: 'backend_tenancy_v1',
@@ -1819,7 +1819,7 @@ test('runChatMessages preserves local response authority when TrustGraph ownersh
             },
         });
 
-    const executionPolicyContract = resolveExecutionPolicyContract({
+    const ExecutionContract = resolveExecutionContract({
         presetId: 'quality-grounded',
     }).policyContract;
 
@@ -1850,7 +1850,7 @@ test('runChatMessages preserves local response authority when TrustGraph ownersh
     const response = await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'What changed?' }],
         conversationSnapshot: 'What changed?',
-        executionPolicyContract,
+        ExecutionContract,
         executionContractTrustGraphContext: {
             queryIntent: 'What changed?',
             scopeTuple: {

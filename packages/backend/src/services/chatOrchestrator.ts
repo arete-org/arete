@@ -33,7 +33,7 @@ import {
 import { createChatPlanner, type ChatPlan } from './chatPlanner.js';
 import { createOpenAiChatPlannerStructuredExecutor } from './chatPlannerStructuredOpenAi.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
-import type { ExecutionResponseMode } from './executionPolicyContract.js';
+import type { ExecutionResponseMode } from './executionContract.js';
 import { normalizeDiscordConversation } from './chatConversationNormalization.js';
 import {
     resolveActiveProfileOverlayPrompt,
@@ -55,7 +55,7 @@ import {
     resolveSearchFallbackPolicy,
     searchFallbackRankingPolicy,
 } from './searchFallbackPolicy.js';
-import { resolveExecutionPolicyContract } from './executionPolicyResolver.js';
+import { resolveExecutionContract } from './executionContractResolver.js';
 import type { WeatherForecastTool } from './weatherGovForecastTool.js';
 import { applySingleToolPolicy } from './tools/toolPolicy.js';
 import {
@@ -92,7 +92,7 @@ const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
 });
 
-const resolveExecutionPolicyPresetId = (
+const resolveExecutionContractPresetId = (
     responseMode: ExecutionResponseMode | undefined
 ): 'fast-direct' | 'quality-grounded' =>
     responseMode === 'quality_grounded' ? 'quality-grounded' : 'fast-direct';
@@ -174,6 +174,9 @@ const buildExecutionContractScopeTuple = (
 /**
  * The orchestrator keeps surface-specific policy in one place while reusing the
  * shared message-generation service for any branch that ends in text output.
+ *
+ * Authority split: the Execution Contract governs allowed execution shape and
+ * bounds; this orchestrator executes requests under those rules.
  */
 export const createChatOrchestrator = ({
     generationRuntime,
@@ -499,12 +502,12 @@ export const createChatOrchestrator = ({
                 }
             );
         }
-        const resolvedExecutionPolicy = resolveExecutionPolicyContract({
-            presetId: resolveExecutionPolicyPresetId(
+        const resolvedExecutionContract = resolveExecutionContract({
+            presetId: resolveExecutionContractPresetId(
                 generationForExecution.responseIntentHint?.responseMode
             ),
         }).policyContract;
-        const routingStrategy = resolvedExecutionPolicy.routing.strategy;
+        const routingStrategy = resolvedExecutionContract.routing.strategy;
         let selectedResponseProfile = defaultResponseProfile;
         let profileSelectionSource: PlannerSelectionSource = 'default';
         // Profile domains at this seam:
@@ -521,7 +524,7 @@ export const createChatOrchestrator = ({
             requestedCapabilityProfile: plan.requestedCapabilityProfile,
             profiles: enabledProfiles,
             requiresSearch: generationForExecution.search !== undefined,
-            routingIntent: resolvedExecutionPolicy.routing,
+            routingIntent: resolvedExecutionContract.routing,
         });
         const plannerSelectedModelProfileId =
             selectedCapabilityDecision.selectedProfile?.id.trim();
@@ -929,9 +932,9 @@ export const createChatOrchestrator = ({
                     toolRequest: toolRequestContext,
                     ...(surfacePolicy && { surfacePolicy }),
                 },
-                executionPolicy: {
-                    policyId: resolvedExecutionPolicy.policyId,
-                    policyVersion: resolvedExecutionPolicy.policyVersion,
+                executionContract: {
+                    policyId: resolvedExecutionContract.policyId,
+                    policyVersion: resolvedExecutionContract.policyVersion,
                 },
             }),
             orchestrationStartedAtMs: orchestrationStartedAt,
@@ -942,7 +945,7 @@ export const createChatOrchestrator = ({
             capabilities: selectedResponseProfile.capabilities,
             generation: executionPlan.generation,
             toolRequest: toolRequestContext,
-            executionPolicyContract: resolvedExecutionPolicy,
+            ExecutionContract: resolvedExecutionContract,
             ...(executionContractScopeTuple !== undefined && {
                 executionContractTrustGraphContext: {
                     queryIntent: normalizedRequest.latestUserInput,
@@ -1032,9 +1035,9 @@ export const createChatOrchestrator = ({
                 plannerExecution.status === 'failed' ||
                 fallbackReasons.length > 0,
             fallbackReasons,
-            executionPolicyId: resolvedExecutionPolicy.policyId,
-            executionPolicyVersion: resolvedExecutionPolicy.policyVersion,
-            routingStrategy: resolvedExecutionPolicy.routing.strategy,
+            executionContractId: resolvedExecutionContract.policyId,
+            executionContractVersion: resolvedExecutionContract.policyVersion,
+            routingStrategy: resolvedExecutionContract.routing.strategy,
             responseId: response.metadata.responseId,
             responseAction: 'message',
             responseModality: executionPlan.modality,
