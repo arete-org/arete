@@ -108,23 +108,22 @@ test('formatExecutionTimelineSummary includes evaluator breaker rule context for
 });
 
 test('formatExecutionTimelineSummary infers influence for legacy observe-only non-allow evaluator payloads', () => {
-    const summary = formatExecutionTimelineSummary([
-        {
-            kind: 'evaluator',
-            status: 'executed',
-            evaluator: {
-                mode: 'observe_only',
-                provenance: 'Inferred',
-                safetyDecision: {
-                    action: 'block',
-                    safetyTier: 'High',
-                    ruleId: 'safety.weaponization_request.v1',
-                    reasonCode: 'weaponization_request',
-                    reason: 'Deterministic weaponization-request rule matched.',
-                },
+    const legacyEvaluatorEvent = {
+        kind: 'evaluator',
+        status: 'executed',
+        evaluator: {
+            mode: 'observe_only',
+            provenance: 'Inferred',
+            safetyDecision: {
+                action: 'block',
+                safetyTier: 'High',
+                ruleId: 'safety.weaponization_request.v1',
+                reasonCode: 'weaponization_request',
+                reason: 'Deterministic weaponization-request rule matched.',
             },
         },
-    ]);
+    } as unknown as ExecutionEvent;
+    const summary = formatExecutionTimelineSummary([legacyEvaluatorEvent]);
 
     assert.equal(
         summary,
