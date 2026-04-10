@@ -23,11 +23,14 @@ mapping in runtime terms.
 
 Canonical mode ids are `fast`, `balanced`, and `grounded`.
 
-| Mode       | Execution Contract preset | Profile kind | Workflow profile id | Workflow use   | Review pass | Revise step  | Evidence level | Max workflow steps | Max deliberation calls |
-| ---------- | ------------------------- | ------------ | ------------------- | -------------- | ----------- | ------------ | -------------- | ------------------ | ---------------------- |
-| `fast`     | `fast-direct`             | `direct`     | `generate-only`     | `disabled`     | `excluded`  | `disallowed` | `minimal`      | 1                  | 0                      |
-| `balanced` | `balanced`                | `reviewed`   | `bounded-review`    | `always`       | `included`  | `allowed`    | `balanced`     | 4                  | 2                      |
-| `grounded` | `quality-grounded`        | `reviewed`   | `bounded-review`    | `policy_gated` | `included`  | `allowed`    | `strict`       | 8                  | 4                      |
+| Mode       | Contract preset    | Profile id       | Workflow used | Review | Revise | Evidence | Steps | Deliberation | Notes                                      |
+| ---------- | ------------------ | ---------------- | ------------- | ------ | ------ | -------- | ----- | ------------ | ------------------------------------------ |
+| `fast`     | `fast-direct`      | `generate-only`  | no            | no     | no     | minimal  | 1     | 0            | direct single-pass path                    |
+| `balanced` | `balanced`         | `bounded-review` | yes           | yes    | yes    | balanced | 4     | 2            | reviewed default path                      |
+| `grounded` | `quality-grounded` | `bounded-review` | conditional   | yes    | yes    | strict   | 8     | 4            | same profile as `balanced`, stricter guard |
+
+`balanced` and `grounded` already show why the split matters: they share one
+workflow profile (`bounded-review`) but differ in posture and limits.
 
 ## Selection Order
 
