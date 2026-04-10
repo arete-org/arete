@@ -197,12 +197,16 @@ const EvaluatorAuthorityLevelSchema = z.enum([
 const EvaluatorDecisionModeSchema = z.enum(['observe_only', 'enforced']);
 const EvaluatorOutcomeSchema = z
     .object({
-        authorityLevel: EvaluatorAuthorityLevelSchema,
+        authorityLevel: EvaluatorAuthorityLevelSchema.optional(),
         mode: EvaluatorDecisionModeSchema,
         provenance: ProvenanceSchema,
         safetyDecision: SafetyDecisionSchema,
     })
     .superRefine((value, context) => {
+        if (value.authorityLevel === undefined) {
+            return;
+        }
+
         if (value.mode === 'enforced' && value.authorityLevel !== 'enforce') {
             context.addIssue({
                 code: z.ZodIssueCode.custom,

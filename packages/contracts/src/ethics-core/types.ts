@@ -211,7 +211,11 @@ export type SafetyDecision =
  * out incrementally.
  */
 export type EvaluatorOutcome = {
-    authorityLevel: EvaluatorAuthorityLevel;
+    /**
+     * Optional for legacy trace compatibility at ingestion boundaries.
+     * New runtime writes should always include this field.
+     */
+    authorityLevel?: EvaluatorAuthorityLevel;
     /**
      * @deprecated Use authorityLevel instead.
      * Kept as a transitional mirror for legacy consumers.
