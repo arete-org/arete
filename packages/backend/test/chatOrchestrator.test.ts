@@ -257,7 +257,7 @@ test('message plans pass planner generation options into chatService', async () 
     );
 });
 
-test('orchestrator carries resolved EPC policy payload through service runtime seam', async () => {
+test('orchestrator carries resolved Execution Contract policy payload through service runtime seam', async () => {
     let capturedConversationSnapshot: string | undefined;
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
@@ -300,12 +300,12 @@ test('orchestrator carries resolved EPC policy payload through service runtime s
     const serializedRequestSnapshot =
         capturedConversationSnapshot?.split('\n\n')[0] ?? '';
     const parsedSnapshot = JSON.parse(serializedRequestSnapshot) as {
-        executionPolicy?: {
+        executionContract?: {
             policyId?: string;
             policyVersion?: string;
         };
     };
-    assert.deepEqual(parsedSnapshot.executionPolicy, {
+    assert.deepEqual(parsedSnapshot.executionContract, {
         policyId: 'core-fast-direct',
         policyVersion: 'v1',
     });

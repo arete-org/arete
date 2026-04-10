@@ -14,7 +14,7 @@ import type { ModelProfile } from '@footnote/contracts';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import type { ChatPlan } from '../chatPlanner.js';
 import type { ChatGenerationPlan } from '../chatGenerationTypes.js';
-import type { ExecutionPolicyContract } from '../executionPolicyContract.js';
+import type { ExecutionContract } from '../executionContract.js';
 import type {
     CapabilityProfileId,
     ModelCapabilityReasonCode,
@@ -40,7 +40,7 @@ type ResolveExecutionProfileInput = {
     enabledProfilesById: Map<string, ModelProfile>;
     defaultResponseProfile: ModelProfile;
     generationForExecution: ChatGenerationPlan;
-    resolvedExecutionPolicy: ExecutionPolicyContract;
+    resolvedExecutionPolicy: ExecutionContract;
 };
 
 type ResolveExecutionProfileResult = {

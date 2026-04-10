@@ -19,7 +19,7 @@ import {
 import { createChatPlanner, type ChatPlan } from './chatPlanner.js';
 import { createOpenAiChatPlannerStructuredExecutor } from './chatPlannerStructuredOpenAi.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
-import type { ExecutionResponseMode } from './executionPolicyContract.js';
+import type { ExecutionResponseMode } from './executionContract.js';
 import {
     resolveActiveProfileOverlayPrompt,
     resolveBotProfileDisplayName,
@@ -33,7 +33,7 @@ import {
     type PlannerFallbackReason,
     type PlannerSelectionSource,
 } from './plannerFallbackTelemetryRollup.js';
-import { resolveExecutionPolicyContract } from './executionPolicyResolver.js';
+import { resolveExecutionContract } from './executionContractResolver.js';
 import type { WeatherForecastTool } from './weatherGovForecastTool.js';
 import { applySingleToolPolicy } from './tools/toolPolicy.js';
 import {
@@ -69,7 +69,7 @@ const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
 });
 
-const resolveExecutionPolicyPresetId = (
+const resolveExecutionContractPresetId = (
     responseMode: ExecutionResponseMode | undefined
 ): 'fast-direct' | 'quality-grounded' =>
     responseMode === 'quality_grounded' ? 'quality-grounded' : 'fast-direct';
@@ -338,8 +338,8 @@ export const createChatOrchestrator = ({
                 }
             );
         }
-        const resolvedExecutionPolicy = resolveExecutionPolicyContract({
-            presetId: resolveExecutionPolicyPresetId(
+        const resolvedExecutionContract = resolveExecutionContract({
+            presetId: resolveExecutionContractPresetId(
                 generationForExecution.responseIntentHint?.responseMode
             ),
         }).policyContract;
@@ -352,7 +352,7 @@ export const createChatOrchestrator = ({
                 enabledProfilesById,
                 defaultResponseProfile,
                 generationForExecution,
-                resolvedExecutionPolicy,
+                resolvedExecutionPolicy: resolvedExecutionContract,
             },
             chatOrchestratorLogger
         );
@@ -523,9 +523,9 @@ export const createChatOrchestrator = ({
                     toolRequest: toolRequestContext,
                     ...(surfacePolicy && { surfacePolicy }),
                 },
-                executionPolicy: {
-                    policyId: resolvedExecutionPolicy.policyId,
-                    policyVersion: resolvedExecutionPolicy.policyVersion,
+                executionContract: {
+                    policyId: resolvedExecutionContract.policyId,
+                    policyVersion: resolvedExecutionContract.policyVersion,
                 },
             }),
             orchestrationStartedAtMs: orchestrationStartedAt,
@@ -536,7 +536,7 @@ export const createChatOrchestrator = ({
             capabilities: selectedResponseProfile.capabilities,
             generation: executionPlan.generation,
             toolRequest: toolRequestContext,
-            executionPolicyContract: resolvedExecutionPolicy,
+            ExecutionContract: resolvedExecutionContract,
             ...(executionContractScopeTuple !== undefined && {
                 executionContractTrustGraphContext: {
                     queryIntent: normalizedRequest.latestUserInput,
@@ -626,9 +626,9 @@ export const createChatOrchestrator = ({
                 plannerExecution.status === 'failed' ||
                 fallbackReasons.length > 0,
             fallbackReasons,
-            executionPolicyId: resolvedExecutionPolicy.policyId,
-            executionPolicyVersion: resolvedExecutionPolicy.policyVersion,
-            routingStrategy: resolvedExecutionPolicy.routing.strategy,
+            executionContractId: resolvedExecutionContract.policyId,
+            executionContractVersion: resolvedExecutionContract.policyVersion,
+            routingStrategy: resolvedExecutionContract.routing.strategy,
             responseId: response.metadata.responseId,
             responseAction: 'message',
             responseModality: executionPlan.modality,

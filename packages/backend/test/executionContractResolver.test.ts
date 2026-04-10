@@ -1,17 +1,17 @@
 /**
- * @description: Verifies Execution Policy Contract resolver assembly invariants for preset mapping and sanitization.
+ * @description: Verifies Execution Contract resolver assembly invariants for preset mapping and sanitization.
  * @footnote-scope: test
- * @footnote-module: ExecutionPolicyResolverTests
- * @footnote-risk: medium - Missing resolver tests can allow EPC preset drift across runtime seams.
- * @footnote-ethics: high - EPC policy drift can silently change authority and fail-open behavior.
+ * @footnote-module: ExecutionContractResolverTests
+ * @footnote-risk: medium - Missing resolver tests can allow Execution Contract preset drift across runtime seams.
+ * @footnote-ethics: high - Execution Contract drift can silently change authority and fail-open behavior.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { resolveExecutionPolicyContract } from '../src/services/executionPolicyResolver.js';
+import { resolveExecutionContract } from '../src/services/executionContractResolver.js';
 
-test('resolveExecutionPolicyContract maps known preset ids deterministically', () => {
-    const qualityGrounded = resolveExecutionPolicyContract({
+test('resolveExecutionContract maps known preset ids deterministically', () => {
+    const qualityGrounded = resolveExecutionContract({
         presetId: '  quality-grounded  ',
     });
 
@@ -32,8 +32,8 @@ test('resolveExecutionPolicyContract maps known preset ids deterministically', (
     );
 });
 
-test('resolveExecutionPolicyContract fails open to fast-direct descriptor for unknown preset ids', () => {
-    const unknownPreset = resolveExecutionPolicyContract({
+test('resolveExecutionContract fails open to fast-direct descriptor for unknown preset ids', () => {
+    const unknownPreset = resolveExecutionContract({
         presetId: 'nonexistent-preset',
     });
 
@@ -47,9 +47,9 @@ test('resolveExecutionPolicyContract fails open to fast-direct descriptor for un
     );
 });
 
-test('resolveExecutionPolicyContract sanitizes unsafe numeric overrides and keeps hard invariants', () => {
+test('resolveExecutionContract sanitizes unsafe numeric overrides and keeps hard invariants', () => {
     const capabilityTags = ['custom_tag'];
-    const resolved = resolveExecutionPolicyContract({
+    const resolved = resolveExecutionContract({
         presetId: 'quality-grounded',
         policyId: 'test-policy-id',
         displayName: 'Test Policy Display Name',
