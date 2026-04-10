@@ -168,16 +168,16 @@ export const createModelProfileResolver = ({
     );
     // Ordered enabled list powers default fallback behavior.
     const enabledCatalog = catalog.filter((profile) => profile.enabled);
-    const configuredDefaultProvider =
-        catalogById.get(defaultProfileId)?.provider;
+    const configuredDefaultProvider = catalogById.get(defaultProfileId)?.enabled
+        ? catalogById.get(defaultProfileId)?.provider
+        : undefined;
     const legacyDefaultModelParsed = parseRawModel(legacyDefaultModel);
     const normalizedLegacyDefaultModel =
         legacyDefaultModelParsed?.providerModel ?? legacyDefaultModel;
     const legacyDefaultProvider =
         legacyDefaultModelParsed?.provider ??
-        configuredDefaultProvider ??
         enabledCatalog[0]?.provider ??
-        catalog[0]?.provider ??
+        configuredDefaultProvider ??
         'openai';
 
     /**

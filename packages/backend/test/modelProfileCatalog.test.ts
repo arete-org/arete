@@ -413,7 +413,7 @@ test('model profile resolver defaults raw model selectors to configured default 
     assert.equal(warnings.length, 0);
 });
 
-test('model profile resolver legacy fallback honors configured default profile provider when catalog is disabled', () => {
+test('model profile resolver legacy fallback does not force disabled default-profile providers', () => {
     const warnings: Array<{ message: string; meta?: Record<string, unknown> }> =
         [];
     const resolver = createModelProfileResolver({
@@ -430,7 +430,7 @@ test('model profile resolver legacy fallback honors configured default profile p
 
     const resolved = resolver.resolve();
     assert.equal(resolved.id, 'legacy-default-model');
-    assert.equal(resolved.provider, 'ollama');
+    assert.equal(resolved.provider, 'openai');
     assert.equal(resolved.providerModel, 'llama3.2:3b');
     assert.match(
         warnings.map((warning) => warning.message).join('\n'),

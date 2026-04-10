@@ -125,7 +125,7 @@ test('voltagent runtime uses default model when request model is blank', async (
     assert.equal(result.model, 'gpt-5-mini');
 });
 
-test('voltagent runtime infers provider from configured default model when request provider is omitted', async () => {
+test('voltagent runtime infers provider from configured default model when request model is blank', async () => {
     let seenModel: string | undefined;
     const runtime = createVoltAgentRuntime({
         defaultModel: 'ollama/gpt-oss:20b-cloud',
@@ -146,10 +146,38 @@ test('voltagent runtime infers provider from configured default model when reque
 
     const result = await runtime.generate({
         messages: [{ role: 'user', content: 'Summarize this.' }],
+        model: '   ',
+    });
+
+    assert.equal(seenModel, 'ollama/gpt-oss:20b-cloud');
+    assert.equal(result.model, 'gpt-oss:20b-cloud');
+});
+
+test('voltagent runtime does not infer provider from default model for explicit unprefixed request models', async () => {
+    let seenModel: string | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'ollama/gpt-oss:20b-cloud',
+        createExecutor: ({ model }) => {
+            seenModel = model;
+            return {
+                async generateText() {
+                    return {
+                        text: 'explicit-model reply',
+                        response: {
+                            modelId: model,
+                        },
+                    };
+                },
+            };
+        },
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
         model: 'qwen3.5:cloud',
     });
 
-    assert.equal(seenModel, 'ollama/qwen3.5:cloud');
+    assert.equal(seenModel, 'openai/qwen3.5:cloud');
     assert.equal(result.model, 'qwen3.5:cloud');
 });
 

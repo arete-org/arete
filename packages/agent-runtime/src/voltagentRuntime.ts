@@ -1001,9 +1001,14 @@ const createVoltAgentRuntime = ({
                 provider: request.provider,
                 ollama,
             });
+            const hasExplicitRequestModel =
+                typeof request.model === 'string' &&
+                request.model.trim().length > 0;
             const inferredProvider =
                 inferProviderFromModelId(selectedModel) ??
-                inferProviderFromModelId(defaultModel);
+                (!hasExplicitRequestModel
+                    ? inferProviderFromModelId(defaultModel)
+                    : undefined);
             const executedModel = toVoltAgentModel(
                 selectedModel,
                 requestedProvider ?? inferredProvider
