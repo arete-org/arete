@@ -341,6 +341,60 @@ test('ResponseMetadataSchema accepts workflow lineage metadata', () => {
     assert.equal(parsed.success, true);
 });
 
+test('ResponseMetadataSchema accepts structured steerability controls metadata', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        steerabilityControls: {
+            version: 'v1',
+            controls: [
+                {
+                    controlId: 'workflow_mode',
+                    value: 'grounded',
+                    source: 'runtime_config',
+                    rationale: 'Configured workflow mode applied.',
+                    mattered: true,
+                    impactedTargets: [
+                        'workflow_execution',
+                        'execution_contract_selection',
+                    ],
+                },
+                {
+                    controlId: 'tool_allowance',
+                    value: 'blocked:web_search:search_not_supported_by_selected_profile',
+                    source: 'capability_policy',
+                    rationale:
+                        'Selected profile cannot use web search; tool path blocked.',
+                    mattered: true,
+                    impactedTargets: ['tool_eligibility'],
+                },
+            ],
+        },
+    });
+
+    assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema rejects steerability controls with unknown enums', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        steerabilityControls: {
+            version: 'v1',
+            controls: [
+                {
+                    controlId: 'unknown_control',
+                    value: 'value',
+                    source: 'runtime_config',
+                    rationale: 'test',
+                    mattered: true,
+                    impactedTargets: ['workflow_execution'],
+                },
+            ],
+        },
+    });
+
+    assert.equal(parsed.success, false);
+});
+
 test('ResponseMetadataSchema rejects workflow lineage with duplicate step ids', () => {
     const now = new Date().toISOString();
     const payload = createValidWorkflowMetadataPayload(now);

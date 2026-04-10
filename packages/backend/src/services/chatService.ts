@@ -376,6 +376,7 @@ export type RunChatMessagesInput = {
     toolRequest?: ToolInvocationRequest;
     executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
     ExecutionContract?: ExecutionContract;
+    steerabilityControls?: ResponseMetadata['steerabilityControls'];
 };
 
 export type FinalToolExecutionTelemetry = {
@@ -497,6 +498,7 @@ export const createChatService = ({
         toolRequest,
         executionContractTrustGraphContext,
         ExecutionContract,
+        steerabilityControls,
     }: RunChatMessagesInput): Promise<{
         message: string;
         metadata: ResponseMetadata;
@@ -909,6 +911,7 @@ export const createChatService = ({
                 }),
             },
             workflowMode: workflowModeDecision,
+            ...(steerabilityControls !== undefined && { steerabilityControls }),
             retrieval: {
                 requested: hasSearchIntent,
                 used: retrievalUsed,

@@ -420,6 +420,50 @@ export type WorkflowModeDecision = {
 };
 
 /**
+ * Canonical steerability control ids tracked in response metadata.
+ * These remain backend-owned/operator-facing until user controls are exposed.
+ */
+export type SteerabilityControlId =
+    | 'workflow_mode'
+    | 'evidence_strictness'
+    | 'review_intensity'
+    | 'provider_preference'
+    | 'persona_tone_overlay'
+    | 'tool_allowance';
+
+export type SteerabilityControlSource =
+    | 'runtime_config'
+    | 'execution_contract'
+    | 'request_override'
+    | 'planner_output'
+    | 'surface_profile'
+    | 'capability_policy'
+    | 'tool_policy'
+    | 'fail_open_default';
+
+export type SteerabilityImpactTarget =
+    | 'workflow_execution'
+    | 'execution_contract_selection'
+    | 'review_loop_execution'
+    | 'model_profile_selection'
+    | 'persona_prompt_layer'
+    | 'tool_eligibility';
+
+export type SteerabilityControlRecord = {
+    controlId: SteerabilityControlId;
+    value: string;
+    source: SteerabilityControlSource;
+    rationale: string;
+    mattered: boolean;
+    impactedTargets: SteerabilityImpactTarget[];
+};
+
+export type SteerabilityControls = {
+    version: 'v1';
+    controls: SteerabilityControlRecord[];
+};
+
+/**
  * Shared correlation envelope for structured backend telemetry.
  * Fields are nullable so callers can keep fail-open behavior.
  */
@@ -558,6 +602,7 @@ export type ResponseMetadata = {
     execution?: ExecutionEvent[]; // Canonical execution timeline for model/tool visibility.
     workflow?: WorkflowRecord; // Optional workflow provenance record for bounded multi-step execution.
     workflowMode?: WorkflowModeDecision; // Explicit mode routing decision and behavior mapping.
+    steerabilityControls?: SteerabilityControls; // Canonical control records explaining which steering choices shaped execution.
     evaluator?: EvaluatorOutcome; // Deterministic evaluator decision captured before breaker enforcement.
     imageDescriptions?: string[]; // Optional captions for any images used.
     evidenceScore?: TraceAxisScore; // Optional TRACE evidence chip score (1..5).

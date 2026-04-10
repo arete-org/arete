@@ -679,6 +679,7 @@ type ResponseMetadataRuntimeContext = {
     };
     workflow?: WorkflowRecord;
     workflowMode?: ResponseMetadata['workflowMode'];
+    steerabilityControls?: ResponseMetadata['steerabilityControls'];
 };
 
 const normalizePlannerReasonCode = (
@@ -972,6 +973,9 @@ const buildResponseMetadata = (
         }),
         ...(runtimeContext.workflowMode !== undefined && {
             workflowMode: runtimeContext.workflowMode,
+        }),
+        ...(runtimeContext.steerabilityControls !== undefined && {
+            steerabilityControls: runtimeContext.steerabilityControls,
         }),
         ...(evaluatorExecution?.outcome !== undefined && {
             evaluator: evaluatorExecution.outcome,

@@ -34,6 +34,7 @@ import {
 } from './plannerFallbackTelemetryRollup.js';
 import { resolveExecutionContract } from './executionContractResolver.js';
 import { resolveWorkflowModeDecision } from './workflowProfileRegistry.js';
+import { buildSteerabilityControls } from './steerabilityControls.js';
 import type { WeatherForecastTool } from './weatherGovForecastTool.js';
 import { applySingleToolPolicy } from './tools/toolPolicy.js';
 import {
@@ -395,6 +396,23 @@ export const createChatOrchestrator = ({
         const toolRequestContext = toolSelection.toolRequest;
         toolExecutionContext =
             toolSelection.toolExecution ?? toolExecutionContext;
+        const steerabilityControls = buildSteerabilityControls({
+            workflowMode: workflowModeResolution.modeDecision,
+            executionContractResponseMode:
+                resolvedExecutionContract.response.responseMode,
+            requestedProfileId: normalizedRequest.profileId,
+            plannerSelectedProfileId: plan.profileId,
+            selectedProfile: {
+                profileId: selectedResponseProfile.id,
+                provider: selectedResponseProfile.provider,
+                model: selectedResponseProfile.providerModel,
+            },
+            persona: {
+                personaId: personaProfile.id,
+                overlaySource: personaProfile.promptOverlay.source,
+            },
+            toolRequest: toolRequestContext,
+        });
         // Persist the effective profile id in planner payload/snapshot so traces
         // reflect what was actually executed.
         const executionPlan: ChatPlan = {
@@ -589,6 +607,7 @@ export const createChatOrchestrator = ({
                     tool: toolExecutionContext,
                 }),
             },
+            steerabilityControls,
         });
         // ChatService computes totalDurationMs before metadata assembly and
         // queued trace writes. Avoid mutating metadata here to keep trace

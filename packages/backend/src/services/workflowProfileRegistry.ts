@@ -193,6 +193,37 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
     },
 };
 
+export type ReviewIntensity = 'none' | 'light' | 'moderate' | 'high';
+
+/**
+ * Canonical review-intensity derivation from workflow-mode behavior.
+ * Any metadata/reporting layer should use this helper to avoid drift.
+ *
+ * Threshold intent:
+ * - none: review path is disabled/excluded
+ * - light: one deliberation pass
+ * - moderate: two or three deliberation passes
+ * - high: four or more deliberation passes
+ */
+export const deriveReviewIntensityFromWorkflowBehavior = (
+    behavior: WorkflowModeBehavior
+): ReviewIntensity => {
+    if (
+        behavior.reviewPass === 'excluded' ||
+        behavior.workflowExecution === 'disabled'
+    ) {
+        return 'none';
+    }
+
+    if (behavior.maxDeliberationCalls <= 1) {
+        return 'light';
+    }
+    if (behavior.maxDeliberationCalls <= 3) {
+        return 'moderate';
+    }
+    return 'high';
+};
+
 const normalizeWorkflowModeId = (
     modeId: string
 ): {

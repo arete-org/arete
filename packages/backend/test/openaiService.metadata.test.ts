@@ -255,6 +255,41 @@ test('buildResponseMetadata defaults tradeoffCount to 0 when assistant and plann
     assert.equal(metadata.tradeoffCount, 0);
 });
 
+test('buildResponseMetadata includes steerability controls when provided by runtime context', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            steerabilityControls: {
+                version: 'v1',
+                controls: [
+                    {
+                        controlId: 'workflow_mode',
+                        value: 'balanced',
+                        source: 'runtime_config',
+                        rationale: 'Configured mode selected.',
+                        mattered: true,
+                        impactedTargets: ['workflow_execution'],
+                    },
+                ],
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.steerabilityControls, {
+        version: 'v1',
+        controls: [
+            {
+                controlId: 'workflow_mode',
+                value: 'balanced',
+                source: 'runtime_config',
+                rationale: 'Configured mode selected.',
+                mattered: true,
+                impactedTargets: ['workflow_execution'],
+            },
+        ],
+    });
+});
+
 test('buildResponseMetadata writes execution timeline from runtime context', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
