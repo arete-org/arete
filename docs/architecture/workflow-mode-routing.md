@@ -4,23 +4,17 @@
 
 A workflow mode is the explicit high-level routing decision for chat execution.
 
-Layer ownership in this design:
+Layer ownership is explicit: Execution Contract governs allowed policy shape,
+chat orchestrator executes within that contract, workflow mode selects the
+high-level execution posture, workflow profile defines concrete workflow
+mechanics, TRACE describes answer temperament, and provenance/evidence metadata
+records what actually happened.
 
-- Execution Contract governs allowed policy shape.
-- Chat orchestrator executes requests within that contract.
-- Workflow mode selects high-level execution posture.
-- Workflow profile defines concrete workflow mechanics.
-- TRACE describes answer temperament.
-- Provenance/evidence metadata records what actually happened.
-
-Each maps to:
-
-- Execution Contract preset
-- Workflow profile
-- Workflow enablement posture
-- Review/revise posture
-- Evidence strictness posture
-- Step bounds
+The split between contract and workflow is intentional. The Execution Contract
+preset answers what kind of run should govern the request, while the workflow
+profile id answers what step pattern will carry that out. Keeping them separate
+prevents one mixed naming layer that combines policy posture and step
+mechanics.
 
 The chosen mode is emitted as `workflowMode` in response metadata.
 Each mode resolves to a concrete execution shape. The table below shows that
@@ -28,11 +22,7 @@ mapping in runtime terms.
 
 ## Mode Set
 
-Canonical mode ids:
-
-- `fast`
-- `balanced`
-- `grounded`
+Canonical mode ids are `fast`, `balanced`, and `grounded`.
 
 | Mode       | Execution Contract preset | Profile kind | Workflow profile id | Workflow use   | Review pass | Revise step  | Evidence level | Max workflow steps | Max deliberation calls |
 | ---------- | ------------------------- | ------------ | ------------------- | -------------- | ----------- | ------------ | -------------- | ------------------ | ---------------------- |
@@ -51,11 +41,7 @@ posture.
 
 ## Metadata Contract
 
-`workflowMode` in response metadata records:
-
-- `modeId`
-- `selectedBy`
-- `selectionReason`
-- `requestedModeId` (when provided)
-- `executionContractResponseMode` (when available)
-- `behavior` (the concrete mapped behavior tuple)
+`workflowMode` in response metadata records `modeId`, `selectedBy`,
+`selectionReason`, optional `requestedModeId`, optional
+`executionContractResponseMode`, and `behavior` (the concrete mapped behavior
+tuple).
