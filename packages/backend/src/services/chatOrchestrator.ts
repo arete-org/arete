@@ -16,7 +16,11 @@ import {
     createChatService,
     type CreateChatServiceOptions,
 } from './chatService.js';
-import { createChatPlanner, type ChatPlan } from './chatPlanner.js';
+import {
+    createChatPlanner,
+    type ChatPlan,
+    type ChatPlannerInvocationContext,
+} from './chatPlanner.js';
 import { createOpenAiChatPlannerStructuredExecutor } from './chatPlannerStructuredOpenAi.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import {
@@ -273,10 +277,19 @@ export const createChatOrchestrator = ({
             normalizedRequest,
             chatOrchestratorLogger
         );
-        // TODO(workflow-planner-step): Move planner dispatch into workflow step
-        // execution so workflow policy owns when/why planning runs and can
-        // support bounded multi-plan passes with purpose-specific outputs.
-        const planned = await chatPlanner.planChat(normalizedRequest);
+        // Planner remains a bounded workflow-owned step. It can recommend
+        // action-selection details but cannot redefine Execution Contract
+        // authority or become a second orchestrator.
+        const plannerInvocationContext: ChatPlannerInvocationContext = {
+            owner: 'workflow',
+            workflowName: 'chat_orchestration',
+            stepKind: 'plan',
+            purpose: 'chat_orchestrator_action_selection',
+        };
+        const planned = await chatPlanner.planChat(
+            normalizedRequest,
+            plannerInvocationContext
+        );
         const plannerExecution = planned.execution;
         const fallbackReasons: PlannerFallbackReason[] = [];
         if (plannerExecution.status === 'failed') {

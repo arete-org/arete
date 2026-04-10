@@ -131,6 +131,20 @@ type CreateChatPlannerOptions = {
 };
 
 /**
+ * Planner is a bounded workflow-owned step.
+ * It does not act as a second orchestrator and cannot redefine Execution
+ * Contract authority.
+ */
+export type ChatPlannerInvocationPurpose = 'chat_orchestrator_action_selection';
+
+export type ChatPlannerInvocationContext = {
+    owner: 'workflow';
+    workflowName: string;
+    stepKind: 'plan';
+    purpose: ChatPlannerInvocationPurpose;
+};
+
+/**
  * Narrow planner-only execution input.
  * This stays backend-local so planner policy can evolve beyond current providers
  * without creating a second shared runtime abstraction.
@@ -1177,10 +1191,79 @@ export const createChatPlanner = ({
               )
             : '[]';
 
+    const isWorkflowOwnedInvocation = (
+        value: unknown
+    ): value is ChatPlannerInvocationContext => {
+        if (!value || typeof value !== 'object') {
+            return false;
+        }
+
+        const candidate = value as Partial<ChatPlannerInvocationContext>;
+        return (
+            candidate.owner === 'workflow' &&
+            candidate.stepKind === 'plan' &&
+            candidate.purpose === 'chat_orchestrator_action_selection' &&
+            typeof candidate.workflowName === 'string' &&
+            candidate.workflowName.trim().length > 0
+        );
+    };
+
     const planChat = async (
-        request: PostChatRequest
+        request: PostChatRequest,
+        invocationContext?: ChatPlannerInvocationContext
     ): Promise<ChatPlannerResult> => {
         const plannerStartedAt = Date.now();
+        if (!isWorkflowOwnedInvocation(invocationContext)) {
+            logger.warn(
+                'chat planner invocation rejected because workflow-owned context and purpose were not provided; using safe fallback',
+                {
+                    event: 'chat.planner.invocation_rejected',
+                    fallbackTo: 'safe_default_plan',
+                    reasonCode: 'planner_runtime_error',
+                    surface: request.surface,
+                    triggerKind: request.trigger.kind,
+                    invocationOwner:
+                        invocationContext &&
+                        typeof invocationContext === 'object' &&
+                        'owner' in invocationContext
+                            ? (invocationContext as { owner?: unknown }).owner
+                            : undefined,
+                    invocationWorkflowName:
+                        invocationContext &&
+                        typeof invocationContext === 'object' &&
+                        'workflowName' in invocationContext
+                            ? (invocationContext as { workflowName?: unknown })
+                                  .workflowName
+                            : undefined,
+                    invocationStepKind:
+                        invocationContext &&
+                        typeof invocationContext === 'object' &&
+                        'stepKind' in invocationContext
+                            ? (invocationContext as { stepKind?: unknown })
+                                  .stepKind
+                            : undefined,
+                    invocationPurpose:
+                        invocationContext &&
+                        typeof invocationContext === 'object' &&
+                        'purpose' in invocationContext
+                            ? (invocationContext as { purpose?: unknown })
+                                  .purpose
+                            : undefined,
+                }
+            );
+            return {
+                plan: buildFallbackPlan(
+                    request,
+                    'Planner invocation was outside workflow-owned boundaries, so the backend used a safe fallback.'
+                ),
+                execution: {
+                    status: 'skipped',
+                    reasonCode: 'planner_runtime_error',
+                    durationMs: Date.now() - plannerStartedAt,
+                },
+            };
+        }
+
         let plannerMode: ChatPlannerExecutionMode = executePlannerStructured
             ? 'structured'
             : 'text_json';

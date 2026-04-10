@@ -12,6 +12,7 @@ import type { PostChatRequest } from '@footnote/contracts/web';
 import {
     createChatPlanner,
     type ChatPlannerCapabilityProfileOption,
+    type ChatPlannerInvocationContext,
 } from '../src/services/chatPlanner.js';
 import { logger } from '../src/utils/logger.js';
 
@@ -30,23 +31,36 @@ const createChatRequest = (
     ...overrides,
 });
 
+const WORKFLOW_PLANNER_INVOCATION: ChatPlannerInvocationContext = {
+    owner: 'workflow',
+    workflowName: 'chat_orchestration',
+    stepKind: 'plan',
+    purpose: 'chat_orchestrator_action_selection',
+};
+
+const planFromWorkflow = (
+    planner: ReturnType<typeof createChatPlanner>,
+    request: PostChatRequest
+) => planner.planChat(request, WORKFLOW_PLANNER_INVOCATION);
+
 const createPlanner = (
     normalizedText: string,
     availableCapabilityProfiles: ChatPlannerCapabilityProfileOption[] = []
-) =>
-    createChatPlanner({
+) => {
+    return createChatPlanner({
         executePlanner: async () => ({
             text: normalizedText,
             model: 'gpt-5-mini',
         }),
         availableCapabilityProfiles,
     });
+};
 
 const createStructuredPlanner = (
     decision: unknown,
     availableCapabilityProfiles: ChatPlannerCapabilityProfileOption[] = []
-) =>
-    createChatPlanner({
+) => {
+    return createChatPlanner({
         executePlannerStructured: async () => ({
             decision,
             model: 'gpt-5-mini',
@@ -59,6 +73,123 @@ const createStructuredPlanner = (
         }),
         availableCapabilityProfiles,
     });
+};
+
+test('chatPlanner rejects invocation without workflow-owned context and fails open', async () => {
+    let plannerCalled = false;
+    const warnings: Array<{ message: string; meta?: unknown }> = [];
+    const originalWarn = logger.warn;
+    logger.warn = ((message: string, meta?: unknown) => {
+        warnings.push({ message, meta });
+        return logger;
+    }) as typeof logger.warn;
+
+    try {
+        const planner = createChatPlanner({
+            executePlanner: async () => {
+                plannerCalled = true;
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        requestedCapabilityProfile: 'balanced-general',
+                        safetyTier: 'Low',
+                        reasoning: 'unused',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            },
+        });
+
+        const { plan, execution } = await planner.planChat(createChatRequest());
+
+        assert.equal(plannerCalled, false);
+        assert.equal(execution.status, 'skipped');
+        assert.equal(execution.reasonCode, 'planner_runtime_error');
+        assert.equal(plan.action, 'message');
+        const rejectedWarning = warnings.find(
+            (warning) =>
+                (warning.meta as { event?: string } | undefined)?.event ===
+                'chat.planner.invocation_rejected'
+        );
+        assert.ok(rejectedWarning);
+    } finally {
+        logger.warn = originalWarn;
+    }
+});
+
+test('chatPlanner rejects workflow invocation with invalid purpose and fails open', async () => {
+    let plannerCalled = false;
+    const warnings: Array<{ message: string; meta?: unknown }> = [];
+    const originalWarn = logger.warn;
+    logger.warn = ((message: string, meta?: unknown) => {
+        warnings.push({ message, meta });
+        return logger;
+    }) as typeof logger.warn;
+
+    try {
+        const planner = createChatPlanner({
+            executePlanner: async () => {
+                plannerCalled = true;
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        requestedCapabilityProfile: 'balanced-general',
+                        safetyTier: 'Low',
+                        reasoning: 'unused',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            },
+        });
+        const invalidInvocation = {
+            owner: 'workflow',
+            workflowName: 'chat_orchestration',
+            stepKind: 'plan',
+            purpose: 'invalid-purpose',
+        } as unknown as ChatPlannerInvocationContext;
+
+        const { execution } = await planner.planChat(
+            createChatRequest(),
+            invalidInvocation
+        );
+
+        assert.equal(plannerCalled, false);
+        assert.equal(execution.status, 'skipped');
+        assert.equal(execution.reasonCode, 'planner_runtime_error');
+        const rejectedWarning = warnings.find(
+            (warning) =>
+                (warning.meta as { event?: string } | undefined)?.event ===
+                'chat.planner.invocation_rejected'
+        );
+        assert.ok(rejectedWarning);
+    } finally {
+        logger.warn = originalWarn;
+    }
+});
 
 test('chatPlanner parses plain JSON output from the backend-native planner prompt', async () => {
     const planner = createPlanner(
@@ -86,7 +217,10 @@ test('chatPlanner parses plain JSON output from the backend-native planner promp
             },
         })
     );
-    const { plan, execution } = await planner.planChat(createChatRequest());
+    const { plan, execution } = await planFromWorkflow(
+        planner,
+        createChatRequest()
+    );
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.requestedCapabilityProfile, 'balanced-general');
@@ -122,7 +256,10 @@ ${JSON.stringify({
 })}
 \`\`\``);
 
-    const { plan, execution } = await planner.planChat(createChatRequest());
+    const { plan, execution } = await planFromWorkflow(
+        planner,
+        createChatRequest()
+    );
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.requestedCapabilityProfile, 'balanced-general');
@@ -149,7 +286,10 @@ test('chatPlanner accepts structured planner decisions without text JSON parsing
         },
     });
 
-    const { plan, execution } = await planner.planChat(createChatRequest());
+    const { plan, execution } = await planFromWorkflow(
+        planner,
+        createChatRequest()
+    );
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.requestedCapabilityProfile, 'structured-cheap');
@@ -168,7 +308,7 @@ test('chatPlanner marks structured policy-invalid decisions as failed with inval
         },
     });
 
-    const { execution } = await planner.planChat(createChatRequest());
+    const { execution } = await planFromWorkflow(planner, createChatRequest());
 
     assert.equal(execution.status, 'failed');
     assert.equal(execution.reasonCode, 'planner_invalid_output');
@@ -222,7 +362,10 @@ test('chatPlanner forwards bounded capability options context and rejects blank 
             },
         });
 
-        const { execution } = await planner.planChat(createChatRequest());
+        const { execution } = await planFromWorkflow(
+            planner,
+            createChatRequest()
+        );
 
         assert.equal(execution.status, 'failed');
         assert.equal(execution.reasonCode, 'planner_invalid_output');
@@ -291,7 +434,10 @@ test('chatPlanner marks unknown requested capability profile as invalid planner 
             },
         });
 
-        const { execution } = await planner.planChat(createChatRequest());
+        const { execution } = await planFromWorkflow(
+            planner,
+            createChatRequest()
+        );
 
         assert.equal(execution.status, 'failed');
         assert.equal(execution.reasonCode, 'planner_invalid_output');
@@ -324,7 +470,10 @@ test('chatPlanner fails open to a valid fallback generation config when planner 
 
     try {
         const planner = createPlanner('{not-valid-json');
-        const { plan, execution } = await planner.planChat(createChatRequest());
+        const { plan, execution } = await planFromWorkflow(
+            planner,
+            createChatRequest()
+        );
 
         assert.equal(plan.action, 'message');
         assert.equal(plan.generation.search, undefined);
@@ -382,7 +531,7 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
             },
         })
     );
-    const { plan } = await planner.planChat(createChatRequest());
+    const { plan } = await planFromWorkflow(planner, createChatRequest());
 
     assert.ok(plan.generation.search);
     assert.equal(plan.generation.search?.intent, 'repo_explainer');
@@ -434,7 +583,7 @@ test('search topicHints are bounded, deduped, and normalized fail-open', async (
             },
         })
     );
-    const { plan } = await planner.planChat(createChatRequest());
+    const { plan } = await planFromWorkflow(planner, createChatRequest());
 
     assert.deepEqual(plan.generation.search?.topicHints, [
         'incident lifecycle',
@@ -472,7 +621,7 @@ test('invalid web_search query downgrades safely to none', async () => {
             },
         })
     );
-    const { plan } = await planner.planChat(createChatRequest());
+    const { plan } = await planFromWorkflow(planner, createChatRequest());
 
     assert.equal(plan.generation.search, undefined);
     assert.match(plan.reasoning, /search was disabled safely/i);
@@ -507,7 +656,7 @@ test('planner weather request is normalized when location contract is valid', as
         })
     );
 
-    const { plan } = await planner.planChat(createChatRequest());
+    const { plan } = await planFromWorkflow(planner, createChatRequest());
 
     assert.deepEqual(plan.generation.weather, {
         location: {
@@ -546,7 +695,7 @@ test('invalid weather request is disabled safely', async () => {
         })
     );
 
-    const { plan } = await planner.planChat(createChatRequest());
+    const { plan } = await planFromWorkflow(planner, createChatRequest());
 
     assert.equal(plan.generation.weather, undefined);
     assert.match(plan.reasoning, /weather tool request was disabled safely/i);
@@ -580,7 +729,7 @@ test('out-of-range lat/lon weather request is disabled safely', async () => {
         })
     );
 
-    const { plan } = await planner.planChat(createChatRequest());
+    const { plan } = await planFromWorkflow(planner, createChatRequest());
 
     assert.equal(plan.generation.weather, undefined);
     assert.match(plan.reasoning, /weather tool request was disabled safely/i);
@@ -615,7 +764,7 @@ test('non-positive gridpoint weather request is disabled safely', async () => {
         })
     );
 
-    const { plan } = await planner.planChat(createChatRequest());
+    const { plan } = await planFromWorkflow(planner, createChatRequest());
 
     assert.equal(plan.generation.weather, undefined);
     assert.match(plan.reasoning, /weather tool request was disabled safely/i);
@@ -652,7 +801,7 @@ test('mixed lat/lon and gridpoint weather location is disabled safely', async ()
         })
     );
 
-    const { plan } = await planner.planChat(createChatRequest());
+    const { plan } = await planFromWorkflow(planner, createChatRequest());
 
     assert.equal(plan.generation.weather, undefined);
     assert.match(plan.reasoning, /weather tool request was disabled safely/i);
@@ -690,7 +839,7 @@ test('invalid weather request does not suppress valid search normalization', asy
         })
     );
 
-    const { plan } = await planner.planChat(createChatRequest());
+    const { plan } = await planFromWorkflow(planner, createChatRequest());
 
     assert.equal(plan.generation.weather, undefined);
     assert.equal(
@@ -721,7 +870,7 @@ test('planner temperament is accepted when all TRACE axes are integer 1..5', asy
             },
         })
     );
-    const { plan } = await planner.planChat(createChatRequest());
+    const { plan } = await planFromWorkflow(planner, createChatRequest());
 
     assert.deepEqual(plan.generation.temperament, {
         tightness: 5,
@@ -758,7 +907,10 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
             },
         })
     );
-    const { plan, execution } = await planner.planChat(createChatRequest());
+    const { plan, execution } = await planFromWorkflow(
+        planner,
+        createChatRequest()
+    );
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.generation.search, undefined);
@@ -772,7 +924,10 @@ test('message plans with missing or invalid TRACE axes fall back safely', async 
 
 test('non-object planner payload falls back safely without runtime errors', async () => {
     const planner = createPlanner(JSON.stringify('not-an-object'));
-    const { plan, execution } = await planner.planChat(createChatRequest());
+    const { plan, execution } = await planFromWorkflow(
+        planner,
+        createChatRequest()
+    );
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.generation.search, undefined);
@@ -794,7 +949,7 @@ test('react plans with non-emoji payload fall back safely', async () => {
             },
         })
     );
-    const { plan } = await planner.planChat(createChatRequest());
+    const { plan } = await planFromWorkflow(planner, createChatRequest());
 
     assert.equal(plan.action, 'message');
     assert.equal(plan.reaction, undefined);
@@ -867,7 +1022,8 @@ test('expanded_with_summary digest summarizes dropped older context, not recent 
         },
     });
 
-    await planner.planChat(
+    await planFromWorkflow(
+        planner,
         createChatRequest({
             conversation: Array.from({ length: 24 }, (_value, index) => ({
                 role: index % 2 === 0 ? 'user' : 'assistant',
@@ -939,7 +1095,8 @@ test('chatPlanner treats expanded safety and TRACE temperament changes as materi
         },
     });
 
-    const response = await planner.planChat(
+    const response = await planFromWorkflow(
+        planner,
         createChatRequest({
             conversation: Array.from({ length: 10 }, (_value, index) => ({
                 role: index % 2 === 0 ? 'user' : 'assistant',
@@ -1026,7 +1183,8 @@ test('chatPlanner adopts expanded attempt when initial marks context as insuffic
         },
     });
 
-    const response = await planner.planChat(
+    const response = await planFromWorkflow(
+        planner,
         createChatRequest({
             conversation: Array.from({ length: 10 }, (_value, index) => ({
                 role: index % 2 === 0 ? 'user' : 'assistant',
@@ -1085,7 +1243,8 @@ test('chatPlanner keeps initial plan when expanded attempt is invalid', async ()
         },
     });
 
-    const response = await planner.planChat(
+    const response = await planFromWorkflow(
+        planner,
         createChatRequest({
             conversation: Array.from({ length: 8 }, (_value, index) => ({
                 role: index % 2 === 0 ? 'user' : 'assistant',
@@ -1135,7 +1294,8 @@ test('chatPlanner marks budget exhausted when expansion is requested with no ext
         },
     });
 
-    const response = await planner.planChat(
+    const response = await planFromWorkflow(
+        planner,
         createChatRequest({
             conversation: [{ role: 'user', content: 'single message only' }],
         })
