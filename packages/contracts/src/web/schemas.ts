@@ -11,6 +11,7 @@ import {
     WORKFLOW_STEP_KINDS,
     WORKFLOW_STEP_STATUSES,
     WORKFLOW_TERMINATION_REASONS,
+    type ProvenanceAssessment,
     type TraceAxisScore,
     type TrustGraphMetadata,
 } from '../ethics-core/index.js';
@@ -449,6 +450,38 @@ type _AssertTrustGraphMetadata =
 const _assertTrustGraphMetadata: _AssertTrustGraphMetadata = true;
 void _assertTrustGraphMetadata;
 
+const ProvenanceAssessmentSchema = z
+    .object({
+        methodId: z.literal('deterministic_multi_signal_v1'),
+        methodLabel: z.string().min(1),
+        signals: z
+            .object({
+                citationsPresent: z.boolean(),
+                retrievalRequested: z.boolean(),
+                retrievalUsed: z.boolean(),
+                retrievalToolExecuted: z.boolean(),
+                workflowEvidence: z.boolean(),
+                trustGraphEvidenceAvailable: z.boolean(),
+                trustGraphEvidenceUsed: z.boolean(),
+                assistantDeclaredSpeculative: z.boolean(),
+            })
+            .strict(),
+        conflicts: z.array(z.string().min(1)),
+        limitations: z.array(z.string().min(1)),
+    })
+    .strict();
+
+type _AssertProvenanceAssessment =
+    z.infer<typeof ProvenanceAssessmentSchema> extends ProvenanceAssessment
+        ? ProvenanceAssessment extends z.infer<
+              typeof ProvenanceAssessmentSchema
+          >
+            ? true
+            : false
+        : false;
+const _assertProvenanceAssessment: _AssertProvenanceAssessment = true;
+void _assertProvenanceAssessment;
+
 const WorkflowModeIdSchema = z.enum(['fast', 'balanced', 'grounded']);
 
 const WorkflowModeSelectionSourceSchema = z.enum([
@@ -500,6 +533,7 @@ const responseMetadataShape = {
     staleAfter: z.string(),
     totalDurationMs: z.number().int().nonnegative().optional(),
     citations: z.array(CitationSchema),
+    provenanceAssessment: ProvenanceAssessmentSchema.optional(),
     execution: z.array(ExecutionEventSchema).optional(),
     workflow: WorkflowRecordSchema.optional(),
     workflowMode: WorkflowModeDecisionSchema.optional(),
