@@ -21,6 +21,7 @@ import {
     type ResponseMetadataRuntimeContext,
 } from '../src/services/openaiService.js';
 import { createChatService } from '../src/services/chatService.js';
+import { resolveExecutionPolicyContract } from '../src/services/executionPolicyResolver.js';
 import {
     createScopeOwnershipValidatorFromTenancyService,
     StubTrustGraphEvidenceAdapter,
@@ -1340,6 +1341,214 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
     }
 });
 
+test('runChatMessages keeps no-generation surfaced when execution policy disables fallback generation', async () => {
+    let generationCalls = 0;
+    let traceMetadata: ResponseMetadata | undefined;
+    const usageRecords: BackendLLMCostRecord[] = [];
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            return {
+                text: 'should not run when fail-open fallback is disabled',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const executionPolicyContract = resolveExecutionPolicyContract({
+        presetId: 'quality-grounded',
+        overrides: {
+            failOpen: {
+                authority: 'backend',
+                allowFallbackGeneration: false,
+                fallbackTemperature: 'deterministic',
+            },
+        },
+    }).policyContract;
+
+    const chatService = createChatService({
+        generationRuntime,
+        storeTrace: async (metadata) => {
+            traceMetadata = metadata;
+        },
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: (record) => {
+            usageRecords.push(record);
+        },
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        runReviewWorkflow: async () =>
+            ({
+                outcome: 'no_generation',
+                workflowLineage: {
+                    workflowId: 'wf_internal_budget_exhausted_steps',
+                    workflowName: 'message_with_review_loop',
+                    status: 'degraded',
+                    terminationReason: 'budget_exhausted_steps',
+                    stepCount: 0,
+                    maxSteps: 3,
+                    maxDurationMs: 15000,
+                    steps: [],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+        executionPolicyContract,
+    });
+
+    assert.equal(generationCalls, 0);
+    assert.equal(usageRecords.length, 0);
+    assert.equal(
+        response.message,
+        'I could not generate a response for this request.'
+    );
+    assert.equal(
+        response.metadata.workflow?.terminationReason,
+        'budget_exhausted_steps'
+    );
+    assert.equal(
+        traceMetadata?.workflow?.terminationReason,
+        'budget_exhausted_steps'
+    );
+    const fallbackExecution = response.metadata.execution?.find(
+        (event) =>
+            event.kind === 'generation' &&
+            event.profileId === 'workflow_internal_fallback'
+    );
+    assert.equal(fallbackExecution, undefined);
+});
+
+test('runChatMessages honors EPC response-mode ownership switch for workflow runtime gating', async () => {
+    const runWithPolicyPreset = async (
+        presetId: 'fast-direct' | 'quality-grounded'
+    ): Promise<{
+        reviewWorkflowCalls: number;
+        directGenerationCalls: number;
+        message: string;
+    }> => {
+        let reviewWorkflowCalls = 0;
+        let directGenerationCalls = 0;
+        const executionPolicyContract = resolveExecutionPolicyContract({
+            presetId,
+        }).policyContract;
+        const generationRuntime: GenerationRuntime = {
+            kind: 'test-runtime',
+            async generate() {
+                directGenerationCalls += 1;
+                return {
+                    text: 'direct runtime generation',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 11,
+                        completionTokens: 7,
+                        totalTokens: 18,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            },
+        };
+
+        const chatService = createChatService({
+            generationRuntime,
+            storeTrace: async () => undefined,
+            buildResponseMetadata,
+            defaultModel: 'gpt-5-mini',
+            recordUsage: () => undefined,
+            chatWorkflowConfig: {
+                profileId: 'bounded-review',
+                reviewLoopEnabled: false,
+                maxIterations: 2,
+                maxDurationMs: 15000,
+            },
+            runReviewWorkflow: async (input) => {
+                reviewWorkflowCalls += 1;
+                return {
+                    outcome: 'generated',
+                    generationResult: {
+                        text: 'workflow generated',
+                        model: input.generationRequest.model,
+                        usage: {
+                            promptTokens: 21,
+                            completionTokens: 9,
+                            totalTokens: 30,
+                        },
+                        provenance: 'Inferred',
+                        citations: [],
+                    },
+                    workflowLineage: {
+                        workflowId: `wf_${presetId}`,
+                        workflowName: input.workflowConfig.workflowName,
+                        status: 'completed',
+                        terminationReason: 'goal_satisfied',
+                        stepCount: 1,
+                        maxSteps:
+                            input.workflowConfig.executionLimits
+                                ?.maxWorkflowSteps ?? 1,
+                        maxDurationMs: input.workflowConfig.maxDurationMs,
+                        steps: [
+                            {
+                                stepId: 'step_1',
+                                attempt: 1,
+                                stepKind: 'generate',
+                                startedAt: new Date().toISOString(),
+                                finishedAt: new Date().toISOString(),
+                                durationMs: 1,
+                                outcome: {
+                                    status: 'executed',
+                                    summary:
+                                        'Generated response through workflow path.',
+                                },
+                            },
+                        ],
+                    },
+                } satisfies RunBoundedReviewWorkflowResult;
+            },
+        });
+
+        const response = await chatService.runChatMessages({
+            messages: [{ role: 'user', content: 'Summarize this.' }],
+            conversationSnapshot: 'Summarize this.',
+            executionPolicyContract,
+        });
+
+        return {
+            reviewWorkflowCalls,
+            directGenerationCalls,
+            message: response.message,
+        };
+    };
+
+    const qualityGrounded = await runWithPolicyPreset('quality-grounded');
+    const fastDirect = await runWithPolicyPreset('fast-direct');
+
+    assert.deepEqual(qualityGrounded, {
+        reviewWorkflowCalls: 1,
+        directGenerationCalls: 0,
+        message: 'workflow generated',
+    });
+    assert.deepEqual(fastDirect, {
+        reviewWorkflowCalls: 0,
+        directGenerationCalls: 1,
+        message: 'direct runtime generation',
+    });
+});
+
 test('runChatMessages emits schema-safe workflow metadata bounds under invalid injected config values', async () => {
     let callCount = 0;
     let capturedMetadata: ResponseMetadata | undefined;
@@ -1593,4 +1802,77 @@ test('runChatMessages trustgraph ON/OFF does not change local execution authorit
             }
         ).trustGraph
     );
+});
+
+test('runChatMessages preserves local response authority when TrustGraph ownership denies under EPC policy carriage', async () => {
+    const scopeOwnershipValidator =
+        createScopeOwnershipValidatorFromTenancyService({
+            validatorId: 'backend_tenancy_v1',
+            service: {
+                validateScopeOwnership: async () => ({
+                    owned: false,
+                    checkedAt: TEST_TIMESTAMP,
+                    evidence: ['ownership_lookup:deny'],
+                    denialReason: 'tenant_mismatch',
+                    details: 'scope is outside tenant boundary',
+                }),
+            },
+        });
+
+    const executionPolicyContract = resolveExecutionPolicyContract({
+        presetId: 'quality-grounded',
+    }).policyContract;
+
+    const chatService = createChatService({
+        generationRuntime: createRuntime({
+            text: 'local response despite ownership deny',
+            provenance: 'Inferred',
+            citations: [],
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        executionContractTrustGraph: {
+            adapter: new StubTrustGraphEvidenceAdapter('success'),
+            budget: {
+                timeoutMs: 100,
+                maxCalls: 1,
+            },
+            ownershipValidationPolicy:
+                TrustGraphOwnershipValidationPolicy.required({
+                    policyId: 'chat_service_runtime_policy',
+                }),
+            scopeOwnershipValidator,
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'What changed?' }],
+        conversationSnapshot: 'What changed?',
+        executionPolicyContract,
+        executionContractTrustGraphContext: {
+            queryIntent: 'What changed?',
+            scopeTuple: {
+                userId: 'user_1',
+                projectId: 'project_1',
+            },
+        },
+    });
+
+    const trustGraph = (
+        response.metadata as ResponseMetadata & {
+            trustGraph?: {
+                adapterStatus?: string;
+                terminalAuthority?: string;
+                failOpenBehavior?: string;
+            };
+        }
+    ).trustGraph;
+
+    assert.equal(response.message, 'local response despite ownership deny');
+    assert.equal(response.metadata.provenance, 'Inferred');
+    assert.equal(trustGraph?.adapterStatus, 'scope_denied');
+    assert.equal(trustGraph?.terminalAuthority, 'backend_execution_contract');
+    assert.equal(trustGraph?.failOpenBehavior, 'local_behavior');
 });
