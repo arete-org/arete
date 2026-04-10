@@ -4,17 +4,16 @@
 
 A workflow mode is the explicit high-level routing decision for chat execution.
 
-Layer ownership is explicit: Execution Contract governs allowed policy shape,
-chat orchestrator executes within that contract, workflow mode selects the
-high-level execution posture, workflow profile defines concrete workflow
-mechanics, TRACE describes answer temperament, and provenance/evidence metadata
-records what actually happened.
+Each part has a different job. The Execution Contract sets the allowed posture.
+The chat orchestrator runs within that contract. Workflow mode is the
+high-level choice, and workflow profile is the concrete step pattern. TRACE is
+about answer temperament, while provenance and evidence metadata are about what
+actually happened.
 
-The split between contract and workflow is intentional. The Execution Contract
-preset answers what kind of run should govern the request, while the workflow
-profile id answers what step pattern will carry that out. Keeping them separate
-prevents one mixed naming layer that combines policy posture and step
-mechanics.
+Keep contract posture and workflow mechanics separate. The Execution Contract
+preset answers "what kind of run should govern this request?" The workflow
+profile id answers "what step pattern should execute this run?" Mixing them
+into one label makes naming and reasoning harder.
 
 The chosen mode is emitted as `workflowMode` in response metadata.
 Each mode resolves to a concrete execution shape. The table below shows that
