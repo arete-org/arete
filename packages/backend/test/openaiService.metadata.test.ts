@@ -191,7 +191,37 @@ test('buildResponseMetadata can classify as retrieved from execution-derived sig
     assert.equal(metadata.provenance, 'Retrieved');
     assert.equal(metadata.evidenceScore, 2);
     assert.equal(metadata.freshnessScore, 3);
-    assert.equal(metadata.provenanceAssessment?.signals.toolExecuted, true);
+    assert.equal(
+        metadata.provenanceAssessment?.signals.retrievalToolExecuted,
+        true
+    );
+});
+
+test('buildResponseMetadata does not classify as retrieved when TrustGraph evidence is available but unused and uncorroborated', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata({
+            provenance: 'Inferred',
+            citations: [],
+        }),
+        baseRuntimeContext({
+            retrieval: {
+                requested: false,
+                used: false,
+            },
+            trustGraphEvidenceAvailable: true,
+            trustGraphEvidenceUsed: false,
+        })
+    );
+
+    assert.equal(metadata.provenance, 'Inferred');
+    assert.equal(
+        metadata.provenanceAssessment?.signals.trustGraphEvidenceAvailable,
+        true
+    );
+    assert.equal(
+        metadata.provenanceAssessment?.signals.trustGraphEvidenceUsed,
+        false
+    );
 });
 
 test('buildResponseMetadata uses planner fallback tradeoffCount when assistant metadata omits count', () => {

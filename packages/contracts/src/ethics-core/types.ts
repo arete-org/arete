@@ -59,9 +59,10 @@ export type ProvenanceAssessment = {
         citationsPresent: boolean;
         retrievalRequested: boolean;
         retrievalUsed: boolean;
-        toolExecuted: boolean;
+        retrievalToolExecuted: boolean;
         workflowEvidence: boolean;
-        trustGraphEvidence: boolean;
+        trustGraphEvidenceAvailable: boolean;
+        trustGraphEvidenceUsed: boolean;
         assistantDeclaredSpeculative: boolean;
     };
     conflicts: string[];

@@ -459,9 +459,10 @@ const ProvenanceAssessmentSchema = z
                 citationsPresent: z.boolean(),
                 retrievalRequested: z.boolean(),
                 retrievalUsed: z.boolean(),
-                toolExecuted: z.boolean(),
+                retrievalToolExecuted: z.boolean(),
                 workflowEvidence: z.boolean(),
-                trustGraphEvidence: z.boolean(),
+                trustGraphEvidenceAvailable: z.boolean(),
+                trustGraphEvidenceUsed: z.boolean(),
                 assistantDeclaredSpeculative: z.boolean(),
             })
             .strict(),

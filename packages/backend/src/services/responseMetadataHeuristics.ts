@@ -10,7 +10,6 @@ import type {
     GenerationSearchIntent,
 } from '@footnote/agent-runtime';
 import type {
-    ExecutionStatus,
     PartialResponseTemperament,
     Provenance,
     ProvenanceAssessment,
@@ -137,9 +136,10 @@ type ProvenanceClassificationInput = {
     citationCount: number;
     retrievalRequested: boolean;
     retrievalUsed: boolean;
-    toolStatus?: ExecutionStatus;
+    retrievalToolExecuted: boolean;
     workflowEvidence: boolean;
-    trustGraphEvidence: boolean;
+    trustGraphEvidenceAvailable: boolean;
+    trustGraphEvidenceUsed: boolean;
 };
 
 type ProvenanceClassificationResult = {
@@ -155,15 +155,13 @@ export const classifyProvenanceWithSignals = (
     input: ProvenanceClassificationInput
 ): ProvenanceClassificationResult => {
     const citationsPresent = input.citationCount > 0;
-    const toolExecuted = input.toolStatus === 'executed';
     const assistantDeclaredSpeculative =
         input.assistantProvenance === 'Speculative';
     const retrievalSignals = [
         citationsPresent,
         input.retrievalUsed,
-        toolExecuted,
+        input.retrievalToolExecuted,
         input.workflowEvidence,
-        input.trustGraphEvidence,
     ];
     const retrievalSignalCount = retrievalSignals.filter(Boolean).length;
     const conflicts: string[] = [];
@@ -176,10 +174,21 @@ export const classifyProvenanceWithSignals = (
         );
     }
 
-    if (citationsPresent && !input.retrievalUsed && !toolExecuted) {
+    if (
+        citationsPresent &&
+        !input.retrievalUsed &&
+        !input.retrievalToolExecuted
+    ) {
         conflicts.push('citations_without_execution_confirmation');
         limitations.push(
             'Citations were present without matching retrieval/tool execution evidence.'
+        );
+    }
+
+    if (input.trustGraphEvidenceUsed && !input.trustGraphEvidenceAvailable) {
+        conflicts.push('trustgraph_usage_without_availability');
+        limitations.push(
+            'TrustGraph usage signal was reported without corresponding available P_EVID refs.'
         );
     }
 
@@ -203,8 +212,11 @@ export const classifyProvenanceWithSignals = (
         provenance = 'Speculative';
     } else if (
         citationsPresent ||
-        input.trustGraphEvidence ||
-        retrievalSignalCount >= 2
+        retrievalSignalCount >= 2 ||
+        (input.trustGraphEvidenceUsed &&
+            (citationsPresent ||
+                retrievalSignalCount > 0 ||
+                input.retrievalToolExecuted))
     ) {
         provenance = 'Retrieved';
     } else if (assistantDeclaredSpeculative) {
@@ -223,9 +235,10 @@ export const classifyProvenanceWithSignals = (
                 citationsPresent,
                 retrievalRequested: input.retrievalRequested,
                 retrievalUsed: input.retrievalUsed,
-                toolExecuted,
+                retrievalToolExecuted: input.retrievalToolExecuted,
                 workflowEvidence: input.workflowEvidence,
-                trustGraphEvidence: input.trustGraphEvidence,
+                trustGraphEvidenceAvailable: input.trustGraphEvidenceAvailable,
+                trustGraphEvidenceUsed: input.trustGraphEvidenceUsed,
                 assistantDeclaredSpeculative,
             },
             conflicts,

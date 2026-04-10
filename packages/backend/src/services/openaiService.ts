@@ -641,7 +641,8 @@ type ResponseMetadataRuntimeContext = {
     totalDurationMs?: number;
     plannerTemperament?: PartialResponseTemperament;
     retrieval?: ResponseMetadataRetrievalContext;
-    trustGraphEvidence?: boolean;
+    trustGraphEvidenceAvailable?: boolean;
+    trustGraphEvidenceUsed?: boolean;
     executionContext?: {
         planner?: {
             status: ExecutionStatus;
@@ -779,14 +780,20 @@ const buildResponseMetadata = (
         ? assistantMetadata.citations
         : [];
     const retrieval = runtimeContext.retrieval;
+    const classificationToolExecution = runtimeContext.executionContext?.tool;
+    const retrievalToolExecuted =
+        classificationToolExecution?.status === 'executed' &&
+        classificationToolExecution.toolName === 'web_search';
     const provenanceClassification = classifyProvenanceWithSignals({
         assistantProvenance: assistantMetadata.provenance,
         citationCount: citations.length,
         retrievalRequested: retrieval?.requested ?? false,
         retrievalUsed: retrieval?.used ?? false,
-        toolStatus: runtimeContext.executionContext?.tool?.status,
+        retrievalToolExecuted,
         workflowEvidence: runtimeContext.workflow !== undefined,
-        trustGraphEvidence: runtimeContext.trustGraphEvidence ?? false,
+        trustGraphEvidenceAvailable:
+            runtimeContext.trustGraphEvidenceAvailable ?? false,
+        trustGraphEvidenceUsed: runtimeContext.trustGraphEvidenceUsed ?? false,
     });
     const provenance = provenanceClassification.provenance;
     const provenanceAssessment = provenanceClassification.assessment;
