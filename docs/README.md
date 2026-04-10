@@ -35,3 +35,4 @@ Footnote keeps docs in three buckets:
 ## Status
 
 - [Incident And Breakers Status](./status/2026-03-13-incident-breakers-status.md): Tracks current implementation progress, gaps, and validation coverage for this active work.
+- [TrustGraph Foundation Consolidation Status (2026-04-10)](./status/2026-04-10-trustgraph-foundation-consolidation.md): Records bounded-scope consolidation work, runtime-truthfulness checks, and outside-review evidence anchors.
