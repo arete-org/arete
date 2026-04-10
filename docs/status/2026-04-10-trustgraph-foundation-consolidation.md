@@ -33,16 +33,16 @@ Record exactly what was consolidated for TrustGraph foundation/seam work, and wh
 
 ## Evidence Anchors Reviewed
 
-- [architecture.md](/C:/Users/Jordan/AppData/Local/Temp/vibe-kanban/worktrees/204d-epic-trustgraph/footnote/docs/architecture/execution_contract_trustgraph/architecture.md)
-- [execution-contract-authority-map.md](/C:/Users/Jordan/AppData/Local/Temp/vibe-kanban/worktrees/204d-epic-trustgraph/footnote/docs/architecture/execution-contract-authority-map.md)
-- [runtimeWiring.ts](/C:/Users/Jordan/AppData/Local/Temp/vibe-kanban/worktrees/204d-epic-trustgraph/footnote/packages/backend/src/services/executionContractTrustGraph/runtimeWiring.ts)
-- [executionContractTrustGraph.ts](/C:/Users/Jordan/AppData/Local/Temp/vibe-kanban/worktrees/204d-epic-trustgraph/footnote/packages/backend/src/config/sections/executionContractTrustGraph.ts)
-- [chatOrchestrator.ts](/C:/Users/Jordan/AppData/Local/Temp/vibe-kanban/worktrees/204d-epic-trustgraph/footnote/packages/backend/src/services/chatOrchestrator.ts)
-- [chat.ts](/C:/Users/Jordan/AppData/Local/Temp/vibe-kanban/worktrees/204d-epic-trustgraph/footnote/packages/backend/src/handlers/chat.ts)
-- [trustGraphEvidenceIngestion.ts](/C:/Users/Jordan/AppData/Local/Temp/vibe-kanban/worktrees/204d-epic-trustgraph/footnote/packages/backend/src/services/executionContractTrustGraph/trustGraphEvidenceIngestion.ts)
-- [trustGraphContract.test.ts](/C:/Users/Jordan/AppData/Local/Temp/vibe-kanban/worktrees/204d-epic-trustgraph/footnote/packages/backend/test/trustGraphContract.test.ts)
-- [chatHandler.test.ts](/C:/Users/Jordan/AppData/Local/Temp/vibe-kanban/worktrees/204d-epic-trustgraph/footnote/packages/backend/test/chatHandler.test.ts)
-- [chatOrchestratorExecutionContractTrustGraph.test.ts](/C:/Users/Jordan/AppData/Local/Temp/vibe-kanban/worktrees/204d-epic-trustgraph/footnote/packages/backend/test/chatOrchestratorExecutionContractTrustGraph.test.ts)
+- [architecture.md](../architecture/execution_contract_trustgraph/architecture.md)
+- [execution-contract-authority-map.md](../architecture/execution-contract-authority-map.md)
+- [runtimeWiring.ts](../../packages/backend/src/services/executionContractTrustGraph/runtimeWiring.ts)
+- [executionContractTrustGraph.ts](../../packages/backend/src/config/sections/executionContractTrustGraph.ts)
+- [chatOrchestrator.ts](../../packages/backend/src/services/chatOrchestrator.ts)
+- [chat.ts](../../packages/backend/src/handlers/chat.ts)
+- [trustGraphEvidenceIngestion.ts](../../packages/backend/src/services/executionContractTrustGraph/trustGraphEvidenceIngestion.ts)
+- [trustGraphContract.test.ts](../../packages/backend/test/trustGraphContract.test.ts)
+- [chatHandler.test.ts](../../packages/backend/test/chatHandler.test.ts)
+- [chatOrchestratorExecutionContractTrustGraph.test.ts](../../packages/backend/test/chatOrchestratorExecutionContractTrustGraph.test.ts)
 
 ## Scope Guardrails Reaffirmed
 
