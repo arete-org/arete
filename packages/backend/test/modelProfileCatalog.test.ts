@@ -438,6 +438,20 @@ test('model profile resolver legacy fallback honors configured default profile p
     );
 });
 
+test('model profile resolver normalizes provider-prefixed legacy default models', () => {
+    const resolver = createModelProfileResolver({
+        catalog: [],
+        defaultProfileId: 'missing-default',
+        legacyDefaultModel: 'ollama/qwen3.5:cloud',
+        warn: () => undefined,
+    });
+
+    const resolved = resolver.resolve();
+    assert.equal(resolved.id, 'legacy-default-model');
+    assert.equal(resolved.provider, 'ollama');
+    assert.equal(resolved.providerModel, 'qwen3.5:cloud');
+});
+
 test('bundled active model profiles are fully covered by pricing or explicit policy classifications', () => {
     const section = buildModelProfilesSection(
         {

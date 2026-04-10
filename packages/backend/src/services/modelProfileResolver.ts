@@ -171,6 +171,8 @@ export const createModelProfileResolver = ({
     const configuredDefaultProvider =
         catalogById.get(defaultProfileId)?.provider;
     const legacyDefaultModelParsed = parseRawModel(legacyDefaultModel);
+    const normalizedLegacyDefaultModel =
+        legacyDefaultModelParsed?.providerModel ?? legacyDefaultModel;
     const legacyDefaultProvider =
         legacyDefaultModelParsed?.provider ??
         configuredDefaultProvider ??
@@ -220,7 +222,7 @@ export const createModelProfileResolver = ({
             },
         });
         return buildLegacyDefaultProfile(
-            legacyDefaultModel,
+            normalizedLegacyDefaultModel,
             legacyDefaultProvider
         );
     };
