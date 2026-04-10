@@ -119,6 +119,7 @@ export type ReviewWorkflowRuntimeConfig = {
     workflowName: string;
     maxIterations: number;
     maxDurationMs: number;
+    executionLimits?: ExecutionLimits;
 };
 
 export type ReviewWorkflowUsageSummary = {
@@ -270,7 +271,8 @@ export const applyStepExecutionToState = (
 export const isWithinExecutionLimits = (
     state: WorkflowState,
     limits: ExecutionLimits,
-    nowMs: number
+    nowMs: number,
+    nextStepKind?: WorkflowStepKind
 ): {
     withinLimits: boolean;
     exhaustedBy?: ExhaustedLimit;
@@ -282,14 +284,22 @@ export const isWithinExecutionLimits = (
         };
     }
 
-    if (state.toolCallCount >= limits.maxToolCalls) {
+    const isNextStepTool = nextStepKind === 'tool';
+    if (isNextStepTool && state.toolCallCount >= limits.maxToolCalls) {
         return {
             withinLimits: false,
             exhaustedBy: 'maxToolCalls',
         };
     }
 
-    if (state.deliberationCallCount >= limits.maxDeliberationCalls) {
+    const isNextStepDeliberative =
+        nextStepKind === 'plan' ||
+        nextStepKind === 'assess' ||
+        nextStepKind === 'revise';
+    if (
+        isNextStepDeliberative &&
+        state.deliberationCallCount >= limits.maxDeliberationCalls
+    ) {
         return {
             withinLimits: false,
             exhaustedBy: 'maxDeliberationCalls',
@@ -404,12 +414,42 @@ export const runBoundedReviewWorkflow = async ({
         parseReviewDecision ?? profileStrategy.parseReviewDecision;
 
     const executionLimits: ExecutionLimits = {
-        maxWorkflowSteps: Math.max(1, normalizedMaxIterations * 2),
-        maxToolCalls: UNBOUNDED_LIMIT,
-        maxDeliberationCalls: Math.max(1, normalizedMaxIterations * 2),
-        maxTokensTotal: UNBOUNDED_LIMIT,
-        maxDurationMs: normalizedMaxDurationMs,
+        maxWorkflowSteps: sanitizePositiveInteger(
+            workflowConfig.executionLimits?.maxWorkflowSteps ??
+                Math.max(1, normalizedMaxIterations * 2),
+            Math.max(1, normalizedMaxIterations * 2)
+        ),
+        maxToolCalls: sanitizeNonNegativeInteger(
+            workflowConfig.executionLimits?.maxToolCalls ?? UNBOUNDED_LIMIT,
+            UNBOUNDED_LIMIT
+        ),
+        maxDeliberationCalls: sanitizeNonNegativeInteger(
+            workflowConfig.executionLimits?.maxDeliberationCalls ??
+                Math.max(1, normalizedMaxIterations * 2),
+            Math.max(1, normalizedMaxIterations * 2)
+        ),
+        maxTokensTotal: sanitizeNonNegativeInteger(
+            workflowConfig.executionLimits?.maxTokensTotal ?? UNBOUNDED_LIMIT,
+            UNBOUNDED_LIMIT
+        ),
+        maxDurationMs: sanitizePositiveInteger(
+            workflowConfig.executionLimits?.maxDurationMs ??
+                normalizedMaxDurationMs,
+            normalizedMaxDurationMs
+        ),
     };
+    const effectiveMaxIterations =
+        workflowConfig.executionLimits !== undefined
+            ? Math.max(
+                  0,
+                  Math.min(
+                      Math.ceil(executionLimits.maxDeliberationCalls / 2),
+                      Math.ceil(
+                          Math.max(0, executionLimits.maxWorkflowSteps - 1) / 2
+                      )
+                  )
+              )
+            : normalizedMaxIterations;
     let workflowState = createInitialWorkflowState({
         workflowId,
         workflowName: workflowConfig.workflowName,
@@ -475,11 +515,12 @@ export const runBoundedReviewWorkflow = async ({
         return stepId;
     };
 
-    const stopIfOverLimits = (): boolean => {
+    const stopIfOverLimits = (nextStepKind?: WorkflowStepKind): boolean => {
         const limitsCheck = isWithinExecutionLimits(
             workflowState,
             executionLimits,
-            Date.now()
+            Date.now(),
+            nextStepKind
         );
         if (limitsCheck.withinLimits) {
             return false;
@@ -504,7 +545,7 @@ export const runBoundedReviewWorkflow = async ({
         terminationReason = 'transition_blocked_by_policy';
         shouldStop = true;
     } else {
-        if (!stopIfOverLimits()) {
+        if (!stopIfOverLimits('generate')) {
             const initialDraftStartedAt = generationStartedAtMs;
             try {
                 draftResult =
@@ -573,14 +614,14 @@ export const runBoundedReviewWorkflow = async ({
             }
         }
     }
-    if (!shouldStop && normalizedMaxIterations === 0) {
+    if (!shouldStop && effectiveMaxIterations === 0) {
         terminationReason = 'goal_satisfied';
         workflowStatus = 'completed';
     }
 
     for (
         let iteration = 1;
-        iteration <= normalizedMaxIterations && !shouldStop;
+        iteration <= effectiveMaxIterations && !shouldStop;
         iteration += 1
     ) {
         if (
@@ -595,7 +636,7 @@ export const runBoundedReviewWorkflow = async ({
             break;
         }
 
-        if (stopIfOverLimits()) {
+        if (stopIfOverLimits('assess')) {
             break;
         }
 
@@ -665,7 +706,7 @@ export const runBoundedReviewWorkflow = async ({
                 break;
             }
 
-            if (iteration >= normalizedMaxIterations) {
+            if (iteration >= effectiveMaxIterations) {
                 terminationReason = 'budget_exhausted_steps';
                 workflowStatus = 'degraded';
                 shouldStop = true;
@@ -685,7 +726,7 @@ export const runBoundedReviewWorkflow = async ({
                 break;
             }
 
-            if (stopIfOverLimits()) {
+            if (stopIfOverLimits('revise')) {
                 break;
             }
 

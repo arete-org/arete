@@ -499,6 +499,12 @@ export const createChatOrchestrator = ({
                 }
             );
         }
+        const resolvedExecutionPolicy = resolveExecutionPolicyContract({
+            presetId: resolveExecutionPolicyPresetId(
+                generationForExecution.responseIntentHint?.responseMode
+            ),
+        }).policyContract;
+        const routingStrategy = resolvedExecutionPolicy.routing.strategy;
         let selectedResponseProfile = defaultResponseProfile;
         let profileSelectionSource: PlannerSelectionSource = 'default';
         // Profile domains at this seam:
@@ -508,43 +514,48 @@ export const createChatOrchestrator = ({
         // Planner selects capability intent; orchestrator resolves model profile.
         const requestedModelProfileId = normalizedRequest.profileId?.trim();
         const allowRequestProfileOverride =
-            normalizedRequest.trigger.kind === 'submit';
+            normalizedRequest.trigger.kind === 'submit' &&
+            routingStrategy === 'profile-first';
         const selectedCapabilityDecision = selectModelProfileForWorkflowStep({
             step: 'generation',
             requestedCapabilityProfile: plan.requestedCapabilityProfile,
             profiles: enabledProfiles,
             requiresSearch: generationForExecution.search !== undefined,
+            routingIntent: resolvedExecutionPolicy.routing,
         });
         const plannerSelectedModelProfileId =
             selectedCapabilityDecision.selectedProfile?.id.trim();
         const profileSelectionOrder: Array<{
             source: PlannerSelectionSource;
             profileId?: string;
-        }> = allowRequestProfileOverride
-            ? [
-                  {
-                      source: 'request',
-                      profileId: requestedModelProfileId,
-                  },
-                  {
-                      source: 'planner',
-                      profileId: plannerSelectedModelProfileId,
-                  },
-                  {
-                      source: 'default',
-                      profileId: defaultResponseProfile.id,
-                  },
-              ]
-            : [
-                  {
-                      source: 'planner',
-                      profileId: plannerSelectedModelProfileId,
-                  },
-                  {
-                      source: 'default',
-                      profileId: defaultResponseProfile.id,
-                  },
-              ];
+        }> =
+            routingStrategy === 'profile-first'
+                ? [
+                      {
+                          source: 'request',
+                          profileId: allowRequestProfileOverride
+                              ? requestedModelProfileId
+                              : undefined,
+                      },
+                      {
+                          source: 'default',
+                          profileId: defaultResponseProfile.id,
+                      },
+                      {
+                          source: 'planner',
+                          profileId: plannerSelectedModelProfileId,
+                      },
+                  ]
+                : [
+                      {
+                          source: 'planner',
+                          profileId: plannerSelectedModelProfileId,
+                      },
+                      {
+                          source: 'default',
+                          profileId: defaultResponseProfile.id,
+                      },
+                  ];
 
         for (const candidate of profileSelectionOrder) {
             if (!candidate.profileId) {
@@ -638,6 +649,7 @@ export const createChatOrchestrator = ({
             fallbackRollupSelectionSource = searchPolicySelectionSource;
             const searchFallbackDecision = resolveSearchFallbackPolicy({
                 selectionSource: searchPolicySelectionSource,
+                routingStrategy,
                 selectedProfile: selectedResponseProfile,
                 searchCapableProfiles,
             });
@@ -742,11 +754,6 @@ export const createChatOrchestrator = ({
             selectedCapabilityProfile:
                 selectedCapabilityDecision.selectedCapabilityProfile,
         };
-        const resolvedExecutionPolicy = resolveExecutionPolicyContract({
-            presetId: resolveExecutionPolicyPresetId(
-                executionPlan.generation.responseIntentHint?.responseMode
-            ),
-        }).policyContract;
 
         // Non-message actions return early and skip model generation.
         if (executionPlan.action === 'ignore') {
@@ -1027,6 +1034,7 @@ export const createChatOrchestrator = ({
             fallbackReasons,
             executionPolicyId: resolvedExecutionPolicy.policyId,
             executionPolicyVersion: resolvedExecutionPolicy.policyVersion,
+            routingStrategy: resolvedExecutionPolicy.routing.strategy,
             responseId: response.metadata.responseId,
             responseAction: 'message',
             responseModality: executionPlan.modality,
