@@ -2,10 +2,18 @@
 
 ## Purpose
 
-Workflow mode is the explicit runtime routing decision for chat execution.
-It is not a planning hint.
+A workflow mode is the explicit runtime routing decision for chat execution.
 
-Each mode deterministically maps to:
+Layer ownership in this design:
+
+- Execution Contract governs allowed policy shape.
+- Chat orchestrator executes requests within that contract.
+- Workflow mode selects high-level execution posture.
+- Workflow profile defines concrete workflow mechanics.
+- TRACE describes answer temperament.
+- Provenance/evidence metadata records what actually happened.
+
+Each maps to:
 
 - Execution Contract preset
 - Workflow profile
@@ -14,23 +22,27 @@ Each mode deterministically maps to:
 - Evidence strictness posture
 - Step bounds
 
-The chosen mode is emitted in response metadata as `workflowMode`.
+The chosen mode is emitted as `workflowMode` in response metadata.
 
 ## Mode Set
 
-| Mode               | Execution Contract preset | Workflow profile | Workflow execution | Review pass | Revise step  | Evidence posture | Max workflow steps | Max deliberation calls |
-| ------------------ | ------------------------- | ---------------- | ------------------ | ----------- | ------------ | ---------------- | ------------------ | ---------------------- |
-| `fast-direct`      | `fast-direct`             | `generate-only`  | `disabled`         | `excluded`  | `disallowed` | `minimal`        | 1                  | 0                      |
-| `balanced`         | `balanced`                | `bounded-review` | `always`           | `included`  | `allowed`    | `balanced`       | 4                  | 2                      |
-| `quality-grounded` | `quality-grounded`        | `bounded-review` | `policy_gated`     | `included`  | `allowed`    | `strict`         | 8                  | 4                      |
-| `bounded-review`   | `quality-grounded`        | `bounded-review` | `always`           | `included`  | `allowed`    | `strict`         | 4                  | 4                      |
-| `generate-only`    | `fast-direct`             | `generate-only`  | `always`           | `excluded`  | `disallowed` | `minimal`        | 1                  | 0                      |
+Canonical mode ids:
+
+- `fast`
+- `balanced`
+- `grounded`
+
+| Mode       | Execution Contract preset | Workflow profile class | Workflow profile id | Workflow execution | Review pass | Revise step  | Evidence posture | Max workflow steps | Max deliberation calls |
+| ---------- | ------------------------- | ---------------------- | ------------------- | ------------------ | ----------- | ------------ | ---------------- | ------------------ | ---------------------- |
+| `fast`     | `fast-direct`             | `direct`               | `generate-only`     | `disabled`         | `excluded`  | `disallowed` | `minimal`        | 1                  | 0                      |
+| `balanced` | `balanced`                | `reviewed`             | `bounded-review`    | `always`           | `included`  | `allowed`    | `balanced`       | 4                  | 2                      |
+| `grounded` | `quality-grounded`        | `reviewed`             | `bounded-review`    | `policy_gated`     | `included`  | `allowed`    | `strict`         | 8                  | 4                      |
 
 ## Selection Order
 
 1. Use requested mode id when it is recognized.
-2. Otherwise infer from Execution Contract response mode (`quality_grounded` -> `quality-grounded`, `fast_direct` -> `fast-direct`).
-3. Otherwise fail open to `bounded-review`.
+2. Otherwise infer from Execution Contract response mode (`quality_grounded` -> `grounded`, `fast_direct` -> `fast`).
+3. Otherwise fail open to `grounded`.
 
 ## Metadata Contract
 

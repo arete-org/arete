@@ -1,6 +1,6 @@
 /**
- * @description: Resolves workflow profiles by id into Execution Contract-aligned workflow
- * policy presets and runtime hooks, with bounded-review fail-open fallback behavior.
+ * @description: Resolves workflow modes and workflow profiles into concrete runtime
+ * workflow settings within Execution Contract guardrails.
  * @footnote-scope: core
  * @footnote-module: WorkflowProfileRegistry
  * @footnote-risk: medium - Incorrect profile resolution can alter runtime execution paths.
@@ -26,21 +26,17 @@ import type {
 } from './workflowProfileContract.js';
 
 type BuiltinWorkflowProfileId = 'bounded-review' | 'generate-only';
-type BuiltinWorkflowModeId =
-    | 'fast-direct'
-    | 'balanced'
-    | 'quality-grounded'
-    | 'bounded-review'
-    | 'generate-only';
+type BuiltinWorkflowModeId = WorkflowModeId;
 
 /**
- * Execution Contract workflow policy presets:
- * - quality-grounded: generate + assess + revise
- * - fast-direct: generate only
+ * Profile policies are concrete workflow implementation shapes:
+ * - reviewed profile (`bounded-review`): generate + assess + revise
+ * - direct profile (`generate-only`): generate-only workflow
  *
- * Registry ownership here is assembly glue only: map profile ids to
- * contract-aligned workflow-step toggles plus runtime hooks. Profiles select one
- * preset and attach limits/hooks; they do not own contract ontology.
+ * Registry ownership here is assembly glue only:
+ * - Execution Contract remains the governing contract language.
+ * - Chat orchestrator remains the runtime coordinator.
+ * - This module maps mode/profile inputs to runtime workflow shapes.
  */
 const EXECUTION_CONTRACT_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET: Readonly<
     RuntimeWorkflowProfile['policy']
@@ -132,7 +128,7 @@ const BUILTIN_RUNTIME_WORKFLOW_PROFILES: Readonly<
 
 export const DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID: BuiltinWorkflowProfileId =
     'bounded-review';
-const DEFAULT_WORKFLOW_MODE_ID: BuiltinWorkflowModeId = 'bounded-review';
+const DEFAULT_WORKFLOW_MODE_ID: BuiltinWorkflowModeId = 'grounded';
 
 const isBuiltinWorkflowProfileId = (
     value: string
@@ -162,8 +158,9 @@ type WorkflowModeBehavior = WorkflowModeDecision['behavior'];
 const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
     Record<BuiltinWorkflowModeId, WorkflowModeBehavior>
 > = {
-    'fast-direct': {
+    fast: {
         executionContractPresetId: 'fast-direct',
+        workflowProfileClass: 'direct',
         workflowProfileId: 'generate-only',
         workflowExecution: 'disabled',
         reviewPass: 'excluded',
@@ -174,6 +171,7 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
     },
     balanced: {
         executionContractPresetId: 'balanced',
+        workflowProfileClass: 'reviewed',
         workflowProfileId: 'bounded-review',
         workflowExecution: 'always',
         reviewPass: 'included',
@@ -182,8 +180,9 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
         maxWorkflowSteps: 4,
         maxDeliberationCalls: 2,
     },
-    'quality-grounded': {
+    grounded: {
         executionContractPresetId: 'quality-grounded',
+        workflowProfileClass: 'reviewed',
         workflowProfileId: 'bounded-review',
         workflowExecution: 'policy_gated',
         reviewPass: 'included',
@@ -192,40 +191,30 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
         maxWorkflowSteps: 8,
         maxDeliberationCalls: 4,
     },
-    'bounded-review': {
-        executionContractPresetId: 'quality-grounded',
-        workflowProfileId: 'bounded-review',
-        workflowExecution: 'always',
-        reviewPass: 'included',
-        reviseStep: 'allowed',
-        evidencePosture: 'strict',
-        maxWorkflowSteps: 4,
-        maxDeliberationCalls: 4,
-    },
-    'generate-only': {
-        executionContractPresetId: 'fast-direct',
-        workflowProfileId: 'generate-only',
-        workflowExecution: 'always',
-        reviewPass: 'excluded',
-        reviseStep: 'disallowed',
-        evidencePosture: 'minimal',
-        maxWorkflowSteps: 1,
-        maxDeliberationCalls: 0,
-    },
 };
 
-const isBuiltinWorkflowModeId = (
-    value: string
-): value is BuiltinWorkflowModeId => value in WORKFLOW_MODE_BEHAVIOR_MAP;
+const normalizeWorkflowModeId = (
+    modeId: string
+): {
+    modeId: WorkflowModeId;
+} | null => {
+    if (modeId === 'fast' || modeId === 'balanced' || modeId === 'grounded') {
+        return {
+            modeId: modeId as WorkflowModeId,
+        };
+    }
+
+    return null;
+};
 
 const inferWorkflowModeIdFromExecutionContract = (
     responseMode: ExecutionResponseMode | undefined
 ): BuiltinWorkflowModeId | undefined => {
     if (responseMode === 'quality_grounded') {
-        return 'quality-grounded';
+        return 'grounded';
     }
     if (responseMode === 'fast_direct') {
-        return 'fast-direct';
+        return 'fast';
     }
     return undefined;
 };
@@ -238,29 +227,34 @@ export type WorkflowModeResolution = {
 /**
  * Resolves one explicit workflow mode decision that drives execution preset,
  * workflow profile routing, review posture, and metadata explanation.
+ *
+ * `modeDecision.modeId` is always the canonical high-level id
+ * (`fast|balanced|grounded`).
  */
 export const resolveWorkflowModeDecision = (input: {
     modeId: string | null | undefined;
     executionContractResponseMode?: ExecutionResponseMode;
 }): WorkflowModeResolution => {
     const requestedModeId = normalizeRequestedModeId(input.modeId);
-    if (
-        requestedModeId !== undefined &&
-        isBuiltinWorkflowModeId(requestedModeId)
-    ) {
+    const normalizedRequestedMode =
+        requestedModeId !== undefined
+            ? normalizeWorkflowModeId(requestedModeId)
+            : null;
+    if (normalizedRequestedMode !== null) {
         return {
             isKnownRequestedModeId: true,
             modeDecision: {
-                modeId: requestedModeId,
+                modeId: normalizedRequestedMode.modeId,
                 selectedBy: 'requested_mode',
                 selectionReason:
-                    'Used requested workflow mode id directly from runtime configuration.',
+                    'Used requested workflow mode id from runtime configuration.',
                 requestedModeId,
                 ...(input.executionContractResponseMode !== undefined && {
                     executionContractResponseMode:
                         input.executionContractResponseMode,
                 }),
-                behavior: WORKFLOW_MODE_BEHAVIOR_MAP[requestedModeId],
+                behavior:
+                    WORKFLOW_MODE_BEHAVIOR_MAP[normalizedRequestedMode.modeId],
             },
         };
     }
@@ -437,6 +431,9 @@ export const resolveWorkflowRuntimeConfig = (input: {
         executionContract !== undefined
             ? executionContract.response.responseMode === 'quality_grounded'
             : input.reviewLoopEnabled === true;
+    // TODO(workflow-mode-escalation): Add explicit mode-transition handling
+    // here when runtime can escalate from lighter modes based on retrieval
+    // sufficiency or downstream review signals.
     const workflowExecutionEnabled =
         modeDecision.behavior.workflowExecution === 'disabled'
             ? false

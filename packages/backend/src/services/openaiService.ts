@@ -785,6 +785,9 @@ const buildResponseMetadata = (
             : retrieval?.used || citations.length > 0
               ? 'Retrieved'
               : 'Inferred';
+    // TODO(provenance-classification-v2): Expand provenance classification to
+    // represent mixed/partial grounding paths once execution evidence can carry
+    // per-claim provenance without overloading mode or TRACE concepts.
     const tradeoffCount = resolveTradeoffCount(
         assistantMetadata.tradeoffCount,
         runtimeContext.plannerTemperament
@@ -792,6 +795,9 @@ const buildResponseMetadata = (
     const temperament = normalizePlannerTemperament(
         runtimeContext.plannerTemperament
     );
+    // TODO(trace-target-vs-final): When runtime can revise TRACE during review,
+    // persist both initial TRACE target and final delivered TRACE in metadata.
+    // Keep `workflowMode` as execution choice; TRACE remains answer posture.
     const evidenceScore = isTraceAxisScore(assistantMetadata.evidenceScore)
         ? assistantMetadata.evidenceScore
         : undefined;

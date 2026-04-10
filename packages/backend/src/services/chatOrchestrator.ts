@@ -333,11 +333,18 @@ export const createChatOrchestrator = ({
                 }
             );
         }
+        // Contract-governed routing boundary:
+        // 1) resolve high-level workflow mode
+        // 2) derive Execution Contract preset from mode
+        // 3) execute orchestration within that contract
         const workflowModeResolution = resolveWorkflowModeDecision({
             modeId: runtimeConfig.chatWorkflow.modeId,
             executionContractResponseMode:
                 generationForExecution.responseIntentHint?.responseMode,
         });
+        // TODO(workflow-mode-escalation): Add optional runtime mode transitions
+        // (for example fast -> grounded) when later retrieval/sufficiency signals
+        // justify escalation. Keep transition policy governed by Execution Contract.
         const resolvedExecutionContract = resolveExecutionContract({
             presetId:
                 workflowModeResolution.modeDecision.behavior

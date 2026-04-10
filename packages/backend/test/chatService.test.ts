@@ -75,7 +75,7 @@ test('createChatService records backend token usage and estimated cost', async (
             usageRecords.push(record);
         },
         chatWorkflowConfig: {
-            modeId: 'fast-direct',
+            modeId: 'fast',
             reviewLoopEnabled: true,
             maxIterations: 2,
             maxDurationMs: 15000,
@@ -150,7 +150,7 @@ test('createChatService preserves the caller-requested model when the runtime om
             usageRecords.push(record);
         },
         chatWorkflowConfig: {
-            modeId: 'fast-direct',
+            modeId: 'fast',
             reviewLoopEnabled: true,
             maxIterations: 2,
             maxDurationMs: 15000,
@@ -528,7 +528,7 @@ test('runChatMessages adds a backend repo-explainer response hint', async () => 
         },
         recordUsage: () => undefined,
         chatWorkflowConfig: {
-            modeId: 'fast-direct',
+            modeId: 'fast',
             reviewLoopEnabled: true,
             maxIterations: 2,
             maxDurationMs: 15000,
@@ -593,7 +593,7 @@ test('runChatMessages forwards planner-selected generation settings to Generatio
         },
         recordUsage: () => undefined,
         chatWorkflowConfig: {
-            modeId: 'fast-direct',
+            modeId: 'fast',
             reviewLoopEnabled: true,
             maxIterations: 2,
             maxDurationMs: 15000,
@@ -742,7 +742,7 @@ test('runChatMessages records usage correctly when VoltAgent handles search dire
             usageRecords.push(record);
         },
         chatWorkflowConfig: {
-            modeId: 'fast-direct',
+            modeId: 'fast',
             reviewLoopEnabled: true,
             maxIterations: 2,
             maxDurationMs: 15000,
@@ -1023,7 +1023,7 @@ test('runChatMessages skips review loop when enabled but maxIterations is zero',
     assert.equal(callCount, 1);
 });
 
-test('runChatMessages uses bounded-review fail-open workflow for unknown workflow profile id', async () => {
+test('runChatMessages falls back to reviewed workflow behavior for unknown workflow mode id', async () => {
     let capturedWorkflow:
         | ResponseMetadataRuntimeContext['workflow']
         | undefined;
@@ -1093,7 +1093,7 @@ test('runChatMessages uses bounded-review fail-open workflow for unknown workflo
     assert.equal(capturedWorkflow?.workflowName, 'message_with_review_loop');
 });
 
-test('runChatMessages executes generate-only workflow profile with lineage and no assess/revise execution', async () => {
+test('runChatMessages executes fast workflow mode as direct generation without workflow lineage', async () => {
     let generationCalls = 0;
     let capturedWorkflow:
         | ResponseMetadataRuntimeContext['workflow']
@@ -1133,7 +1133,7 @@ test('runChatMessages executes generate-only workflow profile with lineage and n
         defaultModel: 'gpt-5-mini',
         recordUsage: () => undefined,
         chatWorkflowConfig: {
-            modeId: 'generate-only',
+            modeId: 'fast',
             reviewLoopEnabled: false,
             maxIterations: 9,
             maxDurationMs: 15000,
@@ -1179,14 +1179,8 @@ test('runChatMessages executes generate-only workflow profile with lineage and n
 
     assert.equal(response.message, 'generate-only response');
     assert.equal(generationCalls, 1);
-    assert.equal(
-        capturedWorkflowRunConfig?.workflowName,
-        'message_generate_only'
-    );
-    assert.equal(capturedWorkflowRunConfig?.maxIterations, 0);
-    assert.equal(capturedWorkflow?.workflowName, 'message_generate_only');
-    assert.equal(capturedWorkflow?.stepCount, 1);
-    assert.equal(capturedWorkflow?.steps[0]?.stepKind, 'generate');
+    assert.equal(capturedWorkflowRunConfig, undefined);
+    assert.equal(capturedWorkflow, undefined);
 });
 
 test('runChatMessages handles surfaced no-generation reasons without runtime fallback generation', async () => {
@@ -1463,7 +1457,7 @@ test('runChatMessages keeps no-generation surfaced when execution policy disable
     assert.equal(fallbackExecution, undefined);
 });
 
-test('runChatMessages treats bounded-review workflow mode as authoritative over execution-contract response-mode gating', async () => {
+test('runChatMessages keeps workflow execution policy gated by the execution contract response mode', async () => {
     const runWithPolicyPreset = async (
         presetId: 'fast-direct' | 'quality-grounded'
     ): Promise<{
@@ -1501,7 +1495,7 @@ test('runChatMessages treats bounded-review workflow mode as authoritative over 
             defaultModel: 'gpt-5-mini',
             recordUsage: () => undefined,
             chatWorkflowConfig: {
-                modeId: 'bounded-review',
+                modeId: 'grounded',
                 reviewLoopEnabled: false,
                 maxIterations: 2,
                 maxDurationMs: 15000,
@@ -1573,13 +1567,13 @@ test('runChatMessages treats bounded-review workflow mode as authoritative over 
         message: 'workflow generated',
     });
     assert.deepEqual(fastDirect, {
-        reviewWorkflowCalls: 1,
-        directGenerationCalls: 0,
-        message: 'workflow generated',
+        reviewWorkflowCalls: 0,
+        directGenerationCalls: 1,
+        message: 'direct runtime generation',
     });
 });
 
-test('runChatMessages records workflow mode decision in metadata and applies fast-direct behavior', async () => {
+test('runChatMessages records workflow mode decision in metadata and applies fast behavior', async () => {
     let reviewWorkflowCalls = 0;
     let directGenerationCalls = 0;
     const generationRuntime: GenerationRuntime = {
@@ -1606,7 +1600,7 @@ test('runChatMessages records workflow mode decision in metadata and applies fas
         defaultModel: 'gpt-5-mini',
         recordUsage: () => undefined,
         chatWorkflowConfig: {
-            modeId: 'fast-direct',
+            modeId: 'fast',
             reviewLoopEnabled: true,
             maxIterations: 3,
             maxDurationMs: 15000,
@@ -1614,7 +1608,7 @@ test('runChatMessages records workflow mode decision in metadata and applies fas
         runReviewWorkflow: async () => {
             reviewWorkflowCalls += 1;
             throw new Error(
-                'runReviewWorkflow should not execute in fast-direct mode'
+                'runReviewWorkflow should not execute in fast mode'
             );
         },
     });
@@ -1627,7 +1621,7 @@ test('runChatMessages records workflow mode decision in metadata and applies fas
     assert.equal(response.message, 'direct mode response');
     assert.equal(directGenerationCalls, 1);
     assert.equal(reviewWorkflowCalls, 0);
-    assert.equal(response.metadata.workflowMode?.modeId, 'fast-direct');
+    assert.equal(response.metadata.workflowMode?.modeId, 'fast');
     assert.equal(
         response.metadata.workflowMode?.behavior.workflowExecution,
         'disabled'

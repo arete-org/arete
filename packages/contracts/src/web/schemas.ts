@@ -449,13 +449,7 @@ type _AssertTrustGraphMetadata =
 const _assertTrustGraphMetadata: _AssertTrustGraphMetadata = true;
 void _assertTrustGraphMetadata;
 
-const WorkflowModeIdSchema = z.enum([
-    'fast-direct',
-    'balanced',
-    'quality-grounded',
-    'bounded-review',
-    'generate-only',
-]);
+const WorkflowModeIdSchema = z.enum(['fast', 'balanced', 'grounded']);
 
 const WorkflowModeSelectionSourceSchema = z.enum([
     'requested_mode',
@@ -470,6 +464,7 @@ const WorkflowModeBehaviorSchema = z
             'balanced',
             'quality-grounded',
         ]),
+        workflowProfileClass: z.enum(['direct', 'reviewed']),
         workflowProfileId: z.enum(['bounded-review', 'generate-only']),
         workflowExecution: z.enum(['disabled', 'policy_gated', 'always']),
         reviewPass: z.enum(['included', 'excluded']),

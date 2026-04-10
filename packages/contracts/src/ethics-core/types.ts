@@ -358,12 +358,10 @@ export type WorkflowRecord = {
     steps: StepRecord[];
 };
 
-export type WorkflowModeId =
-    | 'fast-direct'
-    | 'balanced'
-    | 'quality-grounded'
-    | 'bounded-review'
-    | 'generate-only';
+/**
+ * Canonical high-level workflow mode ids.
+ */
+export type WorkflowModeId = 'fast' | 'balanced' | 'grounded';
 
 export type WorkflowModeSelectionSource =
     | 'requested_mode'
@@ -374,6 +372,7 @@ export type WorkflowModeEvidencePosture = 'minimal' | 'balanced' | 'strict';
 
 export type WorkflowModeBehavior = {
     executionContractPresetId: 'fast-direct' | 'balanced' | 'quality-grounded';
+    workflowProfileClass: 'direct' | 'reviewed';
     workflowProfileId: 'bounded-review' | 'generate-only';
     workflowExecution: 'disabled' | 'policy_gated' | 'always';
     reviewPass: 'included' | 'excluded';

@@ -538,6 +538,8 @@ export const createChatService = ({
                 search: normalizedGeneration.search,
             }),
         };
+        // Execution Contract governs allowed policy shape; runtime resolution
+        // here only composes workflow execution settings within that contract.
         const workflowRuntimeConfig = resolveWorkflowRuntimeConfig({
             modeId: workflowModeId ?? chatWorkflowConfig.modeId,
             reviewLoopEnabled: chatWorkflowConfig.reviewLoopEnabled,
@@ -785,6 +787,9 @@ export const createChatService = ({
             generationResult.retrieval?.used === true ||
             generationResult.provenance === 'Retrieved' ||
             (generationResult.citations?.length ?? 0) > 0;
+        // TODO(workflow-mode-escalation): If runtime introduces mode transitions,
+        // capture transition records here (planned mode -> effective mode) once
+        // retrieval/sufficiency checks can revise an initial mode choice.
         const hasSearchIntent = normalizedGeneration?.search !== undefined;
         const upstreamToolExecution = executionContext?.tool;
         const effectiveToolExecutionContext:
