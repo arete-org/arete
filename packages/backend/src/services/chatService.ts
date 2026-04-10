@@ -107,10 +107,9 @@ type TrustGraphMetadataEnvelope = {
         traceRefs: string[];
     };
     provenanceJoin?: TrustGraphEvidenceIngestionResult['provenanceJoin'];
-};
-
-type ResponseMetadataWithTrustGraph = ResponseMetadata & {
-    trustGraph?: TrustGraphMetadataEnvelope;
+    evidenceMode?: 'off' | TrustGraphEvidenceIngestionResult['evidenceMode'];
+    canBlockExecution?: TrustGraphEvidenceIngestionResult['canBlockExecution'];
+    verificationMode?: ExecutionPolicyContract['verification']['mode'];
 };
 
 /**
@@ -206,13 +205,23 @@ const toPublicScopeValidation = (
 };
 
 const toTrustGraphMetadataEnvelope = (
-    result: TrustGraphEvidenceIngestionResult
+    result: TrustGraphEvidenceIngestionResult,
+    executionPolicyContract?: Pick<
+        ExecutionPolicyContract,
+        'trustGraph' | 'verification'
+    >
 ): TrustGraphMetadataEnvelope => ({
+    evidenceMode:
+        executionPolicyContract?.trustGraph.evidenceMode ?? result.evidenceMode,
+    canBlockExecution:
+        executionPolicyContract?.trustGraph.canBlockExecution ??
+        result.canBlockExecution,
     adapterStatus: result.adapterStatus,
     scopeValidation: toPublicScopeValidation(result.scopeValidation),
     terminalAuthority: result.terminalAuthority,
     failOpenBehavior: result.failOpenBehavior,
     verificationRequired: result.verificationRequired,
+    verificationMode: executionPolicyContract?.verification.mode,
     advisoryEvidenceItemCount: result.advisoryEvidenceItemCount,
     droppedEvidenceCount: result.droppedEvidenceCount,
     droppedEvidenceIds: result.droppedEvidenceIds,
@@ -942,12 +951,14 @@ export const createChatService = ({
                       safetyTier,
                   }
                 : responseMetadata;
-        const metadataWithTrustGraph: ResponseMetadataWithTrustGraph =
+        const metadataWithTrustGraph: ResponseMetadata =
             trustGraphResult !== undefined
                 ? {
                       ...normalizedResponseMetadata,
-                      trustGraph:
-                          toTrustGraphMetadataEnvelope(trustGraphResult),
+                      trustGraph: toTrustGraphMetadataEnvelope(
+                          trustGraphResult,
+                          executionPolicyContract
+                      ),
                   }
                 : normalizedResponseMetadata;
 
