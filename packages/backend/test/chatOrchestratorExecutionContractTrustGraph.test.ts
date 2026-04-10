@@ -26,6 +26,8 @@ const PLANNER_TOKEN_SENTINEL = 1200;
 const TEST_TIMESTAMP = new Date('2026-04-04T00:00:00.000Z').toISOString();
 
 type TrustGraphMetadata = {
+    evidenceMode?: string;
+    canBlockExecution?: boolean;
     adapterStatus?: string;
     terminalAuthority?: string;
     failOpenBehavior?: string;
@@ -183,10 +185,12 @@ test('orchestrator runtime path integrates advisory TrustGraph metadata without 
         }
     ).trustGraph as TrustGraphMetadata | undefined;
     assert.ok(trustGraph);
+    assert.equal(trustGraph?.evidenceMode, 'advisory');
+    assert.equal(trustGraph?.canBlockExecution, false);
     assert.equal(trustGraph?.adapterStatus, 'success');
     assert.equal(trustGraph?.terminalAuthority, 'backend_execution_contract');
     assert.equal(trustGraph?.failOpenBehavior, 'local_behavior');
-    assert.equal(trustGraph?.verificationRequired, true);
+    assert.equal(trustGraph?.verificationRequired, false);
     assert.deepEqual(trustGraph?.scopeValidation, {
         ok: true,
         normalizedScope: {

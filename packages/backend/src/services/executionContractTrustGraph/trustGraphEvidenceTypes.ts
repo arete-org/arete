@@ -210,6 +210,8 @@ export type GovernedPredicateViews = Record<
 >;
 
 export type TrustGraphEvidenceIngestionResult = {
+    evidenceMode: 'advisory';
+    canBlockExecution: false;
     adapterStatus: TrustGraphAdapterStatus;
     scopeValidation: ScopeValidationResult;
     localTerminalOutcome: LocalTerminalOutcome;

@@ -87,11 +87,13 @@ type ExecutionContractTrustGraphContext = {
 };
 
 type TrustGraphMetadataEnvelope = {
+    evidenceMode: TrustGraphEvidenceIngestionResult['evidenceMode'];
+    canBlockExecution: TrustGraphEvidenceIngestionResult['canBlockExecution'];
     adapterStatus: TrustGraphEvidenceIngestionResult['adapterStatus'];
     scopeValidation: TrustGraphEvidenceIngestionResult['scopeValidation'];
     terminalAuthority: TrustGraphEvidenceIngestionResult['terminalAuthority'];
     failOpenBehavior: TrustGraphEvidenceIngestionResult['failOpenBehavior'];
-    verificationRequired: TrustGraphEvidenceIngestionResult['verificationRequired'];
+    verificationRequired: boolean;
     advisoryEvidenceItemCount: TrustGraphEvidenceIngestionResult['advisoryEvidenceItemCount'];
     droppedEvidenceCount: TrustGraphEvidenceIngestionResult['droppedEvidenceCount'];
     droppedEvidenceIds: TrustGraphEvidenceIngestionResult['droppedEvidenceIds'];
@@ -206,13 +208,25 @@ const toPublicScopeValidation = (
 };
 
 const toTrustGraphMetadataEnvelope = (
-    result: TrustGraphEvidenceIngestionResult
+    result: TrustGraphEvidenceIngestionResult,
+    executionPolicyContract?: Pick<
+        ExecutionPolicyContract,
+        'trustGraph' | 'verification'
+    >
 ): TrustGraphMetadataEnvelope => ({
+    evidenceMode:
+        executionPolicyContract?.trustGraph.evidenceMode ?? result.evidenceMode,
+    canBlockExecution:
+        executionPolicyContract?.trustGraph.canBlockExecution ??
+        result.canBlockExecution,
     adapterStatus: result.adapterStatus,
     scopeValidation: toPublicScopeValidation(result.scopeValidation),
     terminalAuthority: result.terminalAuthority,
     failOpenBehavior: result.failOpenBehavior,
-    verificationRequired: result.verificationRequired,
+    verificationRequired:
+        executionPolicyContract?.verification.mode !== undefined
+            ? executionPolicyContract.verification.mode !== 'none'
+            : result.verificationRequired,
     advisoryEvidenceItemCount: result.advisoryEvidenceItemCount,
     droppedEvidenceCount: result.droppedEvidenceCount,
     droppedEvidenceIds: result.droppedEvidenceIds,
@@ -946,8 +960,10 @@ export const createChatService = ({
             trustGraphResult !== undefined
                 ? {
                       ...normalizedResponseMetadata,
-                      trustGraph:
-                          toTrustGraphMetadataEnvelope(trustGraphResult),
+                      trustGraph: toTrustGraphMetadataEnvelope(
+                          trustGraphResult,
+                          executionPolicyContract
+                      ),
                   }
                 : normalizedResponseMetadata;
 

@@ -373,6 +373,8 @@ export const runEvidenceIngestion = async (
         )
     ) {
         return {
+            evidenceMode: 'advisory',
+            canBlockExecution: false,
             adapterStatus: 'scope_denied',
             scopeValidation: {
                 ok: false,
@@ -399,6 +401,8 @@ export const runEvidenceIngestion = async (
     ) {
         provenanceReasonCodes.push('external_scope_validation_failed');
         return {
+            evidenceMode: 'advisory',
+            canBlockExecution: false,
             adapterStatus: 'scope_denied',
             scopeValidation: {
                 ok: false,
@@ -426,6 +430,8 @@ export const runEvidenceIngestion = async (
             );
             provenanceReasonCodes.push('external_scope_validation_failed');
             return {
+                evidenceMode: 'advisory',
+                canBlockExecution: false,
                 adapterStatus: 'scope_denied',
                 scopeValidation: {
                     ok: false,
@@ -455,6 +461,8 @@ export const runEvidenceIngestion = async (
             );
             provenanceReasonCodes.push('external_scope_validation_failed');
             return {
+                evidenceMode: 'advisory',
+                canBlockExecution: false,
                 adapterStatus: 'scope_denied',
                 scopeValidation: {
                     ok: false,
@@ -482,6 +490,8 @@ export const runEvidenceIngestion = async (
         ) {
             provenanceReasonCodes.push('external_scope_validation_failed');
             return {
+                evidenceMode: 'advisory',
+                canBlockExecution: false,
                 adapterStatus: 'scope_denied',
                 scopeValidation: {
                     ok: false,
@@ -526,6 +536,8 @@ export const runEvidenceIngestion = async (
     if (!scopeValidation.ok) {
         provenanceReasonCodes.push('external_scope_validation_failed');
         return {
+            evidenceMode: 'advisory',
+            canBlockExecution: false,
             adapterStatus: 'scope_denied',
             scopeValidation,
             localTerminalOutcome,
@@ -543,6 +555,8 @@ export const runEvidenceIngestion = async (
     if (input.adapter === undefined) {
         provenanceReasonCodes.push('adapter_disabled');
         return {
+            evidenceMode: 'advisory',
+            canBlockExecution: false,
             adapterStatus: 'off',
             scopeValidation,
             localTerminalOutcome,
@@ -575,6 +589,8 @@ export const runEvidenceIngestion = async (
                 );
             }
             return {
+                evidenceMode: 'advisory',
+                canBlockExecution: false,
                 adapterStatus: 'timeout',
                 scopeValidation,
                 localTerminalOutcome,
@@ -590,6 +606,8 @@ export const runEvidenceIngestion = async (
         }
         provenanceReasonCodes.push('adapter_error');
         return {
+            evidenceMode: 'advisory',
+            canBlockExecution: false,
             adapterStatus: 'error',
             scopeValidation,
             localTerminalOutcome,
@@ -619,6 +637,8 @@ export const runEvidenceIngestion = async (
         ) {
             provenanceReasonCodes.push('adapter_scope_mismatch');
             return {
+                evidenceMode: 'advisory',
+                canBlockExecution: false,
                 adapterStatus: 'scope_denied',
                 scopeValidation: {
                     ok: false,
@@ -654,6 +674,8 @@ export const runEvidenceIngestion = async (
         }).join;
 
         return {
+            evidenceMode: 'advisory',
+            canBlockExecution: false,
             adapterStatus: 'success',
             scopeValidation,
             localTerminalOutcome,
@@ -670,6 +692,8 @@ export const runEvidenceIngestion = async (
     } catch (_error: unknown) {
         provenanceReasonCodes.push('adapter_processing_failed');
         return {
+            evidenceMode: 'advisory',
+            canBlockExecution: false,
             adapterStatus: 'error',
             scopeValidation,
             localTerminalOutcome,
