@@ -28,6 +28,7 @@ const TEST_TIMESTAMP = new Date('2026-04-04T00:00:00.000Z').toISOString();
 type TrustGraphMetadata = {
     evidenceMode?: string;
     canBlockExecution?: boolean;
+    verificationMode?: string;
     adapterStatus?: string;
     terminalAuthority?: string;
     failOpenBehavior?: string;
@@ -190,7 +191,8 @@ test('orchestrator runtime path integrates advisory TrustGraph metadata without 
     assert.equal(trustGraph?.adapterStatus, 'success');
     assert.equal(trustGraph?.terminalAuthority, 'backend_execution_contract');
     assert.equal(trustGraph?.failOpenBehavior, 'local_behavior');
-    assert.equal(trustGraph?.verificationRequired, false);
+    assert.equal(trustGraph?.verificationRequired, true);
+    assert.equal(trustGraph?.verificationMode, 'none');
     assert.deepEqual(trustGraph?.scopeValidation, {
         ok: true,
         normalizedScope: {
