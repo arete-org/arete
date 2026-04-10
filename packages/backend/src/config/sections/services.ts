@@ -16,9 +16,12 @@ import {
 } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
-type ChatWorkflowProfileId = RuntimeConfig['chatWorkflow']['profileId'];
+type ChatWorkflowModeId = RuntimeConfig['chatWorkflow']['modeId'];
 
-const CHAT_WORKFLOW_PROFILE_IDS: ReadonlySet<ChatWorkflowProfileId> = new Set([
+const CHAT_WORKFLOW_MODE_IDS: ReadonlySet<ChatWorkflowModeId> = new Set([
+    'fast-direct',
+    'balanced',
+    'quality-grounded',
     'bounded-review',
     'generate-only',
 ]);
@@ -50,11 +53,11 @@ export const buildServiceSections = (
         ),
     },
     chatWorkflow: {
-        profileId: parseStringUnionEnv<ChatWorkflowProfileId>(
-            env.CHAT_WORKFLOW_PROFILE_ID,
+        modeId: parseStringUnionEnv<ChatWorkflowModeId>(
+            env.CHAT_WORKFLOW_MODE_ID,
             'bounded-review',
-            'CHAT_WORKFLOW_PROFILE_ID',
-            CHAT_WORKFLOW_PROFILE_IDS,
+            'CHAT_WORKFLOW_MODE_ID',
+            CHAT_WORKFLOW_MODE_IDS,
             warn
         ),
         reviewLoopEnabled: parseBooleanEnv(

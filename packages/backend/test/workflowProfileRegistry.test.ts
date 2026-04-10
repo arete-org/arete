@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+    resolveWorkflowModeDecision,
     resolveWorkflowProfileRegistry,
     resolveWorkflowRuntimeConfig,
 } from '../src/services/workflowProfileRegistry.js';
@@ -108,7 +109,7 @@ test('resolveWorkflowProfileRegistry keeps public contract serializable while ru
 
 test('resolveWorkflowRuntimeConfig applies forceWorkflowExecution and review-loop gating', () => {
     const generateOnlyRuntimeConfig = resolveWorkflowRuntimeConfig({
-        profileId: 'generate-only',
+        modeId: 'generate-only',
         reviewLoopEnabled: true,
         maxIterations: 5,
         maxDurationMs: 9000,
@@ -129,23 +130,67 @@ test('resolveWorkflowRuntimeConfig applies forceWorkflowExecution and review-loo
     );
 
     const boundedReviewRuntimeConfig = resolveWorkflowRuntimeConfig({
-        profileId: 'bounded-review',
+        modeId: 'bounded-review',
         reviewLoopEnabled: false,
         maxIterations: 5,
         maxDurationMs: 9000,
     });
     assert.equal(boundedReviewRuntimeConfig.profileId, 'bounded-review');
-    assert.equal(boundedReviewRuntimeConfig.workflowExecutionEnabled, false);
+    assert.equal(boundedReviewRuntimeConfig.workflowExecutionEnabled, true);
     assert.equal(
         boundedReviewRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps,
-        10
+        4
     );
     assert.equal(
         boundedReviewRuntimeConfig.workflowExecutionLimits.maxDeliberationCalls,
-        10
+        4
     );
     assert.equal(
         boundedReviewRuntimeConfig.workflowExecutionLimits.maxDurationMs,
         9000
     );
+});
+
+test('resolveWorkflowModeDecision maps requested mode ids and emits inspectable routing behavior', () => {
+    const requested = resolveWorkflowModeDecision({
+        modeId: 'balanced',
+        executionContractResponseMode: 'fast_direct',
+    });
+    assert.equal(requested.isKnownRequestedModeId, true);
+    assert.equal(requested.modeDecision.modeId, 'balanced');
+    assert.equal(requested.modeDecision.selectedBy, 'requested_mode');
+    assert.equal(
+        requested.modeDecision.behavior.executionContractPresetId,
+        'balanced'
+    );
+    assert.equal(
+        requested.modeDecision.behavior.workflowProfileId,
+        'bounded-review'
+    );
+    assert.equal(requested.modeDecision.behavior.reviewPass, 'included');
+    assert.equal(requested.modeDecision.behavior.reviseStep, 'allowed');
+    assert.equal(requested.modeDecision.behavior.evidencePosture, 'balanced');
+});
+
+test('resolveWorkflowModeDecision fails open by inferring from execution contract and then defaulting', () => {
+    const inferred = resolveWorkflowModeDecision({
+        modeId: 'unknown-mode',
+        executionContractResponseMode: 'quality_grounded',
+    });
+    assert.equal(inferred.isKnownRequestedModeId, false);
+    assert.equal(inferred.modeDecision.modeId, 'quality-grounded');
+    assert.equal(
+        inferred.modeDecision.selectedBy,
+        'inferred_from_execution_contract'
+    );
+    assert.equal(
+        inferred.modeDecision.behavior.executionContractPresetId,
+        'quality-grounded'
+    );
+
+    const fallbackDefault = resolveWorkflowModeDecision({
+        modeId: 'unknown-mode',
+    });
+    assert.equal(fallbackDefault.modeDecision.modeId, 'bounded-review');
+    assert.equal(fallbackDefault.modeDecision.selectedBy, 'fail_open_default');
 });

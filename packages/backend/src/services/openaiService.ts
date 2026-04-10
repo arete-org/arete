@@ -675,6 +675,7 @@ type ResponseMetadataRuntimeContext = {
         };
     };
     workflow?: WorkflowRecord;
+    workflowMode?: ResponseMetadata['workflowMode'];
 };
 
 const normalizePlannerReasonCode = (
@@ -949,6 +950,9 @@ const buildResponseMetadata = (
         ...(execution.length > 0 && { execution }),
         ...(runtimeContext.workflow !== undefined && {
             workflow: runtimeContext.workflow,
+        }),
+        ...(runtimeContext.workflowMode !== undefined && {
+            workflowMode: runtimeContext.workflowMode,
         }),
         ...(evaluatorExecution?.outcome !== undefined && {
             evaluator: evaluatorExecution.outcome,

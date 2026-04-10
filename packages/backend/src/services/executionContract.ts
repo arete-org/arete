@@ -22,6 +22,7 @@ export type ExecutionContractVersion = 'v1';
  */
 export type ExecutionContractId =
     | 'core-fast-direct'
+    | 'core-balanced'
     | 'core-quality-grounded'
     | (string & {});
 
@@ -179,6 +180,7 @@ export type ExecutionContract = {
  */
 export type ExecutionContractPresetId =
     | 'fast-direct'
+    | 'balanced'
     | 'quality-grounded'
     | (string & {});
 
@@ -265,7 +267,10 @@ const EXECUTION_CONTRACT_DEFAULTS: Omit<
  * `quality-grounded` is bounded evidence-first.
  */
 export const EXECUTION_CONTRACT_PRESETS: Readonly<
-    Record<'fast-direct' | 'quality-grounded', ExecutionContractPreset>
+    Record<
+        'fast-direct' | 'balanced' | 'quality-grounded',
+        ExecutionContractPreset
+    >
 > = {
     'fast-direct': {
         presetId: 'fast-direct',
@@ -298,6 +303,40 @@ export const EXECUTION_CONTRACT_PRESETS: Readonly<
             routing: {
                 strategy: 'profile-first',
                 capabilityTags: [],
+            },
+        },
+    },
+    balanced: {
+        presetId: 'balanced',
+        displayName: 'Core Balanced',
+        overrides: {
+            response: {
+                responseMode: 'fast_direct',
+                stoppingRule: 'first_sufficient_answer',
+            },
+            evidence: {
+                acquisitionMode: 'bounded',
+                escalationTrigger: 'missing_required_context',
+                requiredEvidenceLevel: 'context_support',
+                sufficiencyTarget: 'answer_is_directionally_useful',
+                maxEscalationRounds: 1,
+                mustTrackProvenance: true,
+            },
+            verification: {
+                mode: 'coherence_check',
+                requireConsistencyCheck: true,
+                requireEvidenceBackedClaims: false,
+            },
+            limits: {
+                maxWorkflowSteps: 5,
+                maxToolCalls: 1,
+                maxDeliberationCalls: 1,
+                maxTokensTotal: 9_000,
+                maxDurationMs: 30_000,
+            },
+            routing: {
+                strategy: 'capability-first',
+                capabilityTags: ['grounding'],
             },
         },
     },

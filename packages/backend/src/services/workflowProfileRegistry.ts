@@ -11,7 +11,14 @@ import {
     DEFAULT_REVISION_PROMPT_PREFIX,
     parseReviewDecisionText,
 } from './workflowEngine.js';
-import type { ExecutionContract } from './executionContract.js';
+import type {
+    ExecutionContract,
+    ExecutionResponseMode,
+} from './executionContract.js';
+import type {
+    WorkflowModeDecision,
+    WorkflowModeId,
+} from '@footnote/contracts/ethics-core';
 import type {
     RuntimeWorkflowProfile,
     WorkflowProfileContract,
@@ -19,6 +26,12 @@ import type {
 } from './workflowProfileContract.js';
 
 type BuiltinWorkflowProfileId = 'bounded-review' | 'generate-only';
+type BuiltinWorkflowModeId =
+    | 'fast-direct'
+    | 'balanced'
+    | 'quality-grounded'
+    | 'bounded-review'
+    | 'generate-only';
 
 /**
  * Execution Contract workflow policy presets:
@@ -119,6 +132,7 @@ const BUILTIN_RUNTIME_WORKFLOW_PROFILES: Readonly<
 
 export const DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID: BuiltinWorkflowProfileId =
     'bounded-review';
+const DEFAULT_WORKFLOW_MODE_ID: BuiltinWorkflowModeId = 'bounded-review';
 
 const isBuiltinWorkflowProfileId = (
     value: string
@@ -132,6 +146,155 @@ const normalizeRequestedProfileId = (
     return trimmedProfileId !== undefined && trimmedProfileId.length > 0
         ? trimmedProfileId
         : undefined;
+};
+
+const normalizeRequestedModeId = (
+    modeId: string | null | undefined
+): string | undefined => {
+    const trimmedModeId = modeId?.trim();
+    return trimmedModeId !== undefined && trimmedModeId.length > 0
+        ? trimmedModeId
+        : undefined;
+};
+
+type WorkflowModeBehavior = WorkflowModeDecision['behavior'];
+
+const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
+    Record<BuiltinWorkflowModeId, WorkflowModeBehavior>
+> = {
+    'fast-direct': {
+        executionContractPresetId: 'fast-direct',
+        workflowProfileId: 'generate-only',
+        workflowExecution: 'disabled',
+        reviewPass: 'excluded',
+        reviseStep: 'disallowed',
+        evidencePosture: 'minimal',
+        maxWorkflowSteps: 1,
+        maxDeliberationCalls: 0,
+    },
+    balanced: {
+        executionContractPresetId: 'balanced',
+        workflowProfileId: 'bounded-review',
+        workflowExecution: 'always',
+        reviewPass: 'included',
+        reviseStep: 'allowed',
+        evidencePosture: 'balanced',
+        maxWorkflowSteps: 4,
+        maxDeliberationCalls: 2,
+    },
+    'quality-grounded': {
+        executionContractPresetId: 'quality-grounded',
+        workflowProfileId: 'bounded-review',
+        workflowExecution: 'policy_gated',
+        reviewPass: 'included',
+        reviseStep: 'allowed',
+        evidencePosture: 'strict',
+        maxWorkflowSteps: 8,
+        maxDeliberationCalls: 4,
+    },
+    'bounded-review': {
+        executionContractPresetId: 'quality-grounded',
+        workflowProfileId: 'bounded-review',
+        workflowExecution: 'always',
+        reviewPass: 'included',
+        reviseStep: 'allowed',
+        evidencePosture: 'strict',
+        maxWorkflowSteps: 4,
+        maxDeliberationCalls: 4,
+    },
+    'generate-only': {
+        executionContractPresetId: 'fast-direct',
+        workflowProfileId: 'generate-only',
+        workflowExecution: 'always',
+        reviewPass: 'excluded',
+        reviseStep: 'disallowed',
+        evidencePosture: 'minimal',
+        maxWorkflowSteps: 1,
+        maxDeliberationCalls: 0,
+    },
+};
+
+const isBuiltinWorkflowModeId = (
+    value: string
+): value is BuiltinWorkflowModeId => value in WORKFLOW_MODE_BEHAVIOR_MAP;
+
+const inferWorkflowModeIdFromExecutionContract = (
+    responseMode: ExecutionResponseMode | undefined
+): BuiltinWorkflowModeId | undefined => {
+    if (responseMode === 'quality_grounded') {
+        return 'quality-grounded';
+    }
+    if (responseMode === 'fast_direct') {
+        return 'fast-direct';
+    }
+    return undefined;
+};
+
+export type WorkflowModeResolution = {
+    modeDecision: WorkflowModeDecision;
+    isKnownRequestedModeId: boolean;
+};
+
+/**
+ * Resolves one explicit workflow mode decision that drives execution preset,
+ * workflow profile routing, review posture, and metadata explanation.
+ */
+export const resolveWorkflowModeDecision = (input: {
+    modeId: string | null | undefined;
+    executionContractResponseMode?: ExecutionResponseMode;
+}): WorkflowModeResolution => {
+    const requestedModeId = normalizeRequestedModeId(input.modeId);
+    if (
+        requestedModeId !== undefined &&
+        isBuiltinWorkflowModeId(requestedModeId)
+    ) {
+        return {
+            isKnownRequestedModeId: true,
+            modeDecision: {
+                modeId: requestedModeId,
+                selectedBy: 'requested_mode',
+                selectionReason:
+                    'Used requested workflow mode id directly from runtime configuration.',
+                requestedModeId,
+                ...(input.executionContractResponseMode !== undefined && {
+                    executionContractResponseMode:
+                        input.executionContractResponseMode,
+                }),
+                behavior: WORKFLOW_MODE_BEHAVIOR_MAP[requestedModeId],
+            },
+        };
+    }
+
+    const inferredModeId = inferWorkflowModeIdFromExecutionContract(
+        input.executionContractResponseMode
+    );
+    if (inferredModeId !== undefined) {
+        return {
+            isKnownRequestedModeId: false,
+            modeDecision: {
+                modeId: inferredModeId,
+                selectedBy: 'inferred_from_execution_contract',
+                selectionReason:
+                    'Requested mode was missing or unknown, so mode was inferred from Execution Contract response mode.',
+                ...(requestedModeId !== undefined && { requestedModeId }),
+                executionContractResponseMode:
+                    input.executionContractResponseMode,
+                behavior: WORKFLOW_MODE_BEHAVIOR_MAP[inferredModeId],
+            },
+        };
+    }
+
+    return {
+        isKnownRequestedModeId: false,
+        modeDecision: {
+            modeId: DEFAULT_WORKFLOW_MODE_ID,
+            selectedBy: 'fail_open_default',
+            selectionReason:
+                'Requested mode and Execution Contract hint were unavailable, so fallback default mode was used.',
+            ...(requestedModeId !== undefined && { requestedModeId }),
+            behavior: WORKFLOW_MODE_BEHAVIOR_MAP[DEFAULT_WORKFLOW_MODE_ID],
+        },
+    };
 };
 
 const sanitizeNonNegativeInteger = (
@@ -229,7 +392,9 @@ export const resolveWorkflowProfileRegistry = (
 };
 
 export type ResolvedWorkflowRuntimeConfig = {
-    requestedProfileId: WorkflowProfileId;
+    requestedModeId: string;
+    modeId: WorkflowModeId;
+    modeDecision: WorkflowModeDecision;
     profileId: WorkflowProfileId;
     runtimeProfile: RuntimeWorkflowProfile;
     profileContract: WorkflowProfileContract;
@@ -251,16 +416,21 @@ export type ResolvedWorkflowRuntimeConfig = {
  * Execution Contract ontology.
  */
 export const resolveWorkflowRuntimeConfig = (input: {
-    profileId: string | null | undefined;
+    modeId: string | null | undefined;
     reviewLoopEnabled: boolean;
     maxIterations: number;
     maxDurationMs: number;
     ExecutionContract?: Pick<ExecutionContract, 'response' | 'limits'>;
 }): ResolvedWorkflowRuntimeConfig => {
-    const requestedProfileId =
-        input.profileId ?? DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID;
-    const profileResolution =
-        resolveWorkflowProfileRegistry(requestedProfileId);
+    const modeResolution = resolveWorkflowModeDecision({
+        modeId: input.modeId,
+        executionContractResponseMode:
+            input.ExecutionContract?.response.responseMode,
+    });
+    const modeDecision = modeResolution.modeDecision;
+    const profileResolution = resolveWorkflowProfileRegistry(
+        modeDecision.behavior.workflowProfileId
+    );
     const workflowProfile = profileResolution.runtimeProfile;
     const executionContract = input.ExecutionContract;
     const executionEnabledByPolicy =
@@ -268,8 +438,12 @@ export const resolveWorkflowRuntimeConfig = (input: {
             ? executionContract.response.responseMode === 'quality_grounded'
             : input.reviewLoopEnabled === true;
     const workflowExecutionEnabled =
-        workflowProfile.requiredHooks.forceWorkflowExecution ||
-        executionEnabledByPolicy;
+        modeDecision.behavior.workflowExecution === 'disabled'
+            ? false
+            : modeDecision.behavior.workflowExecution === 'always'
+              ? true
+              : workflowProfile.requiredHooks.forceWorkflowExecution ||
+                executionEnabledByPolicy;
     const profileDefaultMaxIterations =
         deriveDefaultMaxIterationsFromWorkflowSteps(
             workflowProfile.defaultLimits.maxWorkflowSteps
@@ -279,24 +453,30 @@ export const resolveWorkflowRuntimeConfig = (input: {
             ? 1
             : Math.max(1, profileDefaultMaxIterations * 2);
     const workflowExecutionLimits: RuntimeWorkflowProfile['defaultLimits'] = {
-        maxWorkflowSteps: sanitizePositiveInteger(
-            executionContract?.limits.maxWorkflowSteps ??
-                (workflowProfile.policy.enableAssessment === false
-                    ? 1
-                    : input.maxIterations * 2),
-            fallbackWorkflowStepLimit
+        maxWorkflowSteps: Math.min(
+            sanitizePositiveInteger(
+                executionContract?.limits.maxWorkflowSteps ??
+                    (workflowProfile.policy.enableAssessment === false
+                        ? 1
+                        : input.maxIterations * 2),
+                fallbackWorkflowStepLimit
+            ),
+            modeDecision.behavior.maxWorkflowSteps
         ),
         maxToolCalls: sanitizeNonNegativeInteger(
             executionContract?.limits.maxToolCalls ??
                 workflowProfile.defaultLimits.maxToolCalls,
             workflowProfile.defaultLimits.maxToolCalls
         ),
-        maxDeliberationCalls: sanitizeNonNegativeInteger(
-            executionContract?.limits.maxDeliberationCalls ??
-                (workflowProfile.policy.enableAssessment === false
-                    ? 0
-                    : input.maxIterations * 2),
-            workflowProfile.defaultLimits.maxDeliberationCalls
+        maxDeliberationCalls: Math.min(
+            sanitizeNonNegativeInteger(
+                executionContract?.limits.maxDeliberationCalls ??
+                    (workflowProfile.policy.enableAssessment === false
+                        ? 0
+                        : input.maxIterations * 2),
+                workflowProfile.defaultLimits.maxDeliberationCalls
+            ),
+            modeDecision.behavior.maxDeliberationCalls
         ),
         maxTokensTotal: sanitizeNonNegativeInteger(
             executionContract?.limits.maxTokensTotal ??
@@ -310,7 +490,10 @@ export const resolveWorkflowRuntimeConfig = (input: {
     };
 
     return {
-        requestedProfileId,
+        requestedModeId:
+            normalizeRequestedModeId(input.modeId) ?? DEFAULT_WORKFLOW_MODE_ID,
+        modeId: modeDecision.modeId,
+        modeDecision,
         profileId: workflowProfile.profileId,
         runtimeProfile: workflowProfile,
         profileContract: profileResolution.profileContract,

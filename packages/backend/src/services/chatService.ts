@@ -42,7 +42,6 @@ import type { ExecutionContract } from './executionContract.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import { resolveNoGenerationHandlingFromTermination } from './workflowProfileContract.js';
 import { resolveWorkflowRuntimeConfig } from './workflowProfileRegistry.js';
-import type { WorkflowProfileId } from './workflowProfileContract.js';
 import {
     runBoundedReviewWorkflow,
     type RunBoundedReviewWorkflowResult,
@@ -341,7 +340,7 @@ export type CreateChatServiceOptions = {
     defaultCapabilities?: ModelProfileCapabilities;
     recordUsage?: (record: BackendLLMCostRecord) => void;
     chatWorkflowConfig?: {
-        profileId?: WorkflowProfileId;
+        modeId?: string;
         reviewLoopEnabled: boolean;
         maxIterations: number;
         maxDurationMs: number;
@@ -373,6 +372,7 @@ export type RunChatMessagesInput = {
     capabilities?: ModelProfileCapabilities;
     generation?: ChatGenerationPlan;
     executionContext?: ResponseMetadataRuntimeContext['executionContext'];
+    workflowModeId?: string;
     toolRequest?: ToolInvocationRequest;
     executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
     ExecutionContract?: ExecutionContract;
@@ -493,6 +493,7 @@ export const createChatService = ({
         capabilities,
         generation,
         executionContext,
+        workflowModeId,
         toolRequest,
         executionContractTrustGraphContext,
         ExecutionContract,
@@ -538,7 +539,7 @@ export const createChatService = ({
             }),
         };
         const workflowRuntimeConfig = resolveWorkflowRuntimeConfig({
-            profileId: chatWorkflowConfig.profileId,
+            modeId: workflowModeId ?? chatWorkflowConfig.modeId,
             reviewLoopEnabled: chatWorkflowConfig.reviewLoopEnabled,
             maxIterations: chatWorkflowConfig.maxIterations,
             maxDurationMs: chatWorkflowConfig.maxDurationMs,
@@ -551,6 +552,7 @@ export const createChatService = ({
                     : undefined,
         });
         const workflowProfile = workflowRuntimeConfig.runtimeProfile;
+        const workflowModeDecision = workflowRuntimeConfig.modeDecision;
         const workflowExecutionEnabled =
             workflowRuntimeConfig.workflowExecutionEnabled;
         const workflowExecutionLimits =
@@ -891,6 +893,7 @@ export const createChatService = ({
                     tool: effectiveToolExecutionContext,
                 }),
             },
+            workflowMode: workflowModeDecision,
             retrieval: {
                 requested: hasSearchIntent,
                 used: retrievalUsed,
