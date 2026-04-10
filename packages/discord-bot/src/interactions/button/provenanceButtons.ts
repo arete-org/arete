@@ -251,12 +251,17 @@ function formatSourcesSection(
  * @returns A single-line string containing five fixed-width columns — kind, status, target, reason, and duration — each padded or truncated to the table's configured column widths.
  */
 function formatExecutionEventLine(event: ExecutionEvent): string {
+    const evaluatorAuthority =
+        event.kind === 'evaluator' && event.evaluator
+            ? (event.evaluator.authorityLevel ??
+              (event.evaluator.mode === 'enforced' ? 'enforce' : 'observe'))
+            : undefined;
     const target =
         event.kind === 'evaluator'
             ? event.evaluator
                 ? event.evaluator.safetyDecision.action !== 'allow'
-                    ? `${event.evaluator.safetyDecision.safetyTier}/${event.evaluator.provenance}/${event.evaluator.safetyDecision.action}/${event.evaluator.safetyDecision.ruleId}`
-                    : `${event.evaluator.safetyDecision.safetyTier}/${event.evaluator.provenance}/${event.evaluator.safetyDecision.action}`
+                    ? `${evaluatorAuthority}/${event.evaluator.safetyDecision.safetyTier}/${event.evaluator.provenance}/${event.evaluator.safetyDecision.action}/${event.evaluator.safetyDecision.ruleId}`
+                    : `${evaluatorAuthority}/${event.evaluator.safetyDecision.safetyTier}/${event.evaluator.provenance}/${event.evaluator.safetyDecision.action}`
                 : 'decision'
             : event.kind === 'tool'
               ? formatMarkdownValue(event.toolName, 40)

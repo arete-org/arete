@@ -96,8 +96,8 @@ type SafetyResponseBehavior = 'block' | 'safe_response' | 'redirect' | 'review';
  *
  * - none: no evaluator data found, continue normal action dispatch.
  * - allow: explicit allow found, log and continue.
- * - fail_open: non-allow decision in observe-only mode, log and continue.
- * - enforced: non-allow decision in enforced mode, override outbound behavior.
+ * - fail_open: non-allow decision in observe/influence authority, log and continue.
+ * - enforced: non-allow decision in enforce authority, override outbound behavior.
  *
  * Fail open means we allow normal dispatch when safety metadata is missing or
  * malformed, and we log why enforcement was skipped.
@@ -802,6 +802,7 @@ export class MessageProcessor {
                 plannerAction: chatResponse.action,
                 appliedAction: 'allow',
                 enforcement: 'allow',
+                authorityLevel: preSendSafetyOutcome.decision.authorityLevel,
                 mode: preSendSafetyOutcome.decision.mode,
                 source: preSendSafetyOutcome.decision.source,
                 safetyTier:
@@ -820,6 +821,7 @@ export class MessageProcessor {
                 plannerAction: chatResponse.action,
                 appliedAction: 'allow_fail_open',
                 enforcement: 'observe_only',
+                authorityLevel: preSendSafetyOutcome.decision.authorityLevel,
                 mode: preSendSafetyOutcome.decision.mode,
                 source: preSendSafetyOutcome.decision.source,
                 safetyTier:
@@ -838,6 +840,7 @@ export class MessageProcessor {
                 plannerAction: chatResponse.action,
                 appliedAction: preSendSafetyOutcome.responseBehavior,
                 enforcement: 'enforced',
+                authorityLevel: preSendSafetyOutcome.decision.authorityLevel,
                 mode: preSendSafetyOutcome.decision.mode,
                 source: preSendSafetyOutcome.decision.source,
                 safetyTier:
@@ -952,7 +955,7 @@ export class MessageProcessor {
             };
         }
 
-        if (decision.mode !== 'enforced') {
+        if (decision.authorityLevel !== 'enforce') {
             return {
                 kind: 'fail_open',
                 decision,

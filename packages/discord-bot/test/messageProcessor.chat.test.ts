@@ -57,6 +57,8 @@ const createBreakerMetadata = (
     evaluator:
         overrides.action === 'allow'
             ? {
+                  authorityLevel:
+                      overrides.mode === 'enforced' ? 'enforce' : 'observe',
                   mode: overrides.mode,
                   provenance: 'Inferred',
                   safetyDecision: {
@@ -66,6 +68,8 @@ const createBreakerMetadata = (
                   },
               }
             : {
+                  authorityLevel:
+                      overrides.mode === 'enforced' ? 'enforce' : 'influence',
                   mode: overrides.mode,
                   provenance: 'Inferred',
                   safetyDecision: {

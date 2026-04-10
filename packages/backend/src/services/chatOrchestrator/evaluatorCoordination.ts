@@ -9,6 +9,8 @@
 import type {
     ExecutionReasonCode,
     ExecutionStatus,
+    EvaluatorAuthorityLevel,
+    EvaluatorDecisionMode,
     EvaluatorOutcome,
     SafetyEvaluationInput,
     SafetyTier,
@@ -26,6 +28,17 @@ export type EvaluatorExecutionContext = {
     reasonCode?: ExecutionReasonCode;
     outcome?: EvaluatorOutcome;
     durationMs: number;
+};
+
+const resolveEvaluatorAuthority = (
+    safetyAction: EvaluatorOutcome['safetyDecision']['action'],
+    mode: EvaluatorDecisionMode
+): EvaluatorAuthorityLevel => {
+    if (mode === 'enforced') {
+        return 'enforce';
+    }
+
+    return safetyAction === 'allow' ? 'observe' : 'influence';
 };
 
 export const runDeterministicEvaluator = (
@@ -53,16 +66,22 @@ export const runDeterministicEvaluator = (
             safetyEvaluationInput
         );
         const safetyDecision = buildSafetyDecision(safetyEvaluation);
+        const mode: EvaluatorDecisionMode = 'observe_only';
         const evaluatorOutcome: EvaluatorOutcome = {
-            mode: 'observe_only',
+            authorityLevel: resolveEvaluatorAuthority(
+                safetyDecision.action,
+                mode
+            ),
+            mode,
             provenance: computeProvenance(evaluatorContext),
             safetyDecision,
         };
         if (evaluatorOutcome.safetyDecision.action !== 'allow') {
             onWarn.warn(
-                'deterministic breaker signaled a non-allow action in observe-only mode',
+                'deterministic breaker signaled a non-allow action in influence authority',
                 {
                     event: 'chat.orchestration.breaker_signal',
+                    authorityLevel: evaluatorOutcome.authorityLevel,
                     mode: evaluatorOutcome.mode,
                     action: evaluatorOutcome.safetyDecision.action,
                     ruleId: evaluatorOutcome.safetyDecision.ruleId,

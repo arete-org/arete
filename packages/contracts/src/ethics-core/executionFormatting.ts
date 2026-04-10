@@ -10,6 +10,8 @@ import type { ExecutionEvent } from './types.js';
 const formatEvaluatorSummary = (event: ExecutionEvent): string => {
     const rawEvaluator = event.evaluator as
         | {
+              authorityLevel?: string;
+              mode?: string;
               provenance?: string;
               safetyDecision?: {
                   action?: string;
@@ -29,7 +31,14 @@ const formatEvaluatorSummary = (event: ExecutionEvent): string => {
         typeof safetyDecision.action === 'string' &&
         typeof safetyDecision.safetyTier === 'string'
     ) {
+        const evaluatorAuthorityLevel =
+            typeof rawEvaluator.authorityLevel === 'string'
+                ? rawEvaluator.authorityLevel
+                : rawEvaluator.mode === 'enforced'
+                  ? 'enforce'
+                  : 'observe';
         return [
+            evaluatorAuthorityLevel,
             safetyDecision.safetyTier,
             rawEvaluator.provenance,
             safetyDecision.action,

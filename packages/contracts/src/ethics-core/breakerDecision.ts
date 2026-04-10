@@ -8,6 +8,7 @@
  */
 
 import type {
+    EvaluatorAuthorityLevel,
     EvaluatorDecisionMode,
     ResponseMetadata,
     SafetyDecision,
@@ -17,6 +18,7 @@ export type BreakerDecisionSource = 'metadata.evaluator' | 'metadata.execution';
 
 export type BreakerDecisionContext = {
     source: BreakerDecisionSource;
+    authorityLevel: EvaluatorAuthorityLevel;
     mode: EvaluatorDecisionMode;
     safetyDecision: SafetyDecision;
 };
@@ -73,10 +75,27 @@ const toBreakerDecisionContext = (
         return null;
     }
 
+    const authorityLevel = value.authorityLevel;
     const mode = value.mode;
     const safetyDecision = value.safetyDecision;
+    const normalizedAuthorityLevel =
+        authorityLevel === 'observe' ||
+        authorityLevel === 'influence' ||
+        authorityLevel === 'enforce'
+            ? authorityLevel
+            : mode === 'observe_only'
+              ? 'observe'
+              : mode === 'enforced'
+                ? 'enforce'
+                : null;
+    const normalizedMode =
+        mode === 'observe_only' || mode === 'enforced'
+            ? mode
+            : normalizedAuthorityLevel === 'enforce'
+              ? 'enforced'
+              : 'observe_only';
     if (
-        (mode !== 'observe_only' && mode !== 'enforced') ||
+        normalizedAuthorityLevel === null ||
         !isBreakerSafetyDecision(safetyDecision)
     ) {
         return null;
@@ -84,7 +103,8 @@ const toBreakerDecisionContext = (
 
     return {
         source,
-        mode,
+        authorityLevel: normalizedAuthorityLevel,
+        mode: normalizedMode,
         safetyDecision,
     };
 };

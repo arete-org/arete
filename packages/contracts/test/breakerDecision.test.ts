@@ -33,6 +33,7 @@ const createMetadata = (
 test('resolveBreakerDecisionContext prefers metadata.evaluator over execution timeline', () => {
     const metadata = createMetadata({
         evaluator: {
+            authorityLevel: 'enforce',
             mode: 'enforced',
             provenance: 'Inferred',
             safetyDecision: {
@@ -48,6 +49,7 @@ test('resolveBreakerDecisionContext prefers metadata.evaluator over execution ti
                 kind: 'evaluator',
                 status: 'executed',
                 evaluator: {
+                    authorityLevel: 'influence',
                     mode: 'observe_only',
                     provenance: 'Inferred',
                     safetyDecision: {
@@ -65,6 +67,7 @@ test('resolveBreakerDecisionContext prefers metadata.evaluator over execution ti
     const resolved = resolveBreakerDecisionContext(metadata);
 
     assert.equal(resolved?.source, 'metadata.evaluator');
+    assert.equal(resolved?.authorityLevel, 'enforce');
     assert.equal(resolved?.mode, 'enforced');
     assert.equal(resolved?.safetyDecision.action, 'redirect');
 });
@@ -81,6 +84,7 @@ test('resolveBreakerDecisionContext falls back to execution evaluator entries', 
                 kind: 'evaluator',
                 status: 'executed',
                 evaluator: {
+                    authorityLevel: 'influence',
                     mode: 'observe_only',
                     provenance: 'Inferred',
                     safetyDecision: {
@@ -98,6 +102,7 @@ test('resolveBreakerDecisionContext falls back to execution evaluator entries', 
     const resolved = resolveBreakerDecisionContext(metadata);
 
     assert.equal(resolved?.source, 'metadata.execution');
+    assert.equal(resolved?.authorityLevel, 'influence');
     assert.equal(resolved?.mode, 'observe_only');
     assert.equal(resolved?.safetyDecision.action, 'safe_partial');
 });
@@ -105,6 +110,7 @@ test('resolveBreakerDecisionContext falls back to execution evaluator entries', 
 test('resolveBreakerDecisionContext returns null for malformed evaluator payloads', () => {
     const metadata = createMetadata({
         evaluator: {
+            authorityLevel: 'enforce',
             mode: 'enforced',
             provenance: 'Inferred',
             safetyDecision: {

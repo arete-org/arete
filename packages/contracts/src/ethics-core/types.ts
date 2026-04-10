@@ -116,6 +116,8 @@ export type GenerationExecutionReasonCode = Extract<
     'generation_runtime_error'
 >;
 
+export type EvaluatorAuthorityLevel = 'observe' | 'influence' | 'enforce';
+
 export type EvaluatorDecisionMode = 'observe_only' | 'enforced';
 
 export type SafetyAction =
@@ -188,6 +190,11 @@ export type SafetyDecision =
  * out incrementally.
  */
 export type EvaluatorOutcome = {
+    authorityLevel: EvaluatorAuthorityLevel;
+    /**
+     * @deprecated Use authorityLevel instead.
+     * Kept as a transitional mirror for legacy consumers.
+     */
     mode: EvaluatorDecisionMode;
     provenance: Provenance;
     safetyDecision: SafetyDecision;

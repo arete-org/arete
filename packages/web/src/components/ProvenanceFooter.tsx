@@ -84,6 +84,9 @@ const ProvenanceFooter = ({
             event.reasonCode === 'search_not_supported_by_selected_profile'
     );
     const safetyDecision = evaluatorOutcome?.safetyDecision;
+    const evaluatorAuthority =
+        evaluatorOutcome?.authorityLevel ??
+        (evaluatorOutcome?.mode === 'enforced' ? 'enforce' : 'observe');
     const hasNonAllowSafetyDecision =
         safetyDecision !== undefined && safetyDecision.action !== 'allow';
 
@@ -123,7 +126,7 @@ const ProvenanceFooter = ({
                         <span className="provenance-separator"> • </span>
                         <span className="provenance-tradeoffs">
                             {safetyDecision
-                                ? `eval ${safetyDecision.safetyTier}/${evaluatorOutcome.provenance}/${safetyDecision.action}${
+                                ? `eval ${evaluatorAuthority}/${safetyDecision.safetyTier}/${evaluatorOutcome.provenance}/${safetyDecision.action}${
                                       hasNonAllowSafetyDecision
                                           ? ` (${safetyDecision.ruleId}/${safetyDecision.reasonCode})`
                                           : ''

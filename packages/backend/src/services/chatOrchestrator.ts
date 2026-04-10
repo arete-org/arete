@@ -214,14 +214,18 @@ export const createChatOrchestrator = ({
                 normalizedRequest,
                 input.responseId
             );
+            const authorityLevel =
+                evaluatorExecutionContext.outcome?.authorityLevel ??
+                (evaluatorExecutionContext.outcome?.mode === 'enforced'
+                    ? 'enforce'
+                    : 'observe');
             const enforcement: 'observe_only' | 'enforced' =
-                evaluatorExecutionContext.outcome?.mode === 'observe_only'
-                    ? 'observe_only'
-                    : 'enforced';
+                authorityLevel === 'enforce' ? 'enforced' : 'observe_only';
             chatOrchestratorLogger.info(
                 'chat.orchestration.breaker_action_applied',
                 {
                     event: 'chat.orchestration.breaker_action_applied',
+                    authorityLevel,
                     mode: evaluatorExecutionContext.outcome?.mode,
                     action: breakerDecision.action,
                     ruleId: breakerDecision.ruleId,
@@ -239,6 +243,7 @@ export const createChatOrchestrator = ({
                     type: 'breaker',
                     action: 'chat.orchestration.breaker_action_applied',
                     surface: normalizedRequest.surface,
+                    authorityLevel: authorityLevel ?? 'observe',
                     enforcement,
                     breakerAction: breakerDecision.action,
                     ruleId: breakerDecision.ruleId,
@@ -598,6 +603,8 @@ export const createChatOrchestrator = ({
                 evaluatorExecutionContext?.outcome?.safetyDecision.safetyTier,
             evaluatorProvenance: evaluatorExecutionContext?.outcome?.provenance,
             evaluatorMode: evaluatorExecutionContext?.outcome?.mode,
+            evaluatorAuthorityLevel:
+                evaluatorExecutionContext?.outcome?.authorityLevel,
             generationDurationMs: response.generationDurationMs,
             totalDurationMs,
             plannerProfileId: plannerProfile.id,

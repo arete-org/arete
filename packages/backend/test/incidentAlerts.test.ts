@@ -31,6 +31,7 @@ const breakerEvent = {
     type: 'breaker' as const,
     action: 'chat.orchestration.breaker_action_applied' as const,
     surface: 'discord' as const,
+    authorityLevel: 'influence' as const,
     enforcement: 'observe_only' as const,
     breakerAction: 'block',
     ruleId: 'safety.rule.v1',
@@ -94,6 +95,7 @@ test('router delivers incident and breaker alerts and forwards configured Discor
     assert.match(emailCalls[1]?.subject ?? '', /\[Footnote\]\[Breaker\]/);
     assert.match(emailCalls[0]?.text ?? '', /incidentId: abcd1234/);
     assert.match(emailCalls[1]?.text ?? '', /breakerAction: block/);
+    assert.match(emailCalls[1]?.text ?? '', /authorityLevel: influence/);
     assert.match(emailCalls[1]?.text ?? '', /enforcement: observe_only/);
     assert.match(emailCalls[1]?.text ?? '', /responseAction: message/);
 });

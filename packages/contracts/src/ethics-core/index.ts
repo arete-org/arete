@@ -41,6 +41,7 @@ export type {
     StepOutcome,
     StepRecord,
     WorkflowRecord,
+    EvaluatorAuthorityLevel,
     EvaluatorDecisionMode,
     SafetyAction,
     SafetyReasonCode,
