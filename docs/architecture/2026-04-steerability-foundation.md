@@ -1,25 +1,37 @@
 # Steerability Foundation (Internal Controls v1)
 
-This document explains the first steerability foundation pass in plain language.
+This doc explains the first steerability layer in plain language.
 
-The key idea is simple: we want internal controls that are meaningful and inspectable now, so later user-facing controls can map cleanly to real runtime behavior. We are not building a workflow language or user scripting surface in this phase.
+The goal is simple: record what influenced a run in a way humans can inspect later.  
+This is not a rule engine. This is not user workflow programming.
 
-## What v1 added
+## What this system is
 
-We added one backend-owned metadata bundle: `steerabilityControls`.
+`steerabilityControls` is a metadata bundle attached to response metadata.
 
-Each control record includes:
+Each control record stores:
 
 - control id
 - value
 - source
 - rationale
-- `mattered` flag
-- impacted execution targets
+- `mattered`
+- impacted targets
 
-This gives operators a compact explanation of what shaped a run, without pretending we already have a complete policy engine.
+Why we added this: without a canonical record, control logic gets scattered across logs and code paths, and reviewers cannot quickly tell what actually influenced a response.
 
-## Control set (unchanged in this hardening pass)
+## What this system is not
+
+This pass is intentionally small.
+
+- No new controls
+- No user-facing knobs
+- No DSL
+- No open-ended rules engine
+
+Why we are strict here: expanding power before semantics are stable is how systems become confusing and hard to trust.
+
+## Current control set (v1)
 
 - `workflow_mode`
 - `evidence_strictness`
@@ -28,10 +40,11 @@ This gives operators a compact explanation of what shaped a run, without pretend
 - `persona_tone_overlay`
 - `tool_allowance`
 
-## Control classes (documentation semantics, flat runtime shape)
+## Control groups and authority
 
-The runtime payload stays flat in v1. We are not introducing nested classes in schema yet.  
-To avoid conceptual drift, contributors should read controls as belonging to these authority classes:
+The runtime payload stays flat in v1. We did not change schema shape again yet.
+
+But contributors still need to think in groups. If we do not do that, people will treat all controls as equally powerful, and that is wrong.
 
 - Execution controls:
     - `workflow_mode`
@@ -43,43 +56,53 @@ To avoid conceptual drift, contributors should read controls as belonging to the
 - Preference/environment control:
     - `provider_preference`
 
-The important point: these classes are not equal in authority. A tone overlay does not have the same authority as workflow mode or execution contract policy.
+Failure mode we are preventing: tone controls or advisory preferences being treated like hard execution policy.
 
-## `mattered` definition (causal, not decorative)
+## `mattered` meaning
 
-`mattered = true` means the control had an observable causal impact on this run.
+`mattered = true` means this control changed something real about the run or the final answer.
 
-It does not mean:
+Seeing a control record in metadata is not enough.
 
-- the record existed
-- the control was merely requested
-- the control was accepted but did not materially change behavior
+What counts as real change:
 
-Concrete examples:
+- execution path changed
+- review path changed
+- provider/profile resolution changed
+- tool eligibility changed
+- delivered answer posture changed
 
-- Requested but overridden: `provider_preference` can still matter if policy resolves a different profile.
-- Not consequential: if no tool was requested, `tool_allowance` is still visible but `mattered = false`.
-- Materially consequential: `workflow_mode` selecting a reviewed path sets `mattered = true`.
-- No posture change: if no persona overlay is applied, `persona_tone_overlay` is `mattered = false`.
+What does not count:
 
-## `review_intensity` derivation policy
+- control was present but had no downstream effect
+- control was requested but ignored with no material impact
 
-`review_intensity` is now derived from one canonical workflow-mode helper in `workflowProfileRegistry`.
+Examples:
 
-Why this matters: if mode behavior and metadata use different derivation paths, traces eventually drift and inspectability breaks.
+- If no tool was requested, `tool_allowance` is visible but usually `mattered = false`.
+- If runtime overrides requested provider/profile, `provider_preference` can still matter because it changed selection logic.
+- If no overlay is applied, `persona_tone_overlay` is `mattered = false`.
 
-Current thresholds:
+## `review_intensity` derivation
 
-- `none`: review path excluded/disabled
+`review_intensity` must come from one source of truth: workflow-mode behavior derivation in `workflowProfileRegistry`.
+
+Why this matters: if runtime behavior comes from one place and metadata comes from another, traces eventually lie about what happened.
+
+Current mapping:
+
+- `none`: review excluded or disabled
 - `light`: one deliberation pass
 - `moderate`: two or three passes
 - `high`: four or more passes
 
 ## `provider_preference` semantics
 
-`provider_preference` remains non-authoritative unless policy explicitly makes it authoritative.
+`provider_preference` is not automatically authoritative.
 
-The value/rationale now makes resolution state explicit:
+Unless policy explicitly says otherwise, it is a request or advisory signal that runtime may override.
+
+The record now makes outcome explicit:
 
 - `requested_honored`
 - `requested_overridden`
@@ -87,11 +110,11 @@ The value/rationale now makes resolution state explicit:
 - `advisory_overridden`
 - `fallback_resolved`
 
-This keeps records honest about intent versus outcome.
+Why this matters: the trace should clearly show whether the system followed the preference, overrode it, or fell back.
 
 ## `persona_tone_overlay` constraint
 
-`persona_tone_overlay` is presentation/posture only.
+`persona_tone_overlay` controls presentation and tone only.
 
 It must not:
 
@@ -99,13 +122,12 @@ It must not:
 - change evidence strictness
 - bypass review authority
 
-Tests assert this expectation so future edits do not quietly broaden tone semantics into execution authority.
+Failure mode we are preventing: style-level controls quietly becoming policy controls.
 
-## What this pass did not do
+## What to remember
 
-- No new controls
-- No user-facing knobs
-- No DSL or open-ended rule engine
-- No schema expansion for control classes
-
-This stays a bounded foundation pass: clearer semantics first, broader capability later.
+- `workflow_mode` has more authority than `persona_tone_overlay`.
+- `provider_preference` is a signal unless policy elevates it.
+- `mattered = true` means the control changed something real.
+- `review_intensity` must be derived from the same logic path as workflow routing.
+- This layer is metadata-first for inspection, not a runtime rule engine.
