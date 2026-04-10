@@ -477,6 +477,45 @@ type _AssertTrustGraphMetadata =
 const _assertTrustGraphMetadata: _AssertTrustGraphMetadata = true;
 void _assertTrustGraphMetadata;
 
+const WorkflowModeIdSchema = z.enum(['fast', 'balanced', 'grounded']);
+
+const WorkflowModeSelectionSourceSchema = z.enum([
+    'requested_mode',
+    'inferred_from_execution_contract',
+    'fail_open_default',
+]);
+
+const WorkflowModeBehaviorSchema = z
+    .object({
+        executionContractPresetId: z.enum([
+            'fast-direct',
+            'balanced',
+            'quality-grounded',
+        ]),
+        workflowProfileClass: z.enum(['direct', 'reviewed']),
+        workflowProfileId: z.enum(['bounded-review', 'generate-only']),
+        workflowExecution: z.enum(['disabled', 'policy_gated', 'always']),
+        reviewPass: z.enum(['included', 'excluded']),
+        reviseStep: z.enum(['allowed', 'disallowed']),
+        evidencePosture: z.enum(['minimal', 'balanced', 'strict']),
+        maxWorkflowSteps: z.number().int().positive(),
+        maxDeliberationCalls: z.number().int().nonnegative(),
+    })
+    .strict();
+
+const WorkflowModeDecisionSchema = z
+    .object({
+        modeId: WorkflowModeIdSchema,
+        selectedBy: WorkflowModeSelectionSourceSchema,
+        selectionReason: z.string().min(1),
+        requestedModeId: z.string().min(1).optional(),
+        executionContractResponseMode: z
+            .enum(['fast_direct', 'quality_grounded'])
+            .optional(),
+        behavior: WorkflowModeBehaviorSchema,
+    })
+    .strict();
+
 const responseMetadataShape = {
     responseId: z.string().min(1),
     provenance: ProvenanceSchema,
@@ -491,6 +530,7 @@ const responseMetadataShape = {
     citations: z.array(CitationSchema),
     execution: z.array(ExecutionEventSchema).optional(),
     workflow: WorkflowRecordSchema.optional(),
+    workflowMode: WorkflowModeDecisionSchema.optional(),
     evaluator: EvaluatorOutcomeSchema.optional(),
     imageDescriptions: z.array(z.string()).optional(),
     evidenceScore: TraceAxisScoreSchema.optional(),

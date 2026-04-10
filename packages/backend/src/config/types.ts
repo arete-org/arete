@@ -16,6 +16,7 @@ import type {
     SupportedVerbosity,
 } from '@footnote/contracts/providers';
 import type { ModelProfile } from '@footnote/contracts';
+import type { WorkflowModeId } from '@footnote/contracts/ethics-core';
 import type { BotProfileConfig } from './profile.js';
 
 /**
@@ -93,7 +94,7 @@ export type RuntimeConfig = {
         maxBodyBytes: number;
     };
     chatWorkflow: {
-        profileId: 'bounded-review' | 'generate-only';
+        modeId: WorkflowModeId;
         reviewLoopEnabled: boolean;
         maxIterations: number;
         maxDurationMs: number;

@@ -366,6 +366,39 @@ export type WorkflowRecord = {
 };
 
 /**
+ * Canonical high-level workflow mode ids.
+ */
+export type WorkflowModeId = 'fast' | 'balanced' | 'grounded';
+
+export type WorkflowModeSelectionSource =
+    | 'requested_mode'
+    | 'inferred_from_execution_contract'
+    | 'fail_open_default';
+
+export type WorkflowModeEvidencePosture = 'minimal' | 'balanced' | 'strict';
+
+export type WorkflowModeBehavior = {
+    executionContractPresetId: 'fast-direct' | 'balanced' | 'quality-grounded';
+    workflowProfileClass: 'direct' | 'reviewed';
+    workflowProfileId: 'bounded-review' | 'generate-only';
+    workflowExecution: 'disabled' | 'policy_gated' | 'always';
+    reviewPass: 'included' | 'excluded';
+    reviseStep: 'allowed' | 'disallowed';
+    evidencePosture: WorkflowModeEvidencePosture;
+    maxWorkflowSteps: number;
+    maxDeliberationCalls: number;
+};
+
+export type WorkflowModeDecision = {
+    modeId: WorkflowModeId;
+    selectedBy: WorkflowModeSelectionSource;
+    selectionReason: string;
+    requestedModeId?: string;
+    executionContractResponseMode?: 'fast_direct' | 'quality_grounded';
+    behavior: WorkflowModeBehavior;
+};
+
+/**
  * Shared correlation envelope for structured backend telemetry.
  * Fields are nullable so callers can keep fail-open behavior.
  */
@@ -502,6 +535,7 @@ export type ResponseMetadata = {
     citations: Citation[]; // Sources used for the answer.
     execution?: ExecutionEvent[]; // Canonical execution timeline for model/tool visibility.
     workflow?: WorkflowRecord; // Optional workflow provenance record for bounded multi-step execution.
+    workflowMode?: WorkflowModeDecision; // Explicit mode routing decision and behavior mapping.
     evaluator?: EvaluatorOutcome; // Deterministic evaluator decision captured before breaker enforcement.
     imageDescriptions?: string[]; // Optional captions for any images used.
     evidenceScore?: TraceAxisScore; // Optional TRACE evidence chip score (1..5).

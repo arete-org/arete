@@ -19,7 +19,6 @@ import {
 import { createChatPlanner, type ChatPlan } from './chatPlanner.js';
 import { createOpenAiChatPlannerStructuredExecutor } from './chatPlannerStructuredOpenAi.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
-import type { ExecutionResponseMode } from './executionContract.js';
 import {
     resolveActiveProfileOverlayPrompt,
     resolveBotProfileDisplayName,
@@ -34,6 +33,7 @@ import {
     type PlannerSelectionSource,
 } from './plannerFallbackTelemetryRollup.js';
 import { resolveExecutionContract } from './executionContractResolver.js';
+import { resolveWorkflowModeDecision } from './workflowProfileRegistry.js';
 import type { WeatherForecastTool } from './weatherGovForecastTool.js';
 import { applySingleToolPolicy } from './tools/toolPolicy.js';
 import {
@@ -68,11 +68,6 @@ type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
 const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
 });
-
-const resolveExecutionContractPresetId = (
-    responseMode: ExecutionResponseMode | undefined
-): 'fast-direct' | 'quality-grounded' =>
-    responseMode === 'quality_grounded' ? 'quality-grounded' : 'fast-direct';
 
 /**
  * The orchestrator keeps surface-specific policy in one place while reusing the
@@ -279,6 +274,9 @@ export const createChatOrchestrator = ({
             normalizedRequest,
             chatOrchestratorLogger
         );
+        // TODO(workflow-planner-step): Move planner dispatch into workflow step
+        // execution so workflow policy owns when/why planning runs and can
+        // support bounded multi-plan passes with purpose-specific outputs.
         const planned = await chatPlanner.planChat(normalizedRequest);
         const plannerExecution = planned.execution;
         const fallbackReasons: PlannerFallbackReason[] = [];
@@ -345,10 +343,22 @@ export const createChatOrchestrator = ({
                 }
             );
         }
+        // Contract-governed routing boundary:
+        // 1) resolve high-level workflow mode
+        // 2) derive Execution Contract preset from mode
+        // 3) execute orchestration within that contract
+        const workflowModeResolution = resolveWorkflowModeDecision({
+            modeId: runtimeConfig.chatWorkflow.modeId,
+            executionContractResponseMode:
+                generationForExecution.responseIntentHint?.responseMode,
+        });
+        // TODO(workflow-mode-escalation): Add optional runtime mode transitions
+        // (for example fast -> grounded) when later retrieval/sufficiency signals
+        // justify escalation. Keep transition policy governed by Execution Contract.
         const resolvedExecutionContract = resolveExecutionContract({
-            presetId: resolveExecutionContractPresetId(
-                generationForExecution.responseIntentHint?.responseMode
-            ),
+            presetId:
+                workflowModeResolution.modeDecision.behavior
+                    .executionContractPresetId,
         }).policyContract;
         const profileResolution = resolveExecutionProfile(
             {
@@ -542,6 +552,7 @@ export const createChatOrchestrator = ({
             provider: selectedResponseProfile.provider,
             capabilities: selectedResponseProfile.capabilities,
             generation: executionPlan.generation,
+            workflowModeId: workflowModeResolution.modeDecision.modeId,
             toolRequest: toolRequestContext,
             ExecutionContract: resolvedExecutionContract,
             ...(executionContractScopeTuple !== undefined && {
@@ -638,6 +649,9 @@ export const createChatOrchestrator = ({
             executionContractId: resolvedExecutionContract.policyId,
             executionContractVersion: resolvedExecutionContract.policyVersion,
             routingStrategy: resolvedExecutionContract.routing.strategy,
+            workflowModeId: workflowModeResolution.modeDecision.modeId,
+            workflowModeSelectedBy:
+                workflowModeResolution.modeDecision.selectedBy,
             responseId: response.metadata.responseId,
             responseAction: 'message',
             responseModality: executionPlan.modality,
