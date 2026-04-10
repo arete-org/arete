@@ -10,21 +10,7 @@ import type {
     PostChatResponse,
     ChatConversationMessage,
 } from '@footnote/contracts/web';
-import type { CorrelationEnvelope } from '@footnote/contracts';
-import type {
-    ToolExecutionContext,
-    ToolInvocationRequest,
-    ExecutionReasonCode,
-    ExecutionStatus,
-    EvaluatorOutcome,
-    SafetyTier,
-    SafetyEvaluationInput,
-} from '@footnote/contracts/ethics-core';
-import {
-    buildSafetyDecision,
-    computeProvenance,
-    evaluateSafetyDeterministic,
-} from '../ethics-core/evaluators.js';
+import type { SafetyTier } from '@footnote/contracts/ethics-core';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
     createChatService,
@@ -34,7 +20,6 @@ import { createChatPlanner, type ChatPlan } from './chatPlanner.js';
 import { createOpenAiChatPlannerStructuredExecutor } from './chatPlannerStructuredOpenAi.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import type { ExecutionResponseMode } from './executionPolicyContract.js';
-import { normalizeDiscordConversation } from './chatConversationNormalization.js';
 import {
     resolveActiveProfileOverlayPrompt,
     resolveBotProfileDisplayName,
@@ -42,19 +27,12 @@ import {
 } from './chatProfileOverlay.js';
 import { coercePlanForSurface } from './chatSurfacePolicy.js';
 import { createModelProfileResolver } from './modelProfileResolver.js';
-import {
-    listCapabilityProfileOptionsForStep,
-    selectModelProfileForWorkflowStep,
-} from './modelCapabilityPolicy.js';
+import { listCapabilityProfileOptionsForStep } from './modelCapabilityPolicy.js';
 import {
     createPlannerFallbackTelemetryRollup,
     type PlannerFallbackReason,
     type PlannerSelectionSource,
 } from './plannerFallbackTelemetryRollup.js';
-import {
-    resolveSearchFallbackPolicy,
-    searchFallbackRankingPolicy,
-} from './searchFallbackPolicy.js';
 import { resolveExecutionPolicyContract } from './executionPolicyResolver.js';
 import type { WeatherForecastTool } from './weatherGovForecastTool.js';
 import { applySingleToolPolicy } from './tools/toolPolicy.js';
@@ -62,31 +40,30 @@ import {
     executeSelectedTool,
     resolveToolSelection,
 } from './tools/toolRegistry.js';
-import type { ScopeTuple } from './executionContractTrustGraph/trustGraphEvidenceTypes.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import type { IncidentAlertRouter } from './incidentAlerts.js';
+import {
+    buildExecutionContractScopeTuple,
+    buildCorrelationIds,
+    normalizeRequest,
+} from './chatOrchestrator/requestNormalization.js';
+import {
+    runDeterministicEvaluator,
+    type EvaluatorExecutionContext,
+} from './chatOrchestrator/evaluatorCoordination.js';
+import { resolveExecutionProfile } from './chatOrchestrator/profileResolution.js';
+import { resolveNonMessagePlannerAction } from './chatOrchestrator/actionResolution.js';
+import {
+    buildPlannerPayload,
+    type PlannerGenerationForPrompt,
+    type PlannerPayloadChatPlan,
+} from './chatOrchestrator/plannerPayload.js';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
     weatherForecastTool?: WeatherForecastTool;
     alertRouter?: IncidentAlertRouter;
 };
-
-type PlannerWeatherFailureMarker = {
-    failed: true;
-    reason: 'weather_tool_failed';
-};
-
-type PlannerGenerationForPrompt = Omit<ChatGenerationPlan, 'weather'> & {
-    weather?: ChatGenerationPlan['weather'] | PlannerWeatherFailureMarker;
-};
-
-type PlannerPayloadChatPlan = Omit<ChatPlan, 'generation'> & {
-    generation: PlannerGenerationForPrompt;
-};
-
-const RESPONSE_PROFILE_FALLBACK_POLICY = 'response_profile_fallback_v1';
-const SEARCH_REROUTE_FALLBACK_POLICY = 'search_reroute_profile_fallback_v1';
 
 const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
@@ -96,80 +73,6 @@ const resolveExecutionPolicyPresetId = (
     responseMode: ExecutionResponseMode | undefined
 ): 'fast-direct' | 'quality-grounded' =>
     responseMode === 'quality_grounded' ? 'quality-grounded' : 'fast-direct';
-
-/**
- * Packs the normalized planner decision into one structured system payload.
- *
- * JSON keeps this payload machine-stable so generation can treat planner output
- * as data, not as ambiguous free-form text.
- */
-const buildPlannerPayload = (
-    plan: PlannerPayloadChatPlan,
-    surfacePolicy?: { coercedFrom: ChatPlan['action'] }
-): string =>
-    JSON.stringify({
-        action: plan.action,
-        modality: plan.modality,
-        profileId: plan.profileId,
-        requestedCapabilityProfile: plan.requestedCapabilityProfile,
-        selectedCapabilityProfile: plan.selectedCapabilityProfile,
-        reaction: plan.reaction,
-        imageRequest: plan.imageRequest,
-        safetyTier: plan.safetyTier,
-        reasoning: plan.reasoning,
-        generation: plan.generation,
-        ...(surfacePolicy && { surfacePolicy }),
-    });
-
-const buildCorrelationIds = (
-    request: PostChatRequest,
-    responseId: string | null = null
-): CorrelationEnvelope => ({
-    conversationId: request.sessionId ?? null,
-    requestId: request.trigger.messageId ?? null,
-    incidentId: null,
-    responseId,
-});
-
-const normalizeScopeValue = (value: string | undefined): string | undefined => {
-    if (typeof value !== 'string') {
-        return undefined;
-    }
-
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-};
-
-const buildExecutionContractScopeTuple = (
-    request: PostChatRequest
-): ScopeTuple | undefined => {
-    const userId = normalizeScopeValue(request.surfaceContext?.userId);
-    if (userId === undefined) {
-        return undefined;
-    }
-
-    const channelProjectId = normalizeScopeValue(
-        request.surfaceContext?.channelId
-    );
-    const guildCollectionId = normalizeScopeValue(
-        request.surfaceContext?.guildId
-    );
-
-    if (channelProjectId !== undefined) {
-        return {
-            userId,
-            projectId: channelProjectId,
-        };
-    }
-    if (guildCollectionId !== undefined) {
-        return {
-            userId,
-            collectionId: guildCollectionId,
-        };
-    }
-
-    return { userId };
-};
 
 /**
  * The orchestrator keeps surface-specific policy in one place while reusing the
@@ -287,19 +190,11 @@ export const createChatOrchestrator = ({
         // Total wall-clock budget for this request from planner entry to
         // final response payload. This is exposed as telemetry only.
         const orchestrationStartedAt = Date.now();
-        const normalizedConversation =
-            request.surface === 'discord'
-                ? normalizeDiscordConversation(request, chatOrchestratorLogger)
-                : request.conversation.map(
-                      (message: PostChatRequest['conversation'][number]) => ({
-                          role: message.role,
-                          content: message.content,
-                      })
-                  );
-        const normalizedRequest: PostChatRequest = {
-            ...request,
-            conversation: normalizedConversation,
-        };
+        const { normalizedConversation, normalizedRequest } = normalizeRequest(
+            request,
+            chatOrchestratorLogger
+        );
+        let evaluatorExecutionContext: EvaluatorExecutionContext | undefined;
         const notifyBreakerEvent = (input: {
             responseId: string | null;
             responseAction: 'message' | 'ignore' | 'react' | 'image';
@@ -357,73 +252,17 @@ export const createChatOrchestrator = ({
                 });
             }
         };
-        // Planner and generation both consume this normalized request shape.
         const evaluatorStartedAt = Date.now();
-        let evaluatorExecutionContext:
-            | {
-                  status: ExecutionStatus;
-                  reasonCode?: ExecutionReasonCode;
-                  outcome?: EvaluatorOutcome;
-                  durationMs: number;
-              }
-            | undefined;
-        let evaluatorSafetyTierHint: SafetyTier | undefined;
-        try {
-            const evaluatorContext = normalizedConversation.map(
-                (message) => message.content
-            );
-            const safetyEvaluationInput: SafetyEvaluationInput = {
-                latestUserInput: normalizedRequest.latestUserInput,
-                conversation: normalizedConversation,
-            };
-            const safetyEvaluation = evaluateSafetyDeterministic(
-                safetyEvaluationInput
-            );
-            const safetyDecision = buildSafetyDecision(safetyEvaluation);
-            const evaluatorOutcome: EvaluatorOutcome = {
-                mode: 'observe_only',
-                provenance: computeProvenance(evaluatorContext),
-                safetyDecision,
-            };
-            evaluatorExecutionContext = {
-                status: 'executed',
-                outcome: evaluatorOutcome,
-                durationMs: Math.max(0, Date.now() - evaluatorStartedAt),
-            };
-            evaluatorSafetyTierHint =
-                evaluatorOutcome.safetyDecision.safetyTier;
-            if (evaluatorOutcome.safetyDecision.action !== 'allow') {
-                chatOrchestratorLogger.warn(
-                    'deterministic breaker signaled a non-allow action in observe-only mode',
-                    {
-                        event: 'chat.orchestration.breaker_signal',
-                        mode: evaluatorOutcome.mode,
-                        action: evaluatorOutcome.safetyDecision.action,
-                        ruleId: evaluatorOutcome.safetyDecision.ruleId,
-                        reasonCode: evaluatorOutcome.safetyDecision.reasonCode,
-                        reason: evaluatorOutcome.safetyDecision.reason,
-                        safetyTier: evaluatorOutcome.safetyDecision.safetyTier,
-                        surface: normalizedRequest.surface,
-                        triggerKind: normalizedRequest.trigger.kind,
-                        correlation: buildCorrelationIds(normalizedRequest),
-                    }
-                );
-            }
-        } catch (error) {
-            // Evaluator failures must not block normal response generation.
-            chatOrchestratorLogger.warn(
-                'deterministic evaluator failed open; continuing without evaluator outcome',
-                {
-                    error:
-                        error instanceof Error ? error.message : String(error),
-                }
-            );
-            evaluatorExecutionContext = {
-                status: 'failed',
-                reasonCode: 'evaluator_runtime_error',
-                durationMs: Math.max(0, Date.now() - evaluatorStartedAt),
-            };
-        }
+        const evaluatorResult = runDeterministicEvaluator(
+            {
+                normalizedConversation,
+                normalizedRequest,
+                startedAtMs: evaluatorStartedAt,
+            },
+            chatOrchestratorLogger
+        );
+        evaluatorExecutionContext = evaluatorResult.evaluatorExecutionContext;
+        const evaluatorSafetyTierHint = evaluatorResult.evaluatorSafetyTierHint;
 
         const personaProfile = resolveChatPersonaProfile(
             normalizedRequest,
@@ -504,237 +343,33 @@ export const createChatOrchestrator = ({
                 generationForExecution.responseIntentHint?.responseMode
             ),
         }).policyContract;
-        const routingStrategy = resolvedExecutionPolicy.routing.strategy;
-        let selectedResponseProfile = defaultResponseProfile;
-        let profileSelectionSource: PlannerSelectionSource = 'default';
-        // Profile domains at this seam:
-        // - workflow profile: workflow engine behavior (bounded-review, generate-only)
-        // - capability profile: planner intent for model-selection posture
-        // - model profile: concrete provider/model execution target
-        // Planner selects capability intent; orchestrator resolves model profile.
-        const requestedModelProfileId = normalizedRequest.profileId?.trim();
-        const allowRequestProfileOverride =
-            normalizedRequest.trigger.kind === 'submit' &&
-            routingStrategy === 'profile-first';
-        const selectedCapabilityDecision = selectModelProfileForWorkflowStep({
-            step: 'generation',
-            requestedCapabilityProfile: plan.requestedCapabilityProfile,
-            profiles: enabledProfiles,
-            requiresSearch: generationForExecution.search !== undefined,
-            routingIntent: resolvedExecutionPolicy.routing,
-        });
-        const plannerSelectedModelProfileId =
-            selectedCapabilityDecision.selectedProfile?.id.trim();
-        const profileSelectionOrder: Array<{
-            source: PlannerSelectionSource;
-            profileId?: string;
-        }> =
-            routingStrategy === 'profile-first'
-                ? [
-                      {
-                          source: 'request',
-                          profileId: allowRequestProfileOverride
-                              ? requestedModelProfileId
-                              : undefined,
-                      },
-                      {
-                          source: 'default',
-                          profileId: defaultResponseProfile.id,
-                      },
-                      {
-                          source: 'planner',
-                          profileId: plannerSelectedModelProfileId,
-                      },
-                  ]
-                : [
-                      {
-                          source: 'planner',
-                          profileId: plannerSelectedModelProfileId,
-                      },
-                      {
-                          source: 'default',
-                          profileId: defaultResponseProfile.id,
-                      },
-                  ];
-
-        for (const candidate of profileSelectionOrder) {
-            if (!candidate.profileId) {
-                continue;
-            }
-
-            if (candidate.source === 'default') {
-                selectedResponseProfile = defaultResponseProfile;
-                profileSelectionSource = 'default';
-                break;
-            }
-
-            const matchedModelProfile = enabledProfilesById.get(
-                candidate.profileId
-            );
-            if (matchedModelProfile) {
-                selectedResponseProfile = matchedModelProfile;
-                profileSelectionSource = candidate.source;
-                break;
-            }
-
-            const candidateStage =
-                candidate.source === 'planner'
-                    ? 'invalid_capability_candidate'
-                    : 'invalid_profile_candidate';
-            chatOrchestratorLogger.warn(
-                'chat profile selection candidate is invalid or disabled; continuing fallback order',
-                {
-                    event: 'chat.orchestration.profile_fallback',
-                    policy: RESPONSE_PROFILE_FALLBACK_POLICY,
-                    stage: candidateStage,
-                    source: candidate.source,
-                    selectedProfileId: candidate.profileId,
-                    requestedCapabilityProfile: plan.requestedCapabilityProfile,
-                    selectedCapabilityProfile:
-                        selectedCapabilityDecision.selectedCapabilityProfile,
-                    capabilityReasonCode: selectedCapabilityDecision.reasonCode,
-                    defaultProfileId: defaultResponseProfile.id,
-                    fallbackOrder: profileSelectionOrder.map(
-                        (entry) => entry.source
-                    ),
-                    surface: normalizedRequest.surface,
-                }
-            );
-            if (candidate.source === 'request') {
-                fallbackReasons.push('request_invalid_or_disabled_profile');
-            } else if (candidate.source === 'planner') {
-                fallbackReasons.push('planner_invalid_or_disabled_profile');
-            }
-        }
-
-        if (
-            profileSelectionSource === 'request' &&
-            plannerSelectedModelProfileId &&
-            plannerSelectedModelProfileId !== selectedResponseProfile.id
-        ) {
-            chatOrchestratorLogger.warn(
-                'chat request profile override superseded planner capability selection',
-                {
-                    event: 'chat.orchestration.profile_fallback',
-                    policy: RESPONSE_PROFILE_FALLBACK_POLICY,
-                    stage: 'request_override_superseded_planner',
-                    requestedProfileId: selectedResponseProfile.id,
-                    plannerProfileId: plannerSelectedModelProfileId,
-                    requestedCapabilityProfile: plan.requestedCapabilityProfile,
-                    selectedCapabilityProfile:
-                        selectedCapabilityDecision.selectedCapabilityProfile,
-                    capabilityReasonCode: selectedCapabilityDecision.reasonCode,
-                    surface: normalizedRequest.surface,
-                }
-            );
-        }
-        const originalSelectedProfileId = selectedResponseProfile.id;
-        let effectiveSelectedProfileId = selectedResponseProfile.id;
-        let rerouteApplied = false;
-        let fallbackRollupSelectionSource: PlannerSelectionSource =
-            profileSelectionSource;
-        let webSearchToolRequestContextOverride:
-            | ToolInvocationRequest
-            | undefined;
-        let toolExecutionContext: ToolExecutionContext | undefined;
-        if (
-            generationForExecution.search &&
-            !selectedResponseProfile.capabilities.canUseSearch
-        ) {
-            const searchPolicySelectionSource: PlannerSelectionSource =
-                selectedCapabilityDecision.reasonCode ===
-                'planner_requested_capability_profile_no_floor_match'
-                    ? 'planner'
-                    : profileSelectionSource;
-            fallbackRollupSelectionSource = searchPolicySelectionSource;
-            const searchFallbackDecision = resolveSearchFallbackPolicy({
-                selectionSource: searchPolicySelectionSource,
-                routingStrategy,
-                selectedProfile: selectedResponseProfile,
+        const profileResolution = resolveExecutionProfile(
+            {
+                normalizedRequest,
+                plan,
+                enabledProfiles,
                 searchCapableProfiles,
-            });
-            const {
-                fallbackPolicy,
-                rankedFallbackCandidates,
-                fallbackProfile,
-                fallbackOrder: searchFallbackOrder,
-            } = searchFallbackDecision;
-
-            if (fallbackProfile) {
-                rerouteApplied = true;
-                selectedResponseProfile = fallbackProfile;
-                effectiveSelectedProfileId = fallbackProfile.id;
-                toolExecutionContext = {
-                    toolName: 'web_search',
-                    status: 'executed',
-                    reasonCode: fallbackPolicy.rerouteReasonCode,
-                };
-                fallbackReasons.push('planner_non_search_profile_rerouted');
-                chatOrchestratorLogger.warn(
-                    'selected profile cannot use search; rerouting to policy-ranked tool-capable fallback profile',
-                    {
-                        event: 'chat.orchestration.profile_fallback',
-                        policy: SEARCH_REROUTE_FALLBACK_POLICY,
-                        stage: 'search_rerouted',
-                        reasonCode: fallbackPolicy.rerouteReasonCode,
-                        originalProfileId: originalSelectedProfileId,
-                        effectiveProfileId: effectiveSelectedProfileId,
-                        selectionSource: searchPolicySelectionSource,
-                        rankingPolicy: searchFallbackRankingPolicy.steps,
-                        rankedFallbackProfileIds: rankedFallbackCandidates.map(
-                            (profile) => profile.id
-                        ),
-                        fallbackOrder: searchFallbackOrder,
-                        surface: normalizedRequest.surface,
-                    }
-                );
-            } else {
-                generationForExecution = {
-                    ...generationForExecution,
-                    search: undefined,
-                };
-                webSearchToolRequestContextOverride = {
-                    toolName: 'web_search',
-                    requested: true,
-                    eligible: false,
-                    reasonCode: 'search_not_supported_by_selected_profile',
-                };
-                toolExecutionContext = {
-                    toolName: 'web_search',
-                    status: 'skipped',
-                    reasonCode: fallbackPolicy.skipReasonCode,
-                };
-                if (searchPolicySelectionSource === 'planner') {
-                    fallbackReasons.push('search_dropped_no_fallback_profile');
-                } else {
-                    fallbackReasons.push(
-                        'search_dropped_selection_source_guard'
-                    );
-                }
-                chatOrchestratorLogger.warn(
-                    'search is not supported by selected profile; continuing without search',
-                    {
-                        event: 'chat.orchestration.profile_fallback',
-                        policy: SEARCH_REROUTE_FALLBACK_POLICY,
-                        stage:
-                            searchPolicySelectionSource === 'planner'
-                                ? 'search_dropped_no_search_capable_fallback'
-                                : 'search_dropped_by_selection_policy',
-                        originalProfileId: originalSelectedProfileId,
-                        effectiveProfileId: effectiveSelectedProfileId,
-                        rerouteApplied,
-                        reasonCode: fallbackPolicy.skipReasonCode,
-                        selectionSource: searchPolicySelectionSource,
-                        fallbackOrder: searchFallbackOrder,
-                        rankingPolicy: searchFallbackRankingPolicy.steps,
-                        rankedFallbackProfileIds: rankedFallbackCandidates.map(
-                            (profile) => profile.id
-                        ),
-                        surface: normalizedRequest.surface,
-                    }
-                );
-            }
-        }
+                enabledProfilesById,
+                defaultResponseProfile,
+                generationForExecution,
+                resolvedExecutionPolicy,
+            },
+            chatOrchestratorLogger
+        );
+        generationForExecution = profileResolution.generationForExecution;
+        fallbackReasons.push(...profileResolution.fallbackReasons);
+        const selectedResponseProfile =
+            profileResolution.selectedResponseProfile;
+        const fallbackRollupSelectionSource =
+            profileResolution.fallbackRollupSelectionSource;
+        const originalSelectedProfileId =
+            profileResolution.originalSelectedProfileId;
+        const effectiveSelectedProfileId =
+            profileResolution.effectiveSelectedProfileId;
+        const rerouteApplied = profileResolution.rerouteApplied;
+        const webSearchToolRequestContextOverride =
+            profileResolution.webSearchToolRequestContextOverride;
+        let toolExecutionContext = profileResolution.toolExecutionContext;
         const toolSelection = resolveToolSelection({
             generation: generationForExecution,
             weatherForecastTool,
@@ -752,67 +387,26 @@ export const createChatOrchestrator = ({
             generation: generationForExecution,
             profileId: selectedResponseProfile.id,
             selectedCapabilityProfile:
-                selectedCapabilityDecision.selectedCapabilityProfile,
+                profileResolution.selectedCapabilityProfile,
         };
 
-        // Non-message actions return early and skip model generation.
-        if (executionPlan.action === 'ignore') {
-            notifyBreakerEvent({
-                responseId: null,
-                responseAction: 'ignore',
-                responseModality: executionPlan.modality,
-            });
-            emitFallbackRollup(fallbackRollupSelectionSource);
-            return {
-                action: 'ignore',
-                metadata: null,
-            };
-        }
-
-        if (executionPlan.action === 'react') {
-            notifyBreakerEvent({
-                responseId: null,
-                responseAction: 'react',
-                responseModality: executionPlan.modality,
-            });
-            emitFallbackRollup(fallbackRollupSelectionSource);
-            return {
-                action: 'react',
-                reaction: executionPlan.reaction ?? '👍',
-                metadata: null,
-            };
-        }
-
-        if (executionPlan.action === 'image' && executionPlan.imageRequest) {
-            notifyBreakerEvent({
-                responseId: null,
-                responseAction: 'image',
-                responseModality: executionPlan.modality,
-            });
-            emitFallbackRollup(fallbackRollupSelectionSource);
-            return {
-                action: 'image',
-                imageRequest: executionPlan.imageRequest,
-                metadata: null,
-            };
-        }
-
-        if (executionPlan.action === 'image' && !executionPlan.imageRequest) {
-            // Invalid image action should not block response flow.
-            fallbackReasons.push('image_action_missing_image_request');
-            chatOrchestratorLogger.warn(
-                `Chat planner returned image without imageRequest; falling back to ignore. surface=${normalizedRequest.surface} trigger=${normalizedRequest.trigger.kind} latestUserInputLength=${normalizedRequest.latestUserInput.length}`
-            );
-            notifyBreakerEvent({
-                responseId: null,
-                responseAction: 'ignore',
-                responseModality: executionPlan.modality,
-            });
-            emitFallbackRollup(fallbackRollupSelectionSource);
-            return {
-                action: 'ignore',
-                metadata: null,
-            };
+        const nonMessageResponse = resolveNonMessagePlannerAction(
+            {
+                executionPlan,
+                normalizedRequest,
+                fallbackRollupSelectionSource,
+            },
+            {
+                fallbackReasons,
+                emitFallbackRollup,
+                notifyBreakerEvent,
+                warn: (message, meta) => {
+                    chatOrchestratorLogger.warn(message, meta);
+                },
+            }
+        );
+        if (nonMessageResponse) {
+            return nonMessageResponse;
         }
         const promptLayers = renderConversationPromptLayers(
             normalizedRequest.surface === 'discord'
@@ -1018,8 +612,8 @@ export const createChatOrchestrator = ({
             effectiveProfileId: effectiveSelectedProfileId,
             requestedCapabilityProfile: plan.requestedCapabilityProfile,
             selectedCapabilityProfile:
-                selectedCapabilityDecision.selectedCapabilityProfile,
-            capabilityReasonCode: selectedCapabilityDecision.reasonCode,
+                profileResolution.selectedCapabilityProfile,
+            capabilityReasonCode: profileResolution.capabilityReasonCode,
             searchRequested: generationForExecution.search !== undefined,
             toolName: response.finalToolExecutionTelemetry?.toolName,
             toolStatus: response.finalToolExecutionTelemetry?.status,
