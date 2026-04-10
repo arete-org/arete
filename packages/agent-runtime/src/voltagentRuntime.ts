@@ -188,6 +188,23 @@ const toVoltAgentModel = (model: string, provider?: string): string => {
         : `openai/${model}`;
 };
 
+const inferProviderFromModelId = (model?: string): string | undefined => {
+    if (!model) {
+        return undefined;
+    }
+
+    const trimmed = model.trim();
+    if (!trimmed.includes('/')) {
+        return undefined;
+    }
+
+    const [providerPart] = trimmed.split('/', 1);
+    const normalizedProvider = providerPart?.trim().toLowerCase();
+    return normalizedProvider && normalizedProvider.length > 0
+        ? normalizedProvider
+        : undefined;
+};
+
 const isLocalOllamaHost = (hostname: string): boolean =>
     hostname === 'localhost' ||
     hostname === '127.0.0.1' ||
@@ -980,12 +997,21 @@ const createVoltAgentRuntime = ({
                 );
             }
 
+            const requestedProvider = resolveVoltAgentProviderOverride({
+                provider: request.provider,
+                ollama,
+            });
+            const hasExplicitRequestModel =
+                typeof request.model === 'string' &&
+                request.model.trim().length > 0;
+            const inferredProvider =
+                inferProviderFromModelId(selectedModel) ??
+                (!hasExplicitRequestModel
+                    ? inferProviderFromModelId(defaultModel)
+                    : undefined);
             const executedModel = toVoltAgentModel(
                 selectedModel,
-                resolveVoltAgentProviderOverride({
-                    provider: request.provider,
-                    ollama,
-                })
+                requestedProvider ?? inferredProvider
             );
             const provider = getVoltAgentProvider(executedModel);
             const executorOllamaConfig = resolveExecutorOllamaConfig(

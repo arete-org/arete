@@ -80,7 +80,7 @@ const normalizeSelector = (value: string | undefined): string | null => {
  * Parses raw model selectors into provider + model pieces.
  *
  * Accepted forms:
- * - `model-name` (defaults provider to OpenAI for compatibility)
+ * - `model-name` (provider stays unset so resolver can apply runtime defaults)
  * - `provider/model-name` (provider must be supported)
  */
 const parseRawModel = (selector: string): ParsedRawModel | null => {
@@ -117,12 +117,13 @@ const parseRawModel = (selector: string): ParsedRawModel | null => {
  * `DEFAULT_MODEL` while catalog migration completes.
  */
 const buildLegacyDefaultProfile = (
-    legacyDefaultModel: string
+    legacyDefaultModel: string,
+    fallbackProvider: SupportedProvider
 ): ModelProfile => ({
     id: 'legacy-default-model',
     description:
         'Compatibility profile synthesized from DEFAULT_MODEL fallback behavior.',
-    provider: 'openai',
+    provider: fallbackProvider,
     providerModel: legacyDefaultModel,
     enabled: true,
     tierBindings: [],
@@ -137,9 +138,10 @@ const buildLegacyDefaultProfile = (
  */
 const buildRawModelProfile = (
     selector: string,
-    parsed: ParsedRawModel
+    parsed: ParsedRawModel,
+    fallbackProvider: SupportedProvider
 ): ModelProfile => {
-    const provider = parsed.provider ?? 'openai';
+    const provider = parsed.provider ?? fallbackProvider;
     return {
         id: `raw-${provider}-${parsed.providerModel.replace(/[^a-zA-Z0-9-]+/g, '-')}`.toLowerCase(),
         description: `Raw model selector passthrough for "${selector}".`,
@@ -166,6 +168,17 @@ export const createModelProfileResolver = ({
     );
     // Ordered enabled list powers default fallback behavior.
     const enabledCatalog = catalog.filter((profile) => profile.enabled);
+    const configuredDefaultProvider = catalogById.get(defaultProfileId)?.enabled
+        ? catalogById.get(defaultProfileId)?.provider
+        : undefined;
+    const legacyDefaultModelParsed = parseRawModel(legacyDefaultModel);
+    const normalizedLegacyDefaultModel =
+        legacyDefaultModelParsed?.providerModel ?? legacyDefaultModel;
+    const legacyDefaultProvider =
+        legacyDefaultModelParsed?.provider ??
+        enabledCatalog[0]?.provider ??
+        configuredDefaultProvider ??
+        'openai';
 
     /**
      * Resolves startup default profile with fail-open fallback order:
@@ -208,7 +221,10 @@ export const createModelProfileResolver = ({
                 legacyDefaultModel,
             },
         });
-        return buildLegacyDefaultProfile(legacyDefaultModel);
+        return buildLegacyDefaultProfile(
+            normalizedLegacyDefaultModel,
+            legacyDefaultProvider
+        );
     };
 
     const defaultProfile = resolveDefaultProfile();
@@ -278,7 +294,8 @@ export const createModelProfileResolver = ({
             return null;
         }
 
-        const resolvedProvider = parsedRawModel.provider ?? 'openai';
+        const resolvedProvider =
+            parsedRawModel.provider ?? defaultProfile.provider;
         const exactMatches = catalog.filter(
             (profile) =>
                 profile.enabled &&
@@ -306,7 +323,7 @@ export const createModelProfileResolver = ({
             });
         }
 
-        return buildRawModelProfile(selector, parsedRawModel);
+        return buildRawModelProfile(selector, parsedRawModel, resolvedProvider);
     };
 
     /**

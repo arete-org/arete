@@ -55,6 +55,7 @@ import { buildRealtimeInstructions } from './services/prompts/realtimePromptComp
 import { createChatProfilesHandler } from './handlers/chatProfiles.js';
 import { createWeatherGovForecastTool } from './services/weatherGovForecastTool.js';
 import { resolveExecutionContractTrustGraphRuntimeOptions } from './services/executionContractTrustGraph/index.js';
+import { createModelProfileResolver } from './services/modelProfileResolver.js';
 
 /**
  * @footnote-logger: openAiRealtimeVoiceRuntime
@@ -208,9 +209,20 @@ const initializeServices = () => {
             'Ollama profiles are present in the model catalog, but Ollama provider is unavailable at boot. Ollama profiles will remain disabled.'
         );
     }
+    const startupModelProfileResolver = createModelProfileResolver({
+        catalog: runtimeConfig.modelProfiles.catalog,
+        defaultProfileId: runtimeConfig.modelProfiles.defaultProfileId,
+        legacyDefaultModel: runtimeConfig.openai.defaultModel,
+        warn: logger,
+    });
+    const startupDefaultProfile = startupModelProfileResolver.defaultProfile;
+    const generationRuntimeDefaultModel = `${startupDefaultProfile.provider}/${startupDefaultProfile.providerModel}`;
+    logger.info(
+        `Core generation runtime default profile: ${startupDefaultProfile.id} (${generationRuntimeDefaultModel}).`
+    );
     if (hasOpenAiProvider || hasOllamaProvider) {
         generationRuntime = createVoltAgentRuntime({
-            defaultModel: runtimeConfig.openai.defaultModel,
+            defaultModel: generationRuntimeDefaultModel,
             logger: voltAgentLogger,
             ollama: {
                 baseUrl: runtimeConfig.ollama.baseUrl ?? undefined,
