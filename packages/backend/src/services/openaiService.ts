@@ -838,6 +838,9 @@ const buildResponseMetadata = (
     const execution: ExecutionEvent[] = [];
     const plannerExecution = runtimeContext.executionContext?.planner;
     if (plannerExecution) {
+        // TODO(workflow-planner-step-metadata): When planner becomes a bounded
+        // workflow step type, attach planner step purpose/attempt lineage here
+        // so execution traces can represent multiple planner passes cleanly.
         const normalizedPlannerReasonCode = normalizePlannerReasonCode(
             plannerExecution.status,
             plannerExecution.reasonCode

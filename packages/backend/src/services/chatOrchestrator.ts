@@ -267,6 +267,9 @@ export const createChatOrchestrator = ({
             normalizedRequest,
             chatOrchestratorLogger
         );
+        // TODO(workflow-planner-step): Move planner dispatch into workflow step
+        // execution so workflow policy owns when/why planning runs and can
+        // support bounded multi-plan passes with purpose-specific outputs.
         const planned = await chatPlanner.planChat(normalizedRequest);
         const plannerExecution = planned.execution;
         const fallbackReasons: PlannerFallbackReason[] = [];

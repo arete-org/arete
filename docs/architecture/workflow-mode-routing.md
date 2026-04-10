@@ -14,6 +14,10 @@ Keep contract posture and workflow mechanics separate. The Execution Contract
 preset answers "what kind of run should govern this request?" The workflow
 profile id answers "what step pattern should execute this run?" Mixing them
 into one label makes naming and reasoning harder.
+Today, planner dispatch still happens in orchestration before workflow
+execution. The target shape is for planner behavior to be represented as
+bounded workflow step types so workflow remains the owner of when and why
+planning runs.
 
 The chosen mode is emitted as `workflowMode` in response metadata.
 Each mode resolves to a concrete execution shape. The table below shows that
