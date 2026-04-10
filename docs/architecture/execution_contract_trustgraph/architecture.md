@@ -560,6 +560,17 @@ This is an important theme in the whole design: most bad runtime configurations 
 
 ## 11. Known Risks And Non-Goals
 
+### Sequencing posture (roadmap guardrail)
+
+This subsystem is intentionally positioned as **foundation and seam hardening**, not near-term architectural centrality.
+
+In concrete roadmap terms:
+
+- Execution-spine contract/orchestrator work remains the primary center in this phase.
+- TrustGraph foundation work should track that spine and avoid forcing architecture around itself.
+- Activation should happen only when pinned external service contracts and operations are ready.
+- Expansion into broad evidence-platform work is out of scope until the execution spine is stable.
+
 ### Remaining risks
 
 - This is still an in-process trust boundary. A careless future edit can bypass the intended seam because all of this code lives in the same backend process.
