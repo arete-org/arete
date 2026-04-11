@@ -742,6 +742,16 @@ const parsePlannerApplyOutcome = (
     return undefined;
 };
 
+const isSteerabilityControlId = (
+    value: unknown
+): value is SteerabilityControlId =>
+    value === 'workflow_mode' ||
+    value === 'evidence_strictness' ||
+    value === 'review_intensity' ||
+    value === 'provider_preference' ||
+    value === 'persona_tone_overlay' ||
+    value === 'tool_allowance';
+
 const normalizeEvaluatorReasonCode = (
     status: ExecutionStatus,
     reasonCode: ExecutionReasonCode | undefined
@@ -910,6 +920,14 @@ const buildResponseMetadata = (
         );
         const plannerExecutionSource =
             'runtimeContext.executionContext.planner';
+        const hasValidMattered = typeof plannerExecution.mattered === 'boolean';
+        const sanitizedMatteredControlIds = Array.isArray(
+            plannerExecution.matteredControlIds
+        )
+            ? plannerExecution.matteredControlIds.filter(
+                  isSteerabilityControlId
+              )
+            : [];
         const invalidPlannerFields: Array<{
             field:
                 | 'purpose'
@@ -937,7 +955,7 @@ const buildResponseMetadata = (
                 value: plannerExecution.applyOutcome,
             });
         }
-        if (typeof plannerExecution.mattered !== 'boolean') {
+        if (!hasValidMattered) {
             invalidPlannerFields.push({
                 field: 'mattered',
                 value: plannerExecution.mattered,
@@ -950,7 +968,12 @@ const buildResponseMetadata = (
             });
         }
 
-        if (invalidPlannerFields.length > 0) {
+        if (
+            validatedPlannerPurpose === undefined ||
+            validatedPlannerContractType === undefined ||
+            validatedPlannerApplyOutcome === undefined ||
+            !hasValidMattered
+        ) {
             logger.error(
                 'planner execution metadata dropped due invalid required fields',
                 {
@@ -964,11 +987,11 @@ const buildResponseMetadata = (
             execution.push({
                 kind: 'planner',
                 status: plannerExecution.status,
-                purpose: validatedPlannerPurpose!,
-                contractType: validatedPlannerContractType!,
-                applyOutcome: validatedPlannerApplyOutcome!,
+                purpose: validatedPlannerPurpose,
+                contractType: validatedPlannerContractType,
+                applyOutcome: validatedPlannerApplyOutcome,
                 mattered: plannerExecution.mattered,
-                matteredControlIds: plannerExecution.matteredControlIds,
+                matteredControlIds: sanitizedMatteredControlIds,
                 profileId: plannerExecution.profileId,
                 ...(plannerExecution.originalProfileId !== undefined && {
                     originalProfileId: plannerExecution.originalProfileId,

@@ -74,9 +74,6 @@ const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
 });
 
-const hasRequestedProfileOverride = (profileId: string | undefined): boolean =>
-    typeof profileId === 'string' && profileId.trim().length > 0;
-
 /**
  * The orchestrator keeps surface-specific policy in one place while reusing the
  * shared message-generation service for any branch that ends in text output.
@@ -441,6 +438,15 @@ export const createChatOrchestrator = ({
                       )
                       .map((control) => control.controlId)
                 : [];
+        const providerPreferenceControl = steerabilityControls.controls.find(
+            (control) => control.controlId === 'provider_preference'
+        );
+        const trimmedRequestedProfileId = normalizedRequest.profileId?.trim();
+        const providerPreferencePolicyAdjusted =
+            providerPreferenceControl?.mattered === true &&
+            trimmedRequestedProfileId !== undefined &&
+            trimmedRequestedProfileId.length > 0 &&
+            trimmedRequestedProfileId !== selectedResponseProfile.id;
         // `mattered` is an observed-material-effect signal derived from
         // concrete control records in this run. It is not full causal proof.
         const plannerMattered = plannerMatteredControlIds.length > 0;
@@ -452,7 +458,7 @@ export const createChatOrchestrator = ({
             plannerExecution.status !== 'executed'
                 ? 'not_applied'
                 : surfacePolicy !== undefined ||
-                    hasRequestedProfileOverride(normalizedRequest.profileId) ||
+                    providerPreferencePolicyAdjusted ||
                     rerouteApplied ||
                     toolPolicyDecision.logEvent !== undefined
                   ? 'adjusted_by_policy'
