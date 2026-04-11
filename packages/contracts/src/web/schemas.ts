@@ -12,12 +12,18 @@ import {
     WORKFLOW_STEP_STATUSES,
     WORKFLOW_TERMINATION_REASONS,
     type ProvenanceAssessment,
+    type ResponseMetadata,
     type SteerabilityControls,
     type TraceAxisScore,
     type TrustGraphMetadata,
 } from '../ethics-core/index.js';
 import { SafetyDecisionSchema } from '../ethics-core/schemas.js';
 import type { ApiResponseValidationResult } from './client-core.js';
+import type {
+    GetTraceResponse,
+    GetTraceStaleResponse,
+    PostChatResponse,
+} from './types.js';
 import {
     internalImageRenderModels,
     internalImageTextModels,
@@ -170,6 +176,27 @@ const PlannerExecutionReasonCodeSchema = z.enum([
     'planner_runtime_error',
     'planner_invalid_output',
 ]);
+const PlannerExecutionPurposeSchema = z.enum([
+    'chat_orchestrator_action_selection',
+]);
+const PlannerExecutionContractTypeSchema = z.enum([
+    'structured',
+    'text_json',
+    'fallback',
+]);
+const PlannerExecutionApplyOutcomeSchema = z.enum([
+    'applied',
+    'adjusted_by_policy',
+    'not_applied',
+]);
+const PlannerMatteredControlIdSchema = z.enum([
+    'workflow_mode',
+    'evidence_strictness',
+    'review_intensity',
+    'provider_preference',
+    'persona_tone_overlay',
+    'tool_allowance',
+]);
 const EvaluatorExecutionReasonCodeSchema = z.enum(['evaluator_runtime_error']);
 const GenerationExecutionReasonCodeSchema = z.enum([
     'generation_runtime_error',
@@ -243,6 +270,11 @@ const ExecutionEventSchema = z
         provider: z.string().min(1).optional(),
         model: z.string().min(1).optional(),
         toolName: z.string().min(1).optional(),
+        purpose: PlannerExecutionPurposeSchema.optional(),
+        contractType: PlannerExecutionContractTypeSchema.optional(),
+        applyOutcome: PlannerExecutionApplyOutcomeSchema.optional(),
+        mattered: z.boolean().optional(),
+        matteredControlIds: z.array(PlannerMatteredControlIdSchema).optional(),
         evaluator: EvaluatorOutcomeSchema.optional(),
         reasonCode: ExecutionReasonCodeSchema.optional(),
         durationMs: z.number().int().nonnegative().optional(),
@@ -264,6 +296,51 @@ const ExecutionEventSchema = z
                 code: z.ZodIssueCode.custom,
                 message: 'toolName is required when execution kind is tool.',
             });
+        }
+
+        if (value.kind === 'planner') {
+            const purposeResult = PlannerExecutionPurposeSchema.safeParse(
+                value.purpose
+            );
+            if (!purposeResult.success) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message:
+                        'purpose is required and must be a canonical planner purpose when execution kind is planner.',
+                });
+            }
+
+            if (value.contractType === undefined) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message:
+                        'contractType is required when execution kind is planner.',
+                });
+            }
+
+            if (value.applyOutcome === undefined) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message:
+                        'applyOutcome is required when execution kind is planner.',
+                });
+            }
+
+            if (typeof value.mattered !== 'boolean') {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message:
+                        'mattered is required when execution kind is planner.',
+                });
+            }
+
+            if (!Array.isArray(value.matteredControlIds)) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message:
+                        'matteredControlIds is required when execution kind is planner.',
+                });
+            }
         }
 
         if (value.reasonCode) {
@@ -647,7 +724,7 @@ const TraceCardChipDataSchema = z
 /**
  * Response metadata is intentionally tolerant so new backend fields do not break clients.
  */
-export const ResponseMetadataSchema = z
+export const ResponseMetadataSchema: z.ZodType<ResponseMetadata> = z
     .object(responseMetadataShape)
     .passthrough();
 
@@ -696,36 +773,37 @@ export const PostChatRequestSchema = z
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
-export const PostChatResponseSchema = z.discriminatedUnion('action', [
-    z
-        .object({
-            action: z.literal('message'),
-            message: z.string(),
-            modality: z.enum(['text', 'tts']),
-            metadata: ResponseMetadataSchema,
-        })
-        .passthrough(),
-    z
-        .object({
-            action: z.literal('react'),
-            reaction: z.string().min(1),
-            metadata: z.null(),
-        })
-        .passthrough(),
-    z
-        .object({
-            action: z.literal('ignore'),
-            metadata: z.null(),
-        })
-        .passthrough(),
-    z
-        .object({
-            action: z.literal('image'),
-            imageRequest: ChatImageRequestSchema,
-            metadata: z.null(),
-        })
-        .passthrough(),
-]);
+export const PostChatResponseSchema: z.ZodType<PostChatResponse> =
+    z.discriminatedUnion('action', [
+        z
+            .object({
+                action: z.literal('message'),
+                message: z.string(),
+                modality: z.enum(['text', 'tts']),
+                metadata: ResponseMetadataSchema,
+            })
+            .passthrough(),
+        z
+            .object({
+                action: z.literal('react'),
+                reaction: z.string().min(1),
+                metadata: z.null(),
+            })
+            .passthrough(),
+        z
+            .object({
+                action: z.literal('ignore'),
+                metadata: z.null(),
+            })
+            .passthrough(),
+        z
+            .object({
+                action: z.literal('image'),
+                imageRequest: ChatImageRequestSchema,
+                metadata: z.null(),
+            })
+            .passthrough(),
+    ]);
 
 /**
  * @api.operationId: getChatProfiles
@@ -1051,13 +1129,14 @@ export const PostTraceCardFromTraceResponseSchema = PostTraceCardResponseSchema;
  * @api.operationId: getTrace
  * @api.path: GET /api/traces/{responseId}
  */
-export const GetTraceResponseSchema = ResponseMetadataSchema;
+export const GetTraceResponseSchema: z.ZodType<GetTraceResponse> =
+    ResponseMetadataSchema;
 
 /**
  * @api.operationId: getTrace
  * @api.path: GET /api/traces/{responseId}
  */
-export const GetTraceStaleResponseSchema = z
+export const GetTraceStaleResponseSchema: z.ZodType<GetTraceStaleResponse> = z
     .object({
         message: z.literal('Trace is stale'),
         metadata: ResponseMetadataSchema,
@@ -1067,10 +1146,9 @@ export const GetTraceStaleResponseSchema = z
 /**
  * Trace reads can return either live metadata or a stale envelope depending on status.
  */
-export const GetTraceApiResponseSchema = z.union([
-    GetTraceResponseSchema,
-    GetTraceStaleResponseSchema,
-]);
+export const GetTraceApiResponseSchema: z.ZodType<
+    GetTraceResponse | GetTraceStaleResponse
+> = z.union([GetTraceResponseSchema, GetTraceStaleResponseSchema]);
 
 /**
  * Shared API error envelope for normalized server-side error responses.

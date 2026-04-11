@@ -51,3 +51,32 @@ In practice:
 - `provider_preference` is usually advisory
 - `mattered` means the control actually changed behavior
 - this layer explains runtime influence; it is not a policy engine
+
+## Planner Activity Event Fields (Execution/Provenance)
+
+Planner activity must be explicit in `metadata.execution[]` with a `kind: "planner"` event.
+These fields are canonical and required for planner events:
+
+- `purpose`: canonical invocation purpose (`chat_orchestrator_action_selection`)
+- `contractType`: planner contract path (`structured`, `text_json`, or `fallback`)
+- `applyOutcome`: how planner output was applied (`applied`, `adjusted_by_policy`, or `not_applied`)
+- `mattered`: whether planner influence had observable impact on this run
+- `matteredControlIds`: steerability control ids that justify `mattered=true`
+
+Canonical example:
+
+```json
+{
+    "kind": "planner",
+    "status": "executed",
+    "purpose": "chat_orchestrator_action_selection",
+    "contractType": "text_json",
+    "applyOutcome": "applied",
+    "mattered": true,
+    "matteredControlIds": ["tool_allowance"],
+    "profileId": "openai-text-fast",
+    "provider": "openai",
+    "model": "gpt-5-nano",
+    "durationMs": 17
+}
+```

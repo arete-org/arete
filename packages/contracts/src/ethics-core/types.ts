@@ -127,6 +127,30 @@ export type PlannerExecutionReasonCode = Extract<
     'planner_runtime_error' | 'planner_invalid_output'
 >;
 
+/**
+ * Canonical planner invocation purpose labels.
+ * Keep additive and serializable for trace auditability.
+ */
+export type PlannerExecutionPurpose =
+    | 'chat_orchestrator_action_selection'
+    | (string & {});
+
+/**
+ * Planner contract execution style used for this invocation.
+ */
+export type PlannerExecutionContractType =
+    | 'structured'
+    | 'text_json'
+    | 'fallback';
+
+/**
+ * How planner output was applied by orchestration/policy.
+ */
+export type PlannerExecutionApplyOutcome =
+    | 'applied'
+    | 'adjusted_by_policy'
+    | 'not_applied';
+
 export type EvaluatorExecutionReasonCode = Extract<
     ExecutionReasonCode,
     'evaluator_runtime_error'
@@ -295,6 +319,11 @@ type ProfileExecutionEvent = BaseExecutionEvent & {
 
 export type PlannerExecutionEvent = ProfileExecutionEvent & {
     kind: 'planner';
+    purpose?: PlannerExecutionPurpose;
+    contractType?: PlannerExecutionContractType;
+    applyOutcome?: PlannerExecutionApplyOutcome;
+    mattered?: boolean;
+    matteredControlIds?: SteerabilityControlId[];
     reasonCode?: PlannerExecutionReasonCode;
 };
 
@@ -523,6 +552,11 @@ export type ExecutionEvent = {
     provider?: string;
     model?: string;
     toolName?: string;
+    purpose?: PlannerExecutionPurpose;
+    contractType?: PlannerExecutionContractType;
+    applyOutcome?: PlannerExecutionApplyOutcome;
+    mattered?: boolean;
+    matteredControlIds?: SteerabilityControlId[];
     evaluator?: EvaluatorOutcome;
     reasonCode?: ExecutionReasonCode;
     durationMs?: number;

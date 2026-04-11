@@ -20,11 +20,15 @@ import type {
     EvaluatorOutcome,
     EvaluatorExecutionReasonCode,
     GenerationExecutionReasonCode,
+    PlannerExecutionApplyOutcome,
+    PlannerExecutionContractType,
+    PlannerExecutionPurpose,
     PartialResponseTemperament,
     PlannerExecutionReasonCode,
     Provenance,
     ResponseMetadata,
     SafetyTier,
+    SteerabilityControlId,
     ToolExecutionContext,
     ToolInvocationReasonCode,
     TraceAxisScore,
@@ -647,6 +651,11 @@ type ResponseMetadataRuntimeContext = {
         planner?: {
             status: ExecutionStatus;
             reasonCode?: ExecutionReasonCode;
+            purpose: PlannerExecutionPurpose;
+            contractType: PlannerExecutionContractType;
+            applyOutcome: PlannerExecutionApplyOutcome;
+            mattered: boolean;
+            matteredControlIds: SteerabilityControlId[];
             profileId: string;
             originalProfileId?: string;
             effectiveProfileId?: string;
@@ -698,6 +707,41 @@ const normalizePlannerReasonCode = (
     }
 
     return 'planner_runtime_error';
+};
+
+const normalizePlannerPurpose = (
+    value: PlannerExecutionPurpose | undefined
+): PlannerExecutionPurpose =>
+    value === 'chat_orchestrator_action_selection'
+        ? value
+        : 'chat_orchestrator_action_selection';
+
+const normalizePlannerContractType = (
+    value: PlannerExecutionContractType | undefined
+): PlannerExecutionContractType => {
+    if (
+        value === 'structured' ||
+        value === 'text_json' ||
+        value === 'fallback'
+    ) {
+        return value;
+    }
+
+    return 'fallback';
+};
+
+const normalizePlannerApplyOutcome = (
+    value: PlannerExecutionApplyOutcome | undefined
+): PlannerExecutionApplyOutcome => {
+    if (
+        value === 'applied' ||
+        value === 'adjusted_by_policy' ||
+        value === 'not_applied'
+    ) {
+        return value;
+    }
+
+    return 'not_applied';
 };
 
 const normalizeEvaluatorReasonCode = (
@@ -855,9 +899,23 @@ const buildResponseMetadata = (
             plannerExecution.status,
             plannerExecution.reasonCode
         );
+        const normalizedPlannerPurpose = normalizePlannerPurpose(
+            plannerExecution.purpose
+        );
+        const normalizedPlannerContractType = normalizePlannerContractType(
+            plannerExecution.contractType
+        );
+        const normalizedPlannerApplyOutcome = normalizePlannerApplyOutcome(
+            plannerExecution.applyOutcome
+        );
         execution.push({
             kind: 'planner',
             status: plannerExecution.status,
+            purpose: normalizedPlannerPurpose,
+            contractType: normalizedPlannerContractType,
+            applyOutcome: normalizedPlannerApplyOutcome,
+            mattered: plannerExecution.mattered,
+            matteredControlIds: plannerExecution.matteredControlIds,
             profileId: plannerExecution.profileId,
             ...(plannerExecution.originalProfileId !== undefined && {
                 originalProfileId: plannerExecution.originalProfileId,

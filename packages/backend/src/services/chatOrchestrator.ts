@@ -74,6 +74,9 @@ const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
 });
 
+const hasRequestedProfileOverride = (profileId: string | undefined): boolean =>
+    typeof profileId === 'string' && profileId.trim().length > 0;
+
 /**
  * The orchestrator keeps surface-specific policy in one place while reusing the
  * shared message-generation service for any branch that ends in text output.
@@ -426,6 +429,26 @@ export const createChatOrchestrator = ({
             },
             toolRequest: toolRequestContext,
         });
+        const plannerMatteredControlIds =
+            plannerExecution.status === 'executed'
+                ? steerabilityControls.controls
+                      .filter(
+                          (control) =>
+                              control.source === 'planner_output' &&
+                              control.mattered
+                      )
+                      .map((control) => control.controlId)
+                : [];
+        const plannerMattered = plannerMatteredControlIds.length > 0;
+        const plannerApplyOutcome =
+            plannerExecution.status !== 'executed'
+                ? 'not_applied'
+                : surfacePolicy !== undefined ||
+                    hasRequestedProfileOverride(normalizedRequest.profileId) ||
+                    rerouteApplied ||
+                    toolPolicyDecision.logEvent !== undefined
+                  ? 'adjusted_by_policy'
+                  : 'applied';
         // Persist the effective profile id in planner payload/snapshot so traces
         // reflect what was actually executed.
         const executionPlan: ChatPlan = {
@@ -598,6 +621,11 @@ export const createChatOrchestrator = ({
                     ...(plannerExecution.reasonCode !== undefined && {
                         reasonCode: plannerExecution.reasonCode,
                     }),
+                    purpose: plannerExecution.purpose,
+                    contractType: plannerExecution.contractType,
+                    applyOutcome: plannerApplyOutcome,
+                    mattered: plannerMattered,
+                    matteredControlIds: plannerMatteredControlIds,
                     profileId: plannerProfile.id,
                     originalProfileId: plannerProfile.id,
                     effectiveProfileId: plannerProfile.id,

@@ -235,6 +235,11 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
             {
                 kind: 'planner',
                 status: 'executed',
+                purpose: 'chat_orchestrator_action_selection',
+                contractType: 'text_json',
+                applyOutcome: 'applied',
+                mattered: true,
+                matteredControlIds: ['provider_preference'],
                 profileId: 'openai-text-fast',
                 provider: 'openai',
                 model: 'gpt-5-nano',
