@@ -90,7 +90,7 @@ type PlannerContextReasonCode =
     | 'planner_context_budget_exhausted'
     | 'planner_context_timeout_fail_open';
 
-type PlannerNormalizationResult = {
+export type PlannerNormalizationResult = {
     plan: ChatPlan;
     fallbackTier: PlannerFallbackTier;
     correctionCodes: string[];

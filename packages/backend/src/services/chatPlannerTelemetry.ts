@@ -6,21 +6,14 @@
  * @footnote-ethics: medium - Consistent planner telemetry improves operator visibility into governance and fail-open outcomes.
  */
 import type { PostChatRequest } from '@footnote/contracts/web';
+import type { PlannerNormalizationResult } from './chatPlanner.js';
 import { logger } from '../utils/logger.js';
 
 type ChatPlannerExecutionMode = 'structured' | 'text_json';
 type PlannerOutputIngestionAttempt = 'initial' | 'expanded';
 
-type PlannerNormalizationTelemetry = {
-    fallbackTier: 'none' | 'field_corrections' | 'safe_default_plan';
-    correctionCodes: string[];
-    applyOutcome: 'accepted' | 'partially_applied' | 'rejected';
-    outOfContractFields: string[];
-    authorityFieldAttempts: string[];
-};
-
 type LogPlannerPolicyInvalidFallbackInput = {
-    normalization: PlannerNormalizationTelemetry;
+    normalization: PlannerNormalizationResult;
     mode: ChatPlannerExecutionMode;
     request: Pick<PostChatRequest, 'surface' | 'trigger'>;
     plannerStructuredArguments?: string;
@@ -61,7 +54,7 @@ export const logPlannerPolicyInvalidFallback = ({
 };
 
 type LogPlannerOutputIngestionInput = {
-    normalization: PlannerNormalizationTelemetry;
+    normalization: PlannerNormalizationResult;
     mode: ChatPlannerExecutionMode;
     attempt: PlannerOutputIngestionAttempt;
     request: Pick<PostChatRequest, 'surface' | 'trigger'>;
