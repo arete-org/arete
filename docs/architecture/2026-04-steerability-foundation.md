@@ -126,11 +126,11 @@ authority.
 
 ## Control Observability Envelope
 
-Control decisions also emit one required observability envelope event:
+Every control decision also writes one structured event:
 `chat.steerability.control_observability`.
 
-The envelope is backend-owned and versioned (`v1`). It keeps control
-observability legible in both message and non-message runtime paths.
+Think of this as a compact audit note for each run. It is backend-owned,
+versioned (`v1`), and used in both message and non-message paths.
 
 Required `input` fields:
 
@@ -156,9 +156,12 @@ Required `outcome` fields:
 - `plannerStatus`
 - `mattered`
 
-If required fields are missing, the envelope is invalid. Tests must fail for
-that path. Runtime emission remains fail-open: invalid envelope emission logs
-an error signal and does not block response execution.
+Why this is strict:
+
+- If any required field is missing, that envelope is invalid.
+- Tests should fail for that path.
+- Runtime still fails open. If emission is invalid, we log it and continue
+  response execution.
 
 Canonical planner event:
 
