@@ -50,6 +50,15 @@ import {
     logPlannerOutputIngestion,
     logPlannerPolicyInvalidFallback,
 } from './chatPlannerTelemetry.js';
+import {
+    buildPlannerInvocationRejectionLogMeta,
+    isWorkflowOwnedPlannerInvocation,
+} from './chatPlannerInvocation.js';
+import type { ChatPlannerInvocationContext } from './chatPlannerInvocation.js';
+export type {
+    ChatPlannerInvocationContext,
+    ChatPlannerInvocationPurpose,
+} from './chatPlannerInvocation.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 
@@ -1239,9 +1248,31 @@ export const createChatPlanner = ({
             : '[]';
 
     const planChat = async (
-        request: PostChatRequest
+        request: PostChatRequest,
+        invocationContext?: ChatPlannerInvocationContext
     ): Promise<ChatPlannerResult> => {
         const plannerStartedAt = Date.now();
+        if (!isWorkflowOwnedPlannerInvocation(invocationContext)) {
+            logger.warn(
+                'chat planner invocation rejected because workflow-owned context and purpose were not provided; using safe fallback',
+                buildPlannerInvocationRejectionLogMeta({
+                    request,
+                    invocationContext,
+                })
+            );
+            return {
+                plan: buildFallbackPlan(
+                    request,
+                    'Planner invocation was outside workflow-owned boundaries, so the backend used a safe fallback.'
+                ),
+                execution: {
+                    status: 'skipped',
+                    reasonCode: 'planner_runtime_error',
+                    durationMs: Date.now() - plannerStartedAt,
+                },
+            };
+        }
+
         let plannerMode: ChatPlannerExecutionMode = executePlannerStructured
             ? 'structured'
             : 'text_json';
