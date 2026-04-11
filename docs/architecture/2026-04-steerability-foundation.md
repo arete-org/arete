@@ -13,7 +13,7 @@ The current controls are `workflow_mode`, `evidence_strictness`,
 
 ## Control Semantics
 
-The shape is flat in v1. The controls do different jobs.
+The shape is flat in v1, but the controls are not interchangeable.
 
 Execution controls:
 
@@ -82,7 +82,7 @@ For `provider_preference`, the trace should preserve the visible state:
 Planner activity belongs in `metadata.execution[]` as an explicit
 `kind: "planner"` event.
 
-Required planner fields:
+Planner events always include:
 
 - `purpose`
 - `contractType`
@@ -90,7 +90,7 @@ Required planner fields:
 - `mattered`
 - `matteredControlIds`
 
-Current canonical values:
+In the current chat path:
 
 - `purpose = chat_orchestrator_action_selection`
 - `contractType = structured | text_json | fallback`
@@ -111,7 +111,7 @@ planner path ended in backend fail-open fallback semantics.
 `mattered` and `matteredControlIds` use the same semantics here: observed
 downstream effect through controls in this run.
 
-Non-claims:
+These fields are narrower than they may first look:
 
 - `mattered` does not claim exclusive or complete causal proof
 - `adjusted_by_policy` does not mean planner output was discarded
@@ -189,7 +189,7 @@ Policy-adjusted example:
 
 ## Future Constraints
 
-Some seams are already visible and should stay bounded.
+A few expansion points are already visible, and they need to stay bounded.
 
 - If planner adjustments split into materially different classes, add detail
   alongside `applyOutcome`. Do not overload the top-level enum.
@@ -199,5 +199,4 @@ Some seams are already visible and should stay bounded.
   final TRACE separate. `workflowMode` remains routing metadata. TRACE remains
   answer-posture metadata.
 
-Traces should describe runtime truth in a form contributors can follow and
-reviewers can inspect.
+The trace should show what the runtime actually did.
