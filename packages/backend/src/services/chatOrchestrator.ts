@@ -434,7 +434,9 @@ export const createChatOrchestrator = ({
                 ? steerabilityControls.controls
                       .filter(
                           (control) =>
-                              control.source === 'planner_output' &&
+                              (control.source === 'planner_output' ||
+                                  control.source === 'tool_policy' ||
+                                  control.source === 'capability_policy') &&
                               control.mattered
                       )
                       .map((control) => control.controlId)

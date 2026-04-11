@@ -709,16 +709,14 @@ const normalizePlannerReasonCode = (
     return 'planner_runtime_error';
 };
 
-const normalizePlannerPurpose = (
-    value: PlannerExecutionPurpose | undefined
-): PlannerExecutionPurpose =>
-    value === 'chat_orchestrator_action_selection'
-        ? value
-        : 'chat_orchestrator_action_selection';
+const parsePlannerPurpose = (
+    value: unknown
+): PlannerExecutionPurpose | undefined =>
+    value === 'chat_orchestrator_action_selection' ? value : undefined;
 
-const normalizePlannerContractType = (
-    value: PlannerExecutionContractType | undefined
-): PlannerExecutionContractType => {
+const parsePlannerContractType = (
+    value: unknown
+): PlannerExecutionContractType | undefined => {
     if (
         value === 'structured' ||
         value === 'text_json' ||
@@ -727,12 +725,12 @@ const normalizePlannerContractType = (
         return value;
     }
 
-    return 'fallback';
+    return undefined;
 };
 
-const normalizePlannerApplyOutcome = (
-    value: PlannerExecutionApplyOutcome | undefined
-): PlannerExecutionApplyOutcome => {
+const parsePlannerApplyOutcome = (
+    value: unknown
+): PlannerExecutionApplyOutcome | undefined => {
     if (
         value === 'applied' ||
         value === 'adjusted_by_policy' ||
@@ -741,7 +739,7 @@ const normalizePlannerApplyOutcome = (
         return value;
     }
 
-    return 'not_applied';
+    return undefined;
 };
 
 const normalizeEvaluatorReasonCode = (
@@ -901,39 +899,93 @@ const buildResponseMetadata = (
             plannerExecution.status,
             plannerExecution.reasonCode
         );
-        const normalizedPlannerPurpose = normalizePlannerPurpose(
+        const validatedPlannerPurpose = parsePlannerPurpose(
             plannerExecution.purpose
         );
-        const normalizedPlannerContractType = normalizePlannerContractType(
+        const validatedPlannerContractType = parsePlannerContractType(
             plannerExecution.contractType
         );
-        const normalizedPlannerApplyOutcome = normalizePlannerApplyOutcome(
+        const validatedPlannerApplyOutcome = parsePlannerApplyOutcome(
             plannerExecution.applyOutcome
         );
-        execution.push({
-            kind: 'planner',
-            status: plannerExecution.status,
-            purpose: normalizedPlannerPurpose,
-            contractType: normalizedPlannerContractType,
-            applyOutcome: normalizedPlannerApplyOutcome,
-            mattered: plannerExecution.mattered,
-            matteredControlIds: plannerExecution.matteredControlIds,
-            profileId: plannerExecution.profileId,
-            ...(plannerExecution.originalProfileId !== undefined && {
-                originalProfileId: plannerExecution.originalProfileId,
-            }),
-            ...(plannerExecution.effectiveProfileId !== undefined && {
-                effectiveProfileId: plannerExecution.effectiveProfileId,
-            }),
-            provider: plannerExecution.provider,
-            model: plannerExecution.model,
-            ...(normalizedPlannerReasonCode !== undefined && {
-                reasonCode: normalizedPlannerReasonCode,
-            }),
-            ...(plannerExecution.durationMs !== undefined && {
-                durationMs: plannerExecution.durationMs,
-            }),
-        });
+        const plannerExecutionSource =
+            'runtimeContext.executionContext.planner';
+        const invalidPlannerFields: Array<{
+            field:
+                | 'purpose'
+                | 'contractType'
+                | 'applyOutcome'
+                | 'mattered'
+                | 'matteredControlIds';
+            value: unknown;
+        }> = [];
+        if (validatedPlannerPurpose === undefined) {
+            invalidPlannerFields.push({
+                field: 'purpose',
+                value: plannerExecution.purpose,
+            });
+        }
+        if (validatedPlannerContractType === undefined) {
+            invalidPlannerFields.push({
+                field: 'contractType',
+                value: plannerExecution.contractType,
+            });
+        }
+        if (validatedPlannerApplyOutcome === undefined) {
+            invalidPlannerFields.push({
+                field: 'applyOutcome',
+                value: plannerExecution.applyOutcome,
+            });
+        }
+        if (typeof plannerExecution.mattered !== 'boolean') {
+            invalidPlannerFields.push({
+                field: 'mattered',
+                value: plannerExecution.mattered,
+            });
+        }
+        if (!Array.isArray(plannerExecution.matteredControlIds)) {
+            invalidPlannerFields.push({
+                field: 'matteredControlIds',
+                value: plannerExecution.matteredControlIds,
+            });
+        }
+
+        if (invalidPlannerFields.length > 0) {
+            logger.error(
+                'planner execution metadata dropped due invalid required fields',
+                {
+                    responseId,
+                    source: plannerExecutionSource,
+                    plannerStatus: plannerExecution.status,
+                    invalidPlannerFields,
+                }
+            );
+        } else {
+            execution.push({
+                kind: 'planner',
+                status: plannerExecution.status,
+                purpose: validatedPlannerPurpose,
+                contractType: validatedPlannerContractType,
+                applyOutcome: validatedPlannerApplyOutcome,
+                mattered: plannerExecution.mattered,
+                matteredControlIds: plannerExecution.matteredControlIds,
+                profileId: plannerExecution.profileId,
+                ...(plannerExecution.originalProfileId !== undefined && {
+                    originalProfileId: plannerExecution.originalProfileId,
+                }),
+                ...(plannerExecution.effectiveProfileId !== undefined && {
+                    effectiveProfileId: plannerExecution.effectiveProfileId,
+                }),
+                provider: plannerExecution.provider,
+                model: plannerExecution.model,
+                ...(normalizedPlannerReasonCode !== undefined && {
+                    reasonCode: normalizedPlannerReasonCode,
+                }),
+                ...(plannerExecution.durationMs !== undefined && {
+                    durationMs: plannerExecution.durationMs,
+                }),
+            });
+        }
     }
     const evaluatorExecution = runtimeContext.executionContext?.evaluator;
     if (evaluatorExecution) {

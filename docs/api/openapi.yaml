@@ -2470,6 +2470,52 @@ components:
                                 type: string
                             toolName:
                                 type: string
+                            evaluator:
+                                type: object
+                                description: 'Evaluator outcome payload for kind=evaluator execution events.'
+                                properties:
+                                    authorityLevel:
+                                        type: string
+                                        enum: [observe, influence, enforce]
+                                    mode:
+                                        type: string
+                                        enum: [observe_only, enforced]
+                                    provenance:
+                                        type: string
+                                        enum: [Retrieved, Inferred, Speculative]
+                                    safetyDecision:
+                                        type: object
+                                        properties:
+                                            action:
+                                                type: string
+                                                enum:
+                                                    [
+                                                        allow,
+                                                        block,
+                                                        redirect,
+                                                        safe_partial,
+                                                        human_review,
+                                                    ]
+                                            safetyTier:
+                                                type: string
+                                                enum: [Low, Medium, High]
+                                            ruleId:
+                                                type: string
+                                                nullable: true
+                                            reasonCode:
+                                                type: string
+                                                enum:
+                                                    [
+                                                        self_harm_crisis_intent,
+                                                        weaponization_request,
+                                                        professional_advice_guardrail,
+                                                    ]
+                                            reason:
+                                                type: string
+                                        required: [action, safetyTier, ruleId]
+                                        additionalProperties: false
+                                required: [mode, provenance, safetyDecision]
+                                additionalProperties: false
                             reasonCode:
                                 type: string
                                 enum:

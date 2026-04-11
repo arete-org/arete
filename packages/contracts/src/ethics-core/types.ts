@@ -131,9 +131,7 @@ export type PlannerExecutionReasonCode = Extract<
  * Canonical planner invocation purpose labels.
  * Keep additive and serializable for trace auditability.
  */
-export type PlannerExecutionPurpose =
-    | 'chat_orchestrator_action_selection'
-    | (string & {});
+export type PlannerExecutionPurpose = 'chat_orchestrator_action_selection';
 
 /**
  * Planner contract execution style used for this invocation.
@@ -319,11 +317,11 @@ type ProfileExecutionEvent = BaseExecutionEvent & {
 
 export type PlannerExecutionEvent = ProfileExecutionEvent & {
     kind: 'planner';
-    purpose?: PlannerExecutionPurpose;
-    contractType?: PlannerExecutionContractType;
-    applyOutcome?: PlannerExecutionApplyOutcome;
-    mattered?: boolean;
-    matteredControlIds?: SteerabilityControlId[];
+    purpose: PlannerExecutionPurpose;
+    contractType: PlannerExecutionContractType;
+    applyOutcome: PlannerExecutionApplyOutcome;
+    mattered: boolean;
+    matteredControlIds: SteerabilityControlId[];
     reasonCode?: PlannerExecutionReasonCode;
 };
 
@@ -543,25 +541,11 @@ export type ToolExecutionContext = {
  * This v1 shape is intentionally compact and is expected to grow once
  * workflow-based execution is enabled (lineage, timing, and per-step usage).
  */
-export type ExecutionEvent = {
-    kind: ExecutionEventKind;
-    status: ExecutionStatus;
-    originalProfileId?: string;
-    effectiveProfileId?: string;
-    profileId?: string;
-    provider?: string;
-    model?: string;
-    toolName?: string;
-    purpose?: PlannerExecutionPurpose;
-    contractType?: PlannerExecutionContractType;
-    applyOutcome?: PlannerExecutionApplyOutcome;
-    mattered?: boolean;
-    matteredControlIds?: SteerabilityControlId[];
-    evaluator?: EvaluatorOutcome;
-    reasonCode?: ExecutionReasonCode;
-    durationMs?: number;
-};
-
+export type ExecutionEvent =
+    | PlannerExecutionEvent
+    | EvaluatorExecutionEvent
+    | ToolExecutionEvent
+    | GenerationExecutionEvent;
 export type TrustGraphProvenanceReasonCode =
     | 'external_scope_validation_failed'
     | 'adapter_scope_mismatch'

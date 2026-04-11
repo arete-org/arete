@@ -1347,6 +1347,7 @@ export const createChatPlanner = ({
                 reasonCode?: ExecutionReasonCode;
             }
         ): Promise<ChatPlannerResult> => {
+            const initialAttemptContractType = plannerMode;
             const baseExecution: ChatPlannerExecution = {
                 ...initialExecution,
                 durationMs: Date.now() - plannerStartedAt,
@@ -1354,7 +1355,7 @@ export const createChatPlanner = ({
                 contextTier: 'current_window',
                 selectedAttempt: 'initial',
                 purpose: invocationContext.purpose,
-                contractType: plannerMode,
+                contractType: initialAttemptContractType,
             };
 
             if (
@@ -1426,7 +1427,7 @@ export const createChatPlanner = ({
                             selectedAttempt: 'expanded',
                             contextReasonCode: 'planner_context_expanded',
                             purpose: invocationContext.purpose,
-                            contractType: plannerMode,
+                            contractType: 'text_json',
                         },
                     };
                 }

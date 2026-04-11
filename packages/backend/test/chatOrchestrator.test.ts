@@ -1985,6 +1985,13 @@ test('planner invocation emits explicit execution/provenance chain fields throug
                         generation: {
                             reasoningEffort: 'low',
                             verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 3,
+                            },
                             search: {
                                 query: 'latest release notes',
                                 contextSize: 'low',
@@ -2021,7 +2028,10 @@ test('planner invocation emits explicit execution/provenance chain fields throug
         response.metadata.steerabilityControls?.controls.find(
             (control) => control.controlId === 'tool_allowance'
         );
-    assert.equal(toolAllowanceControl?.source, 'planner_output');
+    assert.ok(
+        toolAllowanceControl?.source === 'tool_policy' ||
+            toolAllowanceControl?.source === 'capability_policy'
+    );
     assert.equal(toolAllowanceControl?.mattered, true);
     const plannerEvent = response.metadata.execution?.find(
         (event) => event.kind === 'planner'
@@ -2054,6 +2064,13 @@ test('planner execution metadata reports adjusted_by_policy when request overrid
                         generation: {
                             reasoningEffort: 'low',
                             verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 3,
+                            },
                             search: {
                                 query: 'latest release notes',
                                 contextSize: 'low',
