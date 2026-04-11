@@ -1,22 +1,19 @@
 # Steerability Foundation (Internal Controls v1)
 
-`steerabilityControls` is a small internal metadata layer for recording which
-backend controls materially shaped a run. Its job is inspectability. Reviewers
-should be able to look at a trace and see which controls mattered, where they
-came from, and what part of execution they influenced.
-
-This layer is not a policy engine. It does not introduce user-facing controls,
-workflow scripting, or a second source of runtime authority. It explains
-control-plane influence after the fact in a form that is serializable and easy
-to inspect.
+`steerabilityControls` records which backend controls materially shaped a run.
+It exists for trace inspection. It is not a policy engine, a user control
+surface, or a workflow scripting layer.
 
 Each control record stores a control id, value, source, rationale,
 `mattered`, and impacted targets.
 
-## Control Classes
+The current controls are `workflow_mode`, `evidence_strictness`,
+`review_intensity`, `provider_preference`, `persona_tone_overlay`, and
+`tool_allowance`.
 
-The v1 runtime shape is flat, but the controls are not interchangeable. The
-distinctions below are architectural, not cosmetic.
+## Control Semantics
+
+The shape is flat in v1. The controls are not equivalent.
 
 Execution controls:
 
@@ -25,35 +22,30 @@ Execution controls:
 - `review_intensity`
 - `tool_allowance`
 
-These controls can change execution behavior directly. They affect routing,
-review behavior, evidence posture, or tool eligibility.
+These change execution behavior. They affect routing, review behavior,
+evidence posture, or tool eligibility.
 
 Presentation control:
 
 - `persona_tone_overlay`
 
-This control affects presentation only. It must not change
-execution-contract authority, evidence strictness, or review authority.
+This affects presentation only. It must not change execution-contract
+authority, evidence strictness, or review authority.
 
 Preference signal:
 
 - `provider_preference`
 
-This control expresses a request or advisory bias. It may influence selection,
-but it is not authoritative by default.
-
-These categories matter because traces must not blur execution policy,
-presentation shaping, and advisory preference into one kind of influence.
-
-## What `mattered` Means
+This is advisory by default. Runtime may honor it, override it, or replace it
+through fallback. Do not treat it as execution authority unless policy says so.
 
 `mattered = true` means the control had an observed material effect on the run
 or the delivered answer.
 
-Presence alone does not count. A control does not matter just because it is
-visible in metadata, evaluated during routing, or carried through a trace. It
-matters when it changes execution, review behavior, provider or profile
-selection, tool eligibility, or final answer posture.
+Presence is not enough. A control does not matter just because it appears in
+metadata or was considered during routing. It matters when it changes
+execution, review behavior, provider or profile selection, tool eligibility,
+or final answer posture.
 
 Examples:
 
@@ -63,18 +55,12 @@ Examples:
   `provider_preference` may still matter because it changed the selection path.
 - If no overlay is applied, `persona_tone_overlay` does not matter.
 
-`mattered` is an observed effect signal. It is not a claim of exclusive or
-complete causal proof.
+`mattered` records observed effect. It does not prove full or exclusive
+causality.
 
-## Review Intensity
-
-`review_intensity` must be derived from the same workflow behavior logic used
-for runtime routing in `workflowProfileRegistry`.
-
-That coupling matters because traces should report what the runtime actually
-did, not what a separate metadata path inferred after the fact. If routing and
-metadata derive from different logic, trace explanations eventually drift away
-from runtime truth.
+`review_intensity` comes from the same workflow behavior logic used for runtime
+routing in `workflowProfileRegistry`. If routing and metadata drift apart,
+traces stop describing what the runtime actually did.
 
 Current mapping:
 
@@ -83,12 +69,7 @@ Current mapping:
 - `moderate`: two or three passes
 - `high`: four or more passes
 
-## Provider Preference
-
-`provider_preference` is advisory unless policy says otherwise. Runtime may
-honor it, override it, or replace it through fallback.
-
-That state should remain visible in trace metadata:
+For `provider_preference`, the trace should preserve the visible state:
 
 - `requested_honored`
 - `requested_overridden`
@@ -96,19 +77,18 @@ That state should remain visible in trace metadata:
 - `advisory_overridden`
 - `fallback_resolved`
 
-## Planner Activity in Execution Metadata
+## Planner Events
 
 Planner activity belongs in `metadata.execution[]` as an explicit
-`kind: "planner"` event. That event makes planner influence inspectable
-without turning the planner into a second orchestrator.
+`kind: "planner"` event.
 
-### Required Planner Event Fields
+Required planner fields:
 
-- `purpose`: canonical invocation purpose
-- `contractType`: planner contract path
-- `applyOutcome`: how planner output was applied
-- `mattered`: whether planner influence had observable impact in this run
-- `matteredControlIds`: control ids that justify `mattered=true`
+- `purpose`
+- `contractType`
+- `applyOutcome`
+- `mattered`
+- `matteredControlIds`
 
 Current canonical values:
 
@@ -116,42 +96,34 @@ Current canonical values:
 - `contractType = structured | text_json | fallback`
 - `applyOutcome = applied | adjusted_by_policy | not_applied`
 
-### Field Semantics
-
-`purpose` identifies the bounded planner role in the workflow. It should answer
-what the planner was invoked to do, not describe the full outcome of the run.
+`purpose` identifies the bounded planner role in the workflow.
 
 `contractType` identifies the planner execution path. `fallback` means the
 planner path ended in backend fail-open fallback semantics.
 
-`applyOutcome` describes how planner output related to final execution:
+`applyOutcome` records how planner output relates to final execution:
 
 - `applied`: planner output was used without material policy adjustment
 - `adjusted_by_policy`: planner output was accepted as input but changed by
   policy, routing, or surface constraints before final execution
 - `not_applied`: planner output did not become the execution path
 
-`mattered` records observed downstream material effect through controls in this
-run. `matteredControlIds` names the controls that justify that claim.
+`mattered` and `matteredControlIds` work the same way here as they do for the
+control layer. They record observed downstream effect through controls in this
+run.
 
-### Non-Claims
+Non-claims:
 
-These planner fields should not be read more strongly than they are defined.
+- `mattered` does not claim exclusive or complete causal proof
+- `adjusted_by_policy` does not mean planner output was discarded
+- `fallback` does not mean planner output was partially trusted
 
-- `mattered` does not claim exclusive or complete causal proof.
-- `adjusted_by_policy` does not mean planner output was discarded.
-- `fallback` does not mean planner output was partially trusted.
-
-### Current Linkage Assumptions
-
-The current chat orchestrator emits one planner invocation per response path.
+The current chat orchestrator assumes one planner invocation per response path.
 Execution ordering is planner-first in `metadata.execution[]`.
 
-That assumption is sufficient for the current shape. If workflows later support
-multiple planner invocations or retries, explicit correlation should be added
-without allowing planner metadata to redefine orchestration authority.
-
-### Examples
+If workflows later support multiple planner invocations or retries, add
+explicit correlation. Do not let planner metadata turn into orchestration
+authority.
 
 Canonical planner event:
 
@@ -216,17 +188,17 @@ Policy-adjusted example:
 }
 ```
 
-## Bounded Future Extensions
+## Future Constraints
 
-Some seams are intentional and already constrained by current semantics.
+Some seams are already visible and should stay bounded.
 
-- If planner adjustments become materially distinct in practice, add detail
-  alongside `applyOutcome` rather than overloading the top-level enum.
+- If planner adjustments split into materially different classes, add detail
+  alongside `applyOutcome`. Do not overload the top-level enum.
 - If multiple planner passes or retries are introduced, add explicit
   correlation while keeping planner ownership bounded by workflow logic.
 - If runtime can revise TRACE posture during review, keep target TRACE and
-  final TRACE separate. `workflowMode` remains routing metadata; TRACE remains
+  final TRACE separate. `workflowMode` remains routing metadata. TRACE remains
   answer-posture metadata.
 
-The core rule stays the same: traces should describe runtime truth in a way
-that remains legible to contributors and inspectable by reviewers.
+The rule is simple: traces should describe runtime truth in a form that stays
+legible to contributors and inspectable by reviewers.
