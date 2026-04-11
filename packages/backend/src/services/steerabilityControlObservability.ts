@@ -57,6 +57,8 @@ const REQUIRED_CONTROL_OBSERVABILITY_FIELDS: readonly string[] = [
     'input.surface',
     'input.workflowModeId',
     'input.executionContractResponseMode',
+    'input.requestedProfileId',
+    'input.plannerSelectedProfileId',
     'input.selectedProfileId',
     'input.personaOverlaySource',
     'input.toolRequest.toolName',
@@ -70,6 +72,32 @@ const REQUIRED_CONTROL_OBSERVABILITY_FIELDS: readonly string[] = [
     'outcome.plannerStatus',
     'outcome.mattered',
 ];
+
+const REQUIRED_CONTROL_OBSERVABILITY_INPUT_FIELDS: readonly string[] = [
+    'surface',
+    'workflowModeId',
+    'executionContractResponseMode',
+    'requestedProfileId',
+    'plannerSelectedProfileId',
+    'selectedProfileId',
+    'personaOverlaySource',
+    'toolRequest.toolName',
+    'toolRequest.requested',
+    'toolRequest.eligible',
+    'plannerApplyOutcome',
+    'plannerMatteredControlIds',
+    'plannerStatus',
+    'responseAction',
+    'responseModality',
+    'steerabilityControls.controls',
+];
+
+const NULLABLE_REQUIRED_CONTROL_OBSERVABILITY_FIELDS = new Set<string>([
+    'input.requestedProfileId',
+    'input.plannerSelectedProfileId',
+    'requestedProfileId',
+    'plannerSelectedProfileId',
+]);
 
 const getValueByPath = (
     source: Record<string, unknown>,
@@ -99,6 +127,17 @@ const hasRequiredValue = (value: unknown): boolean => {
     return true;
 };
 
+const hasRequiredValueAtPath = (path: string, value: unknown): boolean => {
+    if (
+        value === null &&
+        NULLABLE_REQUIRED_CONTROL_OBSERVABILITY_FIELDS.has(path)
+    ) {
+        return true;
+    }
+
+    return hasRequiredValue(value);
+};
+
 export const listMissingControlObservabilityFields = (
     envelope: ControlObservabilityEnvelope
 ): string[] => {
@@ -106,7 +145,21 @@ export const listMissingControlObservabilityFields = (
     const missing: string[] = [];
     for (const requiredField of REQUIRED_CONTROL_OBSERVABILITY_FIELDS) {
         const value = getValueByPath(envelopeRecord, requiredField);
-        if (!hasRequiredValue(value)) {
+        if (!hasRequiredValueAtPath(requiredField, value)) {
+            missing.push(requiredField);
+        }
+    }
+
+    return missing;
+};
+
+const listMissingControlObservabilityInputFields = (
+    input: Record<string, unknown>
+): string[] => {
+    const missing: string[] = [];
+    for (const requiredField of REQUIRED_CONTROL_OBSERVABILITY_INPUT_FIELDS) {
+        const value = getValueByPath(input, requiredField);
+        if (!hasRequiredValueAtPath(requiredField, value)) {
             missing.push(requiredField);
         }
     }
@@ -135,16 +188,29 @@ export const buildControlObservabilityEnvelope = (input: {
         const trimmed = value?.trim();
         return trimmed && trimmed.length > 0 ? trimmed : null;
     };
+    const normalizedInput = {
+        ...input,
+        requestedProfileId: trimToNull(input.requestedProfileId),
+        plannerSelectedProfileId: trimToNull(input.plannerSelectedProfileId),
+    } as Record<string, unknown>;
+    const missingInputFields =
+        listMissingControlObservabilityInputFields(normalizedInput);
+    if (missingInputFields.length > 0) {
+        throw new Error(
+            `Control observability input missing required fields: ${missingInputFields.join(', ')}`
+        );
+    }
     const envelope: ControlObservabilityEnvelope = {
         version: 'v1',
         input: {
             surface: input.surface,
             workflowModeId: input.workflowModeId,
             executionContractResponseMode: input.executionContractResponseMode,
-            requestedProfileId: trimToNull(input.requestedProfileId),
-            plannerSelectedProfileId: trimToNull(
-                input.plannerSelectedProfileId
-            ),
+            requestedProfileId: normalizedInput.requestedProfileId as
+                | string
+                | null,
+            plannerSelectedProfileId:
+                normalizedInput.plannerSelectedProfileId as string | null,
             selectedProfileId: input.selectedProfileId,
             personaOverlaySource: input.personaOverlaySource,
             toolRequest: {

@@ -87,6 +87,39 @@ test('buildControlObservabilityEnvelope emits required input/decision/outcome gr
     assert.equal(listMissingControlObservabilityFields(envelope).length, 0);
 });
 
+test('profile lineage keys are required keys but allow explicit null lineage values', () => {
+    const envelope = buildControlObservabilityEnvelope({
+        ...createEnvelopeInput(),
+        requestedProfileId: undefined,
+        plannerSelectedProfileId: undefined,
+    });
+
+    assert.equal(envelope.input.requestedProfileId, null);
+    assert.equal(envelope.input.plannerSelectedProfileId, null);
+    assert.equal(listMissingControlObservabilityFields(envelope).length, 0);
+});
+
+test('listMissingControlObservabilityFields reports missing profile lineage keys', () => {
+    const envelope = buildControlObservabilityEnvelope(
+        createEnvelopeInput()
+    ) as unknown as {
+        input: {
+            requestedProfileId?: string | null;
+            plannerSelectedProfileId?: string | null;
+        };
+    };
+    delete envelope.input.requestedProfileId;
+    delete envelope.input.plannerSelectedProfileId;
+
+    const missing = listMissingControlObservabilityFields(
+        envelope as unknown as Parameters<
+            typeof listMissingControlObservabilityFields
+        >[0]
+    );
+    assert.ok(missing.includes('input.requestedProfileId'));
+    assert.ok(missing.includes('input.plannerSelectedProfileId'));
+});
+
 test('buildControlObservabilityEnvelope throws when required fields are missing', () => {
     const input = createEnvelopeInput();
     const trimmedInput = {
