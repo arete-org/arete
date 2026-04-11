@@ -79,6 +79,11 @@ test('resolveBreakerDecisionContext falls back to execution evaluator entries', 
             {
                 kind: 'planner',
                 status: 'executed',
+                purpose: 'chat_orchestrator_action_selection',
+                contractType: 'text_json',
+                applyOutcome: 'applied',
+                mattered: false,
+                matteredControlIds: [],
             },
             {
                 kind: 'evaluator',

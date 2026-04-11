@@ -8,6 +8,10 @@
 import type { ExecutionEvent } from './types.js';
 
 const formatEvaluatorSummary = (event: ExecutionEvent): string => {
+    if (event.kind !== 'evaluator') {
+        return 'decision';
+    }
+
     const rawEvaluator = event.evaluator as
         | {
               authorityLevel?: string;

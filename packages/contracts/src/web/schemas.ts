@@ -11,13 +11,20 @@ import {
     WORKFLOW_STEP_KINDS,
     WORKFLOW_STEP_STATUSES,
     WORKFLOW_TERMINATION_REASONS,
+    type ExecutionEvent,
     type ProvenanceAssessment,
+    type ResponseMetadata,
     type SteerabilityControls,
     type TraceAxisScore,
     type TrustGraphMetadata,
 } from '../ethics-core/index.js';
 import { SafetyDecisionSchema } from '../ethics-core/schemas.js';
 import type { ApiResponseValidationResult } from './client-core.js';
+import type {
+    GetTraceResponse,
+    GetTraceStaleResponse,
+    PostChatResponse,
+} from './types.js';
 import {
     internalImageRenderModels,
     internalImageTextModels,
@@ -170,6 +177,28 @@ const PlannerExecutionReasonCodeSchema = z.enum([
     'planner_runtime_error',
     'planner_invalid_output',
 ]);
+const PlannerExecutionPurposeSchema = z.enum([
+    'chat_orchestrator_action_selection',
+]);
+const PlannerExecutionContractTypeSchema = z.enum([
+    'structured',
+    'text_json',
+    'fallback',
+]);
+const PlannerExecutionApplyOutcomeSchema = z.enum([
+    'applied',
+    'adjusted_by_policy',
+    'not_applied',
+]);
+const SteerabilityControlIdSchema = z.enum([
+    'workflow_mode',
+    'evidence_strictness',
+    'review_intensity',
+    'provider_preference',
+    'persona_tone_overlay',
+    'tool_allowance',
+]);
+const PlannerMatteredControlIdSchema = SteerabilityControlIdSchema;
 const EvaluatorExecutionReasonCodeSchema = z.enum(['evaluator_runtime_error']);
 const GenerationExecutionReasonCodeSchema = z.enum([
     'generation_runtime_error',
@@ -229,63 +258,91 @@ const EvaluatorOutcomeSchema = z
         }
     })
     .strict();
-// Cross-field execution invariants:
-// - skipped/failed must explain why (reasonCode required)
-// - executed may include reasonCode for policy outcomes (for example reroutes)
-// This keeps telemetry queryable and makes fallback intent auditable.
-const ExecutionEventSchema = z
+const ProfileExecutionShape = {
+    originalProfileId: z.string().min(1).optional(),
+    effectiveProfileId: z.string().min(1).optional(),
+    profileId: z.string().min(1).optional(),
+    provider: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+} as const;
+
+const requireReasonCodeWhenNotExecuted = (
+    value: {
+        status: z.infer<typeof ExecutionStatusSchema>;
+        reasonCode?: string;
+    },
+    context: z.RefinementCtx
+): void => {
+    if (
+        (value.status === 'skipped' || value.status === 'failed') &&
+        !value.reasonCode
+    ) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+                'reasonCode is required when execution status is skipped or failed.',
+        });
+    }
+};
+
+const PlannerExecutionEventSchema = z
     .object({
-        kind: z.enum(['planner', 'evaluator', 'tool', 'generation']),
+        kind: z.literal('planner'),
         status: ExecutionStatusSchema,
-        originalProfileId: z.string().min(1).optional(),
-        effectiveProfileId: z.string().min(1).optional(),
-        profileId: z.string().min(1).optional(),
-        provider: z.string().min(1).optional(),
-        model: z.string().min(1).optional(),
-        toolName: z.string().min(1).optional(),
-        evaluator: EvaluatorOutcomeSchema.optional(),
-        reasonCode: ExecutionReasonCodeSchema.optional(),
+        ...ProfileExecutionShape,
+        purpose: PlannerExecutionPurposeSchema,
+        contractType: PlannerExecutionContractTypeSchema,
+        applyOutcome: PlannerExecutionApplyOutcomeSchema,
+        mattered: z.boolean(),
+        matteredControlIds: z.array(PlannerMatteredControlIdSchema),
+        reasonCode: PlannerExecutionReasonCodeSchema.optional(),
         durationMs: z.number().int().nonnegative().optional(),
     })
-    .superRefine((value, context) => {
-        if (
-            (value.status === 'skipped' || value.status === 'failed') &&
-            !value.reasonCode
-        ) {
-            context.addIssue({
-                code: z.ZodIssueCode.custom,
-                message:
-                    'reasonCode is required when execution status is skipped or failed.',
-            });
-        }
-
-        if (value.kind === 'tool' && !value.toolName) {
-            context.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: 'toolName is required when execution kind is tool.',
-            });
-        }
-
-        if (value.reasonCode) {
-            const reasonCodeByKind = {
-                planner: PlannerExecutionReasonCodeSchema,
-                evaluator: EvaluatorExecutionReasonCodeSchema,
-                tool: ToolExecutionReasonCodeSchema,
-                generation: GenerationExecutionReasonCodeSchema,
-            } as const;
-            const reasonCodeSchema = reasonCodeByKind[value.kind];
-            const reasonCodeResult = reasonCodeSchema.safeParse(
-                value.reasonCode
-            );
-            if (!reasonCodeResult.success) {
-                context.addIssue({
-                    code: z.ZodIssueCode.custom,
-                    message: `reasonCode "${value.reasonCode}" is not valid for execution kind "${value.kind}".`,
-                });
-            }
-        }
-    })
+    .superRefine(requireReasonCodeWhenNotExecuted)
     .strict();
+
+const EvaluatorExecutionEventSchema = z
+    .object({
+        kind: z.literal('evaluator'),
+        status: ExecutionStatusSchema,
+        evaluator: EvaluatorOutcomeSchema.optional(),
+        reasonCode: EvaluatorExecutionReasonCodeSchema.optional(),
+        durationMs: z.number().int().nonnegative().optional(),
+    })
+    .superRefine(requireReasonCodeWhenNotExecuted)
+    .strict();
+
+const ToolExecutionEventSchema = z
+    .object({
+        kind: z.literal('tool'),
+        status: ExecutionStatusSchema,
+        toolName: z.string().min(1),
+        reasonCode: ToolExecutionReasonCodeSchema.optional(),
+        durationMs: z.number().int().nonnegative().optional(),
+    })
+    .superRefine(requireReasonCodeWhenNotExecuted)
+    .strict();
+
+const GenerationExecutionEventSchema = z
+    .object({
+        kind: z.literal('generation'),
+        status: ExecutionStatusSchema,
+        ...ProfileExecutionShape,
+        reasonCode: GenerationExecutionReasonCodeSchema.optional(),
+        durationMs: z.number().int().nonnegative().optional(),
+    })
+    .superRefine(requireReasonCodeWhenNotExecuted)
+    .strict();
+
+const ExecutionEventSchema: z.ZodType<ExecutionEvent> = z.discriminatedUnion(
+    'kind',
+    [
+        PlannerExecutionEventSchema,
+        EvaluatorExecutionEventSchema,
+        ToolExecutionEventSchema,
+        GenerationExecutionEventSchema,
+    ]
+);
 
 const StepOutcomeSchema = z
     .object({
@@ -554,15 +611,6 @@ const WorkflowModeDecisionSchema = z
     })
     .strict();
 
-const SteerabilityControlIdSchema = z.enum([
-    'workflow_mode',
-    'evidence_strictness',
-    'review_intensity',
-    'provider_preference',
-    'persona_tone_overlay',
-    'tool_allowance',
-]);
-
 const SteerabilityControlSourceSchema = z.enum([
     'runtime_config',
     'execution_contract',
@@ -647,7 +695,7 @@ const TraceCardChipDataSchema = z
 /**
  * Response metadata is intentionally tolerant so new backend fields do not break clients.
  */
-export const ResponseMetadataSchema = z
+export const ResponseMetadataSchema: z.ZodType<ResponseMetadata> = z
     .object(responseMetadataShape)
     .passthrough();
 
@@ -696,36 +744,37 @@ export const PostChatRequestSchema = z
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
-export const PostChatResponseSchema = z.discriminatedUnion('action', [
-    z
-        .object({
-            action: z.literal('message'),
-            message: z.string(),
-            modality: z.enum(['text', 'tts']),
-            metadata: ResponseMetadataSchema,
-        })
-        .passthrough(),
-    z
-        .object({
-            action: z.literal('react'),
-            reaction: z.string().min(1),
-            metadata: z.null(),
-        })
-        .passthrough(),
-    z
-        .object({
-            action: z.literal('ignore'),
-            metadata: z.null(),
-        })
-        .passthrough(),
-    z
-        .object({
-            action: z.literal('image'),
-            imageRequest: ChatImageRequestSchema,
-            metadata: z.null(),
-        })
-        .passthrough(),
-]);
+export const PostChatResponseSchema: z.ZodType<PostChatResponse> =
+    z.discriminatedUnion('action', [
+        z
+            .object({
+                action: z.literal('message'),
+                message: z.string(),
+                modality: z.enum(['text', 'tts']),
+                metadata: ResponseMetadataSchema,
+            })
+            .passthrough(),
+        z
+            .object({
+                action: z.literal('react'),
+                reaction: z.string().min(1),
+                metadata: z.null(),
+            })
+            .passthrough(),
+        z
+            .object({
+                action: z.literal('ignore'),
+                metadata: z.null(),
+            })
+            .passthrough(),
+        z
+            .object({
+                action: z.literal('image'),
+                imageRequest: ChatImageRequestSchema,
+                metadata: z.null(),
+            })
+            .passthrough(),
+    ]);
 
 /**
  * @api.operationId: getChatProfiles
@@ -1051,13 +1100,14 @@ export const PostTraceCardFromTraceResponseSchema = PostTraceCardResponseSchema;
  * @api.operationId: getTrace
  * @api.path: GET /api/traces/{responseId}
  */
-export const GetTraceResponseSchema = ResponseMetadataSchema;
+export const GetTraceResponseSchema: z.ZodType<GetTraceResponse> =
+    ResponseMetadataSchema;
 
 /**
  * @api.operationId: getTrace
  * @api.path: GET /api/traces/{responseId}
  */
-export const GetTraceStaleResponseSchema = z
+export const GetTraceStaleResponseSchema: z.ZodType<GetTraceStaleResponse> = z
     .object({
         message: z.literal('Trace is stale'),
         metadata: ResponseMetadataSchema,
@@ -1067,10 +1117,9 @@ export const GetTraceStaleResponseSchema = z
 /**
  * Trace reads can return either live metadata or a stale envelope depending on status.
  */
-export const GetTraceApiResponseSchema = z.union([
-    GetTraceResponseSchema,
-    GetTraceStaleResponseSchema,
-]);
+export const GetTraceApiResponseSchema: z.ZodType<
+    GetTraceResponse | GetTraceStaleResponse
+> = z.union([GetTraceResponseSchema, GetTraceStaleResponseSchema]);
 
 /**
  * Shared API error envelope for normalized server-side error responses.

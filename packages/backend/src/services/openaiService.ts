@@ -20,11 +20,15 @@ import type {
     EvaluatorOutcome,
     EvaluatorExecutionReasonCode,
     GenerationExecutionReasonCode,
+    PlannerExecutionApplyOutcome,
+    PlannerExecutionContractType,
+    PlannerExecutionPurpose,
     PartialResponseTemperament,
     PlannerExecutionReasonCode,
     Provenance,
     ResponseMetadata,
     SafetyTier,
+    SteerabilityControlId,
     ToolExecutionContext,
     ToolInvocationReasonCode,
     TraceAxisScore,
@@ -647,6 +651,11 @@ type ResponseMetadataRuntimeContext = {
         planner?: {
             status: ExecutionStatus;
             reasonCode?: ExecutionReasonCode;
+            purpose: PlannerExecutionPurpose;
+            contractType: PlannerExecutionContractType;
+            applyOutcome: PlannerExecutionApplyOutcome;
+            mattered: boolean;
+            matteredControlIds: SteerabilityControlId[];
             profileId: string;
             originalProfileId?: string;
             effectiveProfileId?: string;
@@ -699,6 +708,49 @@ const normalizePlannerReasonCode = (
 
     return 'planner_runtime_error';
 };
+
+const parsePlannerPurpose = (
+    value: unknown
+): PlannerExecutionPurpose | undefined =>
+    value === 'chat_orchestrator_action_selection' ? value : undefined;
+
+const parsePlannerContractType = (
+    value: unknown
+): PlannerExecutionContractType | undefined => {
+    if (
+        value === 'structured' ||
+        value === 'text_json' ||
+        value === 'fallback'
+    ) {
+        return value;
+    }
+
+    return undefined;
+};
+
+const parsePlannerApplyOutcome = (
+    value: unknown
+): PlannerExecutionApplyOutcome | undefined => {
+    if (
+        value === 'applied' ||
+        value === 'adjusted_by_policy' ||
+        value === 'not_applied'
+    ) {
+        return value;
+    }
+
+    return undefined;
+};
+
+const isSteerabilityControlId = (
+    value: unknown
+): value is SteerabilityControlId =>
+    value === 'workflow_mode' ||
+    value === 'evidence_strictness' ||
+    value === 'review_intensity' ||
+    value === 'provider_preference' ||
+    value === 'persona_tone_overlay' ||
+    value === 'tool_allowance';
 
 const normalizeEvaluatorReasonCode = (
     status: ExecutionStatus,
@@ -805,9 +857,10 @@ const buildResponseMetadata = (
     const temperament = normalizePlannerTemperament(
         runtimeContext.plannerTemperament
     );
-    // TODO(trace-target-vs-final): When runtime can revise TRACE during review,
-    // persist both initial TRACE target and final delivered TRACE in metadata.
-    // Keep `workflowMode` as execution choice; TRACE remains answer posture.
+    // TODO(trace-target-vs-final): If review-time runtime can revise TRACE
+    // posture, persist both target and final TRACE values. Preserve the
+    // invariant that workflow mode is routing metadata while TRACE remains
+    // answer-posture metadata.
     const evidenceScore = isTraceAxisScore(assistantMetadata.evidenceScore)
         ? assistantMetadata.evidenceScore
         : undefined;
@@ -848,32 +901,114 @@ const buildResponseMetadata = (
     const execution: ExecutionEvent[] = [];
     const plannerExecution = runtimeContext.executionContext?.planner;
     if (plannerExecution) {
-        // TODO(workflow-planner-step-metadata): When planner becomes a bounded
-        // workflow step type, attach planner step purpose/attempt lineage here
-        // so execution traces can represent multiple planner passes cleanly.
+        // TODO(workflow-planner-step-metadata): If workflows support multiple
+        // planner invocations per response, add explicit attempt/correlation
+        // metadata without allowing planner events to redefine orchestration
+        // authority or step ownership boundaries.
         const normalizedPlannerReasonCode = normalizePlannerReasonCode(
             plannerExecution.status,
             plannerExecution.reasonCode
         );
-        execution.push({
-            kind: 'planner',
-            status: plannerExecution.status,
-            profileId: plannerExecution.profileId,
-            ...(plannerExecution.originalProfileId !== undefined && {
-                originalProfileId: plannerExecution.originalProfileId,
-            }),
-            ...(plannerExecution.effectiveProfileId !== undefined && {
-                effectiveProfileId: plannerExecution.effectiveProfileId,
-            }),
-            provider: plannerExecution.provider,
-            model: plannerExecution.model,
-            ...(normalizedPlannerReasonCode !== undefined && {
-                reasonCode: normalizedPlannerReasonCode,
-            }),
-            ...(plannerExecution.durationMs !== undefined && {
-                durationMs: plannerExecution.durationMs,
-            }),
-        });
+        const validatedPlannerPurpose = parsePlannerPurpose(
+            plannerExecution.purpose
+        );
+        const validatedPlannerContractType = parsePlannerContractType(
+            plannerExecution.contractType
+        );
+        const validatedPlannerApplyOutcome = parsePlannerApplyOutcome(
+            plannerExecution.applyOutcome
+        );
+        const plannerExecutionSource =
+            'runtimeContext.executionContext.planner';
+        const hasValidMattered = typeof plannerExecution.mattered === 'boolean';
+        const sanitizedMatteredControlIds = Array.isArray(
+            plannerExecution.matteredControlIds
+        )
+            ? plannerExecution.matteredControlIds.filter(
+                  isSteerabilityControlId
+              )
+            : [];
+        const invalidPlannerFields: Array<{
+            field:
+                | 'purpose'
+                | 'contractType'
+                | 'applyOutcome'
+                | 'mattered'
+                | 'matteredControlIds';
+            value: unknown;
+        }> = [];
+        if (validatedPlannerPurpose === undefined) {
+            invalidPlannerFields.push({
+                field: 'purpose',
+                value: plannerExecution.purpose,
+            });
+        }
+        if (validatedPlannerContractType === undefined) {
+            invalidPlannerFields.push({
+                field: 'contractType',
+                value: plannerExecution.contractType,
+            });
+        }
+        if (validatedPlannerApplyOutcome === undefined) {
+            invalidPlannerFields.push({
+                field: 'applyOutcome',
+                value: plannerExecution.applyOutcome,
+            });
+        }
+        if (!hasValidMattered) {
+            invalidPlannerFields.push({
+                field: 'mattered',
+                value: plannerExecution.mattered,
+            });
+        }
+        if (!Array.isArray(plannerExecution.matteredControlIds)) {
+            invalidPlannerFields.push({
+                field: 'matteredControlIds',
+                value: plannerExecution.matteredControlIds,
+            });
+        }
+
+        if (
+            validatedPlannerPurpose === undefined ||
+            validatedPlannerContractType === undefined ||
+            validatedPlannerApplyOutcome === undefined ||
+            !hasValidMattered
+        ) {
+            logger.error(
+                'planner execution metadata dropped due invalid required fields',
+                {
+                    responseId,
+                    source: plannerExecutionSource,
+                    plannerStatus: plannerExecution.status,
+                    invalidPlannerFields,
+                }
+            );
+        } else {
+            execution.push({
+                kind: 'planner',
+                status: plannerExecution.status,
+                purpose: validatedPlannerPurpose,
+                contractType: validatedPlannerContractType,
+                applyOutcome: validatedPlannerApplyOutcome,
+                mattered: plannerExecution.mattered,
+                matteredControlIds: sanitizedMatteredControlIds,
+                profileId: plannerExecution.profileId,
+                ...(plannerExecution.originalProfileId !== undefined && {
+                    originalProfileId: plannerExecution.originalProfileId,
+                }),
+                ...(plannerExecution.effectiveProfileId !== undefined && {
+                    effectiveProfileId: plannerExecution.effectiveProfileId,
+                }),
+                provider: plannerExecution.provider,
+                model: plannerExecution.model,
+                ...(normalizedPlannerReasonCode !== undefined && {
+                    reasonCode: normalizedPlannerReasonCode,
+                }),
+                ...(plannerExecution.durationMs !== undefined && {
+                    durationMs: plannerExecution.durationMs,
+                }),
+            });
+        }
     }
     const evaluatorExecution = runtimeContext.executionContext?.evaluator;
     if (evaluatorExecution) {

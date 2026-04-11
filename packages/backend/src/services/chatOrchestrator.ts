@@ -426,6 +426,46 @@ export const createChatOrchestrator = ({
             },
             toolRequest: toolRequestContext,
         });
+        const plannerMatteredControlIds =
+            plannerExecution.status === 'executed'
+                ? steerabilityControls.controls
+                      .filter(
+                          (control) =>
+                              (control.source === 'planner_output' ||
+                                  control.source === 'tool_policy' ||
+                                  control.source === 'capability_policy') &&
+                              control.mattered
+                      )
+                      .map((control) => control.controlId)
+                : [];
+        const providerPreferenceControl = steerabilityControls.controls.find(
+            (control) => control.controlId === 'provider_preference'
+        );
+        const trimmedRequestedProfileId = normalizedRequest.profileId?.trim();
+        const providerPreferencePolicyAdjusted =
+            providerPreferenceControl?.mattered === true &&
+            trimmedRequestedProfileId !== undefined &&
+            trimmedRequestedProfileId.length > 0 &&
+            trimmedRequestedProfileId !== selectedResponseProfile.id;
+        // `mattered` is an observed-material-effect signal derived from
+        // concrete control records in this run. It is not full causal proof.
+        const plannerMattered = plannerMatteredControlIds.length > 0;
+        // TODO(planner-adjustment-taxonomy): Split this top-level
+        // `adjusted_by_policy` bucket only after materially distinct classes
+        // appear in practice. Keep one stable top-level outcome and add detail
+        // alongside it, rather than overloading enum semantics.
+        const plannerApplyOutcome =
+            plannerExecution.status !== 'executed'
+                ? 'not_applied'
+                : surfacePolicy !== undefined ||
+                    providerPreferencePolicyAdjusted ||
+                    rerouteApplied ||
+                    toolPolicyDecision.logEvent !== undefined
+                  ? 'adjusted_by_policy'
+                  : 'applied';
+        // TODO(planner-correlation-id): If chat orchestration ever runs
+        // multiple planner passes/retries per response, add explicit correlation
+        // fields while preserving workflow-owned planner boundaries.
         // Persist the effective profile id in planner payload/snapshot so traces
         // reflect what was actually executed.
         const executionPlan: ChatPlan = {
@@ -598,6 +638,11 @@ export const createChatOrchestrator = ({
                     ...(plannerExecution.reasonCode !== undefined && {
                         reasonCode: plannerExecution.reasonCode,
                     }),
+                    purpose: plannerExecution.purpose,
+                    contractType: plannerExecution.contractType,
+                    applyOutcome: plannerApplyOutcome,
+                    mattered: plannerMattered,
+                    matteredControlIds: plannerMatteredControlIds,
                     profileId: plannerProfile.id,
                     originalProfileId: plannerProfile.id,
                     effectiveProfileId: plannerProfile.id,

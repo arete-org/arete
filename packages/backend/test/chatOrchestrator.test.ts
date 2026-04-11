@@ -15,7 +15,10 @@ import type { BotProfileConfig } from '../src/config/profile.js';
 import { runtimeConfig } from '../src/config.js';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
 import { selectModelProfileForWorkflowStep } from '../src/services/modelCapabilityPolicy.js';
-import type { ResponseMetadataRuntimeContext } from '../src/services/openaiService.js';
+import {
+    buildResponseMetadata,
+    type ResponseMetadataRuntimeContext,
+} from '../src/services/openaiService.js';
 import { renderConversationPromptLayers } from '../src/services/prompts/conversationPromptLayers.js';
 import type { WeatherForecastTool } from '../src/services/weatherGovForecastTool.js';
 import { logger } from '../src/utils/logger.js';
@@ -1966,4 +1969,147 @@ test('planner runtime failures emit failed planner execution metadata and still 
     );
     assert.equal(capturedExecutionContext?.generation?.status, 'executed');
     assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
+});
+
+test('planner invocation emits explicit execution/provenance chain fields through final metadata', async () => {
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        safetyTier: 'Low',
+                        reasoning:
+                            'Search is needed for current facts before final answer.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 3,
+                            },
+                            search: {
+                                query: 'latest release notes',
+                                contextSize: 'low',
+                                intent: 'current_facts',
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            return {
+                text: 'chain-visible reply',
+                model: request.model,
+                provenance: 'Retrieved',
+                citations: [{ title: 'Source', url: 'https://example.com' }],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            latestUserInput: 'What changed in the latest release notes?',
+        })
+    );
+
+    assert.equal(response.action, 'message');
+    assert.equal(response.metadata.steerabilityControls?.version, 'v1');
+    const toolAllowanceControl =
+        response.metadata.steerabilityControls?.controls.find(
+            (control) => control.controlId === 'tool_allowance'
+        );
+    assert.ok(
+        toolAllowanceControl?.source === 'tool_policy' ||
+            toolAllowanceControl?.source === 'capability_policy'
+    );
+    assert.equal(toolAllowanceControl?.mattered, true);
+    const plannerEvent = response.metadata.execution?.find(
+        (event) => event.kind === 'planner'
+    );
+    assert.ok(plannerEvent);
+    if (plannerEvent?.kind === 'planner') {
+        assert.equal(
+            plannerEvent.purpose,
+            'chat_orchestrator_action_selection'
+        );
+        assert.equal(plannerEvent.contractType, 'text_json');
+        assert.equal(plannerEvent.applyOutcome, 'applied');
+        assert.equal(plannerEvent.mattered, true);
+        assert.deepEqual(plannerEvent.matteredControlIds, ['tool_allowance']);
+    }
+});
+
+test('planner execution metadata reports adjusted_by_policy when request override changes application path', async () => {
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        safetyTier: 'Low',
+                        reasoning:
+                            'Use retrieval and a balanced profile for this answer.',
+                        requestedCapabilityProfile: 'balanced-general',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 3,
+                            },
+                            search: {
+                                query: 'latest release notes',
+                                contextSize: 'low',
+                                intent: 'current_facts',
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            return {
+                text: 'policy-adjusted reply',
+                model: request.model,
+                provenance: 'Retrieved',
+                citations: [{ title: 'Source', url: 'https://example.com' }],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            profileId: runtimeConfig.modelProfiles.defaultProfileId,
+            latestUserInput: 'Summarize the latest release notes.',
+        })
+    );
+
+    assert.equal(response.action, 'message');
+    const plannerEvent = response.metadata.execution?.find(
+        (event) => event.kind === 'planner'
+    );
+    assert.ok(plannerEvent);
+    if (plannerEvent?.kind === 'planner') {
+        assert.equal(plannerEvent.applyOutcome, 'adjusted_by_policy');
+        assert.equal(plannerEvent.mattered, true);
+        assert.deepEqual(plannerEvent.matteredControlIds, ['tool_allowance']);
+    }
 });

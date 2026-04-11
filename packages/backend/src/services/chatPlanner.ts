@@ -21,6 +21,8 @@ import {
 } from '@footnote/contracts';
 import type {
     ExecutionReasonCode,
+    PlannerExecutionContractType,
+    PlannerExecutionPurpose,
     ExecutionStatus,
     SafetyTier,
     ResponseTemperament,
@@ -76,6 +78,8 @@ export type ChatPlannerExecution = {
     contextTier?: PlannerContextTier;
     selectedAttempt?: PlannerSelectedAttempt;
     contextReasonCode?: PlannerContextReasonCode;
+    purpose: PlannerExecutionPurpose;
+    contractType: PlannerExecutionContractType;
 };
 
 export type ChatPlannerResult = {
@@ -1269,6 +1273,8 @@ export const createChatPlanner = ({
                     status: 'skipped',
                     reasonCode: 'planner_runtime_error',
                     durationMs: Date.now() - plannerStartedAt,
+                    purpose: 'chat_orchestrator_action_selection',
+                    contractType: 'fallback',
                 },
             };
         }
@@ -1377,12 +1383,15 @@ export const createChatPlanner = ({
                 reasonCode?: ExecutionReasonCode;
             }
         ): Promise<ChatPlannerResult> => {
+            const initialAttemptContractType = plannerMode;
             const baseExecution: ChatPlannerExecution = {
                 ...initialExecution,
                 durationMs: Date.now() - plannerStartedAt,
                 plannerAttemptIndex: 1,
                 contextTier: 'current_window',
                 selectedAttempt: 'initial',
+                purpose: invocationContext.purpose,
+                contractType: initialAttemptContractType,
             };
 
             if (
@@ -1453,6 +1462,8 @@ export const createChatPlanner = ({
                             contextTier: expandedTier,
                             selectedAttempt: 'expanded',
                             contextReasonCode: 'planner_context_expanded',
+                            purpose: invocationContext.purpose,
+                            contractType: 'text_json',
                         },
                     };
                 }
@@ -1746,6 +1757,8 @@ export const createChatPlanner = ({
                     status: 'failed',
                     reasonCode,
                     durationMs: Date.now() - plannerStartedAt,
+                    purpose: invocationContext.purpose,
+                    contractType: 'fallback',
                 },
             };
         }

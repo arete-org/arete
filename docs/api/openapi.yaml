@@ -2434,10 +2434,30 @@ components:
                         properties:
                             kind:
                                 type: string
-                                enum: [planner, tool, generation]
+                                enum: [planner, evaluator, tool, generation]
                             status:
                                 type: string
                                 enum: [executed, skipped, failed]
+                            purpose:
+                                type: string
+                                enum: [chat_orchestrator_action_selection]
+                                description: Required for planner events. Canonical planner invocation purpose.
+                            contractType:
+                                type: string
+                                enum: [structured, text_json, fallback]
+                                description: Required for planner events. Planner decision contract execution style.
+                            applyOutcome:
+                                type: string
+                                enum: [applied, adjusted_by_policy, not_applied]
+                                description: Required for planner events. Indicates whether planner output was applied as-is, adjusted by policy, or not applied.
+                            mattered:
+                                type: boolean
+                                description: Required for planner events. Mirrors mattered=true semantics for observable planner impact.
+                            matteredControlIds:
+                                type: array
+                                description: Required for planner events. Control IDs that explain why planner influence materially affected execution.
+                                items:
+                                    type: string
                             originalProfileId:
                                 type: string
                             effectiveProfileId:
@@ -2450,14 +2470,71 @@ components:
                                 type: string
                             toolName:
                                 type: string
+                            evaluator:
+                                type: object
+                                description: 'Evaluator outcome payload for kind=evaluator execution events.'
+                                properties:
+                                    authorityLevel:
+                                        type: string
+                                        enum: [observe, influence, enforce]
+                                    mode:
+                                        type: string
+                                        enum: [observe_only, enforced]
+                                    provenance:
+                                        type: string
+                                        enum: [Retrieved, Inferred, Speculative]
+                                    safetyDecision:
+                                        type: object
+                                        properties:
+                                            action:
+                                                type: string
+                                                enum:
+                                                    [
+                                                        allow,
+                                                        block,
+                                                        redirect,
+                                                        safe_partial,
+                                                        human_review,
+                                                    ]
+                                            safetyTier:
+                                                type: string
+                                                enum: [Low, Medium, High]
+                                            ruleId:
+                                                type: string
+                                                nullable: true
+                                            reasonCode:
+                                                type: string
+                                                enum:
+                                                    [
+                                                        self_harm_crisis_intent,
+                                                        weaponization_request,
+                                                        professional_advice_guardrail,
+                                                    ]
+                                            reason:
+                                                type: string
+                                        required: [action, safetyTier, ruleId]
+                                        additionalProperties: false
+                                required: [mode, provenance, safetyDecision]
+                                additionalProperties: false
                             reasonCode:
                                 type: string
                                 enum:
                                     [
                                         planner_runtime_error,
                                         planner_invalid_output,
+                                        evaluator_runtime_error,
                                         generation_runtime_error,
+                                        tool_not_requested,
                                         tool_not_used,
+                                        search_rerouted_to_fallback_profile,
+                                        search_reroute_not_permitted_by_selection_source,
+                                        search_reroute_no_tool_capable_fallback_available,
+                                        tool_unavailable,
+                                        tool_execution_error,
+                                        tool_timeout,
+                                        tool_http_error,
+                                        tool_network_error,
+                                        tool_invalid_response,
                                         search_not_supported_by_selected_profile,
                                         unspecified_tool_outcome,
                                     ]

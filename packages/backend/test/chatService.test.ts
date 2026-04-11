@@ -315,6 +315,11 @@ test('runChatMessages forwards execution context into metadata runtime context (
         executionContext: {
             planner: {
                 status: 'executed',
+                purpose: 'chat_orchestrator_action_selection',
+                contractType: 'structured',
+                applyOutcome: 'applied',
+                mattered: true,
+                matteredControlIds: ['provider_preference'],
                 profileId: 'openai-text-fast',
                 provider: 'openai',
                 model: 'gpt-5-nano',
@@ -343,6 +348,11 @@ test('runChatMessages forwards execution context into metadata runtime context (
 
     assert.deepEqual(capturedExecutionContext?.planner, {
         status: 'executed',
+        purpose: 'chat_orchestrator_action_selection',
+        contractType: 'structured',
+        applyOutcome: 'applied',
+        mattered: true,
+        matteredControlIds: ['provider_preference'],
         profileId: 'openai-text-fast',
         provider: 'openai',
         model: 'gpt-5-nano',

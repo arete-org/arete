@@ -127,6 +127,28 @@ export type PlannerExecutionReasonCode = Extract<
     'planner_runtime_error' | 'planner_invalid_output'
 >;
 
+/**
+ * Canonical planner invocation purpose labels.
+ * Keep additive and serializable for trace auditability.
+ */
+export type PlannerExecutionPurpose = 'chat_orchestrator_action_selection';
+
+/**
+ * Planner contract execution style used for this invocation.
+ */
+export type PlannerExecutionContractType =
+    | 'structured'
+    | 'text_json'
+    | 'fallback';
+
+/**
+ * How planner output was applied by orchestration/policy.
+ */
+export type PlannerExecutionApplyOutcome =
+    | 'applied'
+    | 'adjusted_by_policy'
+    | 'not_applied';
+
 export type EvaluatorExecutionReasonCode = Extract<
     ExecutionReasonCode,
     'evaluator_runtime_error'
@@ -295,6 +317,11 @@ type ProfileExecutionEvent = BaseExecutionEvent & {
 
 export type PlannerExecutionEvent = ProfileExecutionEvent & {
     kind: 'planner';
+    purpose: PlannerExecutionPurpose;
+    contractType: PlannerExecutionContractType;
+    applyOutcome: PlannerExecutionApplyOutcome;
+    mattered: boolean;
+    matteredControlIds: SteerabilityControlId[];
     reasonCode?: PlannerExecutionReasonCode;
 };
 
@@ -514,20 +541,11 @@ export type ToolExecutionContext = {
  * This v1 shape is intentionally compact and is expected to grow once
  * workflow-based execution is enabled (lineage, timing, and per-step usage).
  */
-export type ExecutionEvent = {
-    kind: ExecutionEventKind;
-    status: ExecutionStatus;
-    originalProfileId?: string;
-    effectiveProfileId?: string;
-    profileId?: string;
-    provider?: string;
-    model?: string;
-    toolName?: string;
-    evaluator?: EvaluatorOutcome;
-    reasonCode?: ExecutionReasonCode;
-    durationMs?: number;
-};
-
+export type ExecutionEvent =
+    | PlannerExecutionEvent
+    | EvaluatorExecutionEvent
+    | ToolExecutionEvent
+    | GenerationExecutionEvent;
 export type TrustGraphProvenanceReasonCode =
     | 'external_scope_validation_failed'
     | 'adapter_scope_mismatch'

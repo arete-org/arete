@@ -19,6 +19,11 @@ test('formatExecutionTimelineSummary includes reasonCode for skipped and failed 
         {
             kind: 'planner',
             status: 'failed',
+            purpose: 'chat_orchestrator_action_selection',
+            contractType: 'fallback',
+            applyOutcome: 'not_applied',
+            mattered: false,
+            matteredControlIds: [],
             reasonCode: 'planner_runtime_error',
             model: 'gpt-5-nano',
         },
@@ -48,6 +53,11 @@ test('formatExecutionTimelineSummary handles missing optional fields', () => {
         {
             kind: 'planner',
             status: 'executed',
+            purpose: 'chat_orchestrator_action_selection',
+            contractType: 'text_json',
+            applyOutcome: 'applied',
+            mattered: false,
+            matteredControlIds: [],
         },
         {
             kind: 'evaluator',
