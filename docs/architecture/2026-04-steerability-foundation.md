@@ -63,6 +63,21 @@ These fields are canonical and required for planner events:
 - `mattered`: whether planner influence had observable impact on this run
 - `matteredControlIds`: steerability control ids that justify `mattered=true`
 
+Semantics to preserve:
+
+- `mattered` means observed downstream material effect through recorded controls in this run.
+- `mattered` does not claim exclusive or complete causal proof.
+- `applyOutcome = adjusted_by_policy` means planner output was accepted as input but changed by policy/routing/surface constraints before final execution.
+- `applyOutcome = adjusted_by_policy` does not mean planner output was discarded.
+- `contractType = fallback` means the planner execution path ended in backend fail-open fallback semantics.
+- `contractType = fallback` does not mean planner output was partially trusted.
+
+Current linkage assumption:
+
+- Today the chat orchestrator emits one planner invocation per response path.
+- Execution ordering is planner-first in `metadata.execution[]`.
+- If multi-pass planner execution is introduced later, add explicit correlation without allowing planner to become a second orchestrator.
+
 Canonical example:
 
 ```json
@@ -78,5 +93,50 @@ Canonical example:
     "provider": "openai",
     "model": "gpt-5-nano",
     "durationMs": 17
+}
+```
+
+Messy canonical example (policy-adjusted but still truthful):
+
+```json
+{
+    "execution": [
+        {
+            "kind": "planner",
+            "status": "executed",
+            "purpose": "chat_orchestrator_action_selection",
+            "contractType": "text_json",
+            "applyOutcome": "adjusted_by_policy",
+            "mattered": true,
+            "matteredControlIds": ["tool_allowance"],
+            "profileId": "openai-text-fast"
+        },
+        {
+            "kind": "tool",
+            "status": "executed",
+            "toolName": "web_search",
+            "reasonCode": "search_rerouted_to_fallback_profile"
+        },
+        {
+            "kind": "generation",
+            "status": "executed",
+            "profileId": "openai-text-medium"
+        }
+    ],
+    "steerabilityControls": {
+        "version": "v1",
+        "controls": [
+            {
+                "controlId": "tool_allowance",
+                "source": "planner_output",
+                "mattered": true
+            },
+            {
+                "controlId": "provider_preference",
+                "source": "planner_output",
+                "mattered": false
+            }
+        ]
+    }
 }
 ```

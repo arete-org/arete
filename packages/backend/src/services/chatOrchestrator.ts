@@ -439,7 +439,13 @@ export const createChatOrchestrator = ({
                       )
                       .map((control) => control.controlId)
                 : [];
+        // `mattered` is an observed-material-effect signal derived from
+        // concrete control records in this run. It is not full causal proof.
         const plannerMattered = plannerMatteredControlIds.length > 0;
+        // TODO(planner-adjustment-taxonomy): Split this top-level
+        // `adjusted_by_policy` bucket only after materially distinct classes
+        // appear in practice. Keep one stable top-level outcome and add detail
+        // alongside it, rather than overloading enum semantics.
         const plannerApplyOutcome =
             plannerExecution.status !== 'executed'
                 ? 'not_applied'
@@ -449,6 +455,9 @@ export const createChatOrchestrator = ({
                     toolPolicyDecision.logEvent !== undefined
                   ? 'adjusted_by_policy'
                   : 'applied';
+        // TODO(planner-correlation-id): If chat orchestration ever runs
+        // multiple planner passes/retries per response, add explicit correlation
+        // fields while preserving workflow-owned planner boundaries.
         // Persist the effective profile id in planner payload/snapshot so traces
         // reflect what was actually executed.
         const executionPlan: ChatPlan = {

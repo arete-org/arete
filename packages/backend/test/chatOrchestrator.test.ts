@@ -2038,3 +2038,61 @@ test('planner invocation emits explicit execution/provenance chain fields throug
         assert.deepEqual(plannerEvent.matteredControlIds, ['tool_allowance']);
     }
 });
+
+test('planner execution metadata reports adjusted_by_policy when request override changes application path', async () => {
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        safetyTier: 'Low',
+                        reasoning:
+                            'Use retrieval and a balanced profile for this answer.',
+                        requestedCapabilityProfile: 'balanced-general',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            search: {
+                                query: 'latest release notes',
+                                contextSize: 'low',
+                                intent: 'current_facts',
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            return {
+                text: 'policy-adjusted reply',
+                model: request.model,
+                provenance: 'Retrieved',
+                citations: [{ title: 'Source', url: 'https://example.com' }],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            profileId: runtimeConfig.modelProfiles.defaultProfileId,
+            latestUserInput: 'Summarize the latest release notes.',
+        })
+    );
+
+    assert.equal(response.action, 'message');
+    const plannerEvent = response.metadata.execution?.find(
+        (event) => event.kind === 'planner'
+    );
+    assert.ok(plannerEvent);
+    if (plannerEvent?.kind === 'planner') {
+        assert.equal(plannerEvent.applyOutcome, 'adjusted_by_policy');
+        assert.equal(plannerEvent.mattered, true);
+        assert.deepEqual(plannerEvent.matteredControlIds, ['tool_allowance']);
+    }
+});

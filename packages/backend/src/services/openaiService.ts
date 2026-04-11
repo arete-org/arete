@@ -849,9 +849,10 @@ const buildResponseMetadata = (
     const temperament = normalizePlannerTemperament(
         runtimeContext.plannerTemperament
     );
-    // TODO(trace-target-vs-final): When runtime can revise TRACE during review,
-    // persist both initial TRACE target and final delivered TRACE in metadata.
-    // Keep `workflowMode` as execution choice; TRACE remains answer posture.
+    // TODO(trace-target-vs-final): If review-time runtime can revise TRACE
+    // posture, persist both target and final TRACE values. Preserve the
+    // invariant that workflow mode is routing metadata while TRACE remains
+    // answer-posture metadata.
     const evidenceScore = isTraceAxisScore(assistantMetadata.evidenceScore)
         ? assistantMetadata.evidenceScore
         : undefined;
@@ -892,9 +893,10 @@ const buildResponseMetadata = (
     const execution: ExecutionEvent[] = [];
     const plannerExecution = runtimeContext.executionContext?.planner;
     if (plannerExecution) {
-        // TODO(workflow-planner-step-metadata): When planner becomes a bounded
-        // workflow step type, attach planner step purpose/attempt lineage here
-        // so execution traces can represent multiple planner passes cleanly.
+        // TODO(workflow-planner-step-metadata): If workflows support multiple
+        // planner invocations per response, add explicit attempt/correlation
+        // metadata without allowing planner events to redefine orchestration
+        // authority or step ownership boundaries.
         const normalizedPlannerReasonCode = normalizePlannerReasonCode(
             plannerExecution.status,
             plannerExecution.reasonCode
