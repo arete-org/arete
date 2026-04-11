@@ -964,9 +964,9 @@ const buildResponseMetadata = (
             execution.push({
                 kind: 'planner',
                 status: plannerExecution.status,
-                purpose: validatedPlannerPurpose,
-                contractType: validatedPlannerContractType,
-                applyOutcome: validatedPlannerApplyOutcome,
+                purpose: validatedPlannerPurpose!,
+                contractType: validatedPlannerContractType!,
+                applyOutcome: validatedPlannerApplyOutcome!,
                 mattered: plannerExecution.mattered,
                 matteredControlIds: plannerExecution.matteredControlIds,
                 profileId: plannerExecution.profileId,
