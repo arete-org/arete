@@ -45,7 +45,7 @@ export type ControlObservabilityEnvelope = {
     };
     outcome: {
         responseAction: 'message' | 'ignore' | 'react' | 'image';
-        responseModality: 'text' | 'voice';
+        responseModality: 'text' | 'tts';
         plannerStatus: ExecutionStatus;
         plannerReasonCode: ExecutionReasonCode | null;
         mattered: boolean;
@@ -128,7 +128,7 @@ export const buildControlObservabilityEnvelope = (input: {
     plannerStatus: ExecutionStatus;
     plannerReasonCode?: ExecutionReasonCode;
     responseAction: 'message' | 'ignore' | 'react' | 'image';
-    responseModality: 'text' | 'voice';
+    responseModality: 'text' | 'tts';
     steerabilityControls: SteerabilityControls;
 }): ControlObservabilityEnvelope => {
     const trimToNull = (value: string | undefined): string | null => {
