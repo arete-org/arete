@@ -1,8 +1,8 @@
 # Steerability Foundation (Internal Controls v1)
 
-`steerabilityControls` records which backend controls materially shaped a run.
-It exists for trace inspection. It is not a policy engine, a user control
-surface, or a workflow scripting layer.
+`steerabilityControls` records which backend controls materially affected a
+run. It exists so traces can show what actually influenced execution. It is
+not a policy engine, a user control surface, or a workflow scripting layer.
 
 Each control record stores a control id, value, source, rationale,
 `mattered`, and impacted targets.
@@ -13,7 +13,7 @@ The current controls are `workflow_mode`, `evidence_strictness`,
 
 ## Control Semantics
 
-The shape is flat in v1. The controls are not equivalent.
+The shape is flat in v1. The controls do different jobs.
 
 Execution controls:
 
@@ -42,10 +42,10 @@ through fallback. Do not treat it as execution authority unless policy says so.
 `mattered = true` means the control had an observed material effect on the run
 or the delivered answer.
 
-Presence is not enough. A control does not matter just because it appears in
-metadata or was considered during routing. It matters when it changes
-execution, review behavior, provider or profile selection, tool eligibility,
-or final answer posture.
+A control does not matter just because it appears in metadata or was
+considered during routing. It matters when it changes execution, review
+behavior, provider or profile selection, tool eligibility, or final answer
+posture.
 
 Examples:
 
@@ -60,7 +60,7 @@ causality.
 
 `review_intensity` comes from the same workflow behavior logic used for runtime
 routing in `workflowProfileRegistry`. If routing and metadata drift apart,
-traces stop describing what the runtime actually did.
+traces stop matching runtime behavior.
 
 Current mapping:
 
@@ -108,9 +108,8 @@ planner path ended in backend fail-open fallback semantics.
   policy, routing, or surface constraints before final execution
 - `not_applied`: planner output did not become the execution path
 
-`mattered` and `matteredControlIds` work the same way here as they do for the
-control layer. They record observed downstream effect through controls in this
-run.
+`mattered` and `matteredControlIds` use the same semantics here: observed
+downstream effect through controls in this run.
 
 Non-claims:
 
@@ -200,5 +199,5 @@ Some seams are already visible and should stay bounded.
   final TRACE separate. `workflowMode` remains routing metadata. TRACE remains
   answer-posture metadata.
 
-The rule is simple: traces should describe runtime truth in a form that stays
-legible to contributors and inspectable by reviewers.
+Traces should describe runtime truth in a form contributors can follow and
+reviewers can inspect.
