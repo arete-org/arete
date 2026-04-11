@@ -296,22 +296,165 @@ test('chatPlanner accepts structured planner decisions without text JSON parsing
     assert.equal(execution.status, 'executed');
 });
 
+test('chatPlanner ingestion marks clean structured outputs as accepted', async () => {
+    const infos: Array<{ message: string; meta?: unknown }> = [];
+    const originalInfo = logger.info;
+    logger.info = ((message: string, meta?: unknown) => {
+        infos.push({ message, meta });
+        return logger;
+    }) as typeof logger.info;
+
+    try {
+        const planner = createStructuredPlanner({
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'structured-cheap',
+            safetyTier: 'Low',
+            reasoning: 'Reply should be a normal message.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'medium',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+            },
+        });
+
+        await planner.planChat(createChatRequest());
+
+        const ingestionInfo = infos.find(
+            (entry) =>
+                (entry.meta as { event?: string } | undefined)?.event ===
+                'chat.planner.output_ingestion'
+        );
+        assert.ok(ingestionInfo);
+        assert.equal(
+            (ingestionInfo?.meta as { applyOutcome?: string } | undefined)
+                ?.applyOutcome,
+            'accepted'
+        );
+    } finally {
+        logger.info = originalInfo;
+    }
+});
+
+test('chatPlanner ignores out-of-contract authority fields and marks ingestion as partially_applied', async () => {
+    const infos: Array<{ message: string; meta?: unknown }> = [];
+    const originalInfo = logger.info;
+    logger.info = ((message: string, meta?: unknown) => {
+        infos.push({ message, meta });
+        return logger;
+    }) as typeof logger.info;
+
+    try {
+        const planner = createStructuredPlanner({
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'structured-cheap',
+            safetyTier: 'Low',
+            reasoning: 'Reply should be a normal message.',
+            profileId: 'forced-profile-id',
+            selectedCapabilityProfile: 'forced-capability',
+            executionContract: {
+                policyId: 'planner-forged-policy',
+            },
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'medium',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+            },
+        });
+
+        const { plan, execution } = await planner.planChat(createChatRequest());
+
+        assert.equal(execution.status, 'executed');
+        assert.equal(plan.profileId, undefined);
+        assert.equal(plan.selectedCapabilityProfile, undefined);
+        assert.equal(
+            plan.reasoning.includes(
+                'could not mutate backend authority controls'
+            ),
+            true
+        );
+
+        const ingestionInfo = infos.find(
+            (entry) =>
+                (entry.meta as { event?: string } | undefined)?.event ===
+                'chat.planner.output_ingestion'
+        );
+        assert.ok(ingestionInfo);
+        assert.equal(
+            (ingestionInfo?.meta as { applyOutcome?: string } | undefined)
+                ?.applyOutcome,
+            'partially_applied'
+        );
+        const authorityFields =
+            (
+                ingestionInfo?.meta as
+                    | { authorityFieldAttempts?: string[] }
+                    | undefined
+            )?.authorityFieldAttempts ?? [];
+        assert.deepEqual(authorityFields.sort(), [
+            'executionContract',
+            'profileId',
+            'selectedCapabilityProfile',
+        ]);
+    } finally {
+        logger.info = originalInfo;
+    }
+});
+
 test('chatPlanner marks structured policy-invalid decisions as failed with invalid-output reason', async () => {
-    const planner = createStructuredPlanner({
-        action: 'message',
-        modality: 'text',
-        safetyTier: 'Low',
-        reasoning: 'Invalid policy decision shape for message action.',
-        generation: {
-            reasoningEffort: 'low',
-            verbosity: 'low',
-        },
-    });
+    const infos: Array<{ message: string; meta?: unknown }> = [];
+    const originalInfo = logger.info;
+    logger.info = ((message: string, meta?: unknown) => {
+        infos.push({ message, meta });
+        return logger;
+    }) as typeof logger.info;
 
-    const { execution } = await planFromWorkflow(planner, createChatRequest());
+    try {
+        const planner = createStructuredPlanner({
+            action: 'message',
+            modality: 'text',
+            safetyTier: 'Low',
+            reasoning: 'Invalid policy decision shape for message action.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+            },
+        });
 
-    assert.equal(execution.status, 'failed');
-    assert.equal(execution.reasonCode, 'planner_invalid_output');
+        const { execution } = await planFromWorkflow(
+            planner,
+            createChatRequest()
+        );
+
+        assert.equal(execution.status, 'failed');
+        assert.equal(execution.reasonCode, 'planner_invalid_output');
+        const ingestionInfo = infos.find(
+            (entry) =>
+                (entry.meta as { event?: string } | undefined)?.event ===
+                'chat.planner.output_ingestion'
+        );
+        assert.ok(ingestionInfo);
+        assert.equal(
+            (ingestionInfo?.meta as { applyOutcome?: string } | undefined)
+                ?.applyOutcome,
+            'rejected'
+        );
+    } finally {
+        logger.info = originalInfo;
+    }
 });
 
 test('chatPlanner forwards bounded capability options context and rejects blank requested capability for message action', async () => {

@@ -42,6 +42,15 @@ import {
     type CapabilityProfileId,
 } from './modelCapabilityPolicy.js';
 import {
+    assessPlannerOutputContract,
+    type PlannerContractAssessment,
+    type PlannerOutputApplyOutcome,
+} from './chatPlannerOutputContract.js';
+import {
+    logPlannerOutputIngestion,
+    logPlannerPolicyInvalidFallback,
+} from './chatPlannerTelemetry.js';
+import {
     buildPlannerInvocationRejectionLogMeta,
     isWorkflowOwnedPlannerInvocation,
 } from './chatPlannerInvocation.js';
@@ -90,12 +99,15 @@ type PlannerContextReasonCode =
     | 'planner_context_budget_exhausted'
     | 'planner_context_timeout_fail_open';
 
-type PlannerNormalizationResult = {
+export type PlannerNormalizationResult = {
     plan: ChatPlan;
     fallbackTier: PlannerFallbackTier;
     correctionCodes: string[];
     contextNeed: PlannerContextNeed;
     contextTier: PlannerContextTier;
+    applyOutcome: PlannerOutputApplyOutcome;
+    outOfContractFields: string[];
+    authorityFieldAttempts: string[];
 };
 
 const REPO_HINT_SET = new Set<ChatRepoSearchHint>(chatRepoSearchHints);
@@ -193,6 +205,9 @@ export type PlannerCandidate = Partial<ChatPlan> & {
         temperament?: unknown;
     };
 };
+
+const isPlannerCandidate = (value: unknown): value is PlannerCandidate =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const TOPIC_HINT_MAX_COUNT = 5;
 const TOPIC_HINT_MAX_LENGTH = 40;
@@ -482,8 +497,8 @@ const stripJsonFences = (content: string): string =>
         .replace(/```$/i, '')
         .trim();
 
-const parsePlannerCandidateFromTextJson = (content: string): PlannerCandidate =>
-    JSON.parse(stripJsonFences(content)) as PlannerCandidate;
+const parsePlannerCandidateFromTextJson = (content: string): unknown =>
+    JSON.parse(stripJsonFences(content)) as unknown;
 
 const createTimeoutSignal = ({
     timeoutMs,
@@ -906,19 +921,45 @@ const normalizeGeneration = (
  */
 const normalizePlan = (
     request: PostChatRequest,
-    candidate: PlannerCandidate
+    candidate: unknown
 ): PlannerNormalizationResult => {
     const fallbackPlan = buildFallbackPlan(
         request,
         'Planner returned an invalid or incomplete decision.'
     );
-
-    if (
-        typeof candidate !== 'object' ||
-        candidate === null ||
-        Array.isArray(candidate)
-    ) {
+    const contractAssessment = assessPlannerOutputContract(candidate);
+    const buildNormalizationResult = (input: {
+        plan: ChatPlan;
+        fallbackTier: PlannerFallbackTier;
+        correctionCodes: string[];
+        contextNeed: PlannerContextNeed;
+        contextTier: PlannerContextTier;
+        contractAssessment: PlannerContractAssessment;
+    }): PlannerNormalizationResult => {
+        const hasPartialSignals =
+            input.correctionCodes.length > 0 ||
+            input.contractAssessment.outOfContractFields.length > 0 ||
+            input.contractAssessment.authorityFieldAttempts.length > 0;
         return {
+            plan: input.plan,
+            fallbackTier: input.fallbackTier,
+            correctionCodes: input.correctionCodes,
+            contextNeed: input.contextNeed,
+            contextTier: input.contextTier,
+            applyOutcome:
+                input.fallbackTier === 'safe_default_plan'
+                    ? 'rejected'
+                    : hasPartialSignals
+                      ? 'partially_applied'
+                      : 'accepted',
+            outOfContractFields: input.contractAssessment.outOfContractFields,
+            authorityFieldAttempts:
+                input.contractAssessment.authorityFieldAttempts,
+        };
+    };
+
+    if (!isPlannerCandidate(candidate)) {
+        return buildNormalizationResult({
             plan: {
                 ...fallbackPlan,
                 reasoning:
@@ -928,7 +969,8 @@ const normalizePlan = (
             correctionCodes: ['candidate_not_object'],
             contextNeed: 'sufficient',
             contextTier: 'current_window',
-        };
+            contractAssessment,
+        });
     }
 
     const correctionCodes: string[] = [];
@@ -962,6 +1004,14 @@ const normalizePlan = (
                 : fallbackPlan.reasoning,
         generation: fallbackPlan.generation,
     };
+    if (contractAssessment.outOfContractFields.length > 0) {
+        correctionCodes.push('out_of_contract_fields_ignored');
+    }
+    if (contractAssessment.authorityFieldAttempts.length > 0) {
+        correctionCodes.push('authority_fields_ignored');
+        normalizedPlan.reasoning =
+            `${normalizedPlan.reasoning} Out-of-contract authority fields were ignored, so planner output could not mutate backend authority controls.`.trim();
+    }
 
     const normalizedGeneration = normalizeGeneration(
         candidate.generation,
@@ -976,7 +1026,7 @@ const normalizePlan = (
 
     if (normalizedPlan.action === 'react') {
         if (!capabilities?.canReact) {
-            return {
+            return buildNormalizationResult({
                 plan: {
                     ...fallbackPlan,
                     reasoning:
@@ -986,14 +1036,15 @@ const normalizePlan = (
                 correctionCodes: [...correctionCodes, 'react_not_allowed'],
                 contextNeed,
                 contextTier,
-            };
+                contractAssessment,
+            });
         }
 
         if (
             typeof candidate.reaction !== 'string' ||
             !candidate.reaction.trim()
         ) {
-            return {
+            return buildNormalizationResult({
                 plan: {
                     ...fallbackPlan,
                     reasoning:
@@ -1003,11 +1054,12 @@ const normalizePlan = (
                 correctionCodes: [...correctionCodes, 'react_missing_emoji'],
                 contextNeed,
                 contextTier,
-            };
+                contractAssessment,
+            });
         }
         const trimmedReaction = candidate.reaction.trim();
         if (!isValidReactionEmoji(trimmedReaction)) {
-            return {
+            return buildNormalizationResult({
                 plan: {
                     ...fallbackPlan,
                     reasoning:
@@ -1017,10 +1069,11 @@ const normalizePlan = (
                 correctionCodes: [...correctionCodes, 'react_invalid_emoji'],
                 contextNeed,
                 contextTier,
-            };
+                contractAssessment,
+            });
         }
 
-        return {
+        return buildNormalizationResult({
             plan: {
                 ...normalizedPlan,
                 reaction: trimmedReaction,
@@ -1035,12 +1088,13 @@ const normalizePlan = (
             correctionCodes,
             contextNeed,
             contextTier,
-        };
+            contractAssessment,
+        });
     }
 
     if (normalizedPlan.action === 'image') {
         if (!capabilities?.canGenerateImages) {
-            return {
+            return buildNormalizationResult({
                 plan: {
                     ...fallbackPlan,
                     reasoning:
@@ -1050,12 +1104,13 @@ const normalizePlan = (
                 correctionCodes: [...correctionCodes, 'image_not_allowed'],
                 contextNeed,
                 contextTier,
-            };
+                contractAssessment,
+            });
         }
 
         const imageRequest = normalizeImageRequest(candidate.imageRequest);
         if (!imageRequest) {
-            return {
+            return buildNormalizationResult({
                 plan: {
                     ...fallbackPlan,
                     reasoning:
@@ -1065,10 +1120,11 @@ const normalizePlan = (
                 correctionCodes: [...correctionCodes, 'image_request_invalid'],
                 contextNeed,
                 contextTier,
-            };
+                contractAssessment,
+            });
         }
 
-        return {
+        return buildNormalizationResult({
             plan: {
                 ...normalizedPlan,
                 modality: 'text',
@@ -1084,11 +1140,12 @@ const normalizePlan = (
             correctionCodes,
             contextNeed,
             contextTier,
-        };
+            contractAssessment,
+        });
     }
 
     if (normalizedPlan.action === 'ignore') {
-        return {
+        return buildNormalizationResult({
             plan: {
                 ...normalizedPlan,
                 modality: 'text',
@@ -1103,11 +1160,12 @@ const normalizePlan = (
             correctionCodes,
             contextNeed,
             contextTier,
-        };
+            contractAssessment,
+        });
     }
 
     if (!normalizedPlan.requestedCapabilityProfile) {
-        return {
+        return buildNormalizationResult({
             plan: {
                 ...fallbackPlan,
                 action: 'message',
@@ -1125,11 +1183,12 @@ const normalizePlan = (
             ],
             contextNeed,
             contextTier,
-        };
+            contractAssessment,
+        });
     }
 
     if (!normalizedPlan.generation.temperament) {
-        return {
+        return buildNormalizationResult({
             plan: {
                 ...fallbackPlan,
                 action: 'message',
@@ -1142,16 +1201,18 @@ const normalizePlan = (
             correctionCodes: [...correctionCodes, 'temperament_missing'],
             contextNeed,
             contextTier,
-        };
+            contractAssessment,
+        });
     }
 
-    return {
+    return buildNormalizationResult({
         plan: normalizedPlan,
         fallbackTier: correctionCodes.length > 0 ? 'field_corrections' : 'none',
         correctionCodes,
         contextNeed,
         contextTier,
-    };
+        contractAssessment,
+    });
 };
 
 /**
@@ -1265,41 +1326,6 @@ export const createChatPlanner = ({
             }
         };
 
-        const logPolicyInvalidFallback = ({
-            normalization,
-            mode,
-        }: {
-            normalization: PlannerNormalizationResult;
-            mode: ChatPlannerExecutionMode;
-        }) => {
-            logger.warn(
-                'chat planner returned policy-invalid decision; using fallback telemetry class',
-                {
-                    event: 'chat.planner.fallback',
-                    plannerMode: mode,
-                    fallbackFrom: mode,
-                    fallbackTo: 'safe_default_plan',
-                    fallbackTier: normalization.fallbackTier,
-                    correctionCodes: normalization.correctionCodes,
-                    reasonCode: 'planner_invalid_output',
-                    failureClass: 'policy_invalid',
-                    surface: request.surface,
-                    triggerKind: request.trigger.kind,
-                    plannerStructuredPreviewPresent:
-                        mode === 'structured' &&
-                        plannerStructuredArguments !== undefined,
-                    plannerStructuredPreviewLength:
-                        mode === 'structured'
-                            ? plannerStructuredArguments?.length
-                            : undefined,
-                    plannerResponseTextLength:
-                        mode === 'text_json'
-                            ? plannerResponseText?.length
-                            : undefined,
-                }
-            );
-        };
-
         const runExpandedTextJsonAttempt = async (
             contextTier: PlannerContextTier
         ): Promise<PlannerNormalizationResult | null> => {
@@ -1331,7 +1357,17 @@ export const createChatPlanner = ({
             const expandedCandidate = parsePlannerCandidateFromTextJson(
                 expandedResponse.text
             );
-            return normalizePlan(request, expandedCandidate);
+            const expandedNormalization = normalizePlan(
+                request,
+                expandedCandidate
+            );
+            logPlannerOutputIngestion({
+                normalization: expandedNormalization,
+                mode: 'text_json',
+                attempt: 'expanded',
+                request,
+            });
+            return expandedNormalization;
         };
 
         const resolveAdaptivePlan = async (
@@ -1480,12 +1516,21 @@ export const createChatPlanner = ({
                 );
                 const normalization = normalizePlan(
                     request,
-                    structuredResponse.decision as PlannerCandidate
+                    structuredResponse.decision
                 );
+                logPlannerOutputIngestion({
+                    normalization,
+                    mode: 'structured',
+                    attempt: 'initial',
+                    request,
+                });
                 if (normalization.fallbackTier === 'safe_default_plan') {
-                    logPolicyInvalidFallback({
+                    logPlannerPolicyInvalidFallback({
                         normalization,
                         mode: 'structured',
+                        request,
+                        plannerStructuredArguments,
+                        plannerResponseText,
                     });
                     return resolveAdaptivePlan(normalization, {
                         status: 'failed',
@@ -1513,6 +1558,12 @@ export const createChatPlanner = ({
                 plannerResponse.text
             );
             const normalization = normalizePlan(request, parsed);
+            logPlannerOutputIngestion({
+                normalization,
+                mode: 'text_json',
+                attempt: 'initial',
+                request,
+            });
 
             /*
             if (isDevelopment()) {
@@ -1536,9 +1587,12 @@ export const createChatPlanner = ({
             }
             */
             if (normalization.fallbackTier === 'safe_default_plan') {
-                logPolicyInvalidFallback({
+                logPlannerPolicyInvalidFallback({
                     normalization,
                     mode: 'text_json',
+                    request,
+                    plannerStructuredArguments,
+                    plannerResponseText,
                 });
             }
 
@@ -1602,10 +1656,19 @@ export const createChatPlanner = ({
                         textJsonResponse.text
                     );
                     const normalization = normalizePlan(request, parsed);
+                    logPlannerOutputIngestion({
+                        normalization,
+                        mode: 'text_json',
+                        attempt: 'initial',
+                        request,
+                    });
                     if (normalization.fallbackTier === 'safe_default_plan') {
-                        logPolicyInvalidFallback({
+                        logPlannerPolicyInvalidFallback({
                             normalization,
                             mode: 'text_json',
+                            request,
+                            plannerStructuredArguments,
+                            plannerResponseText,
                         });
                     }
                     return resolveAdaptivePlan(normalization, {
