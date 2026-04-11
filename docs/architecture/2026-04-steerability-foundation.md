@@ -1,8 +1,8 @@
 # Steerability Foundation (Internal Controls v1)
 
 `steerabilityControls` records which backend controls materially affected a
-run. It exists so traces can show what actually influenced execution. It is
-not a policy engine, a user control surface, or a workflow scripting layer.
+run. The trace uses it to show what actually influenced execution. It is not a
+policy engine, a user control surface, or a workflow scripting layer.
 
 Each control record stores a control id, value, source, rationale,
 `mattered`, and impacted targets.
@@ -82,7 +82,7 @@ For `provider_preference`, the trace should preserve the visible state:
 Planner activity belongs in `metadata.execution[]` as an explicit
 `kind: "planner"` event.
 
-Planner events always include:
+Planner events include:
 
 - `purpose`
 - `contractType`
@@ -90,7 +90,7 @@ Planner events always include:
 - `mattered`
 - `matteredControlIds`
 
-In the current chat path:
+In the current chat orchestrator path:
 
 - `purpose = chat_orchestrator_action_selection`
 - `contractType = structured | text_json | fallback`
@@ -199,4 +199,5 @@ A few expansion points are already visible, and they need to stay bounded.
   final TRACE separate. `workflowMode` remains routing metadata. TRACE remains
   answer-posture metadata.
 
-The trace should show what the runtime actually did.
+The trace should show what the runtime actually did, in a form contributors
+can follow.
