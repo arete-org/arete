@@ -14,10 +14,21 @@ type PlannerWeatherFailureMarker = {
     reason: 'weather_tool_failed';
 };
 
+/**
+ * Planner generation payload after execution-time normalization.
+ *
+ * This stays close to `ChatGenerationPlan`, but it can carry a small amount of
+ * transitional runtime context needed by prompt rendering.
+ */
 export type PlannerGenerationForPrompt = Omit<ChatGenerationPlan, 'weather'> & {
     weather?: ChatGenerationPlan['weather'] | PlannerWeatherFailureMarker;
 };
 
+/**
+ * Planner decision payload serialized into generation prompts.
+ *
+ * This is a transport shape between backend stages, not a public API contract.
+ */
 export type PlannerPayloadChatPlan = Omit<ChatPlan, 'generation'> & {
     generation: PlannerGenerationForPrompt;
 };

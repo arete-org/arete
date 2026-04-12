@@ -43,6 +43,13 @@ const requireHttpAdapterConfig = (input: {
     };
 };
 
+/**
+ * Converts TrustGraph runtime config into the optional chat-service seam.
+ *
+ * This module wires adapters and validators. It does not decide whether
+ * external evidence is sufficient for an answer, and it does not create a
+ * second policy authority beside the backend execution contract.
+ */
 export const resolveExecutionContractTrustGraphRuntimeOptions = (
     config: ExecutionContractTrustGraphRuntimeConfig
 ): CreateChatServiceOptions['executionContractTrustGraph'] | undefined => {
@@ -92,6 +99,8 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
           >['scopeOwnershipValidator']
         | undefined;
     if (config.ownership.bindingMode === 'http') {
+        // Missing ownership wiring fails open at the adapter seam. Retrieval may
+        // still be disabled later by downstream validation or caller policy.
         if (!isNonEmptyString(config.ownership.endpointUrl)) {
             logger.warn({
                 event: 'chat.execution_contract_trustgraph.ownership_wiring',

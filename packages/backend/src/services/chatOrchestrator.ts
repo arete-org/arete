@@ -80,8 +80,11 @@ const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
 });
 
 /**
- * The orchestrator keeps surface-specific policy in one place while reusing the
- * shared message-generation service for any branch that ends in text output.
+ * Entry point for chat requests from web and Discord.
+ *
+ * Most of the work here is deciding what kind of response we are about to
+ * produce. Once that is settled, ChatService handles the actual text
+ * generation.
  */
 export const createChatOrchestrator = ({
     generationRuntime,
@@ -183,11 +186,11 @@ export const createChatOrchestrator = ({
     });
 
     /**
-     * Runs one chat request end-to-end:
-     * 1) normalize conversation shape by surface
-     * 2) plan action/modality
-     * 3) apply surface policy guardrails
-     * 4) execute message generation when action requires text output
+     * Runs one chat request end-to-end.
+     *
+     * The order is easy to miss: normalize the request, run the evaluator,
+     * ask the planner, narrow the profile and tool choices, then generate if
+     * we still owe the caller a message.
      */
     const runChat = async (
         request: PostChatRequest
@@ -372,6 +375,8 @@ export const createChatOrchestrator = ({
             executionContractResponseMode:
                 generationForExecution.responseIntentHint?.responseMode,
         });
+        // Pick the run mode first, then derive the contract from it. That keeps
+        // later branches from inventing their own policy rules.
         // TODO(workflow-mode-escalation): Add optional runtime mode transitions
         // (for example fast -> grounded) when later retrieval/sufficiency
         // signals justify escalation. This is future behavior only, and should
@@ -655,8 +660,9 @@ export const createChatOrchestrator = ({
         const executionContractScopeTuple =
             buildExecutionContractScopeTuple(normalizedRequest);
 
-        // Generation receives resolved provider/capabilities from the active
-        // default model profile instead of relying on provider-name checks.
+        // By the time we call ChatService, planner output and request overrides
+        // have already been folded into one concrete profile and generation
+        // plan.
         const response = await chatService.runChatMessages({
             messages: conversationMessages,
             conversationSnapshot: JSON.stringify({

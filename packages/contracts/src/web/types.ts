@@ -309,6 +309,12 @@ export type ChatImageRequest = {
 };
 
 /**
+ * Chat request shape shared by web and Discord callers.
+ *
+ * `capabilities` tells the backend which response types are usable on this
+ * surface. `surfaceContext` is just lightweight request context, not a full
+ * event payload from the caller.
+ *
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
@@ -338,6 +344,9 @@ export type PostChatRequest = {
 };
 
 /**
+ * Text reply. This is the only variant that carries response metadata because
+ * it represents a completed generated answer.
+ *
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
@@ -349,6 +358,9 @@ export type ChatMessageActionResponse = {
 };
 
 /**
+ * Reaction response for surfaces that can acknowledge briefly without a full
+ * generated message.
+ *
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
@@ -359,6 +371,8 @@ export type ChatReactActionResponse = {
 };
 
 /**
+ * Explicit no-reply response when the assistant should stay silent.
+ *
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
@@ -368,6 +382,9 @@ export type ChatIgnoreActionResponse = {
 };
 
 /**
+ * Image handoff from planning. The backend returns instructions here, not the
+ * rendered asset, so the caller can decide how to fulfill the request.
+ *
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
@@ -378,6 +395,9 @@ export type ChatImageActionResponse = {
 };
 
 /**
+ * Union of all chat response variants. Check `action` first, then read the
+ * fields for that branch.
+ *
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */

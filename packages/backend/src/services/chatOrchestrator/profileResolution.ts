@@ -57,6 +57,13 @@ type ResolveExecutionProfileResult = {
     fallbackReasons: PlannerFallbackReason[];
 };
 
+/**
+ * Chooses the model profile we will actually use for this response.
+ *
+ * The easy mistake is to treat planner output as the final answer. It is only
+ * one input here. A request-level override may win, and the default profile is
+ * still the fallback if the requested or planned choice is missing or disabled.
+ */
 export const resolveExecutionProfile = (
     input: ResolveExecutionProfileInput,
     onWarn: {
@@ -197,6 +204,9 @@ export const resolveExecutionProfile = (
         generationForExecution.search &&
         !selectedResponseProfile.capabilities.canUseSearch
     ) {
+        // A plan can ask for search and still land on a profile that cannot
+        // search. Handle that mismatch here so the rest of the orchestrator can
+        // work with one resolved profile.
         const searchPolicySelectionSource: PlannerSelectionSource =
             selectedCapabilityDecision.reasonCode ===
             'planner_requested_capability_profile_no_floor_match'

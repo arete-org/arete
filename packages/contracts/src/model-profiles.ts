@@ -9,6 +9,10 @@
 import { z } from 'zod';
 import { supportedProviders } from './providers.js';
 
+/**
+ * Shorthand labels for callers that want "fast" or "quality" style routing
+ * without naming a specific profile id.
+ */
 export const modelTierAliases = [
     'text-fast',
     'text-medium',
@@ -16,14 +20,19 @@ export const modelTierAliases = [
 ] as const;
 export type ModelTierAlias = (typeof modelTierAliases)[number];
 
+/** Optional coarse cost bucket for UI and policy hints. */
 export const modelCostClasses = ['low', 'medium', 'high'] as const;
 export type ModelCostClass = (typeof modelCostClasses)[number];
 
+/** Optional coarse latency bucket for UI and policy hints. */
 export const modelLatencyClasses = ['low', 'medium', 'high'] as const;
 export type ModelLatencyClass = (typeof modelLatencyClasses)[number];
 
 /**
  * Runtime-facing capability flags for one model profile.
+ *
+ * These are routing hints. A profile advertising a capability does not force
+ * the backend to use it.
  */
 export interface ModelProfileCapabilities {
     canUseSearch: boolean;
@@ -48,6 +57,9 @@ export interface ModelProfile {
     latencyClass?: ModelLatencyClass;
 }
 
+/**
+ * Schema used when loading and testing capability flags.
+ */
 export const ModelProfileCapabilitiesSchema = z
     .object({
         canUseSearch: z.boolean(),
@@ -55,6 +67,9 @@ export const ModelProfileCapabilitiesSchema = z
     })
     .strict();
 
+/**
+ * Schema for one model profile entry.
+ */
 export const ModelProfileSchema: z.ZodType<ModelProfile> = z
     .object({
         id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
@@ -71,6 +86,12 @@ export const ModelProfileSchema: z.ZodType<ModelProfile> = z
     })
     .strict();
 
+/**
+ * Schema for the full model profile list.
+ *
+ * Duplicate ids are rejected here because the rest of the code treats `id` as
+ * the lookup key.
+ */
 export const ModelProfileCatalogSchema = z
     .array(ModelProfileSchema)
     .superRefine((profiles, context) => {

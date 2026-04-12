@@ -528,6 +528,7 @@ export type ToolInvocationIntent = {
 
 /**
  * Orchestrator-owned tool eligibility decision before runtime execution.
+ * This is the pre-check: should we even try the tool?
  */
 export type ToolInvocationRequest = {
     toolName: ToolInvocationName;
@@ -538,6 +539,7 @@ export type ToolInvocationRequest = {
 
 /**
  * Runtime-owned final tool outcome emitted into execution metadata.
+ * This is the outcome after that check: ran, skipped, or failed.
  */
 export type ToolExecutionContext = {
     toolName: ToolInvocationName;
@@ -586,6 +588,8 @@ export type TrustGraphScopeValidationResult =
       };
 
 export type TrustGraphMetadata = {
+    // This says what TrustGraph contributed to the response. It does not
+    // replace the backend's own execution and policy records.
     adapterStatus: 'off' | 'scope_denied' | 'success' | 'timeout' | 'error';
     scopeValidation: TrustGraphScopeValidationResult;
     terminalAuthority: 'backend_execution_contract';
@@ -618,6 +622,10 @@ export type TrustGraphMetadata = {
 
 /**
  * ResponseMetadata is the compact record attached to a model response.
+ *
+ * Not every field means the same thing. Some values are direct runtime facts,
+ * some are best-effort summaries, and a few are only here to keep older
+ * consumers working while newer fields roll out.
  */
 export type ResponseMetadata = {
     // TODO(metadata-stability-tiers): Publish explicit stability tiers
