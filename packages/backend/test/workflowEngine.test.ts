@@ -533,9 +533,9 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
         },
         captureUsage: (generationResult, requestedModel) => ({
             model: requestedModel ?? generationResult.model ?? 'gpt-5-mini',
-            promptTokens: generationResult.usage.promptTokens ?? 0,
-            completionTokens: generationResult.usage.completionTokens ?? 0,
-            totalTokens: generationResult.usage.totalTokens ?? 0,
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
             estimatedCost: {
                 inputCostUsd: 0,
                 outputCostUsd: 0,

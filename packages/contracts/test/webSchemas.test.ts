@@ -515,13 +515,11 @@ test('ResponseMetadataSchema rejects workflow lineage with invalid termination r
 test('ResponseMetadataSchema rejects executed assess step without canonical decision signals', () => {
     const now = new Date().toISOString();
     const payload = createValidWorkflowMetadataPayload(now);
-    payload.workflow.steps[1].outcome = {
-        status: 'executed',
-        summary: 'Assessment step evaluated draft quality.',
-        signals: {
-            goalMet: true,
-        },
-    };
+    const assessSignals = payload.workflow.steps[1].outcome.signals as Record<
+        string,
+        unknown
+    >;
+    delete assessSignals.reviewDecision;
     const parsed = ResponseMetadataSchema.safeParse(payload);
 
     assert.equal(parsed.success, false);
