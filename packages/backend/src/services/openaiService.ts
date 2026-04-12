@@ -908,6 +908,7 @@ const buildResponseMetadata = (
         // in lineage yet. If workflows support multiple planner invocations,
         // add explicit attempt/correlation metadata without letting planner
         // events redefine orchestration authority or step ownership.
+        // Treat this block as metadata ingestion only, not a policy hook.
         const normalizedPlannerReasonCode = normalizePlannerReasonCode(
             plannerExecution.status,
             plannerExecution.reasonCode

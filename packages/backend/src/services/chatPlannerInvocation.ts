@@ -8,9 +8,11 @@
 import type { PostChatRequest } from '@footnote/contracts/web';
 
 /**
- * Planner is a bounded workflow-owned step.
- * It does not act as a second orchestrator and cannot redefine Execution
- * Contract authority.
+ * Planner is a bounded execution helper owned by workflow orchestration.
+ * It is execution-relevant, but it is not policy authority, contract
+ * authority, or runtime ownership.
+ * TODO(workflow-planner-step-lineage): When planner becomes workflow-native,
+ * bind this invocation context to first-class workflow step IDs.
  */
 export type ChatPlannerInvocationPurpose = 'chat_orchestrator_action_selection';
 
