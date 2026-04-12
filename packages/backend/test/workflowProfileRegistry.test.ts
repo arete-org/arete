@@ -153,6 +153,7 @@ test('resolveWorkflowModeDecision maps requested mode ids and emits inspectable 
     });
     assert.equal(requested.isKnownRequestedModeId, true);
     assert.equal(requested.modeDecision.modeId, 'balanced');
+    assert.equal(requested.modeDecision.initial_mode, 'balanced');
     assert.equal(requested.modeDecision.selectedBy, 'requested_mode');
     assert.equal(
         requested.modeDecision.behavior.executionContractPresetId,
@@ -174,6 +175,7 @@ test('resolveWorkflowModeDecision fails open by inferring from execution contrac
     });
     assert.equal(inferred.isKnownRequestedModeId, false);
     assert.equal(inferred.modeDecision.modeId, 'grounded');
+    assert.equal(inferred.modeDecision.initial_mode, 'grounded');
     assert.equal(
         inferred.modeDecision.selectedBy,
         'inferred_from_execution_contract'
@@ -187,6 +189,7 @@ test('resolveWorkflowModeDecision fails open by inferring from execution contrac
         modeId: 'unknown-mode',
     });
     assert.equal(fallbackDefault.modeDecision.modeId, 'grounded');
+    assert.equal(fallbackDefault.modeDecision.initial_mode, 'grounded');
     assert.equal(fallbackDefault.modeDecision.selectedBy, 'fail_open_default');
 });
 
@@ -196,8 +199,31 @@ test('resolveWorkflowModeDecision treats non-canonical mode ids as unknown and f
     });
     assert.equal(legacyFast.isKnownRequestedModeId, false);
     assert.equal(legacyFast.modeDecision.modeId, 'grounded');
+    assert.equal(legacyFast.modeDecision.initial_mode, 'grounded');
     assert.equal(legacyFast.modeDecision.selectedBy, 'fail_open_default');
     assert.equal(legacyFast.modeDecision.requestedModeId, 'generate-only');
+});
+
+test('resolveWorkflowRuntimeConfig exposes bounded workflow-owned escalation metadata', () => {
+    const config = resolveWorkflowRuntimeConfig({
+        modeId: 'fast',
+        reviewLoopEnabled: true,
+        maxIterations: 3,
+        maxDurationMs: 9000,
+        modeEscalationRequest: {
+            targetModeId: 'grounded',
+            reason: 'retrieval required for grounded evidence posture',
+        },
+    });
+
+    assert.equal(config.modeDecision.initial_mode, 'fast');
+    assert.equal(config.modeDecision.escalated_mode, 'grounded');
+    assert.equal(
+        config.modeDecision.escalation_reason,
+        'retrieval required for grounded evidence posture'
+    );
+    assert.equal(config.modeDecision.modeId, 'grounded');
+    assert.equal(config.modeDecision.selectedBy, 'workflow_mode_escalation');
 });
 
 test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity mapping', () => {

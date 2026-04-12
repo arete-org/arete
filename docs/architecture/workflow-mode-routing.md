@@ -51,13 +51,23 @@ This keeps the system available while preferring the more careful default
 posture.
 These fallback steps are initial routing fallback only. They are not runtime
 mode escalation.
-Initial mode selection is not revisable later in current runtime behavior.
-Future escalation should attach to the centralized mode resolver path instead
-of introducing parallel routing logic.
+
+## Escalation Seam
+
+Workflow mode escalation is attached at one bounded seam in
+`resolveWorkflowRuntimeConfig` (`packages/backend/src/services/workflowProfileRegistry.ts`).
+
+Rules for this seam:
+
+- Resolve initial mode once using the normal selection order.
+- Optionally apply one workflow-owned escalation request.
+- Never run recursive or unbounded mode re-evaluation loops.
+- Keep escalation routing centralized in workflow resolver code, not callers.
 
 ## Metadata Contract
 
 `workflowMode` in response metadata records `modeId`, `selectedBy`,
-`selectionReason`, optional `requestedModeId`, optional
+`selectionReason`, `initial_mode`, optional `escalated_mode`, optional
+`escalation_reason`, optional `requestedModeId`, optional
 `executionContractResponseMode`, and `behavior` (the concrete mapped behavior
 tuple).

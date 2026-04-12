@@ -22,6 +22,7 @@ const createEnvelopeInput = (): Parameters<
             modeId: 'grounded',
             selectedBy: 'requested_mode',
             selectionReason: 'Configured mode selected.',
+            initial_mode: 'grounded',
             behavior: {
                 executionContractPresetId: 'quality-grounded',
                 workflowProfileClass: 'reviewed',

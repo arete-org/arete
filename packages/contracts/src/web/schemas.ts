@@ -578,6 +578,7 @@ const WorkflowModeSelectionSourceSchema = z.enum([
     'requested_mode',
     'inferred_from_execution_contract',
     'fail_open_default',
+    'workflow_mode_escalation',
 ]);
 
 const WorkflowModeBehaviorSchema = z
@@ -603,6 +604,9 @@ const WorkflowModeDecisionSchema = z
         modeId: WorkflowModeIdSchema,
         selectedBy: WorkflowModeSelectionSourceSchema,
         selectionReason: z.string().min(1),
+        initial_mode: WorkflowModeIdSchema,
+        escalated_mode: WorkflowModeIdSchema.optional(),
+        escalation_reason: z.string().min(1).optional(),
         requestedModeId: z.string().min(1).optional(),
         executionContractResponseMode: z
             .enum(['fast_direct', 'quality_grounded'])

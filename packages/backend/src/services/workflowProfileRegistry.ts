@@ -262,6 +262,11 @@ export type WorkflowModeResolution = {
     isKnownRequestedModeId: boolean;
 };
 
+export type WorkflowModeEscalationRequest = {
+    targetModeId: WorkflowModeId;
+    reason: string;
+};
+
 /**
  * Resolves one initial workflow mode decision for this request.
  *
@@ -290,6 +295,7 @@ export const resolveWorkflowModeDecision = (input: {
                 selectedBy: 'requested_mode',
                 selectionReason:
                     'Used requested workflow mode id from runtime configuration.',
+                initial_mode: normalizedRequestedMode.modeId,
                 requestedModeId,
                 ...(input.executionContractResponseMode !== undefined && {
                     executionContractResponseMode:
@@ -312,6 +318,7 @@ export const resolveWorkflowModeDecision = (input: {
                 selectedBy: 'inferred_from_execution_contract',
                 selectionReason:
                     'Requested mode was missing or unknown, so mode was inferred from Execution Contract response mode.',
+                initial_mode: inferredModeId,
                 ...(requestedModeId !== undefined && { requestedModeId }),
                 executionContractResponseMode:
                     input.executionContractResponseMode,
@@ -327,9 +334,48 @@ export const resolveWorkflowModeDecision = (input: {
             selectedBy: 'fail_open_default',
             selectionReason:
                 'Requested mode and Execution Contract hint were unavailable, so fallback default mode was used.',
+            initial_mode: DEFAULT_WORKFLOW_MODE_ID,
             ...(requestedModeId !== undefined && { requestedModeId }),
             behavior: WORKFLOW_MODE_BEHAVIOR_MAP[DEFAULT_WORKFLOW_MODE_ID],
         },
+    };
+};
+
+const normalizeEscalationReason = (
+    reason: string | null | undefined
+): string | undefined => {
+    const trimmedReason = reason?.trim();
+    return trimmedReason !== undefined && trimmedReason.length > 0
+        ? trimmedReason
+        : undefined;
+};
+
+const resolveEscalatedWorkflowModeDecision = (input: {
+    initialModeDecision: WorkflowModeDecision;
+    escalationRequest?: WorkflowModeEscalationRequest;
+}): WorkflowModeDecision => {
+    const initialModeDecision = input.initialModeDecision;
+    const escalationRequest = input.escalationRequest;
+    const escalationReason = normalizeEscalationReason(
+        escalationRequest?.reason
+    );
+    if (escalationRequest === undefined || escalationReason === undefined) {
+        return initialModeDecision;
+    }
+
+    if (escalationRequest.targetModeId === initialModeDecision.modeId) {
+        return initialModeDecision;
+    }
+
+    return {
+        ...initialModeDecision,
+        modeId: escalationRequest.targetModeId,
+        selectedBy: 'workflow_mode_escalation',
+        selectionReason: `Workflow escalation seam accepted one mode transition from "${initialModeDecision.modeId}" to "${escalationRequest.targetModeId}".`,
+        behavior: WORKFLOW_MODE_BEHAVIOR_MAP[escalationRequest.targetModeId],
+        initial_mode: initialModeDecision.initial_mode,
+        escalated_mode: escalationRequest.targetModeId,
+        escalation_reason: escalationReason,
     };
 };
 
@@ -463,16 +509,21 @@ export const resolveWorkflowRuntimeConfig = (input: {
     maxIterations: number;
     maxDurationMs: number;
     ExecutionContract?: Pick<ExecutionContract, 'response' | 'limits'>;
+    modeEscalationRequest?: WorkflowModeEscalationRequest;
 }): ResolvedWorkflowRuntimeConfig => {
-    // TODO(workflow-mode-escalation-attachment): Initial mode selection is
-    // not revisable in v1. Attach any future mode-escalation policy here so
-    // routing revisions stay centralized instead of split across callers.
+    // Bounded escalation seam:
+    // - Initial mode is selected once.
+    // - Optional escalation request can apply at most one transition.
+    // - No loop/re-evaluation is performed in this resolver.
     const modeResolution = resolveWorkflowModeDecision({
         modeId: input.modeId,
         executionContractResponseMode:
             input.ExecutionContract?.response.responseMode,
     });
-    const modeDecision = modeResolution.modeDecision;
+    const modeDecision = resolveEscalatedWorkflowModeDecision({
+        initialModeDecision: modeResolution.modeDecision,
+        escalationRequest: input.modeEscalationRequest,
+    });
     // Mode picks the posture first. The profile lookup then turns that posture
     // into a concrete executable workflow shape.
     const profileResolution = resolveWorkflowProfileRegistry(
@@ -484,9 +535,6 @@ export const resolveWorkflowRuntimeConfig = (input: {
         executionContract !== undefined
             ? executionContract.response.responseMode === 'quality_grounded'
             : input.reviewLoopEnabled === true;
-    // TODO(workflow-mode-escalation): Add explicit mode-transition handling
-    // here if runtime mode escalation is introduced later. Current downstream
-    // fallback behavior does not revise the initial mode decision.
     const workflowExecutionEnabled =
         modeDecision.behavior.workflowExecution === 'disabled'
             ? false

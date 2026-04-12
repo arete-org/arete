@@ -41,7 +41,10 @@ import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import type { ExecutionContract } from './executionContract.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import { resolveNoGenerationHandlingFromTermination } from './workflowProfileContract.js';
-import { resolveWorkflowRuntimeConfig } from './workflowProfileRegistry.js';
+import {
+    resolveWorkflowRuntimeConfig,
+    type WorkflowModeEscalationRequest,
+} from './workflowProfileRegistry.js';
 import {
     runBoundedReviewWorkflow,
     type RunBoundedReviewWorkflowResult,
@@ -373,6 +376,7 @@ export type RunChatMessagesInput = {
     generation?: ChatGenerationPlan;
     executionContext?: ResponseMetadataRuntimeContext['executionContext'];
     workflowModeId?: string;
+    workflowModeEscalationRequest?: WorkflowModeEscalationRequest;
     toolRequest?: ToolInvocationRequest;
     executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
     ExecutionContract?: ExecutionContract;
@@ -495,6 +499,7 @@ export const createChatService = ({
         generation,
         executionContext,
         workflowModeId,
+        workflowModeEscalationRequest,
         toolRequest,
         executionContractTrustGraphContext,
         ExecutionContract,
@@ -555,6 +560,7 @@ export const createChatService = ({
                           limits: ExecutionContract.limits,
                       }
                     : undefined,
+            modeEscalationRequest: workflowModeEscalationRequest,
         });
         const workflowProfile = workflowRuntimeConfig.runtimeProfile;
         const workflowModeDecision = workflowRuntimeConfig.modeDecision;
@@ -800,10 +806,8 @@ export const createChatService = ({
             trustGraphResult?.provenanceJoin?.consumedByConsumers.includes(
                 'P_EVID'
             ) === true;
-        // TODO(workflow-mode-escalation): Initial mode selection is not
-        // revisable in current runtime behavior. If future escalation allows
-        // mode transitions, record explicit planned->final mode lineage here
-        // instead of inferring mode changes from fallback side effects.
+        // Any mode escalation lineage is resolved by workflowProfileRegistry.
+        // Runtime metadata here only carries the resolved decision payload.
         const hasSearchIntent = normalizedGeneration?.search !== undefined;
         const upstreamToolExecution = executionContext?.tool;
         const effectiveToolExecutionContext:

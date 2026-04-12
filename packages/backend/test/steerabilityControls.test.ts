@@ -16,6 +16,7 @@ const createBaseControlsInput = (
         modeId: 'grounded',
         selectedBy: 'requested_mode',
         selectionReason: 'Configured mode selected.',
+        initial_mode: 'grounded',
         behavior: {
             executionContractPresetId: 'quality-grounded',
             workflowProfileClass: 'reviewed',
@@ -169,6 +170,7 @@ test('mattered reflects observable causal impact instead of record presence', ()
                 modeId: 'fast',
                 selectedBy: 'requested_mode',
                 selectionReason: 'Configured fast mode selected.',
+                initial_mode: 'fast',
                 behavior: {
                     executionContractPresetId: 'fast-direct',
                     workflowProfileClass: 'direct',
@@ -243,6 +245,7 @@ test('review_intensity derives as light for low-deliberation reviewed behavior',
                 modeId: 'balanced',
                 selectedBy: 'requested_mode',
                 selectionReason: 'Configured balanced mode selected.',
+                initial_mode: 'balanced',
                 behavior: {
                     executionContractPresetId: 'balanced',
                     workflowProfileClass: 'reviewed',

@@ -60,6 +60,9 @@ const mapWorkflowModeSource = (
     if (selectedBy === 'inferred_from_execution_contract') {
         return 'execution_contract';
     }
+    if (selectedBy === 'workflow_mode_escalation') {
+        return 'execution_contract';
+    }
     return 'fail_open_default';
 };
 
