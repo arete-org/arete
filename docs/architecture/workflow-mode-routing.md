@@ -10,6 +10,11 @@ high-level choice, and workflow profile is the concrete step pattern. TRACE is
 about answer temperament, while provenance and evidence metadata are about what
 actually happened.
 
+In short:
+
+- mode chooses the kind of run,
+- profile chooses the executable workflow shape.
+
 Keep contract posture and workflow mechanics separate. The Execution Contract
 preset answers "what kind of run should govern this request?" The workflow
 profile id answers "what step pattern should execute this run?" Mixing them
@@ -44,6 +49,8 @@ workflow profile (`bounded-review`) but differ in posture and limits.
 
 This keeps the system available while preferring the more careful default
 posture.
+These fallback steps are initial routing fallback only. They are not runtime
+mode escalation.
 Initial mode selection is not revisable later in current runtime behavior.
 Future escalation should attach to the centralized mode resolver path instead
 of introducing parallel routing logic.

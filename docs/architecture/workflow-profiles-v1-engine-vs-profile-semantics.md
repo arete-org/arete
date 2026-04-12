@@ -21,6 +21,9 @@ Think of the system in three layers:
 - workflow profile semantics
 - caller/executor adapters
 
+Workflow mode routing sits one level above this document. Mode chooses the kind
+of run first, then profile semantics choose the executable step shape.
+
 The engine runs the workflow safely.
 The profile describes what kind of workflow it is.
 The adapter connects that workflow to the real route, model, and persistence
