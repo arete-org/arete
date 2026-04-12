@@ -51,7 +51,14 @@ const extractCitationsFromOutputItems = (
 
                 let normalizedUrl: string;
                 try {
-                    normalizedUrl = new URL(annotation.url).toString();
+                    const parsedUrl = new URL(annotation.url);
+                    if (
+                        parsedUrl.protocol !== 'http:' &&
+                        parsedUrl.protocol !== 'https:'
+                    ) {
+                        continue;
+                    }
+                    normalizedUrl = parsedUrl.toString();
                 } catch {
                     continue;
                 }

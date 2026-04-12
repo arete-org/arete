@@ -143,9 +143,10 @@ class SimpleOpenAIService implements OpenAIService {
     ): Promise<GenerateResponseResult> {
         const validMessages = messages.filter((message) => {
             if (!message.content || !message.content.trim()) {
-                logger.warn(
-                    `Filtering out invalid backend chat message with role=${message.role}`
-                );
+                logger.warn('Filtering out invalid backend chat message', {
+                    role: message.role,
+                    reason: 'empty_content',
+                });
                 return false;
             }
 
@@ -161,9 +162,14 @@ class SimpleOpenAIService implements OpenAIService {
             options.search.query.trim().length > 0;
 
         if (options.search && !hasSearchRequest) {
-            logger.warn(
-                'Backend chat requested search without a usable query; falling back to generation without retrieval.'
-            );
+            logger.warn('Backend chat requested search without usable query', {
+                searchProvided: options.search !== undefined,
+                queryLength:
+                    typeof options.search?.query === 'string'
+                        ? options.search.query.length
+                        : 0,
+                reason: 'empty_query',
+            });
         }
 
         const tools: ResponsesApiTool[] = [];
@@ -276,7 +282,7 @@ class SimpleOpenAIService implements OpenAIService {
 
         const outputItems = data.output ?? [];
         let rawOutputText = '';
-        let finishReason = 'stop';
+        let finishReason: string | undefined;
 
         for (const item of outputItems) {
             if (
@@ -294,7 +300,9 @@ class SimpleOpenAIService implements OpenAIService {
                 if (textSegments.length > 0) {
                     rawOutputText += textSegments.join('');
                 }
-                finishReason = item.finish_reason ?? finishReason;
+                if (typeof item.finish_reason === 'string') {
+                    finishReason = item.finish_reason;
+                }
             }
         }
 

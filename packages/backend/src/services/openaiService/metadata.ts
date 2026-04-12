@@ -83,7 +83,7 @@ const normalizePlannerReasonCode = (
     status: ExecutionStatus,
     reasonCode: ExecutionReasonCode | undefined
 ): PlannerExecutionReasonCode | undefined => {
-    if (status === 'executed') {
+    if (status === 'executed' || status === 'skipped') {
         return undefined;
     }
 
@@ -144,7 +144,7 @@ const normalizeEvaluatorReasonCode = (
     status: ExecutionStatus,
     reasonCode: ExecutionReasonCode | undefined
 ): EvaluatorExecutionReasonCode | undefined => {
-    if (status === 'executed') {
+    if (status === 'executed' || status === 'skipped') {
         return undefined;
     }
 
@@ -159,7 +159,7 @@ const normalizeGenerationReasonCode = (
     status: ExecutionStatus,
     reasonCode: ExecutionReasonCode | undefined
 ): GenerationExecutionReasonCode | undefined => {
-    if (status === 'executed') {
+    if (status === 'executed' || status === 'skipped') {
         return undefined;
     }
 
