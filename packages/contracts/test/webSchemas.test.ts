@@ -343,7 +343,9 @@ const createValidWorkflowMetadataPayload = (now: string) => ({
                     status: 'executed',
                     summary: 'Assessment step evaluated draft quality.',
                     signals: {
-                        goalMet: true,
+                        reviewDecision: 'finalize',
+                        reviewReason:
+                            'Draft answers the request with sufficient clarity.',
                     },
                 },
             },
@@ -506,6 +508,21 @@ test('ResponseMetadataSchema rejects workflow lineage with invalid termination r
             ],
         },
     });
+
+    assert.equal(parsed.success, false);
+});
+
+test('ResponseMetadataSchema rejects executed assess step without canonical decision signals', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    payload.workflow.steps[1].outcome = {
+        status: 'executed',
+        summary: 'Assessment step evaluated draft quality.',
+        signals: {
+            goalMet: true,
+        },
+    };
+    const parsed = ResponseMetadataSchema.safeParse(payload);
 
     assert.equal(parsed.success, false);
 });

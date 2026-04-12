@@ -905,6 +905,14 @@ test('runChatMessages executes bounded review loop and forwards workflow lineage
     assert.equal(capturedWorkflow?.terminationReason, 'goal_satisfied');
     assert.equal(capturedWorkflow?.status, 'completed');
     assert.ok((capturedWorkflow?.steps.length ?? 0) >= 2);
+    const assessStep = capturedWorkflow?.steps.find(
+        (step) => step.stepKind === 'assess'
+    );
+    assert.equal(assessStep?.outcome.signals?.reviewDecision, 'finalize');
+    assert.equal(
+        assessStep?.outcome.signals?.reviewReason,
+        'Draft is complete and clear.'
+    );
 });
 
 test('runChatMessages fails open when review output is invalid', async () => {

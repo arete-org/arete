@@ -110,6 +110,8 @@ Expected lifecycle:
 2. For each iteration (up to profile max):
 
 - `assess` runs and returns a profile decision: `finalize` or `revise`.
+  The assess `StepRecord.outcome.signals` is the canonical machine-readable
+  seam for this decision: `reviewDecision` + `reviewReason`.
     - If `finalize`, terminate with `goal_satisfied`.
     - If `revise`, run `revise`, then continue loop.
 

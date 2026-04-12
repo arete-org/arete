@@ -395,10 +395,36 @@ export const WORKFLOW_TERMINATION_REASONS = [
 export type WorkflowTerminationReason =
     (typeof WORKFLOW_TERMINATION_REASONS)[number];
 
+/**
+ * Canonical assess-step decisions emitted by bounded review profiles.
+ * These are advisory outputs used by workflow transitions, not policy authority.
+ */
+export const BOUNDED_REVIEW_ASSESS_DECISIONS = ['finalize', 'revise'] as const;
+
+export type BoundedReviewAssessDecision =
+    (typeof BOUNDED_REVIEW_ASSESS_DECISIONS)[number];
+
+/**
+ * Canonical machine-readable assess output for bounded review profiles.
+ *
+ * Keep this intentionally narrow so review output remains inspectable and does
+ * not become a generic policy bag.
+ */
+export type BoundedReviewAssessSignals = {
+    reviewDecision: BoundedReviewAssessDecision;
+    reviewReason: string;
+};
+
 export type StepOutcome = {
     status: WorkflowStepStatus;
     summary: string;
     artifacts?: string[];
+    /**
+     * Machine-readable per-step outputs.
+     *
+     * For `stepKind === "assess"` in the bounded-review profile, emit
+     * `reviewDecision` + `reviewReason` as the canonical decision seam.
+     */
     signals?: Record<string, string | number | boolean | null>;
     recommendations?: string[];
 };

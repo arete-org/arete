@@ -43,6 +43,8 @@ export type {
     WorkflowStepStatus,
     WorkflowStepKind,
     WorkflowTerminationReason,
+    BoundedReviewAssessDecision,
+    BoundedReviewAssessSignals,
     StepOutcome,
     StepRecord,
     WorkflowRecord,
@@ -72,6 +74,7 @@ export {
     WORKFLOW_STEP_STATUSES,
     WORKFLOW_STEP_KINDS,
     WORKFLOW_TERMINATION_REASONS,
+    BOUNDED_REVIEW_ASSESS_DECISIONS,
 } from './types.js';
 export { formatExecutionTimelineSummary } from './executionFormatting.js';
 export {

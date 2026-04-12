@@ -60,6 +60,11 @@ export type ReviewDecision = {
     reason: string;
 };
 
+type AssessStepSignals = {
+    reviewDecision: ReviewDecision['decision'];
+    reviewReason: string;
+};
+
 export const DEFAULT_REVIEW_DECISION_PROMPT = `Return plain JSON only.
 Schema:
 {
@@ -670,19 +675,6 @@ export const runBoundedReviewWorkflow = async ({
                 reviewResult,
                 generationRequest.model
             );
-            const reviewStepId = captureStep({
-                stepKind: 'assess',
-                status: 'executed',
-                summary:
-                    'Assessment step evaluated draft quality and goal completion.',
-                startedAtMs: reviewStartedAt,
-                finishedAtMs: reviewFinishedAt,
-                model: reviewUsage.model,
-                usage: reviewResult.usage,
-                estimatedCost: reviewUsage.estimatedCost,
-                parentStepId: draftParentStepId,
-                attempt: iteration,
-            });
             workflowState = applyStepExecutionToState(
                 workflowState,
                 'assess',
@@ -692,12 +684,44 @@ export const runBoundedReviewWorkflow = async ({
             );
             const decision = effectiveParseReviewDecision(reviewResult.text);
             if (!decision) {
+                captureStep({
+                    stepKind: 'assess',
+                    status: 'failed',
+                    summary:
+                        'Assessment step returned invalid decision output; fail-open returned latest successful draft.',
+                    reasonCode: 'generation_runtime_error',
+                    startedAtMs: reviewStartedAt,
+                    finishedAtMs: reviewFinishedAt,
+                    model: reviewUsage.model,
+                    usage: reviewResult.usage,
+                    estimatedCost: reviewUsage.estimatedCost,
+                    parentStepId: draftParentStepId,
+                    attempt: iteration,
+                });
                 terminationReason = 'executor_error_fail_open';
                 workflowStatus = 'degraded';
                 shouldStop = true;
                 break;
             }
 
+            const assessSignals: AssessStepSignals = {
+                reviewDecision: decision.decision,
+                reviewReason: decision.reason,
+            };
+            const reviewStepId = captureStep({
+                stepKind: 'assess',
+                status: 'executed',
+                summary:
+                    'Assessment step evaluated draft quality and emitted bounded review decision.',
+                startedAtMs: reviewStartedAt,
+                finishedAtMs: reviewFinishedAt,
+                model: reviewUsage.model,
+                usage: reviewResult.usage,
+                estimatedCost: reviewUsage.estimatedCost,
+                parentStepId: draftParentStepId,
+                attempt: iteration,
+                signals: assessSignals,
+            });
             latestReviewReason = decision.reason;
             if (decision.decision === 'finalize') {
                 terminationReason = 'goal_satisfied';

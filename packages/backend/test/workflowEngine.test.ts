@@ -157,7 +157,8 @@ test('applyStepExecutionToState sanitizes invalid deltas and increments stepCoun
 test('isWithinExecutionLimits reports each exhausted limit key', () => {
     const limits = createLimits();
     const startedAtMs = 500;
-    const nowMs = 1500;
+    const withinDurationNowMs = 1200;
+    const exhaustedDurationNowMs = 1500;
 
     const exhaustedBySteps = isWithinExecutionLimits(
         {
@@ -171,7 +172,7 @@ test('isWithinExecutionLimits reports each exhausted limit key', () => {
             totalTokens: 0,
         },
         limits,
-        nowMs
+        withinDurationNowMs
     );
     assert.equal(exhaustedBySteps.withinLimits, false);
     assert.equal(exhaustedBySteps.exhaustedBy, 'maxWorkflowSteps');
@@ -188,7 +189,8 @@ test('isWithinExecutionLimits reports each exhausted limit key', () => {
             totalTokens: 0,
         },
         limits,
-        nowMs
+        withinDurationNowMs,
+        'tool'
     );
     assert.equal(exhaustedByTools.withinLimits, false);
     assert.equal(exhaustedByTools.exhaustedBy, 'maxToolCalls');
@@ -205,7 +207,8 @@ test('isWithinExecutionLimits reports each exhausted limit key', () => {
             totalTokens: 0,
         },
         limits,
-        nowMs
+        withinDurationNowMs,
+        'assess'
     );
     assert.equal(exhaustedByDeliberation.withinLimits, false);
     assert.equal(exhaustedByDeliberation.exhaustedBy, 'maxDeliberationCalls');
@@ -222,7 +225,7 @@ test('isWithinExecutionLimits reports each exhausted limit key', () => {
             totalTokens: 100,
         },
         limits,
-        nowMs
+        withinDurationNowMs
     );
     assert.equal(exhaustedByTokens.withinLimits, false);
     assert.equal(exhaustedByTokens.exhaustedBy, 'maxTokensTotal');
@@ -239,7 +242,7 @@ test('isWithinExecutionLimits reports each exhausted limit key', () => {
             totalTokens: 0,
         },
         limits,
-        nowMs
+        exhaustedDurationNowMs
     );
     assert.equal(exhaustedByDuration.withinLimits, false);
     assert.equal(exhaustedByDuration.exhaustedBy, 'maxDurationMs');
@@ -466,5 +469,91 @@ test('runBoundedReviewWorkflow classifies initial generate runtime failure as no
     assert.equal(
         result.workflowLineage.steps[0].reasonCode,
         'generation_runtime_error'
+    );
+});
+
+test('runBoundedReviewWorkflow persists assess machine decision and reason in lineage signals', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'initial draft',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 20,
+                        completionTokens: 10,
+                        totalTokens: 30,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+
+            if (generationCalls === 2) {
+                return {
+                    text: '{"decision":"finalize","reason":"Draft is complete and clear."}',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 8,
+                        completionTokens: 6,
+                        totalTokens: 14,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+
+            throw new Error(`Unexpected generation call ${generationCalls}`);
+        },
+    };
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Summarize this.' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Summarize this.' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult, requestedModel) => ({
+            model: requestedModel ?? generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage.promptTokens ?? 0,
+            completionTokens: generationResult.usage.completionTokens ?? 0,
+            totalTokens: generationResult.usage.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.workflowLineage.terminationReason, 'goal_satisfied');
+    const assessStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'assess'
+    );
+    assert.ok(assessStep);
+    assert.equal(assessStep.outcome.status, 'executed');
+    assert.equal(assessStep.outcome.signals?.reviewDecision, 'finalize');
+    assert.equal(
+        assessStep.outcome.signals?.reviewReason,
+        'Draft is complete and clear.'
     );
 });
