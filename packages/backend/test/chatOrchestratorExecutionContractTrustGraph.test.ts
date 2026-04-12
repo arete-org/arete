@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import type { GenerationRuntime } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type { PostChatRequest } from '@footnote/contracts/web';
+import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
 import {
     createScopeOwnershipValidatorFromTenancyService,
@@ -43,20 +44,6 @@ type TrustGraphMetadata = {
     provenanceJoin?: { externalEvidenceBundleId?: string };
     adapterBundle?: unknown;
 };
-
-const createMetadata = (): ResponseMetadata => ({
-    responseId: 'chat_test_response',
-    provenance: 'Inferred',
-    safetyTier: 'Low',
-    tradeoffCount: 0,
-    chainHash: 'abc123def456',
-    licenseContext: 'MIT + HL3',
-    modelVersion: 'gpt-5-mini',
-    staleAfter: new Date(Date.now() + 60000).toISOString(),
-    citations: [],
-    trace_target: {},
-    trace_final: {},
-});
 
 const createChatRequest = (
     overrides: Partial<PostChatRequest> = {}

@@ -386,6 +386,7 @@ test('prepareProvenanceCgiPayload and sendPreparedProvenanceCgi send image plus 
                     tightness: 5,
                     rationale: 3,
                 },
+                trace_final_reason_code: 'runtime_posture_adjustment',
                 evidenceScore: 4,
                 freshnessScore: 5,
             });

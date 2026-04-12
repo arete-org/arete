@@ -303,6 +303,31 @@ test('buildResponseMetadata emits trace_final_reason_code when final posture dif
     );
 });
 
+test('buildResponseMetadata defaults trace_final_reason_code when final posture differs without explicit code', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            plannerTemperament: {
+                tightness: 2,
+            },
+            finalTemperament: {
+                tightness: 4,
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.trace_target, {
+        tightness: 2,
+    });
+    assert.deepEqual(metadata.trace_final, {
+        tightness: 4,
+    });
+    assert.equal(
+        metadata.trace_final_reason_code,
+        'runtime_posture_adjustment'
+    );
+});
+
 test('buildResponseMetadata includes steerability controls when provided by runtime context', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),

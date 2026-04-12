@@ -188,7 +188,17 @@ function formatTraceSection(
 
     const traceTarget = payload.trace_target;
     const traceFinal = payload.trace_final;
-    return [
+    const traceDiverged =
+        traceTarget.tightness !== traceFinal.tightness ||
+        traceTarget.rationale !== traceFinal.rationale ||
+        traceTarget.attribution !== traceFinal.attribution ||
+        traceTarget.caution !== traceFinal.caution ||
+        traceTarget.extent !== traceFinal.extent;
+    const hasExplicitFinalReason =
+        typeof payload.trace_final_reason_code === 'string' &&
+        payload.trace_final_reason_code.trim().length > 0;
+
+    const traceLines = [
         '**TRACE**',
         `- Target Tightness: \`${formatMarkdownValue(traceTarget.tightness)}\``,
         `- Target Rationale: \`${formatMarkdownValue(traceTarget.rationale)}\``,
@@ -200,10 +210,18 @@ function formatTraceSection(
         `- Final Attribution: \`${formatMarkdownValue(traceFinal.attribution)}\``,
         `- Final Caution: \`${formatMarkdownValue(traceFinal.caution)}\``,
         `- Final Extent: \`${formatMarkdownValue(traceFinal.extent)}\``,
-        `- Final Reason: \`${formatMarkdownValue(payload.trace_final_reason_code)}\``,
+    ];
+    if (hasExplicitFinalReason || traceDiverged) {
+        traceLines.push(
+            `- Final Reason: \`${formatMarkdownValue(payload.trace_final_reason_code)}\``
+        );
+    }
+    traceLines.push(
         `- Evidence: \`${formatMarkdownValue(payload.evidenceScore)}\``,
-        `- Freshness: \`${formatMarkdownValue(payload.freshnessScore)}\``,
-    ].join('\n');
+        `- Freshness: \`${formatMarkdownValue(payload.freshnessScore)}\``
+    );
+
+    return traceLines.join('\n');
 }
 
 /**

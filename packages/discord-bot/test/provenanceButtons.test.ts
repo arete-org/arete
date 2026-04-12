@@ -63,10 +63,11 @@ test('details action renders markdown sections with execution table and trace vi
             trace_final: {
                 tightness: 4,
                 rationale: 4,
-                attribution: 5,
+                attribution: 3,
                 caution: 3,
                 extent: 4,
             },
+            trace_final_reason_code: 'runtime_posture_adjustment',
             citations: [
                 {
                     title: 'Primary source ] title',
@@ -76,7 +77,7 @@ test('details action renders markdown sections with execution table and trace vi
             ],
             execution: [
                 {
-                    kind: 'planner',
+                    kind: 'generation',
                     status: 'executed',
                     model: 'gpt-5-mini',
                     durationMs: 25,
@@ -131,6 +132,9 @@ test('details action renders markdown sections with execution table and trace vi
         assert.match(content, /\*\*Trace Viewer\*\*/);
         assert.match(content, /Open full trace/);
         assert.match(content, /\/traces\/resp_details_sections/);
+        assert.match(content, /Target Attribution: `5`/);
+        assert.match(content, /Final Attribution: `3`/);
+        assert.match(content, /Final Reason: `runtime_posture_adjustment`/);
         assert.match(content, /weaponization_request/);
         assert.match(content, /High\/Inferred\/block/);
         assert.match(content, /```text/);
@@ -189,9 +193,10 @@ test('details action truncates oversized payloads while preserving section reada
                 tightness: 4,
                 rationale: 4,
                 attribution: 4,
-                caution: 3,
+                caution: 2,
                 extent: 4,
             },
+            trace_final_reason_code: 'runtime_posture_adjustment',
         },
     })) as typeof botApi.getTrace;
 
