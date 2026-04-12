@@ -179,6 +179,17 @@ function formatSummarySection(
     ].join('\n');
 }
 
+/**
+ * Build the TRACE section as Discord-flavored Markdown for a details payload.
+ *
+ * Produces either an unavailable message when provenance is missing, or a multiline TRACE
+ * block containing Target and Final fields for tightness, rationale, attribution, caution,
+ * and extent. Includes a "Final Reason" line only when an explicit final reason code is present
+ * or when any Target field differs from its Final counterpart, and appends Evidence and Freshness lines.
+ *
+ * @param payload - The response metadata or a resilient fallback payload to render
+ * @returns A Markdown-formatted TRACE section suitable for inclusion in the overall details message
+ */
 function formatTraceSection(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
