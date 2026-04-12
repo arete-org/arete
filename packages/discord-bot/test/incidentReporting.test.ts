@@ -43,6 +43,8 @@ test('handleIncidentReportButton opens a consent prompt and cancel clears it', a
             modelVersion: 'gpt-5-mini',
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
+            trace_target: {},
+            trace_final: {},
         },
     })) as typeof botApi.getTrace;
 
@@ -124,6 +126,8 @@ test('incident report modal stores the incident and remediation outcome', async 
             modelVersion: 'gpt-5-mini',
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
+            trace_target: {},
+            trace_final: {},
         },
     })) as typeof botApi.getTrace;
     botApi.reportIncident = (async (request) => {
@@ -289,6 +293,8 @@ test('incident report modal replies explicitly on backend failure', async () => 
             modelVersion: 'gpt-5-mini',
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
+            trace_target: {},
+            trace_final: {},
         },
     })) as typeof botApi.getTrace;
     botApi.reportIncident = (async () => {
@@ -367,6 +373,8 @@ test('incident report modal keeps the deferred reply open when remediation persi
             modelVersion: 'gpt-5-mini',
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
+            trace_target: {},
+            trace_final: {},
         },
     })) as typeof botApi.getTrace;
     botApi.reportIncident = (async () => ({
@@ -473,6 +481,8 @@ test('incident report retry resumes remediation persistence without creating a d
             modelVersion: 'gpt-5-mini',
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
+            trace_target: {},
+            trace_final: {},
         },
     })) as typeof botApi.getTrace;
     botApi.reportIncident = (async () => {
