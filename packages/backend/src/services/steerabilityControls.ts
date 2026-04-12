@@ -15,6 +15,7 @@ import type {
 import { deriveReviewIntensityFromWorkflowBehavior } from './workflowProfileRegistry.js';
 import {
     resolveInternalSteerabilityControlConflicts,
+    type InternalSteerabilityConflictResolution,
     type ProviderPreferenceOutcomeState,
 } from './steerabilityControlPrecedence.js';
 
@@ -70,14 +71,9 @@ const mapWorkflowModeSource = (
  * This is not a policy command language; it is traceable outcome metadata.
  */
 const buildProviderPreferenceControl = (
-    input: BuildSteerabilityControlsInput
+    input: BuildSteerabilityControlsInput,
+    conflictResolution: InternalSteerabilityConflictResolution
 ): SteerabilityControlRecord => {
-    const conflictResolution = resolveInternalSteerabilityControlConflicts({
-        requestedProfileId: input.requestedProfileId,
-        plannerSelectedProfileId: input.plannerSelectedProfileId,
-        selectedProfileId: input.selectedProfile.profileId,
-        personaOverlaySource: input.persona.overlaySource,
-    });
     const providerPreference = conflictResolution.providerPreference;
     const selectedProfileSummary = `${input.selectedProfile.profileId}(${input.selectedProfile.provider}/${input.selectedProfile.model})`;
 
@@ -225,7 +221,7 @@ export const buildSteerabilityControls = (
             impactedTargets:
                 reviewIntensity !== 'none' ? ['review_loop_execution'] : [],
         },
-        buildProviderPreferenceControl(input),
+        buildProviderPreferenceControl(input, conflictResolution),
         {
             controlId: 'persona_tone_overlay',
             value: `state:${personaOutcome.state};persona:${input.persona.personaId};source:${personaOutcome.overlaySource}`,
