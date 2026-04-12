@@ -667,7 +667,7 @@ const responseMetadataShape = {
     tradeoffCount: z.number().nonnegative(),
     chainHash: z.string(),
     licenseContext: z.string(),
-    // Deprecated compatibility field; prefer execution[].
+    // Deprecated compatibility field; prefer execution[] as structural timeline authority.
     modelVersion: z.string(),
     staleAfter: z.string(),
     totalDurationMs: z.number().int().nonnegative().optional(),
@@ -681,6 +681,7 @@ const responseMetadataShape = {
     imageDescriptions: z.array(z.string()).optional(),
     evidenceScore: TraceAxisScoreSchema.optional(),
     freshnessScore: TraceAxisScoreSchema.optional(),
+    // TRACE posture metadata; related to provenance but not equivalent.
     temperament: PartialResponseTemperamentSchema.optional(),
     trustGraph: TrustGraphMetadataSchema.optional(),
 } as const;
@@ -693,10 +694,21 @@ const TraceCardChipDataSchema = z
     .strict();
 
 /**
- * Response metadata is intentionally tolerant so new backend fields do not break clients.
+ * Response metadata is intentionally tolerant so additive backend fields do not
+ * break clients.
+ *
+ * Stability guidance for consumers:
+ * - Prefer execution/workflow/workflowMode/steerabilityControls/trustGraph for
+ *   structural runtime facts when present.
+ * - Treat provenance/provenanceAssessment/tradeoffCount/chip scores as
+ *   compact classifications that can include heuristic derivation.
+ * - Treat modelVersion as compatibility-shaped and transitional.
+ *
  * TODO(metadata-stability-tiers): Once field stability tiers are published for
  * external consumers, tighten this boundary deliberately without breaking
  * compatibility-shaped rollout paths.
+ * TODO(metadata-compat-model-version): Remove modelVersion from this shape
+ * once compatibility consumers migrate fully to execution[] generation events.
  */
 export const ResponseMetadataSchema: z.ZodType<ResponseMetadata> = z
     .object(responseMetadataShape)
