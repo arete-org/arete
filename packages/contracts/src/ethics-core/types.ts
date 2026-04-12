@@ -669,6 +669,9 @@ export type ResponseMetadata = {
     // TRACE posture is answer-shape metadata only.
     // Keep this separate from workflowMode (policy/routing) and provenance
     // (what happened / grounding classification).
+    // TODO(trace-lifecycle-summary): Current TRACE contract is summary-state.
+    // If TRACE later evolves across multiple runtime steps, model canonical
+    // lifecycle/history first and derive summary fields from it.
     trace_target: PartialResponseTemperament;
     trace_final: PartialResponseTemperament;
     trace_final_reason_code?: TraceFinalizationReasonCode;

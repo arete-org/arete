@@ -253,6 +253,10 @@ const buildResponseMetadata = (
         assistantMetadata.tradeoffCount,
         runtimeContext.plannerTemperament
     );
+    // TODO(trace-lifecycle): TRACE may eventually evolve through planning /
+    // workflow / review steps. If that model is added, keep canonical
+    // lifecycle/history state and derive summary fields from it.
+    // Current runtime stays summary-only and does not implement lifecycle.
     const traceTarget =
         normalizePlannerTemperament(runtimeContext.plannerTemperament) ?? {};
     const traceFinal =

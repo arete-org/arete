@@ -2558,7 +2558,7 @@ components:
                     description: Optional TRACE freshness chip score.
                 trace_target:
                     type: object
-                    description: Canonical intended TRACE answer posture (partial 1-5 axis map).
+                    description: Current summary field for intended TRACE answer posture (partial 1-5 axis map).
                     properties:
                         tightness:
                             type: integer
@@ -2588,7 +2588,7 @@ components:
                     additionalProperties: false
                 trace_final:
                     type: object
-                    description: Canonical delivered TRACE answer posture (partial 1-5 axis map).
+                    description: Current summary field for delivered TRACE answer posture (partial 1-5 axis map).
                     properties:
                         tightness:
                             type: integer

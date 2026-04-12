@@ -727,6 +727,10 @@ const requireTraceFinalReasonWhenChanged = (
     },
     context: z.RefinementCtx
 ): void => {
+    // TODO(trace-lifecycle): This validates the current summary-field model.
+    // If TRACE later becomes multi-step, keep one canonical lifecycle/history
+    // shape and derive these summary fields instead of treating the pair as
+    // the conceptual source of truth.
     const traceChanged = hasDifferentTracePosture(
         value.trace_target,
         value.trace_final

@@ -270,6 +270,7 @@ A few expansion points are already visible, and they need to stay bounded.
   posture during review, `trace_target` and `trace_final` must both be
   recorded with an explicit `trace_final_reason_code`. `workflowMode` remains
   routing metadata. TRACE remains answer-posture metadata.
+  Current runtime does not implement a full TRACE lifecycle/history model yet.
 
 The trace should show what the runtime actually did, in a form contributors
 can follow.
