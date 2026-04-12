@@ -26,6 +26,10 @@ export type SafetyRuleId =
 
 /**
  * Provenance describes where the answer "came from" at a high level.
+ *
+ * This is a backend classification label. It is deterministic for a given
+ * signal set, but signal availability is still evolving, so callers should
+ * treat this as a compact summary rather than raw execution truth.
  */
 export type Provenance = 'Retrieved' | 'Inferred' | 'Speculative';
 
@@ -94,6 +98,9 @@ export type ResponseTemperament = {
 /**
  * PartialResponseTemperament allows missing TRACE axes.
  * Missing values are interpreted by renderers as unavailable.
+ *
+ * TRACE is answer-posture metadata, not source-grounding metadata. Do not
+ * treat this as a provenance substitute.
  */
 export type PartialResponseTemperament = Partial<ResponseTemperament>;
 
@@ -613,28 +620,35 @@ export type TrustGraphMetadata = {
  * ResponseMetadata is the compact record attached to a model response.
  */
 export type ResponseMetadata = {
+    // TODO(metadata-stability-tiers): Publish explicit stability tiers
+    // (structural, heuristic, transitional) in one machine-readable contract
+    // so consumers do not infer truth guarantees from optionality alone.
     responseId: string; // Short id for trace lookups and links.
-    provenance: Provenance; // High-level origin label for the response.
+    provenance: Provenance; // High-level grounding classification for the response.
     safetyTier: SafetyTier; // Sensitivity level used by UI and reviewers.
-    tradeoffCount: number; // Number of trade-offs the model surfaced.
+    tradeoffCount: number; // Heuristic-friendly summary count from assistant metadata with planner fallback.
     chainHash: string; // Short hash to help detect tampering.
     licenseContext: string; // Human-readable license label.
     /** @deprecated Prefer execution[] as the canonical model/runtime timeline. */
+    // TODO(metadata-compat-model-version): Remove after downstream consumers
+    // migrate to execution[] generation events as their model authority.
     modelVersion: string; // Compatibility mirror of the final generation model.
     staleAfter: string; // ISO timestamp after which the data is stale.
     totalDurationMs?: number; // End-to-end orchestration duration when available.
     citations: Citation[]; // Sources used for the answer.
-    provenanceAssessment?: ProvenanceAssessment; // Deterministic method disclosure for provenance labeling.
-    execution?: ExecutionEvent[]; // Canonical execution timeline for model/tool visibility.
+    provenanceAssessment?: ProvenanceAssessment; // Method disclosure for provenance classification, including conflicts and limitations.
+    execution?: ExecutionEvent[]; // Preferred structural execution timeline for model/tool visibility.
     workflow?: WorkflowRecord; // Optional workflow provenance record for bounded multi-step execution.
     workflowMode?: WorkflowModeDecision; // Explicit mode routing decision and behavior mapping.
     steerabilityControls?: SteerabilityControls; // Canonical control records explaining which steering choices shaped execution.
     evaluator?: EvaluatorOutcome; // Deterministic evaluator decision captured before breaker enforcement.
     imageDescriptions?: string[]; // Optional captions for any images used.
-    evidenceScore?: TraceAxisScore; // Optional TRACE evidence chip score (1..5).
-    freshnessScore?: TraceAxisScore; // Optional TRACE freshness chip score (1..5).
+    evidenceScore?: TraceAxisScore; // Optional TRACE chip; may be derived when Retrieved and explicit chip values are absent.
+    freshnessScore?: TraceAxisScore; // Optional TRACE chip; may be derived when Retrieved and explicit chip values are absent.
     // TODO(TRACE-rollout): Make required after TRACE ingestion and rendering
     // paths are fully implemented and validated across surfaces.
+    // TODO(trace-target-vs-final-contract): Split target vs final TRACE once
+    // review-time runtime can revise response posture after planning.
     temperament?: PartialResponseTemperament;
     trustGraph?: TrustGraphMetadata;
 };

@@ -643,6 +643,8 @@ type ResponseMetadataRuntimeContext = {
     modelVersion: string;
     conversationSnapshot: string;
     totalDurationMs?: number;
+    // Planner TRACE target posture. This is answer-shape intent metadata,
+    // not source-grounding or retrieval truth.
     plannerTemperament?: PartialResponseTemperament;
     retrieval?: ResponseMetadataRetrievalContext;
     trustGraphEvidenceAvailable?: boolean;
@@ -816,6 +818,12 @@ const normalizeToolReasonCode = (
 /**
  * Builds canonical ResponseMetadata for trace storage and UI rendering.
  * All values are derived from control-plane context and API annotations.
+ *
+ * Semantics guardrail:
+ * - execution/workflow/workflowMode/steerabilityControls are structural records.
+ * - provenance/provenanceAssessment/chip scores may include deterministic
+ *   heuristic derivation when structural evidence is partial.
+ * - TRACE temperament is response posture metadata, separate from provenance.
  */
 const buildResponseMetadata = (
     assistantMetadata: AssistantResponseMetadata,

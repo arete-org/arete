@@ -1,5 +1,5 @@
 /**
- * @description: Centralizes deterministic TRACE metadata fallbacks used during reflect response assembly.
+ * @description: Centralizes deterministic (but heuristic-derived) TRACE/provenance metadata fallbacks used during reflect response assembly.
  * @footnote-scope: utility
  * @footnote-module: ResponseMetadataHeuristics
  * @footnote-risk: medium - Incorrect fallback rules can misstate metadata chips or tradeoff visibility.
@@ -150,6 +150,10 @@ type ProvenanceClassificationResult = {
 /**
  * Deterministic multi-signal provenance classification with explicit method
  * disclosure, conflict signaling, and conservative uncertainty language.
+ *
+ * This function does not emit structural execution fact records. It emits a
+ * compact classification from available signals, and explicitly records where
+ * those signals conflict or remain incomplete.
  */
 export const classifyProvenanceWithSignals = (
     input: ProvenanceClassificationInput
