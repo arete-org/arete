@@ -13,6 +13,10 @@ import type {
     WorkflowModeDecision,
 } from '@footnote/contracts/ethics-core';
 import { deriveReviewIntensityFromWorkflowBehavior } from './workflowProfileRegistry.js';
+import {
+    resolveInternalSteerabilityControlConflicts,
+    type ProviderPreferenceOutcomeState,
+} from './steerabilityControlPrecedence.js';
 
 type ProfileSelection = {
     profileId: string;
@@ -58,18 +62,6 @@ const mapWorkflowModeSource = (
     return 'fail_open_default';
 };
 
-const trimOptional = (value: string | undefined): string | undefined => {
-    const trimmed = value?.trim();
-    return trimmed && trimmed.length > 0 ? trimmed : undefined;
-};
-
-type ProviderPreferenceState =
-    | 'requested_honored'
-    | 'requested_overridden'
-    | 'advisory_honored'
-    | 'advisory_overridden'
-    | 'fallback_resolved';
-
 /**
  * Provider preference is intentionally honest about intent vs outcome:
  * - requested/advisory origin
@@ -80,19 +72,23 @@ type ProviderPreferenceState =
 const buildProviderPreferenceControl = (
     input: BuildSteerabilityControlsInput
 ): SteerabilityControlRecord => {
-    const requestedProfileId = trimOptional(input.requestedProfileId);
-    const plannerSelectedProfileId = trimOptional(
-        input.plannerSelectedProfileId
-    );
+    const conflictResolution = resolveInternalSteerabilityControlConflicts({
+        requestedProfileId: input.requestedProfileId,
+        plannerSelectedProfileId: input.plannerSelectedProfileId,
+        selectedProfileId: input.selectedProfile.profileId,
+        personaOverlaySource: input.persona.overlaySource,
+    });
+    const providerPreference = conflictResolution.providerPreference;
+    const selectedProfileSummary = `${input.selectedProfile.profileId}(${input.selectedProfile.provider}/${input.selectedProfile.model})`;
 
-    if (requestedProfileId !== undefined) {
-        const state: ProviderPreferenceState =
-            requestedProfileId === input.selectedProfile.profileId
-                ? 'requested_honored'
-                : 'requested_overridden';
+    if (
+        providerPreference.source === 'request_override' &&
+        providerPreference.requestedProfileId !== undefined
+    ) {
+        const state: ProviderPreferenceOutcomeState = providerPreference.state;
         return {
             controlId: 'provider_preference',
-            value: `state:${state};requested:${requestedProfileId};resolved:${input.selectedProfile.profileId}(${input.selectedProfile.provider}/${input.selectedProfile.model})`,
+            value: `state:${state};requested:${providerPreference.requestedProfileId};resolved:${selectedProfileSummary}`,
             source: 'request_override',
             rationale:
                 state === 'requested_honored'
@@ -103,14 +99,14 @@ const buildProviderPreferenceControl = (
         };
     }
 
-    if (plannerSelectedProfileId !== undefined) {
-        const state: ProviderPreferenceState =
-            plannerSelectedProfileId === input.selectedProfile.profileId
-                ? 'advisory_honored'
-                : 'advisory_overridden';
+    if (
+        providerPreference.source === 'planner_output' &&
+        providerPreference.advisoryProfileId !== undefined
+    ) {
+        const state: ProviderPreferenceOutcomeState = providerPreference.state;
         return {
             controlId: 'provider_preference',
-            value: `state:${state};advisory:${plannerSelectedProfileId};resolved:${input.selectedProfile.profileId}(${input.selectedProfile.provider}/${input.selectedProfile.model})`,
+            value: `state:${state};advisory:${providerPreference.advisoryProfileId};resolved:${selectedProfileSummary}`,
             source: 'planner_output',
             rationale:
                 state === 'advisory_honored'
@@ -123,7 +119,7 @@ const buildProviderPreferenceControl = (
 
     return {
         controlId: 'provider_preference',
-        value: `state:fallback_resolved;resolved:${input.selectedProfile.profileId}(${input.selectedProfile.provider}/${input.selectedProfile.model})`,
+        value: `state:fallback_resolved;resolved:${selectedProfileSummary}`,
         source: 'fail_open_default',
         rationale:
             'No requested or advisory profile preference was present, so runtime fallback resolution selected the provider/model profile.',
@@ -188,7 +184,14 @@ export const buildSteerabilityControls = (
     const reviewIntensity = deriveReviewIntensityFromWorkflowBehavior(
         input.workflowMode.behavior
     );
-    const personaHasOverlay = input.persona.overlaySource !== 'none';
+    const conflictResolution = resolveInternalSteerabilityControlConflicts({
+        requestedProfileId: input.requestedProfileId,
+        plannerSelectedProfileId: input.plannerSelectedProfileId,
+        selectedProfileId: input.selectedProfile.profileId,
+        personaOverlaySource: input.persona.overlaySource,
+    });
+    const personaOutcome = conflictResolution.personaToneOverlay;
+    const personaHasOverlay = personaOutcome.overlayApplied;
 
     const controls: SteerabilityControlRecord[] = [
         {
@@ -225,7 +228,7 @@ export const buildSteerabilityControls = (
         buildProviderPreferenceControl(input),
         {
             controlId: 'persona_tone_overlay',
-            value: `${input.persona.personaId}:${input.persona.overlaySource}`,
+            value: `state:${personaOutcome.state};persona:${input.persona.personaId};source:${personaOutcome.overlaySource}`,
             source: 'surface_profile',
             rationale: personaHasOverlay
                 ? 'Backend persona overlay shaped answer presentation/tone only; it did not change execution-contract authority, evidence posture, or review authority.'

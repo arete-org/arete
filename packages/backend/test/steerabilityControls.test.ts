@@ -133,6 +133,35 @@ test('provider_preference records fallback_resolved state when no request or adv
     );
 });
 
+test('requested provider preference override does not mutate execution-policy control values', () => {
+    const controls = buildSteerabilityControls(
+        createBaseControlsInput({
+            requestedProfileId: 'openai-text-quality',
+            selectedProfile: {
+                profileId: 'openai-text-fast',
+                provider: 'openai',
+                model: 'gpt-5-mini',
+            },
+        })
+    );
+    const providerPreference = controls.controls.find(
+        (control) => control.controlId === 'provider_preference'
+    );
+    const evidenceStrictness = controls.controls.find(
+        (control) => control.controlId === 'evidence_strictness'
+    );
+    const reviewIntensity = controls.controls.find(
+        (control) => control.controlId === 'review_intensity'
+    );
+
+    assert.equal(
+        providerPreference?.value,
+        'state:requested_overridden;requested:openai-text-quality;resolved:openai-text-fast(openai/gpt-5-mini)'
+    );
+    assert.equal(evidenceStrictness?.value, 'strict');
+    assert.equal(reviewIntensity?.value, 'high');
+});
+
 test('mattered reflects observable causal impact instead of record presence', () => {
     const controls = buildSteerabilityControls(
         createBaseControlsInput({
@@ -200,6 +229,10 @@ test('persona_tone_overlay rationale stays non-authoritative over execution poli
     assert.match(
         personaControl?.rationale ?? '',
         /did not change execution-contract authority, evidence posture, or review authority/i
+    );
+    assert.match(
+        personaControl?.value ?? '',
+        /^state:presentation_applied;persona:myuri;source:file$/
     );
 });
 

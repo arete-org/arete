@@ -68,6 +68,7 @@ import {
     buildControlObservabilityEnvelope,
     emitControlObservabilityEnvelope,
 } from './steerabilityControlObservability.js';
+import { resolveInternalSteerabilityControlConflicts } from './steerabilityControlPrecedence.js';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
     weatherForecastTool?: WeatherForecastTool;
@@ -430,6 +431,13 @@ export const createChatOrchestrator = ({
             },
             toolRequest: toolRequestContext,
         });
+        const steerabilityConflictResolution =
+            resolveInternalSteerabilityControlConflicts({
+                requestedProfileId: normalizedRequest.profileId,
+                plannerSelectedProfileId: plan.profileId,
+                selectedProfileId: selectedResponseProfile.id,
+                personaOverlaySource: personaProfile.promptOverlay.source,
+            });
         const plannerMatteredControlIds =
             plannerExecution.status === 'executed'
                 ? steerabilityControls.controls
@@ -442,15 +450,9 @@ export const createChatOrchestrator = ({
                       )
                       .map((control) => control.controlId)
                 : [];
-        const providerPreferenceControl = steerabilityControls.controls.find(
-            (control) => control.controlId === 'provider_preference'
-        );
-        const trimmedRequestedProfileId = normalizedRequest.profileId?.trim();
         const providerPreferencePolicyAdjusted =
-            providerPreferenceControl?.mattered === true &&
-            trimmedRequestedProfileId !== undefined &&
-            trimmedRequestedProfileId.length > 0 &&
-            trimmedRequestedProfileId !== selectedResponseProfile.id;
+            steerabilityConflictResolution.providerPreference
+                .wasOverriddenByExecutionPolicy;
         // `mattered` is an observed-material-effect signal derived from
         // concrete control records in this run. It is not full causal proof.
         const plannerMattered = plannerMatteredControlIds.length > 0;
