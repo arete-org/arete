@@ -256,7 +256,9 @@ const inferWorkflowModeIdFromExecutionContract = (
 };
 
 export type WorkflowModeResolution = {
+    /** Final mode record used by downstream runtime assembly. */
     modeDecision: WorkflowModeDecision;
+    /** Whether the request matched a built-in mode directly. */
     isKnownRequestedModeId: boolean;
 };
 
@@ -382,7 +384,9 @@ const toWorkflowProfileContract = (
 export type WorkflowProfileRegistryResolution = {
     requestedProfileId?: string;
     isKnownProfileId: boolean;
+    /** Runtime shape with hooks used by workflow execution. */
     runtimeProfile: RuntimeWorkflowProfile;
+    /** Serializable mirror safe to expose beyond backend runtime. */
     profileContract: WorkflowProfileContract;
 };
 
@@ -428,6 +432,7 @@ export const resolveWorkflowProfileRegistry = (
 export type ResolvedWorkflowRuntimeConfig = {
     // TODO(workflow-mode-final-posture): If runtime mode revisability is added,
     // split mode metadata into initial and final ids instead of overloading one field.
+    /** Requested mode after trimming. Falls back to the resolved mode id. */
     requestedModeId: string;
     modeId: WorkflowModeId;
     modeDecision: WorkflowModeDecision;
@@ -468,6 +473,8 @@ export const resolveWorkflowRuntimeConfig = (input: {
             input.ExecutionContract?.response.responseMode,
     });
     const modeDecision = modeResolution.modeDecision;
+    // Mode picks the posture first. The profile lookup then turns that posture
+    // into a concrete executable workflow shape.
     const profileResolution = resolveWorkflowProfileRegistry(
         modeDecision.behavior.workflowProfileId
     );

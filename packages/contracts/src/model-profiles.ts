@@ -9,6 +9,10 @@
 import { z } from 'zod';
 import { supportedProviders } from './providers.js';
 
+/**
+ * Stable tier aliases used by callers that want intent-level routing instead of
+ * naming one concrete catalog profile id.
+ */
 export const modelTierAliases = [
     'text-fast',
     'text-medium',
@@ -16,14 +20,19 @@ export const modelTierAliases = [
 ] as const;
 export type ModelTierAlias = (typeof modelTierAliases)[number];
 
+/** Optional coarse cost bucket for UI and policy hints. */
 export const modelCostClasses = ['low', 'medium', 'high'] as const;
 export type ModelCostClass = (typeof modelCostClasses)[number];
 
+/** Optional coarse latency bucket for UI and policy hints. */
 export const modelLatencyClasses = ['low', 'medium', 'high'] as const;
 export type ModelLatencyClass = (typeof modelLatencyClasses)[number];
 
 /**
  * Runtime-facing capability flags for one model profile.
+ *
+ * These flags describe what the backend may ask this profile to do. They do
+ * not override execution policy by themselves.
  */
 export interface ModelProfileCapabilities {
     canUseSearch: boolean;
@@ -48,6 +57,9 @@ export interface ModelProfile {
     latencyClass?: ModelLatencyClass;
 }
 
+/**
+ * Runtime capability schema shared by config loading and tests.
+ */
 export const ModelProfileCapabilitiesSchema = z
     .object({
         canUseSearch: z.boolean(),
@@ -55,6 +67,9 @@ export const ModelProfileCapabilitiesSchema = z
     })
     .strict();
 
+/**
+ * Canonical schema for one catalog entry.
+ */
 export const ModelProfileSchema: z.ZodType<ModelProfile> = z
     .object({
         id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
@@ -71,6 +86,12 @@ export const ModelProfileSchema: z.ZodType<ModelProfile> = z
     })
     .strict();
 
+/**
+ * Canonical schema for the full model profile catalog.
+ *
+ * Duplicate ids are rejected here so routing code can safely treat `id` as the
+ * stable lookup key.
+ */
 export const ModelProfileCatalogSchema = z
     .array(ModelProfileSchema)
     .superRefine((profiles, context) => {

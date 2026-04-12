@@ -80,8 +80,12 @@ const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
 });
 
 /**
- * The orchestrator keeps surface-specific policy in one place while reusing the
- * shared message-generation service for any branch that ends in text output.
+ * Builds the backend chat orchestration entry point shared by web and Discord.
+ *
+ * Ownership here is narrow but important:
+ * - this module coordinates the order of decisions for one request
+ * - it does not redefine planner policy, workflow contracts, or model catalog rules
+ * - it delegates final text generation to ChatService once routing is settled
  */
 export const createChatOrchestrator = ({
     generationRuntime,
@@ -183,11 +187,11 @@ export const createChatOrchestrator = ({
     });
 
     /**
-     * Runs one chat request end-to-end:
-     * 1) normalize conversation shape by surface
-     * 2) plan action/modality
-     * 3) apply surface policy guardrails
-     * 4) execute message generation when action requires text output
+     * Runs one chat request end-to-end.
+     *
+     * Order matters here. Earlier steps produce the facts that later steps are
+     * allowed to use, so this function is the place to read when response
+     * ownership or precedence feels unclear.
      */
     const runChat = async (
         request: PostChatRequest
@@ -372,6 +376,8 @@ export const createChatOrchestrator = ({
             executionContractResponseMode:
                 generationForExecution.responseIntentHint?.responseMode,
         });
+        // Mode chooses the intended run posture first. The execution contract
+        // then makes that posture concrete for the rest of orchestration.
         // TODO(workflow-mode-escalation): Add optional runtime mode transitions
         // (for example fast -> grounded) when later retrieval/sufficiency
         // signals justify escalation. This is future behavior only, and should
@@ -655,8 +661,9 @@ export const createChatOrchestrator = ({
         const executionContractScopeTuple =
             buildExecutionContractScopeTuple(normalizedRequest);
 
-        // Generation receives resolved provider/capabilities from the active
-        // default model profile instead of relying on provider-name checks.
+        // Generation receives resolved provider/capabilities from the selected
+        // response profile. By this point, planner suggestions and request
+        // hints have already been reduced to one backend-owned execution plan.
         const response = await chatService.runChatMessages({
             messages: conversationMessages,
             conversationSnapshot: JSON.stringify({

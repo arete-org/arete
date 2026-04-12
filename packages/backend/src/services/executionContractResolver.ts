@@ -58,15 +58,25 @@ const isBuiltinExecutionContractPresetId = (
     Object.prototype.hasOwnProperty.call(EXECUTION_CONTRACT_PRESETS, value);
 
 export type ExecutionContractResolverInput = {
+    /** Optional named preset requested by config or caller assembly. */
     presetId?: ExecutionContractPresetId | null;
+    /** Optional explicit policy id override for the final assembled contract. */
     policyId?: ExecutionContractId;
+    /** Optional display label override for logs and operator views. */
     displayName?: string;
+    /** Final field-level overrides applied after preset defaults. */
     overrides?: ExecutionContractOverrides;
 };
 
 export type ExecutionContractResolverResolution = {
+    /**
+     * Preset id after trimming. This may still be unknown.
+     * Use `isKnownPresetId` to tell whether it matched a built-in preset.
+     */
     requestedPresetId?: ExecutionContractPresetId;
+    /** `true` only when the requested id mapped to a built-in preset. */
     isKnownPresetId: boolean;
+    /** Final canonical contract used by runtime code. */
     policyContract: ExecutionContract;
 };
 
@@ -75,6 +85,9 @@ export type ExecutionContractResolverResolution = {
  * 1) canonical defaults in the builder,
  * 2) optional built-in preset overrides,
  * 3) explicit call-site overrides.
+ *
+ * Unknown preset ids do not fail closed. They are preserved for reporting, then
+ * the resolver falls back to the default built-in descriptor.
  */
 export const resolveExecutionContract = (
     input: ExecutionContractResolverInput

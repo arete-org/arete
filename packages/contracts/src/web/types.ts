@@ -309,6 +309,12 @@ export type ChatImageRequest = {
 };
 
 /**
+ * Transport-neutral chat request sent into backend orchestration.
+ *
+ * `capabilities` tells the backend what this caller can render or perform.
+ * It does not grant permission to force an action. `surfaceContext` carries
+ * lightweight routing context and should stay serializable.
+ *
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
@@ -338,6 +344,9 @@ export type PostChatRequest = {
 };
 
 /**
+ * Text reply variant. This is the only chat response shape that carries
+ * response metadata because it represents a completed generated answer.
+ *
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
@@ -349,6 +358,9 @@ export type ChatMessageActionResponse = {
 };
 
 /**
+ * Reaction variant for surfaces that can acknowledge briefly without a full
+ * generated message.
+ *
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
@@ -359,6 +371,9 @@ export type ChatReactActionResponse = {
 };
 
 /**
+ * Explicit no-reply variant used when orchestration decides the assistant
+ * should stay silent.
+ *
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
@@ -368,6 +383,9 @@ export type ChatIgnoreActionResponse = {
 };
 
 /**
+ * Planner-produced image handoff. The backend returns instructions, not the
+ * rendered asset itself, so surfaces can decide how to fulfill the request.
+ *
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
@@ -378,6 +396,9 @@ export type ChatImageActionResponse = {
 };
 
 /**
+ * Unified chat response union for transport-neutral callers.
+ * Check `action` first, then read the fields for that variant.
+ *
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */

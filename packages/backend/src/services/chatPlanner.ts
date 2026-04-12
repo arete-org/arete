@@ -84,6 +84,7 @@ export type ChatPlannerExecution = {
 
 export type ChatPlannerResult = {
     // Always populated: either planner-derived or fail-open fallback plan.
+    // Callers should branch on this internal plan, not on raw planner output.
     plan: ChatPlan;
     // Execution telemetry used by orchestrator metadata emission.
     execution: ChatPlannerExecution;
@@ -104,11 +105,14 @@ type PlannerContextReasonCode =
     | 'planner_context_timeout_fail_open';
 
 export type PlannerNormalizationResult = {
+    // Backend-owned plan after coercion, validation, and safe defaults.
     plan: ChatPlan;
+    // How much cleanup or fallback was needed to make planner output usable.
     fallbackTier: PlannerFallbackTier;
     correctionCodes: string[];
     contextNeed: PlannerContextNeed;
     contextTier: PlannerContextTier;
+    // Whether workflow-owned policy applied the candidate cleanly.
     applyOutcome: PlannerOutputApplyOutcome;
     outOfContractFields: string[];
     authorityFieldAttempts: string[];
@@ -122,6 +126,10 @@ const UNICODE_SINGLE_EMOJI_PATTERN =
 /**
  * Planner decision consumed by the chat orchestrator after the raw LLM
  * output has been normalized and safety-checked.
+ *
+ * This is an execution suggestion, not an authority record. The orchestrator
+ * may still coerce the action for surface limits, profile policy, or tool
+ * availability.
  */
 export type ChatPlan = {
     action: ChatPlannerAction;
@@ -141,7 +149,8 @@ export type ChatPlan = {
 
 export type ChatPlannerCapabilityProfileOption = {
     id: CapabilityProfileId;
-    // Human-readable capability hint shown to planner.
+    // Human-readable hint for the planner. This is guidance, not a guarantee
+    // that the final response will use this exact profile.
     description: string;
 };
 
@@ -1220,9 +1229,11 @@ const normalizePlan = (
 };
 
 /**
- * Builds the backend-native planner used by the universal chat workflow.
- * It returns an internal plan shape and logs its reasoning in development so
- * planner drift is visible during pre-production rollout.
+ * Builds the planner adapter used by chat orchestration.
+ *
+ * This factory owns planner execution, normalization, and compatibility
+ * fallback. It does not own the final decision to run tools, pick a response
+ * profile, or emit a user-visible action unchanged.
  */
 export const createChatPlanner = ({
     executePlanner,
@@ -1239,8 +1250,8 @@ export const createChatPlanner = ({
         );
     }
 
-    // Keep planner context intentionally narrow.
-    // We expose only decision-relevant fields, not full raw catalog config.
+    // Keep planner context intentionally narrow so the model can choose among
+    // stable options without learning backend-only catalog details.
     const plannerCapabilityContext =
         availableCapabilityProfiles.length > 0
             ? JSON.stringify(

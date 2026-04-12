@@ -37,6 +37,9 @@ export const resolveNonMessagePlannerAction = (
     input: ResolvePlannerActionInput,
     runtime: ResolvePlannerActionRuntime
 ): PostChatResponse | undefined => {
+    // This helper only handles branches that return before text generation.
+    // Message responses continue through the main orchestrator path because
+    // they still need profile resolution, generation, and metadata assembly.
     if (input.executionPlan.action === 'ignore') {
         runtime.notifyBreakerEvent({
             responseId: null,
@@ -85,6 +88,8 @@ export const resolveNonMessagePlannerAction = (
         input.executionPlan.action === 'image' &&
         !input.executionPlan.imageRequest
     ) {
+        // An image action without image instructions is not actionable.
+        // Fall back to ignore instead of guessing at a prompt.
         runtime.fallbackReasons.push('image_action_missing_image_request');
         runtime.warn(
             `Chat planner returned image without imageRequest; falling back to ignore. surface=${input.normalizedRequest.surface} trigger=${input.normalizedRequest.trigger.kind} latestUserInputLength=${input.normalizedRequest.latestUserInput.length}`
