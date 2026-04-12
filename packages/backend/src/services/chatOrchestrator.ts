@@ -80,12 +80,11 @@ const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
 });
 
 /**
- * Builds the backend chat orchestration entry point shared by web and Discord.
+ * Entry point for chat requests from web and Discord.
  *
- * Ownership here is narrow but important:
- * - this module coordinates the order of decisions for one request
- * - it does not redefine planner policy, workflow contracts, or model catalog rules
- * - it delegates final text generation to ChatService once routing is settled
+ * Most of the work here is deciding what kind of response we are about to
+ * produce. Once that is settled, ChatService handles the actual text
+ * generation.
  */
 export const createChatOrchestrator = ({
     generationRuntime,
@@ -189,9 +188,9 @@ export const createChatOrchestrator = ({
     /**
      * Runs one chat request end-to-end.
      *
-     * Order matters here. Earlier steps produce the facts that later steps are
-     * allowed to use, so this function is the place to read when response
-     * ownership or precedence feels unclear.
+     * The order is easy to miss: normalize the request, run the evaluator,
+     * ask the planner, narrow the profile and tool choices, then generate if
+     * we still owe the caller a message.
      */
     const runChat = async (
         request: PostChatRequest
@@ -376,8 +375,8 @@ export const createChatOrchestrator = ({
             executionContractResponseMode:
                 generationForExecution.responseIntentHint?.responseMode,
         });
-        // Mode chooses the intended run posture first. The execution contract
-        // then makes that posture concrete for the rest of orchestration.
+        // Pick the run mode first, then derive the contract from it. That keeps
+        // later branches from inventing their own policy rules.
         // TODO(workflow-mode-escalation): Add optional runtime mode transitions
         // (for example fast -> grounded) when later retrieval/sufficiency
         // signals justify escalation. This is future behavior only, and should
@@ -661,9 +660,9 @@ export const createChatOrchestrator = ({
         const executionContractScopeTuple =
             buildExecutionContractScopeTuple(normalizedRequest);
 
-        // Generation receives resolved provider/capabilities from the selected
-        // response profile. By this point, planner suggestions and request
-        // hints have already been reduced to one backend-owned execution plan.
+        // By the time we call ChatService, planner output and request overrides
+        // have already been folded into one concrete profile and generation
+        // plan.
         const response = await chatService.runChatMessages({
             messages: conversationMessages,
             conversationSnapshot: JSON.stringify({

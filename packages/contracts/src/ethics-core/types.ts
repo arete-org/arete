@@ -528,7 +528,7 @@ export type ToolInvocationIntent = {
 
 /**
  * Orchestrator-owned tool eligibility decision before runtime execution.
- * This says whether a tool may be attempted, not whether it eventually ran.
+ * This is the pre-check: should we even try the tool?
  */
 export type ToolInvocationRequest = {
     toolName: ToolInvocationName;
@@ -539,7 +539,7 @@ export type ToolInvocationRequest = {
 
 /**
  * Runtime-owned final tool outcome emitted into execution metadata.
- * This is the "what happened" record after execution or skip handling.
+ * This is the outcome after that check: ran, skipped, or failed.
  */
 export type ToolExecutionContext = {
     toolName: ToolInvocationName;
@@ -588,8 +588,8 @@ export type TrustGraphScopeValidationResult =
       };
 
 export type TrustGraphMetadata = {
-    // TrustGraph metadata is advisory provenance/evidence context. It is not a
-    // replacement for the backend execution contract or workflow decisions.
+    // This says what TrustGraph contributed to the response. It does not
+    // replace the backend's own execution and policy records.
     adapterStatus: 'off' | 'scope_denied' | 'success' | 'timeout' | 'error';
     scopeValidation: TrustGraphScopeValidationResult;
     terminalAuthority: 'backend_execution_contract';
@@ -623,10 +623,9 @@ export type TrustGraphMetadata = {
 /**
  * ResponseMetadata is the compact record attached to a model response.
  *
- * Keep the distinction between fields clear:
- * - structural fields record runtime decisions and execution facts
- * - heuristic fields summarize inferred state when direct evidence is partial
- * - compatibility fields exist only to help older consumers migrate safely
+ * Not every field means the same thing. Some values are direct runtime facts,
+ * some are best-effort summaries, and a few are only here to keep older
+ * consumers working while newer fields roll out.
  */
 export type ResponseMetadata = {
     // TODO(metadata-stability-tiers): Publish explicit stability tiers

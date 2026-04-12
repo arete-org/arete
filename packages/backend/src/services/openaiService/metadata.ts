@@ -37,7 +37,7 @@ import type {
 } from './types.js';
 
 // Owns: response metadata assembly and normalization of execution metadata fields.
-// Does not own: provider request execution, planner authority, or orchestrator policy decisions.
+// Does not own: making provider calls or deciding chat policy.
 
 const TRACE_AXIS_KEYS = [
     'tightness',
@@ -303,9 +303,9 @@ const buildResponseMetadata = (
         // add explicit attempt/correlation metadata without letting planner
         // events redefine orchestration authority or step ownership.
         // Treat this block as metadata ingestion only, not a policy hook.
-        // This block converts runtime-local planner metadata into the shared
-        // execution timeline contract. Invalid fields are dropped here instead
-        // of leaking partial planner records into stored traces.
+        // Turn the planner record from runtime context into the shared
+        // execution-event shape. If required fields are missing, drop it here
+        // instead of storing something half-valid.
         const normalizedPlannerReasonCode = normalizePlannerReasonCode(
             plannerExecution.status,
             plannerExecution.reasonCode
@@ -413,8 +413,8 @@ const buildResponseMetadata = (
     }
     const evaluatorExecution = runtimeContext.executionContext?.evaluator;
     if (evaluatorExecution) {
-        // Evaluator records are already policy outcomes. Metadata assembly only
-        // mirrors them into the canonical response timeline.
+        // The evaluator already decided this. We are only copying that result
+        // into the response timeline.
         const normalizedEvaluatorReasonCode = normalizeEvaluatorReasonCode(
             evaluatorExecution.status,
             evaluatorExecution.reasonCode
@@ -435,8 +435,8 @@ const buildResponseMetadata = (
     }
     const toolExecution = runtimeContext.executionContext?.tool;
     if (toolExecution) {
-        // Tool metadata stays compact on purpose. This timeline says what
-        // happened, not every request argument or result payload.
+        // Keep the tool event compact. Readers usually need to know whether it
+        // ran and how it ended, not the full request payload.
         const normalizedToolReasonCode = normalizeToolReasonCode(
             toolExecution.status,
             toolExecution.reasonCode
@@ -455,8 +455,8 @@ const buildResponseMetadata = (
     }
     const generationExecution = runtimeContext.executionContext?.generation;
     if (generationExecution) {
-        // Generation remains the source of truth for the final response model.
-        // `modelVersion` below is only a compatibility mirror for older readers.
+        // The generation event is the real source of model information.
+        // `modelVersion` below only exists for older consumers.
         const normalizedGenerationReasonCode = normalizeGenerationReasonCode(
             generationExecution.status,
             generationExecution.reasonCode

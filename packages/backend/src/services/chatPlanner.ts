@@ -84,7 +84,7 @@ export type ChatPlannerExecution = {
 
 export type ChatPlannerResult = {
     // Always populated: either planner-derived or fail-open fallback plan.
-    // Callers should branch on this internal plan, not on raw planner output.
+    // Use this normalized plan, not the raw model output.
     plan: ChatPlan;
     // Execution telemetry used by orchestrator metadata emission.
     execution: ChatPlannerExecution;
@@ -105,14 +105,14 @@ type PlannerContextReasonCode =
     | 'planner_context_timeout_fail_open';
 
 export type PlannerNormalizationResult = {
-    // Backend-owned plan after coercion, validation, and safe defaults.
+    // Plan after we cleaned up planner output and filled in safe defaults.
     plan: ChatPlan;
-    // How much cleanup or fallback was needed to make planner output usable.
+    // How much we had to correct or fall back before the plan was safe to use.
     fallbackTier: PlannerFallbackTier;
     correctionCodes: string[];
     contextNeed: PlannerContextNeed;
     contextTier: PlannerContextTier;
-    // Whether workflow-owned policy applied the candidate cleanly.
+    // Whether the caller could use the candidate as-is or had to adjust it.
     applyOutcome: PlannerOutputApplyOutcome;
     outOfContractFields: string[];
     authorityFieldAttempts: string[];
@@ -127,9 +127,9 @@ const UNICODE_SINGLE_EMOJI_PATTERN =
  * Planner decision consumed by the chat orchestrator after the raw LLM
  * output has been normalized and safety-checked.
  *
- * This is an execution suggestion, not an authority record. The orchestrator
- * may still coerce the action for surface limits, profile policy, or tool
- * availability.
+ * This is what the planner wanted us to do after normalization. It is still
+ * just input to orchestration. Surface rules, profile selection, and tool
+ * availability can still change the final behavior.
  */
 export type ChatPlan = {
     action: ChatPlannerAction;
@@ -149,8 +149,8 @@ export type ChatPlan = {
 
 export type ChatPlannerCapabilityProfileOption = {
     id: CapabilityProfileId;
-    // Human-readable hint for the planner. This is guidance, not a guarantee
-    // that the final response will use this exact profile.
+    // Short description shown to the planner so it can ask for the right kind
+    // of model. The final model can still change after routing and fallback.
     description: string;
 };
 
@@ -1229,11 +1229,11 @@ const normalizePlan = (
 };
 
 /**
- * Builds the planner adapter used by chat orchestration.
+ * Creates the planner wrapper used by chat orchestration.
  *
- * This factory owns planner execution, normalization, and compatibility
- * fallback. It does not own the final decision to run tools, pick a response
- * profile, or emit a user-visible action unchanged.
+ * This code runs the planner, cleans up its output, and falls back when the
+ * model returns something unusable. It does not get the last word on tools,
+ * profiles, or the final response.
  */
 export const createChatPlanner = ({
     executePlanner,
@@ -1250,8 +1250,8 @@ export const createChatPlanner = ({
         );
     }
 
-    // Keep planner context intentionally narrow so the model can choose among
-    // stable options without learning backend-only catalog details.
+    // Keep this input small. The planner needs enough context to choose well,
+    // but not the whole profile catalog or backend config.
     const plannerCapabilityContext =
         availableCapabilityProfiles.length > 0
             ? JSON.stringify(

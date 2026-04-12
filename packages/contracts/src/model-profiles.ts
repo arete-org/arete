@@ -10,8 +10,8 @@ import { z } from 'zod';
 import { supportedProviders } from './providers.js';
 
 /**
- * Stable tier aliases used by callers that want intent-level routing instead of
- * naming one concrete catalog profile id.
+ * Shorthand labels for callers that want "fast" or "quality" style routing
+ * without naming a specific profile id.
  */
 export const modelTierAliases = [
     'text-fast',
@@ -31,8 +31,8 @@ export type ModelLatencyClass = (typeof modelLatencyClasses)[number];
 /**
  * Runtime-facing capability flags for one model profile.
  *
- * These flags describe what the backend may ask this profile to do. They do
- * not override execution policy by themselves.
+ * These are routing hints. A profile advertising a capability does not force
+ * the backend to use it.
  */
 export interface ModelProfileCapabilities {
     canUseSearch: boolean;
@@ -58,7 +58,7 @@ export interface ModelProfile {
 }
 
 /**
- * Runtime capability schema shared by config loading and tests.
+ * Schema used when loading and testing capability flags.
  */
 export const ModelProfileCapabilitiesSchema = z
     .object({
@@ -68,7 +68,7 @@ export const ModelProfileCapabilitiesSchema = z
     .strict();
 
 /**
- * Canonical schema for one catalog entry.
+ * Schema for one model profile entry.
  */
 export const ModelProfileSchema: z.ZodType<ModelProfile> = z
     .object({
@@ -87,10 +87,10 @@ export const ModelProfileSchema: z.ZodType<ModelProfile> = z
     .strict();
 
 /**
- * Canonical schema for the full model profile catalog.
+ * Schema for the full model profile list.
  *
- * Duplicate ids are rejected here so routing code can safely treat `id` as the
- * stable lookup key.
+ * Duplicate ids are rejected here because the rest of the code treats `id` as
+ * the lookup key.
  */
 export const ModelProfileCatalogSchema = z
     .array(ModelProfileSchema)

@@ -58,15 +58,11 @@ type ResolveExecutionProfileResult = {
 };
 
 /**
- * Resolves the final response profile for one request after planning.
+ * Chooses the model profile we will actually use for this response.
  *
- * This is the main precedence seam for profile choice:
- * - request profile may win when policy allows explicit override
- * - planner capability selection may win when routing is capability-first
- * - default profile remains the fail-open landing point
- *
- * This resolver does not execute tools and does not treat the planner as final
- * authority. It picks the safest usable profile for the rest of orchestration.
+ * The easy mistake is to treat planner output as the final answer. It is only
+ * one input here. A request-level override may win, and the default profile is
+ * still the fallback if the requested or planned choice is missing or disabled.
  */
 export const resolveExecutionProfile = (
     input: ResolveExecutionProfileInput,
@@ -208,9 +204,9 @@ export const resolveExecutionProfile = (
         generationForExecution.search &&
         !selectedResponseProfile.capabilities.canUseSearch
     ) {
-        // Search intent stays attached to the request, but the selected profile
-        // may not be able to fulfill it. Reroute logic lives here so callers do
-        // not have to duplicate "search requested vs search possible" handling.
+        // A plan can ask for search and still land on a profile that cannot
+        // search. Handle that mismatch here so the rest of the orchestrator can
+        // work with one resolved profile.
         const searchPolicySelectionSource: PlannerSelectionSource =
             selectedCapabilityDecision.reasonCode ===
             'planner_requested_capability_profile_no_floor_match'

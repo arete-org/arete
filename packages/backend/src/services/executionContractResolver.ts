@@ -58,25 +58,24 @@ const isBuiltinExecutionContractPresetId = (
     Object.prototype.hasOwnProperty.call(EXECUTION_CONTRACT_PRESETS, value);
 
 export type ExecutionContractResolverInput = {
-    /** Optional named preset requested by config or caller assembly. */
+    /** Preset id requested by config or the caller. */
     presetId?: ExecutionContractPresetId | null;
-    /** Optional explicit policy id override for the final assembled contract. */
+    /** Override for the final policy id, if the caller wants one. */
     policyId?: ExecutionContractId;
-    /** Optional display label override for logs and operator views. */
+    /** Display name override for logs and operator views. */
     displayName?: string;
-    /** Final field-level overrides applied after preset defaults. */
+    /** Field-level overrides applied after defaults and any preset. */
     overrides?: ExecutionContractOverrides;
 };
 
 export type ExecutionContractResolverResolution = {
     /**
-     * Preset id after trimming. This may still be unknown.
-     * Use `isKnownPresetId` to tell whether it matched a built-in preset.
+     * Preset id after trimming. This may still be an unknown value.
      */
     requestedPresetId?: ExecutionContractPresetId;
-    /** `true` only when the requested id mapped to a built-in preset. */
+    /** Whether the requested id matched one of the built-in presets. */
     isKnownPresetId: boolean;
-    /** Final canonical contract used by runtime code. */
+    /** Final contract the runtime will use. */
     policyContract: ExecutionContract;
 };
 
@@ -86,8 +85,8 @@ export type ExecutionContractResolverResolution = {
  * 2) optional built-in preset overrides,
  * 3) explicit call-site overrides.
  *
- * Unknown preset ids do not fail closed. They are preserved for reporting, then
- * the resolver falls back to the default built-in descriptor.
+ * If the preset id is unknown, keep it for reporting and fall back to the
+ * default built-in preset instead of throwing.
  */
 export const resolveExecutionContract = (
     input: ExecutionContractResolverInput
