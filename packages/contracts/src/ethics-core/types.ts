@@ -130,6 +130,7 @@ export type PlannerExecutionReasonCode = Extract<
 /**
  * Canonical planner invocation purpose labels.
  * Keep additive and serializable for trace auditability.
+ * Purpose labels describe bounded planner intent, not policy ownership.
  */
 export type PlannerExecutionPurpose = 'chat_orchestrator_action_selection';
 
@@ -142,7 +143,8 @@ export type PlannerExecutionContractType =
     | 'fallback';
 
 /**
- * How planner output was applied by orchestration/policy.
+ * How planner output was applied by workflow-owned policy/routing.
+ * This records execution effect, not planner authority.
  */
 export type PlannerExecutionApplyOutcome =
     | 'applied'
@@ -317,6 +319,8 @@ type ProfileExecutionEvent = BaseExecutionEvent & {
 
 export type PlannerExecutionEvent = ProfileExecutionEvent & {
     kind: 'planner';
+    // TODO(workflow-planner-step-alignment): If planner becomes a workflow
+    // native step, add correlation fields that map this event to step records.
     purpose: PlannerExecutionPurpose;
     contractType: PlannerExecutionContractType;
     applyOutcome: PlannerExecutionApplyOutcome;

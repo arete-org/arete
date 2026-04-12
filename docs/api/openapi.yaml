@@ -2441,21 +2441,21 @@ components:
                             purpose:
                                 type: string
                                 enum: [chat_orchestrator_action_selection]
-                                description: Required for planner events. Canonical planner invocation purpose.
+                                description: Required for planner events. Canonical bounded planner invocation purpose; not policy ownership.
                             contractType:
                                 type: string
                                 enum: [structured, text_json, fallback]
-                                description: Required for planner events. Planner decision contract execution style.
+                                description: Required for planner events. Planner decision contract execution style used by backend-owned orchestration.
                             applyOutcome:
                                 type: string
                                 enum: [applied, adjusted_by_policy, not_applied]
-                                description: Required for planner events. Indicates whether planner output was applied as-is, adjusted by policy, or not applied.
+                                description: Required for planner events. Indicates whether planner output became execution input as-is, was adjusted by workflow policy, or was not applied.
                             mattered:
                                 type: boolean
-                                description: Required for planner events. Mirrors mattered=true semantics for observable planner impact.
+                                description: Required for planner events. Observable planner influence signal, not a claim of policy authority.
                             matteredControlIds:
                                 type: array
-                                description: Required for planner events. Control IDs that explain why planner influence materially affected execution.
+                                description: Required for planner events. Control IDs that explain where planner influence materially affected execution.
                                 items:
                                     type: string
                             originalProfileId:

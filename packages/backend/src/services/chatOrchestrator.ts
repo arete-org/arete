@@ -282,9 +282,9 @@ export const createChatOrchestrator = ({
             normalizedRequest,
             chatOrchestratorLogger
         );
-        // Planner remains a bounded workflow-owned step. It can recommend
-        // action-selection details but cannot redefine Execution Contract
-        // authority or become a second orchestrator.
+        // Planner is a bounded, execution-relevant helper. It can suggest
+        // action-selection details, but it is not policy authority, contract
+        // authority, runtime ownership, or a second orchestrator.
         // TODO(workflow-planner-lineage): Planner is orchestrator-frontloaded
         // today. When planner becomes workflow-native, persist it as a
         // first-class workflow step in workflow lineage.
@@ -603,7 +603,8 @@ export const createChatOrchestrator = ({
         };
 
         // Planner output is injected as a final system message so generation
-        // follows one bounded planner payload selected by backend policy.
+        // follows one bounded payload selected by backend policy.
+        // This payload is execution input only, never policy authority.
         const conversationMessages: Array<
             Pick<ChatConversationMessage, 'role' | 'content'>
         > = [
@@ -693,6 +694,8 @@ export const createChatOrchestrator = ({
             executionContext: {
                 // Planner execution metadata is sourced from ChatPlannerResult
                 // so traces can distinguish successful planning from fallback.
+                // This metadata reports planner influence; it does not delegate
+                // orchestration ownership or policy authority to planner.
                 // TODO(workflow-planner-lineage): Keep this metadata bridge
                 // until planner execution is represented directly as workflow
                 // lineage instead of orchestrator-frontloaded context.
