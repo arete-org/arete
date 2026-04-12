@@ -29,6 +29,10 @@ import type {
 // Owns: provider request shape normalization, request lifecycle, and raw response extraction.
 // Does not own: response metadata assembly policy or orchestration/workflow decisions.
 
+type GenerateResponseInternalOptions = GenerateResponseOptions & {
+    signal?: AbortSignal;
+};
+
 /**
  * Maps planner reasoning effort to a valid Responses API setting.
  */
@@ -135,7 +139,7 @@ class SimpleOpenAIService implements OpenAIService {
     async generateResponse(
         model: string,
         messages: RuntimeMessage[],
-        options: GenerateResponseOptions = {}
+        options: GenerateResponseInternalOptions = {}
     ): Promise<GenerateResponseResult> {
         const validMessages = messages.filter((message) => {
             if (!message.content || !message.content.trim()) {
@@ -254,10 +258,17 @@ class SimpleOpenAIService implements OpenAIService {
         }
 
         if (!response.ok) {
-            const errorText = await response.text();
-            logger.error(`OpenAI API error details: ${errorText}`);
+            const requestId =
+                response.headers.get('x-request-id') ??
+                response.headers.get('request-id') ??
+                undefined;
+            logger.error('OpenAI API request failed.', {
+                status: response.status,
+                statusText: response.statusText,
+                ...(requestId !== undefined && { requestId }),
+            });
             throw new Error(
-                `OpenAI API error: ${response.status} ${response.statusText} - ${errorText}`
+                `OpenAI API error: ${response.status} ${response.statusText}`
             );
         }
 
@@ -273,14 +284,17 @@ class SimpleOpenAIService implements OpenAIService {
                 item.role === 'assistant' &&
                 Array.isArray(item.content)
             ) {
-                const textContent = item.content.find(
-                    (contentItem) => contentItem.type === 'output_text'
-                );
-                if (textContent?.text) {
-                    rawOutputText = textContent.text;
+                const textSegments = item.content
+                    .filter(
+                        (contentItem) =>
+                            contentItem.type === 'output_text' &&
+                            typeof contentItem.text === 'string'
+                    )
+                    .map((contentItem) => contentItem.text ?? '');
+                if (textSegments.length > 0) {
+                    rawOutputText += textSegments.join('');
                 }
                 finishReason = item.finish_reason ?? finishReason;
-                break;
             }
         }
 

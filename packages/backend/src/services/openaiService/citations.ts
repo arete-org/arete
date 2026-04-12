@@ -111,16 +111,52 @@ const normalizeFallbackCitationTitle = (label: string): string => {
 const extractMarkdownLinkCitations = (text: string): Citation[] => {
     const citations: Citation[] = [];
     const seenUrls = new Set<string>();
-    const markdownLinkPattern = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+    let cursor = 0;
 
-    for (const match of text.matchAll(markdownLinkPattern)) {
-        const rawLabel = match[1];
-        const rawUrl = match[2];
+    while (cursor < text.length) {
+        const labelStart = text.indexOf('[', cursor);
+        if (labelStart === -1) {
+            break;
+        }
+        const labelEnd = text.indexOf(']', labelStart + 1);
+        if (labelEnd === -1) {
+            break;
+        }
+        const urlStart = labelEnd + 1;
+        if (text[urlStart] !== '(') {
+            cursor = labelStart + 1;
+            continue;
+        }
+
+        let parenthesisDepth = 0;
+        let urlEnd = -1;
+        for (let index = urlStart; index < text.length; index += 1) {
+            const character = text[index];
+            if (character === '(') {
+                parenthesisDepth += 1;
+                continue;
+            }
+            if (character === ')') {
+                parenthesisDepth -= 1;
+                if (parenthesisDepth === 0) {
+                    urlEnd = index;
+                    break;
+                }
+            }
+        }
+        if (urlEnd === -1) {
+            cursor = labelStart + 1;
+            continue;
+        }
+
+        const rawLabel = text.slice(labelStart + 1, labelEnd);
+        const rawUrl = text.slice(urlStart + 1, urlEnd).trim();
         if (
             typeof rawLabel !== 'string' ||
             rawLabel.trim().length === 0 ||
             typeof rawUrl !== 'string'
         ) {
+            cursor = urlEnd + 1;
             continue;
         }
 
@@ -131,14 +167,17 @@ const extractMarkdownLinkCitations = (text: string): Citation[] => {
                 parsedUrl.protocol !== 'http:' &&
                 parsedUrl.protocol !== 'https:'
             ) {
+                cursor = urlEnd + 1;
                 continue;
             }
             normalizedUrl = parsedUrl.toString();
         } catch {
+            cursor = urlEnd + 1;
             continue;
         }
 
         if (seenUrls.has(normalizedUrl)) {
+            cursor = urlEnd + 1;
             continue;
         }
 
@@ -147,6 +186,7 @@ const extractMarkdownLinkCitations = (text: string): Citation[] => {
             title: normalizeFallbackCitationTitle(rawLabel),
             url: normalizedUrl,
         });
+        cursor = urlEnd + 1;
     }
 
     return citations;

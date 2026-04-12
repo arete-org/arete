@@ -94,7 +94,7 @@ const normalizePlannerReasonCode = (
         return reasonCode;
     }
 
-    return 'planner_runtime_error';
+    return undefined;
 };
 
 const parsePlannerPurpose = (
@@ -152,7 +152,7 @@ const normalizeEvaluatorReasonCode = (
         return reasonCode;
     }
 
-    return 'evaluator_runtime_error';
+    return undefined;
 };
 
 const normalizeGenerationReasonCode = (
@@ -167,7 +167,7 @@ const normalizeGenerationReasonCode = (
         return reasonCode;
     }
 
-    return 'generation_runtime_error';
+    return undefined;
 };
 
 const normalizeToolReasonCode = (

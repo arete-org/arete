@@ -166,6 +166,45 @@ test('SimpleOpenAIService preserves meaningful markdown labels in recovered cita
     );
 });
 
+test('SimpleOpenAIService keeps full markdown URLs that include nested parentheses', async () => {
+    const service = new SimpleOpenAIService('test-key');
+
+    await withMockedFetch(
+        async () =>
+            new Response(
+                JSON.stringify(
+                    createRetrievedResponsePayload(
+                        'See [Math](https://example.com/wiki/Function_(mathematics)) for context.'
+                    )
+                ),
+                {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                }
+            ),
+        async () => {
+            const result = await service.generateResponse(
+                'gpt-5-mini',
+                [{ role: 'user', content: 'What happened today?' }],
+                {
+                    search: {
+                        query: 'latest news',
+                        contextSize: 'low',
+                        intent: 'current_facts',
+                    },
+                }
+            );
+
+            assert.deepEqual(result.metadata.citations, [
+                {
+                    title: 'Math',
+                    url: 'https://example.com/wiki/Function_(mathematics)',
+                },
+            ]);
+        }
+    );
+});
+
 test('SimpleOpenAIService does not run markdown fallback when annotation citations already exist', async () => {
     const service = new SimpleOpenAIService('test-key');
 

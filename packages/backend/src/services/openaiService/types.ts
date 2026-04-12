@@ -77,7 +77,7 @@ export type GenerateResponseResult = {
 
 export type GenerateResponseOptions = Pick<
     GenerationRequest,
-    'maxOutputTokens' | 'reasoningEffort' | 'verbosity' | 'search' | 'signal'
+    'maxOutputTokens' | 'reasoningEffort' | 'verbosity' | 'search'
 >;
 
 export interface OpenAIService {
