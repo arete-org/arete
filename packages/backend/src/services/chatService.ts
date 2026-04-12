@@ -540,8 +540,9 @@ export const createChatService = ({
                 search: normalizedGeneration.search,
             }),
         };
-        // Execution Contract governs allowed policy shape; runtime resolution
-        // here only composes workflow execution settings within that contract.
+        // Execution Contract governs allowed policy shape. Runtime resolution
+        // here applies initial mode routing, then profile shape selection,
+        // and composes workflow execution settings within that contract.
         const workflowRuntimeConfig = resolveWorkflowRuntimeConfig({
             modeId: workflowModeId ?? chatWorkflowConfig.modeId,
             reviewLoopEnabled: chatWorkflowConfig.reviewLoopEnabled,
@@ -800,9 +801,9 @@ export const createChatService = ({
                 'P_EVID'
             ) === true;
         // TODO(workflow-mode-escalation): Initial mode selection is not
-        // revisable in current runtime behavior. If mode transitions are added,
-        // capture transition records here (planned mode -> effective mode)
-        // instead of inferring revisions from downstream effects.
+        // revisable in current runtime behavior. If future escalation allows
+        // mode transitions, record explicit planned->final mode lineage here
+        // instead of inferring mode changes from fallback side effects.
         const hasSearchIntent = normalizedGeneration?.search !== undefined;
         const upstreamToolExecution = executionContext?.tool;
         const effectiveToolExecutionContext:

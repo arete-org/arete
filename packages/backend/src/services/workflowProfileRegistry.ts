@@ -1,6 +1,8 @@
 /**
- * @description: Resolves workflow modes and workflow profiles into concrete runtime
- * workflow settings within Execution Contract guardrails.
+ * @description: Resolves workflow mode and workflow profile into concrete chat
+ * runtime settings within Execution Contract guardrails.
+ *
+ * Mode chooses the kind of run. Profile chooses the executable workflow shape.
  * @footnote-scope: core
  * @footnote-module: WorkflowProfileRegistry
  * @footnote-risk: medium - Incorrect profile resolution can alter runtime execution paths.
@@ -29,14 +31,15 @@ type BuiltinWorkflowProfileId = 'bounded-review' | 'generate-only';
 type BuiltinWorkflowModeId = WorkflowModeId;
 
 /**
- * Profile policies are concrete workflow implementation shapes:
- * - reviewed profile (`bounded-review`): generate + assess + revise
- * - direct profile (`generate-only`): generate-only workflow
+ * Workflow profiles are concrete executable shapes:
+ * - reviewed (`bounded-review`): generate + assess + revise
+ * - direct (`generate-only`): generate only
  *
  * Registry ownership here is assembly glue only:
+ * - Mode resolution decides run kind and default posture.
+ * - Profile resolution decides executable step shape.
  * - Execution Contract remains the governing contract language.
  * - Chat orchestrator remains the runtime coordinator.
- * - This module maps mode/profile inputs to runtime workflow shapes.
  */
 const EXECUTION_CONTRACT_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET: Readonly<
     RuntimeWorkflowProfile['policy']
@@ -258,11 +261,15 @@ export type WorkflowModeResolution = {
 };
 
 /**
- * Resolves one explicit workflow mode decision that drives execution preset,
- * workflow profile routing, review posture, and metadata explanation.
+ * Resolves one initial workflow mode decision for this request.
+ *
+ * That decision drives execution preset, profile routing, review posture, and
+ * metadata explanation.
  *
  * `modeDecision.modeId` is always the canonical high-level id
  * (`fast|balanced|grounded`).
+ *
+ * In v1, this initial mode decision is not revised later in runtime.
  */
 export const resolveWorkflowModeDecision = (input: {
     modeId: string | null | undefined;
@@ -386,7 +393,7 @@ export type WorkflowProfileRegistryResolution = {
  * - Input is trimmed before lookup.
  * - Unknown/blank ids fail open to `DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID`.
  * - `requestedProfileId` may differ from `runtimeProfile.profileId` when
- *   fallback is applied.
+ *   fallback is applied at initial profile selection time.
  *
  * This function is registry assembly glue and is not a policy ontology owner.
  */
@@ -419,6 +426,8 @@ export const resolveWorkflowProfileRegistry = (
 };
 
 export type ResolvedWorkflowRuntimeConfig = {
+    // TODO(workflow-mode-final-posture): If runtime mode revisability is added,
+    // split mode metadata into initial and final ids instead of overloading one field.
     requestedModeId: string;
     modeId: WorkflowModeId;
     modeDecision: WorkflowModeDecision;
@@ -430,12 +439,13 @@ export type ResolvedWorkflowRuntimeConfig = {
 };
 
 /**
- * Resolves chat workflow runtime execution settings from config + profile
- * policy.
+ * Resolves chat workflow runtime settings from initial mode routing +
+ * profile policy.
  *
  * Invariants:
  * - This is the single workflow-execution gating assembly surface for chat runtime.
- * - Callers should not branch on workflow profile ids directly.
+ * - Mode decides run kind first; profile decides executable shape second.
+ * - Callers should not branch on workflow mode/profile ids directly.
  * - `forceWorkflowExecution` is the explicit profile-level override for
  *   workflow execution when review-loop gating would otherwise disable it.
  *
@@ -468,8 +478,8 @@ export const resolveWorkflowRuntimeConfig = (input: {
             ? executionContract.response.responseMode === 'quality_grounded'
             : input.reviewLoopEnabled === true;
     // TODO(workflow-mode-escalation): Add explicit mode-transition handling
-    // here when runtime can escalate from lighter modes based on retrieval
-    // sufficiency or downstream review signals.
+    // here if runtime mode escalation is introduced later. Current downstream
+    // fallback behavior does not revise the initial mode decision.
     const workflowExecutionEnabled =
         modeDecision.behavior.workflowExecution === 'disabled'
             ? false
