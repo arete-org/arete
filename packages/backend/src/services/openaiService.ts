@@ -848,6 +848,9 @@ const buildResponseMetadata = (
             runtimeContext.trustGraphEvidenceAvailable ?? false,
         trustGraphEvidenceUsed: runtimeContext.trustGraphEvidenceUsed ?? false,
     });
+    // TODO(provenance-structural-first): Reduce heuristic dependence here by
+    // preferring explicit runtime retrieval/tool evidence signals wherever they
+    // are available and contract-stable.
     const provenance = provenanceClassification.provenance;
     const provenanceAssessment = provenanceClassification.assessment;
     const tradeoffCount = resolveTradeoffCount(
@@ -901,10 +904,10 @@ const buildResponseMetadata = (
     const execution: ExecutionEvent[] = [];
     const plannerExecution = runtimeContext.executionContext?.planner;
     if (plannerExecution) {
-        // TODO(workflow-planner-step-metadata): If workflows support multiple
-        // planner invocations per response, add explicit attempt/correlation
-        // metadata without allowing planner events to redefine orchestration
-        // authority or step ownership boundaries.
+        // TODO(workflow-planner-step-metadata): Planner is not workflow-native
+        // in lineage yet. If workflows support multiple planner invocations,
+        // add explicit attempt/correlation metadata without letting planner
+        // events redefine orchestration authority or step ownership.
         const normalizedPlannerReasonCode = normalizePlannerReasonCode(
             plannerExecution.status,
             plannerExecution.reasonCode
@@ -1088,8 +1091,8 @@ const buildResponseMetadata = (
         tradeoffCount,
         chainHash,
         licenseContext,
-        // TODO(workflow-execution-metadata): Remove modelVersion once all
-        // metadata consumers have migrated to execution[] as canonical.
+        // TODO(workflow-execution-metadata): Remove modelVersion after metadata
+        // consumers migrate to execution[] as canonical timeline authority.
         // Compatibility mirror for legacy consumers that still read only a
         // single model string.
         modelVersion:

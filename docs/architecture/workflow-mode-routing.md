@@ -44,6 +44,9 @@ workflow profile (`bounded-review`) but differ in posture and limits.
 
 This keeps the system available while preferring the more careful default
 posture.
+Initial mode selection is not revisable later in current runtime behavior.
+Future escalation should attach to the centralized mode resolver path instead
+of introducing parallel routing logic.
 
 ## Metadata Contract
 

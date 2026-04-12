@@ -39,6 +39,32 @@ Preference signal:
 This is advisory by default. Runtime may honor it, override it, or replace it
 through fallback. Do not treat it as execution authority unless policy says so.
 
+## Internal Precedence Matrix (Current Controls Only)
+
+Steerability control conflicts for current internal controls are resolved by one
+shared resolver in backend runtime code:
+`steerabilityControlPrecedence`.
+
+Current precedence:
+
+- `execution_policy` > `preference_signal`
+- `execution_policy` > `presentation_only`
+- `preference_signal` > `presentation_only`
+
+Current class mapping:
+
+- `execution_policy`: `workflow_mode`, `evidence_strictness`,
+  `review_intensity`, `tool_allowance`
+- `preference_signal`: `provider_preference`
+- `presentation_only`: `persona_tone_overlay`
+
+Guardrails:
+
+- `provider_preference` cannot escalate into execution-policy authority.
+- `persona_tone_overlay` cannot escalate into execution-policy authority.
+- Tone/presentation and preference requests are represented as outcomes, not
+  authority commands.
+
 `mattered = true` means the control had an observed material effect on the run
 or the delivered answer.
 
@@ -76,6 +102,12 @@ For `provider_preference`, the trace should preserve the visible state:
 - `advisory_honored`
 - `advisory_overridden`
 - `fallback_resolved`
+
+For `persona_tone_overlay`, the trace should preserve explicit presentation
+state:
+
+- `presentation_applied`
+- `presentation_not_applied`
 
 ## Planner Events
 

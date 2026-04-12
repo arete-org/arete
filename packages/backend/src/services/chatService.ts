@@ -799,9 +799,10 @@ export const createChatService = ({
             trustGraphResult?.provenanceJoin?.consumedByConsumers.includes(
                 'P_EVID'
             ) === true;
-        // TODO(workflow-mode-escalation): If runtime introduces mode transitions,
-        // capture transition records here (planned mode -> effective mode) once
-        // retrieval/sufficiency checks can revise an initial mode choice.
+        // TODO(workflow-mode-escalation): Initial mode selection is not
+        // revisable in current runtime behavior. If mode transitions are added,
+        // capture transition records here (planned mode -> effective mode)
+        // instead of inferring revisions from downstream effects.
         const hasSearchIntent = normalizedGeneration?.search !== undefined;
         const upstreamToolExecution = executionContext?.tool;
         const effectiveToolExecutionContext:

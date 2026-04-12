@@ -449,6 +449,9 @@ export const resolveWorkflowRuntimeConfig = (input: {
     maxDurationMs: number;
     ExecutionContract?: Pick<ExecutionContract, 'response' | 'limits'>;
 }): ResolvedWorkflowRuntimeConfig => {
+    // TODO(workflow-mode-escalation-attachment): Initial mode selection is
+    // not revisable in v1. Attach any future mode-escalation policy here so
+    // routing revisions stay centralized instead of split across callers.
     const modeResolution = resolveWorkflowModeDecision({
         modeId: input.modeId,
         executionContractResponseMode:
