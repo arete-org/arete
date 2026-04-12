@@ -64,6 +64,10 @@ import {
     type PlannerGenerationForPrompt,
     type PlannerPayloadChatPlan,
 } from './chatOrchestrator/plannerPayload.js';
+import {
+    buildControlObservabilityEnvelope,
+    emitControlObservabilityEnvelope,
+} from './steerabilityControlObservability.js';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
     weatherForecastTool?: WeatherForecastTool;
@@ -463,6 +467,52 @@ export const createChatOrchestrator = ({
                     toolPolicyDecision.logEvent !== undefined
                   ? 'adjusted_by_policy'
                   : 'applied';
+        const emitControlObservability = (input: {
+            responseAction: 'message' | 'ignore' | 'react' | 'image';
+            responseModality: ChatPlan['modality'];
+        }): void => {
+            try {
+                const observabilityEnvelope = buildControlObservabilityEnvelope(
+                    {
+                        surface: normalizedRequest.surface,
+                        workflowModeId:
+                            workflowModeResolution.modeDecision.modeId,
+                        executionContractResponseMode:
+                            resolvedExecutionContract.response.responseMode,
+                        requestedProfileId: normalizedRequest.profileId,
+                        plannerSelectedProfileId: plan.profileId,
+                        selectedProfileId: selectedResponseProfile.id,
+                        personaOverlaySource:
+                            personaProfile.promptOverlay.source,
+                        toolRequest: toolRequestContext,
+                        plannerApplyOutcome,
+                        plannerMatteredControlIds,
+                        plannerStatus: plannerExecution.status,
+                        plannerReasonCode: plannerExecution.reasonCode,
+                        responseAction: input.responseAction,
+                        responseModality: input.responseModality,
+                        steerabilityControls,
+                    }
+                );
+                emitControlObservabilityEnvelope(
+                    chatOrchestratorLogger,
+                    observabilityEnvelope
+                );
+            } catch (error) {
+                chatOrchestratorLogger.warn(
+                    'chat.steerability.control_observability_failed_open',
+                    {
+                        event: 'chat.steerability.control_observability_failed_open',
+                        reason:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                        surface: normalizedRequest.surface,
+                        plannerStatus: plannerExecution.status,
+                    }
+                );
+            }
+        };
         // TODO(planner-correlation-id): If chat orchestration ever runs
         // multiple planner passes/retries per response, add explicit correlation
         // fields while preserving workflow-owned planner boundaries.
@@ -492,6 +542,10 @@ export const createChatOrchestrator = ({
             }
         );
         if (nonMessageResponse) {
+            emitControlObservability({
+                responseAction: nonMessageResponse.action,
+                responseModality: executionPlan.modality,
+            });
             return nonMessageResponse;
         }
         const promptLayers = renderConversationPromptLayers(
@@ -676,6 +730,10 @@ export const createChatOrchestrator = ({
         emitFallbackRollup(fallbackRollupSelectionSource);
         notifyBreakerEvent({
             responseId: response.metadata.responseId,
+            responseAction: 'message',
+            responseModality: executionPlan.modality,
+        });
+        emitControlObservability({
             responseAction: 'message',
             responseModality: executionPlan.modality,
         });

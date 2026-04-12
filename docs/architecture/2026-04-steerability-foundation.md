@@ -124,6 +124,45 @@ If workflows later support multiple planner invocations or retries, add
 explicit correlation. Do not let planner metadata turn into orchestration
 authority.
 
+## Control Observability Envelope
+
+Every control decision also writes one structured event:
+`chat.steerability.control_observability`.
+
+Think of this as a compact audit note for each run. It is backend-owned,
+versioned (`v1`), and used in both message and non-message paths.
+
+Required `input` fields:
+
+- `surface`
+- `workflowModeId`
+- `executionContractResponseMode`
+- `selectedProfileId`
+- `personaOverlaySource`
+- `toolRequest.toolName`
+- `toolRequest.requested`
+- `toolRequest.eligible`
+
+Required `decision` fields:
+
+- `plannerApplyOutcome`
+- `plannerMatteredControlIds`
+- `controls`
+
+Required `outcome` fields:
+
+- `responseAction`
+- `responseModality`
+- `plannerStatus`
+- `mattered`
+
+Why this is strict:
+
+- If any required field is missing, that envelope is invalid.
+- Tests should fail for that path.
+- Runtime still fails open. If emission is invalid, we log it and continue
+  response execution.
+
 Canonical planner event:
 
 ```json
