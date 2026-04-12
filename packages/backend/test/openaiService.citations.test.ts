@@ -166,6 +166,45 @@ test('SimpleOpenAIService preserves meaningful markdown labels in recovered cita
     );
 });
 
+test('SimpleOpenAIService keeps full markdown URLs that include nested parentheses', async () => {
+    const service = new SimpleOpenAIService('test-key');
+
+    await withMockedFetch(
+        async () =>
+            new Response(
+                JSON.stringify(
+                    createRetrievedResponsePayload(
+                        'See [Math](https://example.com/wiki/Function_(mathematics)) for context.'
+                    )
+                ),
+                {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                }
+            ),
+        async () => {
+            const result = await service.generateResponse(
+                'gpt-5-mini',
+                [{ role: 'user', content: 'What happened today?' }],
+                {
+                    search: {
+                        query: 'latest news',
+                        contextSize: 'low',
+                        intent: 'current_facts',
+                    },
+                }
+            );
+
+            assert.deepEqual(result.metadata.citations, [
+                {
+                    title: 'Math',
+                    url: 'https://example.com/wiki/Function_(mathematics)',
+                },
+            ]);
+        }
+    );
+});
+
 test('SimpleOpenAIService does not run markdown fallback when annotation citations already exist', async () => {
     const service = new SimpleOpenAIService('test-key');
 
@@ -215,6 +254,59 @@ test('SimpleOpenAIService does not run markdown fallback when annotation citatio
     );
 });
 
+test('SimpleOpenAIService drops annotation citations with non-http schemes', async () => {
+    const service = new SimpleOpenAIService('test-key');
+
+    await withMockedFetch(
+        async () =>
+            new Response(
+                JSON.stringify(
+                    createRetrievedResponsePayload('See sources', [
+                        {
+                            type: 'url_citation',
+                            url: 'javascript:alert(1)',
+                            title: 'Bad',
+                            start_index: 0,
+                            end_index: 3,
+                        },
+                        {
+                            type: 'url_citation',
+                            url: 'https://example.com/ok',
+                            title: 'Good',
+                            start_index: 4,
+                            end_index: 7,
+                        },
+                    ])
+                ),
+                {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                }
+            ),
+        async () => {
+            const result = await service.generateResponse(
+                'gpt-5-mini',
+                [{ role: 'user', content: 'What happened today?' }],
+                {
+                    search: {
+                        query: 'latest news',
+                        contextSize: 'low',
+                        intent: 'current_facts',
+                    },
+                }
+            );
+
+            assert.deepEqual(result.metadata.citations, [
+                {
+                    title: 'Good',
+                    url: 'https://example.com/ok',
+                    snippet: 'sou',
+                },
+            ]);
+        }
+    );
+});
+
 test('SimpleOpenAIService does not recover markdown citations for non-retrieved replies', async () => {
     const service = new SimpleOpenAIService('test-key');
 
@@ -254,6 +346,47 @@ test('SimpleOpenAIService does not recover markdown citations for non-retrieved 
 
             assert.equal(result.metadata.provenance, 'Inferred');
             assert.deepEqual(result.metadata.citations, []);
+        }
+    );
+});
+
+test('SimpleOpenAIService leaves finishReason undefined when provider omits it', async () => {
+    const service = new SimpleOpenAIService('test-key');
+
+    await withMockedFetch(
+        async () =>
+            new Response(
+                JSON.stringify({
+                    model: 'gpt-5-mini-2025-08-07',
+                    usage: {
+                        input_tokens: 120,
+                        output_tokens: 80,
+                        total_tokens: 200,
+                    },
+                    output: [
+                        {
+                            type: 'message',
+                            role: 'assistant',
+                            content: [
+                                {
+                                    type: 'output_text',
+                                    text: 'Answer without finish reason',
+                                },
+                            ],
+                        },
+                    ],
+                }),
+                {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                }
+            ),
+        async () => {
+            const result = await service.generateResponse('gpt-5-mini', [
+                { role: 'user', content: 'Summarize this.' },
+            ]);
+
+            assert.equal(result.metadata.finishReason, undefined);
         }
     );
 });

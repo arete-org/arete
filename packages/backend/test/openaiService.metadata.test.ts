@@ -548,7 +548,7 @@ test('buildResponseMetadata keeps failed planner reasonCode in execution timelin
     ]);
 });
 
-test('buildResponseMetadata normalizes invalid planner reasonCode to planner_runtime_error', () => {
+test('buildResponseMetadata drops invalid planner reasonCode instead of rewriting it', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
         baseRuntimeContext({
@@ -573,7 +573,6 @@ test('buildResponseMetadata normalizes invalid planner reasonCode to planner_run
         {
             kind: 'planner',
             status: 'failed',
-            reasonCode: 'planner_runtime_error',
             purpose: 'chat_orchestrator_action_selection',
             contractType: 'fallback',
             applyOutcome: 'not_applied',
@@ -586,7 +585,66 @@ test('buildResponseMetadata normalizes invalid planner reasonCode to planner_run
     ]);
 });
 
-test('buildResponseMetadata normalizes invalid generation reasonCode to generation_runtime_error', () => {
+test('buildResponseMetadata does not emit planner/evaluator/generation reasonCode for skipped status', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            executionContext: {
+                planner: {
+                    status: 'skipped',
+                    reasonCode: 'planner_runtime_error',
+                    purpose: 'chat_orchestrator_action_selection',
+                    contractType: 'fallback',
+                    applyOutcome: 'not_applied',
+                    mattered: false,
+                    matteredControlIds: [],
+                    profileId: 'openai-text-fast',
+                    provider: 'openai',
+                    model: 'gpt-5-nano',
+                },
+                evaluator: {
+                    status: 'skipped',
+                    reasonCode: 'evaluator_runtime_error',
+                },
+                generation: {
+                    status: 'skipped',
+                    reasonCode: 'generation_runtime_error',
+                    profileId: 'openai-text-medium',
+                    provider: 'openai',
+                    model: 'gpt-5-mini',
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'planner',
+            status: 'skipped',
+            purpose: 'chat_orchestrator_action_selection',
+            contractType: 'fallback',
+            applyOutcome: 'not_applied',
+            mattered: false,
+            matteredControlIds: [],
+            profileId: 'openai-text-fast',
+            provider: 'openai',
+            model: 'gpt-5-nano',
+        },
+        {
+            kind: 'evaluator',
+            status: 'skipped',
+        },
+        {
+            kind: 'generation',
+            status: 'skipped',
+            profileId: 'openai-text-medium',
+            provider: 'openai',
+            model: 'gpt-5-mini',
+        },
+    ]);
+});
+
+test('buildResponseMetadata drops invalid generation reasonCode instead of rewriting it', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
         baseRuntimeContext({
@@ -606,7 +664,6 @@ test('buildResponseMetadata normalizes invalid generation reasonCode to generati
         {
             kind: 'generation',
             status: 'failed',
-            reasonCode: 'generation_runtime_error',
             profileId: 'openai-text-medium',
             provider: 'openai',
             model: 'gpt-5-mini',
@@ -662,7 +719,7 @@ test('buildResponseMetadata normalizes invalid tool reasonCode by status default
     ]);
 });
 
-test('buildResponseMetadata normalizes failed evaluator event with fallback reasonCode', () => {
+test('buildResponseMetadata keeps failed evaluator event without a reasonCode when unavailable', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
         baseRuntimeContext({
@@ -678,7 +735,6 @@ test('buildResponseMetadata normalizes failed evaluator event with fallback reas
         {
             kind: 'evaluator',
             status: 'failed',
-            reasonCode: 'evaluator_runtime_error',
         },
     ]);
     assert.equal(metadata.evaluator, undefined);
