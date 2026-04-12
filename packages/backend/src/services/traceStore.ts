@@ -36,7 +36,7 @@ const storeTrace = async (
         // Trace-card generation stays out of this write path so trace storage
         // remains lightweight and fail-open even when rendering dependencies
         // or image generation are unavailable.
-        if (metadata.temperament) {
+        if (Object.keys(metadata.trace_final).length > 0) {
             logger.debug(
                 `Deferring trace-card generation to trace-card handler path for "${responseId}".`
             );

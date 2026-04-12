@@ -34,7 +34,7 @@ function normalizeResponseId(responseId: string): string {
 }
 
 const normalizeTemperament = (
-    temperament: ResponseMetadata['temperament']
+    temperament: ResponseMetadata['trace_final']
 ): PartialResponseTemperament | undefined => {
     if (!temperament) {
         return undefined;
@@ -80,7 +80,7 @@ const normalizeTraceCardChips = (
 export function buildTraceCardRequest(
     metadata: ResponseMetadata
 ): PostTraceCardRequest {
-    const temperament = normalizeTemperament(metadata.temperament);
+    const temperament = normalizeTemperament(metadata.trace_final);
     const chips = normalizeTraceCardChips(metadata);
 
     return {

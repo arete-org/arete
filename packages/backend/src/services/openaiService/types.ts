@@ -155,6 +155,11 @@ export type ResponseMetadataRuntimeContext = {
     // Planner TRACE target posture. This is answer-shape intent metadata,
     // not source-grounding or retrieval truth.
     plannerTemperament?: PartialResponseTemperament;
+    // Final TRACE posture delivered by runtime. If omitted, metadata assembly
+    // treats target and final as the same posture.
+    finalTemperament?: PartialResponseTemperament;
+    // Required when finalTemperament diverges from plannerTemperament.
+    temperamentFinalizationReasonCode?: ResponseMetadata['trace_final_reason_code'];
     retrieval?: ResponseMetadataRetrievalContext;
     trustGraphEvidenceAvailable?: boolean;
     trustGraphEvidenceUsed?: boolean;

@@ -53,7 +53,14 @@ test('details action renders markdown sections with execution table and trace vi
             totalDurationMs: 321,
             evidenceScore: 4,
             freshnessScore: 3,
-            temperament: {
+            trace_target: {
+                tightness: 4,
+                rationale: 4,
+                attribution: 5,
+                caution: 3,
+                extent: 4,
+            },
+            trace_final: {
                 tightness: 4,
                 rationale: 4,
                 attribution: 5,
@@ -171,7 +178,14 @@ test('details action truncates oversized payloads while preserving section reada
                     index % 3 === 0 ? 'tool_execution_error' : 'tool_not_used',
                 durationMs: 100 + index,
             })),
-            temperament: {
+            trace_target: {
+                tightness: 4,
+                rationale: 4,
+                attribution: 4,
+                caution: 3,
+                extent: 4,
+            },
+            trace_final: {
                 tightness: 4,
                 rationale: 4,
                 attribution: 4,

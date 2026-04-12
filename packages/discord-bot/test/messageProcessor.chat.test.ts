@@ -31,6 +31,8 @@ const createMetadata = (): ResponseMetadata => ({
     modelVersion: 'gpt-5-mini',
     staleAfter: new Date(Date.now() + 60000).toISOString(),
     citations: [],
+    trace_target: {},
+    trace_final: {},
 });
 
 const createBreakerMetadata = (
@@ -380,7 +382,7 @@ test('prepareProvenanceCgiPayload and sendPreparedProvenanceCgi send image plus 
         const preparedPayload =
             await processorAccess.prepareProvenanceCgiPayload({
                 ...createMetadata(),
-                temperament: {
+                trace_final: {
                     tightness: 5,
                     rationale: 3,
                 },

@@ -28,6 +28,8 @@ function createMetadata(): ResponseMetadata {
         modelVersion: 'gpt-5-mini',
         staleAfter: '2026-03-05T00:00:00.000Z',
         citations: [],
+        trace_target: {},
+        trace_final: {},
     };
 }
 
@@ -75,7 +77,7 @@ test('buildTraceCardRequest forwards metadata-provided TRACE values without defa
     const metadata = createMetadata();
     const request = buildTraceCardRequest({
         ...metadata,
-        temperament: {
+        trace_final: {
             tightness: 5,
             attribution: 3,
         },
@@ -99,7 +101,7 @@ test('buildTraceCardRequest omits invalid or missing TRACE values', () => {
     const request = buildTraceCardRequest({
         ...metadata,
         responseId: '   ',
-        temperament: {
+        trace_final: {
             tightness: 6 as unknown as 5,
         },
         evidenceScore: 2.4 as unknown as 1,

@@ -186,14 +186,21 @@ function formatTraceSection(
         return ['**TRACE**', '- TRACE scores unavailable'].join('\n');
     }
 
-    const temperament = payload.temperament;
+    const traceTarget = payload.trace_target;
+    const traceFinal = payload.trace_final;
     return [
         '**TRACE**',
-        `- Tightness: \`${formatMarkdownValue(temperament?.tightness)}\``,
-        `- Rationale: \`${formatMarkdownValue(temperament?.rationale)}\``,
-        `- Attribution: \`${formatMarkdownValue(temperament?.attribution)}\``,
-        `- Caution: \`${formatMarkdownValue(temperament?.caution)}\``,
-        `- Extent: \`${formatMarkdownValue(temperament?.extent)}\``,
+        `- Target Tightness: \`${formatMarkdownValue(traceTarget.tightness)}\``,
+        `- Target Rationale: \`${formatMarkdownValue(traceTarget.rationale)}\``,
+        `- Target Attribution: \`${formatMarkdownValue(traceTarget.attribution)}\``,
+        `- Target Caution: \`${formatMarkdownValue(traceTarget.caution)}\``,
+        `- Target Extent: \`${formatMarkdownValue(traceTarget.extent)}\``,
+        `- Final Tightness: \`${formatMarkdownValue(traceFinal.tightness)}\``,
+        `- Final Rationale: \`${formatMarkdownValue(traceFinal.rationale)}\``,
+        `- Final Attribution: \`${formatMarkdownValue(traceFinal.attribution)}\``,
+        `- Final Caution: \`${formatMarkdownValue(traceFinal.caution)}\``,
+        `- Final Extent: \`${formatMarkdownValue(traceFinal.extent)}\``,
+        `- Final Reason: \`${formatMarkdownValue(payload.trace_final_reason_code)}\``,
         `- Evidence: \`${formatMarkdownValue(payload.evidenceScore)}\``,
         `- Freshness: \`${formatMarkdownValue(payload.freshnessScore)}\``,
     ].join('\n');

@@ -254,7 +254,7 @@ test('GET trace-card SVG returns 404 when asset is missing', async () => {
     }
 });
 
-test('POST /api/trace-cards/from-trace uses stored metadata temperament and chip scores', async () => {
+test('POST /api/trace-cards/from-trace uses stored metadata trace_final and chip scores', async () => {
     const server = await createTestServer();
     const responseId = 'from_trace_response_123';
 
@@ -269,7 +269,14 @@ test('POST /api/trace-cards/from-trace uses stored metadata temperament and chip
             modelVersion: 'gpt-5-mini',
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
-            temperament: {
+            trace_target: {
+                tightness: 4,
+                rationale: 3,
+                attribution: 5,
+                caution: 2,
+                extent: 4,
+            },
+            trace_final: {
                 tightness: 4,
                 rationale: 3,
                 attribution: 5,
@@ -322,7 +329,14 @@ test('POST /api/trace-cards/from-trace renders successfully when stored chip sco
             modelVersion: 'gpt-5-mini',
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
-            temperament: {
+            trace_target: {
+                tightness: 4,
+                rationale: 3,
+                attribution: 5,
+                caution: 2,
+                extent: 4,
+            },
+            trace_final: {
                 tightness: 4,
                 rationale: 3,
                 attribution: 5,
@@ -356,9 +370,9 @@ test('POST /api/trace-cards/from-trace renders successfully when stored chip sco
     }
 });
 
-test('POST /api/trace-cards/from-trace renders successfully when stored temperament is missing', async () => {
+test('POST /api/trace-cards/from-trace renders successfully when stored trace_final is empty', async () => {
     const server = await createTestServer();
-    const responseId = 'from_trace_missing_temperament';
+    const responseId = 'from_trace_missing_trace_final';
 
     try {
         await server.store.upsert({
@@ -371,6 +385,8 @@ test('POST /api/trace-cards/from-trace renders successfully when stored temperam
             modelVersion: 'gpt-5-mini',
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
+            trace_target: {},
+            trace_final: {},
         });
 
         const response = await fetch(

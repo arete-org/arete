@@ -153,6 +153,9 @@ const ResponseTemperamentSchema = z
     })
     .strict();
 const PartialResponseTemperamentSchema = ResponseTemperamentSchema.partial();
+const TraceFinalizationReasonCodeSchema = z.enum([
+    'runtime_posture_adjustment',
+]);
 const ExecutionStatusSchema = z.enum(WORKFLOW_STEP_STATUSES);
 const ExecutionReasonCodeSchema = z.enum([
     'planner_runtime_error',
@@ -685,10 +688,68 @@ const responseMetadataShape = {
     imageDescriptions: z.array(z.string()).optional(),
     evidenceScore: TraceAxisScoreSchema.optional(),
     freshnessScore: TraceAxisScoreSchema.optional(),
-    // TRACE posture metadata; related to provenance but not equivalent.
-    temperament: PartialResponseTemperamentSchema.optional(),
+    // TRACE posture metadata; policy/mode and provenance stay separate.
+    trace_target: PartialResponseTemperamentSchema,
+    trace_final: PartialResponseTemperamentSchema,
+    trace_final_reason_code: TraceFinalizationReasonCodeSchema.optional(),
     trustGraph: TrustGraphMetadataSchema.optional(),
 } as const;
+
+const hasDifferentTracePosture = (
+    target: z.infer<typeof PartialResponseTemperamentSchema>,
+    final: z.infer<typeof PartialResponseTemperamentSchema>
+): boolean => {
+    const normalizedTarget = {
+        tightness: target.tightness,
+        rationale: target.rationale,
+        attribution: target.attribution,
+        caution: target.caution,
+        extent: target.extent,
+    };
+    const normalizedFinal = {
+        tightness: final.tightness,
+        rationale: final.rationale,
+        attribution: final.attribution,
+        caution: final.caution,
+        extent: final.extent,
+    };
+
+    return JSON.stringify(normalizedTarget) !== JSON.stringify(normalizedFinal);
+};
+
+const requireTraceFinalReasonWhenChanged = (
+    value: {
+        trace_target: z.infer<typeof PartialResponseTemperamentSchema>;
+        trace_final: z.infer<typeof PartialResponseTemperamentSchema>;
+        trace_final_reason_code?: z.infer<
+            typeof TraceFinalizationReasonCodeSchema
+        >;
+    },
+    context: z.RefinementCtx
+): void => {
+    const traceChanged = hasDifferentTracePosture(
+        value.trace_target,
+        value.trace_final
+    );
+
+    if (traceChanged && value.trace_final_reason_code === undefined) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['trace_final_reason_code'],
+            message:
+                'trace_final_reason_code is required when trace_final differs from trace_target.',
+        });
+    }
+
+    if (!traceChanged && value.trace_final_reason_code !== undefined) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['trace_final_reason_code'],
+            message:
+                'trace_final_reason_code must be omitted when trace_final matches trace_target.',
+        });
+    }
+};
 
 const TraceCardChipDataSchema = z
     .object({
@@ -716,6 +777,7 @@ const TraceCardChipDataSchema = z
  */
 export const ResponseMetadataSchema: z.ZodType<ResponseMetadata> = z
     .object(responseMetadataShape)
+    .superRefine(requireTraceFinalReasonWhenChanged)
     .passthrough();
 
 /**
@@ -1063,7 +1125,10 @@ export const PostInternalTextResponseSchema = z.discriminatedUnion('task', [
  * @api.operationId: postTraces
  * @api.path: POST /api/traces
  */
-export const PostTracesRequestSchema = z.object(responseMetadataShape).strict();
+export const PostTracesRequestSchema = z
+    .object(responseMetadataShape)
+    .superRefine(requireTraceFinalReasonWhenChanged)
+    .strict();
 
 /**
  * @api.operationId: postTraces

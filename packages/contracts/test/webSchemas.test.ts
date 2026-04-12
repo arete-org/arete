@@ -84,6 +84,20 @@ const baseMetadata = {
             url: 'https://example.com/article',
         },
     ],
+    trace_target: {
+        tightness: 5,
+        rationale: 3,
+        attribution: 4,
+        caution: 3,
+        extent: 4,
+    },
+    trace_final: {
+        tightness: 5,
+        rationale: 3,
+        attribution: 4,
+        caution: 3,
+        extent: 4,
+    },
 } as const;
 
 const baseIncidentDetail = {
@@ -709,10 +723,17 @@ test('ResponseMetadataSchema rejects invalid execution timeline event kind/statu
     assert.equal(validNonAllowBreaker.success, true);
 });
 
-test('ResponseMetadataSchema accepts valid TRACE temperament metadata', () => {
+test('ResponseMetadataSchema accepts valid TRACE target/final metadata', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
-        temperament: {
+        trace_target: {
+            tightness: 5,
+            rationale: 3,
+            attribution: 4,
+            caution: 3,
+            extent: 4,
+        },
+        trace_final: {
             tightness: 5,
             rationale: 3,
             attribution: 4,
@@ -724,10 +745,14 @@ test('ResponseMetadataSchema accepts valid TRACE temperament metadata', () => {
     assert.equal(parsed.success, true);
 });
 
-test('ResponseMetadataSchema accepts partial TRACE temperament metadata', () => {
+test('ResponseMetadataSchema accepts partial TRACE target/final metadata', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
-        temperament: {
+        trace_target: {
+            tightness: 5,
+            attribution: 4,
+        },
+        trace_final: {
             tightness: 5,
             attribution: 4,
         },
@@ -736,16 +761,49 @@ test('ResponseMetadataSchema accepts partial TRACE temperament metadata', () => 
     assert.equal(parsed.success, true);
 });
 
-test('ResponseMetadataSchema rejects invalid TRACE temperament metadata', () => {
+test('ResponseMetadataSchema rejects invalid TRACE target/final metadata', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
-        temperament: {
+        trace_target: {
             tightness: 6,
             rationale: 3,
             attribution: 4,
             caution: 3,
             extent: 4,
         },
+        trace_final: {
+            tightness: 5,
+            rationale: 3,
+            attribution: 4,
+            caution: 3,
+            extent: 4,
+        },
+    });
+
+    assert.equal(parsed.success, false);
+});
+
+test('ResponseMetadataSchema requires divergence reason code when trace_target and trace_final differ', () => {
+    const missingReason = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        trace_target: { tightness: 3 },
+        trace_final: { tightness: 5 },
+    });
+    assert.equal(missingReason.success, false);
+
+    const withReason = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        trace_target: { tightness: 3 },
+        trace_final: { tightness: 5 },
+        trace_final_reason_code: 'runtime_posture_adjustment',
+    });
+    assert.equal(withReason.success, true);
+});
+
+test('ResponseMetadataSchema rejects trace_final_reason_code when trace_target and trace_final match', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        trace_final_reason_code: 'runtime_posture_adjustment',
     });
 
     assert.equal(parsed.success, false);

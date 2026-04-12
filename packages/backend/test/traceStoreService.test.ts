@@ -24,6 +24,8 @@ const createMetadata = (
     modelVersion: 'gpt-5-mini',
     staleAfter: new Date(Date.now() + 60000).toISOString(),
     citations: [],
+    trace_target: {},
+    trace_final: {},
     ...overrides,
 });
 
@@ -43,7 +45,14 @@ test('storeTrace writes metadata and skips trace-card SVG auto-generation', asyn
     await storeTrace(
         traceStore,
         createMetadata({
-            temperament: {
+            trace_target: {
+                tightness: 5,
+                rationale: 3,
+                attribution: 4,
+                caution: 3,
+                extent: 4,
+            },
+            trace_final: {
                 tightness: 5,
                 rationale: 3,
                 attribution: 4,
@@ -57,7 +66,7 @@ test('storeTrace writes metadata and skips trace-card SVG auto-generation', asyn
     assert.equal(traceCardCalled, false);
 });
 
-test('storeTrace skips trace-card write when temperament is missing', async () => {
+test('storeTrace skips trace-card write when trace_final has no populated axes', async () => {
     let traceCardCalled = false;
 
     const traceStore = {
@@ -89,7 +98,14 @@ test('storeTrace stays fail-open when trace upsert throws', async () => {
         storeTrace(
             traceStore,
             createMetadata({
-                temperament: {
+                trace_target: {
+                    tightness: 5,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                trace_final: {
                     tightness: 5,
                     rationale: 3,
                     attribution: 4,

@@ -722,7 +722,7 @@ paths:
                 - packages/contracts/src/web/types.ts#PostTraceCardFromTraceResponse
             summary: Generate and store a trace-card from an existing trace
             description: |
-                Load stored trace metadata by response id, use stored TRACE temperament and optional chip scores,
+                Load stored trace metadata by response id, use stored final TRACE posture and optional chip scores,
                 regenerate/store the canonical SVG asset, and return a PNG payload for inline display.
                 TraceToken required.
             tags:
@@ -2556,9 +2556,9 @@ components:
                     minimum: 1
                     maximum: 5
                     description: Optional TRACE freshness chip score.
-                temperament:
+                trace_target:
                     type: object
-                    description: Optional partial TRACE temperament profile with named 1-5 integer axes.
+                    description: Canonical intended TRACE answer posture (partial 1-5 axis map).
                     properties:
                         tightness:
                             type: integer
@@ -2586,6 +2586,40 @@ components:
                             minimum: 1
                             maximum: 5
                     additionalProperties: false
+                trace_final:
+                    type: object
+                    description: Canonical delivered TRACE answer posture (partial 1-5 axis map).
+                    properties:
+                        tightness:
+                            type: integer
+                            description: 1 to 5, where higher means stronger concision and structural efficiency.
+                            minimum: 1
+                            maximum: 5
+                        rationale:
+                            type: integer
+                            description: 1 to 5, where higher means more visible rationale and trade-off explanation.
+                            minimum: 1
+                            maximum: 5
+                        attribution:
+                            type: integer
+                            description: 1 to 5, where higher means clearer sourced vs inferred boundaries.
+                            minimum: 1
+                            maximum: 5
+                        caution:
+                            type: integer
+                            description: 1 to 5, where higher means stronger safeguards and overclaim restraint.
+                            minimum: 1
+                            maximum: 5
+                        extent:
+                            type: integer
+                            description: 1 to 5, where higher means broader options and perspectives.
+                            minimum: 1
+                            maximum: 5
+                    additionalProperties: false
+                trace_final_reason_code:
+                    type: string
+                    description: Required when trace_final differs from trace_target.
+                    enum: [runtime_posture_adjustment]
                 trustGraph:
                     type: object
                     properties:
@@ -2791,6 +2825,8 @@ components:
                 - modelVersion
                 - staleAfter
                 - citations
+                - trace_target
+                - trace_final
             additionalProperties: true
 
         ResponseMetadata:

@@ -18,6 +18,7 @@ export type {
     Citation,
     ProvenanceAssessment,
     TraceAxisScore,
+    TraceFinalizationReasonCode,
     ResponseTemperament,
     PartialResponseTemperament,
     ExecutionStatus,
