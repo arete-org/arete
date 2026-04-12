@@ -285,6 +285,9 @@ export const createChatOrchestrator = ({
         // Planner remains a bounded workflow-owned step. It can recommend
         // action-selection details but cannot redefine Execution Contract
         // authority or become a second orchestrator.
+        // TODO(workflow-planner-lineage): Planner is orchestrator-frontloaded
+        // today. When planner becomes workflow-native, persist it as a
+        // first-class workflow step in workflow lineage.
         const plannerInvocationContext: ChatPlannerInvocationContext = {
             owner: 'workflow',
             workflowName: 'chat_orchestration',
@@ -600,7 +603,7 @@ export const createChatOrchestrator = ({
         };
 
         // Planner output is injected as a final system message so generation
-        // can follow one backend-owned decision payload.
+        // follows one bounded planner payload selected by backend policy.
         const conversationMessages: Array<
             Pick<ChatConversationMessage, 'role' | 'content'>
         > = [
@@ -626,7 +629,8 @@ export const createChatOrchestrator = ({
                 content: [
                     '// ==========',
                     '// BEGIN Planner Output',
-                    '// This planner decision was made by the backend and should be treated as authoritative for this response.',
+                    '// This bounded planner output was selected by backend policy for this response.',
+                    '// It is execution input for this run, not execution-contract authority.',
                     '// ==========',
                     buildPlannerPayload(executionPlanForPrompt, surfacePolicy),
                     '// ==========',
@@ -689,6 +693,9 @@ export const createChatOrchestrator = ({
             executionContext: {
                 // Planner execution metadata is sourced from ChatPlannerResult
                 // so traces can distinguish successful planning from fallback.
+                // TODO(workflow-planner-lineage): Keep this metadata bridge
+                // until planner execution is represented directly as workflow
+                // lineage instead of orchestrator-frontloaded context.
                 planner: {
                     status: plannerExecution.status,
                     ...(plannerExecution.reasonCode !== undefined && {

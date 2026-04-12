@@ -154,6 +154,9 @@ type ProvenanceClassificationResult = {
 export const classifyProvenanceWithSignals = (
     input: ProvenanceClassificationInput
 ): ProvenanceClassificationResult => {
+    // TODO(provenance-structural-first): Keep this deterministic classifier,
+    // but retire heuristic fallbacks that can be replaced by explicit runtime
+    // execution evidence once those signals are universally available.
     const citationsPresent = input.citationCount > 0;
     const assistantDeclaredSpeculative =
         input.assistantProvenance === 'Speculative';

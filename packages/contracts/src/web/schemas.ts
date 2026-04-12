@@ -694,6 +694,9 @@ const TraceCardChipDataSchema = z
 
 /**
  * Response metadata is intentionally tolerant so new backend fields do not break clients.
+ * TODO(metadata-stability-tiers): Once field stability tiers are published for
+ * external consumers, tighten this boundary deliberately without breaking
+ * compatibility-shaped rollout paths.
  */
 export const ResponseMetadataSchema: z.ZodType<ResponseMetadata> = z
     .object(responseMetadataShape)
