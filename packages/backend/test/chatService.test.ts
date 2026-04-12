@@ -1634,6 +1634,7 @@ test('runChatMessages records workflow mode decision in metadata and applies fas
     assert.equal(directGenerationCalls, 1);
     assert.equal(reviewWorkflowCalls, 0);
     assert.equal(response.metadata.workflowMode?.modeId, 'fast');
+    assert.equal(response.metadata.workflowMode?.initial_mode, 'fast');
     assert.equal(
         response.metadata.workflowMode?.behavior.workflowExecution,
         'disabled'
@@ -1641,6 +1642,59 @@ test('runChatMessages records workflow mode decision in metadata and applies fas
     assert.equal(
         response.metadata.workflowMode?.behavior.evidencePosture,
         'minimal'
+    );
+});
+
+test('runChatMessages can emit bounded workflow escalation attachment metadata', async () => {
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            return {
+                text: 'escalated path response',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+    const chatService = createChatService({
+        generationRuntime,
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'fast',
+            reviewLoopEnabled: true,
+            maxIterations: 3,
+            maxDurationMs: 15000,
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+        workflowModeEscalationRequest: {
+            targetModeId: 'grounded',
+            reason: 'insufficient evidence confidence for fast mode',
+        },
+    });
+
+    assert.equal(response.metadata.workflowMode?.initial_mode, 'fast');
+    assert.equal(response.metadata.workflowMode?.escalated_mode, 'grounded');
+    assert.equal(
+        response.metadata.workflowMode?.escalation_reason,
+        'insufficient evidence confidence for fast mode'
+    );
+    assert.equal(response.metadata.workflowMode?.modeId, 'grounded');
+    assert.equal(
+        response.metadata.workflowMode?.selectedBy,
+        'workflow_mode_escalation'
     );
 });
 

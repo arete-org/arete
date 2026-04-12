@@ -379,6 +379,34 @@ test('ResponseMetadataSchema accepts structured steerability controls metadata',
     assert.equal(parsed.success, true);
 });
 
+test('ResponseMetadataSchema accepts workflow mode escalation attachment metadata', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        workflowMode: {
+            modeId: 'grounded',
+            selectedBy: 'workflow_mode_escalation',
+            selectionReason:
+                'Workflow escalation seam accepted one mode transition.',
+            initial_mode: 'fast',
+            escalated_mode: 'grounded',
+            escalation_reason: 'insufficient evidence confidence for fast mode',
+            behavior: {
+                executionContractPresetId: 'quality-grounded',
+                workflowProfileClass: 'reviewed',
+                workflowProfileId: 'bounded-review',
+                workflowExecution: 'policy_gated',
+                reviewPass: 'included',
+                reviseStep: 'allowed',
+                evidencePosture: 'strict',
+                maxWorkflowSteps: 8,
+                maxDeliberationCalls: 4,
+            },
+        },
+    });
+
+    assert.equal(parsed.success, true);
+});
+
 test('ResponseMetadataSchema rejects steerability controls with unknown enums', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,

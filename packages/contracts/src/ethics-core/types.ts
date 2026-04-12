@@ -436,7 +436,8 @@ export type WorkflowModeId = 'fast' | 'balanced' | 'grounded';
 export type WorkflowModeSelectionSource =
     | 'requested_mode'
     | 'inferred_from_execution_contract'
-    | 'fail_open_default';
+    | 'fail_open_default'
+    | 'workflow_mode_escalation';
 
 export type WorkflowModeEvidencePosture = 'minimal' | 'balanced' | 'strict';
 
@@ -456,6 +457,9 @@ export type WorkflowModeDecision = {
     modeId: WorkflowModeId;
     selectedBy: WorkflowModeSelectionSource;
     selectionReason: string;
+    initial_mode: WorkflowModeId;
+    escalated_mode?: WorkflowModeId;
+    escalation_reason?: string;
     requestedModeId?: string;
     executionContractResponseMode?: 'fast_direct' | 'quality_grounded';
     behavior: WorkflowModeBehavior;
