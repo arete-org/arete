@@ -629,9 +629,8 @@ const createTraceHandlers = ({
                     modelVersion: 'trace-card-preview',
                     staleAfter: new Date(now + ninetyDaysMs).toISOString(),
                     citations: [],
-                    ...(parsedPayload.data.temperament && {
-                        temperament: parsedPayload.data.temperament,
-                    }),
+                    trace_target: parsedPayload.data.temperament ?? {},
+                    trace_final: parsedPayload.data.temperament ?? {},
                     ...(parsedPayload.data.chips?.evidenceScore && {
                         evidenceScore: parsedPayload.data.chips.evidenceScore,
                     }),
@@ -733,7 +732,7 @@ const createTraceHandlers = ({
             }
 
             const { svg, png } = renderTraceCardPng({
-                temperament: metadata.temperament,
+                temperament: metadata.trace_final,
                 chips: {
                     evidenceScore: metadata.evidenceScore,
                     freshnessScore: metadata.freshnessScore,

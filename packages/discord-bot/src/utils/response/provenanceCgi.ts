@@ -28,13 +28,19 @@ const TRACE_AXIS_KEYS = [
     'extent',
 ] as const;
 
+/**
+ * Normalize a response identifier by trimming surrounding whitespace and substituting a fallback when empty.
+ *
+ * @param responseId - The response identifier to normalize
+ * @returns The trimmed `responseId`, or `unknown_response_id` when the trimmed value is empty
+ */
 function normalizeResponseId(responseId: string): string {
     const trimmed = responseId.trim();
     return trimmed.length > 0 ? trimmed : UNKNOWN_RESPONSE_ID_FALLBACK;
 }
 
 const normalizeTemperament = (
-    temperament: ResponseMetadata['temperament']
+    temperament: ResponseMetadata['trace_final']
 ): PartialResponseTemperament | undefined => {
     if (!temperament) {
         return undefined;
@@ -75,12 +81,15 @@ const normalizeTraceCardChips = (
 };
 
 /**
- * Builds the backend trace-card request from response metadata.
+ * Constructs a trace-card request payload from response metadata.
+ *
+ * @param metadata - Response metadata used to derive the request fields
+ * @returns A PostTraceCardRequest with a normalized `responseId`; includes `temperament` and `chips` only when those values are present after normalization
  */
 export function buildTraceCardRequest(
     metadata: ResponseMetadata
 ): PostTraceCardRequest {
-    const temperament = normalizeTemperament(metadata.temperament);
+    const temperament = normalizeTemperament(metadata.trace_final);
     const chips = normalizeTraceCardChips(metadata);
 
     return {

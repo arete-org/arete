@@ -255,6 +255,79 @@ test('buildResponseMetadata defaults tradeoffCount to 0 when assistant and plann
     assert.equal(metadata.tradeoffCount, 0);
 });
 
+test('buildResponseMetadata emits canonical trace_target and trace_final fields', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            plannerTemperament: {
+                tightness: 4,
+                rationale: 3,
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.trace_target, {
+        tightness: 4,
+        rationale: 3,
+    });
+    assert.deepEqual(metadata.trace_final, {
+        tightness: 4,
+        rationale: 3,
+    });
+    assert.equal(metadata.trace_final_reason_code, undefined);
+});
+
+test('buildResponseMetadata emits trace_final_reason_code when final posture differs', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            plannerTemperament: {
+                tightness: 2,
+            },
+            finalTemperament: {
+                tightness: 4,
+            },
+            temperamentFinalizationReasonCode: 'runtime_posture_adjustment',
+        })
+    );
+
+    assert.deepEqual(metadata.trace_target, {
+        tightness: 2,
+    });
+    assert.deepEqual(metadata.trace_final, {
+        tightness: 4,
+    });
+    assert.equal(
+        metadata.trace_final_reason_code,
+        'runtime_posture_adjustment'
+    );
+});
+
+test('buildResponseMetadata defaults trace_final_reason_code when final posture differs without explicit code', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            plannerTemperament: {
+                tightness: 2,
+            },
+            finalTemperament: {
+                tightness: 4,
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.trace_target, {
+        tightness: 2,
+    });
+    assert.deepEqual(metadata.trace_final, {
+        tightness: 4,
+    });
+    assert.equal(
+        metadata.trace_final_reason_code,
+        'runtime_posture_adjustment'
+    );
+});
+
 test('buildResponseMetadata includes steerability controls when provided by runtime context', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),

@@ -15,6 +15,7 @@ import type {
 } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import type { PostChatRequest } from '@footnote/contracts/web';
+import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import { createChatHandler } from '../src/handlers/chat.js';
 import { runtimeConfig } from '../src/config.js';
 import type { RuntimeConfig } from '../src/config/types.js';
@@ -90,18 +91,6 @@ const createExecutionContractTrustGraphRuntimeConfig = (
         ...rest,
     };
 };
-
-const createMetadata = (): ResponseMetadata => ({
-    responseId: 'chat_test_response',
-    provenance: 'Inferred',
-    safetyTier: 'Low',
-    tradeoffCount: 0,
-    chainHash: 'abc123def456',
-    licenseContext: 'MIT + HL3',
-    modelVersion: 'gpt-5-mini',
-    staleAfter: new Date(Date.now() + 60000).toISOString(),
-    citations: [],
-});
 
 const createChatRequest = (
     overrides: Partial<PostChatRequest> = {}

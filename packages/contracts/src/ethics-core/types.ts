@@ -104,6 +104,15 @@ export type ResponseTemperament = {
  */
 export type PartialResponseTemperament = Partial<ResponseTemperament>;
 
+/**
+ * Reason code for cases where delivered TRACE posture differs from the
+ * intended TRACE posture.
+ *
+ * Keep this narrow in v1. Additive expansion is allowed when runtime
+ * divergence classes become contract-stable.
+ */
+export type TraceFinalizationReasonCode = 'runtime_posture_adjustment';
+
 export type ExecutionStatus = 'executed' | 'skipped' | 'failed';
 
 /**
@@ -657,10 +666,14 @@ export type ResponseMetadata = {
     imageDescriptions?: string[]; // Optional captions for any images used.
     evidenceScore?: TraceAxisScore; // Optional TRACE chip; may be derived when Retrieved and explicit chip values are absent.
     freshnessScore?: TraceAxisScore; // Optional TRACE chip; may be derived when Retrieved and explicit chip values are absent.
-    // TODO(TRACE-rollout): Make required after TRACE ingestion and rendering
-    // paths are fully implemented and validated across surfaces.
-    // TODO(trace-target-vs-final-contract): Split target vs final TRACE once
-    // review-time runtime can revise response posture after planning.
-    temperament?: PartialResponseTemperament;
+    // TRACE posture is answer-shape metadata only.
+    // Keep this separate from workflowMode (policy/routing) and provenance
+    // (what happened / grounding classification).
+    // TODO(trace-lifecycle-summary): Current TRACE contract is summary-state.
+    // If TRACE later evolves across multiple runtime steps, model canonical
+    // lifecycle/history first and derive summary fields from it.
+    trace_target: PartialResponseTemperament;
+    trace_final: PartialResponseTemperament;
+    trace_final_reason_code?: TraceFinalizationReasonCode;
     trustGraph?: TrustGraphMetadata;
 };

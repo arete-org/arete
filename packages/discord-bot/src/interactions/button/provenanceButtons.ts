@@ -179,6 +179,17 @@ function formatSummarySection(
     ].join('\n');
 }
 
+/**
+ * Build the TRACE section as Discord-flavored Markdown for a details payload.
+ *
+ * Produces either an unavailable message when provenance is missing, or a multiline TRACE
+ * block containing Target and Final fields for tightness, rationale, attribution, caution,
+ * and extent. Includes a "Final Reason" line only when an explicit final reason code is present
+ * or when any Target field differs from its Final counterpart, and appends Evidence and Freshness lines.
+ *
+ * @param payload - The response metadata or a resilient fallback payload to render
+ * @returns A Markdown-formatted TRACE section suitable for inclusion in the overall details message
+ */
 function formatTraceSection(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
@@ -186,17 +197,42 @@ function formatTraceSection(
         return ['**TRACE**', '- TRACE scores unavailable'].join('\n');
     }
 
-    const temperament = payload.temperament;
-    return [
+    const traceTarget = payload.trace_target;
+    const traceFinal = payload.trace_final;
+    const traceDiverged =
+        traceTarget.tightness !== traceFinal.tightness ||
+        traceTarget.rationale !== traceFinal.rationale ||
+        traceTarget.attribution !== traceFinal.attribution ||
+        traceTarget.caution !== traceFinal.caution ||
+        traceTarget.extent !== traceFinal.extent;
+    const hasExplicitFinalReason =
+        typeof payload.trace_final_reason_code === 'string' &&
+        payload.trace_final_reason_code.trim().length > 0;
+
+    const traceLines = [
         '**TRACE**',
-        `- Tightness: \`${formatMarkdownValue(temperament?.tightness)}\``,
-        `- Rationale: \`${formatMarkdownValue(temperament?.rationale)}\``,
-        `- Attribution: \`${formatMarkdownValue(temperament?.attribution)}\``,
-        `- Caution: \`${formatMarkdownValue(temperament?.caution)}\``,
-        `- Extent: \`${formatMarkdownValue(temperament?.extent)}\``,
+        `- Target Tightness: \`${formatMarkdownValue(traceTarget.tightness)}\``,
+        `- Target Rationale: \`${formatMarkdownValue(traceTarget.rationale)}\``,
+        `- Target Attribution: \`${formatMarkdownValue(traceTarget.attribution)}\``,
+        `- Target Caution: \`${formatMarkdownValue(traceTarget.caution)}\``,
+        `- Target Extent: \`${formatMarkdownValue(traceTarget.extent)}\``,
+        `- Final Tightness: \`${formatMarkdownValue(traceFinal.tightness)}\``,
+        `- Final Rationale: \`${formatMarkdownValue(traceFinal.rationale)}\``,
+        `- Final Attribution: \`${formatMarkdownValue(traceFinal.attribution)}\``,
+        `- Final Caution: \`${formatMarkdownValue(traceFinal.caution)}\``,
+        `- Final Extent: \`${formatMarkdownValue(traceFinal.extent)}\``,
+    ];
+    if (hasExplicitFinalReason || traceDiverged) {
+        traceLines.push(
+            `- Final Reason: \`${formatMarkdownValue(payload.trace_final_reason_code)}\``
+        );
+    }
+    traceLines.push(
         `- Evidence: \`${formatMarkdownValue(payload.evidenceScore)}\``,
-        `- Freshness: \`${formatMarkdownValue(payload.freshnessScore)}\``,
-    ].join('\n');
+        `- Freshness: \`${formatMarkdownValue(payload.freshnessScore)}\``
+    );
+
+    return traceLines.join('\n');
 }
 
 /**

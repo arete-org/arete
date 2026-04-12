@@ -102,6 +102,8 @@ test('resolveProvenanceMetadata rejects mismatched trace payload response IDs', 
                 modelVersion: 'gpt-5-mini',
                 staleAfter: new Date().toISOString(),
                 citations: [],
+                trace_target: {},
+                trace_final: {},
             },
         }) as Awaited<ReturnType<typeof botApi.getTrace>>;
 

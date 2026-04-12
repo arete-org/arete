@@ -14,6 +14,7 @@ import path from 'node:path';
 
 import { createTraceHandlers } from '../src/handlers/trace.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
+import { renderTraceCardSvg } from '../src/services/traceCard/traceCardSvg.js';
 import { SqliteTraceStore } from '../src/storage/traces/sqliteTraceStore.js';
 
 type TestServer = {
@@ -254,9 +255,23 @@ test('GET trace-card SVG returns 404 when asset is missing', async () => {
     }
 });
 
-test('POST /api/trace-cards/from-trace uses stored metadata temperament and chip scores', async () => {
+test('POST /api/trace-cards/from-trace uses stored metadata trace_final and chip scores', async () => {
     const server = await createTestServer();
     const responseId = 'from_trace_response_123';
+    const traceTarget = {
+        tightness: 2,
+        rationale: 3,
+        attribution: 5,
+        caution: 2,
+        extent: 4,
+    } as const;
+    const traceFinal = {
+        tightness: 5,
+        rationale: 4,
+        attribution: 5,
+        caution: 2,
+        extent: 4,
+    } as const;
 
     try {
         await server.store.upsert({
@@ -269,13 +284,9 @@ test('POST /api/trace-cards/from-trace uses stored metadata temperament and chip
             modelVersion: 'gpt-5-mini',
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
-            temperament: {
-                tightness: 4,
-                rationale: 3,
-                attribution: 5,
-                caution: 2,
-                extent: 4,
-            },
+            trace_target: traceTarget,
+            trace_final: traceFinal,
+            trace_final_reason_code: 'runtime_posture_adjustment',
             evidenceScore: 4,
             freshnessScore: 3,
         });
@@ -301,6 +312,30 @@ test('POST /api/trace-cards/from-trace uses stored metadata temperament and chip
         };
         assert.equal(payload.responseId, responseId);
         assert.ok(payload.pngBase64.length > 32);
+        const storedSvg = await server.store.getTraceCardSvg(responseId);
+        assert.ok(storedSvg);
+        assert.equal(
+            storedSvg,
+            renderTraceCardSvg({
+                temperament: traceFinal,
+                chips: {
+                    evidenceScore: 4,
+                    freshnessScore: 3,
+                },
+            }),
+            'trace-card should render from trace_final'
+        );
+        assert.notEqual(
+            storedSvg,
+            renderTraceCardSvg({
+                temperament: traceTarget,
+                chips: {
+                    evidenceScore: 4,
+                    freshnessScore: 3,
+                },
+            }),
+            'trace-card should not render from trace_target when values differ'
+        );
     } finally {
         await server.close();
         await server.cleanup();
@@ -322,7 +357,14 @@ test('POST /api/trace-cards/from-trace renders successfully when stored chip sco
             modelVersion: 'gpt-5-mini',
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
-            temperament: {
+            trace_target: {
+                tightness: 4,
+                rationale: 3,
+                attribution: 5,
+                caution: 2,
+                extent: 4,
+            },
+            trace_final: {
                 tightness: 4,
                 rationale: 3,
                 attribution: 5,
@@ -356,9 +398,9 @@ test('POST /api/trace-cards/from-trace renders successfully when stored chip sco
     }
 });
 
-test('POST /api/trace-cards/from-trace renders successfully when stored temperament is missing', async () => {
+test('POST /api/trace-cards/from-trace renders successfully when stored trace_final is empty', async () => {
     const server = await createTestServer();
-    const responseId = 'from_trace_missing_temperament';
+    const responseId = 'from_trace_missing_trace_final';
 
     try {
         await server.store.upsert({
@@ -371,6 +413,8 @@ test('POST /api/trace-cards/from-trace renders successfully when stored temperam
             modelVersion: 'gpt-5-mini',
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
+            trace_target: {},
+            trace_final: {},
         });
 
         const response = await fetch(

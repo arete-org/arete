@@ -7,8 +7,8 @@ A workflow mode is the explicit high-level routing decision for chat execution.
 Each part has a different job. The Execution Contract sets the allowed posture.
 The chat orchestrator runs within that contract. Workflow mode is the
 high-level choice, and workflow profile is the concrete step pattern. TRACE is
-about answer temperament, while provenance and evidence metadata are about what
-actually happened.
+about answer temperament (`trace_target` and `trace_final`), while provenance
+and evidence metadata are about what actually happened.
 
 In short:
 

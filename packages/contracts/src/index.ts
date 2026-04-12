@@ -34,6 +34,7 @@ export type {
     EvaluatorOutcome,
     ExecutionEvent,
     TraceAxisScore,
+    TraceFinalizationReasonCode,
     PartialResponseTemperament,
     ResponseTemperament,
     TrustGraphMetadata,

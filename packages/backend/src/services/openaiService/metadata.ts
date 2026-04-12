@@ -209,7 +209,9 @@ const normalizeToolReasonCode = (
  * - execution/workflow/workflowMode/steerabilityControls are structural records.
  * - provenance/provenanceAssessment/chip scores may include deterministic
  *   heuristic derivation when structural evidence is partial.
- * - TRACE temperament is response posture metadata, separate from provenance.
+ * - workflowMode is policy/routing metadata.
+ * - TRACE is answer-posture metadata.
+ * - provenance is grounding/event metadata.
  */
 const buildResponseMetadata = (
     assistantMetadata: AssistantResponseMetadata,
@@ -251,13 +253,32 @@ const buildResponseMetadata = (
         assistantMetadata.tradeoffCount,
         runtimeContext.plannerTemperament
     );
-    const temperament = normalizePlannerTemperament(
-        runtimeContext.plannerTemperament
-    );
-    // TODO(trace-target-vs-final): If review-time runtime can revise TRACE
-    // posture, persist both target and final TRACE values. Preserve the
-    // invariant that workflow mode is routing metadata while TRACE remains
-    // answer-posture metadata.
+    // TODO(trace-lifecycle): TRACE may eventually evolve through planning /
+    // workflow / review steps. If that model is added, keep canonical
+    // lifecycle/history state and derive summary fields from it.
+    // Current runtime stays summary-only and does not implement lifecycle.
+    const traceTarget =
+        normalizePlannerTemperament(runtimeContext.plannerTemperament) ?? {};
+    const traceFinal =
+        normalizePlannerTemperament(runtimeContext.finalTemperament) ??
+        traceTarget;
+    const traceChanged =
+        JSON.stringify(traceTarget) !== JSON.stringify(traceFinal);
+    const traceFinalReasonCode = traceChanged
+        ? (runtimeContext.temperamentFinalizationReasonCode ??
+          'runtime_posture_adjustment')
+        : undefined;
+    if (
+        traceChanged &&
+        runtimeContext.temperamentFinalizationReasonCode === undefined
+    ) {
+        logger.warn(
+            'TRACE target/final divergence reason code missing; defaulting to runtime_posture_adjustment.',
+            {
+                responseId,
+            }
+        );
+    }
     const evidenceScore = isTraceAxisScore(assistantMetadata.evidenceScore)
         ? assistantMetadata.evidenceScore
         : undefined;
@@ -522,7 +543,11 @@ const buildResponseMetadata = (
         ...(evaluatorExecution?.outcome !== undefined && {
             evaluator: evaluatorExecution.outcome,
         }),
-        ...(temperament && { temperament }),
+        trace_target: traceTarget,
+        trace_final: traceFinal,
+        ...(traceFinalReasonCode !== undefined && {
+            trace_final_reason_code: traceFinalReasonCode,
+        }),
         ...(finalEvidenceScore !== undefined && {
             evidenceScore: finalEvidenceScore,
         }),

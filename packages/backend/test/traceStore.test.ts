@@ -39,6 +39,8 @@ test('TraceStore round trips metadata with citation URLs', async () => {
                 url: 'https://example.com/string',
             },
         ],
+        trace_target: {},
+        trace_final: {},
     };
 
     try {
@@ -96,6 +98,8 @@ test('TraceStore round trips trace-card SVG assets', async () => {
             modelVersion: 'gpt-5-mini',
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
+            trace_target: {},
+            trace_final: {},
         });
 
         await store.upsertTraceCardSvg(responseId, initialSvg);
@@ -132,6 +136,8 @@ test('TraceStore delete removes both trace metadata and trace-card SVG', async (
             modelVersion: 'gpt-5-mini',
             staleAfter: new Date(Date.now() + 60000).toISOString(),
             citations: [],
+            trace_target: {},
+            trace_final: {},
         });
         await store.upsertTraceCardSvg(responseId, '<svg>trace-card</svg>');
 

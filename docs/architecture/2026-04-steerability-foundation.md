@@ -266,9 +266,11 @@ A few expansion points are already visible, and they need to stay bounded.
   alongside `applyOutcome`. Do not overload the top-level enum.
 - If multiple planner passes or retries are introduced, add explicit
   correlation while keeping planner ownership bounded by workflow logic.
-- If runtime can revise TRACE posture during review, keep target TRACE and
-  final TRACE separate. `workflowMode` remains routing metadata. TRACE remains
-  answer-posture metadata.
+- TRACE posture uses separate target/final contract fields. If runtime revises
+  posture during review, `trace_target` and `trace_final` must both be
+  recorded with an explicit `trace_final_reason_code`. `workflowMode` remains
+  routing metadata. TRACE remains answer-posture metadata.
+  Current runtime does not implement a full TRACE lifecycle/history model yet.
 
 The trace should show what the runtime actually did, in a form contributors
 can follow.
