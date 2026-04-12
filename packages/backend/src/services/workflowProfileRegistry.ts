@@ -350,6 +350,18 @@ const normalizeEscalationReason = (
         : undefined;
 };
 
+const deriveWorkflowBehaviorRestrictivenessRank = (
+    behavior: WorkflowModeBehavior
+): 0 | 1 | 2 => {
+    if (behavior.executionContractPresetId === 'fast-direct') {
+        return 0;
+    }
+    if (behavior.executionContractPresetId === 'balanced') {
+        return 1;
+    }
+    return 2;
+};
+
 const resolveEscalatedWorkflowModeDecision = (input: {
     initialModeDecision: WorkflowModeDecision;
     escalationRequest?: WorkflowModeEscalationRequest;
@@ -366,13 +378,24 @@ const resolveEscalatedWorkflowModeDecision = (input: {
     if (escalationRequest.targetModeId === initialModeDecision.modeId) {
         return initialModeDecision;
     }
+    const targetBehavior =
+        WORKFLOW_MODE_BEHAVIOR_MAP[escalationRequest.targetModeId];
+    const initialBehavior = initialModeDecision.behavior;
+    // Escalation seam only accepts equal-or-more-restrictive posture changes.
+    // Downward posture changes are ignored and runtime keeps the initial mode.
+    if (
+        deriveWorkflowBehaviorRestrictivenessRank(targetBehavior) <
+        deriveWorkflowBehaviorRestrictivenessRank(initialBehavior)
+    ) {
+        return initialModeDecision;
+    }
 
     return {
         ...initialModeDecision,
         modeId: escalationRequest.targetModeId,
         selectedBy: 'workflow_mode_escalation',
         selectionReason: `Workflow escalation seam accepted one mode transition from "${initialModeDecision.modeId}" to "${escalationRequest.targetModeId}".`,
-        behavior: WORKFLOW_MODE_BEHAVIOR_MAP[escalationRequest.targetModeId],
+        behavior: targetBehavior,
         initial_mode: initialModeDecision.initial_mode,
         escalated_mode: escalationRequest.targetModeId,
         escalation_reason: escalationReason,

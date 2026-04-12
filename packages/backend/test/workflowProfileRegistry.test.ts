@@ -226,6 +226,28 @@ test('resolveWorkflowRuntimeConfig exposes bounded workflow-owned escalation met
     assert.equal(config.modeDecision.selectedBy, 'workflow_mode_escalation');
 });
 
+test('resolveWorkflowRuntimeConfig rejects downward mode changes and keeps initial behavior', () => {
+    const config = resolveWorkflowRuntimeConfig({
+        modeId: 'grounded',
+        reviewLoopEnabled: true,
+        maxIterations: 3,
+        maxDurationMs: 9000,
+        modeEscalationRequest: {
+            targetModeId: 'fast',
+            reason: 'attempt downgrade',
+        },
+    });
+
+    assert.equal(config.modeDecision.modeId, 'grounded');
+    assert.equal(config.modeDecision.selectedBy, 'requested_mode');
+    assert.equal(
+        config.modeDecision.behavior.executionContractPresetId,
+        'quality-grounded'
+    );
+    assert.equal(config.modeDecision.escalated_mode, undefined);
+    assert.equal(config.modeDecision.escalation_reason, undefined);
+});
+
 test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity mapping', () => {
     assert.equal(
         deriveReviewIntensityFromWorkflowBehavior({
