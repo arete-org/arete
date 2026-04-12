@@ -248,6 +248,27 @@ test('resolveWorkflowRuntimeConfig rejects downward mode changes and keeps initi
     assert.equal(config.modeDecision.escalation_reason, undefined);
 });
 
+test('resolveWorkflowRuntimeConfig fails open when escalation target mode id is malformed', () => {
+    const config = resolveWorkflowRuntimeConfig({
+        modeId: 'balanced',
+        reviewLoopEnabled: true,
+        maxIterations: 3,
+        maxDurationMs: 9000,
+        modeEscalationRequest: {
+            targetModeId: 'not-a-mode',
+            reason: 'unsafe runtime input',
+        } as unknown as {
+            targetModeId: 'fast' | 'balanced' | 'grounded';
+            reason: string;
+        },
+    });
+
+    assert.equal(config.modeDecision.modeId, 'balanced');
+    assert.equal(config.modeDecision.selectedBy, 'requested_mode');
+    assert.equal(config.modeDecision.escalated_mode, undefined);
+    assert.equal(config.modeDecision.escalation_reason, undefined);
+});
+
 test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity mapping', () => {
     assert.equal(
         deriveReviewIntensityFromWorkflowBehavior({

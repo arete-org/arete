@@ -350,6 +350,20 @@ const normalizeEscalationReason = (
         : undefined;
 };
 
+const normalizeEscalationTargetModeId = (
+    modeId: unknown
+): WorkflowModeId | undefined => {
+    if (typeof modeId !== 'string') {
+        return undefined;
+    }
+    const trimmedModeId = modeId.trim();
+    if (trimmedModeId.length === 0) {
+        return undefined;
+    }
+
+    return normalizeWorkflowModeId(trimmedModeId)?.modeId;
+};
+
 const deriveWorkflowBehaviorRestrictivenessRank = (
     behavior: WorkflowModeBehavior
 ): 0 | 1 | 2 => {
@@ -375,11 +389,19 @@ const resolveEscalatedWorkflowModeDecision = (input: {
         return initialModeDecision;
     }
 
-    if (escalationRequest.targetModeId === initialModeDecision.modeId) {
+    const normalizedTargetModeId = normalizeEscalationTargetModeId(
+        escalationRequest.targetModeId
+    );
+    if (
+        normalizedTargetModeId === undefined ||
+        normalizedTargetModeId === initialModeDecision.modeId
+    ) {
         return initialModeDecision;
     }
-    const targetBehavior =
-        WORKFLOW_MODE_BEHAVIOR_MAP[escalationRequest.targetModeId];
+    const targetBehavior = WORKFLOW_MODE_BEHAVIOR_MAP[normalizedTargetModeId];
+    if (targetBehavior === undefined) {
+        return initialModeDecision;
+    }
     const initialBehavior = initialModeDecision.behavior;
     // Escalation seam only accepts equal-or-more-restrictive posture changes.
     // Downward posture changes are ignored and runtime keeps the initial mode.
@@ -392,12 +414,12 @@ const resolveEscalatedWorkflowModeDecision = (input: {
 
     return {
         ...initialModeDecision,
-        modeId: escalationRequest.targetModeId,
+        modeId: normalizedTargetModeId,
         selectedBy: 'workflow_mode_escalation',
-        selectionReason: `Workflow escalation seam accepted one mode transition from "${initialModeDecision.modeId}" to "${escalationRequest.targetModeId}".`,
+        selectionReason: `Workflow escalation seam accepted one mode transition from "${initialModeDecision.modeId}" to "${normalizedTargetModeId}".`,
         behavior: targetBehavior,
         initial_mode: initialModeDecision.initial_mode,
-        escalated_mode: escalationRequest.targetModeId,
+        escalated_mode: normalizedTargetModeId,
         escalation_reason: escalationReason,
     };
 };
