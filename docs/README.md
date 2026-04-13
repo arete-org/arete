@@ -17,6 +17,7 @@ Footnote keeps docs in three buckets:
 - [Prompt Resolution](./architecture/prompt-resolution.md): Defines how prompt layers and overrides resolve at runtime.
 - [Workflow Profile Contract](./architecture/workflow-profile-contract.md): Defines required profile hooks/fields and blocked/no-generation behavior + provenance expectations.
 - [Workflow Engine And Provenance](./architecture/workflow-engine-and-provenance.md): Defines the workflow engine direction, step model, and provenance record shape.
+- [How to Read Provenance-Related Metadata](./architecture/provenance-label-taxonomy.md): Explains how to read mode, TRACE, planner, steerability, and provenance fields without mixing their meanings together.
 - [Workflow Profiles V1 RFC: Engine Core vs Profile Semantics](./architecture/workflow-profiles-v1-engine-vs-profile-semantics.md): Defines ownership boundaries and invariants for single-pass and bounded-review profiles.
 - [Execution Contract TrustGraph Architecture](./architecture/execution_contract_trustgraph/architecture.md): Defines advisory TrustGraph integration constraints, runtime wiring, and production-readiness limits.
 

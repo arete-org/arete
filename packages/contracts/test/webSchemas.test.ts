@@ -297,6 +297,73 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
     assert.equal(parsed.success, true);
 });
 
+test('ResponseMetadataSchema accepts one payload with distinct mode, TRACE, planner, controls, and provenance categories', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        provenanceAssessment: {
+            methodId: 'deterministic_multi_signal_v1',
+            methodLabel:
+                'Deterministic multi-signal provenance classification (backend)',
+            signals: {
+                citationsPresent: true,
+                retrievalRequested: true,
+                retrievalUsed: true,
+                retrievalToolExecuted: true,
+                workflowEvidence: false,
+                trustGraphEvidenceAvailable: false,
+                trustGraphEvidenceUsed: false,
+                assistantDeclaredSpeculative: false,
+            },
+            conflicts: [],
+            limitations: [],
+        },
+        workflowMode: {
+            modeId: 'grounded',
+            selectedBy: 'requested_mode',
+            selectionReason: 'Configured mode selected.',
+            initial_mode: 'grounded',
+            behavior: {
+                executionContractPresetId: 'quality-grounded',
+                workflowProfileClass: 'reviewed',
+                workflowProfileId: 'bounded-review',
+                workflowExecution: 'policy_gated',
+                reviewPass: 'included',
+                reviseStep: 'allowed',
+                evidencePosture: 'strict',
+                maxWorkflowSteps: 8,
+                maxDeliberationCalls: 4,
+            },
+        },
+        execution: [
+            {
+                kind: 'planner',
+                status: 'executed',
+                purpose: 'chat_orchestrator_action_selection',
+                contractType: 'text_json',
+                applyOutcome: 'applied',
+                mattered: true,
+                matteredControlIds: ['tool_allowance'],
+            },
+        ],
+        steerabilityControls: {
+            version: 'v1',
+            controls: [
+                {
+                    controlId: 'tool_allowance',
+                    value: 'allowed:web_search',
+                    source: 'tool_policy',
+                    rationale:
+                        'Tool request was eligible under selected profile.',
+                    mattered: true,
+                    impactedTargets: ['tool_eligibility'],
+                },
+            ],
+        },
+    });
+
+    assert.equal(parsed.success, true);
+});
+
 const createValidWorkflowMetadataPayload = (now: string) => ({
     ...baseMetadata,
     workflow: {
