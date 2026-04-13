@@ -343,7 +343,9 @@ const createValidWorkflowMetadataPayload = (now: string) => ({
                     status: 'executed',
                     summary: 'Assessment step evaluated draft quality.',
                     signals: {
-                        goalMet: true,
+                        reviewDecision: 'finalize',
+                        reviewReason:
+                            'Draft answers the request with sufficient clarity.',
                     },
                 },
             },
@@ -508,6 +510,40 @@ test('ResponseMetadataSchema rejects workflow lineage with invalid termination r
     });
 
     assert.equal(parsed.success, false);
+});
+
+test('ResponseMetadataSchema rejects executed assess step without canonical decision signals', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    const assessSignals = payload.workflow.steps[1].outcome.signals as Record<
+        string,
+        unknown
+    >;
+    delete assessSignals.reviewDecision;
+    const parsed = ResponseMetadataSchema.safeParse(payload);
+
+    assert.equal(parsed.success, false);
+});
+
+test('ResponseMetadataSchema rejects executed assess step without reviewReason', () => {
+    const now = new Date().toISOString();
+    const payloadMissingReason = createValidWorkflowMetadataPayload(now);
+    const missingReasonSignals = payloadMissingReason.workflow.steps[1].outcome
+        .signals as Record<string, unknown>;
+    delete missingReasonSignals.reviewReason;
+    const missingReasonParsed =
+        ResponseMetadataSchema.safeParse(payloadMissingReason);
+
+    assert.equal(missingReasonParsed.success, false);
+
+    const payloadBlankReason = createValidWorkflowMetadataPayload(now);
+    const blankReasonSignals = payloadBlankReason.workflow.steps[1].outcome
+        .signals as Record<string, unknown>;
+    blankReasonSignals.reviewReason = '';
+    const blankReasonParsed =
+        ResponseMetadataSchema.safeParse(payloadBlankReason);
+
+    assert.equal(blankReasonParsed.success, false);
 });
 
 test('ResponseMetadataSchema rejects non-canonical safety decision rule tuples', () => {

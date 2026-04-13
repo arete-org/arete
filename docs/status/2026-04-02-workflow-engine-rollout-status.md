@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-04-03
+2026-04-12
 
 ## Owners
 
@@ -23,6 +23,8 @@ Architecture reference:
 
 - Workflow metadata is now aligned to `WorkflowRecord` + `StepRecord`.
 - Step outcomes now have explicit machine-readable control signals.
+- Bounded review assess steps now emit canonical machine-readable decision and
+  reason signals in lineage (`reviewDecision`, `reviewReason`).
 - Workflow termination reasons are now contract-level.
 - Workflow profile contract now documents required profile hooks,
   blocked/no-generation behavior, and no-generation provenance invariants.

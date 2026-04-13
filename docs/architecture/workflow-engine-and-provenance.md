@@ -101,6 +101,8 @@ Each `StepRecord` includes an `outcome` with minimal typed fields:
 This keeps handoff data explicit without a separate top-level handoff type.
 `signals` means machine-readable control indicators used by transition logic
 (for example `goalMet`, `needsMoreEvidence`, `toolResultQuality`), not generic telemetry.
+For bounded review `assess` steps, use `reviewDecision` (`finalize` or `revise`)
+plus `reviewReason` as the canonical machine output seam.
 `recommendations` is advisory only and never overrides backend legality checks.
 
 ## Transition Legality

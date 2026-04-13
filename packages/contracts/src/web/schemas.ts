@@ -8,6 +8,7 @@
 
 import { z } from 'zod';
 import {
+    BOUNDED_REVIEW_ASSESS_DECISIONS,
     WORKFLOW_STEP_KINDS,
     WORKFLOW_STEP_STATUSES,
     WORKFLOW_TERMINATION_REASONS,
@@ -390,6 +391,50 @@ const StepRecordSchema = z
             .strict()
             .optional(),
         outcome: StepOutcomeSchema,
+    })
+    .superRefine((value, context) => {
+        if (
+            value.stepKind !== 'assess' ||
+            value.outcome.status !== 'executed'
+        ) {
+            return;
+        }
+
+        const assessSignals = value.outcome.signals;
+        const reviewDecision =
+            assessSignals !== undefined
+                ? assessSignals.reviewDecision
+                : undefined;
+        const reviewReason =
+            assessSignals !== undefined
+                ? assessSignals.reviewReason
+                : undefined;
+
+        if (
+            typeof reviewDecision !== 'string' ||
+            !BOUNDED_REVIEW_ASSESS_DECISIONS.includes(
+                reviewDecision as (typeof BOUNDED_REVIEW_ASSESS_DECISIONS)[number]
+            )
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['outcome', 'signals', 'reviewDecision'],
+                message:
+                    'executed assess steps must include reviewDecision: "finalize" | "revise".',
+            });
+        }
+
+        if (
+            typeof reviewReason !== 'string' ||
+            reviewReason.trim().length === 0
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['outcome', 'signals', 'reviewReason'],
+                message:
+                    'executed assess steps must include non-empty reviewReason.',
+            });
+        }
     })
     .strict();
 
