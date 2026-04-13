@@ -206,12 +206,13 @@ const normalizeToolReasonCode = (
  * All values are derived from control-plane context and API annotations.
  *
  * Semantics guardrail:
- * - execution/workflow/workflowMode/steerabilityControls are structural records.
- * - provenance/provenanceAssessment/chip scores may include deterministic
- *   heuristic derivation when structural evidence is partial.
- * - workflowMode is policy/routing metadata.
- * - TRACE is answer-posture metadata.
- * - provenance is grounding/event metadata.
+ * - execution/workflow are structural record surfaces for what happened.
+ * - workflowMode is execution-policy metadata.
+ * - TRACE (trace_target/trace_final + optional chips) is answer-posture metadata.
+ * - planner influence is represented in execution[] planner events.
+ * - steerability control influence is represented in steerabilityControls.
+ * - provenance/provenanceAssessment are compact grounding classification-method
+ *   metadata and may include deterministic heuristic derivation.
  */
 const buildResponseMetadata = (
     assistantMetadata: AssistantResponseMetadata,
@@ -285,6 +286,8 @@ const buildResponseMetadata = (
     const freshnessScore = isTraceAxisScore(assistantMetadata.freshnessScore)
         ? assistantMetadata.freshnessScore
         : undefined;
+    // TRACE chips remain posture-facing summaries even when deterministically
+    // derived from retrieval-context signals.
     const shouldDeriveRetrievedChips =
         provenance === 'Retrieved' &&
         (evidenceScore === undefined || freshnessScore === undefined);

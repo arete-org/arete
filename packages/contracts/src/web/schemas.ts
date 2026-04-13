@@ -674,7 +674,7 @@ const responseMetadataShape = {
     tradeoffCount: z.number().nonnegative(),
     chainHash: z.string(),
     licenseContext: z.string(),
-    // Deprecated compatibility field; prefer execution[] as structural timeline authority.
+    // Deprecated compatibility field; prefer execution[] as structural record authority.
     modelVersion: z.string(),
     staleAfter: z.string(),
     totalDurationMs: z.number().int().nonnegative().optional(),
@@ -688,7 +688,8 @@ const responseMetadataShape = {
     imageDescriptions: z.array(z.string()).optional(),
     evidenceScore: TraceAxisScoreSchema.optional(),
     freshnessScore: TraceAxisScoreSchema.optional(),
-    // TRACE posture metadata; policy/mode and provenance stay separate.
+    // TRACE posture metadata; keep separate from execution policy and provenance
+    // classification/record fields.
     trace_target: PartialResponseTemperamentSchema,
     trace_final: PartialResponseTemperamentSchema,
     trace_final_reason_code: TraceFinalizationReasonCodeSchema.optional(),
@@ -767,10 +768,15 @@ const TraceCardChipDataSchema = z
  * break clients.
  *
  * Stability guidance for consumers:
- * - Prefer execution/workflow/workflowMode/steerabilityControls/trustGraph for
- *   structural runtime facts when present.
- * - Treat provenance/provenanceAssessment/tradeoffCount/chip scores as
- *   compact classifications that can include heuristic derivation.
+ * - Prefer execution/workflow/trustGraph for structural record surfaces.
+ * - Treat workflowMode as execution-policy metadata.
+ * - Treat TRACE fields (`trace_target`, `trace_final`, optional chips) as
+ *   answer-posture metadata.
+ * - Treat planner influence as `execution[]` planner events (`kind=planner`,
+ *   `applyOutcome`, `mattered`, `matteredControlIds`).
+ * - Treat steerabilityControls as control-influence records.
+ * - Treat provenance/provenanceAssessment as compact grounding
+ *   classification-method metadata, not complete execution truth.
  * - Treat modelVersion as compatibility-shaped and transitional.
  *
  * TODO(metadata-stability-tiers): Once field stability tiers are published for

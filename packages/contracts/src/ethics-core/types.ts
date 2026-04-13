@@ -645,7 +645,7 @@ export type ResponseMetadata = {
     // (structural, heuristic, transitional) in one machine-readable contract
     // so consumers do not infer truth guarantees from optionality alone.
     responseId: string; // Short id for trace lookups and links.
-    provenance: Provenance; // High-level grounding classification for the response.
+    provenance: Provenance; // Compact grounding classification for the response.
     safetyTier: SafetyTier; // Sensitivity level used by UI and reviewers.
     tradeoffCount: number; // Heuristic-friendly summary count from assistant metadata with planner fallback.
     chainHash: string; // Short hash to help detect tampering.
@@ -657,18 +657,18 @@ export type ResponseMetadata = {
     staleAfter: string; // ISO timestamp after which the data is stale.
     totalDurationMs?: number; // End-to-end orchestration duration when available.
     citations: Citation[]; // Sources used for the answer.
-    provenanceAssessment?: ProvenanceAssessment; // Method disclosure for provenance classification, including conflicts and limitations.
-    execution?: ExecutionEvent[]; // Preferred structural execution timeline for model/tool visibility.
-    workflow?: WorkflowRecord; // Optional workflow provenance record for bounded multi-step execution.
-    workflowMode?: WorkflowModeDecision; // Explicit mode routing decision and behavior mapping.
-    steerabilityControls?: SteerabilityControls; // Canonical control records explaining which steering choices shaped execution.
+    provenanceAssessment?: ProvenanceAssessment; // Classification-method disclosure for provenance, including conflicts and limitations.
+    execution?: ExecutionEvent[]; // Structural execution record (planner/evaluator/tool/generation events).
+    workflow?: WorkflowRecord; // Optional workflow record of bounded multi-step execution.
+    workflowMode?: WorkflowModeDecision; // Execution-policy routing decision and behavior mapping.
+    steerabilityControls?: SteerabilityControls; // Control-influence records explaining which controls shaped execution/output.
     evaluator?: EvaluatorOutcome; // Deterministic evaluator decision captured before breaker enforcement.
     imageDescriptions?: string[]; // Optional captions for any images used.
     evidenceScore?: TraceAxisScore; // Optional TRACE chip; may be derived when Retrieved and explicit chip values are absent.
     freshnessScore?: TraceAxisScore; // Optional TRACE chip; may be derived when Retrieved and explicit chip values are absent.
     // TRACE posture is answer-shape metadata only.
-    // Keep this separate from workflowMode (policy/routing) and provenance
-    // (what happened / grounding classification).
+    // Keep this separate from workflowMode (execution policy) and provenance
+    // classification/record fields.
     // TODO(trace-lifecycle-summary): Current TRACE contract is summary-state.
     // If TRACE later evolves across multiple runtime steps, model canonical
     // lifecycle/history first and derive summary fields from it.

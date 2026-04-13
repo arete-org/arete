@@ -462,8 +462,9 @@ export const createChatOrchestrator = ({
         const providerPreferencePolicyAdjusted =
             steerabilityConflictResolution.providerPreference
                 .wasOverriddenByExecutionPolicy;
-        // `mattered` is an observed-material-effect signal derived from
-        // concrete control records in this run. It is not full causal proof.
+        // Planner influence is emitted on execution[] planner fields.
+        // Control influence is emitted separately via steerabilityControls.
+        // `mattered` remains an observed-material-effect signal, not full causal proof.
         const plannerMattered = plannerMatteredControlIds.length > 0;
         // TODO(planner-adjustment-taxonomy): Split this top-level
         // `adjusted_by_policy` bucket only after materially distinct classes
