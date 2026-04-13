@@ -7,9 +7,9 @@ without erasing Footnote's own semantics.
 
 Use it like this:
 
-- start with the Footnote term,
-- use the common pattern as orientation,
-- keep Footnote's constraints as the real rule.
+- Start with the Footnote term.
+- Use the common pattern only as orientation.
+- Footnote's constraints are the real rule.
 
 ## Quick Crosswalk
 
@@ -25,8 +25,7 @@ Use it like this:
 **What common pattern it resembles**
 
 Routing in other systems usually means deciding which execution path to take.
-That may mean picking a fast path, a tool path, or a more careful multi-step
-path.
+That may mean a fast path, a tool path, or a reviewed path.
 
 **What Footnote calls it**
 
@@ -43,8 +42,7 @@ Current examples:
 - Routing stays inside Execution Contract guardrails.
 - Mode and profile are related, but they are not the same thing.
 - Backend owns the final routing decision.
-- Fail-open fallback still applies when requested routing input is missing or
-  unknown.
+- Missing or unknown routing input falls back fail-open.
 
 **What it is not**
 
@@ -56,8 +54,7 @@ Current examples:
 
 **What common pattern it resembles**
 
-Planning resembles the common "planner" step that decides what kind of action
-should happen next before execution continues.
+Planning resembles the common planner step that decides the next action shape.
 
 **What Footnote calls it**
 
@@ -70,8 +67,7 @@ not the owner of orchestration.
 - Planner output can be adjusted or rejected by policy.
 - Planner metadata is recorded as execution/provenance data.
 - Planning must stay serializable and inspectable.
-- Planning should align with steerability, provenance, and backend-owned
-  control logic.
+- Planning does not override backend control logic.
 
 **What it is not**
 
@@ -84,7 +80,7 @@ not the owner of orchestration.
 **What common pattern it resembles**
 
 This resembles reflection, critique, or reviewer passes used in other agent
-systems to assess and possibly improve a draft.
+systems.
 
 **What Footnote calls it**
 
@@ -96,7 +92,7 @@ Footnote control.
 
 - Review is optional and policy-gated.
 - Review decisions are bounded: finalize or revise.
-- Revision stays inside grounding and provenance boundaries.
+- Revision cannot loosen grounding or provenance rules.
 - TRACE remains Footnote-specific response temperament metadata, not a generic
   self-improvement score.
 - Backend remains the authority for when review can happen and when it stops.
@@ -111,8 +107,8 @@ Footnote control.
 
 **What common pattern it resembles**
 
-This resembles standard agent tool calling: a model or planner requests an
-external capability, and runtime executes it if allowed.
+This resembles standard tool calling: request a capability, then execute it if
+allowed.
 
 **What Footnote calls it**
 
@@ -138,21 +134,21 @@ intent, eligibility, outcome state, and reason codes.
 
 **What common pattern it resembles**
 
-This resembles agent memory: storing useful information across steps or across
-requests.
+This resembles agent memory, but this part is mostly planned rather than
+current.
 
 **What Footnote calls it**
 
-Memory is still planned work in Footnote. The near-term idea is bounded memory,
-not open-ended agent identity or autonomous long-horizon recall.
+Memory is planned work in Footnote. Near-term direction is bounded memory, not
+open-ended agent identity or autonomous long-horizon recall.
 
 **What constraints Footnote adds**
 
 - Memory must fit provenance and governance requirements.
 - Memory should stay behind Footnote's backend boundary.
-- Public contract behavior must remain serializable and inspectable.
-- Memory only helps if it improves user-visible transparency and steerability,
-  not just runtime cleverness.
+- Any public memory-facing behavior must stay serializable and inspectable.
+- Memory only belongs if it improves user-visible transparency or
+  steerability.
 
 **What it is not**
 
@@ -164,8 +160,8 @@ not open-ended agent identity or autonomous long-horizon recall.
 
 **What common pattern it resembles**
 
-MCP resembles a standard protocol layer for exposing tools or resources to a
-runtime in a more uniform way.
+MCP resembles a protocol layer for exposing tools or resources in a more
+uniform way.
 
 **What Footnote calls it**
 
@@ -190,10 +186,10 @@ capability access.
 
 ## Bottom Line
 
-Footnote does use some patterns that people will recognize from wider agent
-systems.
+Footnote uses some patterns people will recognize from agent systems.
 
-But Footnote is not trying to become a generic vocabulary demo.
+But those patterns only help if they are translated into Footnote's own terms
+and constraints.
 
 The semantic center stays the same:
 
