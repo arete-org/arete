@@ -8,6 +8,7 @@
 import type { WorkflowStepKind } from '@footnote/contracts/ethics-core';
 import type { WorkflowTerminationReason } from '@footnote/contracts/ethics-core';
 import type {
+    BoundedReviewAssessSignals,
     ExecutionReasonCode,
     StepRecord,
     WorkflowRecord,
@@ -58,11 +59,6 @@ export type WorkflowState = {
 export type ReviewDecision = {
     decision: 'finalize' | 'revise';
     reason: string;
-};
-
-type AssessStepSignals = {
-    reviewDecision: ReviewDecision['decision'];
-    reviewReason: string;
 };
 
 export const DEFAULT_REVIEW_DECISION_PROMPT = `Return plain JSON only.
@@ -704,7 +700,7 @@ export const runBoundedReviewWorkflow = async ({
                 break;
             }
 
-            const assessSignals: AssessStepSignals = {
+            const assessSignals: BoundedReviewAssessSignals = {
                 reviewDecision: decision.decision,
                 reviewReason: decision.reason,
             };

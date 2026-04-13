@@ -556,4 +556,5 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
         assessStep.outcome.signals?.reviewReason,
         'Draft is complete and clear.'
     );
+    assert.equal(generationCalls, 2);
 });

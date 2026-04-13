@@ -525,6 +525,27 @@ test('ResponseMetadataSchema rejects executed assess step without canonical deci
     assert.equal(parsed.success, false);
 });
 
+test('ResponseMetadataSchema rejects executed assess step without reviewReason', () => {
+    const now = new Date().toISOString();
+    const payloadMissingReason = createValidWorkflowMetadataPayload(now);
+    const missingReasonSignals = payloadMissingReason.workflow.steps[1].outcome
+        .signals as Record<string, unknown>;
+    delete missingReasonSignals.reviewReason;
+    const missingReasonParsed =
+        ResponseMetadataSchema.safeParse(payloadMissingReason);
+
+    assert.equal(missingReasonParsed.success, false);
+
+    const payloadBlankReason = createValidWorkflowMetadataPayload(now);
+    const blankReasonSignals = payloadBlankReason.workflow.steps[1].outcome
+        .signals as Record<string, unknown>;
+    blankReasonSignals.reviewReason = '';
+    const blankReasonParsed =
+        ResponseMetadataSchema.safeParse(payloadBlankReason);
+
+    assert.equal(blankReasonParsed.success, false);
+});
+
 test('ResponseMetadataSchema rejects non-canonical safety decision rule tuples', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
