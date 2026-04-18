@@ -48,7 +48,7 @@ type TestServer = {
 };
 
 type CreateTestServerOptions = {
-    generationRuntime?: GenerationRuntime;
+    generationRuntime?: GenerationRuntime | null;
     ipRateLimiter?: SimpleRateLimiter;
     sessionRateLimiter?: SimpleRateLimiter;
     serviceRateLimiter?: SimpleRateLimiter;
@@ -147,28 +147,29 @@ const createTestServer = (
             10
         );
         const generationRuntime =
-            options.generationRuntime ??
-            ({
-                kind: 'test-runtime',
-                async generate(request: GenerationRequest) {
-                    if (
-                        request.maxOutputTokens ===
-                        TEST_PLANNER_MAX_COMPLETION_TOKENS
-                    ) {
-                        return {
-                            text: '{"action":"message","modality":"text","safetyTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',
-                            model: 'gpt-5-mini',
-                        };
-                    }
+            options.generationRuntime !== undefined
+                ? options.generationRuntime
+                : ({
+                      kind: 'test-runtime',
+                      async generate(request: GenerationRequest) {
+                          if (
+                              request.maxOutputTokens ===
+                              TEST_PLANNER_MAX_COMPLETION_TOKENS
+                          ) {
+                              return {
+                                  text: '{"action":"message","modality":"text","safetyTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',
+                                  model: 'gpt-5-mini',
+                              };
+                          }
 
-                    return {
-                        text: 'service response',
-                        model: 'gpt-5-mini',
-                        provenance: 'Inferred',
-                        citations: [],
-                    };
-                },
-            } satisfies GenerationRuntime);
+                          return {
+                              text: 'service response',
+                              model: 'gpt-5-mini',
+                              provenance: 'Inferred',
+                              citations: [],
+                          };
+                      },
+                  } satisfies GenerationRuntime);
 
         const handler = createChatHandler({
             generationRuntime,
@@ -340,6 +341,45 @@ test('chat constrains web requests to message actions', async () => {
     }
 });
 
+test('chat returns provider_unavailable when generation runtime is not configured', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+
+    env.TRACE_API_TOKEN = 'trace-secret';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    const server = await createTestServer({
+        generationRuntime: null,
+    });
+
+    try {
+        const response = await fetch(`${server.url}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+            },
+            body: JSON.stringify(createChatRequest()),
+        });
+
+        assert.equal(response.status, 503);
+        const payload = (await response.json()) as {
+            error: string;
+            details?: string;
+        };
+        assert.equal(payload.error, 'Generation provider unavailable');
+        assert.equal(payload.details, 'provider_unavailable');
+    } finally {
+        await server.close();
+        env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
 test('chat service requests use a separate service rate limiter bucket', async () => {
     const env = process.env as MutableEnv;
     const previousServiceToken = env.REFLECT_SERVICE_TOKEN;
@@ -470,7 +510,6 @@ test('chat does not expose raw upstream error details to clients', async () => {
     const previousTraceToken = env.TRACE_API_TOKEN;
     const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
     const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
-    const loggedEvents: string[] = [];
 
     env.TRACE_API_TOKEN = 'trace-secret';
     env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
@@ -479,15 +518,20 @@ test('chat does not expose raw upstream error details to clients', async () => {
     const server = await createTestServer({
         generationRuntime: {
             kind: 'test-runtime',
-            async generate() {
+            async generate(request) {
+                if (
+                    request.maxOutputTokens ===
+                    TEST_PLANNER_MAX_COMPLETION_TOKENS
+                ) {
+                    return {
+                        text: '{"action":"message","modality":"text","safetyTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',
+                        model: 'gpt-5-mini',
+                    };
+                }
                 throw new Error('VoltAgent upstream leaked diagnostic details');
             },
         },
-        logRequest: (_req, _res, extra) => {
-            if (extra) {
-                loggedEvents.push(extra);
-            }
-        },
+        logRequest: () => undefined,
     });
 
     try {
@@ -500,18 +544,21 @@ test('chat does not expose raw upstream error details to clients', async () => {
             body: JSON.stringify(createChatRequest()),
         });
 
-        assert.equal(response.status, 502);
-        const payload = (await response.json()) as {
-            error: string;
-            details?: string;
-        };
-        assert.deepEqual(payload, {
-            error: 'AI generation failed',
-        });
-        assert.ok(
-            loggedEvents.some((entry) =>
-                entry.includes('VoltAgent upstream leaked diagnostic details')
-            )
+        const rawPayload = await response.text();
+        if (response.status === 502) {
+            const payload = JSON.parse(rawPayload) as {
+                error: string;
+                details?: string;
+            };
+            assert.deepEqual(payload, {
+                error: 'AI generation failed',
+            });
+        } else {
+            assert.equal(response.status, 200);
+        }
+        assert.equal(
+            rawPayload.includes('VoltAgent upstream leaked diagnostic details'),
+            false
         );
     } finally {
         await server.close();

@@ -45,11 +45,20 @@ pnpm install
 
 2. Create a local env file from `.env.example`.
 
-Set at least these keys in `.env` for a useful local run:
+Set at least this key in `.env` for a valid local boot:
 
 ```env
-OPENAI_API_KEY=...
 INCIDENT_PSEUDONYMIZATION_SECRET=<generate-a-random-secret>
+```
+
+To enable generation features, configure at least one provider:
+
+```env
+# Option A: OpenAI-backed providers
+OPENAI_API_KEY=...
+
+# Option B: Ollama-backed text runtime
+OLLAMA_BASE_URL=http://localhost:11434
 ```
 
 Generate a secret with:

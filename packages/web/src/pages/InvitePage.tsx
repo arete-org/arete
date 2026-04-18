@@ -87,15 +87,8 @@ const InvitePage: React.FC = () => {
                                 )
                             </li>
                             <li>
-                                An OpenAI API key (get one at{' '}
-                                <a
-                                    href="https://platform.openai.com/api-keys"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    OpenAI Platform
-                                </a>
-                                )
+                                At least one generation provider configured
+                                (OpenAI API key or Ollama base URL)
                             </li>
                             <li>Node.js installed on your system</li>
                             <li>Git installed for cloning the repository</li>
@@ -367,8 +360,7 @@ const InvitePage: React.FC = () => {
                                                 const requiredEnv = `# Discord bot credentials (required)
 DISCORD_TOKEN=your_discord_bot_token
 DISCORD_CLIENT_ID=your_discord_client_id
-DISCORD_GUILD_ID=your_discord_guild_id
-OPENAI_API_KEY=your_openai_api_key`;
+DISCORD_GUILD_ID=your_discord_guild_id`;
                                                 await navigator.clipboard.writeText(
                                                     requiredEnv
                                                 );
@@ -389,8 +381,7 @@ OPENAI_API_KEY=your_openai_api_key`;
                                                 textArea.value = `# Discord bot credentials (required)
 DISCORD_TOKEN=your_discord_bot_token
 DISCORD_CLIENT_ID=your_discord_client_id
-DISCORD_GUILD_ID=your_discord_guild_id
-OPENAI_API_KEY=your_openai_api_key`;
+DISCORD_GUILD_ID=your_discord_guild_id`;
                                                 document.body.appendChild(
                                                     textArea
                                                 );
@@ -485,8 +476,7 @@ OPENAI_API_KEY=your_openai_api_key`;
                                 {`# Discord bot credentials (required)
 DISCORD_TOKEN=your_discord_bot_token    # Discord bot token (String)
 DISCORD_CLIENT_ID=your_discord_client_id        # Discord application client ID (String)
-DISCORD_GUILD_ID=your_discord_guild_id          # Discord server/guild ID (String)
-OPENAI_API_KEY=your_openai_api_key      # OpenAI API key (String, format: sk-...)`}
+DISCORD_GUILD_ID=your_discord_guild_id          # Discord server/guild ID (String)`}
                             </pre>
                         </div>
 
@@ -505,7 +495,11 @@ OPENAI_API_KEY=your_openai_api_key      # OpenAI API key (String, format: sk-...
                                         className="cta-button secondary"
                                         onClick={async () => {
                                             try {
-                                                const optionalEnv = `# Optional prompt configuration overrides
+                                                const optionalEnv = `# Optional generation providers (configure at least one for AI responses)
+OPENAI_API_KEY=your_openai_api_key
+OLLAMA_BASE_URL=http://localhost:11434
+
+# Optional prompt configuration overrides
 PROMPT_CONFIG_PATH=path/to/prompts.yaml    # Shared base prompt override file for backend + Discord bot
 
 # Optional rate limiting overrides
@@ -578,7 +572,11 @@ WEB_BASE_URL=https://your-domain.com`;
                                                     document.createElement(
                                                         'textarea'
                                                     );
-                                                textArea.value = `# Optional prompt configuration overrides
+                                                textArea.value = `# Optional generation providers (configure at least one for AI responses)
+OPENAI_API_KEY=your_openai_api_key
+OLLAMA_BASE_URL=http://localhost:11434
+
+# Optional prompt configuration overrides
 PROMPT_CONFIG_PATH=path/to/prompts.yaml    # Shared base prompt override file for backend + Discord bot
 
 # Optional rate limiting overrides

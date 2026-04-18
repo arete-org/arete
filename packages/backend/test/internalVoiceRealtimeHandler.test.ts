@@ -256,6 +256,33 @@ test('internal realtime handler rejects websocket upgrades without trusted auth'
     assert.equal(socket.endedByHandler, true);
 });
 
+test('internal realtime handler returns provider_unavailable when runtime is missing', () => {
+    const { handleUpgrade } = createInternalVoiceRealtimeHandler({
+        realtimeVoiceRuntime: null,
+        traceApiToken: 'trace-token',
+        serviceToken: null,
+        serviceRateLimiter: new SimpleRateLimiter({ limit: 10, window: 60000 }),
+        buildInstructions: () => 'test instructions',
+    });
+    const socket = new FakeUpgradeSocket();
+    const request = {
+        method: 'GET',
+        headers: {
+            'x-trace-token': 'trace-token',
+        },
+    } as IncomingMessage;
+
+    handleUpgrade(request, socket, Buffer.alloc(0));
+
+    assert.match(socket.written, /503 Service Unavailable/);
+    assert.match(
+        socket.written,
+        /Internal voice realtime provider unavailable/
+    );
+    assert.match(socket.written, /provider_unavailable/);
+    assert.equal(socket.endedByHandler, true);
+});
+
 test('internal realtime handler rejects invalid realtime payloads after websocket upgrade', async () => {
     const harness = await createRealtimeHandlerHarness();
 

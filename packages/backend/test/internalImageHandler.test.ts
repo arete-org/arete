@@ -438,6 +438,15 @@ test('internal image endpoint returns 503 when the internal image task service i
         });
 
         assert.equal(response.status, 503);
+        const payload = (await response.json()) as {
+            error: string;
+            details?: string;
+        };
+        assert.equal(
+            payload.error,
+            'Internal image generation provider unavailable'
+        );
+        assert.equal(payload.details, 'provider_unavailable');
     } finally {
         await server.close();
     }

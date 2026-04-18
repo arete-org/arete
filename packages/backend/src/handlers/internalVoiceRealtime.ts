@@ -28,6 +28,7 @@ import {
 } from '../services/llmCostRecorder.js';
 import { logger } from '../utils/logger.js';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
+import { PROVIDER_UNAVAILABLE_DETAILS } from './chatResponses.js';
 import { parseTrustedServiceAuth } from './trustedServiceRequest.js';
 
 /**
@@ -434,7 +435,8 @@ export const createInternalVoiceRealtimeHandler = ({
                 'Internal voice realtime rejected: service unavailable.'
             );
             rejectUpgrade(socket, 503, {
-                error: 'Internal voice realtime service unavailable',
+                error: 'Internal voice realtime provider unavailable',
+                details: PROVIDER_UNAVAILABLE_DETAILS,
             });
             return;
         }

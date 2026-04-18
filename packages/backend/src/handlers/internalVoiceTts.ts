@@ -11,7 +11,7 @@ import { PostInternalVoiceTtsRequestSchema } from '@footnote/contracts/voice';
 import type { InternalVoiceTtsService } from '../services/internalVoiceTts.js';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { logger } from '../utils/logger.js';
-import { sendJson } from './chatResponses.js';
+import { buildProviderUnavailableError, sendJson } from './chatResponses.js';
 import {
     parseTrustedBodyWithSchema,
     parseTrustedServiceAuth,
@@ -110,9 +110,13 @@ export const createInternalVoiceTtsHandler = ({
                 ttsLogger.warn(
                     'Internal voice TTS service unavailable for request.'
                 );
-                sendJson(res, 503, {
-                    error: 'Internal voice service unavailable',
-                });
+                sendJson(
+                    res,
+                    503,
+                    buildProviderUnavailableError(
+                        'Internal voice TTS provider unavailable'
+                    )
+                );
                 logRequest(req, res, 'internal voice tts service-unavailable');
                 return;
             }
