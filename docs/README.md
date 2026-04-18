@@ -11,10 +11,10 @@ filenames.
 1. Read [Architecture](./architecture/README.md) for the main system shape and
    ownership boundaries.
 2. Read [Status](./status/README.md) for what is actively rolling out now.
-3. Read [Decisions](./decisions/) when you need the rationale behind a durable
+3. See [Decisions](./decisions/) when you need the rationale behind a durable
    technical choice.
-4. Read [Proposals](./proposals/) when you want ideas that are not accepted as
-   current architecture yet.
+4. Consult [Proposals](./proposals/) when you want ideas that are not accepted
+   as current architecture yet.
 
 ## Fast Paths
 
