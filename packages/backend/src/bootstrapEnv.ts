@@ -7,13 +7,69 @@
  */
 
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoEnvPath = path.join(currentDirectory, '../../../.env');
+const incidentSecretKey = 'INCIDENT_PSEUDONYMIZATION_SECRET';
+
+const hasConfiguredIncidentSecret = (): boolean =>
+    typeof process.env[incidentSecretKey] === 'string' &&
+    process.env[incidentSecretKey]!.trim().length > 0;
+
+const isLocalAutogenerationAllowed = (): boolean => {
+    const nodeEnv = process.env.NODE_ENV?.trim().toLowerCase();
+    const isProduction = nodeEnv === 'production';
+    const isTest = nodeEnv === 'test';
+    const hasFlyAppName =
+        typeof process.env.FLY_APP_NAME === 'string' &&
+        process.env.FLY_APP_NAME.trim().length > 0;
+    return !isProduction && !isTest && !hasFlyAppName;
+};
+
+const upsertIncidentSecretInEnvFile = (
+    envFilePath: string,
+    secret: string
+): void => {
+    const source = fs.readFileSync(envFilePath, 'utf8');
+    const lineEnding = source.includes('\r\n') ? '\r\n' : '\n';
+    const keyPattern = /^INCIDENT_PSEUDONYMIZATION_SECRET=.*$/m;
+    const replacementLine = `${incidentSecretKey}=${secret}`;
+    const updated = keyPattern.test(source)
+        ? source.replace(keyPattern, replacementLine)
+        : `${source}${source.endsWith(lineEnding) ? '' : lineEnding}${replacementLine}${lineEnding}`;
+
+    fs.writeFileSync(envFilePath, updated, 'utf8');
+};
+
+const ensureLocalIncidentSecret = (envFilePath: string): void => {
+    if (hasConfiguredIncidentSecret() || !isLocalAutogenerationAllowed()) {
+        return;
+    }
+
+    if (!fs.existsSync(envFilePath)) {
+        return;
+    }
+
+    try {
+        const generatedSecret = crypto.randomBytes(32).toString('hex');
+        upsertIncidentSecretInEnvFile(envFilePath, generatedSecret);
+        process.env[incidentSecretKey] = generatedSecret;
+        console.warn(
+            `[backendEnvBootstrap] Auto-generated ${incidentSecretKey} in .env for local boot. Rotate this value if it was exposed.`
+        );
+    } catch (error) {
+        console.warn(
+            `[backendEnvBootstrap] Could not auto-generate ${incidentSecretKey}: ${String(error)}`
+        );
+    }
+};
 
 if (fs.existsSync(repoEnvPath)) {
     const dotenv = await import('dotenv');
     dotenv.config({ path: repoEnvPath });
 }
+
+ensureLocalIncidentSecret(repoEnvPath);

@@ -45,11 +45,8 @@ pnpm install
 
 2. Create a local env file from `.env.example`.
 
-Set at least this key in `.env` for a valid local boot:
-
-```env
-INCIDENT_PSEUDONYMIZATION_SECRET=<generate-a-random-secret>
-```
+`INCIDENT_PSEUDONYMIZATION_SECRET` is auto-generated on first local boot when
+`.env` exists and the key is empty.
 
 To enable generation features, configure at least one provider:
 
@@ -60,12 +57,6 @@ OPENAI_API_KEY=...
 # Option B: Ollama-backed text runtime
 OLLAMA_LOCAL_INFERENCE_ENABLED=true
 OLLAMA_BASE_URL=http://localhost:11434
-```
-
-Generate a secret with:
-
-```bash
-node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
 3. Start backend + web:
