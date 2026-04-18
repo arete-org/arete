@@ -71,17 +71,20 @@ Before final handoff:
 
 - `pnpm lint`
 
-When relevant:
+Conditional (must explain if skipped):
 
 - `pnpm validate-footnote-tags`
 - `pnpm validate-openapi-links` (API boundary changes)
-- `pnpm review` (cross-cutting or review-ready changes)
-- `docker compose -f deploy/compose.yml build` (deploy/runtime packaging impact)
+- `pnpm review` (required for review-ready code changes; explain if skipped)
+- `docker compose -f deploy/compose.yml build` (required for startup, provider, env, deploy, or runtime packaging impact; explain if skipped)
 
 ## Working Style
 
 - Prefer small, focused diffs.
 - Edit only files needed for the task.
+- If the task starts touching multiple concepts, packages, or behavior surfaces, stop, report the scope expansion, and wait for confirmation before continuing.
+- Follow the user’s requested change, but preserve existing project boundaries unless the prompt explicitly asks to change them. If the prompt appears to conflict with core Footnote semantics, stop and ask before rewriting those semantics.
+- Use repo code/docs as primary context; use MCP/external tools only to verify third-party APIs, UI behavior, secrets, or issue state.
 - For non-trivial structural refactors, include 1-2 example evidence links using `pnpm refactor:lookup`.
 - Do not invent runtime facts, command output, or test results.
 - If a check was not run, say that clearly.
@@ -93,4 +96,5 @@ Write for a junior contributor:
 - Plain language first.
 - Short sentences.
 - Concrete action words.
-- Comments should explain purpose, trigger, and consequence.
+- Add JSDoc or comments for exported boundary functions, workflow/orchestrator/provider/provenance logic, fail-open behavior, and authority decisions.
+- Do not add comments that only restate obvious code.
