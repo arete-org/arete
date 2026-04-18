@@ -13,9 +13,6 @@ import { createHmac } from 'node:crypto';
 
 import { startBackendServerContractHarness } from './serverContractHarness.js';
 
-const readAllText = async (response: Response): Promise<string> =>
-    await response.text();
-
 const createChatRequestPayload = (): Record<string, unknown> => ({
     surface: 'discord',
     trigger: { kind: 'direct' },
@@ -67,10 +64,15 @@ const readUpgradeResponse = async ({
     await new Promise((resolve, reject) => {
         const socket = net.connect({ host, port });
         const chunks: string[] = [];
+        let accumulated = '';
         let settled = false;
 
         const cleanup = () => {
             socket.removeAllListeners();
+            socket.on('error', () => undefined);
+            if (!socket.destroyed) {
+                socket.destroy();
+            }
         };
 
         const finish = (value: string) => {
@@ -108,7 +110,13 @@ const readUpgradeResponse = async ({
         });
 
         socket.on('data', (chunk: Buffer) => {
-            chunks.push(chunk.toString('utf8'));
+            const text = chunk.toString('utf8');
+            chunks.push(text);
+            accumulated += text;
+
+            if (accumulated.includes('\r\n\r\n')) {
+                finish(chunks.join(''));
+            }
         });
 
         socket.on('end', () => {
@@ -122,9 +130,8 @@ const readUpgradeResponse = async ({
         socket.on('error', fail);
 
         setTimeout(() => {
-            socket.destroy();
             finish(chunks.join(''));
-        }, 2_000).unref();
+        }, 750).unref();
     });
 
 test('backend server contract baseline routes and transport behavior stay stable', async (t) => {
@@ -260,10 +267,7 @@ test('backend server contract baseline routes and transport behavior stay stable
                 staticResponse.headers.get('content-security-policy'),
                 null
             );
-            assert.match(
-                await readAllText(staticResponse),
-                /SERVER_CONTRACT_ASSET/
-            );
+            assert.match(await staticResponse.text(), /SERVER_CONTRACT_ASSET/);
 
             const spaResponse = await fetch(
                 `${harness.baseUrl}/contract/spa/fallback/route`
@@ -382,7 +386,7 @@ test('/api/internal/image stream path keeps NDJSON response contract', async (t)
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.equal(response.headers.get('x-accel-buffering'), 'no');
 
-    const lines = (await readAllText(response))
+    const lines = (await response.text())
         .split('\n')
         .map((line) => line.trim())
         .filter((line) => line.length > 0);

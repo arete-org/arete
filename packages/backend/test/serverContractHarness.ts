@@ -87,28 +87,45 @@ const ensureStaticFixture = async (
     );
 
     const indexPath = path.join(distDir, 'index.html');
+    const indexCreationLockPath = `${indexPath}.server-contract-${uniqueId}.lock`;
     let indexWasCreated = false;
+    let createdIndexPath: string | null = null;
     try {
-        await fs.access(indexPath);
-    } catch {
-        indexWasCreated = true;
         await fs.writeFile(
             indexPath,
             '<!doctype html><html><head><meta charset="utf-8"><title>server-contract</title></head><body>server-contract-index</body></html>',
-            'utf8'
+            { encoding: 'utf8', flag: 'wx' }
         );
+        await fs.writeFile(indexCreationLockPath, uniqueId, {
+            encoding: 'utf8',
+            flag: 'wx',
+        });
+        indexWasCreated = true;
+        createdIndexPath = indexPath;
+    } catch (error) {
+        const nodeError = error as NodeJS.ErrnoException;
+        if (nodeError.code !== 'EEXIST') {
+            throw error;
+        }
     }
 
     return {
         routePath: `/${assetFileName}`,
         indexWasCreated,
         createdAssetPath,
-        createdIndexPath: indexWasCreated ? indexPath : null,
+        createdIndexPath,
         cleanup: async () => {
             await fs.rm(createdAssetPath, { force: true });
-            if (indexWasCreated) {
-                await fs.rm(indexPath, { force: true });
+            if (indexWasCreated && createdIndexPath === indexPath) {
+                const lockOwner = await fs
+                    .readFile(indexCreationLockPath, 'utf8')
+                    .then((content) => content.trim())
+                    .catch(() => null);
+                if (lockOwner === uniqueId) {
+                    await fs.rm(indexPath, { force: true });
+                }
             }
+            await fs.rm(indexCreationLockPath, { force: true });
         },
     };
 };
@@ -151,11 +168,20 @@ const stopChildProcess = async (child: ChildProcess): Promise<void> => {
 
     await new Promise<void>((resolve, reject) => {
         let settled = false;
+        let forceSettleTimeout: ReturnType<typeof setTimeout> | undefined;
         const timeout = setTimeout(() => {
             if (settled) {
                 return;
             }
             child.kill('SIGKILL');
+            forceSettleTimeout = setTimeout(() => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                resolve();
+            }, 1_000);
+            forceSettleTimeout.unref();
         }, 8_000);
 
         child.once('exit', () => {
@@ -164,6 +190,9 @@ const stopChildProcess = async (child: ChildProcess): Promise<void> => {
             }
             settled = true;
             clearTimeout(timeout);
+            if (forceSettleTimeout) {
+                clearTimeout(forceSettleTimeout);
+            }
             resolve();
         });
 
@@ -173,6 +202,9 @@ const stopChildProcess = async (child: ChildProcess): Promise<void> => {
             }
             settled = true;
             clearTimeout(timeout);
+            if (forceSettleTimeout) {
+                clearTimeout(forceSettleTimeout);
+            }
             reject(error);
         });
 
@@ -257,9 +289,35 @@ export const startBackendServerContractHarness = async ({
             indexWasCreated: staticFixture.indexWasCreated,
         },
         stop: async () => {
-            await stopChildProcess(child);
-            await staticFixture.cleanup();
-            await fs.rm(dataDir, { recursive: true, force: true });
+            let stopError: unknown = null;
+            let cleanupError: unknown = null;
+
+            try {
+                await stopChildProcess(child);
+            } catch (error) {
+                stopError = error;
+            }
+
+            try {
+                await staticFixture.cleanup();
+            } catch (error) {
+                cleanupError = error;
+            }
+
+            try {
+                await fs.rm(dataDir, { recursive: true, force: true });
+            } catch (error) {
+                if (!cleanupError) {
+                    cleanupError = error;
+                }
+            }
+
+            if (stopError) {
+                throw stopError;
+            }
+            if (cleanupError) {
+                throw cleanupError;
+            }
         },
     };
 };
