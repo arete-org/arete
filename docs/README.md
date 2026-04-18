@@ -1,40 +1,41 @@
 # Documentation Map
 
-Footnote keeps docs in three buckets:
+Start here if you are new to Footnote.
 
-- `architecture`: stable system design and interfaces
-- `decisions`: durable technical choices and rationale
-- `status`: implementation progress for active work
+The docs are useful, but they are not all the same kind of document. This page
+points you to the right next read instead of expecting you to infer it from
+filenames.
 
-## Architecture
+## Start Here
 
-- [Execution Contract Authority Map](./architecture/execution-contract-authority-map.md): Defines the governing authority model and module ownership for execution.
-- [Incident Reporting](./architecture/incident-reporting.md): Defines the consented Discord-side report flow and captured context.
-- [Incident Storage And Audit](./architecture/incident-storage-and-audit.md): Defines the durable incident model, audit trail, and privacy boundary.
-- [Incident And Breaker Logging](./architecture/incident-and-breaker-logging.md): Defines the structured logging schema and examples for incident lifecycle and breaker events.
-- [Safety Evaluation And Breakers](./architecture/risk-evaluation-and-breakers.md): Defines the target deterministic safety layer and enforcement point.
-- [Deterministic Breaker Evaluator V1 (Draft)](./architecture/deterministic-breaker-evaluator-v1.md): Proposes the concrete evaluator contract, rule model, action mapping, and validation gates for issue #75.
-- [Prompt Resolution](./architecture/prompt-resolution.md): Defines how prompt layers and overrides resolve at runtime.
-- [Bounded User Control Mapping](./architecture/bounded-user-control-mapping.md): Defines the small user-facing posture set and the internal controls that stay backend-owned.
-- [Workflow Profile Contract](./architecture/workflow-profile-contract.md): Defines required profile hooks/fields and blocked/no-generation behavior + provenance expectations.
-- [Workflow Engine And Provenance](./architecture/workflow-engine-and-provenance.md): Defines the workflow engine direction, step model, and provenance record shape.
-- [How to Read Provenance-Related Metadata](./architecture/provenance-label-taxonomy.md): Explains how to read mode, TRACE, planner, steerability, and provenance fields without mixing their meanings together.
-- [Workflow Profiles V1 RFC: Engine Core vs Profile Semantics](./architecture/workflow-profiles-v1-engine-vs-profile-semantics.md): Defines ownership boundaries and invariants for single-pass and bounded-review profiles.
-- [Execution Contract TrustGraph Architecture](./architecture/execution_contract_trustgraph/architecture.md): Defines advisory TrustGraph integration constraints, runtime wiring, and production-readiness limits.
+1. Read [Architecture](./architecture/README.md) for the main system shape and
+   ownership boundaries.
+2. Read [Status](./status/README.md) for what is actively rolling out now.
+3. Read [Decisions](./decisions/) when you need the rationale behind a durable
+   technical choice.
+4. Read [Proposals](./proposals/) when you want ideas that are not accepted as
+   current architecture yet.
 
-## Decisions
+## Fast Paths
 
-- [Turnstile Selection](./decisions/2025-10-turnstile-selection.md): Records why Turnstile was chosen for abuse protection.
-- [Incident Identifier Pseudonymization](./decisions/2026-03-incident-pseudonymization.md): Records the decision to store incident-facing Discord identifiers as HMAC digests.
-- [TRACE: Response Temperament + Compact UI Provenance](./decisions/2026-03-compact-provenance-TRACE.md): Records TRACE as the canonical temperament model and compact Discord provenance UI.
-- [Env Parsing Standardization](./decisions/2026-03-env-parsing-standardization.md): Records the environment parsing and validation approach used across services.
-- [Multi-Bot Vendoring Plan](./decisions/2026-03-multi-bot-vendoring-plan.md): Records the plan for shared backend support across multiple Discord bot identities.
-- [Persona/Core Split + Out-of-Band TRACE Metadata](./decisions/2026-03-persona-core-and-trace-metadata-separation.md): Records the split between core constraints, persona layers, and control-plane metadata generation.
-- [Completing Legacy OpenAI Removal Across Text, Image, and Voice](./decisions/2026-03-legacy-openai-removal-and-runtime-branching.md): Records the end-state architecture for removing legacy OpenAI product flows across text, image, and voice.
-- [VoltAgent Runtime Adoption Behind the Existing Backend](./decisions/2026-03-voltagent-runtime-adoption.md): Records why VoltAgent is being adopted behind Footnote's backend boundary and what the first MVP should prove.
-- [External Pattern Adoption: Context Packaging + Tool Governance](./decisions/2026-03-external-pattern-adoption-context-and-tooling.md): Records selective adoption of external architecture patterns without platform migration.
+- I need the main architecture reading order:
+  [docs/architecture/README.md](./architecture/README.md)
+- I need to know what is current work versus historical rollout context:
+  [docs/status/README.md](./status/README.md)
+- I need API boundary references and OpenAPI material:
+  [docs/api/README.md](./api/README.md)
+- I need contributor guidance for AI-assisted work:
+  [docs/ai/README.md](./ai/README.md)
 
-## Status
+## What Each Section Is For
 
-- [Incident And Breakers Status](./status/2026-03-13-incident-breakers-status.md): Tracks current implementation progress, gaps, and validation coverage for this active work.
-- [TrustGraph Foundation Consolidation Status (2026-04-10)](./status/2026-04-10-trustgraph-foundation-consolidation.md): Records bounded-scope consolidation work, runtime-truthfulness checks, and outside-review evidence anchors.
+- [Architecture](./architecture/README.md): stable system design, interfaces,
+  boundaries, and reading-order guidance.
+- [Status](./status/README.md): active rollout notes and implementation
+  snapshots. `status/archive` is historical rollout context, not the primary
+  place to learn current architecture.
+- [Decisions](./decisions/): durable technical choices and why they were made.
+- [Proposals](./proposals/): unadopted or exploratory ideas.
+- [API](./api/README.md): OpenAPI source, operation mapping, and code-linking
+  rules.
+- [AI](./ai/README.md): contributor workflow for AI-assisted changes.

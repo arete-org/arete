@@ -14,7 +14,7 @@
 Track current incident + breaker status for operations.
 Keep this short and aligned with code reality.
 
-Canonical runtime capability reference: [2026-03-27-runtime-capability-matrix.md](./2026-03-27-runtime-capability-matrix.md).
+Canonical runtime capability reference: [2026-03-runtime-capability-matrix.md](./2026-03-runtime-capability-matrix.md).
 
 ## Snapshot
 
