@@ -247,7 +247,7 @@ test('internal realtime handler rejects websocket upgrades without trusted auth'
     const request = {
         method: 'GET',
         headers: {},
-    } as IncomingMessage;
+    } as unknown as IncomingMessage;
 
     handleUpgrade(request, socket, Buffer.alloc(0));
 
@@ -270,7 +270,7 @@ test('internal realtime handler returns provider_unavailable when runtime is mis
         headers: {
             'x-trace-token': 'trace-token',
         },
-    } as IncomingMessage;
+    } as unknown as IncomingMessage;
 
     handleUpgrade(request, socket, Buffer.alloc(0));
 

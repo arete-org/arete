@@ -58,6 +58,7 @@ To enable generation features, configure at least one provider:
 OPENAI_API_KEY=...
 
 # Option B: Ollama-backed text runtime
+OLLAMA_LOCAL_INFERENCE_ENABLED=true
 OLLAMA_BASE_URL=http://localhost:11434
 ```
 
