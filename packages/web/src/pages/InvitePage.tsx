@@ -49,6 +49,66 @@ const InvitePage: React.FC = () => {
 
     // Breadcrumb items for invite page
     const breadcrumbItems = [{ label: 'Self-Hosting Setup' }];
+    const optionalEnv = `# Optional generation providers (configure at least one for AI responses)
+OPENAI_API_KEY=your_openai_api_key
+OLLAMA_BASE_URL=http://localhost:11434
+
+# Optional prompt configuration overrides
+PROMPT_CONFIG_PATH=path/to/prompts.yaml    # Shared base prompt override file for backend + Discord bot
+
+# Optional rate limiting overrides
+RATE_LIMIT_USER=true
+USER_RATE_LIMIT=5
+USER_RATE_WINDOW_MS=60000
+RATE_LIMIT_CHANNEL=true
+CHANNEL_RATE_LIMIT=10
+CHANNEL_RATE_WINDOW_MS=60000
+RATE_LIMIT_GUILD=true
+GUILD_RATE_LIMIT=20
+GUILD_RATE_WINDOW_MS=60000
+
+# Optional thread engagement controls
+ALLOW_THREAD_RESPONSES=true
+ALLOWED_THREAD_IDS=123456789,987654321
+
+# Optional image generation overrides
+IMAGE_DEFAULT_TEXT_MODEL=gpt-5-mini
+IMAGE_DEFAULT_IMAGE_MODEL=gpt-image-1-mini
+IMAGE_TOKENS_PER_REFRESH=10
+IMAGE_TOKEN_REFRESH_INTERVAL_MS=86400000
+
+# Optional channel context manager configuration
+CONTEXT_MANAGER_ENABLED=true
+CONTEXT_MANAGER_MAX_MESSAGES=50
+CONTEXT_MANAGER_RETENTION_MS=3600000
+CONTEXT_MANAGER_EVICTION_INTERVAL_MS=300000
+
+# Optional realtime engagement filter configuration
+REALTIME_FILTER_ENABLED=false
+
+# Engagement scoring weights (0-1 range, higher = more influence)
+ENGAGEMENT_WEIGHT_MENTION=0.3
+ENGAGEMENT_WEIGHT_QUESTION=0.2
+ENGAGEMENT_WEIGHT_TECHNICAL=0.15
+ENGAGEMENT_WEIGHT_HUMAN_ACTIVITY=0.15
+ENGAGEMENT_WEIGHT_BOT_NOISE=0.05
+ENGAGEMENT_WEIGHT_DM_BOOST=1.5
+ENGAGEMENT_WEIGHT_DECAY=0.05
+
+# Engagement behavior preferences
+ENGAGEMENT_IGNORE_MODE=silent
+ENGAGEMENT_REACTION_EMOJI=dY\`?
+ENGAGEMENT_MIN_THRESHOLD=0.5
+BOT_DIRECT_INVOCATION_MIN_THRESHOLD=0.75
+ENGAGEMENT_PROBABILISTIC_LOW=0.4
+ENGAGEMENT_PROBABILISTIC_HIGH=0.6
+ENGAGEMENT_ENABLE_LLM_REFINEMENT=false
+
+# Provenance storage configuration
+PROVENANCE_SQLITE_PATH=/data/provenance.db
+
+# Optional web server configuration
+WEB_BASE_URL=https://your-domain.com`;
 
     const showToast = (setter: ToastSetter, message: string) => {
         setter({ message, visible: true });
@@ -87,15 +147,8 @@ const InvitePage: React.FC = () => {
                                 )
                             </li>
                             <li>
-                                An OpenAI API key (get one at{' '}
-                                <a
-                                    href="https://platform.openai.com/api-keys"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    OpenAI Platform
-                                </a>
-                                )
+                                At least one generation provider configured
+                                (OpenAI API key or Ollama base URL)
                             </li>
                             <li>Node.js installed on your system</li>
                             <li>Git installed for cloning the repository</li>
@@ -367,8 +420,7 @@ const InvitePage: React.FC = () => {
                                                 const requiredEnv = `# Discord bot credentials (required)
 DISCORD_TOKEN=your_discord_bot_token
 DISCORD_CLIENT_ID=your_discord_client_id
-DISCORD_GUILD_ID=your_discord_guild_id
-OPENAI_API_KEY=your_openai_api_key`;
+DISCORD_GUILD_ID=your_discord_guild_id`;
                                                 await navigator.clipboard.writeText(
                                                     requiredEnv
                                                 );
@@ -389,8 +441,7 @@ OPENAI_API_KEY=your_openai_api_key`;
                                                 textArea.value = `# Discord bot credentials (required)
 DISCORD_TOKEN=your_discord_bot_token
 DISCORD_CLIENT_ID=your_discord_client_id
-DISCORD_GUILD_ID=your_discord_guild_id
-OPENAI_API_KEY=your_openai_api_key`;
+DISCORD_GUILD_ID=your_discord_guild_id`;
                                                 document.body.appendChild(
                                                     textArea
                                                 );
@@ -485,8 +536,7 @@ OPENAI_API_KEY=your_openai_api_key`;
                                 {`# Discord bot credentials (required)
 DISCORD_TOKEN=your_discord_bot_token    # Discord bot token (String)
 DISCORD_CLIENT_ID=your_discord_client_id        # Discord application client ID (String)
-DISCORD_GUILD_ID=your_discord_guild_id          # Discord server/guild ID (String)
-OPENAI_API_KEY=your_openai_api_key      # OpenAI API key (String, format: sk-...)`}
+DISCORD_GUILD_ID=your_discord_guild_id          # Discord server/guild ID (String)`}
                             </pre>
                         </div>
 
@@ -505,62 +555,6 @@ OPENAI_API_KEY=your_openai_api_key      # OpenAI API key (String, format: sk-...
                                         className="cta-button secondary"
                                         onClick={async () => {
                                             try {
-                                                const optionalEnv = `# Optional prompt configuration overrides
-PROMPT_CONFIG_PATH=path/to/prompts.yaml    # Shared base prompt override file for backend + Discord bot
-
-# Optional rate limiting overrides
-RATE_LIMIT_USER=true
-USER_RATE_LIMIT=5
-USER_RATE_WINDOW_MS=60000
-RATE_LIMIT_CHANNEL=true
-CHANNEL_RATE_LIMIT=10
-CHANNEL_RATE_WINDOW_MS=60000
-RATE_LIMIT_GUILD=true
-GUILD_RATE_LIMIT=20
-GUILD_RATE_WINDOW_MS=60000
-
-# Optional thread engagement controls
-ALLOW_THREAD_RESPONSES=true
-ALLOWED_THREAD_IDS=123456789,987654321
-
-# Optional image generation overrides
-IMAGE_DEFAULT_TEXT_MODEL=gpt-5-mini
-IMAGE_DEFAULT_IMAGE_MODEL=gpt-image-1-mini
-IMAGE_TOKENS_PER_REFRESH=10
-IMAGE_TOKEN_REFRESH_INTERVAL_MS=86400000
-
-# Optional channel context manager configuration
-CONTEXT_MANAGER_ENABLED=true
-CONTEXT_MANAGER_MAX_MESSAGES=50
-CONTEXT_MANAGER_RETENTION_MS=3600000
-CONTEXT_MANAGER_EVICTION_INTERVAL_MS=300000
-
-# Optional realtime engagement filter configuration
-REALTIME_FILTER_ENABLED=false
-
-# Engagement scoring weights (0-1 range, higher = more influence)
-ENGAGEMENT_WEIGHT_MENTION=0.3
-ENGAGEMENT_WEIGHT_QUESTION=0.2
-ENGAGEMENT_WEIGHT_TECHNICAL=0.15
-ENGAGEMENT_WEIGHT_HUMAN_ACTIVITY=0.15
-ENGAGEMENT_WEIGHT_BOT_NOISE=0.05
-ENGAGEMENT_WEIGHT_DM_BOOST=1.5
-ENGAGEMENT_WEIGHT_DECAY=0.05
-
-# Engagement behavior preferences
-ENGAGEMENT_IGNORE_MODE=silent
-ENGAGEMENT_REACTION_EMOJI=dY\`?
-ENGAGEMENT_MIN_THRESHOLD=0.5
-BOT_DIRECT_INVOCATION_MIN_THRESHOLD=0.75
-ENGAGEMENT_PROBABILISTIC_LOW=0.4
-ENGAGEMENT_PROBABILISTIC_HIGH=0.6
-ENGAGEMENT_ENABLE_LLM_REFINEMENT=false
-
-# Provenance storage configuration
-PROVENANCE_SQLITE_PATH=/data/provenance.db
-
-# Optional web server configuration
-WEB_BASE_URL=https://your-domain.com`;
                                                 await navigator.clipboard.writeText(
                                                     optionalEnv
                                                 );
@@ -578,62 +572,7 @@ WEB_BASE_URL=https://your-domain.com`;
                                                     document.createElement(
                                                         'textarea'
                                                     );
-                                                textArea.value = `# Optional prompt configuration overrides
-PROMPT_CONFIG_PATH=path/to/prompts.yaml    # Shared base prompt override file for backend + Discord bot
-
-# Optional rate limiting overrides
-RATE_LIMIT_USER=true
-USER_RATE_LIMIT=5
-USER_RATE_WINDOW_MS=60000
-RATE_LIMIT_CHANNEL=true
-CHANNEL_RATE_LIMIT=10
-CHANNEL_RATE_WINDOW_MS=60000
-RATE_LIMIT_GUILD=true
-GUILD_RATE_LIMIT=20
-GUILD_RATE_WINDOW_MS=60000
-
-# Optional thread engagement controls
-ALLOW_THREAD_RESPONSES=true
-ALLOWED_THREAD_IDS=123456789,987654321
-
-# Optional image generation overrides
-IMAGE_DEFAULT_TEXT_MODEL=gpt-5-mini
-IMAGE_DEFAULT_IMAGE_MODEL=gpt-image-1-mini
-IMAGE_TOKENS_PER_REFRESH=10
-IMAGE_TOKEN_REFRESH_INTERVAL_MS=86400000
-
-# Optional channel context manager configuration
-CONTEXT_MANAGER_ENABLED=true
-CONTEXT_MANAGER_MAX_MESSAGES=50
-CONTEXT_MANAGER_RETENTION_MS=3600000
-CONTEXT_MANAGER_EVICTION_INTERVAL_MS=300000
-
-# Optional realtime engagement filter configuration
-REALTIME_FILTER_ENABLED=false
-
-# Engagement scoring weights (0-1 range, higher = more influence)
-ENGAGEMENT_WEIGHT_MENTION=0.3
-ENGAGEMENT_WEIGHT_QUESTION=0.2
-ENGAGEMENT_WEIGHT_TECHNICAL=0.15
-ENGAGEMENT_WEIGHT_HUMAN_ACTIVITY=0.15
-ENGAGEMENT_WEIGHT_BOT_NOISE=0.05
-ENGAGEMENT_WEIGHT_DM_BOOST=1.5
-ENGAGEMENT_WEIGHT_DECAY=0.05
-
-# Engagement behavior preferences
-ENGAGEMENT_IGNORE_MODE=silent
-ENGAGEMENT_REACTION_EMOJI=dY\`?
-ENGAGEMENT_MIN_THRESHOLD=0.5
-BOT_DIRECT_INVOCATION_MIN_THRESHOLD=0.75
-ENGAGEMENT_PROBABILISTIC_LOW=0.4
-ENGAGEMENT_PROBABILISTIC_HIGH=0.6
-ENGAGEMENT_ENABLE_LLM_REFINEMENT=false
-
-# Provenance storage configuration
-PROVENANCE_SQLITE_PATH=/data/provenance.db
-
-# Optional web server configuration
-WEB_BASE_URL=https://your-domain.com`;
+                                                textArea.value = optionalEnv;
                                                 document.body.appendChild(
                                                     textArea
                                                 );
@@ -726,62 +665,7 @@ WEB_BASE_URL=https://your-domain.com`;
                                     maxHeight: '400px',
                                 }}
                             >
-                                {`# Optional prompt configuration overrides
-PROMPT_CONFIG_PATH=path/to/prompts.yaml    # Shared base prompt override file for backend + Discord bot (String)
-
-# Optional rate limiting overrides
-RATE_LIMIT_USER=true                       # Enable user-level rate limiting (Boolean)
-USER_RATE_LIMIT=5                          # User rate limit count (Integer ≥ 1)
-USER_RATE_WINDOW_MS=60000                  # User rate limit window in ms (Integer)
-RATE_LIMIT_CHANNEL=true                    # Enable channel-level rate limiting (Boolean)
-CHANNEL_RATE_LIMIT=10                      # Channel rate limit count (Integer ≥ 1)
-CHANNEL_RATE_WINDOW_MS=60000               # Channel rate limit window in ms (Integer)
-RATE_LIMIT_GUILD=true                      # Enable guild-level rate limiting (Boolean)
-GUILD_RATE_LIMIT=20                        # Guild rate limit count (Integer ≥ 1)
-GUILD_RATE_WINDOW_MS=60000                 # Guild rate limit window in ms (Integer)
-
-# Optional thread engagement controls
-ALLOW_THREAD_RESPONSES=true                # Allow responses in threads (Boolean)
-ALLOWED_THREAD_IDS=123456789,987654321     # Thread IDs whitelist (String)
-
-# Optional image generation overrides
-IMAGE_DEFAULT_TEXT_MODEL=gpt-5-mini        # Default text model (String)
-IMAGE_DEFAULT_IMAGE_MODEL=gpt-image-1-mini # Default image model (String)
-IMAGE_TOKENS_PER_REFRESH=10                # Tokens per refresh (Integer ≥ 1)
-IMAGE_TOKEN_REFRESH_INTERVAL_MS=86400000   # Token refresh interval in ms (Integer)
-
-# Optional channel context manager configuration
-CONTEXT_MANAGER_ENABLED=true               # Enable per-channel state tracking (Boolean)
-CONTEXT_MANAGER_MAX_MESSAGES=50            # Max messages per channel (Integer ≥ 1)
-CONTEXT_MANAGER_RETENTION_MS=3600000       # Message retention time in ms (Integer)
-CONTEXT_MANAGER_EVICTION_INTERVAL_MS=300000 # Cleanup frequency in ms (Integer)
-
-# Optional realtime engagement filter configuration
-REALTIME_FILTER_ENABLED=false              # Enable weighted engagement scoring (Boolean)
-
-# Engagement scoring weights (0-1 range, higher = more influence)
-ENGAGEMENT_WEIGHT_MENTION=0.3              # Weight for mentions/replies (Float: 0.0-1.0)
-ENGAGEMENT_WEIGHT_QUESTION=0.2            # Weight for questions (Float: 0.0-1.0)
-ENGAGEMENT_WEIGHT_TECHNICAL=0.15          # Weight for technical keywords (Float: 0.0-1.0)
-ENGAGEMENT_WEIGHT_HUMAN_ACTIVITY=0.15     # Weight for human activity (Float: 0.0-1.0)
-ENGAGEMENT_WEIGHT_BOT_NOISE=0.05          # Weight for bot noise (Float: 0.0-1.0)
-ENGAGEMENT_WEIGHT_DM_BOOST=1.5            # DM context multiplier (Float ≥ 0)
-ENGAGEMENT_WEIGHT_DECAY=0.05              # Time decay factor (Float ≥ 0)
-
-# Engagement behavior preferences
-ENGAGEMENT_IGNORE_MODE=silent              # Skip acknowledgment mode (String: "silent" or "react")
-ENGAGEMENT_REACTION_EMOJI=dY\`?            # Emoji for reactions (String)
-ENGAGEMENT_MIN_THRESHOLD=0.5               # Minimum score to engage (Float: 0.0-1.0)
-BOT_DIRECT_INVOCATION_MIN_THRESHOLD=0.75  # Minimum score for bot-authored direct mentions/replies (Float: 0.0-1.0)
-ENGAGEMENT_PROBABILISTIC_LOW=0.4          # Lower bound for LLM refinement (Float: 0.0-1.0)
-ENGAGEMENT_PROBABILISTIC_HIGH=0.6         # Upper bound for LLM refinement (Float: 0.0-1.0)
-ENGAGEMENT_ENABLE_LLM_REFINEMENT=false    # Use LLM for score refinement (Boolean)
-
-# Provenance storage configuration
-PROVENANCE_SQLITE_PATH=/data/provenance.db # SQLite database path
-
-# Optional web server configuration
-WEB_BASE_URL=https://your-domain.com       # Base URL for web server (String)`}
+                                {optionalEnv}
                             </pre>
                             <p>
                                 <strong>Note:</strong> This is a representative

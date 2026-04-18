@@ -27,7 +27,7 @@ import {
 } from './chatAuth.js';
 import { getRequestIdentity, parseChatRequest } from './chatRequest.js';
 import { createChatRateLimitController } from './chatRateLimit.js';
-import { sendJson } from './chatResponses.js';
+import { buildProviderUnavailableError, sendJson } from './chatResponses.js';
 
 type LogRequest = (
     req: IncomingMessage,
@@ -298,9 +298,13 @@ const createChatHandler = ({
             logSuccessfulAuthStep(req, res, logRequest, authResult.data);
 
             if (!chatOrchestrator) {
-                sendJson(res, 503, {
-                    error: 'Service temporarily unavailable. Please try again later.',
-                });
+                sendJson(
+                    res,
+                    503,
+                    buildProviderUnavailableError(
+                        'Generation provider unavailable'
+                    )
+                );
                 logRequest(req, res, 'chat service-unavailable');
                 return;
             }

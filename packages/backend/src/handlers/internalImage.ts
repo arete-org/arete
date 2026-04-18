@@ -18,7 +18,7 @@ import {
 import type { InternalImageTaskService } from '../services/internalImage.js';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { logger } from '../utils/logger.js';
-import { sendJson } from './chatResponses.js';
+import { buildProviderUnavailableError, sendJson } from './chatResponses.js';
 import {
     parseTrustedBodyWithSchema,
     parseTrustedServiceAuth,
@@ -143,9 +143,13 @@ export const createInternalImageHandler = ({
 
             if (!internalImageTaskService) {
                 imageLogger.warn('Internal image service unavailable.');
-                sendJson(res, 503, {
-                    error: 'Internal image service unavailable',
-                });
+                sendJson(
+                    res,
+                    503,
+                    buildProviderUnavailableError(
+                        'Internal image generation provider unavailable'
+                    )
+                );
                 logRequest(req, res, 'internal image service-unavailable');
                 return;
             }

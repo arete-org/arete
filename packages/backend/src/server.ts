@@ -204,6 +204,9 @@ const initializeServices = () => {
         Boolean(runtimeConfig.ollama.baseUrl) &&
         ollamaHostname !== null &&
         (!ollamaBaseUrlIsLocal || runtimeConfig.ollama.localInferenceEnabled);
+    logger.info(
+        `Text generation provider availability: openai=${hasOpenAiProvider ? 'available' : 'unavailable'}, ollama=${hasOllamaProvider ? 'available' : 'unavailable'}`
+    );
     if (hasOllamaCatalogProfiles && !hasOllamaProvider) {
         logger.warn(
             'Ollama profiles are present in the model catalog, but Ollama provider is unavailable at boot. Ollama profiles will remain disabled.'
@@ -243,6 +246,20 @@ const initializeServices = () => {
             'No text-generation provider is configured. Set OPENAI_API_KEY or OLLAMA_BASE_URL to enable /api/chat.'
         );
     }
+
+    internalNewsTaskService =
+        generationRuntime !== null
+            ? createInternalNewsTaskService({
+                  generationRuntime,
+                  defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+              })
+            : null;
+    if (!internalNewsTaskService) {
+        logger.warn(
+            'Internal news task is unavailable because no text-generation provider is configured.'
+        );
+    }
+
     // Keep weather adapter construction in service bootstrap so runtime config
     // can control pilot enablement/behavior without import-time wiring.
     weatherForecastTool = createWeatherGovForecastTool();
@@ -253,13 +270,6 @@ const initializeServices = () => {
             apiKey: runtimeConfig.openai.apiKey,
             requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
         });
-        internalNewsTaskService =
-            generationRuntime !== null
-                ? createInternalNewsTaskService({
-                      generationRuntime,
-                      defaultModel: runtimeConfig.openai.defaultModel,
-                  })
-                : null;
         internalImageDescriptionTaskService =
             createInternalImageDescriptionTaskService({
                 adapter: createOpenAiImageDescriptionAdapter({
@@ -285,7 +295,6 @@ const initializeServices = () => {
         });
     } else {
         imageGenerationRuntime = null;
-        internalNewsTaskService = null;
         internalImageDescriptionTaskService = null;
         internalImageTaskService = null;
         internalVoiceTtsService = null;

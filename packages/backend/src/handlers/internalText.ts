@@ -17,7 +17,7 @@ import type {
 } from '../services/internalText.js';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { logger } from '../utils/logger.js';
-import { sendJson } from './chatResponses.js';
+import { buildProviderUnavailableError, sendJson } from './chatResponses.js';
 import {
     parseTrustedBodyWithSchema,
     parseTrustedServiceAuth,
@@ -131,9 +131,13 @@ export const createInternalTextHandler = ({
             if (parsedRequest.task === 'news') {
                 if (!internalNewsTaskService) {
                     textLogger.warn('Internal text news task unavailable.');
-                    sendJson(res, 503, {
-                        error: 'Internal text service unavailable',
-                    });
+                    sendJson(
+                        res,
+                        503,
+                        buildProviderUnavailableError(
+                            'Internal text generation provider unavailable'
+                        )
+                    );
                     logRequest(req, res, 'internal text service-unavailable');
                     return;
                 }
@@ -162,9 +166,13 @@ export const createInternalTextHandler = ({
                     textLogger.warn(
                         'Internal text image-description task unavailable.'
                     );
-                    sendJson(res, 503, {
-                        error: 'Internal text service unavailable',
-                    });
+                    sendJson(
+                        res,
+                        503,
+                        buildProviderUnavailableError(
+                            'Internal image-description provider unavailable'
+                        )
+                    );
                     logRequest(req, res, 'internal text service-unavailable');
                     return;
                 }

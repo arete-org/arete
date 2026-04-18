@@ -17,6 +17,19 @@ export type ChatFailureResponse = {
     extraHeaders?: JsonHeaders;
 };
 
+export const PROVIDER_UNAVAILABLE_DETAILS = 'provider_unavailable' as const;
+
+/**
+ * Standard error payload for routes that depend on a generation provider.
+ * `details` stays stable so clients can branch on one reason code.
+ */
+export const buildProviderUnavailableError = (
+    message: string
+): ApiErrorResponse => ({
+    error: message,
+    details: PROVIDER_UNAVAILABLE_DETAILS,
+});
+
 /**
  * Small shared helper so every chat response uses the same JSON headers.
  * Keeping this in one place makes later status/payload changes less error-prone.

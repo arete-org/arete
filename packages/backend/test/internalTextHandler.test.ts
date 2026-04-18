@@ -341,6 +341,15 @@ test('internal text endpoint returns 503 when the internal news task service is 
         });
 
         assert.equal(response.status, 503);
+        const payload = (await response.json()) as {
+            error: string;
+            details?: string;
+        };
+        assert.equal(
+            payload.error,
+            'Internal text generation provider unavailable'
+        );
+        assert.equal(payload.details, 'provider_unavailable');
     } finally {
         await server.close();
     }
@@ -424,6 +433,15 @@ test('internal text endpoint returns 503 for image-description tasks when only t
         });
 
         assert.equal(response.status, 503);
+        const payload = (await response.json()) as {
+            error: string;
+            details?: string;
+        };
+        assert.equal(
+            payload.error,
+            'Internal image-description provider unavailable'
+        );
+        assert.equal(payload.details, 'provider_unavailable');
     } finally {
         await server.close();
     }
