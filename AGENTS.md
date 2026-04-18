@@ -83,7 +83,7 @@ Conditional (must explain if skipped):
 - Prefer small, focused diffs.
 - Edit only files needed for the task.
 - If the task starts touching multiple concepts, packages, or behavior surfaces, stop, report the scope expansion, and wait for confirmation before continuing.
-- Follow the current project shape over the literal prompt when they conflict. Preserve Footnote terms and boundaries unless the user explicitly asks to change them.
+- Follow the user’s requested change, but preserve existing project boundaries unless the prompt explicitly asks to change them. If the prompt appears to conflict with core Footnote semantics, stop and ask before rewriting those semantics.
 - Use repo code/docs as primary context; use MCP/external tools only to verify third-party APIs, UI behavior, secrets, or issue state.
 - For non-trivial structural refactors, include 1-2 example evidence links using `pnpm refactor:lookup`.
 - Do not invent runtime facts, command output, or test results.
