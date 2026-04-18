@@ -45,9 +45,6 @@ pnpm install
 
 2. Create a local env file from `.env.example`.
 
-`INCIDENT_PSEUDONYMIZATION_SECRET` is auto-generated on first local boot when
-`.env` exists and the key is empty.
-
 To enable generation features, configure at least one provider:
 
 ```env
