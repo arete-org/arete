@@ -14,9 +14,9 @@
 
 Current runtime status for active surfaces. This file is a short operational snapshot.
 
-Canonical source of truth for capabilities: [2026-03-27-runtime-capability-matrix.md](./2026-03-27-runtime-capability-matrix.md).
+Canonical source of truth for capabilities: [2026-03-runtime-capability-matrix.md](./2026-03-runtime-capability-matrix.md).
 
-Historical closeout snapshot: [archive/2026-03-17-voltagent-reflect-runtime-status.md](./archive/2026-03-17-voltagent-reflect-runtime-status.md).
+Historical closeout snapshot: [archive/2026-03-voltagent-reflect-runtime-status.md](./archive/2026-03-voltagent-reflect-runtime-status.md).
 
 ## Current Runtime Reality
 
