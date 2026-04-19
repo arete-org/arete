@@ -1,11 +1,5 @@
 # Documentation Map
 
-Start here if you are new to Footnote.
-
-The docs are useful, but they are not all the same kind of document. This page
-points you to the right next read instead of expecting you to infer it from
-filenames.
-
 ## Start Here
 
 1. Read [Architecture](./architecture/README.md) for the main system shape and
