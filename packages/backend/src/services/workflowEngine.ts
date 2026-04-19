@@ -497,21 +497,26 @@ export const buildPlannerStepRecord = ({
         (usage.promptTokens !== undefined ||
             usage.completionTokens !== undefined ||
             usage.totalTokens !== undefined);
-    const normalizedCost =
+    const validatedCostInput =
         summary.cost !== undefined
+            ? toNonNegativeNumberOrUndefined(summary.cost.inputCostUsd)
+            : undefined;
+    const validatedCostOutput =
+        summary.cost !== undefined
+            ? toNonNegativeNumberOrUndefined(summary.cost.outputCostUsd)
+            : undefined;
+    const validatedCostTotal =
+        summary.cost !== undefined
+            ? toNonNegativeNumberOrUndefined(summary.cost.totalCostUsd)
+            : undefined;
+    const normalizedCost =
+        validatedCostInput !== undefined &&
+        validatedCostOutput !== undefined &&
+        validatedCostTotal !== undefined
             ? {
-                  inputCostUsd:
-                      toNonNegativeNumberOrUndefined(
-                          summary.cost.inputCostUsd
-                      ) ?? 0,
-                  outputCostUsd:
-                      toNonNegativeNumberOrUndefined(
-                          summary.cost.outputCostUsd
-                      ) ?? 0,
-                  totalCostUsd:
-                      toNonNegativeNumberOrUndefined(
-                          summary.cost.totalCostUsd
-                      ) ?? 0,
+                  inputCostUsd: validatedCostInput,
+                  outputCostUsd: validatedCostOutput,
+                  totalCostUsd: validatedCostTotal,
               }
             : undefined;
 
