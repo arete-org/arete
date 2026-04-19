@@ -385,6 +385,7 @@ export const createInternalVoiceRealtimeHandler = ({
         socket: Duplex,
         head: Buffer
     ): void => {
+        // Upgrade flow is intentionally explicit; generic HTTP middleware should not intercept this path.
         if (req.method !== 'GET') {
             rejectUpgrade(socket, 405, { error: 'Method not allowed' });
             return;

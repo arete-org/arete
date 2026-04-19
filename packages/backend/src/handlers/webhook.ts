@@ -77,6 +77,8 @@ const createWebhookHandler =
             }
 
             // --- Body capture (raw bytes for signature) ---
+            // This path is transport-sensitive by design: signature verification must use unparsed bytes.
+            // Keep generic JSON middleware away from this route so byte-level signature checks stay correct.
             const chunks: Buffer[] = [];
             let bodyBytes = 0;
             let bodyTooLarge = false;
