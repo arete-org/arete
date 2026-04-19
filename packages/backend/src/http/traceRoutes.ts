@@ -8,19 +8,12 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import express from 'express';
-import { getRequestUrl } from './requestUrl.js';
-import { respondWithRouteError, type LogRequest } from './routeError.js';
-
-type RequestHandler = (
-    req: IncomingMessage,
-    res: ServerResponse
-) => Promise<void>;
-
-type ParsedUrlHandler = (
-    req: IncomingMessage,
-    res: ServerResponse,
-    parsedUrl: URL
-) => Promise<void>;
+import {
+    createDispatchRouter,
+    type LogRequest,
+    type ParsedUrlHandler,
+    type RequestHandler,
+} from './dispatchRouter.js';
 
 type RegisterTraceRoutesDeps = {
     app: express.Express;
@@ -44,17 +37,10 @@ const registerTraceRoutes = ({
     handleTraceCardAssetRequest,
     logRequest,
 }: RegisterTraceRoutesDeps): void => {
-    const traceRouter = express.Router();
-    traceRouter.use(async (req, res, next) => {
-        try {
-            const requestUrl = getRequestUrl(req);
-            if (!requestUrl) {
-                res.status(400).end('Bad Request');
-                return;
-            }
-            const parsedUrl = new URL(requestUrl, 'http://localhost');
-            const normalizedPathname = normalizePathname(parsedUrl.pathname);
-
+    const traceRouter = createDispatchRouter({
+        normalizePathname,
+        logRequest,
+        matcher: async ({ req, res, next, parsedUrl, normalizedPathname }) => {
             if (normalizedPathname === '/api/traces') {
                 await handleTraceUpsertRequest(req, res);
                 return;
@@ -76,9 +62,7 @@ const registerTraceRoutes = ({
             }
 
             next();
-        } catch (error) {
-            respondWithRouteError(req, res, logRequest, error);
-        }
+        },
     });
 
     app.use('/api', traceRouter);
