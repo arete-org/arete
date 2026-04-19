@@ -1,6 +1,6 @@
 /**
  * @description: Verifies incident routes are owned by the Express shell with explicit precedence.
- * Confirms report/sub-route/detail matching bypasses legacy /api dispatch when routes are recognized.
+ * Confirms report/sub-route/detail matching bypasses central special-boundary dispatch when routes are recognized.
  * @footnote-scope: test
  * @footnote-module: IncidentRoutesTests
  * @footnote-risk: medium - Missing route-order tests can silently reroute incident traffic to wrong handlers.
@@ -60,7 +60,7 @@ const createUnhandledBlogPostHandler = async (
     _postId: string
 ): Promise<void> => createUnhandledRouteHandler(req, res);
 
-test('incident routes are handled in Express with explicit precedence and no legacy dispatch handoff', async (t) => {
+test('incident routes are handled in Express with explicit precedence and no special transport dispatch handoff', async (t) => {
     const dispatchCalls: string[] = [];
     const incidentCalls: string[] = [];
 

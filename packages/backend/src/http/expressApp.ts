@@ -216,7 +216,7 @@ const createExpressApp = ({
         logRequest,
     });
 
-    // Stage 2: central/special transport dispatch for routes not yet Express-owned.
+    // Stage 2: central explicit special-boundary dispatch.
     // Keep request body parsing opt-in per route so signature/raw-body paths stay safe.
     app.use('/api', async (req, res, next) => {
         const requestUrl = getRequestUrl(req);
