@@ -1,4 +1,4 @@
-# How to Read Provenance-Related Metadata
+# Response Metadata
 
 Footnote returns several metadata records next to each other because one
 response can have several different explanations. One field may describe how

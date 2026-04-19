@@ -12,7 +12,7 @@ the best starting point.
 2. [Workflow Mode Routing](./workflow-mode-routing.md): read this next for the
    current workflow and planner model, including mode, profile, review/revise,
    and planner boundaries.
-3. [How to Read Provenance-Related Metadata](./provenance-label-taxonomy.md):
+3. [Response Metadata](./response-metadata.md):
    use this when you need the metadata map for mode, TRACE, planner influence,
    steerability, and provenance.
 4. [Workflow Engine And Provenance](./workflow-engine-and-provenance.md):
