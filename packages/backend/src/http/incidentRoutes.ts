@@ -60,6 +60,27 @@ const respondWithRouteError = (
     );
 };
 
+/**
+ * @boundary Backend transport composition boundary for incident HTTP routes.
+ * @api.path: GET /api/incidents
+ * @api.operationId: listIncidents
+ * @route.handler: handleIncidentListRequest
+ * @api.path: POST /api/incidents/report
+ * @api.operationId: postIncidentReport
+ * @route.handler: handleIncidentReportRequest
+ * @api.path: GET /api/incidents/{incidentId}
+ * @api.operationId: getIncident
+ * @route.handler: handleIncidentDetailRequest
+ * @api.path: POST /api/incidents/{incidentId}/status
+ * @api.operationId: postIncidentStatus
+ * @route.handler: handleIncidentStatusRequest
+ * @api.path: POST /api/incidents/{incidentId}/notes
+ * @api.operationId: postIncidentNotes
+ * @route.handler: handleIncidentNotesRequest
+ * @api.path: POST /api/incidents/{incidentId}/remediation
+ * @api.operationId: postIncidentRemediation
+ * @route.handler: handleIncidentRemediationRequest
+ */
 const registerIncidentRoutes = ({
     app,
     normalizePathname,
