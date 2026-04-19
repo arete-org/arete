@@ -428,18 +428,25 @@ export const buildPlannerStepRecord = ({
     finishedAtMs,
     summary,
 }: BuildPlannerStepRecordInput): StepRecord => {
+    const coercedFinishedAtMs = Number(finishedAtMs);
     const normalizedFinishedAtMs =
-        typeof finishedAtMs === 'number' && Number.isFinite(finishedAtMs)
-            ? Math.floor(finishedAtMs)
+        Number.isFinite(coercedFinishedAtMs)
+            ? Math.floor(coercedFinishedAtMs)
             : Date.now();
+    const coercedStartedAtMs = Number(startedAtMs);
     const normalizedDurationMs =
-        startedAtMs !== undefined
+        Number.isFinite(coercedStartedAtMs)
             ? Math.max(
                   0,
-                  Math.floor(normalizedFinishedAtMs - Math.floor(startedAtMs))
+                  Math.floor(
+                      normalizedFinishedAtMs - Math.floor(coercedStartedAtMs)
+                  )
               )
             : toNonNegativeIntegerOrZero(summary.durationMs);
     const normalizedStartedAtMs = normalizedFinishedAtMs - normalizedDurationMs;
+    const normalizedAttempt = Number.isFinite(Number(attempt))
+        ? Math.max(1, Math.floor(Number(attempt)))
+        : 1;
     const sanitizedReasonCode = isPlannerReasonCode(summary.reasonCode)
         ? summary.reasonCode
         : undefined;
@@ -511,7 +518,7 @@ export const buildPlannerStepRecord = ({
     return {
         stepId,
         ...(parentStepId !== undefined && { parentStepId }),
-        attempt: Math.max(1, Math.floor(attempt)),
+        attempt: normalizedAttempt,
         stepKind: 'plan',
         ...(sanitizedReasonCode !== undefined && {
             reasonCode: sanitizedReasonCode,
