@@ -1,9 +1,9 @@
 /**
- * @description: Verifies chat/internal/trace write routes are Express-owned while special trace dispatch remains explicit.
- * Confirms moved routes bypass central dispatch and /api/traces/:id still flows through special central handling.
+ * @description: Verifies Express-owned route boundaries for standard, internal, and trace write/card HTTP surfaces.
+ * Confirms special transport dispatch remains explicit for Accept-negotiated trace reads.
  * @footnote-scope: test
- * @footnote-module: RemainingExpressRoutesTests
- * @footnote-risk: medium - Missing ownership tests can hide transport regressions during migration closeout.
+ * @footnote-module: ExpressRouteOwnershipTests
+ * @footnote-risk: medium - Missing ownership tests can hide route-composition regressions at transport boundaries.
  * @footnote-ethics: low - Route ownership checks do not alter policy or user data semantics.
  */
 import test from 'node:test';
@@ -144,7 +144,7 @@ test('chat route is Express-owned and bypasses central dispatch', async (t) => {
     assert.equal(dispatchCalls.includes('/api/health'), true);
 });
 
-test('internal routes are Express-owned and bypass central dispatch', async (t) => {
+test('internal HTTP routes are Express-owned and bypass central dispatch', async (t) => {
     const dispatchCalls: string[] = [];
     const internalCalls: string[] = [];
 
@@ -260,7 +260,7 @@ test('internal routes are Express-owned and bypass central dispatch', async (t) 
     assert.equal(dispatchCalls.includes('/api/internal/voice/realtime'), true);
 });
 
-test('trace write/card routes are Express-owned while /api/traces/:id remains central special dispatch', async (t) => {
+test('trace write/card route is Express-owned while Accept-negotiated trace read stays in special transport dispatch', async (t) => {
     const dispatchCalls: string[] = [];
     const traceCalls: string[] = [];
 
