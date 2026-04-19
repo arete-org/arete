@@ -60,7 +60,7 @@ type CreateExpressAppDeps = {
         res: http.ServerResponse,
         postId: string
     ) => Promise<void>;
-    blogReadRateLimiter: SimpleRateLimiter | null;
+    blogReadRateLimiter: SimpleRateLimiter;
     handleStaticTransportRequest: HandleStaticTransportRequest;
     resolveAsset: ResolveAsset;
     mimeMap: ReadonlyMap<string, string>;

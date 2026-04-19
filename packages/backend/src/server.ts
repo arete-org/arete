@@ -606,7 +606,12 @@ const app = createExpressApp({
     handleChatProfilesRequest,
     handleBlogIndexRequest,
     handleBlogPostRequest,
-    blogReadRateLimiter,
+    blogReadRateLimiter:
+        blogReadRateLimiter ??
+        new SimpleRateLimiter({
+            limit: runtimeConfig.rateLimits.web.ip.limit,
+            window: runtimeConfig.rateLimits.web.ip.windowMs,
+        }),
     handleStaticTransportRequest,
     resolveAsset,
     mimeMap,

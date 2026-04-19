@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 
 import { createExpressApp } from '../src/http/expressApp.js';
+import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 
 const TEST_HOST = '127.0.0.1';
 
@@ -83,7 +84,10 @@ test('low-risk JSON routes bypass legacy /api dispatch and preserve blog path ma
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.end(JSON.stringify({ id: postId }));
         },
-        blogReadRateLimiter: null,
+        blogReadRateLimiter: new SimpleRateLimiter({
+            limit: 100,
+            window: 60_000,
+        }),
         handleStaticTransportRequest: async ({ res }) => {
             res.statusCode = 404;
             res.end('static');

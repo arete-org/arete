@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 
 import { createExpressApp } from '../src/http/expressApp.js';
+import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 
 const TEST_HOST = '127.0.0.1';
 
@@ -73,7 +74,10 @@ test('express shell returns handled API dispatch without entering static fallbac
             res.statusCode = 501;
             res.end('not-implemented');
         },
-        blogReadRateLimiter: null,
+        blogReadRateLimiter: new SimpleRateLimiter({
+            limit: 100,
+            window: 60_000,
+        }),
         handleStaticTransportRequest: async ({ res }) => {
             staticCalls += 1;
             res.statusCode = 200;
@@ -108,7 +112,10 @@ test('express shell falls through API dispatch and serves static transport', asy
             res.statusCode = 501;
             res.end('not-implemented');
         },
-        blogReadRateLimiter: null,
+        blogReadRateLimiter: new SimpleRateLimiter({
+            limit: 100,
+            window: 60_000,
+        }),
         handleStaticTransportRequest: async ({ res }) => {
             staticCalls += 1;
             res.statusCode = 200;
