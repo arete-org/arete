@@ -1,6 +1,6 @@
 /**
- * @description: Centralizes ordered transport-boundary dispatch for routes not yet Express-owned.
- * Keeps explicit handling for special transport paths in the mixed Express + boundary-dispatch architecture.
+ * @description: Centralizes ordered special transport-boundary dispatch paths.
+ * Keeps explicit handling for raw-body webhook and dual-use trace Accept-negotiated behavior.
  * @footnote-scope: core
  * @footnote-module: RouteDispatch
  * @footnote-risk: high - Route order mistakes can silently change endpoint behavior.
@@ -10,9 +10,6 @@ import type http from 'node:http';
 import { wantsTraceJsonResponse } from './traceAccept.js';
 
 // --- Route path helpers ---
-const TRACE_CARD_ASSET_PATH_PATTERN =
-    /^\/api\/traces\/[^/]+\/assets\/trace-card\.svg$/;
-
 const normalizePathname = (pathname: string): string =>
     pathname.length > 1 && pathname.endsWith('/')
         ? pathname.slice(0, -1)
@@ -38,15 +35,7 @@ type DispatchOutcome = 'handled' | 'fallthrough';
 
 type RouteDispatchHandlers = {
     handleWebhookRequest: RequestHandler;
-    handleInternalTextRequest: RequestHandler;
-    handleInternalImageRequest: RequestHandler;
-    handleInternalVoiceTtsRequest: RequestHandler;
-    handleTraceUpsertRequest: RequestHandler;
-    handleTraceCardCreateRequest: RequestHandler;
-    handleTraceCardFromTraceRequest: RequestHandler;
-    handleTraceCardAssetRequest: ParsedUrlHandler;
     handleTraceRequest: ParsedUrlHandler;
-    handleChatRequest: RequestHandler;
 };
 
 /**
@@ -78,43 +67,6 @@ const createRouteDispatcher = ({
             return 'handled';
         }
 
-        // --- Trusted internal routes ---
-        if (normalizedPathname === '/api/internal/text') {
-            await handlers.handleInternalTextRequest(req, res);
-            return 'handled';
-        }
-
-        if (normalizedPathname === '/api/internal/image') {
-            await handlers.handleInternalImageRequest(req, res);
-            return 'handled';
-        }
-
-        if (normalizedPathname === '/api/internal/voice/tts') {
-            await handlers.handleInternalVoiceTtsRequest(req, res);
-            return 'handled';
-        }
-
-        // --- Trace write/asset routes ---
-        if (normalizedPathname === '/api/traces') {
-            await handlers.handleTraceUpsertRequest(req, res);
-            return 'handled';
-        }
-
-        if (normalizedPathname === '/api/trace-cards') {
-            await handlers.handleTraceCardCreateRequest(req, res);
-            return 'handled';
-        }
-
-        if (normalizedPathname === '/api/trace-cards/from-trace') {
-            await handlers.handleTraceCardFromTraceRequest(req, res);
-            return 'handled';
-        }
-
-        if (TRACE_CARD_ASSET_PATH_PATTERN.test(normalizedPathname)) {
-            await handlers.handleTraceCardAssetRequest(req, res, parsedUrl);
-            return 'handled';
-        }
-
         // --- Special dual-use trace route ---
         // This path also doubles as a browser route for the trace page.
         // Keep JSON-vs-HTML behavior exactly as-is.
@@ -128,12 +80,6 @@ const createRouteDispatcher = ({
             }
             // Fall through to static resolver for SPA HTML.
             return 'fallthrough';
-        }
-
-        // --- Chat routes ---
-        if (normalizedPathname === '/api/chat') {
-            await handlers.handleChatRequest(req, res);
-            return 'handled';
         }
 
         return 'fallthrough';

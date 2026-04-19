@@ -1,6 +1,6 @@
 /**
  * @description: Verifies incident routes are owned by the Express shell with explicit precedence.
- * Confirms report/sub-route/detail matching bypasses legacy /api dispatch when routes are recognized.
+ * Confirms report/sub-route/detail matching bypasses central special-boundary dispatch when routes are recognized.
  * @footnote-scope: test
  * @footnote-module: IncidentRoutesTests
  * @footnote-risk: medium - Missing route-order tests can silently reroute incident traffic to wrong handlers.
@@ -60,7 +60,7 @@ const createUnhandledBlogPostHandler = async (
     _postId: string
 ): Promise<void> => createUnhandledRouteHandler(req, res);
 
-test('incident routes are handled in Express with explicit precedence and no legacy dispatch handoff', async (t) => {
+test('incident routes are handled in Express with explicit precedence and no special transport dispatch handoff', async (t) => {
     const dispatchCalls: string[] = [];
     const incidentCalls: string[] = [];
 
@@ -104,6 +104,38 @@ test('incident routes are handled in Express with explicit precedence and no leg
             incidentCalls.push(parsedUrl.pathname);
             res.statusCode = 200;
             res.end('detail');
+        },
+        handleChatRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('chat');
+        },
+        handleInternalTextRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('internal-text');
+        },
+        handleInternalImageRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('internal-image');
+        },
+        handleInternalVoiceTtsRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('internal-voice-tts');
+        },
+        handleTraceUpsertRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('trace-upsert');
+        },
+        handleTraceCardCreateRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('trace-card-create');
+        },
+        handleTraceCardFromTraceRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('trace-card-from-trace');
+        },
+        handleTraceCardAssetRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('trace-card-asset');
         },
         handleRuntimeConfigRequest: createUnhandledRouteHandler,
         handleChatProfilesRequest: createUnhandledRouteHandler,

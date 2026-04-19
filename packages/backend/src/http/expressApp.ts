@@ -8,8 +8,11 @@
  */
 import type http from 'node:http';
 import express from 'express';
-import { registerStandardHttpRoutes } from './standardHttpRoutes.js';
+import { registerPublicRoutes } from './publicRoutes.js';
 import { registerIncidentRoutes } from './incidentRoutes.js';
+import { registerChatRoutes } from './chatRoutes.js';
+import { registerInternalRoutes } from './internalRoutes.js';
+import { registerTraceRoutes } from './traceRoutes.js';
 import { getRequestUrl } from './requestUrl.js';
 
 type DispatchOutcome = 'handled' | 'fallthrough';
@@ -78,6 +81,39 @@ type CreateExpressAppDeps = {
         res: http.ServerResponse,
         parsedUrl: URL
     ) => Promise<void>;
+    handleChatRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleInternalTextRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleInternalImageRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleInternalVoiceTtsRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleTraceUpsertRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleTraceCardCreateRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleTraceCardFromTraceRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleTraceCardAssetRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        parsedUrl: URL
+    ) => Promise<void>;
     handleRuntimeConfigRequest: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -113,6 +149,14 @@ const createExpressApp = ({
     handleIncidentNotesRequest,
     handleIncidentRemediationRequest,
     handleIncidentDetailRequest,
+    handleChatRequest,
+    handleInternalTextRequest,
+    handleInternalImageRequest,
+    handleInternalVoiceTtsRequest,
+    handleTraceUpsertRequest,
+    handleTraceCardCreateRequest,
+    handleTraceCardFromTraceRequest,
+    handleTraceCardAssetRequest,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
     handleBlogIndexRequest,
@@ -126,8 +170,9 @@ const createExpressApp = ({
     const app = express();
     app.set('trust proxy', trustProxy);
 
-    // Stage 1: standard HTTP routes that are already Express-owned.
-    registerStandardHttpRoutes({
+    // Stage 1: public and other Express-owned standard HTTP routes.
+    // /api/chat split ownership is intentional: publicRoutes owns /api/chat/* subroutes (for example /api/chat/profiles), while chatRoutes owns only bare /api/chat.
+    registerPublicRoutes({
         app,
         normalizePathname,
         blogReadRateLimitConfig,
@@ -148,8 +193,29 @@ const createExpressApp = ({
         handleIncidentDetailRequest,
         logRequest,
     });
+    registerChatRoutes({
+        app,
+        handleChatRequest,
+        logRequest,
+    });
+    registerInternalRoutes({
+        app,
+        handleInternalTextRequest,
+        handleInternalImageRequest,
+        handleInternalVoiceTtsRequest,
+        logRequest,
+    });
+    registerTraceRoutes({
+        app,
+        normalizePathname,
+        handleTraceUpsertRequest,
+        handleTraceCardCreateRequest,
+        handleTraceCardFromTraceRequest,
+        handleTraceCardAssetRequest,
+        logRequest,
+    });
 
-    // Stage 2: central/special transport dispatch for routes not yet Express-owned.
+    // Stage 2: central explicit special-boundary dispatch.
     // Keep request body parsing opt-in per route so signature/raw-body paths stay safe.
     app.use('/api', async (req, res, next) => {
         const requestUrl = getRequestUrl(req);
