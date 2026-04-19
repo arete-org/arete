@@ -335,8 +335,8 @@ type ProfileExecutionEvent = BaseExecutionEvent & {
 
 export type PlannerExecutionEvent = ProfileExecutionEvent & {
     kind: 'planner';
-    // TODO(workflow-planner-step-alignment): If planner becomes a workflow
-    // native step, add correlation fields that map this event to step records.
+    // Legacy compatibility record. Prefer workflow `steps[]` with
+    // `stepKind=plan` when workflow lineage is available.
     purpose: PlannerExecutionPurpose;
     contractType: PlannerExecutionContractType;
     applyOutcome: PlannerExecutionApplyOutcome;
@@ -684,8 +684,8 @@ export type ResponseMetadata = {
     totalDurationMs?: number; // End-to-end orchestration duration when available.
     citations: Citation[]; // Sources used for the answer.
     provenanceAssessment?: ProvenanceAssessment; // Classification-method disclosure for provenance, including conflicts and limitations.
-    execution?: ExecutionEvent[]; // Structural execution record (planner/evaluator/tool/generation events).
-    workflow?: WorkflowRecord; // Optional workflow record of bounded multi-step execution.
+    execution?: ExecutionEvent[]; // Structural execution record; planner entries are compatibility fallback when workflow plan steps are unavailable.
+    workflow?: WorkflowRecord; // Optional workflow record of bounded multi-step execution; includes authoritative planner lineage when plan steps are present.
     workflowMode?: WorkflowModeDecision; // Execution-policy routing decision and behavior mapping.
     steerabilityControls?: SteerabilityControls; // Control-influence records explaining which controls shaped execution/output.
     evaluator?: EvaluatorOutcome; // Deterministic evaluator decision captured before breaker enforcement.

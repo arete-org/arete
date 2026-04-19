@@ -288,9 +288,6 @@ export const createChatOrchestrator = ({
         // Planner is a bounded, execution-relevant helper. It can suggest
         // action-selection details, but it is not policy authority, contract
         // authority, runtime ownership, or a second orchestrator.
-        // TODO(workflow-planner-lineage): Planner is orchestrator-frontloaded
-        // today. When planner becomes workflow-native, persist it as a
-        // first-class workflow step in workflow lineage.
         const plannerInvocationContext: ChatPlannerInvocationContext = {
             owner: 'workflow',
             workflowName: 'chat_orchestration',
@@ -704,9 +701,6 @@ export const createChatOrchestrator = ({
                 // so traces can distinguish successful planning from fallback.
                 // This metadata reports planner influence; it does not delegate
                 // orchestration ownership or policy authority to planner.
-                // TODO(workflow-planner-lineage): Keep this metadata bridge
-                // until planner execution is represented directly as workflow
-                // lineage instead of orchestrator-frontloaded context.
                 planner: {
                     status: plannerExecution.status,
                     ...(plannerExecution.reasonCode !== undefined && {

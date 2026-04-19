@@ -161,3 +161,59 @@ test('formatExecutionTimelineSummary returns null for missing or empty timelines
     assert.equal(formatExecutionTimelineSummary(undefined), null);
     assert.equal(formatExecutionTimelineSummary([]), null);
 });
+
+test('formatExecutionTimelineSummary surfaces planner lineage from workflow plan steps when execution planner bridge is absent', () => {
+    const summary = formatExecutionTimelineSummary(
+        [
+            {
+                kind: 'generation',
+                status: 'executed',
+                model: 'gpt-5-mini',
+            },
+        ],
+        {
+            workflowId: 'wf_1',
+            workflowName: 'message_with_review_loop',
+            status: 'completed',
+            terminationReason: 'goal_satisfied',
+            stepCount: 2,
+            maxSteps: 3,
+            maxDurationMs: 15000,
+            steps: [
+                {
+                    stepId: 'step_plan_1',
+                    attempt: 1,
+                    stepKind: 'plan',
+                    startedAt: '2026-04-01T00:00:00.000Z',
+                    finishedAt: '2026-04-01T00:00:00.010Z',
+                    durationMs: 10,
+                    outcome: {
+                        status: 'executed',
+                        summary:
+                            'Planner step emitted bounded action-selection summary.',
+                        signals: {
+                            profileId: 'openai-text-fast',
+                        },
+                    },
+                },
+                {
+                    stepId: 'step_1',
+                    attempt: 1,
+                    stepKind: 'generate',
+                    startedAt: '2026-04-01T00:00:00.010Z',
+                    finishedAt: '2026-04-01T00:00:00.020Z',
+                    durationMs: 10,
+                    outcome: {
+                        status: 'executed',
+                        summary: 'Generated initial draft response.',
+                    },
+                },
+            ],
+        }
+    );
+
+    assert.equal(
+        summary,
+        'planner:openai-text-fast(executed, 10ms) -> generation:gpt-5-mini(executed)'
+    );
+});

@@ -140,6 +140,10 @@ const isSteerabilityControlId = (
     value === 'persona_tone_overlay' ||
     value === 'tool_allowance';
 
+const hasWorkflowPlannerLineage = (
+    workflow: ResponseMetadataRuntimeContext['workflow']
+): boolean => workflow?.steps.some((step) => step.stepKind === 'plan') ?? false;
+
 const normalizeEvaluatorReasonCode = (
     status: ExecutionStatus,
     reasonCode: ExecutionReasonCode | undefined
@@ -209,7 +213,8 @@ const normalizeToolReasonCode = (
  * - execution/workflow are structural record surfaces for what happened.
  * - workflowMode is execution-policy metadata.
  * - TRACE (trace_target/trace_final + optional chips) is answer-posture metadata.
- * - planner influence is represented in execution[] planner events.
+ * - planner influence is represented in workflow.steps[] (stepKind=plan) when
+ *   available, with execution[] planner events as compatibility fallback.
  * - steerability control influence is represented in steerabilityControls.
  * - provenance/provenanceAssessment are compact grounding classification-method
  *   metadata and may include deterministic heuristic derivation.
@@ -321,15 +326,12 @@ const buildResponseMetadata = (
     const licenseContext = 'MIT + HL3';
     const execution: ExecutionEvent[] = [];
     const plannerExecution = runtimeContext.executionContext?.planner;
-    if (plannerExecution) {
-        // TODO(workflow-planner-step-metadata): Planner is not workflow-native
-        // in lineage yet. If workflows support multiple planner invocations,
-        // add explicit attempt/correlation metadata without letting planner
-        // events redefine orchestration authority or step ownership.
-        // Treat this block as metadata ingestion only, not a policy hook.
-        // Turn the planner record from runtime context into the shared
-        // execution-event shape. If required fields are missing, drop it here
-        // instead of storing something half-valid.
+    if (
+        plannerExecution &&
+        !hasWorkflowPlannerLineage(runtimeContext.workflow)
+    ) {
+        // Compatibility bridge for legacy/unmigrated traces.
+        // Migrated workflow traces expose planner lineage in workflow.steps[].
         const normalizedPlannerReasonCode = normalizePlannerReasonCode(
             plannerExecution.status,
             plannerExecution.reasonCode

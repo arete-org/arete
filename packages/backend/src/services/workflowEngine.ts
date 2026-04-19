@@ -414,8 +414,7 @@ const isPlannerReasonCode = (
 > => value === 'planner_runtime_error' || value === 'planner_invalid_output';
 
 /**
- * Builds a planner-specific workflow step record for short-lived lineage
- * bridging while planner execution is still orchestrator-frontloaded.
+ * Builds a planner-specific workflow step record for workflow lineage.
  *
  * Keep this mapper narrow and bounded to planner-safe summary fields only.
  * It must not become a generic workflow-step factory.
@@ -429,20 +428,18 @@ export const buildPlannerStepRecord = ({
     summary,
 }: BuildPlannerStepRecordInput): StepRecord => {
     const coercedFinishedAtMs = Number(finishedAtMs);
-    const normalizedFinishedAtMs =
-        Number.isFinite(coercedFinishedAtMs)
-            ? Math.floor(coercedFinishedAtMs)
-            : Date.now();
+    const normalizedFinishedAtMs = Number.isFinite(coercedFinishedAtMs)
+        ? Math.floor(coercedFinishedAtMs)
+        : Date.now();
     const coercedStartedAtMs = Number(startedAtMs);
-    const normalizedDurationMs =
-        Number.isFinite(coercedStartedAtMs)
-            ? Math.max(
-                  0,
-                  Math.floor(
-                      normalizedFinishedAtMs - Math.floor(coercedStartedAtMs)
-                  )
+    const normalizedDurationMs = Number.isFinite(coercedStartedAtMs)
+        ? Math.max(
+              0,
+              Math.floor(
+                  normalizedFinishedAtMs - Math.floor(coercedStartedAtMs)
               )
-            : toNonNegativeIntegerOrZero(summary.durationMs);
+          )
+        : toNonNegativeIntegerOrZero(summary.durationMs);
     const normalizedStartedAtMs = normalizedFinishedAtMs - normalizedDurationMs;
     const normalizedAttempt = Number.isFinite(Number(attempt))
         ? Math.max(1, Math.floor(Number(attempt)))

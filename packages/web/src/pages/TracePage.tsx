@@ -73,7 +73,7 @@ const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
 };
 
 const resolveExecutionSummary = (traceData: ServerMetadata): string | null =>
-    formatExecutionTimelineSummary(traceData.execution);
+    formatExecutionTimelineSummary(traceData.execution, traceData.workflow);
 
 const buildDisplayTrace = (traceData: ServerMetadata): DisplayTrace => ({
     responseId: traceData.responseId ?? null,

@@ -466,6 +466,80 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
     });
 });
 
+test('buildResponseMetadata uses workflow plan-step lineage over execution planner bridge when both are present', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            workflow: {
+                workflowId: 'wf_123',
+                workflowName: 'message_with_review_loop',
+                status: 'completed',
+                terminationReason: 'goal_satisfied',
+                stepCount: 2,
+                maxSteps: 3,
+                maxDurationMs: 15000,
+                steps: [
+                    {
+                        stepId: 'step_plan_1',
+                        attempt: 1,
+                        stepKind: 'plan',
+                        startedAt: '2026-04-01T00:00:00.000Z',
+                        finishedAt: '2026-04-01T00:00:00.010Z',
+                        durationMs: 10,
+                        outcome: {
+                            status: 'executed',
+                            summary:
+                                'Planner step emitted bounded action-selection summary.',
+                        },
+                    },
+                    {
+                        stepId: 'step_1',
+                        attempt: 1,
+                        stepKind: 'generate',
+                        startedAt: '2026-04-01T00:00:00.011Z',
+                        finishedAt: '2026-04-01T00:00:00.020Z',
+                        durationMs: 9,
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Generated initial draft response.',
+                        },
+                    },
+                ],
+            },
+            executionContext: {
+                planner: {
+                    status: 'executed',
+                    purpose: 'chat_orchestrator_action_selection',
+                    contractType: 'structured',
+                    applyOutcome: 'applied',
+                    mattered: true,
+                    matteredControlIds: ['provider_preference'],
+                    profileId: 'openai-text-fast',
+                    provider: 'openai',
+                    model: 'gpt-5-nano',
+                    durationMs: 12,
+                },
+                generation: {
+                    status: 'executed',
+                    profileId: 'openai-text-medium',
+                    provider: 'openai',
+                    model: 'gpt-5-mini',
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'generation',
+            status: 'executed',
+            profileId: 'openai-text-medium',
+            provider: 'openai',
+            model: 'gpt-5-mini',
+        },
+    ]);
+});
+
 test('buildResponseMetadata mirrors modelVersion from final generation execution model', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata({ model: 'fallback-model' }),

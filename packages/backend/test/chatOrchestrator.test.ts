@@ -2014,7 +2014,7 @@ test('planner invocation emits distinct metadata categories for mode TRACE plann
     // Category separation assertions for one end-to-end orchestrator path:
     // - mode => workflowMode (execution policy)
     // - TRACE => trace_target/trace_final (answer posture)
-    // - planner => execution[] planner event (workflow-step influence)
+    // - planner => workflow.steps[] plan step (execution lineage)
     // - controls => steerabilityControls (control influence)
     // - provenance => grounding classification + assessment/record surfaces
     assert.ok(response.metadata.workflowMode);
@@ -2041,32 +2041,34 @@ test('planner invocation emits distinct metadata categories for mode TRACE plann
     const plannerEvent = response.metadata.execution?.find(
         (event) => event.kind === 'planner'
     );
-    assert.ok(plannerEvent);
-    if (plannerEvent?.kind === 'planner') {
-        assert.equal(
-            plannerEvent.purpose,
-            'chat_orchestrator_action_selection'
-        );
-        assert.ok(
-            plannerEvent.contractType === 'structured' ||
-                plannerEvent.contractType === 'text_json' ||
-                plannerEvent.contractType === 'fallback'
-        );
-        assert.ok(
-            plannerEvent.applyOutcome === 'applied' ||
-                plannerEvent.applyOutcome === 'adjusted_by_policy' ||
-                plannerEvent.applyOutcome === 'not_applied'
-        );
-        assert.equal(typeof plannerEvent.mattered, 'boolean');
-        assert.ok(Array.isArray(plannerEvent.matteredControlIds));
-    }
+    assert.equal(plannerEvent, undefined);
+    const plannerStep = response.metadata.workflow?.steps.find(
+        (step) => step.stepKind === 'plan'
+    );
+    assert.ok(plannerStep);
+    assert.ok(
+        plannerStep?.outcome.status === 'executed' ||
+            plannerStep?.outcome.status === 'failed'
+    );
+    const plannerSignals = plannerStep?.outcome.signals;
+    assert.equal(plannerSignals?.purpose, 'chat_orchestrator_action_selection');
+    assert.ok(
+        plannerSignals?.contractType === 'structured' ||
+            plannerSignals?.contractType === 'text_json' ||
+            plannerSignals?.contractType === 'fallback'
+    );
+    assert.ok(
+        plannerSignals?.applyOutcome === 'applied' ||
+            plannerSignals?.applyOutcome === 'adjusted_by_policy' ||
+            plannerSignals?.applyOutcome === 'not_applied'
+    );
     // Planner influence must remain distinct from execution-policy and TRACE surfaces.
-    assert.equal(typeof plannerEvent?.kind, 'string');
+    assert.equal(plannerStep?.stepKind, 'plan');
     assert.notEqual(response.metadata.workflowMode?.modeId, undefined);
     assert.notEqual(response.metadata.trace_final, undefined);
 });
 
-test('planner execution metadata reports adjusted_by_policy when request override changes application path', async () => {
+test('planner workflow lineage reports adjusted_by_policy when request override changes application path', async () => {
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
             if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
@@ -2120,13 +2122,18 @@ test('planner execution metadata reports adjusted_by_policy when request overrid
     );
 
     assert.equal(response.action, 'message');
+    const plannerStep = response.metadata.workflow?.steps.find(
+        (step) => step.stepKind === 'plan'
+    );
+    assert.ok(plannerStep);
+    assert.equal(
+        plannerStep?.outcome.signals?.applyOutcome,
+        'adjusted_by_policy'
+    );
+    assert.equal(plannerStep?.outcome.signals?.mattered, true);
+    assert.equal(plannerStep?.outcome.signals?.matteredControlCount, 1);
     const plannerEvent = response.metadata.execution?.find(
         (event) => event.kind === 'planner'
     );
-    assert.ok(plannerEvent);
-    if (plannerEvent?.kind === 'planner') {
-        assert.equal(plannerEvent.applyOutcome, 'adjusted_by_policy');
-        assert.equal(plannerEvent.mattered, true);
-        assert.deepEqual(plannerEvent.matteredControlIds, ['tool_allowance']);
-    }
+    assert.equal(plannerEvent, undefined);
 });
