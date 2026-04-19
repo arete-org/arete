@@ -1,0 +1,307 @@
+#1 [internal] load local bake definitions
+#1 reading from stdin 1.82kB done
+#1 DONE 0.0s
+
+#2 [discord-bot internal] load build definition from Dockerfile.bot
+#2 transferring dockerfile: 1.94kB done
+#2 DONE 0.0s
+
+#3 [web internal] load build definition from Dockerfile.web
+#3 transferring dockerfile: 1.74kB done
+#3 DONE 0.0s
+
+#4 [backend internal] load build definition from Dockerfile.backend
+#4 transferring dockerfile: 2.19kB done
+#4 DONE 0.1s
+
+#5 [backend internal] load metadata for docker.io/library/node:22-slim
+#5 ...
+
+#6 [backend internal] load metadata for docker.io/litestream/litestream:0.5
+#6 DONE 0.4s
+
+#5 [web internal] load metadata for docker.io/library/node:22-slim
+#5 DONE 0.4s
+
+#7 [web internal] load .dockerignore
+#7 transferring context: 122B done
+#7 DONE 0.0s
+
+#8 [web internal] load metadata for docker.io/library/caddy:2.10.2-alpine
+#8 DONE 0.5s
+
+#9 [discord-bot internal] load build context
+#9 DONE 0.0s
+
+#10 [backend internal] load build context
+#10 DONE 0.0s
+
+#11 [web internal] load build context
+#11 transferring context: 17.76kB 0.0s done
+#11 DONE 0.1s
+
+#12 [backend build  1/20] FROM docker.io/library/node:22-slim@sha256:f3a68cf41a855d227d1b0ab832bed9749469ef38cf4f58182fb8c893bc462383
+#12 resolve docker.io/library/node:22-slim@sha256:f3a68cf41a855d227d1b0ab832bed9749469ef38cf4f58182fb8c893bc462383 0.1s done
+#12 resolve docker.io/library/node:22-slim@sha256:f3a68cf41a855d227d1b0ab832bed9749469ef38cf4f58182fb8c893bc462383 0.1s done
+#12 DONE 0.1s
+
+#13 [web stage-1 1/3] FROM docker.io/library/caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+#13 resolve docker.io/library/caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d 0.1s done
+#13 DONE 0.1s
+
+#14 [backend litestream 1/1] FROM docker.io/litestream/litestream:0.5@sha256:79e3bfce6ed758722916f816b028fffd9e0a971058f41b88e2779510cead1d8d
+#14 resolve docker.io/litestream/litestream:0.5@sha256:79e3bfce6ed758722916f816b028fffd9e0a971058f41b88e2779510cead1d8d 0.1s done
+#14 DONE 0.1s
+
+#15 [web build  9/20] COPY packages/backend/package.json packages/backend/tsconfig.json packages/backend/
+#15 CACHED
+
+#16 [web build 16/20] COPY packages/web/ packages/web/
+#16 CACHED
+
+#17 [web build 14/20] COPY pnpm-lock.yaml* ./
+#17 CACHED
+
+#18 [web stage-1 2/3] COPY --from=build /app/packages/web/dist /usr/share/caddy
+#18 CACHED
+
+#19 [web build  2/20] WORKDIR /app
+#19 CACHED
+
+#20 [web build  5/20] COPY package.json pnpm-workspace.yaml ./
+#20 CACHED
+
+#21 [web build 18/20] COPY packages/backend/src/ packages/backend/src/
+#21 CACHED
+
+#22 [web build  4/20] COPY tsconfig.json ./tsconfig.json
+#22 CACHED
+
+#23 [web build 15/20] RUN --mount=type=cache,id=footnote-pnpm-store,target=/pnpm/store   pnpm install --frozen-lockfile --prod=false --filter @footnote/web... --store-dir /pnpm/store
+#23 CACHED
+
+#24 [web build  7/20] COPY packages/web/package.json packages/web/package.json
+#24 CACHED
+
+#25 [web build 13/20] COPY packages/prompts/package.json packages/prompts/tsconfig.json packages/prompts/
+#25 CACHED
+
+#26 [web build 17/20] COPY packages/api-client/src/ packages/api-client/src/
+#26 CACHED
+
+#27 [web build 19/20] COPY packages/contracts/src/ packages/contracts/src/
+#27 CACHED
+
+#28 [web build  3/20] RUN corepack enable && corepack prepare pnpm@10.26.2 --activate
+#28 CACHED
+
+#29 [web build 10/20] COPY packages/config-spec/package.json packages/config-spec/tsconfig.json packages/config-spec/
+#29 CACHED
+
+#30 [web build 11/20] COPY packages/contracts/package.json packages/contracts/tsconfig.json packages/contracts/
+#30 CACHED
+
+#31 [web build  6/20] COPY packages/agent-runtime/package.json packages/agent-runtime/tsconfig.json packages/agent-runtime/
+#31 CACHED
+
+#32 [web build 20/20] RUN pnpm --filter @footnote/contracts run build   && pnpm --filter @footnote/web run build
+#32 CACHED
+
+#33 [web build 12/20] COPY packages/discord-bot/package.json packages/discord-bot/tsconfig.json packages/discord-bot/
+#33 CACHED
+
+#34 [web build  8/20] COPY packages/api-client/package.json packages/api-client/tsconfig.json packages/api-client/
+#34 CACHED
+
+#35 [web stage-1 3/3] COPY deploy/Caddyfile /etc/caddy/Caddyfile
+#35 CACHED
+
+#9 [discord-bot internal] load build context
+#9 transferring context: 13.99kB 0.0s done
+#9 DONE 0.1s
+
+#10 [backend internal] load build context
+#10 transferring context: 14.28kB 0.0s done
+#10 DONE 0.1s
+
+#36 [web] exporting to image
+#36 exporting layers done
+#36 exporting manifest sha256:663ad7c09a0a6d28a937ce523f8119f746fa174d41f38067ae7a5925ce723980 done
+#36 exporting config sha256:1257bf35f58f93b792f6110dd961cddb2d8b77deed32c3620c3522e7692ed34a done
+#36 ...
+
+#37 [discord-bot builder  9/19] COPY packages/config-spec/package.json packages/config-spec/tsconfig.json packages/config-spec/
+#37 CACHED
+
+#38 [discord-bot builder 19/19] RUN pnpm --filter @footnote/discord-bot run build   && CI=true pnpm --filter @footnote/discord-bot... install --prod
+#38 CACHED
+
+#39 [discord-bot builder 12/19] COPY pnpm-lock.yaml* ./
+#39 CACHED
+
+#40 [discord-bot stage-1 4/5] COPY --from=builder --chown=node:node /app/node_modules /app/node_modules
+#40 CACHED
+
+#41 [discord-bot builder 17/19] COPY packages/api-client/src/ packages/api-client/src/
+#41 CACHED
+
+#42 [discord-bot builder 11/19] COPY packages/prompts/package.json packages/prompts/tsconfig.json packages/prompts/
+#42 CACHED
+
+#43 [discord-bot builder 16/19] COPY packages/prompts/src/ packages/prompts/src/
+#43 CACHED
+
+#28 [discord-bot build  3/20] RUN corepack enable && corepack prepare pnpm@10.26.2 --activate
+#28 CACHED
+
+#44 [discord-bot builder 13/19] RUN --mount=type=cache,id=footnote-pnpm-store,target=/pnpm/store   pnpm install --frozen-lockfile --prod=false --store-dir /pnpm/store
+#44 CACHED
+
+#45 [discord-bot builder 15/19] COPY packages/contracts/src/ packages/contracts/src/
+#45 CACHED
+
+#46 [discord-bot builder 10/19] COPY packages/contracts/package.json packages/contracts/tsconfig.json packages/contracts/
+#46 CACHED
+
+#47 [discord-bot builder 14/19] COPY packages/config-spec/src/ packages/config-spec/src/
+#47 CACHED
+
+#48 [discord-bot builder 18/19] COPY packages/discord-bot/ packages/discord-bot/
+#48 CACHED
+
+#49 [discord-bot builder  7/19] COPY packages/discord-bot/package.json packages/discord-bot/package.json
+#49 CACHED
+
+#50 [discord-bot builder  8/19] COPY packages/api-client/package.json packages/api-client/tsconfig.json packages/api-client/
+#50 CACHED
+
+#51 [discord-bot builder  4/19] RUN apt-get update   && apt-get install -y --no-install-recommends python3 make g++   && rm -rf /var/lib/apt/lists/*
+#51 CACHED
+
+#52 [discord-bot builder  5/19] COPY tsconfig.json ./tsconfig.json
+#52 CACHED
+
+#53 [discord-bot builder  6/19] COPY package.json pnpm-workspace.yaml ./
+#53 CACHED
+
+#54 [discord-bot stage-1 3/5] COPY --from=builder --chown=node:node /app/packages /app/packages
+#54 CACHED
+
+#55 [discord-bot stage-1 5/5] WORKDIR /app/packages/discord-bot
+#55 CACHED
+
+#56 [backend builder  8/19] COPY packages/backend/package.json packages/backend/tsconfig.json packages/backend/
+#56 CACHED
+
+#57 [backend stage-2 4/9] COPY --from=builder /app/packages /app/packages
+#57 CACHED
+
+#58 [backend stage-2 8/9] RUN chmod +x /usr/local/bin/backend-entrypoint.sh
+#58 CACHED
+
+#59 [backend builder 15/19] COPY packages/backend/src/ packages/backend/src/
+#59 CACHED
+
+#60 [backend builder  7/19] COPY packages/agent-runtime/package.json packages/agent-runtime/tsconfig.json packages/agent-runtime/
+#60 CACHED
+
+#61 [backend builder 14/19] COPY packages/agent-runtime/src/ packages/agent-runtime/src/
+#61 CACHED
+
+#62 [backend builder  3/19] RUN corepack enable && corepack prepare pnpm@10.26.2 --activate
+#62 CACHED
+
+#63 [backend builder  4/19] RUN apt-get update   && apt-get install -y --no-install-recommends python3 make g++   && rm -rf /var/lib/apt/lists/*
+#63 CACHED
+
+#64 [backend builder 12/19] COPY pnpm-lock.yaml* ./
+#64 CACHED
+
+#65 [backend stage-2 3/9] COPY --from=builder /app/node_modules /app/node_modules
+#65 CACHED
+
+#19 [backend build  2/20] WORKDIR /app
+#19 CACHED
+
+#66 [backend stage-2 7/9] COPY deploy/backend-entrypoint.sh /usr/local/bin/backend-entrypoint.sh
+#66 CACHED
+
+#67 [backend builder 13/19] RUN --mount=type=cache,id=footnote-pnpm-store,target=/pnpm/store   pnpm install --frozen-lockfile --prod=false --store-dir /pnpm/store
+#67 CACHED
+
+#68 [backend builder 17/19] COPY packages/contracts/src/ packages/contracts/src/
+#68 CACHED
+
+#69 [backend builder 19/19] RUN pnpm --filter @footnote/backend run build   && CI=true pnpm --filter @footnote/backend... install --prod
+#69 CACHED
+
+#70 [backend builder 11/19] COPY packages/prompts/package.json packages/prompts/tsconfig.json packages/prompts/
+#70 CACHED
+
+#71 [backend stage-2 5/9] COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
+#71 CACHED
+
+#72 [backend builder 16/19] COPY packages/config-spec/src/ packages/config-spec/src/
+#72 CACHED
+
+#73 [backend stage-2 6/9] COPY deploy/litestream.yml /etc/litestream.yml
+#73 CACHED
+
+#74 [backend builder 18/19] COPY packages/prompts/src/ packages/prompts/src/
+#74 CACHED
+
+#75 [backend builder 10/19] COPY packages/contracts/package.json packages/contracts/tsconfig.json packages/contracts/
+#75 CACHED
+
+#76 [backend builder  9/19] COPY packages/config-spec/package.json packages/config-spec/tsconfig.json packages/config-spec/
+#76 CACHED
+
+#77 [backend builder  5/19] COPY tsconfig.json ./tsconfig.json
+#77 CACHED
+
+#78 [backend builder  6/19] COPY package.json pnpm-workspace.yaml ./
+#78 CACHED
+
+#79 [backend stage-2 9/9] WORKDIR /app/packages/backend
+#79 CACHED
+
+#36 [web] exporting to image
+#36 exporting attestation manifest sha256:b6121c3f10ea2fc3b8f6004e077dc5a7f41a53a11fab126468392fcf0fdf326a 0.0s done
+#36 exporting manifest list sha256:317e9060a75503ce7c4e086717f7777ca8269050beb9e1030417fffbe138c6b2 0.1s done
+#36 naming to docker.io/library/footnote-web:latest
+#36 naming to docker.io/library/footnote-web:latest 0.0s done
+#36 unpacking to docker.io/library/footnote-web:latest 0.0s done
+#36 DONE 0.3s
+
+#80 [discord-bot] exporting to image
+#80 exporting layers done
+#80 exporting manifest sha256:c65a221a6b5a770c1b51da1f90d699ac77ee7f52ea854bfcd70e27e8227f4660 0.0s done
+#80 exporting config sha256:7a73a32359db6e8a3223f4b5f5062c1d3bbeb6964eb308f5c3753193c17af330 0.0s done
+#80 exporting attestation manifest sha256:ac601fbe0db6f433e950b9e277d2a52cc8717b9d849cc2dc914d031a069cb138 0.1s done
+#80 exporting manifest list sha256:df02fa3d48db66217786681f904706eff816d20bed6d30e3afb0b5e557dc4898
+#80 exporting manifest list sha256:df02fa3d48db66217786681f904706eff816d20bed6d30e3afb0b5e557dc4898 0.1s done
+#80 naming to docker.io/library/footnote-discord-bot:latest 0.0s done
+#80 unpacking to docker.io/library/footnote-discord-bot:latest 0.0s done
+#80 DONE 0.4s
+
+#81 [backend] exporting to image
+#81 exporting layers done
+#81 exporting manifest sha256:7f047ad945abad20edf187d4723adea2ee41a44e2c22a29635ea2da544be2431 0.0s done
+#81 exporting config sha256:6669a12f45df9d99e19bc0801dbb394feb1dd6b51e6308dad694ae88c7ddb9ad 0.0s done
+#81 exporting attestation manifest sha256:f1b1da433d142462c723e5e11aebf211247e80201804d0bc40c66a41f03d7e2e 0.2s done
+#81 exporting manifest list sha256:69a7d6236f90485b9b1e4368cd319f8d7a01f2e29cfe08baf6fd393fb08975e6 0.1s done
+#81 naming to docker.io/library/footnote-backend:latest done
+#81 unpacking to docker.io/library/footnote-backend:latest 0.0s done
+#81 DONE 0.4s
+
+#82 [web] resolving provenance for metadata file
+#82 DONE 0.1s
+
+#83 [discord-bot] resolving provenance for metadata file
+#83 DONE 0.1s
+
+#84 [backend] resolving provenance for metadata file
+#84 DONE 0.0s
+ footnote-discord-bot  Built
+ footnote-web  Built
+ footnote-backend  Built

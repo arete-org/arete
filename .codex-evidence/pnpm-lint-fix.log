@@ -1,0 +1,10 @@
+
+> footnote@ lint:fix C:\Users\Jordan\AppData\Local\Temp\vibe-kanban\worktrees\6c59-add-buildkit-pnp\footnote
+> pnpm run format:write && pnpm exec eslint packages/ --fix
+
+
+> footnote@ format:write C:\Users\Jordan\AppData\Local\Temp\vibe-kanban\worktrees\6c59-add-buildkit-pnp\footnote
+> node scripts/format-changed.cjs --write
+
+Running Prettier (write) on 1 changed file(s).
+.codex-evidence/summary.md 138ms

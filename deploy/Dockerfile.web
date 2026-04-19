@@ -21,7 +21,8 @@ COPY packages/prompts/package.json packages/prompts/tsconfig.json packages/promp
 
 # --- Dependencies ---
 COPY pnpm-lock.yaml* ./
-RUN pnpm install --frozen-lockfile --prod=false --filter @footnote/web...
+RUN --mount=type=cache,id=footnote-pnpm-store,target=/pnpm/store \
+  pnpm install --frozen-lockfile --prod=false --filter @footnote/web... --store-dir /pnpm/store
 
 # --- Sources ---
 COPY packages/web/ packages/web/
