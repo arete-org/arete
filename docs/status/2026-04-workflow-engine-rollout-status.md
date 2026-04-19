@@ -16,8 +16,14 @@
 Track current rollout state for moving from a specialized bounded review loop
 to a general workflow-engine shape with first-class workflow provenance records.
 
-Architecture reference:
-`docs/architecture/workflow-engine-and-provenance.md`
+Read this after the current architecture docs.
+It is rollout history and tracking, not the main workflow/planner explainer.
+
+Current architecture references:
+
+- `docs/architecture/workflow-mode-routing.md`
+- `docs/architecture/workflow-engine-and-provenance.md`
+- `docs/architecture/workflow-profile-contract.md`
 
 ## Current Snapshot
 
@@ -34,6 +40,8 @@ Architecture reference:
   `ExecutionLimits`, transition checks, and state/limit helpers).
 - Chat bounded review loop routing is now delegated through
   `runBoundedReviewWorkflow`, with legality enforced before each bounded step.
+- Planner still runs in `chatOrchestrator` before workflow execution; planner
+  as first-class workflow step remains future work.
 
 ## What Is Landed
 
@@ -125,6 +133,15 @@ Goal:
 
 - Ensure model-backed deliberation is invoked only for allowed step kinds and
   within `maxDeliberationCalls`.
+
+### 4) Planner As Workflow Step
+
+Status: `pending`
+
+Goal:
+
+- Move planner from orchestrator-frontloaded execution into first-class
+  workflow lineage without giving planner extra policy authority.
 
 ## Policy And Limits Boundary
 

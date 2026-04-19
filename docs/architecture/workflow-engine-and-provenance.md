@@ -2,30 +2,11 @@
 
 ## Purpose
 
-Define the next orchestration shape for chat generation in Footnote.
+Explain the current workflow-engine surface and the provenance record it emits.
 
-This document is high-level and natural language.
-It is intended to align architecture direction before deeper implementation details.
-
-## Why This Exists
-
-The current bounded review loop was a useful stepping stone.
-It proved three important things:
-
-- we can run bounded multi-step execution safely,
-- we can keep fail-open behavior where policy allows,
-- we can emit lineage-bearing workflow metadata.
-
-It is not the final form.
-Its current shape is still specialized around a draft/review/revise path.
-
-Footnote now needs a general workflow engine that can support:
-
-- optional planning,
-- optional tool usage with bounded retries,
-- optional model-assisted assessment,
-- optional revision,
-- deterministic termination under hard limits.
+This doc is about what is implemented now, not the full target direction.
+Read [Workflow Mode Routing](./workflow-mode-routing.md) first if you need the
+big picture.
 
 ## Core Principles
 
@@ -38,7 +19,7 @@ Footnote now needs a general workflow engine that can support:
 
 ## Terms
 
-- `WorkflowEngine`: Runs one workflow loop from start to termination.
+- `WorkflowEngine`: Runs one bounded workflow loop from start to termination.
 - `WorkflowPolicy`: Declares legal transitions and capability toggles.
 - `ExecutionLimits`: Declares hard caps (steps, calls, tokens, time).
 - `WorkflowState`: In-memory state used while a workflow is running.
@@ -46,14 +27,25 @@ Footnote now needs a general workflow engine that can support:
 - `WorkflowRecord`: Curated structured artifact for provenance and operators.
 - `StepRecord`: One step entry inside the workflow record.
 
-## Control And Work Separation
+## Current Engine Scope
 
-Footnote separates:
+Today the engine mainly powers the reviewed chat path in
+`packages/backend/src/services/workflowEngine.ts`.
 
-- decision/control logic (what can run next),
-- execution logic (run tool calls, generation, checks).
+What is active now:
 
-This is a responsibility split, not a 2D axis model.
+- legal transition checks,
+- hard execution limits,
+- bounded `generate -> assess -> revise` execution,
+- canonical termination reasons,
+- fail-open handling for generation/review/revise failures,
+- `WorkflowRecord` and `StepRecord` lineage output.
+
+What is vocabulary now but not the main current chat path:
+
+- `plan`
+- `tool`
+- replanning/tool-call budgets beyond current reviewed generation flow
 
 ## Step Model
 
@@ -72,21 +64,17 @@ That choice is controlled by `WorkflowPolicy` and `ExecutionLimits`.
 Model-backed deliberation is treated as an optional capability of certain steps,
 not a top-level orchestration authority.
 
-## Tool Step Boundary
+## Current Review Loop
 
-The `tool` step is intentionally simple:
+The reviewed profile uses one bounded pattern:
 
-- it accepts `calls[]`,
-- it declares `execution: sequential | parallel`,
-- it returns one normalized step outcome.
+1. `generate` produces the current draft.
+2. `assess` returns `reviewDecision` and `reviewReason`.
+3. If the decision is `revise`, `revise` produces the next draft.
+4. The loop stops when it reaches `finalize`, hits a limit, or fails open.
 
-Boundary rules:
-
-- `calls[]` must stay short and bounded.
-- no internal branching mini-language inside one `tool` step.
-- complex routing becomes multiple workflow steps.
-
-Even with one `tool` step type, each concrete tool call attempt is still recorded internally for retries, costs, and provenance.
+This is the current runtime path behind review and revise behavior.
+It is not just a target design note.
 
 ## Outcome Shape
 
@@ -105,18 +93,14 @@ For bounded review `assess` steps, use `reviewDecision` (`finalize` or `revise`)
 plus `reviewReason` as the canonical machine output seam.
 `recommendations` is advisory only and never overrides backend legality checks.
 
-## Transition Legality
+## Transition And Limit Ownership
 
 `WorkflowPolicy` defines legal next steps from current state.
 `WorkflowPolicy` also owns capability toggles (for example plan/revise/tool enablement).
 Model outputs can recommend transitions only where policy allows.
 Final transition legality remains backend-owned.
 
-## Limits And Budgeting
-
-`ExecutionLimits` is separate from `WorkflowPolicy`.
-`ExecutionLimits` owns hard quantitative caps only.
-Examples:
+`ExecutionLimits` owns the hard caps:
 
 - `maxWorkflowSteps`
 - `maxToolCalls`
@@ -124,7 +108,7 @@ Examples:
 - `maxTokensTotal`
 - `maxDurationMs`
 
-These limits are hard stops enforced by backend code.
+These are backend-enforced stops, not model suggestions.
 
 ## Termination Reasons
 
@@ -139,30 +123,26 @@ Initial reasons:
 - `max_deliberation_calls_reached`
 - `executor_error_fail_open`
 
-## Provenance Direction
+## Provenance Shape
 
 `WorkflowRecord` is the primary orchestration provenance artifact.
-Execution metadata should progressively align around it.
 `WorkflowRecord` is the provenance-facing curated record.
 Deeper runtime/debug execution detail can remain in internal logs keyed by
 `workflowId` and `stepId`.
 
-Legacy fields may exist temporarily during migration, but they are not the target model.
+In current chat responses:
 
-## Non-Goals
+- planner metadata still lives alongside workflow lineage,
+- workflow lineage covers the reviewed generation path,
+- the two should be read together without confusing planner influence for
+  workflow authority.
 
-- full generalized graph language,
-- unlimited nested orchestration,
-- cross-request memory planning framework,
-- broad rollout to every route before chat stabilization.
+## Future Direction
 
-## Rollout Strategy
+Future work may extend the same engine shape to planner and tool steps.
+That is not the current first-read explanation.
+Use rollout or RFC docs only when you need historical sequencing or design
+tradeoffs.
 
-- Phase 1: lock names, boundaries, and minimal record contract.
-- Phase 2: build engine skeleton with current behavior parity.
-- Phase 3: migrate current specialized loop to step-based execution.
-- Phase 4: enable optional planning/assessment/revision modes via policy toggles.
-- Phase 5: expand tool execution patterns (parallel where safe).
-
-Status and implementation tracking lives in:
+Historical rollout tracking lives in
 `docs/status/2026-04-workflow-engine-rollout-status.md`.

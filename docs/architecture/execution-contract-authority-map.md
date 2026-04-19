@@ -22,16 +22,16 @@ That module is the Execution Contract authority surface.
 
 ## Authority Map
 
-| Concern                           | Governing Authority                                                       | Runtime Executor                                       | Notes                                                                             |
-| --------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| Execution rules and legal shape   | Execution Contract (`packages/backend/src/services/executionContract.ts`) | `chatOrchestrator` + workflow runtime                  | Runtime must satisfy contract fields; runtime does not redefine ontology.         |
-| Request execution coordination    | Execution Contract (policy bounds)                                        | `packages/backend/src/services/chatOrchestrator.ts`    | Orchestrator selects/coordinates steps inside contract limits.                    |
-| Planner step invocation           | Workflow-owned step policy under Execution Contract bounds                | `chatPlanner` invoked from workflow context only       | Planner is a bounded `plan` step with named purpose; planner output is advisory.  |
-| Workflow/profile semantics        | Execution Contract response/limit constraints + workflow profile contract | `workflowProfileRegistry` + `workflowEngine`           | Profiles are named execution shapes, not competing policy authorities.            |
-| Model/provider/tool selection     | Execution Contract routing intent and limits                              | orchestrator + resolver/services + runtime adapters    | Selection details are execution assembly under contract constraints.              |
-| Trace and provenance recording    | Execution Contract requirement to track provenance                        | `chatService`, trace store, response metadata emitters | Provenance records what happened; it does not set policy.                         |
-| TrustGraph evidence intake        | Execution Contract boundary rules                                         | `executionContractTrustGraph` seam modules             | Advisory evidence can influence bounded views, never control execution authority. |
-| Breaker/safety action application | Deterministic safety contract + backend policy boundary                   | orchestrator/service enforcement path                  | Planner hints are advisory only.                                                  |
+| Concern                           | Governing Authority                                                       | Runtime Executor                                       | Notes                                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Execution rules and legal shape   | Execution Contract (`packages/backend/src/services/executionContract.ts`) | `chatOrchestrator` + workflow runtime                  | Runtime must satisfy contract fields; runtime does not redefine ontology.                            |
+| Request execution coordination    | Execution Contract (policy bounds)                                        | `packages/backend/src/services/chatOrchestrator.ts`    | Orchestrator selects/coordinates steps inside contract limits.                                       |
+| Planner step invocation           | Workflow-owned planner boundary under Execution Contract bounds           | `chatPlanner` invoked by `chatOrchestrator` today      | Planner output is advisory. Planner-as-workflow-step is future direction, not current runtime shape. |
+| Workflow/profile semantics        | Execution Contract response/limit constraints + workflow profile contract | `workflowProfileRegistry` + `workflowEngine`           | Profiles are named execution shapes, not competing policy authorities.                               |
+| Model/provider/tool selection     | Execution Contract routing intent and limits                              | orchestrator + resolver/services + runtime adapters    | Selection details are execution assembly under contract constraints.                                 |
+| Trace and provenance recording    | Execution Contract requirement to track provenance                        | `chatService`, trace store, response metadata emitters | Provenance records what happened; it does not set policy.                                            |
+| TrustGraph evidence intake        | Execution Contract boundary rules                                         | `executionContractTrustGraph` seam modules             | Advisory evidence can influence bounded views, never control execution authority.                    |
+| Breaker/safety action application | Deterministic safety contract + backend policy boundary                   | orchestrator/service enforcement path                  | Planner hints are advisory only.                                                                     |
 
 ## Explicit Non-Goals
 
@@ -44,7 +44,7 @@ That module is the Execution Contract authority surface.
 
 - The Execution Contract is the single governing contract for execution shape.
 - The orchestrator is the request-time execution coordinator.
-- Planner is a bounded workflow step, not a second orchestrator.
+- Planner is a bounded helper with workflow-owned boundaries, not a second orchestrator.
 - Planner outputs are advisory and cannot directly override Execution Contract authority.
 - Workflow profiles remain named shapes selected under the contract.
 - External evidence systems (including TrustGraph) never become routing or terminal authorities.

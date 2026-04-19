@@ -2,44 +2,57 @@
 
 ## Purpose
 
-A workflow mode is the explicit high-level routing decision for chat execution.
+A workflow mode is the high-level routing choice for one chat request.
 
-Each part has a different job. The Execution Contract sets the allowed posture.
-The chat orchestrator runs within that contract. Workflow mode is the
-high-level choice, and workflow profile is the concrete step pattern. TRACE is
-about answer temperament (`trace_target` and `trace_final`), while provenance
-and evidence metadata are about what actually happened.
+This is the main current-shape doc for workflow and planner behavior.
+Read this before the profile contract, rollout notes, or RFC material.
 
-In short:
+The short version:
 
-- mode chooses the kind of run,
-- profile chooses the executable workflow shape.
+- the Execution Contract governs allowed posture and limits,
+- workflow mode chooses the kind of run,
+- workflow profile chooses the executable step pattern,
+- planner can suggest execution details but does not gain policy authority,
+- workflow lineage records what actually happened.
 
-Keep contract posture and workflow mechanics separate. The Execution Contract
-preset answers "what kind of run should govern this request?" The workflow
-profile id answers "what step pattern should execute this run?" Mixing them
-into one label makes naming and reasoning harder.
-Today, planner dispatch still happens in orchestration before workflow
-execution. The target shape is for planner behavior to be represented as
-bounded workflow step types so workflow remains the owner of when and why
-planning runs.
+Keep those jobs separate.
+The Execution Contract answers "what kind of run is allowed?"
+Workflow mode answers "which current posture did we choose?"
+Workflow profile answers "which step pattern executes that posture?"
+Planner answers "what action details should this run try?"
+Those are related, but they are not the same thing.
 
-The chosen mode is emitted as `workflowMode` in response metadata.
-Each mode resolves to a concrete execution shape. The table below shows that
-mapping in runtime terms.
+## Current Runtime Shape
+
+Today the request path looks like this:
+
+1. The backend resolves an Execution Contract preset.
+2. Workflow mode is resolved as `fast`, `balanced`, or `grounded`.
+3. That mode maps to a workflow profile and runtime limits.
+4. `chatOrchestrator` invokes planner once, before message generation.
+5. Planner output is filtered through surface policy, capability policy, and
+   tool policy.
+6. `chatService` either runs direct generation or the bounded review workflow.
+7. Response metadata records `workflowMode`, planner execution details, and
+   workflow lineage.
+
+That means planner is execution-relevant today, but it is not yet a
+first-class workflow-engine step in runtime lineage.
 
 ## Mode Set
 
 Canonical mode ids are `fast`, `balanced`, and `grounded`.
 
-| Mode       | Contract preset    | Profile id       | Workflow used | Review | Revise | Evidence | Steps | Deliberation | Notes                                      |
-| ---------- | ------------------ | ---------------- | ------------- | ------ | ------ | -------- | ----- | ------------ | ------------------------------------------ |
-| `fast`     | `fast-direct`      | `generate-only`  | no            | no     | no     | minimal  | 1     | 0            | direct single-pass path                    |
-| `balanced` | `balanced`         | `bounded-review` | yes           | yes    | yes    | balanced | 4     | 2            | reviewed default path                      |
-| `grounded` | `quality-grounded` | `bounded-review` | conditional   | yes    | yes    | strict   | 8     | 4            | same profile as `balanced`, stricter guard |
+| Mode       | Contract preset    | Workflow profile | Current execution shape                   | Review | Revise | Evidence posture | Notes                                      |
+| ---------- | ------------------ | ---------------- | ----------------------------------------- | ------ | ------ | ---------------- | ------------------------------------------ |
+| `fast`     | `fast-direct`      | `generate-only`  | single-pass generation                    | no     | no     | minimal          | no workflow review loop                    |
+| `balanced` | `balanced`         | `bounded-review` | reviewed workflow path                    | yes    | yes    | balanced         | same profile as `grounded`, lighter limits |
+| `grounded` | `quality-grounded` | `bounded-review` | reviewed workflow path with stricter caps | yes    | yes    | strict           | workflow execution is policy-gated         |
 
-`balanced` and `grounded` already show why the split matters: they share one
-workflow profile (`bounded-review`) but differ in posture and limits.
+`balanced` and `grounded` share one profile today.
+That is why mode and profile stay separate.
+Mode carries posture and limits.
+Profile carries executable shape.
 
 ## Selection Order
 
@@ -51,6 +64,66 @@ This keeps the system available while preferring the more careful default
 posture.
 These fallback steps are initial routing fallback only. They are not runtime
 mode escalation.
+
+## Review And Revise Behavior
+
+The current profiles are simple on purpose:
+
+- `generate-only` means one `generate` step and stop.
+- `bounded-review` means `generate -> assess -> revise` in a bounded loop.
+
+The assess step emits the canonical machine-readable review outcome:
+
+- `reviewDecision`: `finalize` or `revise`
+- `reviewReason`: one short explanation
+
+That assess output can request revision, but it still does not bypass engine
+limits or workflow policy.
+The engine decides whether another step is legal.
+
+## Planner Boundary
+
+Planner is intentionally bounded.
+
+Planner can:
+
+- choose an action shape for the request,
+- suggest search/tool usage details,
+- suggest a capability profile,
+- influence execution metadata when its output materially mattered.
+
+Planner cannot:
+
+- change the Execution Contract,
+- grant itself extra tools or extra steps,
+- bypass surface policy or capability policy,
+- become the final authority on mode, profile, safety, or provenance.
+
+Today, planner runs in `chatOrchestrator` before `chatService` begins the
+review workflow.
+Planner execution is recorded in `metadata.execution[]` and in steerability
+metadata, but workflow lineage still starts with the generation/review path.
+
+## Current And Future Line
+
+Current behavior:
+
+- planner is orchestrator-frontloaded,
+- workflow engine is used for the reviewed generation path,
+- `plan` and `tool` are part of the shared workflow vocabulary but are not the
+  main current chat path,
+- review/revise are real runtime behavior today.
+
+Future direction:
+
+- planner-as-workflow-step,
+- tool steps under the same workflow engine,
+- clearer correlation if multiple planner passes or retries ever exist.
+
+Do not read the future direction back into current authority.
+Planner is still advisory.
+Workflow engine does not yet own planner execution timing in the current chat
+path.
 
 ## Escalation Seam
 
@@ -71,3 +144,10 @@ Rules for this seam:
 `escalation_reason`, optional `requestedModeId`, optional
 `executionContractResponseMode`, and `behavior` (the concrete mapped behavior
 tuple).
+
+Use nearby metadata like this:
+
+- `metadata.workflowMode.*` explains the routing choice.
+- `metadata.execution[]` planner entries explain planner influence.
+- `metadata.workflow` explains the executed workflow lineage.
+- TRACE fields explain answer posture, not workflow routing.

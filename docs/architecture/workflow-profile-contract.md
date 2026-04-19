@@ -2,9 +2,11 @@
 
 ## Purpose
 
-Define one contract for workflow profiles before multi-profile execution is introduced.
+Define the contract that executable workflow profiles must satisfy.
 
-This removes ambiguity for blocked/no-generation handling and provenance.
+This is a contract doc, not the best first explanation of the current runtime
+shape.
+Read [Workflow Mode Routing](./workflow-mode-routing.md) first if you are new.
 
 ## Scope
 
@@ -21,6 +23,18 @@ Out of scope:
 - profile registry runtime implementation,
 - plan-and-generate or tool-assisted profile implementation,
 - blocked-state UI redesign.
+
+## Current Built-In Profiles
+
+Current chat runtime uses two built-in profiles:
+
+| Profile id       | Current purpose              | Main steps                     |
+| ---------------- | ---------------------------- | ------------------------------ |
+| `generate-only`  | direct single-pass execution | `generate`                     |
+| `bounded-review` | reviewed message generation  | `generate -> assess -> revise` |
+
+Modes choose between these profiles.
+Profiles do not become a second policy authority.
 
 ## Contract Shape
 
@@ -50,6 +64,13 @@ Contract rule:
 
 - optional extensions cannot override required no-generation classification,
   disposition, or termination-reason mapping.
+
+The practical split is:
+
+- mode chooses the run posture,
+- profile chooses the executable shape,
+- engine enforces legality and limits,
+- adapters wire the profile to real runtime calls.
 
 ## Blocked / No-Generation Behavior Matrix
 
@@ -125,9 +146,9 @@ Current `bounded-review` profile:
   `transition_blocked_by_policy` when generation is blocked before first
   draft emission.
 
-Upcoming `generate-only` profile:
+Current `generate-only` profile:
 
-- should implement the same required hooks with
+- already uses the same required hooks with
   `enableAssessment=false`, `enableRevision=false`.
-- should reuse the same no-generation mapping and provenance invariants.
-- should not introduce profile-specific blocked-state semantics.
+- reuses the same no-generation mapping and provenance invariants.
+- does not introduce profile-specific blocked-state semantics.
