@@ -55,8 +55,14 @@ function Invoke-EnvValidation {
   Write-Host "Validating env for $Target..."
   if ($assumedPresent -and $assumedPresent.Trim().Length -gt 0) {
     pnpm validate-env --target $Target --assume-present $assumedPresent
+    if ($LASTEXITCODE -ne 0) {
+      throw "env validation failed with exit code $LASTEXITCODE"
+    }
   } else {
     pnpm validate-env --target $Target
+    if ($LASTEXITCODE -ne 0) {
+      throw "env validation failed with exit code $LASTEXITCODE"
+    }
   }
 }
 
