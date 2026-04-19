@@ -13,7 +13,10 @@ import type {
     GenerationRuntime,
 } from '@footnote/agent-runtime';
 import { createVoltAgentRuntime } from '@footnote/agent-runtime';
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type {
+    ResponseMetadata,
+    StepRecord,
+} from '@footnote/contracts/ethics-core';
 import { ResponseMetadataSchema } from '@footnote/contracts/web';
 import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import {
@@ -1100,6 +1103,112 @@ test('runChatMessages falls back to reviewed workflow behavior for unknown workf
     );
     assert.equal(capturedWorkflowRunConfig?.maxIterations, 2);
     assert.equal(capturedWorkflow?.workflowName, 'message_with_review_loop');
+});
+
+test('runChatMessages maps planner execution context into a workflow planner step for bounded-review lineage', async () => {
+    let capturedPlannerStep: StepRecord | undefined;
+
+    const chatService = createChatService({
+        generationRuntime: createRuntime(),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'grounded',
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        runReviewWorkflow: async (input) => {
+            capturedPlannerStep = input.plannerStepRecord;
+            return {
+                outcome: 'generated',
+                generationResult: {
+                    text: 'workflow response',
+                    model: input.generationRequest.model,
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 5,
+                        totalTokens: 15,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                },
+                workflowLineage: {
+                    workflowId: 'wf_planner_bridge',
+                    workflowName: input.workflowConfig.workflowName,
+                    status: 'completed',
+                    terminationReason: 'goal_satisfied',
+                    stepCount: 2,
+                    maxSteps: 3,
+                    maxDurationMs: input.workflowConfig.maxDurationMs,
+                    steps: [
+                        input.plannerStepRecord ?? {
+                            stepId: 'step_1',
+                            attempt: 1,
+                            stepKind: 'plan',
+                            startedAt: new Date().toISOString(),
+                            finishedAt: new Date().toISOString(),
+                            durationMs: 1,
+                            outcome: {
+                                status: 'failed',
+                                summary: 'planner placeholder',
+                            },
+                        },
+                        {
+                            stepId: 'step_2',
+                            parentStepId: 'step_1',
+                            attempt: 1,
+                            stepKind: 'generate',
+                            startedAt: new Date().toISOString(),
+                            finishedAt: new Date().toISOString(),
+                            durationMs: 1,
+                            outcome: {
+                                status: 'executed',
+                                summary: 'Generated workflow response.',
+                            },
+                        },
+                    ],
+                },
+            } satisfies RunBoundedReviewWorkflowResult;
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+        executionContext: {
+            planner: {
+                status: 'failed',
+                reasonCode: 'planner_runtime_error',
+                purpose: 'chat_orchestrator_action_selection',
+                contractType: 'fallback',
+                applyOutcome: 'not_applied',
+                mattered: false,
+                matteredControlIds: [],
+                profileId: 'openai-text-fast',
+                originalProfileId: 'openai-text-fast',
+                effectiveProfileId: 'openai-text-fast',
+                provider: 'openai',
+                model: 'gpt-5-nano',
+                durationMs: 9,
+            },
+        },
+    });
+
+    assert.equal(response.message, 'workflow response');
+    assert.equal(capturedPlannerStep?.stepKind, 'plan');
+    assert.equal(capturedPlannerStep?.outcome.status, 'failed');
+    assert.equal(capturedPlannerStep?.reasonCode, 'planner_runtime_error');
+    assert.equal(
+        capturedPlannerStep?.outcome.signals?.applyOutcome,
+        'not_applied'
+    );
+    assert.equal(
+        capturedPlannerStep?.outcome.signals?.contractType,
+        'fallback'
+    );
 });
 
 test('runChatMessages executes fast workflow mode as direct generation without workflow lineage', async () => {
