@@ -61,6 +61,12 @@ test('low-risk JSON routes bypass legacy /api dispatch while preserving low-risk
                 : pathname,
         trustProxy: false,
         blogReadRateLimitConfig: { limit: 100, windowMs: 60_000 },
+        handleIncidentListRequest: async () => undefined,
+        handleIncidentReportRequest: async () => undefined,
+        handleIncidentStatusRequest: async () => undefined,
+        handleIncidentNotesRequest: async () => undefined,
+        handleIncidentRemediationRequest: async () => undefined,
+        handleIncidentDetailRequest: async () => undefined,
         handleRuntimeConfigRequest: async (_req, res) => {
             handledPaths.push('/config.json');
             res.statusCode = 200;

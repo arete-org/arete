@@ -8,6 +8,7 @@
  */
 import type http from 'node:http';
 import express from 'express';
+import { registerIncidentRoutes } from './incidentRoutes.js';
 import { registerLowRiskJsonRoutes } from './lowRiskJsonRoutes.js';
 import { getRequestUrl } from './requestUrl.js';
 
@@ -48,6 +49,35 @@ type CreateExpressAppDeps = {
         limit: number;
         windowMs: number;
     };
+    handleIncidentListRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        parsedUrl: URL
+    ) => Promise<void>;
+    handleIncidentReportRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleIncidentStatusRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        parsedUrl: URL
+    ) => Promise<void>;
+    handleIncidentNotesRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        parsedUrl: URL
+    ) => Promise<void>;
+    handleIncidentRemediationRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        parsedUrl: URL
+    ) => Promise<void>;
+    handleIncidentDetailRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        parsedUrl: URL
+    ) => Promise<void>;
     handleRuntimeConfigRequest: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -77,6 +107,12 @@ const createExpressApp = ({
     normalizePathname,
     trustProxy,
     blogReadRateLimitConfig,
+    handleIncidentListRequest,
+    handleIncidentReportRequest,
+    handleIncidentStatusRequest,
+    handleIncidentNotesRequest,
+    handleIncidentRemediationRequest,
+    handleIncidentDetailRequest,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
     handleBlogIndexRequest,
@@ -98,6 +134,17 @@ const createExpressApp = ({
         handleChatProfilesRequest,
         handleBlogIndexRequest,
         handleBlogPostRequest,
+        logRequest,
+    });
+    registerIncidentRoutes({
+        app,
+        normalizePathname,
+        handleIncidentListRequest,
+        handleIncidentReportRequest,
+        handleIncidentStatusRequest,
+        handleIncidentNotesRequest,
+        handleIncidentRemediationRequest,
+        handleIncidentDetailRequest,
         logRequest,
     });
 

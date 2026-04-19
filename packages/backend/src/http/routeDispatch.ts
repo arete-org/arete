@@ -9,11 +9,6 @@ import type http from 'node:http';
 import { wantsTraceJsonResponse } from './traceAccept.js';
 
 // --- Route path helpers ---
-const INCIDENT_STATUS_PATH_PATTERN = /^\/api\/incidents\/[^/]+\/status$/;
-const INCIDENT_NOTES_PATH_PATTERN = /^\/api\/incidents\/[^/]+\/notes$/;
-const INCIDENT_REMEDIATION_PATH_PATTERN =
-    /^\/api\/incidents\/[^/]+\/remediation$/;
-const INCIDENT_DETAIL_PATH_PATTERN = /^\/api\/incidents\/[^/]+$/;
 const TRACE_CARD_ASSET_PATH_PATTERN =
     /^\/api\/traces\/[^/]+\/assets\/trace-card\.svg$/;
 
@@ -42,15 +37,9 @@ type DispatchOutcome = 'handled' | 'fallthrough';
 
 type RouteDispatchHandlers = {
     handleWebhookRequest: RequestHandler;
-    handleIncidentListRequest: ParsedUrlHandler;
-    handleIncidentReportRequest: RequestHandler;
     handleInternalTextRequest: RequestHandler;
     handleInternalImageRequest: RequestHandler;
     handleInternalVoiceTtsRequest: RequestHandler;
-    handleIncidentStatusRequest: ParsedUrlHandler;
-    handleIncidentNotesRequest: ParsedUrlHandler;
-    handleIncidentRemediationRequest: ParsedUrlHandler;
-    handleIncidentDetailRequest: ParsedUrlHandler;
     handleTraceUpsertRequest: RequestHandler;
     handleTraceCardCreateRequest: RequestHandler;
     handleTraceCardFromTraceRequest: RequestHandler;
@@ -88,18 +77,6 @@ const createRouteDispatcher = ({
             return 'handled';
         }
 
-        // --- Incident routes ---
-        if (normalizedPathname === '/api/incidents') {
-            await handlers.handleIncidentListRequest(req, res, parsedUrl);
-            return 'handled';
-        }
-
-        // Keep explicit report route before generic /api/incidents/:incidentId.
-        if (normalizedPathname === '/api/incidents/report') {
-            await handlers.handleIncidentReportRequest(req, res);
-            return 'handled';
-        }
-
         // --- Trusted internal routes ---
         if (normalizedPathname === '/api/internal/text') {
             await handlers.handleInternalTextRequest(req, res);
@@ -113,31 +90,6 @@ const createRouteDispatcher = ({
 
         if (normalizedPathname === '/api/internal/voice/tts') {
             await handlers.handleInternalVoiceTtsRequest(req, res);
-            return 'handled';
-        }
-
-        // --- Incident detail sub-routes ---
-        if (INCIDENT_STATUS_PATH_PATTERN.test(normalizedPathname)) {
-            await handlers.handleIncidentStatusRequest(req, res, parsedUrl);
-            return 'handled';
-        }
-
-        if (INCIDENT_NOTES_PATH_PATTERN.test(normalizedPathname)) {
-            await handlers.handleIncidentNotesRequest(req, res, parsedUrl);
-            return 'handled';
-        }
-
-        if (INCIDENT_REMEDIATION_PATH_PATTERN.test(normalizedPathname)) {
-            await handlers.handleIncidentRemediationRequest(
-                req,
-                res,
-                parsedUrl
-            );
-            return 'handled';
-        }
-
-        if (INCIDENT_DETAIL_PATH_PATTERN.test(normalizedPathname)) {
-            await handlers.handleIncidentDetailRequest(req, res, parsedUrl);
             return 'handled';
         }
 
