@@ -199,7 +199,6 @@ const createExpressApp = ({
     });
     registerInternalRoutes({
         app,
-        normalizePathname,
         handleInternalTextRequest,
         handleInternalImageRequest,
         handleInternalVoiceTtsRequest,
