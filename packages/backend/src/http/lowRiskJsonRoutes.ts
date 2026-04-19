@@ -34,7 +34,7 @@ type RegisterLowRiskJsonRoutesDeps = {
     handleChatProfilesRequest: RequestHandler;
     handleBlogIndexRequest: RequestHandler;
     handleBlogPostRequest: BlogPostHandler;
-    blogReadRateLimiter: SimpleRateLimiter | null;
+    blogReadRateLimiter: SimpleRateLimiter;
     logRequest: LogRequest;
 };
 
@@ -126,65 +126,61 @@ const registerLowRiskJsonRoutes = ({
             const parsedUrl = new URL(requestUrl, 'http://localhost');
             const normalizedPathname = normalizePathname(parsedUrl.pathname);
             if (normalizedPathname === '/api/blog-posts') {
-                if (blogReadRateLimiter) {
-                    const rateLimitResult = blogReadRateLimiter.check(
-                        getClientIp(req)
+                const rateLimitResult = blogReadRateLimiter.check(
+                    getClientIp(req)
+                );
+                if (!rateLimitResult.allowed) {
+                    res.statusCode = 429;
+                    res.setHeader(
+                        'Content-Type',
+                        'application/json; charset=utf-8'
                     );
-                    if (!rateLimitResult.allowed) {
-                        res.statusCode = 429;
-                        res.setHeader(
-                            'Content-Type',
-                            'application/json; charset=utf-8'
-                        );
-                        res.setHeader(
-                            'Retry-After',
-                            rateLimitResult.retryAfter.toString()
-                        );
-                        res.end(
-                            JSON.stringify({
-                                error: 'Too many requests',
-                                retryAfter: rateLimitResult.retryAfter,
-                            })
-                        );
-                        logRequest(
-                            req,
-                            res,
-                            `blog read rate-limited retryAfter=${rateLimitResult.retryAfter}`
-                        );
-                        return;
-                    }
+                    res.setHeader(
+                        'Retry-After',
+                        rateLimitResult.retryAfter.toString()
+                    );
+                    res.end(
+                        JSON.stringify({
+                            error: 'Too many requests',
+                            retryAfter: rateLimitResult.retryAfter,
+                        })
+                    );
+                    logRequest(
+                        req,
+                        res,
+                        `blog read rate-limited retryAfter=${rateLimitResult.retryAfter}`
+                    );
+                    return;
                 }
                 await handleBlogIndexRequest(req, res);
                 return;
             }
             if (normalizedPathname.startsWith('/api/blog-posts/')) {
-                if (blogReadRateLimiter) {
-                    const rateLimitResult = blogReadRateLimiter.check(
-                        getClientIp(req)
+                const rateLimitResult = blogReadRateLimiter.check(
+                    getClientIp(req)
+                );
+                if (!rateLimitResult.allowed) {
+                    res.statusCode = 429;
+                    res.setHeader(
+                        'Content-Type',
+                        'application/json; charset=utf-8'
                     );
-                    if (!rateLimitResult.allowed) {
-                        res.statusCode = 429;
-                        res.setHeader(
-                            'Content-Type',
-                            'application/json; charset=utf-8'
-                        );
-                        res.setHeader(
-                            'Retry-After',
-                            rateLimitResult.retryAfter.toString()
-                        );
-                        res.end(
-                            JSON.stringify({
-                                error: 'Too many requests',
-                                retryAfter: rateLimitResult.retryAfter,
-                            })
-                        );
-                        logRequest(
-                            req,
-                            res,
-                            `blog read rate-limited retryAfter=${rateLimitResult.retryAfter}`
-                        );
-                        return;
-                    }
+                    res.setHeader(
+                        'Retry-After',
+                        rateLimitResult.retryAfter.toString()
+                    );
+                    res.end(
+                        JSON.stringify({
+                            error: 'Too many requests',
+                            retryAfter: rateLimitResult.retryAfter,
+                        })
+                    );
+                    logRequest(
+                        req,
+                        res,
+                        `blog read rate-limited retryAfter=${rateLimitResult.retryAfter}`
+                    );
+                    return;
                 }
                 const postId = normalizedPathname.split('/').pop() || '';
                 await handleBlogPostRequest(req, res, postId);
