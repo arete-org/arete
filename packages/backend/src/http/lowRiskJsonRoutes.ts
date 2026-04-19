@@ -9,6 +9,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
+import { getRequestUrl } from './requestUrl.js';
 
 type RequestHandler = (
     req: IncomingMessage,
@@ -30,24 +31,15 @@ type LogRequest = (
 type RegisterLowRiskJsonRoutesDeps = {
     app: express.Express;
     normalizePathname: (pathname: string) => string;
+    blogReadRateLimitConfig: {
+        limit: number;
+        windowMs: number;
+    };
     handleRuntimeConfigRequest: RequestHandler;
     handleChatProfilesRequest: RequestHandler;
     handleBlogIndexRequest: RequestHandler;
     handleBlogPostRequest: BlogPostHandler;
     logRequest: LogRequest;
-};
-
-const getRequestUrl = (req: IncomingMessage): string | undefined => {
-    const requestWithOriginalUrl = req as IncomingMessage & {
-        originalUrl?: unknown;
-    };
-    if (
-        typeof requestWithOriginalUrl.originalUrl === 'string' &&
-        requestWithOriginalUrl.originalUrl.length > 0
-    ) {
-        return requestWithOriginalUrl.originalUrl;
-    }
-    return (typeof req.url === 'string' && req.url) || undefined;
 };
 
 const respondWithRouteError = (
@@ -65,9 +57,33 @@ const respondWithRouteError = (
     );
 };
 
+/**
+ * Registers low-risk JSON route boundaries in the Express shell.
+ *
+ * Public route contract:
+ * - `/config.json`
+ * - `/api/chat/profiles`
+ * - `/api/blog-posts` and `/api/blog-posts/:postId`
+ *
+ * Notes:
+ * - Blog reads are protected by route-scoped rate limiting.
+ * - Unmatched `/api/chat/*` and `/api/blog-posts/*` requests intentionally
+ *   fall through to downstream dispatch (fail-open behavior).
+ *
+ * @param app Express app receiving mounted low-risk routes.
+ * @param normalizePathname Shared path normalizer for trailing-slash parity.
+ * @param blogReadRateLimitConfig Per-IP limiter window/limit for blog routes.
+ * @param handleRuntimeConfigRequest Existing `/config.json` handler.
+ * @param handleChatProfilesRequest Existing `/api/chat/profiles` handler.
+ * @param handleBlogIndexRequest Existing blog index handler.
+ * @param handleBlogPostRequest Existing blog post-by-id handler.
+ * @param logRequest Shared request logger used for route-level error context.
+ * @returns void
+ */
 const registerLowRiskJsonRoutes = ({
     app,
     normalizePathname,
+    blogReadRateLimitConfig,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
     handleBlogIndexRequest,
@@ -83,20 +99,8 @@ const registerLowRiskJsonRoutes = ({
     });
 
     const chatRouter = express.Router();
-    chatRouter.use(async (req, res, next) => {
-        const requestUrl = getRequestUrl(req);
-        if (!requestUrl) {
-            res.status(400).end('Bad Request');
-            return;
-        }
-
+    chatRouter.all('/profiles', async (req, res) => {
         try {
-            const parsedUrl = new URL(requestUrl, 'http://localhost');
-            const normalizedPathname = normalizePathname(parsedUrl.pathname);
-            if (normalizedPathname !== '/api/chat/profiles') {
-                next();
-                return;
-            }
             await handleChatProfilesRequest(req, res);
         } catch (error) {
             respondWithRouteError(req, res, logRequest, error);
@@ -106,8 +110,8 @@ const registerLowRiskJsonRoutes = ({
 
     const blogRouter = express.Router();
     const blogRateLimiter = rateLimit({
-        windowMs: 15 * 60 * 1000,
-        max: 100,
+        windowMs: blogReadRateLimitConfig.windowMs,
+        limit: blogReadRateLimitConfig.limit,
         standardHeaders: true,
         legacyHeaders: false,
         statusCode: 429,
@@ -116,26 +120,28 @@ const registerLowRiskJsonRoutes = ({
         },
     });
     blogRouter.use(blogRateLimiter);
-    blogRouter.use(async (req, res, next) => {
-        const requestUrl = getRequestUrl(req);
-        if (!requestUrl) {
-            res.status(400).end('Bad Request');
-            return;
-        }
-
+    blogRouter.all('/', async (req, res) => {
         try {
+            await handleBlogIndexRequest(req, res);
+        } catch (error) {
+            respondWithRouteError(req, res, logRequest, error);
+        }
+    });
+    blogRouter.all('/:postId', async (req, res, next) => {
+        try {
+            const requestUrl = getRequestUrl(req);
+            if (!requestUrl) {
+                res.status(400).end('Bad Request');
+                return;
+            }
             const parsedUrl = new URL(requestUrl, 'http://localhost');
             const normalizedPathname = normalizePathname(parsedUrl.pathname);
-            if (normalizedPathname === '/api/blog-posts') {
-                await handleBlogIndexRequest(req, res);
+            const postId = String(req.params.postId ?? '');
+            if (!postId || normalizedPathname === '/api/blog-posts') {
+                next();
                 return;
             }
-            if (normalizedPathname.startsWith('/api/blog-posts/')) {
-                const postId = normalizedPathname.split('/').pop() || '';
-                await handleBlogPostRequest(req, res, postId);
-                return;
-            }
-            next();
+            await handleBlogPostRequest(req, res, postId);
         } catch (error) {
             respondWithRouteError(req, res, logRequest, error);
         }

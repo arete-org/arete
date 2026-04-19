@@ -595,6 +595,8 @@ const { dispatchHttpRoute, dispatchUpgradeRoute } = createRouteDispatcher({
 const app = createExpressApp({
     dispatchHttpRoute,
     normalizePathname,
+    trustProxy: runtimeConfig.server.trustProxy,
+    blogReadRateLimitConfig: runtimeConfig.rateLimits.web.ip,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
     handleBlogIndexRequest,

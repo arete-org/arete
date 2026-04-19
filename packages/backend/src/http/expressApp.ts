@@ -9,6 +9,7 @@
 import type http from 'node:http';
 import express from 'express';
 import { registerLowRiskJsonRoutes } from './lowRiskJsonRoutes.js';
+import { getRequestUrl } from './requestUrl.js';
 
 type DispatchOutcome = 'handled' | 'fallthrough';
 
@@ -42,6 +43,11 @@ type HandleStaticTransportRequest = (args: {
 type CreateExpressAppDeps = {
     dispatchHttpRoute: DispatchHttpRoute;
     normalizePathname: (pathname: string) => string;
+    trustProxy: boolean;
+    blogReadRateLimitConfig: {
+        limit: number;
+        windowMs: number;
+    };
     handleRuntimeConfigRequest: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -66,22 +72,11 @@ type CreateExpressAppDeps = {
     logRequest: LogRequest;
 };
 
-const getRequestUrl = (req: http.IncomingMessage): string | undefined => {
-    const requestWithOriginalUrl = req as http.IncomingMessage & {
-        originalUrl?: unknown;
-    };
-    if (
-        typeof requestWithOriginalUrl.originalUrl === 'string' &&
-        requestWithOriginalUrl.originalUrl.length > 0
-    ) {
-        return requestWithOriginalUrl.originalUrl;
-    }
-    return (typeof req.url === 'string' && req.url) || undefined;
-};
-
 const createExpressApp = ({
     dispatchHttpRoute,
     normalizePathname,
+    trustProxy,
+    blogReadRateLimitConfig,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
     handleBlogIndexRequest,
@@ -93,10 +88,12 @@ const createExpressApp = ({
     logRequest,
 }: CreateExpressAppDeps): express.Express => {
     const app = express();
+    app.set('trust proxy', trustProxy);
 
     registerLowRiskJsonRoutes({
         app,
         normalizePathname,
+        blogReadRateLimitConfig,
         handleRuntimeConfigRequest,
         handleChatProfilesRequest,
         handleBlogIndexRequest,

@@ -46,7 +46,7 @@ const createTestServer = (
         });
     });
 
-test('low-risk JSON routes bypass legacy /api dispatch and preserve blog path matching', async (t) => {
+test('low-risk JSON routes bypass legacy /api dispatch while preserving low-risk route ownership', async (t) => {
     const handledPaths: string[] = [];
     const dispatchCalls: string[] = [];
 
@@ -59,6 +59,8 @@ test('low-risk JSON routes bypass legacy /api dispatch and preserve blog path ma
             pathname.length > 1 && pathname.endsWith('/')
                 ? pathname.slice(0, -1)
                 : pathname,
+        trustProxy: false,
+        blogReadRateLimitConfig: { limit: 100, windowMs: 60_000 },
         handleRuntimeConfigRequest: async (_req, res) => {
             handledPaths.push('/config.json');
             res.statusCode = 200;
@@ -112,14 +114,18 @@ test('low-risk JSON routes bypass legacy /api dispatch and preserve blog path ma
     const blogPostResponse = await fetch(
         `${server.baseUrl}/api/blog-posts/100/extra`
     );
-    assert.equal(blogPostResponse.status, 200);
-    assert.deepEqual(await blogPostResponse.json(), { id: 'extra' });
+    assert.equal(blogPostResponse.status, 404);
+
+    const healthResponse = await fetch(`${server.baseUrl}/api/health`);
+    assert.equal(healthResponse.status, 404);
 
     assert.deepEqual(handledPaths, [
         '/config.json',
         '/api/chat/profiles',
         '/api/blog-posts',
-        '/api/blog-posts/extra',
     ]);
-    assert.deepEqual(dispatchCalls, []);
+    assert.deepEqual(dispatchCalls, [
+        '/api/blog-posts/100/extra',
+        '/api/health',
+    ]);
 });
