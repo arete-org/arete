@@ -52,7 +52,7 @@ const Hero = (): JSX.Element => {
                 </h1>
                 <p className="hero-copy__subtitle">
                     Footnote gives you a direct answer, then shows what shaped
-                    it so you can inspect the result instead of guessing.
+                    it so you can see what shaped it, not just the final text.
                 </p>
                 <div className="hero-action-hub">
                     <div className="hero-action-tabs" role="tablist">
