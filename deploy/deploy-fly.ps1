@@ -44,6 +44,22 @@ function Get-FlySecretNames {
   return $lines | ForEach-Object { ($_ -split '\s+')[0] }
 }
 
+function Invoke-EnvValidation {
+  param(
+    [ValidateSet('fly-backend', 'fly-bot')]
+    [string]$Target,
+    [string]$AppName
+  )
+
+  $assumedPresent = (Get-FlySecretNames -AppName $AppName) -join ','
+  Write-Host "Validating env for $Target..."
+  if ($assumedPresent -and $assumedPresent.Trim().Length -gt 0) {
+    pnpm validate-env --target $Target --assume-present $assumedPresent
+  } else {
+    pnpm validate-env --target $Target
+  }
+}
+
 function Get-EnvValueFromFile {
   param(
     [string]$EnvPath,
@@ -168,12 +184,14 @@ Ensure-FlySecrets -AppName $backendAppName `
   -RequiredSecrets @('OPENAI_API_KEY', 'TRACE_API_TOKEN') `
   -OptionalSecrets @('TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY', 'GITHUB_WEBHOOK_SECRET') `
   -EnvPath $envPath
+Invoke-EnvValidation -Target 'fly-backend' -AppName $backendAppName
 
 Write-Host "Configuring bot secrets..."
 Ensure-FlySecrets -AppName $botAppName `
   -RequiredSecrets @('DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_GUILD_ID', 'OPENAI_API_KEY', 'DISCORD_USER_ID', 'INCIDENT_PSEUDONYMIZATION_SECRET', 'TRACE_API_TOKEN') `
   -OptionalSecrets @('WEB_BASE_URL', 'CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET') `
   -EnvPath $envPath
+Invoke-EnvValidation -Target 'fly-bot' -AppName $botAppName
 
 Write-Host "Deploying backend..."
 fly deploy -c (Join-Path $configRoot 'fly.backend.toml')

@@ -85,6 +85,7 @@ const { resolveAsset, mimeMap } = createAssetResolver(DIST_DIR);
 // --- Service state ---
 let traceStore: ReturnType<typeof createTraceStore> | null = null;
 let incidentStore: ReturnType<typeof getDefaultIncidentStore> | null = null;
+let incidentStoreUnavailableReason: string | null = null;
 let generationRuntime: GenerationRuntime | null = null;
 let imageGenerationRuntime: ImageGenerationRuntime | null = null;
 let weatherForecastTool: ReturnType<
@@ -160,8 +161,19 @@ const initializeServices = () => {
         );
     }
 
-    // Incident storage is a required Wave 1 dependency. Surface failures early.
-    incidentStore = getDefaultIncidentStore();
+    // Incident storage is optional at runtime. When unavailable, keep backend
+    // online and return explicit 503 responses for incident routes.
+    try {
+        incidentStore = getDefaultIncidentStore();
+        incidentStoreUnavailableReason = null;
+    } catch (error) {
+        incidentStore = null;
+        incidentStoreUnavailableReason =
+            error instanceof Error ? error.message : String(error);
+        logger.error(
+            `Incident store unavailable; incident routes will return 503. ${incidentStoreUnavailableReason}`
+        );
+    }
 
     // --- Text generation runtime ---
     // Chat runtime can run when at least one provider is configured.
@@ -381,30 +393,102 @@ const { handleBlogIndexRequest, handleBlogPostRequest } = createBlogHandlers({
     blogStore,
     logRequest,
 });
-if (!incidentStore) {
-    throw new Error('Incident store did not initialize correctly.');
-}
 const incidentAlertRouter = createIncidentAlertRouter({
     config: runtimeConfig.alerts,
 });
-const incidentService = createIncidentService({
-    incidentStore,
-    alertRouter: incidentAlertRouter,
-});
-const {
-    handleIncidentReportRequest,
-    handleIncidentListRequest,
-    handleIncidentDetailRequest,
-    handleIncidentStatusRequest,
-    handleIncidentNotesRequest,
-    handleIncidentRemediationRequest,
-} = createIncidentHandlers({
-    incidentService,
-    logRequest,
-    maxIncidentBodyBytes: runtimeConfig.reflect.maxBodyBytes,
-    traceApiToken: runtimeConfig.trace.apiToken,
-    serviceToken: runtimeConfig.reflect.serviceToken,
-});
+const writeIncidentUnavailable = (
+    res: http.ServerResponse,
+    reason: string
+): void => {
+    if (res.headersSent) {
+        return;
+    }
+
+    res.writeHead(503, { 'Content-Type': 'application/json' });
+    res.end(
+        JSON.stringify({
+            error: 'Incident subsystem unavailable',
+            code: 'INCIDENT_SERVICE_UNAVAILABLE',
+            reason,
+        })
+    );
+};
+
+let handleIncidentReportRequest: (
+    req: http.IncomingMessage,
+    res: http.ServerResponse
+) => Promise<void>;
+let handleIncidentListRequest: (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    parsedUrl: URL
+) => Promise<void>;
+let handleIncidentDetailRequest: (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    parsedUrl: URL
+) => Promise<void>;
+let handleIncidentStatusRequest: (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    parsedUrl: URL
+) => Promise<void>;
+let handleIncidentNotesRequest: (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    parsedUrl: URL
+) => Promise<void>;
+let handleIncidentRemediationRequest: (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    parsedUrl: URL
+) => Promise<void>;
+
+if (incidentStore) {
+    const incidentService = createIncidentService({
+        incidentStore,
+        alertRouter: incidentAlertRouter,
+    });
+    ({
+        handleIncidentReportRequest,
+        handleIncidentListRequest,
+        handleIncidentDetailRequest,
+        handleIncidentStatusRequest,
+        handleIncidentNotesRequest,
+        handleIncidentRemediationRequest,
+    } = createIncidentHandlers({
+        incidentService,
+        logRequest,
+        maxIncidentBodyBytes: runtimeConfig.reflect.maxBodyBytes,
+        traceApiToken: runtimeConfig.trace.apiToken,
+        serviceToken: runtimeConfig.reflect.serviceToken,
+    }));
+} else {
+    const reason =
+        incidentStoreUnavailableReason ??
+        'INCIDENT_PSEUDONYMIZATION_SECRET is not configured.';
+    const logUnavailableRoute = (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        routeLabel: string
+    ) => {
+        writeIncidentUnavailable(res, reason);
+        logRequest(req, res, `${routeLabel} unavailable`);
+    };
+
+    handleIncidentReportRequest = async (req, res) =>
+        logUnavailableRoute(req, res, 'incident report');
+    handleIncidentListRequest = async (req, res) =>
+        logUnavailableRoute(req, res, 'incident list');
+    handleIncidentDetailRequest = async (req, res) =>
+        logUnavailableRoute(req, res, 'incident detail');
+    handleIncidentStatusRequest = async (req, res) =>
+        logUnavailableRoute(req, res, 'incident status');
+    handleIncidentNotesRequest = async (req, res) =>
+        logUnavailableRoute(req, res, 'incident notes');
+    handleIncidentRemediationRequest = async (req, res) =>
+        logUnavailableRoute(req, res, 'incident remediation');
+}
 const handleRuntimeConfigRequest = createRuntimeConfigHandler({ logRequest });
 const handleChatProfilesRequest = createChatProfilesHandler({ logRequest });
 const handleWebhookRequest = createWebhookHandler({
