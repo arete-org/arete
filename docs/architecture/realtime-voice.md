@@ -74,9 +74,9 @@ These are the main settings that change realtime voice behavior.
 
 ## 1. Discord Entry and Session Start
 
-The Discord entrypoint is the `/call` slash command in [call.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/commands/call.ts). That command joins the target voice channel, records the initiating user, and optionally records a per-call voice override.
+The Discord entrypoint is the `/call` slash command in [call.ts](../../packages/discord-bot/src/commands/call.ts). That command joins the target voice channel, records the initiating user, and optionally records a per-call voice override.
 
-The actual realtime session does not start just because the bot joined the channel. The bot waits for the initiating user to join and start the conversation. That orchestration lives in [VoiceStateHandler.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/events/VoiceStateHandler.ts).
+The actual realtime session does not start just because the bot joined the channel. The bot waits for the initiating user to join and start the conversation. That orchestration lives in [VoiceStateHandler.ts](../../packages/discord-bot/src/events/VoiceStateHandler.ts).
 
 When conversation start is triggered, `VoiceStateHandler`:
 
@@ -90,7 +90,7 @@ This keeps the session lifecycle tied to real human participation instead of ope
 
 ## 2. Discord-Side Realtime Session
 
-The Discord-side session wrapper lives in [realtimeService.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/utils/realtimeService.ts). Its job is to hide the backend websocket protocol from the rest of the Discord bot.
+The Discord-side session wrapper lives in [realtimeService.ts](../../packages/discord-bot/src/utils/realtimeService.ts). Its job is to hide the backend websocket protocol from the rest of the Discord bot.
 
 This layer:
 
@@ -104,17 +104,17 @@ This is intentionally not the provider boundary. It is only the Discord-to-backe
 
 ## 3. Audio Capture and Turn Closing
 
-Discord audio capture lives in [AudioCaptureHandler.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/voice/AudioCaptureHandler.ts). It subscribes to Discord voice receiver streams, decodes Opus to PCM, resamples the audio, and emits `audioChunk` events to the session manager.
+Discord audio capture lives in [AudioCaptureHandler.ts](../../packages/discord-bot/src/voice/AudioCaptureHandler.ts). It subscribes to Discord voice receiver streams, decodes Opus to PCM, resamples the audio, and emits `audioChunk` events to the session manager.
 
 Discord voice activity mode can stop sending audio immediately when the user stops speaking. That means the provider may not observe enough trailing silence to close a turn on its own.
 
-To compensate, [VoiceSessionManager.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/voice/VoiceSessionManager.ts) listens for `speakerSilence` events and appends a short silence tail when `server_vad` is active. The silence length is derived from `REALTIME_VAD_SILENCE_MS`, clamped to a safe range. That design lets provider-side VAD stay authoritative while adapting to Discord's voice-activity behavior.
+To compensate, [VoiceSessionManager.ts](../../packages/discord-bot/src/voice/VoiceSessionManager.ts) listens for `speakerSilence` events and appends a short silence tail when `server_vad` is active. The silence length is derived from `REALTIME_VAD_SILENCE_MS`, clamped to a safe range. That design lets provider-side VAD stay authoritative while adapting to Discord's voice-activity behavior.
 
 The invariant is simple: Discord streams audio continuously while the user is speaking, but the provider still decides when the turn is complete.
 
 ## 4. Backend Trusted Boundary
 
-The backend websocket handler lives in [internalVoiceRealtime.ts](/Users/Jordan/Desktop/footnote/packages/backend/src/handlers/internalVoiceRealtime.ts). This is the public control-plane boundary for realtime voice inside Footnote.
+The backend websocket handler lives in [internalVoiceRealtime.ts](../../packages/backend/src/handlers/internalVoiceRealtime.ts). This is the public control-plane boundary for realtime voice inside Footnote.
 
 Its responsibilities are:
 
@@ -128,7 +128,7 @@ This is the main architectural seam. If the Discord bot needs realtime voice, it
 
 ## 5. Prompt Composition
 
-Realtime prompt composition lives in [realtimePromptComposer.ts](/Users/Jordan/Desktop/footnote/packages/backend/src/services/prompts/realtimePromptComposer.ts). The backend builds one instruction string for the provider session using:
+Realtime prompt composition lives in [realtimePromptComposer.ts](../../packages/backend/src/services/prompts/realtimePromptComposer.ts). The backend builds one instruction string for the provider session using:
 
 - the shared conversational system layer
 - the realtime voice surface layer
@@ -140,7 +140,7 @@ That means realtime voice now follows the same prompt model as the rest of the p
 
 ## 6. Provider Runtime Adapter
 
-The provider adapter lives in [openAiRealtimeVoiceRuntime.ts](/Users/Jordan/Desktop/footnote/packages/agent-runtime/src/openAiRealtimeVoiceRuntime.ts). This adapter is responsible for:
+The provider adapter lives in [openAiRealtimeVoiceRuntime.ts](../../packages/agent-runtime/src/openAiRealtimeVoiceRuntime.ts). This adapter is responsible for:
 
 - opening the OpenAI realtime websocket
 - sending the initial `session.update`
@@ -152,9 +152,9 @@ This is the only place that should know the provider websocket details for realt
 
 ## 7. Event Return Path and Playback
 
-Provider events are normalized by the runtime, forwarded through the backend websocket handler, and consumed by Discord's realtime event layer in [RealtimeEventHandler.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/realtime/RealtimeEventHandler.ts).
+Provider events are normalized by the runtime, forwarded through the backend websocket handler, and consumed by Discord's realtime event layer in [RealtimeEventHandler.ts](../../packages/discord-bot/src/realtime/RealtimeEventHandler.ts).
 
-That event layer emits streamed audio chunks immediately so playback can begin before the full response completes. Playback is then handled by [AudioPlaybackHandler.ts](/Users/Jordan/Desktop/footnote/packages/discord-bot/src/voice/AudioPlaybackHandler.ts), which keeps a guild-local playback pipeline alive long enough to avoid clipping between chunks or turns.
+That event layer emits streamed audio chunks immediately so playback can begin before the full response completes. Playback is then handled by [AudioPlaybackHandler.ts](../../packages/discord-bot/src/voice/AudioPlaybackHandler.ts), which keeps a guild-local playback pipeline alive long enough to avoid clipping between chunks or turns.
 
 The result is a streamed path in both directions:
 

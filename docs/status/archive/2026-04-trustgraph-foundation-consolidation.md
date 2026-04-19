@@ -1,5 +1,8 @@
 # TrustGraph Foundation Consolidation Status (2026-04-10)
 
+This is a dated consolidation note, not the primary TrustGraph architecture
+doc.
+
 ## Purpose
 
 Record exactly what was consolidated for TrustGraph foundation/seam work, and why, so outside reviewers can quickly confirm scope, truthfulness, and activation readiness posture.
@@ -33,8 +36,8 @@ Record exactly what was consolidated for TrustGraph foundation/seam work, and wh
 
 ## Evidence Anchors Reviewed
 
-- [architecture.md](../architecture/execution_contract_trustgraph/architecture.md)
-- [execution-contract-authority-map.md](../architecture/execution-contract-authority-map.md)
+- [architecture.md](../../architecture/execution_contract_trustgraph/architecture.md)
+- [execution-contract-authority-map.md](../../architecture/execution-contract-authority-map.md)
 - [runtimeWiring.ts](../../packages/backend/src/services/executionContractTrustGraph/runtimeWiring.ts)
 - [executionContractTrustGraph.ts](../../packages/backend/src/config/sections/executionContractTrustGraph.ts)
 - [chatOrchestrator.ts](../../packages/backend/src/services/chatOrchestrator.ts)

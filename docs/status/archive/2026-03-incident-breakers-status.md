@@ -1,20 +1,26 @@
 # Incident Queue And Breakers Status
 
+This is a dated operational snapshot from 2026-03-27.
+
+Keep it as historical rollout context, not as the main current-architecture
+entrypoint.
+
 ## Last Updated
 
 2026-03-27
 
 ## Owners
 
-- packages/backend (incident workflow and breaker/evaluator behavior)
-- docs (status maintenance)
+- `packages/backend` (incident workflow and breaker/evaluator behavior)
+- `docs` (status maintenance)
 
 ## Purpose
 
-Track current incident + breaker status for operations.
+Track incident and breaker status for operations.
 Keep this short and aligned with code reality.
 
-Canonical runtime capability reference: [2026-03-runtime-capability-matrix.md](./2026-03-runtime-capability-matrix.md).
+Canonical runtime capability reference for this snapshot:
+[2026-03-runtime-capability-matrix.md](./2026-03-runtime-capability-matrix.md).
 
 ## Snapshot
 
@@ -38,17 +44,20 @@ Canonical runtime capability reference: [2026-03-runtime-capability-matrix.md](.
 
 ### 1) Integration Pilot
 
-Goal: validate one real integration path with clear provenance and fail-open behavior.
+Goal: validate one real integration path with clear provenance and fail-open
+behavior.
 
 Reference issue: JBA-18
-Summary: validate one real integration path with clear provenance and fail-open behavior.
+Summary: validate one real integration path with clear provenance and fail-open
+behavior.
 
 ### 2) Deterministic Breaker Metadata Parity
 
 Goal: ensure breaker outcomes are explicit and auditable in execution metadata.
 
 Reference issue: JBA-19
-Summary: ensure breaker outcomes are explicit and auditable in execution metadata.
+Summary: ensure breaker outcomes are explicit and auditable in execution
+metadata.
 
 ### 3) Multi-step Workflow Follow-up
 
@@ -66,6 +75,6 @@ Summary: add lineage safely after current single-path hardening is stable.
 
 ## Validation Focus
 
-- Tool outcome visibility (xecuted / skipped / ailed + reason codes).
-- Breaker outcome visibility (uleId, action, and user-safe metadata).
+- Tool outcome visibility (`executed` / `skipped` / `failed` + reason codes).
+- Breaker outcome visibility (`ruleId`, `action`, and user-safe metadata).
 - End-to-end traceability across backend and Discord/web rendering surfaces.

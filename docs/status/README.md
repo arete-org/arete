@@ -3,30 +3,30 @@
 Use this section for rollout state and implementation snapshots.
 
 Read the active files first. Use `archive/` when you need branch closeout
-history or migration context.
+history, dated capability snapshots, or subsystem notes that are no longer a
+good entrypoint for current architecture.
 
-## Active Status
+## Current Rollout Notes
 
-- [Incident Queue And Breakers Status](./2026-03-incident-breakers-status.md):
-  current implementation progress and validation coverage for incident/breaker
-  work.
-- [Runtime Capability Matrix](./2026-03-runtime-capability-matrix.md): current
-  capability and support matrix across runtime surfaces.
-- [Runtime Surface Status](./2026-03-runtime-surface-status.md): current
-  surface-level status and cross-links into the capability matrix.
-- [Weather.gov Tool Pilot Eval](./2026-03-weathergov-pilot-eval.md): pilot
-  evaluation notes for the Weather.gov tool path.
 - [Workflow Engine Rollout Status](./2026-04-workflow-engine-rollout-status.md):
   rollout state and landing history for workflow-engine work. Read the
   architecture docs first for the current workflow/planner explanation.
-- [TrustGraph Foundation Consolidation Status](./2026-04-trustgraph-foundation-consolidation.md):
-  bounded-scope TrustGraph consolidation and review notes.
+- [Weather.gov Tool Pilot Eval](./2026-03-weathergov-pilot-eval.md): bounded
+  pilot evaluation notes for one tool path. This is specialized status, not the
+  main architecture reading path.
 
 ## Historical Archive
 
 `archive/` is historical rollout context. It is useful when you need branch
-closeout details, migration sequencing, or older implementation snapshots. It
-is not the best first stop for current architecture.
+closeout details, migration sequencing, older implementation snapshots, or
+generated views. It is not the best first stop for current architecture.
+
+- [Incident Queue And Breakers Status](./archive/2026-03-incident-breakers-status.md)
+- [Runtime Capability Matrix](./archive/2026-03-runtime-capability-matrix.md)
+- [Runtime Surface Status](./archive/2026-03-runtime-surface-status.md)
+- [TrustGraph Foundation Consolidation Status](./archive/2026-04-trustgraph-foundation-consolidation.md)
+- [Realtime Engagement Implementation Snapshot](./archive/2026-04-realtime-engagement-implementation-snapshot.md)
+- [Dependency Graph Snapshots](./archive/dependency-graphs/README.md)
 
 - [VoltAgent Reflect Runtime Status](./archive/2026-03-voltagent-reflect-runtime-status.md)
 - [Legacy OpenAI Text Migration Status](./archive/2026-03-legacy-openai-text-migration-status.md)
