@@ -9,6 +9,10 @@ import type { WorkflowStepKind } from '@footnote/contracts/ethics-core';
 import type { WorkflowTerminationReason } from '@footnote/contracts/ethics-core';
 import type {
     BoundedReviewAssessSignals,
+    ExecutionStatus,
+    PlannerExecutionApplyOutcome,
+    PlannerExecutionContractType,
+    PlannerExecutionPurpose,
     ExecutionReasonCode,
     StepRecord,
     WorkflowRecord,
@@ -353,6 +357,182 @@ export const mapExhaustedLimitToTerminationReason = (
     throw new Error(
         `Unsupported exhausted execution limit: ${exhaustiveCheck}`
     );
+};
+
+type PlannerStepRecordSummary = {
+    status: ExecutionStatus;
+    reasonCode?: ExecutionReasonCode;
+    purpose: PlannerExecutionPurpose;
+    contractType: PlannerExecutionContractType;
+    applyOutcome: PlannerExecutionApplyOutcome;
+    durationMs?: number;
+    action?: 'message' | 'react' | 'ignore' | 'image';
+    modality?: 'text' | 'tts';
+    requestedCapabilityProfile?: string;
+    selectedCapabilityProfile?: string;
+    profileId?: string;
+    originalProfileId?: string;
+    effectiveProfileId?: string;
+    provider?: string;
+    model?: string;
+    usage?: StepRecord['usage'];
+    cost?: StepRecord['cost'];
+    mattered?: boolean;
+    matteredControlIds?: string[];
+};
+
+export type BuildPlannerStepRecordInput = {
+    stepId: string;
+    attempt: number;
+    parentStepId?: string;
+    startedAtMs?: number;
+    finishedAtMs: number;
+    summary: PlannerStepRecordSummary;
+};
+
+const toNonNegativeIntegerOrZero = (value: unknown): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return 0;
+    }
+
+    return Math.max(0, Math.floor(value));
+};
+
+const toNonNegativeNumberOrUndefined = (value: unknown): number | undefined => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+        return undefined;
+    }
+
+    return value;
+};
+
+const isPlannerReasonCode = (
+    value: unknown
+): value is Extract<
+    ExecutionReasonCode,
+    'planner_runtime_error' | 'planner_invalid_output'
+> => value === 'planner_runtime_error' || value === 'planner_invalid_output';
+
+/**
+ * Builds a planner-specific workflow step record for short-lived lineage
+ * bridging while planner execution is still orchestrator-frontloaded.
+ *
+ * Keep this mapper narrow and bounded to planner-safe summary fields only.
+ * It must not become a generic workflow-step factory.
+ */
+export const buildPlannerStepRecord = ({
+    stepId,
+    attempt,
+    parentStepId,
+    startedAtMs,
+    finishedAtMs,
+    summary,
+}: BuildPlannerStepRecordInput): StepRecord => {
+    const normalizedFinishedAtMs =
+        typeof finishedAtMs === 'number' && Number.isFinite(finishedAtMs)
+            ? Math.floor(finishedAtMs)
+            : Date.now();
+    const normalizedDurationMs =
+        startedAtMs !== undefined
+            ? Math.max(
+                  0,
+                  Math.floor(normalizedFinishedAtMs - Math.floor(startedAtMs))
+              )
+            : toNonNegativeIntegerOrZero(summary.durationMs);
+    const normalizedStartedAtMs = normalizedFinishedAtMs - normalizedDurationMs;
+    const sanitizedReasonCode = isPlannerReasonCode(summary.reasonCode)
+        ? summary.reasonCode
+        : undefined;
+
+    const signals: NonNullable<StepRecord['outcome']['signals']> = {
+        applyOutcome: summary.applyOutcome,
+        purpose: summary.purpose,
+        contractType: summary.contractType,
+        ...(summary.action !== undefined && { action: summary.action }),
+        ...(summary.modality !== undefined && { modality: summary.modality }),
+        ...(summary.requestedCapabilityProfile !== undefined && {
+            requestedCapabilityProfile: summary.requestedCapabilityProfile,
+        }),
+        ...(summary.selectedCapabilityProfile !== undefined && {
+            selectedCapabilityProfile: summary.selectedCapabilityProfile,
+        }),
+        ...(summary.profileId !== undefined && {
+            profileId: summary.profileId,
+        }),
+        ...(summary.originalProfileId !== undefined && {
+            originalProfileId: summary.originalProfileId,
+        }),
+        ...(summary.effectiveProfileId !== undefined && {
+            effectiveProfileId: summary.effectiveProfileId,
+        }),
+        ...(summary.provider !== undefined && { provider: summary.provider }),
+        ...(summary.mattered !== undefined && { mattered: summary.mattered }),
+        ...(Array.isArray(summary.matteredControlIds) && {
+            matteredControlCount: summary.matteredControlIds.length,
+        }),
+    };
+
+    const usage = summary.usage
+        ? {
+              promptTokens: toNonNegativeNumberOrUndefined(
+                  summary.usage.promptTokens
+              ),
+              completionTokens: toNonNegativeNumberOrUndefined(
+                  summary.usage.completionTokens
+              ),
+              totalTokens: toNonNegativeNumberOrUndefined(
+                  summary.usage.totalTokens
+              ),
+          }
+        : undefined;
+    const hasUsage =
+        usage !== undefined &&
+        (usage.promptTokens !== undefined ||
+            usage.completionTokens !== undefined ||
+            usage.totalTokens !== undefined);
+    const normalizedCost =
+        summary.cost !== undefined
+            ? {
+                  inputCostUsd:
+                      toNonNegativeNumberOrUndefined(
+                          summary.cost.inputCostUsd
+                      ) ?? 0,
+                  outputCostUsd:
+                      toNonNegativeNumberOrUndefined(
+                          summary.cost.outputCostUsd
+                      ) ?? 0,
+                  totalCostUsd:
+                      toNonNegativeNumberOrUndefined(
+                          summary.cost.totalCostUsd
+                      ) ?? 0,
+              }
+            : undefined;
+
+    return {
+        stepId,
+        ...(parentStepId !== undefined && { parentStepId }),
+        attempt: Math.max(1, Math.floor(attempt)),
+        stepKind: 'plan',
+        ...(sanitizedReasonCode !== undefined && {
+            reasonCode: sanitizedReasonCode,
+        }),
+        startedAt: new Date(normalizedStartedAtMs).toISOString(),
+        finishedAt: new Date(normalizedFinishedAtMs).toISOString(),
+        durationMs: normalizedDurationMs,
+        ...(summary.model !== undefined && { model: summary.model }),
+        ...(hasUsage && usage !== undefined && { usage }),
+        ...(normalizedCost !== undefined && { cost: normalizedCost }),
+        outcome: {
+            status: summary.status,
+            summary:
+                summary.status === 'executed'
+                    ? 'Planner step emitted bounded action-selection summary.'
+                    : summary.status === 'failed'
+                      ? 'Planner step failed; bounded fallback guidance remained in effect.'
+                      : 'Planner step was skipped before action selection.',
+            signals,
+        },
+    };
 };
 
 export const runBoundedReviewWorkflow = async ({
