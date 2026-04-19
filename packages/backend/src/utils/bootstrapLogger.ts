@@ -11,7 +11,7 @@ import { createLogger, format, transports } from 'winston';
 /**
  * Dedicated bootstrap logger that avoids importing runtime-config-dependent logger wiring.
  */
-export const logger = createLogger({
+export const logger: ReturnType<typeof createLogger> = createLogger({
     level: 'warn',
     format: format.combine(
         format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),

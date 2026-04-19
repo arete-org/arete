@@ -460,18 +460,12 @@ if (incidentStore) {
         serviceToken: runtimeConfig.reflect.serviceToken,
     }));
 } else {
-    const reason =
-        incidentStoreUnavailableReason ??
-        'INCIDENT_PSEUDONYMIZATION_SECRET is not configured.';
     const logUnavailableRoute = (
         req: http.IncomingMessage,
         res: http.ServerResponse,
         routeLabel: string
     ) => {
-        logger.error('Incident subsystem initialization failure', {
-            reason,
-            routeLabel,
-        });
+        logger.warn('Incident subsystem unavailable route hit', { routeLabel });
         writeIncidentUnavailable(res);
         logRequest(req, res, `${routeLabel} unavailable`);
     };
