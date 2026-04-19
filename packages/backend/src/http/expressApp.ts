@@ -1,6 +1,6 @@
 /**
- * @description: Builds the Express composition shell for standard HTTP route dispatch.
- * Keeps special transport behavior explicit by delegating to existing route/static handlers without global body parsing.
+ * @description: Builds the Express transport composition root.
+ * Composes standard routes, central transport-boundary dispatch, and static/SPA/CSP fallback without global body parsing.
  * @footnote-scope: interface
  * @footnote-module: ExpressAppShell
  * @footnote-risk: medium - Middleware ordering mistakes can change route fallthrough behavior.
@@ -8,8 +8,8 @@
  */
 import type http from 'node:http';
 import express from 'express';
+import { registerStandardHttpRoutes } from './standardHttpRoutes.js';
 import { registerIncidentRoutes } from './incidentRoutes.js';
-import { registerLowRiskJsonRoutes } from './lowRiskJsonRoutes.js';
 import { getRequestUrl } from './requestUrl.js';
 
 type DispatchOutcome = 'handled' | 'fallthrough';
@@ -126,7 +126,8 @@ const createExpressApp = ({
     const app = express();
     app.set('trust proxy', trustProxy);
 
-    registerLowRiskJsonRoutes({
+    // Stage 1: standard HTTP routes that are already Express-owned.
+    registerStandardHttpRoutes({
         app,
         normalizePathname,
         blogReadRateLimitConfig,
@@ -148,7 +149,7 @@ const createExpressApp = ({
         logRequest,
     });
 
-    // Normal HTTP API routes should be composed here with route-scoped middleware.
+    // Stage 2: central/special transport dispatch for routes not yet Express-owned.
     // Keep request body parsing opt-in per route so signature/raw-body paths stay safe.
     app.use('/api', async (req, res, next) => {
         const requestUrl = getRequestUrl(req);
@@ -180,7 +181,7 @@ const createExpressApp = ({
         }
     });
 
-    // Static assets and SPA fallback remain the terminal normal-HTTP transport stage.
+    // Stage 3: static/SPA/CSP fallback terminal stage.
     app.use(async (req, res) => {
         const requestUrl = getRequestUrl(req);
         if (!requestUrl) {
