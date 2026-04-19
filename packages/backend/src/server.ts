@@ -396,10 +396,7 @@ const { handleBlogIndexRequest, handleBlogPostRequest } = createBlogHandlers({
 const incidentAlertRouter = createIncidentAlertRouter({
     config: runtimeConfig.alerts,
 });
-const writeIncidentUnavailable = (
-    res: http.ServerResponse,
-    reason: string
-): void => {
+const writeIncidentUnavailable = (res: http.ServerResponse): void => {
     if (res.headersSent) {
         return;
     }
@@ -409,7 +406,6 @@ const writeIncidentUnavailable = (
         JSON.stringify({
             error: 'Incident subsystem unavailable',
             code: 'INCIDENT_SERVICE_UNAVAILABLE',
-            reason,
         })
     );
 };
@@ -472,7 +468,11 @@ if (incidentStore) {
         res: http.ServerResponse,
         routeLabel: string
     ) => {
-        writeIncidentUnavailable(res, reason);
+        logger.error('Incident subsystem initialization failure', {
+            reason,
+            routeLabel,
+        });
+        writeIncidentUnavailable(res);
         logRequest(req, res, `${routeLabel} unavailable`);
     };
 
