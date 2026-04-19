@@ -14,6 +14,20 @@ import { createExpressApp } from '../src/http/expressApp.js';
 
 const TEST_HOST = '127.0.0.1';
 
+const createUnhandledRouteHandler = async (
+    _req: http.IncomingMessage,
+    res: http.ServerResponse
+): Promise<void> => {
+    res.statusCode = 501;
+    res.end('not-implemented');
+};
+
+const createUnhandledBlogPostHandler = async (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    _postId: string
+): Promise<void> => createUnhandledRouteHandler(req, res);
+
 const createTestServer = (
     app: ReturnType<typeof createExpressApp>
 ): Promise<{
@@ -58,6 +72,12 @@ test('express shell returns handled API dispatch without entering static fallbac
             return 'fallthrough';
         },
         normalizePathname: (pathname) => pathname,
+        trustProxy: false,
+        blogReadRateLimitConfig: { limit: 100, windowMs: 60_000 },
+        handleRuntimeConfigRequest: createUnhandledRouteHandler,
+        handleChatProfilesRequest: createUnhandledRouteHandler,
+        handleBlogIndexRequest: createUnhandledRouteHandler,
+        handleBlogPostRequest: createUnhandledBlogPostHandler,
         handleStaticTransportRequest: async ({ res }) => {
             staticCalls += 1;
             res.statusCode = 200;
@@ -85,6 +105,12 @@ test('express shell falls through API dispatch and serves static transport', asy
     const app = createExpressApp({
         dispatchHttpRoute: async () => 'fallthrough',
         normalizePathname: (pathname) => pathname,
+        trustProxy: false,
+        blogReadRateLimitConfig: { limit: 100, windowMs: 60_000 },
+        handleRuntimeConfigRequest: createUnhandledRouteHandler,
+        handleChatProfilesRequest: createUnhandledRouteHandler,
+        handleBlogIndexRequest: createUnhandledRouteHandler,
+        handleBlogPostRequest: createUnhandledBlogPostHandler,
         handleStaticTransportRequest: async ({ res }) => {
             staticCalls += 1;
             res.statusCode = 200;

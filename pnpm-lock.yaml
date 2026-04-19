@@ -115,6 +115,9 @@ catalogs:
         express:
             specifier: ^5.2.1
             version: 5.2.1
+        express-rate-limit:
+            specifier: ^8.3.2
+            version: 8.3.2
         flyio:
             specifier: ^0.6.14
             version: 0.6.14
@@ -333,6 +336,9 @@ importers:
             express:
                 specifier: 'catalog:'
                 version: 5.2.1
+            express-rate-limit:
+                specifier: 'catalog:'
+                version: 8.3.2(express@5.2.1)
             js-yaml:
                 specifier: 'catalog:'
                 version: 4.1.1
