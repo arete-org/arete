@@ -32,6 +32,8 @@ import {
     createRouteDispatcher,
     normalizePathname,
 } from './http/routeDispatch.js';
+import { handleStaticTransportRequest } from './http/staticTransport.js';
+import { handleUpgradeBoundary } from './http/upgradeBoundary.js';
 import { verifyGitHubSignature } from './utils/github.js';
 import { logRequest } from './utils/requestLogger.js';
 import { logger } from './utils/logger.js';
@@ -539,82 +541,15 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
-        // --- Static assets ---
-        const asset = await resolveAsset(req.url);
-
-        if (!asset) {
-            res.statusCode = 404;
-            res.end('Not Found');
-            logRequest(req, res, '(missing asset, index.html unavailable)');
-            return;
-        }
-
-        const extension = path.extname(asset.absolutePath).toLowerCase();
-        const contentType =
-            mimeMap.get(extension) || 'application/octet-stream';
-
-        // --- Static response headers ---
-        res.statusCode = 200;
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=600');
-
-        // --- Content Security Policy ---
-        // Apply CSP only for HTML responses and embed routes.
-        const isHtml =
-            contentType.includes('text/html') ||
-            parsedUrl.pathname === '/' ||
-            parsedUrl.pathname.endsWith('.html') ||
-            parsedUrl.pathname.startsWith('/embed');
-
-        if (isHtml) {
-            const forwardedProto =
-                typeof req.headers['x-forwarded-proto'] === 'string'
-                    ? req.headers['x-forwarded-proto']
-                    : undefined;
-            const scheme = forwardedProto?.split(',')[0].trim() || 'http';
-            const hostHeader =
-                typeof req.headers.host === 'string'
-                    ? req.headers.host.trim()
-                    : '';
-            const requestOrigin = hostHeader ? `${scheme}://${hostHeader}` : '';
-
-            // Always allow self + current host, then merge configured frame ancestors.
-            const mergedFrameAncestors = [
-                "'self'",
-                ...(requestOrigin ? [requestOrigin] : []),
-                ...runtimeConfig.csp.frameAncestors,
-            ];
-            const trimTrailingSlashes = (value: string): string => {
-                let end = value.length;
-                while (end > 0 && value[end - 1] === '/') {
-                    end -= 1;
-                }
-                return value.slice(0, end);
-            };
-
-            const normalizedFrameAncestors = [
-                ...new Set(
-                    mergedFrameAncestors.map((domain) =>
-                        trimTrailingSlashes(domain)
-                    )
-                ),
-            ];
-
-            const csp = [
-                `frame-ancestors ${normalizedFrameAncestors.join(' ')}`,
-                "default-src 'self'",
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://challenges.cloudflare.com",
-                "style-src 'self' 'unsafe-inline' data:",
-                "img-src 'self' data: blob:",
-                "font-src 'self' data:",
-                "frame-src 'self' https://challenges.cloudflare.com",
-                "connect-src 'self' https://challenges.cloudflare.com https://api.openai.com",
-            ].join('; ');
-            res.setHeader('Content-Security-Policy', csp);
-        }
-
-        res.end(asset.content);
-        logRequest(req, res);
+        await handleStaticTransportRequest({
+            req,
+            res,
+            parsedUrl,
+            resolveAsset,
+            mimeMap,
+            frameAncestors: runtimeConfig.csp.frameAncestors,
+            logRequest,
+        });
     } catch (error) {
         res.statusCode = 500;
         res.end('Internal Server Error');
@@ -627,33 +562,21 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.on('upgrade', (req, socket, head) => {
-    if (!req.url) {
-        socket.destroy();
-        return;
-    }
-
-    try {
-        const parsedUrl = new URL(req.url, 'http://localhost');
-        const normalizedPathname = normalizePathname(parsedUrl.pathname);
-        const isUpgradeHandled = dispatchUpgradeRoute({
-            req,
-            socket,
-            head,
-            normalizedPathname,
-            handleInternalVoiceRealtimeUpgrade,
-        });
-        if (isUpgradeHandled) {
-            return;
-        }
-    } catch (error) {
-        logger.error(
-            `Failed to process websocket upgrade: ${
-                error instanceof Error ? error.message : String(error)
-            }`
-        );
-    }
-
-    socket.destroy();
+    handleUpgradeBoundary({
+        req,
+        socket,
+        head,
+        normalizePathname,
+        dispatchUpgradeRoute,
+        handleInternalVoiceRealtimeUpgrade,
+        logUpgradeError: (error) => {
+            logger.error(
+                `Failed to process websocket upgrade: ${
+                    error instanceof Error ? error.message : String(error)
+                }`
+            );
+        },
+    });
 });
 
 let isShuttingDown = false;

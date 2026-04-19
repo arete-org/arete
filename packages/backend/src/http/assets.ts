@@ -87,6 +87,7 @@ const createAssetResolver = (distDir: string) => {
         }
 
         // SPA fallback for client-side routes.
+        // This fallback is transport-sensitive and should stay explicit so API and middleware changes do not shadow it.
         const fallbackPath = path.join(distDir, 'index.html');
         const fallbackContent = await tryReadFile(fallbackPath);
         if (fallbackContent) {

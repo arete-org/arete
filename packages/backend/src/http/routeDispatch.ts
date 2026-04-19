@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - Dispatch order controls which trust/auth checks run first.
  */
 import type http from 'node:http';
+import { wantsTraceJsonResponse } from './traceAccept.js';
 
 // --- Route path helpers ---
 const INCIDENT_STATUS_PATH_PATTERN = /^\/api\/incidents\/[^/]+\/status$/;
@@ -20,28 +21,6 @@ const normalizePathname = (pathname: string): string =>
     pathname.length > 1 && pathname.endsWith('/')
         ? pathname.slice(0, -1)
         : pathname;
-
-// Decide whether /api/traces/:responseId should return JSON or the SPA HTML shell.
-// We default to JSON unless the Accept header clearly asks for HTML.
-// This keeps API clients working even when they send a generic "*/*" Accept header.
-const wantsJsonResponse = (req: http.IncomingMessage): boolean => {
-    const headerValue = req.headers.accept;
-    const acceptHeader = Array.isArray(headerValue)
-        ? headerValue.join(',')
-        : headerValue || '';
-    const normalized = acceptHeader.toLowerCase();
-    const wantsHtml =
-        normalized.includes('text/html') ||
-        normalized.includes('application/xhtml+xml');
-    const wantsJson =
-        normalized.includes('application/json') || normalized.includes('+json');
-
-    if (wantsHtml && !wantsJson) {
-        return false;
-    }
-
-    return true;
-};
 
 type RequestHandler = (
     req: http.IncomingMessage,
@@ -111,7 +90,8 @@ const createRouteDispatcher = ({
         parsedUrl: URL;
         normalizedPathname: string;
     }): Promise<DispatchOutcome> => {
-        // --- Special routes (keep at top; auth/signature-sensitive) ---
+        // --- Special routes (keep at top; raw-body/signature-sensitive) ---
+        // Keep webhook dispatch ahead of any future generic body middleware. Signature checks require exact raw bytes.
         if (normalizedPathname === '/api/webhook/github') {
             await handlers.handleWebhookRequest(req, res);
             return 'handled';
@@ -215,7 +195,7 @@ const createRouteDispatcher = ({
         if (normalizedPathname.startsWith('/api/traces/')) {
             // Tell caches to keep JSON and HTML variants separate.
             res.setHeader('Vary', 'Accept');
-            if (wantsJsonResponse(req)) {
+            if (wantsTraceJsonResponse(req)) {
                 onTraceRouteMatched(normalizedPathname);
                 await handlers.handleTraceRequest(req, res, parsedUrl);
                 return 'handled';

@@ -186,6 +186,8 @@ export const createInternalImageHandler = ({
                 });
                 if (imageRequest.stream) {
                     streamStarted = true;
+                    // NDJSON streaming is a transport contract for trusted image callers.
+                    // Keep this path isolated from buffering middleware so partial events flush immediately.
                     res.statusCode = 200;
                     res.setHeader(
                         'Content-Type',
