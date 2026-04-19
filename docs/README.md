@@ -26,7 +26,7 @@
 - [Architecture](./architecture/README.md): stable system design, interfaces,
   boundaries, and reading-order guidance.
 - [Status](./status/README.md): active rollout notes and implementation
-  snapshots. `status/archive` is historical rollout context, not the primary
+  state. `status/archive` is historical rollout context, not the primary
   place to learn current architecture.
 - [Decisions](./decisions/): durable technical choices and why they were made.
 - [Proposals](./proposals/): unadopted or exploratory ideas.

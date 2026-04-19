@@ -111,9 +111,6 @@ Rules for this seam:
 
 ## Metadata
 
-The response metadata keeps these concepts separate so readers can see why the
-request ran the way it did.
-
 `metadata.workflowMode.*` explains the routing choice.
 `metadata.execution[]` planner entries explain planner influence.
 `metadata.workflow` records workflow lineage.

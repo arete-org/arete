@@ -4,6 +4,9 @@
 run. The trace uses it to show what actually influenced execution. It is not a
 policy engine, a user control surface, or a workflow scripting layer.
 
+For the broader metadata map, read
+[Response Metadata](./response-metadata.md) first.
+
 Each control record stores a control id, value, source, rationale,
 `mattered`, and impacted targets.
 

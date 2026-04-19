@@ -91,7 +91,10 @@ Representative metadata shape:
 
 TRACE shows five response qualities at a glance: Tightness, Rationale, Attribution, Caution, and Extent.
 
-Learn more: [TRACE decision record](docs/decisions/2026-03-compact-provenance-TRACE.md)
+See [Response Metadata](docs/architecture/response-metadata.md)
+for the current metadata model, and the
+[TRACE decision record](docs/decisions/2026-03-compact-provenance-TRACE.md)
+for rationale.
 
 ## Advanced Setup
 
