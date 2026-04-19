@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { envSpecByKey } from '../packages/config-spec/src/env-spec';
+import { logger } from '../packages/discord-bot/src/utils/logger';
 
 type ValidationTarget = 'local-dev' | 'fly-backend' | 'fly-bot';
 
@@ -30,8 +31,12 @@ const validationProfiles: Record<ValidationTarget, ValidationProfile> = {
         warnings: ['INCIDENT_PSEUDONYMIZATION_SECRET'],
     },
     'fly-backend': {
-        required: ['OPENAI_API_KEY', 'TRACE_API_TOKEN'],
-        warnings: ['INCIDENT_PSEUDONYMIZATION_SECRET'],
+        required: [
+            'OPENAI_API_KEY',
+            'TRACE_API_TOKEN',
+            'INCIDENT_PSEUDONYMIZATION_SECRET',
+        ],
+        warnings: [],
     },
     'fly-bot': {
         required: [
@@ -101,6 +106,60 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(currentDirectory, '..');
 const envPath = path.join(repoRoot, '.env');
 
+const normalizeEnvValue = (rawValue: string): string => {
+    let isInSingleQuote = false;
+    let isInDoubleQuote = false;
+    let commentStartIndex = -1;
+
+    for (let index = 0; index < rawValue.length; index += 1) {
+        const character = rawValue[index];
+        const previousCharacter = index > 0 ? rawValue[index - 1] : '';
+
+        if (
+            character === "'" &&
+            !isInDoubleQuote &&
+            previousCharacter !== '\\'
+        ) {
+            isInSingleQuote = !isInSingleQuote;
+            continue;
+        }
+
+        if (
+            character === '"' &&
+            !isInSingleQuote &&
+            previousCharacter !== '\\'
+        ) {
+            isInDoubleQuote = !isInDoubleQuote;
+            continue;
+        }
+
+        if (
+            character === '#' &&
+            !isInSingleQuote &&
+            !isInDoubleQuote &&
+            (index === 0 || /\s/.test(previousCharacter))
+        ) {
+            commentStartIndex = index;
+            break;
+        }
+    }
+
+    const withoutComment =
+        commentStartIndex >= 0
+            ? rawValue.slice(0, commentStartIndex).trim()
+            : rawValue.trim();
+
+    if (
+        withoutComment.length >= 2 &&
+        ((withoutComment.startsWith('"') && withoutComment.endsWith('"')) ||
+            (withoutComment.startsWith("'") && withoutComment.endsWith("'")))
+    ) {
+        return withoutComment.slice(1, -1).trim();
+    }
+
+    return withoutComment;
+};
+
 const parseDotEnv = (source: string): Map<string, string> => {
     const values = new Map<string, string>();
     for (const rawLine of source.split(/\r?\n/)) {
@@ -113,8 +172,9 @@ const parseDotEnv = (source: string): Map<string, string> => {
             continue;
         }
         const key = line.slice(0, equalsIndex).trim();
-        const value = line.slice(equalsIndex + 1).trim();
-        if (key.length > 0) {
+        let value = line.slice(equalsIndex + 1).trim();
+        value = normalizeEnvValue(value);
+        if (key.length > 0 && value.length > 0) {
             values.set(key, value);
         }
     }
@@ -149,7 +209,7 @@ const assertKnownKeys = (keys: string[]): void => {
     }
 };
 
-const validate = () => {
+const validate = (): void => {
     const { target, assumedPresent } = parseArgs();
     const profile = validationProfiles[target];
     assertKnownKeys([...profile.required, ...profile.warnings]);
@@ -175,18 +235,18 @@ const validate = () => {
     }
 
     if (missingRequired.length > 0) {
-        console.error(`[validate-env] ${target} missing required keys:`);
+        logger.error(`[validate-env] ${target} missing required keys:`);
         for (const key of missingRequired) {
-            console.error(`- ${key}`);
+            logger.error(`- ${key}`);
         }
     }
 
     if (missingWarnings.length > 0) {
-        console.warn(
+        logger.warn(
             `[validate-env] ${target} missing warning-only keys (feature degradation possible):`
         );
         for (const key of missingWarnings) {
-            console.warn(`- ${key}`);
+            logger.warn(`- ${key}`);
         }
     }
 
@@ -194,7 +254,7 @@ const validate = () => {
         process.exit(1);
     }
 
-    console.log(`[validate-env] ${target} validation passed.`);
+    logger.info(`[validate-env] ${target} validation passed.`);
 };
 
 validate();
