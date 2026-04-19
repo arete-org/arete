@@ -6,7 +6,6 @@
  * @footnote-risk: high - Route precedence mistakes can collide trace asset and trace detail paths.
  * @footnote-ethics: high - Trace transport affects provenance visibility and trusted write boundaries.
  */
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import express from 'express';
 import {
     createDispatchRouter,
