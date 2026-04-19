@@ -1,5 +1,6 @@
 /**
- * @description: Centralizes ordered HTTP route dispatch for the backend node:http server.
+ * @description: Centralizes ordered transport-boundary dispatch for routes not yet Express-owned.
+ * Keeps explicit handling for special transport paths in the mixed Express + boundary-dispatch architecture.
  * @footnote-scope: core
  * @footnote-module: RouteDispatch
  * @footnote-risk: high - Route order mistakes can silently change endpoint behavior.
@@ -60,7 +61,7 @@ type RouteDispatchHandlers = {
 };
 
 /**
- * Keeps route matching rules explicit and ordered.
+ * Keeps central transport-boundary matching rules explicit and ordered.
  * Order is behavior: first match wins and later checks never run.
  */
 const createRouteDispatcher = ({
