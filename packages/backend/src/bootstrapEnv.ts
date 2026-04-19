@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { logger } from './utils/bootstrapLogger.js';
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoEnvPath = path.join(currentDirectory, '../../../.env');
@@ -44,6 +45,14 @@ const upsertIncidentSecretInEnvFile = (
     fs.writeFileSync(envFilePath, updated, 'utf8');
 };
 
+/**
+ * Fail-open local bootstrap helper.
+ *
+ * If local secret generation is not applicable (production/test/fly), .env is
+ * unavailable, or write permissions fail, this function intentionally avoids
+ * throwing. Callers can expect startup to continue with existing env values
+ * and warning logs for visibility.
+ */
 const ensureLocalIncidentSecret = (envFilePath: string): void => {
     if (hasConfiguredIncidentSecret() || !isLocalAutogenerationAllowed()) {
         return;
@@ -57,12 +66,13 @@ const ensureLocalIncidentSecret = (envFilePath: string): void => {
         const generatedSecret = crypto.randomBytes(32).toString('hex');
         upsertIncidentSecretInEnvFile(envFilePath, generatedSecret);
         process.env[incidentSecretKey] = generatedSecret;
-        console.warn(
+        logger.warn(
             `[backendEnvBootstrap] Auto-generated ${incidentSecretKey} in .env for local boot. Rotate this value if it was exposed.`
         );
     } catch (error) {
-        console.warn(
-            `[backendEnvBootstrap] Could not auto-generate ${incidentSecretKey}: ${String(error)}`
+        logger.warn(
+            `[backendEnvBootstrap] Could not auto-generate ${incidentSecretKey}`,
+            { error }
         );
     }
 };
