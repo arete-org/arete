@@ -12,12 +12,13 @@ the best starting point.
 2. [Workflow Mode Routing](./workflow-mode-routing.md): read this next for the
    current workflow and planner model, including mode, profile, review/revise,
    and planner boundaries.
-3. [Workflow Engine And Provenance](./workflow-engine-and-provenance.md):
-   use this after the routing doc for the current engine flow and workflow
-   metadata.
-4. [How to Read Provenance-Related Metadata](./provenance-label-taxonomy.md):
-   use this before interpreting TRACE, provenance, mode, or planner fields in
-   responses.
+3. [How to Read Provenance-Related Metadata](./provenance-label-taxonomy.md):
+   use this next if your question is "what am I actually seeing in response
+   metadata?" It separates mode, TRACE, planner influence, steerability
+   controls, provenance, and current transitional fields.
+4. [Workflow Engine And Provenance](./workflow-engine-and-provenance.md):
+   use this after the metadata guide for the current engine flow and workflow
+   lineage records.
 
 ## Important Adjacent Docs
 
@@ -30,12 +31,13 @@ the best starting point.
 - [Execution Contract TrustGraph Architecture](./execution_contract_trustgraph/architecture.md):
   TrustGraph-specific architecture and rollout constraints.
 - [Steerability Foundation (Internal Controls v1)](./2026-04-steerability-foundation.md):
-  the control-plane foundation behind bounded user control and runtime posture.
+  internal control-record semantics behind steerability metadata. Read this
+  after the metadata guide, not before.
 
 ## Historical Workflow Notes
 
 Read these after the docs above if you need rollout history or older design
-notes. They are not the best first read for the workflow/planner model today.
+notes. They are rationale or rollout context, not the main current explanation.
 
 - [Workflow Profiles V1 RFC: Engine Core vs Profile Semantics](./workflow-profiles-v1-engine-vs-profile-semantics.md):
   design notes and ownership reasoning from the workflow-engine rollout.

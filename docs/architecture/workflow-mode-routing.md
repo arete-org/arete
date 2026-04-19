@@ -18,6 +18,12 @@ Workflow mode chooses the run type. Workflow profile chooses the step pattern.
 Planner can suggest action details inside those limits. Workflow lineage shows
 what actually happened.
 
+If you are reading response metadata, keep one boundary in mind from the start:
+mode is about how the system runs. TRACE is about the posture of the answer.
+Planner metadata is about planner influence in the run, not workflow
+authority. Use [How to Read Provenance-Related Metadata](./provenance-label-taxonomy.md)
+for the field-level map.
+
 ## Runtime Flow
 
 The normal chat path starts with the Execution Contract. That contract decides
@@ -118,6 +124,13 @@ request ran the way it did.
 `metadata.execution[]` planner entries explain planner influence.
 `metadata.workflow` records workflow lineage.
 TRACE fields describe answer behavior, not workflow routing.
+
+Current behavior and future direction are separate here:
+
+- Current runtime records mode, planner influence, and workflow lineage.
+- Planner is not yet a first-class workflow step in main chat metadata.
+- TRACE lifecycle/history is not the current routing model and should not be
+  read into workflow fields.
 
 The `workflowMode` object includes `modeId`, `selectedBy`,
 `selectionReason`, `initial_mode`, optional `escalated_mode`, optional

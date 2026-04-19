@@ -4,6 +4,11 @@
 run. The trace uses it to show what actually influenced execution. It is not a
 policy engine, a user control surface, or a workflow scripting layer.
 
+Read this as an internal control-record doc, not as the main explainer for
+response metadata. For the first-pass separation between mode, TRACE, planner
+metadata, steerability controls, and provenance, start with
+[How to Read Provenance-Related Metadata](./provenance-label-taxonomy.md).
+
 Each control record stores a control id, value, source, rationale,
 `mattered`, and impacted targets.
 
@@ -156,6 +161,12 @@ If workflows later support multiple planner invocations or retries, add
 explicit correlation. Do not let planner metadata turn into orchestration
 authority.
 
+This boundary matters for doc cleanup:
+
+- planner metadata is about planner influence in a run
+- steerability controls are bounded internal control records
+- neither one replaces workflow lineage or provenance classification
+
 ## Control Observability Envelope
 
 Every control decision also writes one structured event:
@@ -271,6 +282,8 @@ A few expansion points are already visible, and they need to stay bounded.
   recorded with an explicit `trace_final_reason_code`. `workflowMode` remains
   routing metadata. TRACE remains answer-posture metadata.
   Current runtime does not implement a full TRACE lifecycle/history model yet.
+  Treat that lifecycle/history as future direction, not current runtime
+  behavior.
 
 The trace should show what the runtime actually did, in a form contributors
 can follow.

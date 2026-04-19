@@ -7,6 +7,9 @@ Explain the current workflow engine and the metadata it emits.
 This doc covers what is implemented now, not the full plan.
 Read [Workflow Mode Routing](./workflow-mode-routing.md) first if you need the
 big picture.
+Read [How to Read Provenance-Related Metadata](./provenance-label-taxonomy.md)
+if your main question is how workflow records relate to mode, TRACE, planner
+metadata, or provenance classification.
 
 ## Core Principles
 
@@ -97,12 +100,24 @@ lineage, and workflow lineage covers the reviewed generation path. Read those
 records together, but do not confuse planner influence with workflow
 authority.
 
+The same separation applies to TRACE and provenance:
+
+- workflow lineage records what the workflow did
+- TRACE records answer posture
+- provenance classifies what happened and how it should be read
+
+Those records support each other, but they are not interchangeable.
+
 ## Future Work
 
 Future work may extend the same engine flow to planner and tool steps. That is
 not the current first-read explanation.
 Use rollout or RFC docs only when you need historical sequencing or design
 tradeoffs.
+
+That same rule applies to workflow history language. Branch closeout notes and
+rollout history are useful context, but they are not the main current docs for
+reading response metadata or workflow behavior.
 
 For rollout history, see
 `docs/status/2026-04-workflow-engine-rollout-status.md`.
