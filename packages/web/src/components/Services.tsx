@@ -25,7 +25,7 @@ const FEATURES: ServiceFeature[] = [
             'Get an answer, then inspect provenance, safety tier, and trace details in the same flow.',
     },
     {
-        id: 'realtime',
+        id: 'sources',
         title: 'Sources when needed',
         description:
             'When live web context is used, source links are shown with the response.',
@@ -56,7 +56,7 @@ const getFeatureImage = (featureId: string, theme: string): string | null => {
     // Map feature IDs to image names
     const imageMap: Record<string, string> = {
         chat: 'chat',
-        realtime: 'search',
+        sources: 'search',
         call: 'call',
         'image-understanding': 'image-understanding',
         image: 'image',
