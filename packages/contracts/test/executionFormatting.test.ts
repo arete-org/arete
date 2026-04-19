@@ -15,50 +15,57 @@ import {
 } from '../src/ethics-core';
 
 test('formatExecutionTimelineSummary includes reasonCode for skipped and failed events', () => {
-    const summary = formatExecutionTimelineSummary([
+    const summary = formatExecutionTimelineSummary(
+        [
+            {
+                kind: 'tool',
+                status: 'skipped',
+                toolName: 'web_search',
+                reasonCode: 'search_not_supported_by_selected_profile',
+                durationMs: 5,
+            },
+            {
+                kind: 'generation',
+                status: 'executed',
+                model: 'gpt-5-mini',
+                durationMs: 22,
+            },
+        ],
         {
-            kind: 'planner',
-            status: 'failed',
-            purpose: 'chat_orchestrator_action_selection',
-            contractType: 'fallback',
-            applyOutcome: 'not_applied',
-            mattered: false,
-            matteredControlIds: [],
-            reasonCode: 'planner_runtime_error',
-            model: 'gpt-5-nano',
-        },
-        {
-            kind: 'tool',
-            status: 'skipped',
-            toolName: 'web_search',
-            reasonCode: 'search_not_supported_by_selected_profile',
-            durationMs: 5,
-        },
-        {
-            kind: 'generation',
-            status: 'executed',
-            model: 'gpt-5-mini',
-            durationMs: 22,
-        },
-    ]);
+            workflowId: 'wf_1',
+            workflowName: 'message_with_review_loop',
+            status: 'degraded',
+            terminationReason: 'goal_satisfied',
+            stepCount: 1,
+            maxSteps: 3,
+            maxDurationMs: 15000,
+            steps: [
+                {
+                    stepId: 'step_plan_1',
+                    attempt: 1,
+                    stepKind: 'plan',
+                    reasonCode: 'planner_runtime_error',
+                    startedAt: '2026-04-01T00:00:00.000Z',
+                    finishedAt: '2026-04-01T00:00:00.010Z',
+                    durationMs: 10,
+                    model: 'gpt-5-nano',
+                    outcome: {
+                        status: 'failed',
+                        summary: 'Planner step failed.',
+                    },
+                },
+            ],
+        }
+    );
 
     assert.equal(
         summary,
-        'planner:gpt-5-nano(failed, planner_runtime_error) -> tool:web_search(skipped, search_not_supported_by_selected_profile, 5ms) -> generation:gpt-5-mini(executed, 22ms)'
+        'planner:gpt-5-nano(failed, planner_runtime_error, 10ms) -> tool:web_search(skipped, search_not_supported_by_selected_profile, 5ms) -> generation:gpt-5-mini(executed, 22ms)'
     );
 });
 
 test('formatExecutionTimelineSummary handles missing optional fields', () => {
     const events: ExecutionEvent[] = [
-        {
-            kind: 'planner',
-            status: 'executed',
-            purpose: 'chat_orchestrator_action_selection',
-            contractType: 'text_json',
-            applyOutcome: 'applied',
-            mattered: false,
-            matteredControlIds: [],
-        },
         {
             kind: 'evaluator',
             status: 'executed',
@@ -85,8 +92,31 @@ test('formatExecutionTimelineSummary handles missing optional fields', () => {
     ];
 
     assert.equal(
-        formatExecutionTimelineSummary(events),
-        'planner:unknown(executed) -> evaluator:observe/Low/Inferred/allow(executed) -> tool:web_search(executed) -> generation:unknown(executed)'
+        formatExecutionTimelineSummary(events, {
+            workflowId: 'wf_2',
+            workflowName: 'message_with_review_loop',
+            status: 'completed',
+            terminationReason: 'goal_satisfied',
+            stepCount: 1,
+            maxSteps: 3,
+            maxDurationMs: 15000,
+            steps: [
+                {
+                    stepId: 'step_plan_1',
+                    attempt: 1,
+                    stepKind: 'plan',
+                    startedAt: '2026-04-01T00:00:00.000Z',
+                    finishedAt: '2026-04-01T00:00:00.010Z',
+                    durationMs: 10,
+                    outcome: {
+                        status: 'executed',
+                        summary:
+                            'Planner step emitted bounded action-selection summary.',
+                    },
+                },
+            ],
+        }),
+        'planner:workflow(executed, 10ms) -> evaluator:observe/Low/Inferred/allow(executed) -> tool:web_search(executed) -> generation:unknown(executed)'
     );
 });
 
@@ -160,6 +190,28 @@ test('formatExecutionTimelineSummary falls back to decision label for malformed 
 test('formatExecutionTimelineSummary returns null for missing or empty timelines', () => {
     assert.equal(formatExecutionTimelineSummary(undefined), null);
     assert.equal(formatExecutionTimelineSummary([]), null);
+});
+
+test('formatExecutionTimelineSummary ignores legacy planner execution events', () => {
+    const summary = formatExecutionTimelineSummary([
+        {
+            kind: 'planner',
+            status: 'executed',
+            purpose: 'chat_orchestrator_action_selection',
+            contractType: 'text_json',
+            applyOutcome: 'applied',
+            mattered: false,
+            matteredControlIds: [],
+            model: 'gpt-5-nano',
+        },
+        {
+            kind: 'generation',
+            status: 'executed',
+            model: 'gpt-5-mini',
+        },
+    ]);
+
+    assert.equal(summary, 'generation:gpt-5-mini(executed)');
 });
 
 test('formatExecutionTimelineSummary surfaces planner lineage from workflow plan steps when execution planner bridge is absent', () => {

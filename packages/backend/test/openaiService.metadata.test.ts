@@ -412,19 +412,6 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
 
     assert.deepEqual(metadata.execution, [
         {
-            kind: 'planner',
-            status: 'executed',
-            purpose: 'chat_orchestrator_action_selection',
-            contractType: 'structured',
-            applyOutcome: 'applied',
-            mattered: true,
-            matteredControlIds: ['provider_preference'],
-            profileId: 'openai-text-fast',
-            provider: 'openai',
-            model: 'gpt-5-nano',
-            durationMs: 12,
-        },
-        {
             kind: 'evaluator',
             status: 'executed',
             evaluator: {
@@ -466,7 +453,7 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
     });
 });
 
-test('buildResponseMetadata uses workflow plan-step lineage over execution planner bridge when both are present', () => {
+test('buildResponseMetadata ignores planner execution bridge fields and keeps execution timeline non-planner only', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
         baseRuntimeContext({
@@ -657,7 +644,7 @@ test('buildResponseMetadata normalizes failed tool event with fallback reasonCod
     ]);
 });
 
-test('buildResponseMetadata keeps failed planner reasonCode in execution timeline', () => {
+test('buildResponseMetadata ignores failed planner execution bridge fields', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
         baseRuntimeContext({
@@ -678,24 +665,10 @@ test('buildResponseMetadata keeps failed planner reasonCode in execution timelin
         })
     );
 
-    assert.deepEqual(metadata.execution, [
-        {
-            kind: 'planner',
-            status: 'failed',
-            reasonCode: 'planner_runtime_error',
-            purpose: 'chat_orchestrator_action_selection',
-            contractType: 'fallback',
-            applyOutcome: 'not_applied',
-            mattered: false,
-            matteredControlIds: [],
-            profileId: 'openai-text-fast',
-            provider: 'openai',
-            model: 'gpt-5-nano',
-        },
-    ]);
+    assert.equal(metadata.execution, undefined);
 });
 
-test('buildResponseMetadata drops invalid planner reasonCode instead of rewriting it', () => {
+test('buildResponseMetadata ignores planner execution bridge fields regardless of planner reasonCode validity', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
         baseRuntimeContext({
@@ -716,23 +689,10 @@ test('buildResponseMetadata drops invalid planner reasonCode instead of rewritin
         })
     );
 
-    assert.deepEqual(metadata.execution, [
-        {
-            kind: 'planner',
-            status: 'failed',
-            purpose: 'chat_orchestrator_action_selection',
-            contractType: 'fallback',
-            applyOutcome: 'not_applied',
-            mattered: false,
-            matteredControlIds: [],
-            profileId: 'openai-text-fast',
-            provider: 'openai',
-            model: 'gpt-5-nano',
-        },
-    ]);
+    assert.equal(metadata.execution, undefined);
 });
 
-test('buildResponseMetadata does not emit planner/evaluator/generation reasonCode for skipped status', () => {
+test('buildResponseMetadata does not emit evaluator/generation reasonCode for skipped status and ignores planner bridge', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
         baseRuntimeContext({
@@ -765,18 +725,6 @@ test('buildResponseMetadata does not emit planner/evaluator/generation reasonCod
     );
 
     assert.deepEqual(metadata.execution, [
-        {
-            kind: 'planner',
-            status: 'skipped',
-            purpose: 'chat_orchestrator_action_selection',
-            contractType: 'fallback',
-            applyOutcome: 'not_applied',
-            mattered: false,
-            matteredControlIds: [],
-            profileId: 'openai-text-fast',
-            provider: 'openai',
-            model: 'gpt-5-nano',
-        },
         {
             kind: 'evaluator',
             status: 'skipped',

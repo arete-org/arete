@@ -112,16 +112,13 @@ export const formatExecutionTimelineSummary = (
     workflow?: WorkflowRecord
 ): string | null => {
     const executionEvents = execution ?? [];
-    const executionIncludesPlanner = executionEvents.some(
-        (event) => event.kind === 'planner'
-    );
     const workflowPlannerSummaries =
-        !executionIncludesPlanner && workflow !== undefined
-            ? workflow.steps
-                  .filter((step) => step.stepKind === 'plan')
-                  .map(formatWorkflowPlannerStep)
-            : [];
-    const executionSummaries = executionEvents.map(formatExecutionEvent);
+        workflow?.steps
+            .filter((step) => step.stepKind === 'plan')
+            .map(formatWorkflowPlannerStep) ?? [];
+    const executionSummaries = executionEvents
+        .filter((event) => event.kind !== 'planner')
+        .map(formatExecutionEvent);
     const timelineSegments = [
         ...workflowPlannerSummaries,
         ...executionSummaries,

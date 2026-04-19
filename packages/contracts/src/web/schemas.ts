@@ -817,8 +817,7 @@ const TraceCardChipDataSchema = z
  * - Treat workflowMode as execution-policy metadata.
  * - Treat TRACE fields (`trace_target`, `trace_final`, optional chips) as
  *   answer-posture metadata.
- * - Treat planner influence as workflow `steps[]` with `stepKind=plan` when
- *   present; use `execution[]` planner events as legacy compatibility fallback.
+ * - Treat planner influence as workflow `steps[]` with `stepKind=plan`.
  * - Treat steerabilityControls as control-influence records.
  * - Treat provenance/provenanceAssessment as compact grounding
  *   classification-method metadata, not complete execution truth.
