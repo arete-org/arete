@@ -31,11 +31,6 @@ type ParsedUrlHandler = (
     res: http.ServerResponse,
     parsedUrl: URL
 ) => Promise<void>;
-type BlogPostHandler = (
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-    postId: string
-) => Promise<void>;
 type TraceRouteMatchedLogger = (pathname: string) => void;
 type UpgradeHandler = (
     req: http.IncomingMessage,
@@ -47,7 +42,6 @@ type DispatchOutcome = 'handled' | 'fallthrough';
 
 type RouteDispatchHandlers = {
     handleWebhookRequest: RequestHandler;
-    handleRuntimeConfigRequest: RequestHandler;
     handleIncidentListRequest: ParsedUrlHandler;
     handleIncidentReportRequest: RequestHandler;
     handleInternalTextRequest: RequestHandler;
@@ -57,15 +51,12 @@ type RouteDispatchHandlers = {
     handleIncidentNotesRequest: ParsedUrlHandler;
     handleIncidentRemediationRequest: ParsedUrlHandler;
     handleIncidentDetailRequest: ParsedUrlHandler;
-    handleBlogIndexRequest: RequestHandler;
-    handleBlogPostRequest: BlogPostHandler;
     handleTraceUpsertRequest: RequestHandler;
     handleTraceCardCreateRequest: RequestHandler;
     handleTraceCardFromTraceRequest: RequestHandler;
     handleTraceCardAssetRequest: ParsedUrlHandler;
     handleTraceRequest: ParsedUrlHandler;
     handleChatRequest: RequestHandler;
-    handleChatProfilesRequest: RequestHandler;
 };
 
 /**
@@ -94,12 +85,6 @@ const createRouteDispatcher = ({
         // Keep webhook dispatch ahead of any future generic body middleware. Signature checks require exact raw bytes.
         if (normalizedPathname === '/api/webhook/github') {
             await handlers.handleWebhookRequest(req, res);
-            return 'handled';
-        }
-
-        // --- Runtime config route ---
-        if (normalizedPathname === '/config.json') {
-            await handlers.handleRuntimeConfigRequest(req, res);
             return 'handled';
         }
 
@@ -156,18 +141,6 @@ const createRouteDispatcher = ({
             return 'handled';
         }
 
-        // --- Blog routes ---
-        if (normalizedPathname === '/api/blog-posts') {
-            await handlers.handleBlogIndexRequest(req, res);
-            return 'handled';
-        }
-
-        if (normalizedPathname.startsWith('/api/blog-posts/')) {
-            const postId = normalizedPathname.split('/').pop() || '';
-            await handlers.handleBlogPostRequest(req, res, postId);
-            return 'handled';
-        }
-
         // --- Trace write/asset routes ---
         if (normalizedPathname === '/api/traces') {
             await handlers.handleTraceUpsertRequest(req, res);
@@ -207,11 +180,6 @@ const createRouteDispatcher = ({
         // --- Chat routes ---
         if (normalizedPathname === '/api/chat') {
             await handlers.handleChatRequest(req, res);
-            return 'handled';
-        }
-
-        if (normalizedPathname === '/api/chat/profiles') {
-            await handlers.handleChatProfilesRequest(req, res);
             return 'handled';
         }
 

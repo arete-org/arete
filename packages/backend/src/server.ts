@@ -572,7 +572,6 @@ const handleChatRequest = createChatHandler({
 const { dispatchHttpRoute, dispatchUpgradeRoute } = createRouteDispatcher({
     handlers: {
         handleWebhookRequest,
-        handleRuntimeConfigRequest,
         handleIncidentListRequest,
         handleIncidentReportRequest,
         handleInternalTextRequest,
@@ -582,15 +581,12 @@ const { dispatchHttpRoute, dispatchUpgradeRoute } = createRouteDispatcher({
         handleIncidentNotesRequest,
         handleIncidentRemediationRequest,
         handleIncidentDetailRequest,
-        handleBlogIndexRequest,
-        handleBlogPostRequest,
         handleTraceUpsertRequest,
         handleTraceCardCreateRequest,
         handleTraceCardFromTraceRequest,
         handleTraceCardAssetRequest,
         handleTraceRequest,
         handleChatRequest,
-        handleChatProfilesRequest,
     },
     onTraceRouteMatched: (pathname) => {
         logger.debug(`Trace route matched: ${pathname}`);
@@ -599,6 +595,10 @@ const { dispatchHttpRoute, dispatchUpgradeRoute } = createRouteDispatcher({
 const app = createExpressApp({
     dispatchHttpRoute,
     normalizePathname,
+    handleRuntimeConfigRequest,
+    handleChatProfilesRequest,
+    handleBlogIndexRequest,
+    handleBlogPostRequest,
     handleStaticTransportRequest,
     resolveAsset,
     mimeMap,
