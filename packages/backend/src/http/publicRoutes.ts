@@ -10,6 +10,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { getRequestUrl } from './requestUrl.js';
+import { respondWithRouteError, type LogRequest } from './routeError.js';
 
 type RequestHandler = (
     req: IncomingMessage,
@@ -21,12 +22,6 @@ type BlogPostHandler = (
     res: ServerResponse,
     postId: string
 ) => Promise<void>;
-
-type LogRequest = (
-    req: IncomingMessage,
-    res: ServerResponse,
-    extra?: string
-) => void;
 
 type RegisterPublicRoutesDeps = {
     app: express.Express;
@@ -40,21 +35,6 @@ type RegisterPublicRoutesDeps = {
     handleBlogIndexRequest: RequestHandler;
     handleBlogPostRequest: BlogPostHandler;
     logRequest: LogRequest;
-};
-
-const respondWithRouteError = (
-    req: IncomingMessage,
-    res: ServerResponse,
-    logRequestWithContext: LogRequest,
-    error: unknown
-): void => {
-    res.statusCode = 500;
-    res.end('Internal Server Error');
-    logRequestWithContext(
-        req,
-        res,
-        error instanceof Error ? error.message : 'unknown error'
-    );
 };
 
 /**

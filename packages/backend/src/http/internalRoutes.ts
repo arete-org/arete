@@ -8,17 +8,12 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import express from 'express';
+import { respondWithRouteError, type LogRequest } from './routeError.js';
 
 type RequestHandler = (
     req: IncomingMessage,
     res: ServerResponse
 ) => Promise<void>;
-
-type LogRequest = (
-    req: IncomingMessage,
-    res: ServerResponse,
-    extra?: string
-) => void;
 
 type RegisterInternalRoutesDeps = {
     app: express.Express;
@@ -26,21 +21,6 @@ type RegisterInternalRoutesDeps = {
     handleInternalImageRequest: RequestHandler;
     handleInternalVoiceTtsRequest: RequestHandler;
     logRequest: LogRequest;
-};
-
-const respondWithRouteError = (
-    req: IncomingMessage,
-    res: ServerResponse,
-    logRequestWithContext: LogRequest,
-    error: unknown
-): void => {
-    res.statusCode = 500;
-    res.end('Internal Server Error');
-    logRequestWithContext(
-        req,
-        res,
-        error instanceof Error ? error.message : 'unknown error'
-    );
 };
 
 /**

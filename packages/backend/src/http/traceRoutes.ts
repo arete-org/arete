@@ -9,6 +9,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import express from 'express';
 import { getRequestUrl } from './requestUrl.js';
+import { respondWithRouteError, type LogRequest } from './routeError.js';
 
 type RequestHandler = (
     req: IncomingMessage,
@@ -20,12 +21,6 @@ type ParsedUrlHandler = (
     res: ServerResponse,
     parsedUrl: URL
 ) => Promise<void>;
-
-type LogRequest = (
-    req: IncomingMessage,
-    res: ServerResponse,
-    extra?: string
-) => void;
 
 type RegisterTraceRoutesDeps = {
     app: express.Express;
@@ -39,21 +34,6 @@ type RegisterTraceRoutesDeps = {
 
 const TRACE_CARD_ASSET_PATH_PATTERN =
     /^\/api\/traces\/[^/]+\/assets\/trace-card\.svg$/;
-
-const respondWithRouteError = (
-    req: IncomingMessage,
-    res: ServerResponse,
-    logRequestWithContext: LogRequest,
-    error: unknown
-): void => {
-    res.statusCode = 500;
-    res.end('Internal Server Error');
-    logRequestWithContext(
-        req,
-        res,
-        error instanceof Error ? error.message : 'unknown error'
-    );
-};
 
 const registerTraceRoutes = ({
     app,
