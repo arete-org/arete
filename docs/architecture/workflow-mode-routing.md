@@ -4,12 +4,12 @@
 
 A workflow mode is the high-level routing choice for one chat request.
 
-This is the main current-shape doc for workflow and planner behavior.
+This is the main doc for current workflow and planner behavior.
 Read this before the profile contract, rollout notes, or RFC material.
 
 The short version:
 
-- the Execution Contract governs allowed posture and limits,
+- the Execution Contract governs allowed behavior and limits,
 - workflow mode chooses the kind of run,
 - workflow profile chooses the executable step pattern,
 - planner can suggest execution details but does not gain policy authority,
@@ -17,12 +17,12 @@ The short version:
 
 Keep those jobs separate.
 The Execution Contract answers "what kind of run is allowed?"
-Workflow mode answers "which current posture did we choose?"
+Workflow mode answers "which run did we choose?"
 Workflow profile answers "which step pattern executes that posture?"
 Planner answers "what action details should this run try?"
 Those are related, but they are not the same thing.
 
-## Current Runtime Shape
+## Runtime Flow
 
 Today the request path looks like this:
 
@@ -36,10 +36,10 @@ Today the request path looks like this:
 7. Response metadata records `workflowMode`, planner execution details, and
    workflow lineage.
 
-That means planner is execution-relevant today, but it is not yet a
-first-class workflow-engine step in runtime lineage.
+Planner affects execution today, but it is not yet a first-class
+workflow-engine step in workflow metadata.
 
-## Mode Set
+## Modes And Profiles
 
 Canonical mode ids are `fast`, `balanced`, and `grounded`.
 
@@ -51,7 +51,7 @@ Canonical mode ids are `fast`, `balanced`, and `grounded`.
 
 `balanced` and `grounded` share one profile today.
 That is why mode and profile stay separate.
-Mode carries posture and limits.
+Mode carries behavior and limits.
 Profile carries executable shape.
 
 ## Selection Order
@@ -65,7 +65,7 @@ posture.
 These fallback steps are initial routing fallback only. They are not runtime
 mode escalation.
 
-## Review And Revise Behavior
+## Review Loop
 
 The current profiles are simple on purpose:
 
@@ -100,13 +100,13 @@ Planner cannot:
 - become the final authority on mode, profile, safety, or provenance.
 
 Today, planner runs in `chatOrchestrator` before `chatService` begins the
-review workflow.
+review loop.
 Planner execution is recorded in `metadata.execution[]` and in steerability
 metadata, but workflow lineage still starts with the generation/review path.
 
-## Current And Future Line
+## Future Work
 
-Current behavior:
+Today:
 
 - planner is orchestrator-frontloaded,
 - workflow engine is used for the reviewed generation path,
@@ -114,13 +114,13 @@ Current behavior:
   main current chat path,
 - review/revise are real runtime behavior today.
 
-Future direction:
+Future work:
 
 - planner-as-workflow-step,
 - tool steps under the same workflow engine,
 - clearer correlation if multiple planner passes or retries ever exist.
 
-Do not read the future direction back into current authority.
+Do not read future work back into current authority.
 Planner is still advisory.
 Workflow engine does not yet own planner execution timing in the current chat
 path.
@@ -137,7 +137,7 @@ Rules for this seam:
 - Never run recursive or unbounded mode re-evaluation loops.
 - Keep escalation routing centralized in workflow resolver code, not callers.
 
-## Metadata Contract
+## Metadata Output
 
 `workflowMode` in response metadata records `modeId`, `selectedBy`,
 `selectionReason`, `initial_mode`, optional `escalated_mode`, optional
@@ -150,4 +150,4 @@ Use nearby metadata like this:
 - `metadata.workflowMode.*` explains the routing choice.
 - `metadata.execution[]` planner entries explain planner influence.
 - `metadata.workflow` explains the executed workflow lineage.
-- TRACE fields explain answer posture, not workflow routing.
+- TRACE fields explain answer behavior, not workflow routing.

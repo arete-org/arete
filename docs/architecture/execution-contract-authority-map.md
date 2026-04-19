@@ -20,7 +20,7 @@ Implementation note:
 Current code still uses `ExecutionContract` naming for the main contract module.
 That module is the Execution Contract authority surface.
 
-## Authority Map
+## Ownership
 
 | Concern                           | Governing Authority                                                       | Runtime Executor                                       | Notes                                                                                                |
 | --------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
@@ -33,14 +33,7 @@ That module is the Execution Contract authority surface.
 | TrustGraph evidence intake        | Execution Contract boundary rules                                         | `executionContractTrustGraph` seam modules             | Advisory evidence can influence bounded views, never control execution authority.                    |
 | Breaker/safety action application | Deterministic safety contract + backend policy boundary                   | orchestrator/service enforcement path                  | Planner hints are advisory only.                                                                     |
 
-## Explicit Non-Goals
-
-- Turn the Execution Contract into a general runtime engine.
-- Replace orchestrator control flow with a contract interpreter.
-- Introduce user-defined workflow programming in this phase.
-- Treat provider abstraction as solved by this authority-map document.
-
-## Invariants To Keep Stable
+## Boundaries
 
 - The Execution Contract is the single governing contract for execution shape.
 - The orchestrator is the request-time execution coordinator.
@@ -49,6 +42,13 @@ That module is the Execution Contract authority surface.
 - Workflow profiles remain named shapes selected under the contract.
 - External evidence systems (including TrustGraph) never become routing or terminal authorities.
 - Provenance explains decisions after execution; it does not become a second decision engine.
+
+## Non-Goals
+
+- Turn the Execution Contract into a general runtime engine.
+- Replace orchestrator control flow with a contract interpreter.
+- Introduce user-defined workflow programming in this phase.
+- Treat provider abstraction as solved by this authority-map document.
 
 ## Extension Checklist
 

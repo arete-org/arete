@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Explain the current workflow-engine surface and the provenance record it emits.
+Explain the current workflow engine and the metadata it emits.
 
 This doc is about what is implemented now, not the full target direction.
 Read [Workflow Mode Routing](./workflow-mode-routing.md) first if you need the
@@ -27,7 +27,7 @@ big picture.
 - `WorkflowRecord`: Curated structured artifact for provenance and operators.
 - `StepRecord`: One step entry inside the workflow record.
 
-## Current Engine Scope
+## Engine Scope
 
 Today the engine mainly powers the reviewed chat path in
 `packages/backend/src/services/workflowEngine.ts`.
@@ -41,7 +41,8 @@ What is active now:
 - fail-open handling for generation/review/revise failures,
 - `WorkflowRecord` and `StepRecord` lineage output.
 
-What is vocabulary now but not the main current chat path:
+Terms that exist in the shared workflow vocabulary but are not part of the
+main current chat path:
 
 - `plan`
 - `tool`
@@ -64,7 +65,7 @@ That choice is controlled by `WorkflowPolicy` and `ExecutionLimits`.
 Model-backed deliberation is treated as an optional capability of certain steps,
 not a top-level orchestration authority.
 
-## Current Review Loop
+## Review Loop
 
 The reviewed profile uses one bounded pattern:
 
@@ -76,7 +77,7 @@ The reviewed profile uses one bounded pattern:
 This is the current runtime path behind review and revise behavior.
 It is not just a target design note.
 
-## Outcome Shape
+## Step Records
 
 Each `StepRecord` includes an `outcome` with minimal typed fields:
 
@@ -86,19 +87,19 @@ Each `StepRecord` includes an `outcome` with minimal typed fields:
 - `signals`
 - `recommendations` (optional)
 
-This keeps handoff data explicit without a separate top-level handoff type.
+This keeps step output explicit without a separate top-level handoff type.
 `signals` means machine-readable control indicators used by transition logic
 (for example `goalMet`, `needsMoreEvidence`, `toolResultQuality`), not generic telemetry.
 For bounded review `assess` steps, use `reviewDecision` (`finalize` or `revise`)
 plus `reviewReason` as the canonical machine output seam.
 `recommendations` is advisory only and never overrides backend legality checks.
 
-## Transition And Limit Ownership
+## Limits
 
-`WorkflowPolicy` defines legal next steps from current state.
-`WorkflowPolicy` also owns capability toggles (for example plan/revise/tool enablement).
+`WorkflowPolicy` defines legal next steps from the current state.
+It also owns capability toggles such as plan/revise/tool enablement.
 Model outputs can recommend transitions only where policy allows.
-Final transition legality remains backend-owned.
+Final transition checks remain backend-owned.
 
 `ExecutionLimits` owns the hard caps:
 
@@ -110,9 +111,9 @@ Final transition legality remains backend-owned.
 
 These are backend-enforced stops, not model suggestions.
 
-## Termination Reasons
+## Failure Behavior
 
-Initial reasons:
+The current workflow can end for these reasons:
 
 - `goal_satisfied`
 - `budget_exhausted_steps`
@@ -123,10 +124,11 @@ Initial reasons:
 - `max_deliberation_calls_reached`
 - `executor_error_fail_open`
 
-## Provenance Shape
+## Workflow Metadata
 
 `WorkflowRecord` is the primary orchestration provenance artifact.
-`WorkflowRecord` is the provenance-facing curated record.
+`WorkflowRecord` is the main workflow record returned for operators and
+response metadata.
 Deeper runtime/debug execution detail can remain in internal logs keyed by
 `workflowId` and `stepId`.
 
@@ -134,10 +136,10 @@ In current chat responses:
 
 - planner metadata still lives alongside workflow lineage,
 - workflow lineage covers the reviewed generation path,
-- the two should be read together without confusing planner influence for
-  workflow authority.
+- read planner metadata and workflow metadata together, but do not confuse
+  planner influence with workflow authority.
 
-## Future Direction
+## Future Work
 
 Future work may extend the same engine shape to planner and tool steps.
 That is not the current first-read explanation.

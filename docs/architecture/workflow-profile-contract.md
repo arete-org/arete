@@ -24,7 +24,7 @@ Out of scope:
 - plan-and-generate or tool-assisted profile implementation,
 - blocked-state UI redesign.
 
-## Current Built-In Profiles
+## Built-In Profiles
 
 Current chat runtime uses two built-in profiles:
 
@@ -72,7 +72,7 @@ The practical split is:
 - engine enforces legality and limits,
 - adapters wire the profile to real runtime calls.
 
-## Blocked / No-Generation Behavior Matrix
+## No-Generation Behavior
 
 | Condition                                              | Surface To Caller                               | Internal Termination | Required `terminationReason`   |
 | ------------------------------------------------------ | ----------------------------------------------- | -------------------- | ------------------------------ |
@@ -110,7 +110,7 @@ Disposition mapping:
 - surfaced: policy-blocked, generation-disabled, executor-error
 - internal-only: pre-generation budget exhaustion
 
-## Provenance Requirements For No-Generation Outcomes
+## Metadata Requirements
 
 For all profiles, blocked-before-generation and no-generation outcomes must
 produce a valid `WorkflowRecord` with:
@@ -136,7 +136,7 @@ Cross-profile invariants:
   internal-only in another path.
 - no profile may omit workflow provenance for no-generation outcomes.
 
-## Compatibility Notes
+## Compatibility Rules
 
 Current `bounded-review` profile:
 
