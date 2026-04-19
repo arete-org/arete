@@ -677,7 +677,6 @@ const AskMeAnything = (): JSX.Element => {
                             placeholder="What should we talk about?"
                             autoComplete="off"
                             ref={inputRef}
-                            aria-label="Question input field"
                             rows={1}
                             onFocus={() => {
                                 void ensureRuntimeConfigLoaded();
