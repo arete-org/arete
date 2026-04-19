@@ -27,6 +27,31 @@ type RegisterTraceRoutesDeps = {
 const TRACE_CARD_ASSET_PATH_PATTERN =
     /^\/api\/traces\/[^/]+\/assets\/trace-card\.svg$/;
 
+/**
+ * Registers trace write/card HTTP routes on the Express shell.
+ *
+ * Express-owned route contract (all under `app.use('/api', traceRouter)`):
+ * - `POST /api/traces` -> `handleTraceUpsertRequest`
+ * - `POST /api/trace-cards` -> `handleTraceCardCreateRequest`
+ * - `POST /api/trace-cards/from-trace` -> `handleTraceCardFromTraceRequest`
+ * - `GET /api/traces/:id/assets/trace-card.svg` (regex-matched) -> `handleTraceCardAssetRequest`
+ *
+ * Notes:
+ * - `/api/traces/:id` (without `/assets/trace-card.svg`) intentionally falls
+ *   through to central special transport dispatch so `Vary: Accept` JSON-vs-SPA
+ *   negotiation remains authoritative there.
+ * - Body parsing, auth, and provenance/authority decisions remain inside each
+ *   handler; this module only owns path matching and route-level error logging.
+ *
+ * @param app Express app receiving the mounted trace router.
+ * @param normalizePathname Shared path normalizer for trailing-slash parity.
+ * @param handleTraceUpsertRequest Existing `/api/traces` write handler.
+ * @param handleTraceCardCreateRequest Existing `/api/trace-cards` handler.
+ * @param handleTraceCardFromTraceRequest Existing `/api/trace-cards/from-trace` handler.
+ * @param handleTraceCardAssetRequest Existing trace-card SVG asset handler (receives parsedUrl).
+ * @param logRequest Shared request logger used for route-level error context.
+ * @returns void
+ */
 const registerTraceRoutes = ({
     app,
     normalizePathname,
