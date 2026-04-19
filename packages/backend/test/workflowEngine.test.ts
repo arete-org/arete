@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 
 import {
     applyStepExecutionToState,
+    buildPlannerStepRecord,
     createInitialWorkflowState,
     isTransitionAllowed,
     isWithinExecutionLimits,
@@ -48,6 +49,13 @@ test('isTransitionAllowed permits only plan/generate from initial state', () => 
     assert.equal(isTransitionAllowed(null, 'plan', permissivePolicy), true);
     assert.equal(isTransitionAllowed(null, 'generate', permissivePolicy), true);
     assert.equal(isTransitionAllowed(null, 'assess', permissivePolicy), false);
+});
+
+test('isTransitionAllowed allows plan to generate in permissive policy', () => {
+    assert.equal(
+        isTransitionAllowed('plan', 'generate', permissivePolicy),
+        true
+    );
 });
 
 test('isTransitionAllowed enforces policy capability toggles', () => {
@@ -557,4 +565,157 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
         'Draft is complete and clear.'
     );
     assert.equal(generationCalls, 2);
+});
+
+test('buildPlannerStepRecord creates schema-safe plan step with bounded planner summary fields', () => {
+    const startedAtMs = Date.now() - 24;
+    const finishedAtMs = Date.now();
+    const step = buildPlannerStepRecord({
+        stepId: 'step_plan_1',
+        attempt: 1,
+        startedAtMs,
+        finishedAtMs,
+        summary: {
+            status: 'executed',
+            purpose: 'chat_orchestrator_action_selection',
+            contractType: 'structured',
+            applyOutcome: 'applied',
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'openai_text_fast',
+            selectedCapabilityProfile: 'openai_text_medium',
+            profileId: 'planner_profile',
+            originalProfileId: 'planner_profile',
+            effectiveProfileId: 'planner_profile',
+            provider: 'openai',
+            model: 'gpt-5-nano',
+            usage: {
+                promptTokens: 11,
+                completionTokens: 7,
+                totalTokens: 18,
+            },
+            cost: {
+                inputCostUsd: 0.000001,
+                outputCostUsd: 0.000002,
+                totalCostUsd: 0.000003,
+            },
+            mattered: true,
+            matteredControlIds: ['provider_preference'],
+        },
+    });
+
+    assert.equal(step.stepKind, 'plan');
+    assert.equal(step.outcome.status, 'executed');
+    assert.equal(step.reasonCode, undefined);
+    assert.equal(step.outcome.signals?.applyOutcome, 'applied');
+    assert.equal(step.outcome.signals?.action, 'message');
+    assert.equal(step.outcome.signals?.modality, 'text');
+    assert.equal(
+        step.outcome.signals?.requestedCapabilityProfile,
+        'openai_text_fast'
+    );
+    assert.equal(
+        step.outcome.signals?.selectedCapabilityProfile,
+        'openai_text_medium'
+    );
+    assert.equal(step.outcome.signals?.profileId, 'planner_profile');
+    assert.equal(step.outcome.signals?.provider, 'openai');
+    assert.equal(step.outcome.signals?.mattered, true);
+    assert.equal(step.outcome.signals?.matteredControlCount, 1);
+    assert.equal(step.model, 'gpt-5-nano');
+    assert.equal(step.usage?.totalTokens, 18);
+    assert.equal(step.cost?.totalCostUsd, 0.000003);
+    assert.ok(step.durationMs >= 0);
+});
+
+test('buildPlannerStepRecord tolerates missing optional planner fields', () => {
+    const step = buildPlannerStepRecord({
+        stepId: 'step_plan_2',
+        attempt: 1,
+        finishedAtMs: Date.now(),
+        summary: {
+            status: 'failed',
+            reasonCode: 'planner_runtime_error',
+            purpose: 'chat_orchestrator_action_selection',
+            contractType: 'fallback',
+            applyOutcome: 'not_applied',
+        },
+    });
+
+    assert.equal(step.stepKind, 'plan');
+    assert.equal(step.outcome.status, 'failed');
+    assert.equal(step.reasonCode, 'planner_runtime_error');
+    assert.equal(step.model, undefined);
+    assert.equal(step.usage, undefined);
+    assert.equal(step.cost, undefined);
+    assert.equal(step.outcome.signals?.applyOutcome, 'not_applied');
+    assert.equal(step.outcome.signals?.action, undefined);
+});
+
+test('buildPlannerStepRecord does not include raw or noisy planner internals', () => {
+    const noisySummary = {
+        status: 'executed',
+        purpose: 'chat_orchestrator_action_selection',
+        contractType: 'text_json',
+        applyOutcome: 'adjusted_by_policy',
+        action: 'message',
+        modality: 'text',
+        model: 'gpt-5-nano',
+        rawPrompt: 'do not include',
+        rawModelOutput: '{"action":"message"}',
+        fullPlannerJson: '{"deep":"payload"}',
+        fullRequest: { hidden: true },
+    } as unknown as Parameters<typeof buildPlannerStepRecord>[0]['summary'];
+
+    const step = buildPlannerStepRecord({
+        stepId: 'step_plan_3',
+        attempt: 1,
+        finishedAtMs: Date.now(),
+        summary: noisySummary,
+    });
+
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(step, 'rawPrompt'),
+        false
+    );
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(step, 'rawModelOutput'),
+        false
+    );
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(step, 'fullPlannerJson'),
+        false
+    );
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(step, 'fullRequest'),
+        false
+    );
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            step.outcome.signals ?? {},
+            'rawPrompt'
+        ),
+        false
+    );
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            step.outcome.signals ?? {},
+            'rawModelOutput'
+        ),
+        false
+    );
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            step.outcome.signals ?? {},
+            'fullPlannerJson'
+        ),
+        false
+    );
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            step.outcome.signals ?? {},
+            'fullRequest'
+        ),
+        false
+    );
 });
