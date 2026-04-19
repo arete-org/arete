@@ -7,7 +7,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # --- Tooling ---
-RUN corepack enable && corepack prepare pnpm@10.26.2 --activate
+RUN corepack enable && corepack prepare pnpm@10.27.0 --activate
 
 # --- System deps ---
 RUN apt-get update \
