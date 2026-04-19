@@ -73,6 +73,7 @@ test('express shell returns handled API dispatch without entering static fallbac
             res.statusCode = 501;
             res.end('not-implemented');
         },
+        blogReadRateLimiter: null,
         handleStaticTransportRequest: async ({ res }) => {
             staticCalls += 1;
             res.statusCode = 200;
@@ -107,6 +108,7 @@ test('express shell falls through API dispatch and serves static transport', asy
             res.statusCode = 501;
             res.end('not-implemented');
         },
+        blogReadRateLimiter: null,
         handleStaticTransportRequest: async ({ res }) => {
             staticCalls += 1;
             res.statusCode = 200;

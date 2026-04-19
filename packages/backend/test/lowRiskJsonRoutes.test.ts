@@ -83,6 +83,7 @@ test('low-risk JSON routes bypass legacy /api dispatch and preserve blog path ma
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.end(JSON.stringify({ id: postId }));
         },
+        blogReadRateLimiter: null,
         handleStaticTransportRequest: async ({ res }) => {
             res.statusCode = 404;
             res.end('static');

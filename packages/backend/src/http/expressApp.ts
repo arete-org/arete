@@ -8,6 +8,7 @@
  */
 import type http from 'node:http';
 import express from 'express';
+import type { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { registerLowRiskJsonRoutes } from './lowRiskJsonRoutes.js';
 
 type DispatchOutcome = 'handled' | 'fallthrough';
@@ -59,6 +60,7 @@ type CreateExpressAppDeps = {
         res: http.ServerResponse,
         postId: string
     ) => Promise<void>;
+    blogReadRateLimiter: SimpleRateLimiter | null;
     handleStaticTransportRequest: HandleStaticTransportRequest;
     resolveAsset: ResolveAsset;
     mimeMap: ReadonlyMap<string, string>;
@@ -86,6 +88,7 @@ const createExpressApp = ({
     handleChatProfilesRequest,
     handleBlogIndexRequest,
     handleBlogPostRequest,
+    blogReadRateLimiter,
     handleStaticTransportRequest,
     resolveAsset,
     mimeMap,
@@ -101,6 +104,7 @@ const createExpressApp = ({
         handleChatProfilesRequest,
         handleBlogIndexRequest,
         handleBlogPostRequest,
+        blogReadRateLimiter,
         logRequest,
     });
 

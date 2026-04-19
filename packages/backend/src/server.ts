@@ -115,6 +115,7 @@ let ipRateLimiter: SimpleRateLimiter | null = null;
 let sessionRateLimiter: SimpleRateLimiter | null = null;
 let serviceRateLimiter: SimpleRateLimiter | null = null;
 let traceWriteLimiter: SimpleRateLimiter | null = null;
+let blogReadRateLimiter: SimpleRateLimiter | null = null;
 const voltAgentLogger = createVoltAgentLogger({
     directory: VOLTAGENT_LOG_DIR,
     level: runtimeConfig.logging.level,
@@ -347,6 +348,11 @@ const initializeServices = () => {
         limit: runtimeConfig.rateLimits.traceApi.limit,
         window: runtimeConfig.rateLimits.traceApi.windowMs,
     });
+    // Public blog reads perform file-system access; keep a lightweight limiter for DoS resistance.
+    blogReadRateLimiter = new SimpleRateLimiter({
+        limit: runtimeConfig.rateLimits.web.ip.limit,
+        window: runtimeConfig.rateLimits.web.ip.windowMs,
+    });
 
     // --- Cleanup loop ---
     // Background cleanup keeps in-memory rate limiter maps from growing forever.
@@ -356,6 +362,7 @@ const initializeServices = () => {
             sessionRateLimiter?.cleanup();
             serviceRateLimiter?.cleanup();
             traceWriteLimiter?.cleanup();
+            blogReadRateLimiter?.cleanup();
         },
         2 * 60 * 1000
     );
@@ -599,6 +606,7 @@ const app = createExpressApp({
     handleChatProfilesRequest,
     handleBlogIndexRequest,
     handleBlogPostRequest,
+    blogReadRateLimiter,
     handleStaticTransportRequest,
     resolveAsset,
     mimeMap,
