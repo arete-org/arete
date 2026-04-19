@@ -46,6 +46,20 @@ get_secret_names() {
   fly secrets list -a "$app_name" 2>/dev/null | awk 'NR>1 {print $1}'
 }
 
+run_env_validation() {
+  local target="$1"
+  local app_name="$2"
+  local assumed_present
+  assumed_present=$(get_secret_names "$app_name" | paste -sd, -)
+
+  echo "Validating env for $target..."
+  if [[ -n "$assumed_present" ]]; then
+    pnpm validate-env --target "$target" --assume-present "$assumed_present"
+  else
+    pnpm validate-env --target "$target"
+  fi
+}
+
 get_env_value() {
   local env_path="$1"
   local key="$2"
@@ -163,10 +177,12 @@ web_app_name=$(get_app_name "$SCRIPT_DIR/fly.web.toml")
 echo "Configuring backend secrets..."
 ensure_secrets "$backend_app_name" OPENAI_API_KEY TRACE_API_TOKEN
 ensure_optional_secrets "$backend_app_name" TURNSTILE_SECRET_KEY TURNSTILE_SITE_KEY GITHUB_WEBHOOK_SECRET
+run_env_validation fly-backend "$backend_app_name"
 
 echo "Configuring bot secrets..."
 ensure_secrets "$bot_app_name" DISCORD_TOKEN DISCORD_CLIENT_ID DISCORD_GUILD_ID OPENAI_API_KEY DISCORD_USER_ID INCIDENT_PSEUDONYMIZATION_SECRET TRACE_API_TOKEN
 ensure_optional_secrets "$bot_app_name" WEB_BASE_URL CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET
+run_env_validation fly-bot "$bot_app_name"
 
 echo "Deploying backend..."
 fly deploy -c "$SCRIPT_DIR/fly.backend.toml"

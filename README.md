@@ -35,21 +35,19 @@ With Footnote, you can:
 
 This starts the local backend + web app.
 
-1. Install dependencies:
+1. Run local setup:
 
 ```bash
-pnpm install
+pnpm setup
 ```
 
-> If `pnpm` is not available yet, run `corepack enable` once, then run `pnpm install`.
+> If `pnpm` is not available yet, run `corepack enable` once, then run `pnpm setup`.
 
-2. Create a local env file from `.env.example`.
+`pnpm setup` will:
 
-Set at least this key in `.env` for a valid local boot:
-
-```env
-INCIDENT_PSEUDONYMIZATION_SECRET=<generate-a-random-secret>
-```
+- create `.env` from `.env.example` when missing
+- generate local secrets when missing (`INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`)
+- install dependencies
 
 To enable generation features, configure at least one provider:
 
@@ -62,19 +60,13 @@ OLLAMA_LOCAL_INFERENCE_ENABLED=true
 OLLAMA_BASE_URL=http://localhost:11434
 ```
 
-Generate a secret with:
-
-```bash
-node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
-```
-
-3. Start backend + web:
+2. Start backend + web:
 
 ```bash
 pnpm dev
 ```
 
-4. Open web app:
+3. Open web app:
 
 `http://localhost:8080`
 

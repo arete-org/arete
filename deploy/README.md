@@ -21,6 +21,11 @@ Services:
 - discord-bot: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`
     > Why `TRACE_API_TOKEN`? It's a shared key used to authenticate trace uploads from the bot to the backend.
 
+Validate expected deployment env before deploy:
+
+- backend: `pnpm validate-env --target fly-backend`
+- bot: `pnpm validate-env --target fly-bot`
+
 ## Optional environment
 
 ### Optional Services
@@ -85,7 +90,7 @@ Services:
 - All three (bash): `./deploy/deploy-fly.sh`
 - All three (PowerShell): `./deploy/deploy-fly.ps1`
   (Requires Fly CLI: https://fly.io/docs/flyctl/install/)
-  The scripts read `.env` and will prompt for any missing values.
+  The scripts read `.env`, prompt for missing secrets, and run `pnpm validate-env` before deploy.
   Note: we use three separate Fly apps to mirror the Docker Compose service split.
   Note: web uses `BACKEND_HOST=footnote-backend.internal` in `deploy/fly.web.toml`; update it if the backend app name changes.
   GitHub Actions deploys use `.github/workflows/fly-deploy.yml` and only need the `FLY_API_TOKEN` secret; app names come from `deploy/fly.*.toml`.
