@@ -47,10 +47,12 @@ const Hero = (): JSX.Element => {
             <Header breadcrumbItems={breadcrumbItems} />
 
             <div className="hero-copy">
-                <h1 id="hero-title">AI you can inspect and steer.</h1>
+                <h1 id="hero-title">
+                    Ask a question. Get an answer with a trail.
+                </h1>
                 <p className="hero-copy__subtitle">
-                    A transparency-first framework for people who want more than
-                    a black-box answer.
+                    Footnote gives you a direct answer, then shows what shaped
+                    it so you can inspect the result instead of guessing.
                 </p>
                 <div className="hero-action-hub">
                     <div className="hero-action-tabs" role="tablist">
@@ -157,13 +159,27 @@ const Hero = (): JSX.Element => {
                             />
                         </div>
                         <div className="intro-card-text">
-                            <h2 id="intro-card-title">Footnote, at a glance</h2>
+                            <h2 id="intro-card-title">
+                                What you get after asking
+                            </h2>
                             <p>
-                                Footnote pairs model output with inspectable
-                                metadata, including confidence, sources,
-                                trade-offs, and applied constraints. Run it
-                                locally, self-host it, or bring it into Discord
-                                while keeping human oversight in the loop.
+                                The response is not just text in a chat box. You
+                                can inspect what happened.
+                            </p>
+                            <ul className="intro-card-list">
+                                <li>A direct answer.</li>
+                                <li>Source links when web sources are used.</li>
+                                <li>
+                                    Provenance details with safety and
+                                    confidence signals.
+                                </li>
+                                <li>
+                                    A trace link so you can open the full run.
+                                </li>
+                            </ul>
+                            <p>
+                                If you want full control, use the setup tab and
+                                run Footnote in your own environment.
                             </p>
                         </div>
                     </div>

@@ -19,9 +19,9 @@ interface Principle {
 
 const PRINCIPLES: Principle[] = [
     {
-        title: 'Open source',
+        title: 'Inspect the product, not just the promise',
         description:
-            'Inspect the implementation, trace decisions, and adapt Footnote to your governance model.',
+            'Footnote shows answer-level provenance, safety signals, and trace links so you can verify what happened.',
         link: {
             href: 'https://github.com/footnote-ai/footnote/tree/main',
             label: 'Repository',
@@ -29,18 +29,18 @@ const PRINCIPLES: Principle[] = [
         },
     },
     {
-        title: 'Self-hosted first',
+        title: 'Run it yourself',
         description:
-            'Keep control of credentials, runtime, and policy boundaries in your own environment.',
+            'Self-hosting keeps your keys, runtime, and policy boundaries in your environment.',
         link: {
             href: '/invite/',
             label: 'Quickstart setup',
         },
     },
     {
-        title: 'Dual license',
+        title: 'Open code with clear license terms',
         description:
-            'Dual-licensed under MIT and Hippocratic License v3 (HL3-CORE) for practical use with explicit guardrails.',
+            'Footnote is dual-licensed under MIT and Hippocratic License v3 (HL3-CORE).',
         link: {
             href: 'https://github.com/footnote-ai/footnote/blob/main/docs/LICENSE_STRATEGY.md',
             label: 'License strategy',
@@ -52,7 +52,9 @@ const PRINCIPLES: Principle[] = [
 // Transparency block with three concise commitments.
 const OpenAccountable = (): JSX.Element => (
     <section className="transparency" aria-labelledby="transparency-title">
-        <h2 id="transparency-title">Built to be inspectable</h2>
+        <h2 id="transparency-title">
+            Why this is different from a normal chat box
+        </h2>
         <div className="card-grid" role="list">
             {PRINCIPLES.map((principle) => (
                 <article key={principle.title} className="card" role="listitem">

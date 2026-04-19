@@ -617,7 +617,7 @@ const AskMeAnything = (): JSX.Element => {
     return (
         <div className="interaction">
             <div className="interaction-heading-row">
-                <h2 className="interaction-heading">Ask me anything</h2>
+                <h2 className="interaction-heading">Ask a question</h2>
                 <div className="interaction-prompt-buttons-row">
                     <div className="interaction-prompt-text-button-wrapper">
                         <button
@@ -656,6 +656,10 @@ const AskMeAnything = (): JSX.Element => {
                     </button>
                 </div>
             </div>
+            <p className="interaction-helper">
+                After each reply, Footnote can show sources (when used),
+                provenance, safety tier, and a trace link.
+            </p>
             <form className="interaction-form" onSubmit={onSubmit}>
                 <div className="interaction-input-group">
                     <label htmlFor="question-input" className="sr-only">
