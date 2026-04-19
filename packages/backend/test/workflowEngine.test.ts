@@ -687,6 +687,10 @@ test('buildPlannerStepRecord does not include raw or noisy planner internals', (
         false
     );
     assert.equal(
+        Object.prototype.hasOwnProperty.call(step, 'fullRequest'),
+        false
+    );
+    assert.equal(
         Object.prototype.hasOwnProperty.call(
             step.outcome.signals ?? {},
             'rawPrompt'
@@ -704,6 +708,13 @@ test('buildPlannerStepRecord does not include raw or noisy planner internals', (
         Object.prototype.hasOwnProperty.call(
             step.outcome.signals ?? {},
             'fullPlannerJson'
+        ),
+        false
+    );
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            step.outcome.signals ?? {},
+            'fullRequest'
         ),
         false
     );
