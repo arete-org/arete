@@ -28,6 +28,10 @@ import { createTraceStore, storeTrace } from './services/traceStore.js';
 import { createBlogStore } from './storage/blogStore.js';
 import { getDefaultIncidentStore } from './storage/incidents/incidentStore.js';
 import { createAssetResolver } from './http/assets.js';
+import {
+    createRouteDispatcher,
+    normalizePathname,
+} from './http/routeDispatch.js';
 import { verifyGitHubSignature } from './utils/github.js';
 import { logRequest } from './utils/requestLogger.js';
 import { logger } from './utils/logger.js';
@@ -465,27 +469,6 @@ const { handleUpgrade: handleInternalVoiceRealtimeUpgrade } =
             }),
         buildInstructions: buildRealtimeInstructions,
     });
-// Decide whether /api/traces/:responseId should return JSON or the SPA HTML shell.
-// We default to JSON unless the Accept header clearly asks for HTML.
-// This keeps API clients working even when they send a generic "*/*" Accept header.
-const wantsJsonResponse = (req: http.IncomingMessage): boolean => {
-    const headerValue = req.headers.accept;
-    const acceptHeader = Array.isArray(headerValue)
-        ? headerValue.join(',')
-        : headerValue || '';
-    const normalized = acceptHeader.toLowerCase();
-    const wantsHtml =
-        normalized.includes('text/html') ||
-        normalized.includes('application/xhtml+xml');
-    const wantsJson =
-        normalized.includes('application/json') || normalized.includes('+json');
-
-    if (wantsHtml && !wantsJson) {
-        return false;
-    }
-
-    return true;
-};
 // Chat is the backend-standardized conversation interface (adapter-facing, Turnstile + rate-limited for public web calls).
 const executionContractTrustGraphRuntimeOptions =
     resolveExecutionContractTrustGraphRuntimeOptions(
@@ -505,6 +488,33 @@ const handleChatRequest = createChatHandler({
     maxChatBodyBytes: runtimeConfig.reflect.maxBodyBytes,
     executionContractTrustGraph: executionContractTrustGraphRuntimeOptions,
 });
+const { dispatchHttpRoute, dispatchUpgradeRoute } = createRouteDispatcher({
+    handlers: {
+        handleWebhookRequest,
+        handleRuntimeConfigRequest,
+        handleIncidentListRequest,
+        handleIncidentReportRequest,
+        handleInternalTextRequest,
+        handleInternalImageRequest,
+        handleInternalVoiceTtsRequest,
+        handleIncidentStatusRequest,
+        handleIncidentNotesRequest,
+        handleIncidentRemediationRequest,
+        handleIncidentDetailRequest,
+        handleBlogIndexRequest,
+        handleBlogPostRequest,
+        handleTraceUpsertRequest,
+        handleTraceCardCreateRequest,
+        handleTraceCardFromTraceRequest,
+        handleTraceCardAssetRequest,
+        handleTraceRequest,
+        handleChatRequest,
+        handleChatProfilesRequest,
+    },
+    onTraceRouteMatched: (pathname) => {
+        logger.debug(`Trace route matched: ${pathname}`);
+    },
+});
 
 // --- HTTP server ---
 const server = http.createServer(async (req, res) => {
@@ -518,124 +528,14 @@ const server = http.createServer(async (req, res) => {
     try {
         // --- URL parsing ---
         const parsedUrl = new URL(req.url, 'http://localhost');
-        const normalizedPathname =
-            parsedUrl.pathname.length > 1 && parsedUrl.pathname.endsWith('/')
-                ? parsedUrl.pathname.slice(0, -1)
-                : parsedUrl.pathname;
-
-        // --- API routes ---
-        if (normalizedPathname === '/api/webhook/github') {
-            await handleWebhookRequest(req, res);
-            return;
-        }
-
-        if (normalizedPathname === '/config.json') {
-            await handleRuntimeConfigRequest(req, res);
-            return;
-        }
-
-        if (normalizedPathname === '/api/incidents') {
-            await handleIncidentListRequest(req, res, parsedUrl);
-            return;
-        }
-
-        if (normalizedPathname === '/api/incidents/report') {
-            await handleIncidentReportRequest(req, res);
-            return;
-        }
-
-        if (normalizedPathname === '/api/internal/text') {
-            await handleInternalTextRequest(req, res);
-            return;
-        }
-
-        if (normalizedPathname === '/api/internal/image') {
-            await handleInternalImageRequest(req, res);
-            return;
-        }
-
-        if (normalizedPathname === '/api/internal/voice/tts') {
-            await handleInternalVoiceTtsRequest(req, res);
-            return;
-        }
-
-        if (/^\/api\/incidents\/[^/]+\/status$/.test(normalizedPathname)) {
-            await handleIncidentStatusRequest(req, res, parsedUrl);
-            return;
-        }
-
-        if (/^\/api\/incidents\/[^/]+\/notes$/.test(normalizedPathname)) {
-            await handleIncidentNotesRequest(req, res, parsedUrl);
-            return;
-        }
-
-        if (/^\/api\/incidents\/[^/]+\/remediation$/.test(normalizedPathname)) {
-            await handleIncidentRemediationRequest(req, res, parsedUrl);
-            return;
-        }
-
-        if (/^\/api\/incidents\/[^/]+$/.test(normalizedPathname)) {
-            await handleIncidentDetailRequest(req, res, parsedUrl);
-            return;
-        }
-
-        if (normalizedPathname === '/api/blog-posts') {
-            await handleBlogIndexRequest(req, res);
-            return;
-        }
-
-        if (normalizedPathname.startsWith('/api/blog-posts/')) {
-            const postId = normalizedPathname.split('/').pop() || '';
-            await handleBlogPostRequest(req, res, postId);
-            return;
-        }
-
-        if (normalizedPathname === '/api/traces') {
-            await handleTraceUpsertRequest(req, res);
-            return;
-        }
-
-        if (normalizedPathname === '/api/trace-cards') {
-            await handleTraceCardCreateRequest(req, res);
-            return;
-        }
-
-        if (normalizedPathname === '/api/trace-cards/from-trace') {
-            await handleTraceCardFromTraceRequest(req, res);
-            return;
-        }
-
-        if (
-            /^\/api\/traces\/[^/]+\/assets\/trace-card\.svg$/.test(
-                normalizedPathname
-            )
-        ) {
-            await handleTraceCardAssetRequest(req, res, parsedUrl);
-            return;
-        }
-
-        // --- Trace retrieval route (JSON only) ---
-        // This path also doubles as a browser route for the trace page.
-        // We only return JSON when the caller explicitly asks for JSON.
-        if (normalizedPathname.startsWith('/api/traces/')) {
-            // This endpoint can return HTML or JSON depending on the Accept header.
-            // Tell caches to keep those two versions separate (so a JSON request never gets a cached HTML page and vice versa).
-            res.setHeader('Vary', 'Accept');
-            if (wantsJsonResponse(req)) {
-                logger.debug(`Trace route matched: ${normalizedPathname}`);
-                await handleTraceRequest(req, res, parsedUrl);
-                return;
-            }
-            // Fall through to the static asset resolver for the SPA.
-        }
-
-        if (normalizedPathname === '/api/chat') {
-            await handleChatRequest(req, res);
-            return;
-        }
-
-        if (normalizedPathname === '/api/chat/profiles') {
-            await handleChatProfilesRequest(req, res);
+        const normalizedPathname = normalizePathname(parsedUrl.pathname);
+        const routeOutcome = await dispatchHttpRoute({
+            req,
+            res,
+            parsedUrl,
+            normalizedPathname,
+        });
+        if (routeOutcome === 'handled') {
             return;
         }
 
@@ -734,13 +634,15 @@ server.on('upgrade', (req, socket, head) => {
 
     try {
         const parsedUrl = new URL(req.url, 'http://localhost');
-        const normalizedPathname =
-            parsedUrl.pathname.length > 1 && parsedUrl.pathname.endsWith('/')
-                ? parsedUrl.pathname.slice(0, -1)
-                : parsedUrl.pathname;
-
-        if (normalizedPathname === '/api/internal/voice/realtime') {
-            handleInternalVoiceRealtimeUpgrade(req, socket, head);
+        const normalizedPathname = normalizePathname(parsedUrl.pathname);
+        const isUpgradeHandled = dispatchUpgradeRoute({
+            req,
+            socket,
+            head,
+            normalizedPathname,
+            handleInternalVoiceRealtimeUpgrade,
+        });
+        if (isUpgradeHandled) {
             return;
         }
     } catch (error) {
