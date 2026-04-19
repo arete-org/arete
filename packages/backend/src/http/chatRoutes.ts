@@ -8,7 +8,6 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import express from 'express';
-import { getRequestUrl } from './requestUrl.js';
 
 type RequestHandler = (
     req: IncomingMessage,
@@ -23,7 +22,6 @@ type LogRequest = (
 
 type RegisterChatRoutesDeps = {
     app: express.Express;
-    normalizePathname: (pathname: string) => string;
     handleChatRequest: RequestHandler;
     logRequest: LogRequest;
 };
@@ -43,24 +41,32 @@ const respondWithRouteError = (
     );
 };
 
+/**
+ * Registers the bare chat endpoint in the Express shell.
+ *
+ * Chat route contract:
+ * - `app.use('/api/chat', chatRouter)` mount point
+ * - `chatRouter.all('/')` owns only `/api/chat`
+ *
+ * Notes:
+ * - `/api/chat/profiles` is owned by `publicRoutes.ts`.
+ * - Unmatched `/api/chat/*` requests intentionally fall through to downstream
+ *   dispatch (fail-open behavior).
+ *
+ * @param app Express app receiving mounted chat routes.
+ * @param handleChatRequest Existing `/api/chat` handler.
+ * @param logRequest Shared request logger used for route-level error context.
+ * @returns void
+ */
 const registerChatRoutes = ({
     app,
-    normalizePathname,
     handleChatRequest,
     logRequest,
 }: RegisterChatRoutesDeps): void => {
     const chatRouter = express.Router();
-    chatRouter.use(async (req, res, next) => {
+    chatRouter.all('/', async (req, res, next) => {
         try {
-            const requestUrl = getRequestUrl(req);
-            if (!requestUrl) {
-                res.status(400).end('Bad Request');
-                return;
-            }
-            const parsedUrl = new URL(requestUrl, 'http://localhost');
-            const normalizedPathname = normalizePathname(parsedUrl.pathname);
-
-            if (normalizedPathname === '/api/chat') {
+            if (req.path === '/' || req.path === '') {
                 await handleChatRequest(req, res);
                 return;
             }

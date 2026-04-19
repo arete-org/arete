@@ -194,7 +194,6 @@ const createExpressApp = ({
     });
     registerChatRoutes({
         app,
-        normalizePathname,
         handleChatRequest,
         logRequest,
     });
