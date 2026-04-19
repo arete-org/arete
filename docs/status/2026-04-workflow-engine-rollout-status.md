@@ -14,12 +14,18 @@
 ## Purpose
 
 Track current rollout state for moving from a specialized bounded review loop
-to a general workflow-engine shape with first-class workflow provenance records.
+to a general workflow engine with first-class workflow provenance records.
 
-Architecture reference:
-`docs/architecture/workflow-engine-and-provenance.md`
+Read this after the current architecture docs. It is a rollout tracker, not
+the main workflow/planner explainer.
 
-## Current Snapshot
+Current architecture references:
+
+- `docs/architecture/workflow-mode-routing.md`
+- `docs/architecture/workflow-engine-and-provenance.md`
+- `docs/architecture/workflow-profile-contract.md`
+
+## Snapshot
 
 - Workflow metadata is now aligned to `WorkflowRecord` + `StepRecord`.
 - Step outcomes now have explicit machine-readable control signals.
@@ -34,8 +40,10 @@ Architecture reference:
   `ExecutionLimits`, transition checks, and state/limit helpers).
 - Chat bounded review loop routing is now delegated through
   `runBoundedReviewWorkflow`, with legality enforced before each bounded step.
+- Planner still runs in `chatOrchestrator` before workflow execution; planner
+  as first-class workflow step remains future work.
 
-## What Is Landed
+## Landed Work
 
 ### 1) Contract Baseline (Core)
 
@@ -95,7 +103,7 @@ Status: `landed`
 - Added termination reason mapping from exhausted limits.
 - Added direct unit tests for engine legality and budget invariants.
 
-## What Is Open
+## Open Work
 
 ### 1) Replace Specialized Loop With Engine-Driven Step Routing
 
@@ -126,10 +134,19 @@ Goal:
 - Ensure model-backed deliberation is invoked only for allowed step kinds and
   within `maxDeliberationCalls`.
 
-## Policy And Limits Boundary
+### 4) Planner As Workflow Step
 
-- `WorkflowPolicy` owns capability toggles and legal transition rules.
-- `ExecutionLimits` owns hard quantitative caps.
+Status: `pending`
+
+Goal:
+
+- Move planner from orchestrator-frontloaded execution into first-class
+  workflow lineage without giving planner extra policy authority.
+
+## Policy And Limits
+
+`WorkflowPolicy` owns capability toggles and legal transition rules.
+`ExecutionLimits` owns hard quantitative caps.
 
 ## Runtime Controls (Current Chat Profile)
 

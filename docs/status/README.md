@@ -17,7 +17,8 @@ history or migration context.
 - [Weather.gov Tool Pilot Eval](./2026-03-weathergov-pilot-eval.md): pilot
   evaluation notes for the Weather.gov tool path.
 - [Workflow Engine Rollout Status](./2026-04-workflow-engine-rollout-status.md):
-  rollout state for workflow-engine work.
+  rollout state and landing history for workflow-engine work. Read the
+  architecture docs first for the current workflow/planner explanation.
 - [TrustGraph Foundation Consolidation Status](./2026-04-trustgraph-foundation-consolidation.md):
   bounded-scope TrustGraph consolidation and review notes.
 

@@ -6,6 +6,13 @@
 - Scope: Architecture boundary contract for workflow execution
 - Applies to: `packages/backend/src/services/workflowEngine.ts` and caller adapters
 
+This RFC is historical design context for the workflow-engine rollout.
+For the current first-read explanation, use:
+
+- [Workflow Mode Routing](./workflow-mode-routing.md)
+- [Workflow Engine And Provenance](./workflow-engine-and-provenance.md)
+- [Workflow Profile Contract](./workflow-profile-contract.md)
+
 ## Why This Exists
 
 Workflow logic can spread across several files and layers.

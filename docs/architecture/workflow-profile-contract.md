@@ -2,25 +2,32 @@
 
 ## Purpose
 
-Define one contract for workflow profiles before multi-profile execution is introduced.
+Define the contract that executable workflow profiles must satisfy.
 
-This removes ambiguity for blocked/no-generation handling and provenance.
+This is a contract doc, not the best first explanation of the current runtime
+flow.
+Read [Workflow Mode Routing](./workflow-mode-routing.md) first if you are new.
 
 ## Scope
 
-This document defines:
+This document covers the profile contract, no-generation behavior, required
+termination-reason mapping, workflow metadata requirements, and compatibility
+rules for `bounded-review` and `generate-only`.
 
-- profile contract shape,
-- blocked/no-generation behavior matrix,
-- required termination-reason mapping,
-- provenance requirements for blocked-before-generation and no-generation,
-- compatibility notes for `bounded-review` and `generate-only`.
+It does not cover profile registry runtime implementation, plan-and-generate
+or tool-assisted profiles, or blocked-state UI design.
 
-Out of scope:
+## Built-In Profiles
 
-- profile registry runtime implementation,
-- plan-and-generate or tool-assisted profile implementation,
-- blocked-state UI redesign.
+Current chat runtime uses two built-in profiles:
+
+| Profile id       | Current purpose              | Main steps                     |
+| ---------------- | ---------------------------- | ------------------------------ |
+| `generate-only`  | direct single-pass execution | `generate`                     |
+| `bounded-review` | reviewed message generation  | `generate -> assess -> revise` |
+
+Modes choose between these profiles. Profiles do not become a second policy
+authority.
 
 ## Contract Shape
 
@@ -51,7 +58,10 @@ Contract rule:
 - optional extensions cannot override required no-generation classification,
   disposition, or termination-reason mapping.
 
-## Blocked / No-Generation Behavior Matrix
+Mode chooses the kind of run. Profile chooses the step pattern. The engine
+enforces legality and limits. Adapters connect the profile to runtime calls.
+
+## No-Generation Behavior
 
 | Condition                                              | Surface To Caller                               | Internal Termination | Required `terminationReason`   |
 | ------------------------------------------------------ | ----------------------------------------------- | -------------------- | ------------------------------ |
@@ -69,37 +79,31 @@ Notes:
 - “Internal termination” means the workflow record always terminates with a
   reason code, even when not surfaced as a dedicated blocked UI state.
 
-## Required No-Generation Reason Mapping
+## Reason Mapping
 
 Reason-code mapping is defined in:
 `WORKFLOW_NO_GENERATION_HANDLING_MAP`
 (`packages/backend/src/services/workflowProfileContract.ts`).
 
-Required mapping:
+The required mapping is:
+`blocked_by_policy_before_generate` -> `transition_blocked_by_policy`,
+`generation_disabled_by_profile` -> `transition_blocked_by_policy`,
+`budget_exhausted_steps_before_generate` -> `budget_exhausted_steps`,
+`budget_exhausted_tokens_before_generate` -> `budget_exhausted_tokens`,
+`budget_exhausted_time_before_generate` -> `budget_exhausted_time`,
+and `executor_error_before_generate` -> `executor_error_fail_open`.
 
-- `blocked_by_policy_before_generate` -> `transition_blocked_by_policy`
-- `generation_disabled_by_profile` -> `transition_blocked_by_policy`
-- `budget_exhausted_steps_before_generate` -> `budget_exhausted_steps`
-- `budget_exhausted_tokens_before_generate` -> `budget_exhausted_tokens`
-- `budget_exhausted_time_before_generate` -> `budget_exhausted_time`
-- `executor_error_before_generate` -> `executor_error_fail_open`
+The disposition mapping is:
+policy-blocked, generation-disabled, and executor-error are surfaced.
+Pre-generation budget exhaustion is internal-only.
 
-Disposition mapping:
-
-- surfaced: policy-blocked, generation-disabled, executor-error
-- internal-only: pre-generation budget exhaustion
-
-## Provenance Requirements For No-Generation Outcomes
+## Metadata Requirements
 
 For all profiles, blocked-before-generation and no-generation outcomes must
-produce a valid `WorkflowRecord` with:
-
-- `workflowId`, `workflowName`
-- `status='degraded'` (unless a future profile formally introduces a completed
-  no-output mode with a new reason vocabulary)
-- `terminationReason` from the required map
-- `stepCount` equal to `steps.length`
-- `maxSteps`, `maxDurationMs`
+produce a valid `WorkflowRecord` with `workflowId`, `workflowName`,
+`status='degraded'`, `terminationReason` from the required map, `stepCount`
+equal to `steps.length`, `maxSteps`, and `maxDurationMs`. A future profile may
+introduce a completed no-output mode, but only with a new reason vocabulary.
 
 When generation never occurred:
 
@@ -108,26 +112,18 @@ When generation never occurred:
 - if any step executed before no-generation termination, emitted steps must
   remain chronologically ordered with valid parent references.
 
-Cross-profile invariants:
+Across profiles, no profile may emit ad-hoc termination reason strings, treat
+the same reason code as surfaced in one path and internal-only in another, or
+omit workflow provenance for no-generation outcomes.
 
-- no profile may emit ad-hoc termination reason strings.
-- no profile may treat the same reason code as surfaced in one path and
-  internal-only in another path.
-- no profile may omit workflow provenance for no-generation outcomes.
+## Compatibility Rules
 
-## Compatibility Notes
+Current `bounded-review` profile is compatible with this contract through
+policy, limits, and review/revision extensions. Its current no-generation
+hotspot maps to `transition_blocked_by_policy` when generation is blocked
+before the first draft.
 
-Current `bounded-review` profile:
-
-- compatible with this contract through policy/limits + review/revision
-  extensions.
-- current no-generation hotspot maps to
-  `transition_blocked_by_policy` when generation is blocked before first
-  draft emission.
-
-Upcoming `generate-only` profile:
-
-- should implement the same required hooks with
-  `enableAssessment=false`, `enableRevision=false`.
-- should reuse the same no-generation mapping and provenance invariants.
-- should not introduce profile-specific blocked-state semantics.
+Current `generate-only` profile uses the same required hooks with
+`enableAssessment=false` and `enableRevision=false`. It reuses the same
+no-generation mapping and metadata rules and does not introduce
+profile-specific blocked-state semantics.

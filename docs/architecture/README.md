@@ -9,28 +9,38 @@ the best starting point.
 
 1. [Execution Contract Authority Map](./execution-contract-authority-map.md):
    start here for system authority and ownership boundaries.
-2. [Workflow Profile Contract](./workflow-profile-contract.md): read this next
-   for the contract that profiles must satisfy.
-3. [Workflow Mode Routing](./workflow-mode-routing.md): explains how runtime
-   routing decisions relate to user-facing posture and execution.
-4. [Workflow Engine And Provenance](./workflow-engine-and-provenance.md):
-   explains the workflow shape and provenance model.
-5. [How to Read Provenance-Related Metadata](./provenance-label-taxonomy.md):
+2. [Workflow Mode Routing](./workflow-mode-routing.md): read this next for the
+   current workflow and planner model, including mode, profile, review/revise,
+   and planner boundaries.
+3. [Workflow Engine And Provenance](./workflow-engine-and-provenance.md):
+   use this after the routing doc for the current engine flow and workflow
+   metadata.
+4. [How to Read Provenance-Related Metadata](./provenance-label-taxonomy.md):
    use this before interpreting TRACE, provenance, mode, or planner fields in
    responses.
 
 ## Important Adjacent Docs
 
+- [Workflow Profile Contract](./workflow-profile-contract.md): contract details
+  for executable workflow profiles, limits, and no-generation handling.
 - [Prompt Resolution Order](./prompt-resolution.md): how prompt layers and
   overrides resolve at runtime.
 - [Bounded User Control Mapping](./bounded-user-control-mapping.md): what users
   can steer directly and what stays backend-owned.
-- [Workflow Profiles V1 RFC: Engine Core vs Profile Semantics](./workflow-profiles-v1-engine-vs-profile-semantics.md):
-  a deeper explanation of engine/profile boundaries and invariants.
 - [Execution Contract TrustGraph Architecture](./execution_contract_trustgraph/architecture.md):
   TrustGraph-specific architecture and rollout constraints.
 - [Steerability Foundation (Internal Controls v1)](./2026-04-steerability-foundation.md):
   the control-plane foundation behind bounded user control and runtime posture.
+
+## Historical Workflow Notes
+
+Read these after the docs above if you need rollout history or older design
+notes. They are not the best first read for the workflow/planner model today.
+
+- [Workflow Profiles V1 RFC: Engine Core vs Profile Semantics](./workflow-profiles-v1-engine-vs-profile-semantics.md):
+  design notes and ownership reasoning from the workflow-engine rollout.
+- [Workflow Engine Rollout Status](../status/2026-04-workflow-engine-rollout-status.md):
+  rollout tracking and landing history for workflow-engine work.
 
 ## Incident And Safety
 
