@@ -567,6 +567,171 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
     assert.equal(generationCalls, 2);
 });
 
+test('runBoundedReviewWorkflow attaches planner plan step to lineage and links initial generate step to planner root', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            return {
+                text: 'initial draft',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 12,
+                    completionTokens: 6,
+                    totalTokens: 18,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const plannerStep = buildPlannerStepRecord({
+        stepId: 'step_1',
+        attempt: 1,
+        finishedAtMs: Date.now(),
+        summary: {
+            status: 'executed',
+            purpose: 'chat_orchestrator_action_selection',
+            contractType: 'structured',
+            applyOutcome: 'applied',
+            profileId: 'openai-text-fast',
+            provider: 'openai',
+            model: 'gpt-5-nano',
+            mattered: true,
+            matteredControlIds: ['provider_preference'],
+        },
+    });
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Summarize this.' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Summarize this.' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop',
+            maxIterations: 0,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        plannerStepRecord: plannerStep,
+        captureUsage: (generationResult, requestedModel) => ({
+            model: requestedModel ?? generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.workflowLineage.stepCount, 2);
+    assert.equal(result.workflowLineage.steps[0].stepKind, 'plan');
+    assert.equal(result.workflowLineage.steps[1].stepKind, 'generate');
+    assert.equal(result.workflowLineage.steps[1].parentStepId, 'step_1');
+    assert.equal(generationCalls, 1);
+});
+
+test('runBoundedReviewWorkflow preserves failed planner fallback status on injected plan step', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            return {
+                text: 'should not run',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 1,
+                    completionTokens: 1,
+                    totalTokens: 2,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const plannerStep = buildPlannerStepRecord({
+        stepId: 'step_1',
+        attempt: 1,
+        finishedAtMs: Date.now(),
+        summary: {
+            status: 'failed',
+            reasonCode: 'planner_runtime_error',
+            purpose: 'chat_orchestrator_action_selection',
+            contractType: 'fallback',
+            applyOutcome: 'not_applied',
+            profileId: 'openai-text-fast',
+            provider: 'openai',
+            model: 'gpt-5-nano',
+            mattered: false,
+            matteredControlIds: [],
+        },
+    });
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Summarize this.' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Summarize this.' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: false,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        plannerStepRecord: plannerStep,
+        captureUsage: () => ({
+            model: 'gpt-5-mini',
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'no_generation');
+    assert.equal(generationCalls, 0);
+    assert.equal(result.workflowLineage.stepCount, 1);
+    assert.equal(result.workflowLineage.steps.length, 1);
+    assert.equal(result.workflowLineage.steps[0].stepKind, 'plan');
+    assert.equal(result.workflowLineage.steps[0].outcome.status, 'failed');
+    assert.equal(
+        result.workflowLineage.steps[0].reasonCode,
+        'planner_runtime_error'
+    );
+});
+
 test('buildPlannerStepRecord creates schema-safe plan step with bounded planner summary fields', () => {
     const startedAtMs = Date.now() - 24;
     const finishedAtMs = Date.now();

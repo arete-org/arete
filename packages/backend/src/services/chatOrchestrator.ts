@@ -704,9 +704,10 @@ export const createChatOrchestrator = ({
                 // so traces can distinguish successful planning from fallback.
                 // This metadata reports planner influence; it does not delegate
                 // orchestration ownership or policy authority to planner.
-                // TODO(workflow-planner-lineage): Keep this metadata bridge
-                // until planner execution is represented directly as workflow
-                // lineage instead of orchestrator-frontloaded context.
+                // TODO(workflow-planner-metadata-cleanup): Planner execution
+                // is now also attached to bounded-review workflow lineage as a
+                // `plan` StepRecord. Keep this execution[] metadata bridge only
+                // for temporary compatibility with non-migrated paths.
                 planner: {
                     status: plannerExecution.status,
                     ...(plannerExecution.reasonCode !== undefined && {
