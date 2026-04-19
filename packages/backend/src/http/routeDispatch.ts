@@ -52,6 +52,7 @@ type RouteDispatchHandlers = {
 /**
  * Keeps central transport-boundary matching rules explicit and ordered.
  * Order is behavior: first match wins and later checks never run.
+ * TODO(express-special-dispatch-closeout): After standard HTTP routes move, reassess whether this module should remain as the explicit special transport dispatcher for raw webhook, trace Accept negotiation, and upgrade routing.
  */
 const createRouteDispatcher = ({
     handlers,
@@ -79,6 +80,7 @@ const createRouteDispatcher = ({
         }
 
         // --- Trusted internal routes ---
+        // TODO(express-internal-routes): Move trusted internal HTTP routes into an Express internal route module while preserving service-token auth, bounded parsing, TTS behavior, and NDJSON streaming headers/flush behavior for image.
         if (normalizedPathname === '/api/internal/text') {
             await handlers.handleInternalTextRequest(req, res);
             return 'handled';
@@ -95,6 +97,7 @@ const createRouteDispatcher = ({
         }
 
         // --- Trace write/asset routes ---
+        // TODO(express-trace-write-routes): Move trace write/card routes into an Express trace route module while keeping /api/traces/:id Accept-negotiated JSON-vs-SPA behavior explicit.
         if (normalizedPathname === '/api/traces') {
             await handlers.handleTraceUpsertRequest(req, res);
             return 'handled';
@@ -131,6 +134,7 @@ const createRouteDispatcher = ({
         }
 
         // --- Chat routes ---
+        // TODO(express-chat-route): Move /api/chat into a dedicated Express chat route module after preserving CORS OPTIONS, body parsing, provider-unavailable, rate-limit, and response-shape contracts.
         if (normalizedPathname === '/api/chat') {
             await handlers.handleChatRequest(req, res);
             return 'handled';
