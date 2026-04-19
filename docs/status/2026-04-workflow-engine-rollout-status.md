@@ -14,10 +14,10 @@
 ## Purpose
 
 Track current rollout state for moving from a specialized bounded review loop
-to a general workflow-engine shape with first-class workflow provenance records.
+to a general workflow engine with first-class workflow provenance records.
 
-Read this after the current architecture docs.
-It is rollout history and tracking, not the main workflow/planner explainer.
+Read this after the current architecture docs. It is a rollout tracker, not
+the main workflow/planner explainer.
 
 Current architecture references:
 
@@ -145,8 +145,8 @@ Goal:
 
 ## Policy And Limits Boundary
 
-- `WorkflowPolicy` owns capability toggles and legal transition rules.
-- `ExecutionLimits` owns hard quantitative caps.
+`WorkflowPolicy` owns capability toggles and legal transition rules.
+`ExecutionLimits` owns hard quantitative caps.
 
 ## Runtime Controls (Current Chat Profile)
 

@@ -13,8 +13,8 @@ the best starting point.
    current workflow and planner model, including mode, profile, review/revise,
    and planner boundaries.
 3. [Workflow Engine And Provenance](./workflow-engine-and-provenance.md):
-   use this after the routing doc for the current engine surface and lineage
-   record shape.
+   use this after the routing doc for the current engine flow and workflow
+   metadata.
 4. [How to Read Provenance-Related Metadata](./provenance-label-taxonomy.md):
    use this before interpreting TRACE, provenance, mode, or planner fields in
    responses.
@@ -34,8 +34,8 @@ the best starting point.
 
 ## Historical Workflow Notes
 
-These are useful after you understand the current docs above.
-They are not the best first read for the current workflow/planner shape.
+Read these after the docs above if you need rollout history or older design
+notes. They are not the best first read for the workflow/planner model today.
 
 - [Workflow Profiles V1 RFC: Engine Core vs Profile Semantics](./workflow-profiles-v1-engine-vs-profile-semantics.md):
   design notes and ownership reasoning from the workflow-engine rollout.

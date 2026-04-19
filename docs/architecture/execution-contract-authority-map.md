@@ -4,21 +4,21 @@
 
 Define one stable authority model for chat execution in Footnote.
 
-Target statement:
-
-`The contract governs. The orchestrator executes.`
+The short version is simple: the contract governs and the orchestrator
+executes.
 
 ## Canonical Terms
 
-- `Execution Contract`: the governing backend contract for allowed execution shape, limits, verification expectations, and fail-open semantics.
-- `chatOrchestrator`: the runtime coordinator that carries out one request under the contract.
-- `planner`: a bounded workflow step owned by workflow logic; it can propose action details but cannot mutate hard execution authority.
-- `workflow profile`: a named workflow shape selected under the contract.
-- `trace/provenance`: evidence of what happened relative to contract-governed execution.
+`Execution Contract` is the backend contract for allowed execution behavior,
+limits, verification expectations, and fail-open semantics.
+`chatOrchestrator` carries out one request under that contract.
+`planner` can propose action details, but it cannot change the rules.
+`workflow profile` is the named step pattern selected under the contract.
+`trace/provenance` records what happened.
 
 Implementation note:
 Current code still uses `ExecutionContract` naming for the main contract module.
-That module is the Execution Contract authority surface.
+That module is still the main Execution Contract module.
 
 ## Ownership
 
@@ -35,13 +35,12 @@ That module is the Execution Contract authority surface.
 
 ## Boundaries
 
-- The Execution Contract is the single governing contract for execution shape.
-- The orchestrator is the request-time execution coordinator.
-- Planner is a bounded helper with workflow-owned boundaries, not a second orchestrator.
-- Planner outputs are advisory and cannot directly override Execution Contract authority.
-- Workflow profiles remain named shapes selected under the contract.
-- External evidence systems (including TrustGraph) never become routing or terminal authorities.
-- Provenance explains decisions after execution; it does not become a second decision engine.
+The Execution Contract is the governing contract for execution behavior. The
+orchestrator coordinates the request at runtime. Planner is a bounded helper,
+not a second orchestrator, and its output is advisory. Workflow profiles stay
+inside the contract. External evidence systems such as TrustGraph can inform
+execution, but they do not become routing or terminal authorities. Provenance
+records decisions after execution; it does not become a second decision engine.
 
 ## Non-Goals
 
