@@ -7,20 +7,33 @@ A workflow mode is the routing choice for one chat request.
 This is the main doc for workflow and planner behavior today.
 Read this before the profile contract, rollout notes, or RFC material.
 
-The Execution Contract sets the limits. Workflow mode picks the kind of run.
-Workflow profile picks the step pattern. Planner can suggest how to carry out
-the run, but it cannot change the rules. Workflow lineage records what
-happened.
+When a chat request comes in, Footnote has to decide how careful the run
+should be before it starts generating. Some requests can take the fast path.
+Others should use the reviewed path, with stricter evidence and revision rules.
+
+This doc explains that routing layer.
+
+The split is simple. The Execution Contract sets the limits for the run.
+Workflow mode chooses the run type. Workflow profile chooses the step pattern.
+Planner can suggest action details inside those limits. Workflow lineage shows
+what actually happened.
 
 ## Runtime Flow
 
-The backend resolves an Execution Contract preset first. Then it resolves a
-workflow mode, maps that mode to a workflow profile and runtime limits, and
-runs planner once in `chatOrchestrator` before message generation. Planner
-output still goes through surface policy, capability policy, and tool policy.
-`chatService` then runs either direct generation or the bounded review loop.
-Response metadata records `workflowMode`, planner execution details, and
-workflow lineage.
+The normal chat path starts with the Execution Contract. That contract decides
+the allowed behavior and limits for the request.
+
+After that, the backend resolves a workflow mode: `fast`, `balanced`, or
+`grounded`. The mode maps to a workflow profile, which is the step pattern the
+runtime will use. For example, `fast` maps to `generate-only`, while
+`balanced` and `grounded` both use `bounded-review`.
+
+Planner runs once in `chatOrchestrator` before generation. Its output still
+goes through surface policy, capability policy, and tool policy. Then
+`chatService` runs either direct generation or the bounded review loop.
+
+Response metadata records the selected mode, planner influence, and workflow
+lineage.
 
 Planner affects execution today, but it is not yet a first-class workflow step
 in workflow metadata.
@@ -51,7 +64,9 @@ mode escalation.
 ## Review Loop
 
 `generate-only` runs one `generate` step and stops. `bounded-review` runs
-`generate -> assess -> revise` in a bounded loop.
+`generate -> assess -> revise` in a bounded loop. That is why the reviewed
+path matters here: it gives the runtime one bounded chance to assess the draft
+and revise it before stopping.
 
 The assess step emits two machine-readable fields: `reviewDecision`
 (`finalize` or `revise`) and `reviewReason`. A review result can request a
@@ -59,11 +74,12 @@ revision, but it does not bypass workflow policy or engine limits.
 
 ## Planner Boundary
 
-Planner can choose an action shape for the request, suggest search or tool
-details, suggest a capability profile, and affect execution metadata when its
-output materially mattered. It cannot change the Execution Contract, grant
-itself extra tools or steps, bypass policy, or become the final authority on
-mode, profile, safety, or provenance.
+Planner helps decide how to carry out the request. It can suggest search or
+tool details, choose an action shape, and recommend a capability profile.
+
+Those suggestions stay inside backend policy. Planner cannot change the
+Execution Contract, grant extra tools or steps, bypass policy, or become the
+final authority on mode, profile, safety, or provenance.
 
 Today, planner runs in `chatOrchestrator` before `chatService` starts the
 review loop.
@@ -95,13 +111,15 @@ Rules for this seam:
 
 ## Metadata
 
-`workflowMode` in response metadata records `modeId`, `selectedBy`,
-`selectionReason`, `initial_mode`, optional `escalated_mode`, optional
-`escalation_reason`, optional `requestedModeId`, optional
-`executionContractResponseMode`, and `behavior`.
+The response metadata keeps these concepts separate so readers can see why the
+request ran the way it did.
 
-Use the nearby metadata fields for different jobs.
 `metadata.workflowMode.*` explains the routing choice.
 `metadata.execution[]` planner entries explain planner influence.
 `metadata.workflow` records workflow lineage.
 TRACE fields describe answer behavior, not workflow routing.
+
+The `workflowMode` object includes `modeId`, `selectedBy`,
+`selectionReason`, `initial_mode`, optional `escalated_mode`, optional
+`escalation_reason`, optional `requestedModeId`, optional
+`executionContractResponseMode`, and `behavior`.
