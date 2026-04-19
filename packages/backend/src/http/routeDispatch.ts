@@ -1,6 +1,6 @@
 /**
- * @description: Centralizes ordered transport-boundary dispatch for routes not yet Express-owned.
- * Keeps explicit handling for special transport paths in the mixed Express + boundary-dispatch architecture.
+ * @description: Centralizes ordered special transport-boundary dispatch paths.
+ * Keeps explicit handling for raw-body webhook and dual-use trace Accept-negotiated behavior.
  * @footnote-scope: core
  * @footnote-module: RouteDispatch
  * @footnote-risk: high - Route order mistakes can silently change endpoint behavior.
@@ -10,9 +10,6 @@ import type http from 'node:http';
 import { wantsTraceJsonResponse } from './traceAccept.js';
 
 // --- Route path helpers ---
-const TRACE_CARD_ASSET_PATH_PATTERN =
-    /^\/api\/traces\/[^/]+\/assets\/trace-card\.svg$/;
-
 const normalizePathname = (pathname: string): string =>
     pathname.length > 1 && pathname.endsWith('/')
         ? pathname.slice(0, -1)
@@ -38,21 +35,12 @@ type DispatchOutcome = 'handled' | 'fallthrough';
 
 type RouteDispatchHandlers = {
     handleWebhookRequest: RequestHandler;
-    handleInternalTextRequest: RequestHandler;
-    handleInternalImageRequest: RequestHandler;
-    handleInternalVoiceTtsRequest: RequestHandler;
-    handleTraceUpsertRequest: RequestHandler;
-    handleTraceCardCreateRequest: RequestHandler;
-    handleTraceCardFromTraceRequest: RequestHandler;
-    handleTraceCardAssetRequest: ParsedUrlHandler;
     handleTraceRequest: ParsedUrlHandler;
-    handleChatRequest: RequestHandler;
 };
 
 /**
  * Keeps central transport-boundary matching rules explicit and ordered.
  * Order is behavior: first match wins and later checks never run.
- * TODO(express-special-dispatch-closeout): After standard HTTP routes move, reassess whether this module should remain as the explicit special transport dispatcher for raw webhook, trace Accept negotiation, and upgrade routing.
  */
 const createRouteDispatcher = ({
     handlers,
@@ -79,45 +67,6 @@ const createRouteDispatcher = ({
             return 'handled';
         }
 
-        // --- Trusted internal routes ---
-        // TODO(express-internal-routes): Move trusted internal HTTP routes into an Express internal route module while preserving service-token auth, bounded parsing, TTS behavior, and NDJSON streaming headers/flush behavior for image.
-        if (normalizedPathname === '/api/internal/text') {
-            await handlers.handleInternalTextRequest(req, res);
-            return 'handled';
-        }
-
-        if (normalizedPathname === '/api/internal/image') {
-            await handlers.handleInternalImageRequest(req, res);
-            return 'handled';
-        }
-
-        if (normalizedPathname === '/api/internal/voice/tts') {
-            await handlers.handleInternalVoiceTtsRequest(req, res);
-            return 'handled';
-        }
-
-        // --- Trace write/asset routes ---
-        // TODO(express-trace-write-routes): Move trace write/card routes into an Express trace route module while keeping /api/traces/:id Accept-negotiated JSON-vs-SPA behavior explicit.
-        if (normalizedPathname === '/api/traces') {
-            await handlers.handleTraceUpsertRequest(req, res);
-            return 'handled';
-        }
-
-        if (normalizedPathname === '/api/trace-cards') {
-            await handlers.handleTraceCardCreateRequest(req, res);
-            return 'handled';
-        }
-
-        if (normalizedPathname === '/api/trace-cards/from-trace') {
-            await handlers.handleTraceCardFromTraceRequest(req, res);
-            return 'handled';
-        }
-
-        if (TRACE_CARD_ASSET_PATH_PATTERN.test(normalizedPathname)) {
-            await handlers.handleTraceCardAssetRequest(req, res, parsedUrl);
-            return 'handled';
-        }
-
         // --- Special dual-use trace route ---
         // This path also doubles as a browser route for the trace page.
         // Keep JSON-vs-HTML behavior exactly as-is.
@@ -131,13 +80,6 @@ const createRouteDispatcher = ({
             }
             // Fall through to static resolver for SPA HTML.
             return 'fallthrough';
-        }
-
-        // --- Chat routes ---
-        // TODO(express-chat-route): Move /api/chat into a dedicated Express chat route module after preserving CORS OPTIONS, body parsing, provider-unavailable, rate-limit, and response-shape contracts.
-        if (normalizedPathname === '/api/chat') {
-            await handlers.handleChatRequest(req, res);
-            return 'handled';
         }
 
         return 'fallthrough';

@@ -67,6 +67,39 @@ test('standard HTTP JSON routes bypass central /api dispatch while preserving ro
         handleIncidentNotesRequest: async () => undefined,
         handleIncidentRemediationRequest: async () => undefined,
         handleIncidentDetailRequest: async () => undefined,
+        handleChatRequest: async (_req, res) => {
+            handledPaths.push('/api/chat');
+            res.statusCode = 200;
+            res.end('chat');
+        },
+        handleInternalTextRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('internal-text');
+        },
+        handleInternalImageRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('internal-image');
+        },
+        handleInternalVoiceTtsRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('internal-voice-tts');
+        },
+        handleTraceUpsertRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('trace-upsert');
+        },
+        handleTraceCardCreateRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('trace-card-create');
+        },
+        handleTraceCardFromTraceRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('trace-card-from-trace');
+        },
+        handleTraceCardAssetRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('trace-card-asset');
+        },
         handleRuntimeConfigRequest: async (_req, res) => {
             handledPaths.push('/config.json');
             res.statusCode = 200;

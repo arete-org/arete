@@ -105,6 +105,38 @@ test('incident routes are handled in Express with explicit precedence and no leg
             res.statusCode = 200;
             res.end('detail');
         },
+        handleChatRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('chat');
+        },
+        handleInternalTextRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('internal-text');
+        },
+        handleInternalImageRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('internal-image');
+        },
+        handleInternalVoiceTtsRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('internal-voice-tts');
+        },
+        handleTraceUpsertRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('trace-upsert');
+        },
+        handleTraceCardCreateRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('trace-card-create');
+        },
+        handleTraceCardFromTraceRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('trace-card-from-trace');
+        },
+        handleTraceCardAssetRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('trace-card-asset');
+        },
         handleRuntimeConfigRequest: createUnhandledRouteHandler,
         handleChatProfilesRequest: createUnhandledRouteHandler,
         handleBlogIndexRequest: createUnhandledRouteHandler,

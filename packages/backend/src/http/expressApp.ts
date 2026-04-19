@@ -10,6 +10,9 @@ import type http from 'node:http';
 import express from 'express';
 import { registerStandardHttpRoutes } from './standardHttpRoutes.js';
 import { registerIncidentRoutes } from './incidentRoutes.js';
+import { registerChatRoutes } from './chatRoutes.js';
+import { registerInternalRoutes } from './internalRoutes.js';
+import { registerTraceRoutes } from './traceRoutes.js';
 import { getRequestUrl } from './requestUrl.js';
 
 type DispatchOutcome = 'handled' | 'fallthrough';
@@ -78,6 +81,39 @@ type CreateExpressAppDeps = {
         res: http.ServerResponse,
         parsedUrl: URL
     ) => Promise<void>;
+    handleChatRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleInternalTextRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleInternalImageRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleInternalVoiceTtsRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleTraceUpsertRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleTraceCardCreateRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleTraceCardFromTraceRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleTraceCardAssetRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        parsedUrl: URL
+    ) => Promise<void>;
     handleRuntimeConfigRequest: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -113,6 +149,14 @@ const createExpressApp = ({
     handleIncidentNotesRequest,
     handleIncidentRemediationRequest,
     handleIncidentDetailRequest,
+    handleChatRequest,
+    handleInternalTextRequest,
+    handleInternalImageRequest,
+    handleInternalVoiceTtsRequest,
+    handleTraceUpsertRequest,
+    handleTraceCardCreateRequest,
+    handleTraceCardFromTraceRequest,
+    handleTraceCardAssetRequest,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
     handleBlogIndexRequest,
@@ -146,6 +190,29 @@ const createExpressApp = ({
         handleIncidentNotesRequest,
         handleIncidentRemediationRequest,
         handleIncidentDetailRequest,
+        logRequest,
+    });
+    registerChatRoutes({
+        app,
+        normalizePathname,
+        handleChatRequest,
+        logRequest,
+    });
+    registerInternalRoutes({
+        app,
+        normalizePathname,
+        handleInternalTextRequest,
+        handleInternalImageRequest,
+        handleInternalVoiceTtsRequest,
+        logRequest,
+    });
+    registerTraceRoutes({
+        app,
+        normalizePathname,
+        handleTraceUpsertRequest,
+        handleTraceCardCreateRequest,
+        handleTraceCardFromTraceRequest,
+        handleTraceCardAssetRequest,
         logRequest,
     });
 
