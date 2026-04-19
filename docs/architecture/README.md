@@ -50,7 +50,7 @@ notes. They are rationale or rollout context, not the main current explanation.
 - [Safety Evaluation And Breakers](./risk-evaluation-and-breakers.md)
 - [Deterministic Safety Evaluator V1](./deterministic-breaker-evaluator-v1.md)
 
-## Supplemental Context
+## Subsystem Notes
 
 - [Footnote and Common Agentic Patterns](./footnote-and-common-agentic-patterns.md):
   external-pattern comparison and fit.
@@ -58,6 +58,15 @@ notes. They are rationale or rollout context, not the main current explanation.
 - [Tool Invocation Contract v1](./tool-invocation-contract-v1.md): tool-call
   contract details.
 - [Embedding Footnote](./embedding.md): embedding-specific notes.
-- [Realtime Engagement System](./realtime-engagement.md)
-- [Realtime Voice System](./realtime-voice.md)
-- [Dependency Graphs](./dependency-graphs/README.md): generated package graphs.
+- [Realtime Voice System](./realtime-voice.md): implementation-oriented
+  walkthrough of the current backend-owned realtime voice boundary.
+
+## Historical Subsystem Notes
+
+Use these only when you need older implementation snapshots or generated views.
+They are not part of the main current-architecture reading path.
+
+- [Realtime Engagement Implementation Snapshot](../status/archive/2026-04-realtime-engagement-implementation-snapshot.md):
+  older Discord-side engagement note kept for historical context.
+- [Dependency Graph Snapshots](../status/archive/dependency-graphs/README.md):
+  generated package graph outputs and regeneration commands.

@@ -1,5 +1,12 @@
 # Realtime Engagement System
 
+This is a historical implementation snapshot kept for context.
+
+It is not a current architecture source of truth. The flow below still helps
+explain older Discord-side engagement work, but it references module names from
+an earlier runtime shape and should not be used to infer today's planner or
+provider boundaries without re-validation.
+
 ## Purpose
 
 The realtime engagement loop provides a context-aware flow that stays quiet when appropriate and uses recent channel state to decide whether to reply.
