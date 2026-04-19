@@ -15,6 +15,7 @@
         "better-sqlite3": "catalog:",
         "dotenv": "catalog:",
         "express": "catalog:",
+        "express-rate-limit": "catalog:",
         "js-yaml": "catalog:",
         "nodemailer": "catalog:",
         "winston": "catalog:",
