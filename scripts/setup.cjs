@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* eslint-env node */
-/* global __dirname, process */
+/* global __dirname, process, console */
 
 /**
  * @description: Bootstraps local development by creating .env, generating local secrets, and installing dependencies.
@@ -52,7 +52,8 @@ const readEnvValue = (envContent, key) => {
     if (!match) {
         return null;
     }
-    const value = match[1].trim();
+    const valueWithoutComment = match[1].replace(/\s+#.*$/, '');
+    const value = valueWithoutComment.trim();
     return value.length > 0 ? value : null;
 };
 
@@ -128,7 +129,13 @@ const printChecklist = () => {
     const hasOllamaBaseUrl = Boolean(
         readEnvValue(envContent, 'OLLAMA_BASE_URL')
     );
-    const hasProvider = hasOpenAiKey || (ollamaEnabled && hasOllamaBaseUrl);
+    const hasProvider = hasOpenAiKey || hasOllamaBaseUrl;
+
+    if (hasOllamaBaseUrl && !ollamaEnabled) {
+        console.info(
+            '[setup] OLLAMA_BASE_URL is set while OLLAMA_LOCAL_INFERENCE_ENABLED is not true. This is expected for remote Ollama endpoints.'
+        );
+    }
 
     if (!hasProvider) {
         console.warn(
