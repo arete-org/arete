@@ -1,8 +1,8 @@
 /**
- * @description: Composes standard HTTP JSON read routes into scoped Express routers.
- * Keeps behavior parity with existing handlers while narrowing central transport dispatch surface.
+ * @description: Composes public routes into scoped Express routers.
+ * Keeps behavior parity with existing handlers while preserving explicit special transport dispatch boundaries.
  * @footnote-scope: interface
- * @footnote-module: StandardHttpRoutes
+ * @footnote-module: PublicRoutes
  * @footnote-risk: low - Router grouping can misroute requests if path normalization changes.
  * @footnote-ethics: low - Read-only route wiring does not change trust or governance decisions.
  */
@@ -28,7 +28,7 @@ type LogRequest = (
     extra?: string
 ) => void;
 
-type RegisterStandardHttpRoutesDeps = {
+type RegisterPublicRoutesDeps = {
     app: express.Express;
     normalizePathname: (pathname: string) => string;
     blogReadRateLimitConfig: {
@@ -58,7 +58,7 @@ const respondWithRouteError = (
 };
 
 /**
- * Registers standard HTTP JSON route boundaries in the Express shell.
+ * Registers public routes in the Express shell.
  *
  * Public route contract:
  * - `/config.json`
@@ -70,7 +70,7 @@ const respondWithRouteError = (
  * - Unmatched `/api/chat/*` and `/api/blog-posts/*` requests intentionally
  *   fall through to downstream dispatch (fail-open behavior).
  *
- * @param app Express app receiving mounted standard routes.
+ * @param app Express app receiving mounted public routes.
  * @param normalizePathname Shared path normalizer for trailing-slash parity.
  * @param blogReadRateLimitConfig Per-IP limiter window/limit for blog routes.
  * @param handleRuntimeConfigRequest Existing `/config.json` handler.
@@ -80,7 +80,7 @@ const respondWithRouteError = (
  * @param logRequest Shared request logger used for route-level error context.
  * @returns void
  */
-const registerStandardHttpRoutes = ({
+const registerPublicRoutes = ({
     app,
     normalizePathname,
     blogReadRateLimitConfig,
@@ -89,7 +89,7 @@ const registerStandardHttpRoutes = ({
     handleBlogIndexRequest,
     handleBlogPostRequest,
     logRequest,
-}: RegisterStandardHttpRoutesDeps): void => {
+}: RegisterPublicRoutesDeps): void => {
     app.all('/config.json', async (req, res) => {
         try {
             await handleRuntimeConfigRequest(req, res);
@@ -149,4 +149,4 @@ const registerStandardHttpRoutes = ({
     app.use('/api/blog-posts', blogRouter);
 };
 
-export { registerStandardHttpRoutes };
+export { registerPublicRoutes };

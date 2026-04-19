@@ -1,8 +1,8 @@
 /**
- * @description: Verifies standard HTTP JSON routes are handled by Express routers with current behavior parity.
+ * @description: Verifies public routes are handled by Express routers with current behavior parity.
  * Protects config, chat profile listing, and blog route matching from transport dispatch-order regressions.
  * @footnote-scope: test
- * @footnote-module: StandardHttpRoutesTests
+ * @footnote-module: PublicRoutesTests
  * @footnote-risk: medium - Missing tests can let route grouping drift and silently change endpoint behavior.
  * @footnote-ethics: low - Route-composition assertions do not involve policy or human-impact decisions.
  */
@@ -46,7 +46,7 @@ const createTestServer = (
         });
     });
 
-test('standard HTTP JSON routes bypass central /api dispatch while preserving route ownership', async (t) => {
+test('public routes are Express-owned and bypass central /api dispatch while preserving route ownership', async (t) => {
     const handledPaths: string[] = [];
     const dispatchCalls: string[] = [];
 

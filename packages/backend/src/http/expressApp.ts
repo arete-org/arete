@@ -8,7 +8,7 @@
  */
 import type http from 'node:http';
 import express from 'express';
-import { registerStandardHttpRoutes } from './standardHttpRoutes.js';
+import { registerPublicRoutes } from './publicRoutes.js';
 import { registerIncidentRoutes } from './incidentRoutes.js';
 import { registerChatRoutes } from './chatRoutes.js';
 import { registerInternalRoutes } from './internalRoutes.js';
@@ -170,8 +170,8 @@ const createExpressApp = ({
     const app = express();
     app.set('trust proxy', trustProxy);
 
-    // Stage 1: standard HTTP routes that are already Express-owned.
-    registerStandardHttpRoutes({
+    // Stage 1: public and other Express-owned standard HTTP routes.
+    registerPublicRoutes({
         app,
         normalizePathname,
         blogReadRateLimitConfig,
