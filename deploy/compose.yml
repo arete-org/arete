@@ -4,6 +4,7 @@ services:
     backend:
         # Backend runs the Node server (server.js) and owns persistence.
         build:
+            # Use repo root context so Dockerfiles can COPY workspace files under packages/*.
             context: ..
             dockerfile: deploy/Dockerfile.backend
         command: ['node', 'dist/server.js']
