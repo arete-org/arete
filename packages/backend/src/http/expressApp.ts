@@ -171,6 +171,7 @@ const createExpressApp = ({
     app.set('trust proxy', trustProxy);
 
     // Stage 1: public and other Express-owned standard HTTP routes.
+    // /api/chat split ownership is intentional: publicRoutes owns /api/chat/* subroutes (for example /api/chat/profiles), while chatRoutes owns only bare /api/chat.
     registerPublicRoutes({
         app,
         normalizePathname,
