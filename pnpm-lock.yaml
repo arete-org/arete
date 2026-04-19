@@ -330,6 +330,9 @@ importers:
             dotenv:
                 specifier: 'catalog:'
                 version: 17.3.1
+            express:
+                specifier: 'catalog:'
+                version: 5.2.1
             js-yaml:
                 specifier: 'catalog:'
                 version: 4.1.1
@@ -352,6 +355,9 @@ importers:
             '@types/better-sqlite3':
                 specifier: 'catalog:'
                 version: 7.6.13
+            '@types/express':
+                specifier: 'catalog:'
+                version: 5.0.6
             '@types/node':
                 specifier: 'catalog:'
                 version: 25.5.0

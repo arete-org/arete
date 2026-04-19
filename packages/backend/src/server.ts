@@ -28,6 +28,7 @@ import { createTraceStore, storeTrace } from './services/traceStore.js';
 import { createBlogStore } from './storage/blogStore.js';
 import { getDefaultIncidentStore } from './storage/incidents/incidentStore.js';
 import { createAssetResolver } from './http/assets.js';
+import { createExpressApp } from './http/expressApp.js';
 import {
     createRouteDispatcher,
     normalizePathname,
@@ -517,49 +518,18 @@ const { dispatchHttpRoute, dispatchUpgradeRoute } = createRouteDispatcher({
         logger.debug(`Trace route matched: ${pathname}`);
     },
 });
+const app = createExpressApp({
+    dispatchHttpRoute,
+    normalizePathname,
+    handleStaticTransportRequest,
+    resolveAsset,
+    mimeMap,
+    frameAncestors: runtimeConfig.csp.frameAncestors,
+    logRequest,
+});
 
 // --- HTTP server ---
-const server = http.createServer(async (req, res) => {
-    // --- Early request guard ---
-    if (!req.url) {
-        res.statusCode = 400;
-        res.end('Bad Request');
-        return;
-    }
-
-    try {
-        // --- URL parsing ---
-        const parsedUrl = new URL(req.url, 'http://localhost');
-        const normalizedPathname = normalizePathname(parsedUrl.pathname);
-        const routeOutcome = await dispatchHttpRoute({
-            req,
-            res,
-            parsedUrl,
-            normalizedPathname,
-        });
-        if (routeOutcome === 'handled') {
-            return;
-        }
-
-        await handleStaticTransportRequest({
-            req,
-            res,
-            parsedUrl,
-            resolveAsset,
-            mimeMap,
-            frameAncestors: runtimeConfig.csp.frameAncestors,
-            logRequest,
-        });
-    } catch (error) {
-        res.statusCode = 500;
-        res.end('Internal Server Error');
-        logRequest(
-            req,
-            res,
-            error instanceof Error ? error.message : 'unknown error'
-        );
-    }
-});
+const server = http.createServer(app);
 
 server.on('upgrade', (req, socket, head) => {
     handleUpgradeBoundary({
