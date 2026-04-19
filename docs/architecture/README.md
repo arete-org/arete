@@ -13,9 +13,8 @@ the best starting point.
    current workflow and planner model, including mode, profile, review/revise,
    and planner boundaries.
 3. [How to Read Provenance-Related Metadata](./provenance-label-taxonomy.md):
-   use this next if your question is "what am I actually seeing in response
-   metadata?" It separates mode, TRACE, planner influence, steerability
-   controls, provenance, and current transitional fields.
+   use this when you need the metadata map for mode, TRACE, planner influence,
+   steerability, and provenance.
 4. [Workflow Engine And Provenance](./workflow-engine-and-provenance.md):
    use this after the metadata guide for the current engine flow and workflow
    lineage records.
@@ -31,8 +30,7 @@ the best starting point.
 - [Execution Contract TrustGraph Architecture](./execution_contract_trustgraph/architecture.md):
   TrustGraph-specific architecture and rollout constraints.
 - [Steerability Foundation (Internal Controls v1)](./2026-04-steerability-foundation.md):
-  internal control-record semantics behind steerability metadata. Read this
-  after the metadata guide, not before.
+  internal control-record semantics behind steerability metadata.
 
 ## Historical Workflow Notes
 

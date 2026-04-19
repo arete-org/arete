@@ -91,11 +91,10 @@ Representative metadata shape:
 
 TRACE shows five response qualities at a glance: Tightness, Rationale, Attribution, Caution, and Extent.
 
-To understand how TRACE differs from mode, planner influence, steerability
-controls, and provenance, start with
-[How to Read Provenance-Related Metadata](docs/architecture/provenance-label-taxonomy.md).
-For the rationale behind TRACE itself, see the
-[TRACE decision record](docs/decisions/2026-03-compact-provenance-TRACE.md).
+See [How to Read Provenance-Related Metadata](docs/architecture/provenance-label-taxonomy.md)
+for the current metadata model, and the
+[TRACE decision record](docs/decisions/2026-03-compact-provenance-TRACE.md)
+for rationale.
 
 ## Advanced Setup
 
