@@ -38,7 +38,7 @@ The shared workflow vocabulary also includes `plan`, `tool`, and replanning or
 tool-call budgets. Those terms exist in the engine, but they are not part of
 the main chat path yet.
 
-## Step Model
+## Steps
 
 Step kinds are `plan`, `tool`, `generate`, `assess`, `revise`, and
 `finalize`.
@@ -85,7 +85,7 @@ The current workflow can end with `goal_satisfied`,
 `max_tool_calls_reached`, `max_deliberation_calls_reached`, or
 `executor_error_fail_open`.
 
-## Workflow Metadata
+## Metadata
 
 `WorkflowRecord` is the main workflow record returned for operators and
 response metadata.
@@ -104,5 +104,5 @@ not the current first-read explanation.
 Use rollout or RFC docs only when you need historical sequencing or design
 tradeoffs.
 
-Historical rollout tracking lives in
+For rollout history, see
 `docs/status/2026-04-workflow-engine-rollout-status.md`.

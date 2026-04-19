@@ -2,7 +2,7 @@
 
 ## Purpose
 
-A workflow mode is the high-level routing choice for one chat request.
+A workflow mode is the routing choice for one chat request.
 
 This is the main doc for workflow and planner behavior today.
 Read this before the profile contract, rollout notes, or RFC material.
@@ -27,7 +27,7 @@ in workflow metadata.
 
 ## Modes And Profiles
 
-Canonical mode ids are `fast`, `balanced`, and `grounded`.
+The mode ids are `fast`, `balanced`, and `grounded`.
 
 | Mode       | Contract preset    | Workflow profile | Flow                     | Review | Revise | Evidence | Notes                                      |
 | ---------- | ------------------ | ---------------- | ------------------------ | ------ | ------ | -------- | ------------------------------------------ |
@@ -38,7 +38,7 @@ Canonical mode ids are `fast`, `balanced`, and `grounded`.
 `balanced` and `grounded` share one profile today. The difference is in the
 contract preset and limits, not in the step pattern.
 
-## Selection Order
+## Selection
 
 1. Use the requested mode when it is recognized.
 2. Otherwise, if the Execution Contract provides a response mode, map it to canonical mode (`quality_grounded` -> `grounded`, `fast_direct` -> `fast`).
@@ -81,9 +81,9 @@ engine, and clearer correlation if planner passes or retries are added later.
 That does not change the current rule: planner is advisory, and the workflow
 engine does not yet own planner timing in the current chat path.
 
-## Escalation Seam
+## Mode Escalation
 
-Workflow mode escalation is attached at one bounded seam in
+Workflow mode escalation is attached at one place in
 `resolveWorkflowRuntimeConfig` (`packages/backend/src/services/workflowProfileRegistry.ts`).
 
 Rules for this seam:
@@ -93,7 +93,7 @@ Rules for this seam:
 - Never run recursive or unbounded mode re-evaluation loops.
 - Keep escalation routing centralized in workflow resolver code, not callers.
 
-## Metadata Output
+## Metadata
 
 `workflowMode` in response metadata records `modeId`, `selectedBy`,
 `selectionReason`, `initial_mode`, optional `escalated_mode`, optional

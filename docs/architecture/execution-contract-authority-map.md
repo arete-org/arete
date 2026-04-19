@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Define one stable authority model for chat execution in Footnote.
+Explain which part owns each decision in chat execution.
 
 The short version is simple: the contract governs and the orchestrator
 executes.
 
-## Canonical Terms
+## Terms
 
 `Execution Contract` is the backend contract for allowed execution behavior,
 limits, verification expectations, and fail-open semantics.
@@ -49,7 +49,7 @@ records decisions after execution; it does not become a second decision engine.
 - Introduce user-defined workflow programming in this phase.
 - Treat provider abstraction as solved by this authority-map document.
 
-## Extension Checklist
+## Changes
 
 When adding execution behavior:
 

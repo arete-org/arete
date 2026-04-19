@@ -59,7 +59,7 @@ Contract rule:
   disposition, or termination-reason mapping.
 
 Mode chooses the kind of run. Profile chooses the step pattern. The engine
-enforces legality and limits. Adapters wire the profile to runtime calls.
+enforces legality and limits. Adapters connect the profile to runtime calls.
 
 ## No-Generation Behavior
 
@@ -79,13 +79,13 @@ Notes:
 - “Internal termination” means the workflow record always terminates with a
   reason code, even when not surfaced as a dedicated blocked UI state.
 
-## Required No-Generation Reason Mapping
+## Reason Mapping
 
 Reason-code mapping is defined in:
 `WORKFLOW_NO_GENERATION_HANDLING_MAP`
 (`packages/backend/src/services/workflowProfileContract.ts`).
 
-Required mapping:
+The required mapping is:
 `blocked_by_policy_before_generate` -> `transition_blocked_by_policy`,
 `generation_disabled_by_profile` -> `transition_blocked_by_policy`,
 `budget_exhausted_steps_before_generate` -> `budget_exhausted_steps`,
@@ -93,7 +93,7 @@ Required mapping:
 `budget_exhausted_time_before_generate` -> `budget_exhausted_time`,
 and `executor_error_before_generate` -> `executor_error_fail_open`.
 
-Disposition mapping:
+The disposition mapping is:
 policy-blocked, generation-disabled, and executor-error are surfaced.
 Pre-generation budget exhaustion is internal-only.
 

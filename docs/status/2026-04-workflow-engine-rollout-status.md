@@ -25,7 +25,7 @@ Current architecture references:
 - `docs/architecture/workflow-engine-and-provenance.md`
 - `docs/architecture/workflow-profile-contract.md`
 
-## Current Snapshot
+## Snapshot
 
 - Workflow metadata is now aligned to `WorkflowRecord` + `StepRecord`.
 - Step outcomes now have explicit machine-readable control signals.
@@ -43,7 +43,7 @@ Current architecture references:
 - Planner still runs in `chatOrchestrator` before workflow execution; planner
   as first-class workflow step remains future work.
 
-## What Is Landed
+## Landed Work
 
 ### 1) Contract Baseline (Core)
 
@@ -103,7 +103,7 @@ Status: `landed`
 - Added termination reason mapping from exhausted limits.
 - Added direct unit tests for engine legality and budget invariants.
 
-## What Is Open
+## Open Work
 
 ### 1) Replace Specialized Loop With Engine-Driven Step Routing
 
@@ -143,7 +143,7 @@ Goal:
 - Move planner from orchestrator-frontloaded execution into first-class
   workflow lineage without giving planner extra policy authority.
 
-## Policy And Limits Boundary
+## Policy And Limits
 
 `WorkflowPolicy` owns capability toggles and legal transition rules.
 `ExecutionLimits` owns hard quantitative caps.
