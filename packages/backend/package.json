@@ -14,17 +14,19 @@
         "@resvg/resvg-js": "catalog:",
         "better-sqlite3": "catalog:",
         "dotenv": "catalog:",
+        "express": "catalog:",
         "js-yaml": "catalog:",
         "nodemailer": "catalog:",
-        "ws": "catalog:",
+        "winston": "catalog:",
         "winston-daily-rotate-file": "catalog:",
-        "zod": "catalog:",
-        "winston": "catalog:"
+        "ws": "catalog:",
+        "zod": "catalog:"
     },
     "devDependencies": {
         "@types/better-sqlite3": "catalog:",
-        "@types/nodemailer": "catalog:",
+        "@types/express": "catalog:",
         "@types/node": "catalog:",
+        "@types/nodemailer": "catalog:",
         "typescript": "catalog:"
     }
 }
