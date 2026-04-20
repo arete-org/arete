@@ -47,10 +47,12 @@ const Hero = (): JSX.Element => {
             <Header breadcrumbItems={breadcrumbItems} />
 
             <div className="hero-copy">
-                <h1 id="hero-title">AI you can inspect and steer.</h1>
+                <h1 id="hero-title">
+                    Ask a question. See what shaped the answer.
+                </h1>
                 <p className="hero-copy__subtitle">
-                    A transparency-first framework for people who want more than
-                    a black-box answer.
+                    Footnote answers your question, then shows the sources,
+                    signals, and trace behind the response.
                 </p>
                 <div className="hero-action-hub">
                     <div className="hero-action-tabs" role="tablist">
@@ -157,13 +159,25 @@ const Hero = (): JSX.Element => {
                             />
                         </div>
                         <div className="intro-card-text">
-                            <h2 id="intro-card-title">Footnote, at a glance</h2>
+                            <h2 id="intro-card-title">
+                                What you get after asking
+                            </h2>
                             <p>
-                                Footnote pairs model output with inspectable
-                                metadata, including confidence, sources,
-                                trade-offs, and applied constraints. Run it
-                                locally, self-host it, or bring it into Discord
-                                while keeping human oversight in the loop.
+                                Footnote does not stop at the answer. It also
+                                gives you a few ways to check how the response
+                                was produced.
+                            </p>
+                            <ul className="intro-card-list">
+                                <li>The answer itself.</li>
+                                <li>Source links, when sources were used.</li>
+                                <li>Safety and confidence signals.</li>
+                                <li>
+                                    A trace you can open to see what happened.
+                                </li>
+                            </ul>
+                            <p>
+                                If you want full control, use the setup tab and
+                                run Footnote in your own environment.
                             </p>
                         </div>
                     </div>

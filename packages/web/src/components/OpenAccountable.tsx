@@ -21,7 +21,7 @@ const PRINCIPLES: Principle[] = [
     {
         title: 'Open source',
         description:
-            'Inspect the implementation, trace decisions, and adapt Footnote to your governance model.',
+            'Read the code, inspect the implementation, and adapt Footnote to your needs.',
         link: {
             href: 'https://github.com/footnote-ai/footnote/tree/main',
             label: 'Repository',
@@ -29,18 +29,18 @@ const PRINCIPLES: Principle[] = [
         },
     },
     {
-        title: 'Self-hosted first',
+        title: 'Self-hosted',
         description:
-            'Keep control of credentials, runtime, and policy boundaries in your own environment.',
+            'Run Footnote in your own environment, with your own credentials and provider choices.',
         link: {
             href: '/invite/',
             label: 'Quickstart setup',
         },
     },
     {
-        title: 'Dual license',
+        title: 'Clear license terms',
         description:
-            'Dual-licensed under MIT and Hippocratic License v3 (HL3-CORE) for practical use with explicit guardrails.',
+            'Dual-licensed under MIT and Hippocratic License v3 (HL3-CORE), with the license strategy documented in the repo.',
         link: {
             href: 'https://github.com/footnote-ai/footnote/blob/main/docs/LICENSE_STRATEGY.md',
             label: 'License strategy',
@@ -52,7 +52,7 @@ const PRINCIPLES: Principle[] = [
 // Transparency block with three concise commitments.
 const OpenAccountable = (): JSX.Element => (
     <section className="transparency" aria-labelledby="transparency-title">
-        <h2 id="transparency-title">Built to be inspectable</h2>
+        <h2 id="transparency-title">What makes Footnote different</h2>
         <div className="card-grid" role="list">
             {PRINCIPLES.map((principle) => (
                 <article key={principle.title} className="card" role="listitem">

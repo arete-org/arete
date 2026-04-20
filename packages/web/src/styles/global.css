@@ -890,6 +890,13 @@ section:has(.site-header-sticky) {
     white-space: nowrap;
 }
 
+.interaction-helper {
+    margin: 0 0 1rem;
+    color: var(--subtle-text);
+    font-size: 0.95rem;
+    max-width: 68ch;
+}
+
 .interaction-description {
     margin: 0 0 1.4rem;
     color: var(--subtle-text);
@@ -2025,6 +2032,15 @@ div.interaction-status:not(.interaction-status-visible) *,
 
 .intro-card-text p:last-child {
     margin-bottom: 0;
+}
+
+.intro-card-list {
+    margin: 0 0 1rem;
+    padding-left: 1.25rem;
+}
+
+.intro-card-list li {
+    margin-bottom: 0.4rem;
 }
 
 /* ===== FOOTER ===== */
