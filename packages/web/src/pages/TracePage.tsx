@@ -86,11 +86,12 @@ const resolveExecutionSummary = (traceData: ServerMetadata): string | null =>
     formatExecutionTimelineSummary(traceData.execution, traceData.workflow);
 
 const PROVENANCE_EXPLANATIONS: Record<string, string> = {
-    Retrieved: 'The answer is grounded in sources recorded in this trace.',
+    Retrieved:
+        'This answer is classified as grounded in retrieved or workflow evidence recorded in this trace.',
     Inferred:
-        'The answer combines model reasoning with available context; verify key claims when stakes are high.',
+        'This answer combines model reasoning with available context; verify key claims when stakes are high.',
     Speculative:
-        'The answer may include uncertain reasoning; treat it as a starting point and verify before relying on it.',
+        'This answer may include uncertain reasoning; treat it as a starting point and verify before relying on it.',
 };
 
 const WORKFLOW_MODE_LABELS: Record<string, string> = {
@@ -114,8 +115,8 @@ const getModeSummary = (
             traceData.workflowMode?.behavior.evidencePosture;
         const reviewText =
             reviewPass === 'included'
-                ? 'includes a review pass'
-                : 'does not include a review pass';
+                ? 'is configured to include a review pass'
+                : 'is configured without a review pass';
         const evidenceText = evidencePosture
             ? `and uses a ${evidencePosture} evidence posture`
             : '';
@@ -151,7 +152,7 @@ const getSourceSummary = (
                     ? '1 source linked'
                     : `${citationCount} sources linked`,
             explanation:
-                'Source links are available below so you can inspect where evidence came from.',
+                'Source links are available below for direct inspection.',
         };
     }
 
@@ -169,7 +170,7 @@ const getSourceSummary = (
         return {
             value: 'No sources linked',
             explanation:
-                'The trace shows search was unavailable for the selected profile, so no source links were attached.',
+                'Search was unavailable for the selected profile, so no source links were attached.',
         };
     }
 
@@ -177,7 +178,7 @@ const getSourceSummary = (
         return {
             value: 'No sources linked',
             explanation:
-                'A search/tool step is recorded, but this response ended without source links.',
+                'A tool/search step is recorded, but no source links were attached.',
         };
     }
 
@@ -592,6 +593,10 @@ const TracePage = (): JSX.Element => {
             explanation: workflowSummary.explanation,
         },
     ];
+    const hasWorkflowPlanStep =
+        traceData.workflow?.steps.some((step) => step.stepKind === 'plan') ??
+        false;
+    const showDataCaveats = !hasWorkflowPlanStep || !traceData.trustGraph;
 
     return (
         <section className="site-section">
@@ -850,25 +855,31 @@ const TracePage = (): JSX.Element => {
                 </details>
             </article>
 
-            <article className="card" aria-label="Data caveats">
-                <h2>Data Caveats</h2>
-                <dl>
-                    <div>
-                        <dt>Planner lineage</dt>
-                        <dd>
-                            This page only shows planner workflow steps when
-                            they exist in the trace workflow record.
-                        </dd>
-                    </div>
-                    <div>
-                        <dt>TrustGraph signals</dt>
-                        <dd>
-                            TrustGraph-specific evidence is not shown unless it
-                            is present in this trace metadata.
-                        </dd>
-                    </div>
-                </dl>
-            </article>
+            {showDataCaveats && (
+                <article className="card" aria-label="Data caveats">
+                    <h2>Data Caveats</h2>
+                    <dl>
+                        {!hasWorkflowPlanStep && (
+                            <div>
+                                <dt>Planner lineage</dt>
+                                <dd>
+                                    Planner steps appear only when real `plan`
+                                    steps exist in workflow metadata.
+                                </dd>
+                            </div>
+                        )}
+                        {!traceData.trustGraph && (
+                            <div>
+                                <dt>TrustGraph signals</dt>
+                                <dd>
+                                    TrustGraph evidence appears only when this
+                                    trace includes TrustGraph metadata.
+                                </dd>
+                            </div>
+                        )}
+                    </dl>
+                </article>
+            )}
         </section>
     );
 };
