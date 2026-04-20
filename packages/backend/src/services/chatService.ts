@@ -16,6 +16,7 @@ import type {
     PartialResponseTemperament,
     ResponseMetadata,
     SafetyTier,
+    StepRecord,
     TraceAxisScore,
     ToolExecutionContext,
     ToolInvocationRequest,
@@ -629,6 +630,44 @@ export const createChatService = ({
         let generationResult: GenerationResult;
         let workflowLineage: WorkflowRecord | undefined;
         let fallbackAfterInternalNoGeneration = false;
+        const plannerExecutionContext = executionContext?.planner;
+        const plannerWorkflowStepRecord: StepRecord | undefined =
+            plannerExecutionContext !== undefined
+                ? buildPlannerStepRecord({
+                      stepId: 'step_1',
+                      attempt: 1,
+                      startedAtMs:
+                          plannerExecutionContext.durationMs !== undefined
+                              ? Math.max(
+                                    0,
+                                    generationStartedAt -
+                                        plannerExecutionContext.durationMs
+                                )
+                              : undefined,
+                      finishedAtMs: generationStartedAt,
+                      summary: {
+                          status: plannerExecutionContext.status,
+                          ...(plannerExecutionContext.reasonCode !==
+                              undefined && {
+                              reasonCode: plannerExecutionContext.reasonCode,
+                          }),
+                          purpose: plannerExecutionContext.purpose,
+                          contractType: plannerExecutionContext.contractType,
+                          applyOutcome: plannerExecutionContext.applyOutcome,
+                          durationMs: plannerExecutionContext.durationMs,
+                          profileId: plannerExecutionContext.profileId,
+                          originalProfileId:
+                              plannerExecutionContext.originalProfileId,
+                          effectiveProfileId:
+                              plannerExecutionContext.effectiveProfileId,
+                          provider: plannerExecutionContext.provider,
+                          model: plannerExecutionContext.model,
+                          mattered: plannerExecutionContext.mattered,
+                          matteredControlIds:
+                              plannerExecutionContext.matteredControlIds,
+                      },
+                  })
+                : undefined;
         if (workflowExecutionEnabled) {
             const workflowPolicy: WorkflowPolicy = workflowProfile.policy;
             const workflowResult = await runReviewWorkflow({
@@ -658,6 +697,7 @@ export const createChatService = ({
                 workflowPolicy,
                 captureUsage: (result, requestedModel) =>
                     recordUsageForStep(result, requestedModel),
+                plannerStepRecord: plannerWorkflowStepRecord,
             });
             switch (workflowResult.outcome) {
                 case 'generated':

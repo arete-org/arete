@@ -154,6 +154,7 @@ export type RunBoundedReviewWorkflowInput = {
         result: GenerationResult,
         requestedModel: string | undefined
     ) => ReviewWorkflowUsageSummary;
+    plannerStepRecord?: StepRecord;
 };
 
 export type RunBoundedReviewWorkflowResult =
@@ -556,6 +557,7 @@ export const runBoundedReviewWorkflow = async ({
     revisionPromptPrefix,
     parseReviewDecision,
     captureUsage,
+    plannerStepRecord,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
     const UNBOUNDED_LIMIT = Number.MAX_SAFE_INTEGER;
     const sanitizeNonNegativeInteger = (
@@ -590,6 +592,12 @@ export const runBoundedReviewWorkflow = async ({
     const workflowId = `wf_${workflowStartedAt.toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     const workflowSteps: StepRecord[] = [];
     let stepCounter = 0;
+    let plannerRootStepId: string | undefined;
+    if (plannerStepRecord?.stepKind === 'plan') {
+        workflowSteps.push(plannerStepRecord);
+        stepCounter = 1;
+        plannerRootStepId = plannerStepRecord.stepId;
+    }
     let terminationReason: WorkflowTerminationReason = 'budget_exhausted_steps';
     let workflowStatus: WorkflowRecord['status'] = 'degraded';
     let draftResult: GenerationResult | null = null;
@@ -754,6 +762,7 @@ export const runBoundedReviewWorkflow = async ({
                     model: initialDraftUsage.model,
                     usage: draftResult.usage,
                     estimatedCost: initialDraftUsage.estimatedCost,
+                    parentStepId: plannerRootStepId,
                     attempt: 1,
                 });
                 draftParentStepId = initialDraftStepId;
@@ -789,6 +798,7 @@ export const runBoundedReviewWorkflow = async ({
                     reasonCode: 'generation_runtime_error',
                     startedAtMs: initialDraftStartedAt,
                     finishedAtMs: initialDraftFinishedAt,
+                    parentStepId: plannerRootStepId,
                     attempt: 1,
                 });
                 workflowState = applyStepExecutionToState(
@@ -1041,7 +1051,7 @@ export const runBoundedReviewWorkflow = async ({
         workflowId,
         workflowName: workflowConfig.workflowName,
         status: workflowStatus,
-        stepCount: workflowState.stepCount,
+        stepCount: workflowSteps.length,
         maxSteps: executionLimits.maxWorkflowSteps,
         maxDurationMs: executionLimits.maxDurationMs,
         terminationReason,
