@@ -14,21 +14,22 @@ import Services from '@components/Services';
 import OpenAccountable from '@components/OpenAccountable';
 import Footer from '@components/Footer';
 
-const SetupPage = lazy(() => import('@pages/SetupPage'));
 const TracePage = lazy(() => import('@pages/TracePage'));
+const SetupPage = lazy(() => import('@pages/SetupPage'));
 const BlogListPage = lazy(() => import('@pages/BlogListPage'));
 const BlogPostPage = lazy(() => import('@pages/BlogPostPage'));
 const EmbedPage = lazy(() => import('@pages/EmbedPage'));
 const AboutPage = lazy(() => import('@pages/AboutPage'));
 
-const RouteLoadingFallback = (): JSX.Element => (
+const routeFallback = (
     <main
         id="main-content"
-        className="route-loading"
+        className="interaction-status route-loading"
         role="status"
         aria-live="polite"
     >
-        Loading…
+        <div className="spinner" aria-hidden="true" />
+        <p>Loading page...</p>
     </main>
 );
 
@@ -60,7 +61,7 @@ const App = (): JSX.Element => (
             <Route
                 path="/setup"
                 element={
-                    <Suspense fallback={<RouteLoadingFallback />}>
+                    <Suspense fallback={routeFallback}>
                         <SetupPage />
                     </Suspense>
                 }
@@ -68,7 +69,7 @@ const App = (): JSX.Element => (
             <Route
                 path="/setup/"
                 element={
-                    <Suspense fallback={<RouteLoadingFallback />}>
+                    <Suspense fallback={routeFallback}>
                         <SetupPage />
                     </Suspense>
                 }
@@ -76,7 +77,7 @@ const App = (): JSX.Element => (
             <Route
                 path="/about"
                 element={
-                    <Suspense fallback={<RouteLoadingFallback />}>
+                    <Suspense fallback={routeFallback}>
                         <AboutPage />
                     </Suspense>
                 }
@@ -84,7 +85,7 @@ const App = (): JSX.Element => (
             <Route
                 path="/about/"
                 element={
-                    <Suspense fallback={<RouteLoadingFallback />}>
+                    <Suspense fallback={routeFallback}>
                         <AboutPage />
                     </Suspense>
                 }
@@ -92,7 +93,7 @@ const App = (): JSX.Element => (
             <Route
                 path="/embed"
                 element={
-                    <Suspense fallback={<RouteLoadingFallback />}>
+                    <Suspense fallback={routeFallback}>
                         <EmbedPage />
                     </Suspense>
                 }
@@ -100,7 +101,7 @@ const App = (): JSX.Element => (
             <Route
                 path="/blog"
                 element={
-                    <Suspense fallback={<RouteLoadingFallback />}>
+                    <Suspense fallback={routeFallback}>
                         <BlogListPage />
                     </Suspense>
                 }
@@ -108,7 +109,7 @@ const App = (): JSX.Element => (
             <Route
                 path="/blog/"
                 element={
-                    <Suspense fallback={<RouteLoadingFallback />}>
+                    <Suspense fallback={routeFallback}>
                         <BlogListPage />
                     </Suspense>
                 }
@@ -116,7 +117,7 @@ const App = (): JSX.Element => (
             <Route
                 path="/blog/:number"
                 element={
-                    <Suspense fallback={<RouteLoadingFallback />}>
+                    <Suspense fallback={routeFallback}>
                         <BlogPostPage />
                     </Suspense>
                 }
@@ -124,7 +125,7 @@ const App = (): JSX.Element => (
             <Route
                 path="/traces/:responseId"
                 element={
-                    <Suspense fallback={<RouteLoadingFallback />}>
+                    <Suspense fallback={routeFallback}>
                         <TracePage />
                     </Suspense>
                 }
@@ -132,7 +133,7 @@ const App = (): JSX.Element => (
             <Route
                 path="/api/traces/:responseId"
                 element={
-                    <Suspense fallback={<RouteLoadingFallback />}>
+                    <Suspense fallback={routeFallback}>
                         <TracePage />
                     </Suspense>
                 }
