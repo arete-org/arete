@@ -4,36 +4,39 @@
 [![Hippocratic License HL3-CORE](https://img.shields.io/static/v1?label=Hippocratic%20License&message=HL3-CORE&labelColor=5e2751&color=bc8c3d)](https://firstdonoharm.dev/version/3/0/core.html)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/footnote-ai/footnote)
 
-AI you can inspect and steer.
+Footnote is an AI assistant that helps you see what is behind an answer.
 
-Footnote is a transparency-first AI framework for people who want more than a black-box answer. It pairs responses with provenance and trace metadata so you can understand what happened, challenge weak output, and guide behavior over time.
+Ask a question and Footnote gives you a response with receipts: source links, confidence and safety notes, and a trace page for digging deeper.
 
-Built for human oversight, not "just trust me."
+You can use Footnote in the browser, or run your own copy from this repo.
 
 <img width="761" height="344" alt="image" src="https://github.com/user-attachments/assets/706ea443-7085-41c0-a7ee-06633f196acd" />
 
-[Demo](https://ai.jordanmakes.dev) · [Quickstart](#quickstart) · [Docs](#docs) · [Contributing](#contributing)
+[Demo](https://ai.jordanmakes.dev) · [Reading a response](#reading-a-response) · [Quickstart](#quickstart) · [Docs](#docs)
 
 ---
 
 ## Why Footnote
 
-Most AI products give you an answer and hide the reasoning context.
+Most AI tools give you a finished answer and leave the messy part out of view: where the answer came from, what was checked, and how confident the system should really sound.
 
-Footnote takes the opposite approach: make responses easier to inspect, easier to challenge, and easier to steer. The goal is to support better human judgment, not replace it.
+Footnote keeps more of that context attached to the response. It will not make every answer correct, and it does not pretend to. It gives you more to inspect before you decide what to do with the answer.
 
-With Footnote, you can:
+## Reading a response
 
-- See how confident the AI is
-- Check what information it used
-- Understand the trade-offs behind an answer
-- See what guardrails were applied
+A Footnote response can include:
 
-[Try the live demo](https://ai.jordanmakes.dev)
+- the answer
+- source links
+- confidence and safety notes
+- tradeoffs or constraints when they matter
+- a trace page with more detail about the run
+
+The trace helps you review the answer; it does not prove the answer is right. For the technical model, see [Response Metadata](docs/architecture/response-metadata.md).
 
 ## Quickstart
 
-This starts the local backend + web app.
+This starts the local backend and web app.
 
 1. Run local setup:
 
@@ -46,8 +49,10 @@ pnpm setup
 `pnpm setup` will:
 
 - create `.env` from `.env.example` when missing
-- generate local secrets when missing (`INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`)
+- generate local development secrets when missing
 - install dependencies
+
+The generated local secrets include `INCIDENT_PSEUDONYMIZATION_SECRET` and `TRACE_API_TOKEN`.
 
 To enable generation features, configure at least one provider:
 
@@ -60,90 +65,41 @@ OLLAMA_LOCAL_INFERENCE_ENABLED=true
 OLLAMA_BASE_URL=http://localhost:11434
 ```
 
-2. Start backend + web:
+2. Start backend and web:
 
 ```bash
 pnpm dev
 ```
 
-3. Open web app:
+3. Open the web app:
 
 `http://localhost:8080`
 
-## How It Works
+### More setup options
 
-1. You ask Footnote a question.
-2. The backend generates a response using the configured model runtime.
-3. Footnote returns the answer with inspectable metadata (confidence, sources, trade-offs, and applied constraints).
+- [Deployment guide](deploy/README.md)
+- [Prompt/profile configuration](docs/architecture/prompt-resolution.md)
+- [Documentation map](docs/README.md)
 
-Representative metadata shape:
+## Learn more
 
-```json
-{
-    "confidence": "medium",
-    "sources": ["..."],
-    "tradeoffs": ["..."],
-    "constraintsApplied": ["..."]
-}
-```
-
-### TRACE Wheel
-
-TRACE shows five response qualities at a glance: Tightness, Rationale, Attribution, Caution, and Extent.
-
-See [Response Metadata](docs/architecture/response-metadata.md)
-for the current metadata model, and the
-[TRACE decision record](docs/decisions/2026-03-compact-provenance-TRACE.md)
-for rationale.
-
-## Advanced Setup
-
-### Run Discord Bot + Web + Backend
-
-If you want the Discord surface, set Discord credentials in `.env` and run:
-
-```bash
-pnpm start:all
-```
-
-Required Discord configuration includes:
-
-- `DISCORD_TOKEN`
-- `DISCORD_CLIENT_ID`
-- `DISCORD_USER_ID`
-- `DISCORD_GUILD_IDS` (preferred) or `DISCORD_GUILD_ID` (legacy fallback)
-
-### VoltOps Observability
-
-To enable VoltAgent runtime observability in VoltOps, set:
-
-```env
-VOLTAGENT_PUBLIC_KEY=pk_...
-VOLTAGENT_SECRET_KEY=sk_...
-```
-
-### Multi-Bot Vendoring
-
-You can run a vendored bot identity by setting:
-
-- `BOT_PROFILE_ID`
-- `BOT_PROFILE_DISPLAY_NAME`
-- `BOT_PROFILE_PROMPT_OVERLAY` or `BOT_PROFILE_PROMPT_OVERLAY_PATH`
-- `BOT_PROFILE_MENTION_ALIASES` (optional)
-
-For precedence details, see [`docs/architecture/prompt-resolution.md`](docs/architecture/prompt-resolution.md).
+- **Background:** [History](docs/History.md), [Philosophy](docs/Philosophy.md)
+- **Architecture:** [Architecture Reading Guide](docs/architecture/README.md)
+- **Contributor notes:** [AGENTS.md](AGENTS.md), [AI Assistance Guide](docs/ai/README.md)
+- **Self-hosting:** start with [Quickstart](#quickstart), then see [deploy/README.md](deploy/README.md)
+- **Docs map:** [docs/README.md](docs/README.md)
 
 ## Docs
 
 Start here: [Documentation Map](docs/README.md)
 
-Docs are actively being improved as Footnote evolves. If something is unclear or hard to find, open a Discussion and we will point you to the right source.
+Docs are still being tightened as Footnote moves toward v1.0. Start with the map; it points to current architecture, decisions, setup, and contributor notes.
 
 ## Contributing
 
 Contribution docs are still in progress.
 
-For now, please open an Issue or Discussion for non-trivial changes so we can align on scope early. Thoughtful critique, focused PRs, and experiments are welcome.
+For now, open an Issue or Discussion before large changes so we can align on scope. Focused PRs, careful bug reports, and thoughtful critique are welcome.
 
 ## Project Status
 
