@@ -240,6 +240,13 @@ body::before {
     box-sizing: border-box;
 }
 
+.route-loading {
+    padding: clamp(1.5rem, 4vw, 2.25rem) 0;
+    font-family: var(--mono-font);
+    font-size: 0.95rem;
+    color: var(--subtle-text);
+}
+
 @media (max-width: 560px) {
     .app-shell {
         padding: clamp(1.35rem, 4vw, 2rem) clamp(1.15rem, 4vw, 1.85rem);

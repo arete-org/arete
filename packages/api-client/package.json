@@ -9,6 +9,10 @@
         ".": {
             "types": "./dist/index.d.ts",
             "default": "./dist/index.js"
+        },
+        "./web-client": {
+            "types": "./dist/webClient.d.ts",
+            "default": "./dist/webClient.js"
         }
     },
     "scripts": {

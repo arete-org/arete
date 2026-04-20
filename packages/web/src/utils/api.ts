@@ -12,7 +12,7 @@ import {
     type ApiClientError,
     type ApiErrorResponse,
     type CreateWebApiClientOptions,
-} from '@footnote/api-client';
+} from '@footnote/api-client/web-client';
 import type {
     GetBlogPostResponse,
     GetRuntimeConfigResponse,

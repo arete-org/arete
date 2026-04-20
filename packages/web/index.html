@@ -69,9 +69,107 @@
                 }
             }
         </script>
+        <style>
+            body {
+                margin: 0;
+            }
+
+            #root {
+                min-height: 100dvh;
+            }
+
+            .preload-shell {
+                box-sizing: border-box;
+                min-height: 100dvh;
+                margin: 0;
+                padding: clamp(2.5rem, 10vw, 6rem) 1.25rem 2rem;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                gap: 0.65rem;
+                background: #f7f7fc;
+                color: #10111a;
+                font-family:
+                    ui-sans-serif,
+                    system-ui,
+                    -apple-system,
+                    'Segoe UI',
+                    sans-serif;
+            }
+
+            .preload-shell__mark {
+                margin: 0;
+                font-weight: 700;
+                font-size: clamp(1.5rem, 4vw, 2rem);
+                letter-spacing: 0.02em;
+            }
+
+            .preload-shell__line,
+            .preload-shell__state {
+                margin: 0;
+                font-size: 1rem;
+                line-height: 1.5;
+            }
+
+            .preload-shell__line {
+                max-width: 28rem;
+            }
+
+            .preload-shell__state {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.45rem;
+                color: #4a4d63;
+            }
+
+            .preload-shell__state::before {
+                content: '';
+                width: 0.55rem;
+                height: 0.55rem;
+                border-radius: 999px;
+                background: currentColor;
+                animation: preload-pulse 1.2s ease-in-out infinite;
+            }
+
+            @keyframes preload-pulse {
+                0%,
+                100% {
+                    opacity: 0.35;
+                    transform: scale(0.88);
+                }
+                50% {
+                    opacity: 1;
+                    transform: scale(1);
+                }
+            }
+
+            @media (prefers-color-scheme: dark) {
+                .preload-shell {
+                    background: #0b0c12;
+                    color: #f2f3f8;
+                }
+
+                .preload-shell__state {
+                    color: #adb1c7;
+                }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                .preload-shell__state::before {
+                    animation: none;
+                    opacity: 0.8;
+                }
+            }
+        </style>
     </head>
     <body>
-        <div id="root"></div>
+        <div id="root">
+            <div class="preload-shell" aria-live="polite">
+                <p class="preload-shell__mark">Footnote</p>
+                <p class="preload-shell__line">AI answers with receipts.</p>
+                <p class="preload-shell__state">Loading Footnote…</p>
+            </div>
+        </div>
         <script type="module" src="/src/main.tsx"></script>
     </body>
 </html>

@@ -11,12 +11,11 @@ import type {
     PostChatResponse,
 } from '@footnote/contracts/web';
 import type { ToolExecutionContext } from '@footnote/contracts/ethics-core';
-import {
-    GetChatProfilesResponseSchema,
-    PostChatResponseSchema,
-    createSchemaResponseValidator,
-} from '@footnote/contracts/web/schemas';
 import type { ApiRequester } from './client.js';
+import {
+    loadGetChatProfilesResponseValidator,
+    loadPostChatResponseValidator,
+} from './lazyWebValidators.js';
 
 export type CreateChatApiOptions = {
     traceApiToken?: string;
@@ -66,15 +65,15 @@ export const createChatApi = (
     const getChatProfiles = async (options?: {
         signal?: AbortSignal;
     }): Promise<GetChatProfilesResponse> => {
+        const validateResponse = await loadGetChatProfilesResponseValidator();
+
         const response = await requestJson<GetChatProfilesResponse>(
             '/api/chat/profiles',
             {
                 method: 'GET',
                 signal: options?.signal,
                 cache: 'no-store',
-                validateResponse: createSchemaResponseValidator(
-                    GetChatProfilesResponseSchema
-                ),
+                validateResponse,
             }
         );
 
@@ -119,6 +118,7 @@ export const createChatApi = (
         request: PostChatRequest,
         options?: { turnstileToken?: string; signal?: AbortSignal }
     ): Promise<PostChatResponse> => {
+        const validateResponse = await loadPostChatResponseValidator();
         const headers: Record<string, string> = {};
 
         if (options?.turnstileToken) {
@@ -133,9 +133,7 @@ export const createChatApi = (
             headers,
             body: request,
             signal: options?.signal,
-            validateResponse: createSchemaResponseValidator(
-                PostChatResponseSchema
-            ),
+            validateResponse,
         });
 
         return response.data;
