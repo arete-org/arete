@@ -28,3 +28,26 @@ jobs:
             - run: pnpm install --frozen-lockfile
             - run: pnpm review
             - run: pnpm -r build
+
+    docker:
+        runs-on: ubuntu-latest
+        if: github.event_name == 'pull_request'
+        strategy:
+            matrix:
+                include:
+                    - name: backend
+                      dockerfile: deploy/Dockerfile.backend
+                    - name: bot
+                      dockerfile: deploy/Dockerfile.bot
+                    - name: web
+                      dockerfile: deploy/Dockerfile.web
+        steps:
+            - uses: actions/checkout@v4
+            - uses: docker/setup-buildx-action@v4
+            - name: Build ${{ matrix.name }} image with cache
+              run: |
+                  docker buildx build \
+                    --file ${{ matrix.dockerfile }} \
+                    --cache-from type=gha,scope=footnote-${{ matrix.name }} \
+                    --cache-to type=gha,mode=max,scope=footnote-${{ matrix.name }} \
+                    .
