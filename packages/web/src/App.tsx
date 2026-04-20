@@ -6,18 +6,26 @@
  * @footnote-ethics: medium - The top-level route map affects access to transparency and self-hosting guidance.
  */
 
+import { Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Hero from '@components/Hero';
 import Invite from '@components/Invite';
 import Services from '@components/Services';
 import OpenAccountable from '@components/OpenAccountable';
 import Footer from '@components/Footer';
-import TracePage from '@pages/TracePage';
-import SetupPage from '@pages/SetupPage';
-import BlogListPage from '@pages/BlogListPage';
-import BlogPostPage from '@pages/BlogPostPage';
-import EmbedPage from '@pages/EmbedPage';
-import AboutPage from '@pages/AboutPage';
+
+const SetupPage = lazy(() => import('@pages/SetupPage'));
+const TracePage = lazy(() => import('@pages/TracePage'));
+const BlogListPage = lazy(() => import('@pages/BlogListPage'));
+const BlogPostPage = lazy(() => import('@pages/BlogPostPage'));
+const EmbedPage = lazy(() => import('@pages/EmbedPage'));
+const AboutPage = lazy(() => import('@pages/AboutPage'));
+
+const RouteLoadingFallback = (): JSX.Element => (
+    <div className="route-loading" role="status" aria-live="polite">
+        Loading…
+    </div>
+);
 
 // The App component stitches together the landing page sections in their intended scroll order.
 const App = (): JSX.Element => (
@@ -44,16 +52,86 @@ const App = (): JSX.Element => (
                     </main>
                 }
             />
-            <Route path="/setup" element={<SetupPage />} />
-            <Route path="/setup/" element={<SetupPage />} />
-            <Route path="/about" element={<AboutPage />} />
-            <Route path="/about/" element={<AboutPage />} />
-            <Route path="/embed" element={<EmbedPage />} />
-            <Route path="/blog" element={<BlogListPage />} />
-            <Route path="/blog/" element={<BlogListPage />} />
-            <Route path="/blog/:number" element={<BlogPostPage />} />
-            <Route path="/traces/:responseId" element={<TracePage />} />
-            <Route path="/api/traces/:responseId" element={<TracePage />} />
+            <Route
+                path="/setup"
+                element={
+                    <Suspense fallback={<RouteLoadingFallback />}>
+                        <SetupPage />
+                    </Suspense>
+                }
+            />
+            <Route
+                path="/setup/"
+                element={
+                    <Suspense fallback={<RouteLoadingFallback />}>
+                        <SetupPage />
+                    </Suspense>
+                }
+            />
+            <Route
+                path="/about"
+                element={
+                    <Suspense fallback={<RouteLoadingFallback />}>
+                        <AboutPage />
+                    </Suspense>
+                }
+            />
+            <Route
+                path="/about/"
+                element={
+                    <Suspense fallback={<RouteLoadingFallback />}>
+                        <AboutPage />
+                    </Suspense>
+                }
+            />
+            <Route
+                path="/embed"
+                element={
+                    <Suspense fallback={<RouteLoadingFallback />}>
+                        <EmbedPage />
+                    </Suspense>
+                }
+            />
+            <Route
+                path="/blog"
+                element={
+                    <Suspense fallback={<RouteLoadingFallback />}>
+                        <BlogListPage />
+                    </Suspense>
+                }
+            />
+            <Route
+                path="/blog/"
+                element={
+                    <Suspense fallback={<RouteLoadingFallback />}>
+                        <BlogListPage />
+                    </Suspense>
+                }
+            />
+            <Route
+                path="/blog/:number"
+                element={
+                    <Suspense fallback={<RouteLoadingFallback />}>
+                        <BlogPostPage />
+                    </Suspense>
+                }
+            />
+            <Route
+                path="/traces/:responseId"
+                element={
+                    <Suspense fallback={<RouteLoadingFallback />}>
+                        <TracePage />
+                    </Suspense>
+                }
+            />
+            <Route
+                path="/api/traces/:responseId"
+                element={
+                    <Suspense fallback={<RouteLoadingFallback />}>
+                        <TracePage />
+                    </Suspense>
+                }
+            />
         </Routes>
     </div>
 );
