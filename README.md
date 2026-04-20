@@ -32,9 +32,7 @@ A Footnote response can include:
 - tradeoffs or constraints when they matter
 - a trace page with more detail about the run
 
-The trace is there so you can dig deeper. It is not a certificate that the answer is correct.
-
-For the technical model behind response metadata, see [Response Metadata](docs/architecture/response-metadata.md).
+The trace helps you review the answer; it does not prove the answer is right. For the technical model, see [Response Metadata](docs/architecture/response-metadata.md).
 
 ## Quickstart
 
