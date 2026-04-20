@@ -6,13 +6,15 @@
 
 AI you can inspect and steer.
 
-Footnote is a transparency-first AI framework for people who want more than a black-box answer. It pairs responses with provenance and trace metadata so you can understand what happened, challenge weak output, and guide behavior over time.
+Footnote is an AI assistant that attaches provenance and trace data to its answers, so you can see what information it used and what happened during the response.
+
+This repo contains the Footnote product surfaces and the framework code behind them: the web app, the backend, and the Discord bot.
 
 Built for human oversight, not "just trust me."
 
 <img width="761" height="344" alt="image" src="https://github.com/user-attachments/assets/706ea443-7085-41c0-a7ee-06633f196acd" />
 
-[Demo](https://ai.jordanmakes.dev) · [Quickstart](#quickstart) · [Docs](#docs) · [Contributing](#contributing)
+[Demo](https://ai.jordanmakes.dev) · [What You See](#what-you-see-after-asking) · [Quickstart](#quickstart) · [Learn More](#learn-more) · [Docs](#docs)
 
 ---
 
@@ -22,6 +24,12 @@ Most AI products give you an answer and hide the reasoning context.
 
 Footnote takes the opposite approach: make responses easier to inspect, easier to challenge, and easier to steer. The goal is to support better human judgment, not replace it.
 
+Why this repo exists:
+
+- Footnote is both a user-facing assistant and the codebase for building and running it.
+- The repo keeps the product behavior, provenance model, and deployment paths in one place.
+- If you want to try it, self-host it, or contribute to it, this is the place to start.
+
 With Footnote, you can:
 
 - See how confident the AI is
@@ -30,6 +38,25 @@ With Footnote, you can:
 - See what guardrails were applied
 
 [Try the live demo](https://ai.jordanmakes.dev)
+
+## What You See After Asking
+
+When you ask Footnote a question, you get more than a plain answer.
+
+- An answer in normal language
+- Sources or evidence Footnote used when they are available
+- Provenance metadata that shows how the response was produced
+- A trace view that helps you inspect confidence, trade-offs, and applied constraints
+
+The point is not to make the AI look smarter. The point is to make its output easier to check, challenge, and steer.
+
+## Learn More
+
+- Curious about the idea behind Footnote: start with [History](docs/History.md) and [Philosophy](docs/Philosophy.md)
+- Developer who wants the system shape: read the [Architecture Reading Guide](docs/architecture/README.md)
+- Contributor who wants repo rules: read [AGENTS.md](AGENTS.md) and the [AI Assistance Guide](docs/ai/README.md)
+- Self-hoster who wants to run the stack: use [Quickstart](#quickstart) for local setup, then [deploy/README.md](deploy/README.md) for Docker and Fly.io
+- Want the docs map: open [docs/README.md](docs/README.md)
 
 ## Quickstart
 
