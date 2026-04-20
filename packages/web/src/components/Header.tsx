@@ -27,11 +27,11 @@ const Header = ({ breadcrumbItems }: HeaderProps): JSX.Element => {
     const location = useLocation();
     const pathname = location.pathname;
 
-    // Hide Setup button on setup/invite page
-    const showSetupButton = !pathname.startsWith('/invite');
+    // Hide Setup button on setup page
+    const showSetupButton = !pathname.startsWith('/setup');
 
-    // Hide Guide button on guide page
-    const showGuideButton = !pathname.startsWith('/guide');
+    // Hide About button on about page
+    const showAboutButton = !pathname.startsWith('/about');
 
     // Hide Blog button on blog pages
     const showBlogButton = !pathname.startsWith('/blog');
@@ -49,10 +49,10 @@ const Header = ({ breadcrumbItems }: HeaderProps): JSX.Element => {
                     <Breadcrumb items={breadcrumbItems} />
                 </div>
                 <div className="site-header-actions">
-                    {showGuideButton && (
+                    {showAboutButton && (
                         <a
                             className="header-button secondary"
-                            href="/guide"
+                            href="/about"
                             {...(pathname === '/embed'
                                 ? {
                                       target: '_blank',
@@ -61,11 +61,11 @@ const Header = ({ breadcrumbItems }: HeaderProps): JSX.Element => {
                                 : {})}
                             aria-label={
                                 pathname === '/embed'
-                                    ? 'Guide (opens in new tab)'
-                                    : 'Guide'
+                                    ? 'About (opens in new tab)'
+                                    : 'About'
                             }
                         >
-                            Guide
+                            About
                             {pathname === '/embed' && (
                                 <>
                                     {' '}
@@ -77,7 +77,7 @@ const Header = ({ breadcrumbItems }: HeaderProps): JSX.Element => {
                     {showSetupButton && (
                         <a
                             className="header-button secondary"
-                            href="/invite/"
+                            href="/setup/"
                             {...(pathname === '/embed'
                                 ? {
                                       target: '_blank',

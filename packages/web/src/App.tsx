@@ -44,10 +44,10 @@ const App = (): JSX.Element => (
                     </main>
                 }
             />
-            <Route path="/invite" element={<InvitePage />} />
-            <Route path="/invite/" element={<InvitePage />} />
-            <Route path="/guide" element={<GuidePage />} />
-            <Route path="/guide/" element={<GuidePage />} />
+            <Route path="/setup" element={<InvitePage />} />
+            <Route path="/setup/" element={<InvitePage />} />
+            <Route path="/about" element={<GuidePage />} />
+            <Route path="/about/" element={<GuidePage />} />
             <Route path="/embed" element={<EmbedPage />} />
             <Route path="/blog" element={<BlogListPage />} />
             <Route path="/blog/" element={<BlogListPage />} />

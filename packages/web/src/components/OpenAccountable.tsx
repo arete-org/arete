@@ -33,7 +33,7 @@ const PRINCIPLES: Principle[] = [
         description:
             'Keep control of credentials, runtime, and policy boundaries in your own environment.',
         link: {
-            href: '/invite/',
+            href: '/setup/',
             label: 'Quickstart setup',
         },
     },
