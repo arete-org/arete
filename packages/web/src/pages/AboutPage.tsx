@@ -2,7 +2,7 @@
  * @description: Renders the Footnote engineering guide for contributors who
  * need a quick, current map of the repo and runtime.
  * @footnote-scope: web
- * @footnote-module: GuidePage
+ * @footnote-module: AboutPage
  * @footnote-risk: low - Incorrect guide copy can mislead contributors about package ownership and request flow.
  * @footnote-ethics: medium - This page shapes contributor understanding of provenance, trace, and backend-owned controls.
  */
@@ -154,7 +154,7 @@ const renderFlowStep = (title: string, body: ReactNode): JSX.Element => (
     </li>
 );
 
-const GuidePage = (): JSX.Element => (
+const AboutPage = (): JSX.Element => (
     <>
         <Header breadcrumbItems={breadcrumbItems} />
         <main className="guide-page" id="main-content">
@@ -435,4 +435,4 @@ const GuidePage = (): JSX.Element => (
     </>
 );
 
-export default GuidePage;
+export default AboutPage;

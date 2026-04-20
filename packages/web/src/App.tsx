@@ -13,11 +13,11 @@ import Services from '@components/Services';
 import OpenAccountable from '@components/OpenAccountable';
 import Footer from '@components/Footer';
 import TracePage from '@pages/TracePage';
-import InvitePage from '@pages/InvitePage';
+import SetupPage from '@pages/SetupPage';
 import BlogListPage from '@pages/BlogListPage';
 import BlogPostPage from '@pages/BlogPostPage';
 import EmbedPage from '@pages/EmbedPage';
-import GuidePage from '@pages/GuidePage';
+import AboutPage from '@pages/AboutPage';
 
 // The App component stitches together the landing page sections in their intended scroll order.
 const App = (): JSX.Element => (
@@ -44,10 +44,10 @@ const App = (): JSX.Element => (
                     </main>
                 }
             />
-            <Route path="/setup" element={<InvitePage />} />
-            <Route path="/setup/" element={<InvitePage />} />
-            <Route path="/about" element={<GuidePage />} />
-            <Route path="/about/" element={<GuidePage />} />
+            <Route path="/setup" element={<SetupPage />} />
+            <Route path="/setup/" element={<SetupPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/about/" element={<AboutPage />} />
             <Route path="/embed" element={<EmbedPage />} />
             <Route path="/blog" element={<BlogListPage />} />
             <Route path="/blog/" element={<BlogListPage />} />
