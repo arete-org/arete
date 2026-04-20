@@ -12,11 +12,8 @@ import type {
     GetTraceStaleResponse,
     ListBlogPostsResponse,
 } from '@footnote/contracts/web';
-import {
-    GetTraceApiResponseSchema,
-    createSchemaResponseValidator,
-} from '@footnote/contracts/web/schemas';
 import type { ApiJsonResult, ApiRequester } from './client.js';
+import { loadGetTraceApiResponseValidator } from './lazyWebValidators.js';
 
 export type WebReadApi = {
     getRuntimeConfig: (
@@ -95,6 +92,7 @@ export const createWebReadApi = (requestJson: ApiRequester): WebReadApi => {
         responseId: string,
         signal?: AbortSignal
     ): Promise<ApiJsonResult<GetTraceResponse | GetTraceStaleResponse>> => {
+        const validateResponse = await loadGetTraceApiResponseValidator();
         const encodedResponseId = encodeURIComponent(responseId);
         return requestJson<GetTraceResponse | GetTraceStaleResponse>(
             `/api/traces/${encodedResponseId}`,
@@ -105,9 +103,7 @@ export const createWebReadApi = (requestJson: ApiRequester): WebReadApi => {
                     Accept: 'application/json',
                 },
                 acceptedStatusCodes: [410],
-                validateResponse: createSchemaResponseValidator(
-                    GetTraceApiResponseSchema
-                ),
+                validateResponse,
             }
         );
     };
