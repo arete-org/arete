@@ -17,6 +17,7 @@ import InvitePage from '@pages/InvitePage';
 import BlogListPage from '@pages/BlogListPage';
 import BlogPostPage from '@pages/BlogPostPage';
 import EmbedPage from '@pages/EmbedPage';
+import GuidePage from '@pages/GuidePage';
 
 // The App component stitches together the landing page sections in their intended scroll order.
 const App = (): JSX.Element => (
@@ -45,6 +46,8 @@ const App = (): JSX.Element => (
             />
             <Route path="/invite" element={<InvitePage />} />
             <Route path="/invite/" element={<InvitePage />} />
+            <Route path="/guide" element={<GuidePage />} />
+            <Route path="/guide/" element={<GuidePage />} />
             <Route path="/embed" element={<EmbedPage />} />
             <Route path="/blog" element={<BlogListPage />} />
             <Route path="/blog/" element={<BlogListPage />} />

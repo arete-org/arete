@@ -30,6 +30,9 @@ const Header = ({ breadcrumbItems }: HeaderProps): JSX.Element => {
     // Hide Setup button on setup/invite page
     const showSetupButton = !pathname.startsWith('/invite');
 
+    // Hide Guide button on guide page
+    const showGuideButton = !pathname.startsWith('/guide');
+
     // Hide Blog button on blog pages
     const showBlogButton = !pathname.startsWith('/blog');
 
@@ -46,6 +49,31 @@ const Header = ({ breadcrumbItems }: HeaderProps): JSX.Element => {
                     <Breadcrumb items={breadcrumbItems} />
                 </div>
                 <div className="site-header-actions">
+                    {showGuideButton && (
+                        <a
+                            className="header-button secondary"
+                            href="/guide"
+                            {...(pathname === '/embed'
+                                ? {
+                                      target: '_blank',
+                                      rel: 'noopener noreferrer',
+                                  }
+                                : {})}
+                            aria-label={
+                                pathname === '/embed'
+                                    ? 'Guide (opens in new tab)'
+                                    : 'Guide'
+                            }
+                        >
+                            Guide
+                            {pathname === '/embed' && (
+                                <>
+                                    {' '}
+                                    <span aria-hidden="true">↗</span>
+                                </>
+                            )}
+                        </a>
+                    )}
                     {showSetupButton && (
                         <a
                             className="header-button secondary"
