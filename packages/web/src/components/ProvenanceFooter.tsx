@@ -105,7 +105,7 @@ const ProvenanceFooter = ({
             style={safetyStyle}
         >
             <div className="provenance-header">
-                Reasoning - {metadata.provenance}
+                Context · {metadata.provenance}
             </div>
 
             <div className="provenance-main">
@@ -124,7 +124,7 @@ const ProvenanceFooter = ({
                 {metadata.safetyTier && (
                     <>
                         <span className="provenance-risktier">
-                            {metadata.safetyTier} safety
+                            Safety: {metadata.safetyTier}
                         </span>
                     </>
                 )}
