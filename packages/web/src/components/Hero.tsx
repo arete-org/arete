@@ -48,11 +48,11 @@ const Hero = (): JSX.Element => {
 
             <div className="hero-copy">
                 <h1 id="hero-title">
-                    Ask a question. Get an answer with a trail.
+                    Ask a question. See what shaped the answer.
                 </h1>
                 <p className="hero-copy__subtitle">
-                    Footnote gives you a direct answer, then shows what shaped
-                    it so you can see what shaped it, not just the final text.
+                    Footnote answers your question, then shows the sources,
+                    signals, and trace behind the response.
                 </p>
                 <div className="hero-action-hub">
                     <div className="hero-action-tabs" role="tablist">
@@ -163,18 +163,16 @@ const Hero = (): JSX.Element => {
                                 What you get after asking
                             </h2>
                             <p>
-                                The response is not just text in a chat box. You
-                                can inspect what happened.
+                                Footnote does not stop at the answer. It also
+                                gives you a few ways to check how the response
+                                was produced.
                             </p>
                             <ul className="intro-card-list">
-                                <li>A direct answer.</li>
-                                <li>Source links when web sources are used.</li>
+                                <li>The answer itself.</li>
+                                <li>Source links, when sources were used.</li>
+                                <li>Safety and confidence signals.</li>
                                 <li>
-                                    Provenance details with safety and
-                                    confidence signals.
-                                </li>
-                                <li>
-                                    A trace link so you can open the full run.
+                                    A trace you can open to see what happened.
                                 </li>
                             </ul>
                             <p>

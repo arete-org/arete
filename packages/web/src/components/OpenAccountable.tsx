@@ -19,9 +19,9 @@ interface Principle {
 
 const PRINCIPLES: Principle[] = [
     {
-        title: 'Inspect the product, not just the promise',
+        title: 'Open source',
         description:
-            'Footnote shows answer-level provenance, safety signals, and trace links so you can verify what happened.',
+            'Read the code, inspect the implementation, and adapt Footnote to your needs.',
         link: {
             href: 'https://github.com/footnote-ai/footnote/tree/main',
             label: 'Repository',
@@ -29,18 +29,18 @@ const PRINCIPLES: Principle[] = [
         },
     },
     {
-        title: 'Run it yourself',
+        title: 'Self-hosted',
         description:
-            'Self-hosting keeps your keys, runtime, and policy boundaries in your environment.',
+            'Run Footnote in your own environment, with your own credentials and provider choices.',
         link: {
             href: '/invite/',
             label: 'Quickstart setup',
         },
     },
     {
-        title: 'Open code with clear license terms',
+        title: 'Clear license terms',
         description:
-            'Footnote is dual-licensed under MIT and Hippocratic License v3 (HL3-CORE).',
+            'Dual-licensed under MIT and Hippocratic License v3 (HL3-CORE), with the license strategy documented in the repo.',
         link: {
             href: 'https://github.com/footnote-ai/footnote/blob/main/docs/LICENSE_STRATEGY.md',
             label: 'License strategy',
@@ -52,9 +52,7 @@ const PRINCIPLES: Principle[] = [
 // Transparency block with three concise commitments.
 const OpenAccountable = (): JSX.Element => (
     <section className="transparency" aria-labelledby="transparency-title">
-        <h2 id="transparency-title">
-            Why this is different from a normal chat box
-        </h2>
+        <h2 id="transparency-title">What makes Footnote different</h2>
         <div className="card-grid" role="list">
             {PRINCIPLES.map((principle) => (
                 <article key={principle.title} className="card" role="listitem">

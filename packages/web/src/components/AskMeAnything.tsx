@@ -657,8 +657,8 @@ const AskMeAnything = (): JSX.Element => {
                 </div>
             </div>
             <p className="interaction-helper">
-                After each reply, Footnote can show sources (when used),
-                provenance, safety tier, and a trace link.
+                After each reply, you can check sources when they were used,
+                safety signals, and the full trace.
             </p>
             <form className="interaction-form" onSubmit={onSubmit}>
                 <div className="interaction-input-group">

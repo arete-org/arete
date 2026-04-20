@@ -20,9 +20,9 @@ interface ServiceFeature {
 const FEATURES: ServiceFeature[] = [
     {
         id: 'chat',
-        title: 'Answer + trail',
+        title: 'Answers you can inspect',
         description:
-            'Get an answer, then inspect provenance, safety tier, and trace details in the same flow.',
+            'Ask a question, get a response, and open the trace to see what sources and signals shaped it.',
     },
     {
         id: 'sources',
@@ -34,19 +34,19 @@ const FEATURES: ServiceFeature[] = [
         id: 'call',
         title: '/call',
         description:
-            'Run live voice sessions in Discord while keeping the same inspectable output model.',
+            'Run live voice sessions in Discord and keep response context visible.',
     },
     {
         id: 'image-understanding',
         title: 'Image understanding',
         description:
-            'Ask about an image and get findings folded into the same answer trail.',
+            'Ask about an image and see the findings alongside the response context.',
     },
     {
         id: 'image',
         title: '/image',
         description:
-            'Generate images inside the same workspace where answers and traces are visible.',
+            'Generate images from Discord while keeping the surrounding conversation in one place.',
         variant: 'wide',
     },
 ];
