@@ -22,9 +22,14 @@ const EmbedPage = lazy(() => import('@pages/EmbedPage'));
 const AboutPage = lazy(() => import('@pages/AboutPage'));
 
 const RouteLoadingFallback = (): JSX.Element => (
-    <div className="route-loading" role="status" aria-live="polite">
+    <main
+        id="main-content"
+        className="route-loading"
+        role="status"
+        aria-live="polite"
+    >
         Loading…
-    </div>
+    </main>
 );
 
 // The App component stitches together the landing page sections in their intended scroll order.

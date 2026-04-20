@@ -25,27 +25,35 @@ import {
 } from './chat.js';
 import { createWebReadApi, type WebReadApi } from './web.js';
 
-export type CreateWebApiClientOptions = CreateApiTransportOptions;
+export type CreateWebApiClientOptions = CreateApiTransportOptions &
+    Pick<CreateChatApiOptions, 'traceApiToken'>;
 
 export type WebApiClient = {
     requestJson: ApiRequester;
     chatQuestion: ChatApi['chatQuestion'];
 } & WebReadApi;
 
+/**
+ * @description: Creates the web API boundary client and wires `createApiTransport`, `createChatApi`, and `createWebReadApi`.
+ * @param options - `CreateWebApiClientOptions` including transport options such as `clientErrorName` and chat options such as `traceApiToken`.
+ * @returns Stable `WebApiClient` methods for JSON requests, chat, and web read endpoints.
+ */
 export const createWebApiClient = ({
     baseUrl,
     defaultHeaders,
     defaultTimeoutMs,
     fetchImpl = fetch,
+    clientErrorName,
+    traceApiToken,
 }: CreateWebApiClientOptions = {}): WebApiClient => {
     const { requestJson } = createApiTransport({
         baseUrl,
         defaultHeaders,
         defaultTimeoutMs,
         fetchImpl,
-        clientErrorName: 'ApiClientError',
+        clientErrorName,
     });
-    const chatApi = createChatApi(requestJson);
+    const chatApi = createChatApi(requestJson, { traceApiToken });
     const webReadApi = createWebReadApi(requestJson);
 
     return {

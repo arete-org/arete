@@ -29,7 +29,11 @@ let getTraceApiResponseValidatorPromise: Promise<
 
 const loadWebSchemasModule = async (): Promise<WebSchemasModule> => {
     if (!webSchemasModulePromise) {
-        webSchemasModulePromise = import('@footnote/contracts/web/schemas');
+        webSchemasModulePromise =
+            import('@footnote/contracts/web/schemas').catch((error) => {
+                webSchemasModulePromise = null;
+                throw error;
+            });
     }
 
     return webSchemasModulePromise;
