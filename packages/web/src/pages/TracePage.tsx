@@ -17,6 +17,10 @@ import type {
     GetTraceResponse,
     GetTraceStaleResponse,
 } from '@footnote/contracts/web';
+import type {
+    ExecutionEvent,
+    WorkflowStepKind,
+} from '@footnote/contracts/ethics-core';
 import { api, isApiClientError } from '../utils/api';
 import { createScopedLogger } from '../utils/logger';
 // Define the actual server response metadata structure
@@ -59,6 +63,12 @@ type DisplayTrace = {
     } | null;
 };
 
+type SummarySignal = {
+    label: string;
+    value: string;
+    explanation: string;
+};
+
 const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
     // Prefer canonical generation event model first, then legacy mirrors.
     const generationEventModel = traceData.execution
@@ -74,6 +84,159 @@ const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
 
 const resolveExecutionSummary = (traceData: ServerMetadata): string | null =>
     formatExecutionTimelineSummary(traceData.execution, traceData.workflow);
+
+const PROVENANCE_EXPLANATIONS: Record<string, string> = {
+    Retrieved:
+        'This answer is classified as grounded in retrieved or workflow evidence recorded in this trace.',
+    Inferred:
+        'This answer combines model reasoning with available context; verify key claims when stakes are high.',
+    Speculative:
+        'This answer may include uncertain reasoning; treat it as a starting point and verify before relying on it.',
+};
+
+const WORKFLOW_MODE_LABELS: Record<string, string> = {
+    fast: 'Fast mode',
+    balanced: 'Balanced mode',
+    grounded: 'Grounded mode',
+};
+
+const getProvenanceExplanation = (provenance: string): string =>
+    PROVENANCE_EXPLANATIONS[provenance] ??
+    'This is the runtime provenance label recorded for this response.';
+
+const getModeSummary = (
+    traceData: ServerMetadata
+): Pick<SummarySignal, 'value' | 'explanation'> => {
+    const modeId = traceData.workflowMode?.modeId;
+    if (modeId) {
+        const modeValue = WORKFLOW_MODE_LABELS[modeId] ?? modeId;
+        const reviewPass = traceData.workflowMode?.behavior.reviewPass;
+        const evidencePosture =
+            traceData.workflowMode?.behavior.evidencePosture;
+        const reviewText =
+            reviewPass === 'included'
+                ? 'is configured to include a review pass'
+                : 'is configured without a review pass';
+        const evidenceText = evidencePosture
+            ? `and uses a ${evidencePosture} evidence posture`
+            : '';
+        return {
+            value: modeValue,
+            explanation: `${modeValue} ran for this response, ${reviewText}${evidenceText}.`,
+        };
+    }
+
+    if (traceData.workflow?.workflowName) {
+        return {
+            value: traceData.workflow.workflowName,
+            explanation:
+                'A workflow record exists, but no explicit mode decision was attached.',
+        };
+    }
+
+    return {
+        value: 'Not recorded',
+        explanation:
+            'This trace does not include workflow mode metadata, which is common in older records.',
+    };
+};
+
+const getSourceSummary = (
+    traceData: ServerMetadata
+): Pick<SummarySignal, 'value' | 'explanation'> => {
+    const citationCount = traceData.citations?.length ?? 0;
+    if (citationCount > 0) {
+        return {
+            value:
+                citationCount === 1
+                    ? '1 source linked'
+                    : `${citationCount} sources linked`,
+            explanation:
+                'Source links are available below for direct inspection.',
+        };
+    }
+
+    const toolEvents = (traceData.execution ?? []).filter(
+        (event): event is ExecutionEvent & { kind: 'tool' } =>
+            event.kind === 'tool' && event.toolName === 'web_search'
+    );
+    const searchUnsupported = toolEvents.some(
+        (event) =>
+            event.status === 'skipped' &&
+            event.reasonCode === 'search_not_supported_by_selected_profile'
+    );
+
+    if (searchUnsupported) {
+        return {
+            value: 'No sources linked',
+            explanation:
+                'Search was unavailable for the selected profile, so no source links were attached.',
+        };
+    }
+
+    if (toolEvents.length > 0) {
+        return {
+            value: 'No sources linked',
+            explanation:
+                'A tool/search step is recorded, but no source links were attached.',
+        };
+    }
+
+    return {
+        value: 'No sources linked',
+        explanation:
+            'No source links were attached in this trace. Treat unsupported claims as unverified.',
+    };
+};
+
+const getSafetySummary = (
+    traceData: ServerMetadata,
+    safetyLabel: string
+): Pick<SummarySignal, 'value' | 'explanation'> => {
+    const safetyDecision = traceData.evaluator?.safetyDecision;
+    if (safetyDecision) {
+        const action =
+            safetyDecision.action === 'allow'
+                ? 'allowed'
+                : `resolved with "${safetyDecision.action}"`;
+        return {
+            value: `${safetyLabel} (${action})`,
+            explanation:
+                'Safety tier and evaluator action come from runtime policy checks captured in the trace.',
+        };
+    }
+
+    return {
+        value: safetyLabel,
+        explanation:
+            'Safety tier is recorded, but detailed evaluator decision metadata is not present on this trace.',
+    };
+};
+
+const getWorkflowSummary = (
+    traceData: ServerMetadata
+): Pick<SummarySignal, 'value' | 'explanation'> => {
+    const workflow = traceData.workflow;
+    if (!workflow) {
+        return {
+            value: 'No workflow record',
+            explanation:
+                'This trace has no workflow lineage attached, which can happen for older or direct runs.',
+        };
+    }
+
+    const reviewStepKinds: WorkflowStepKind[] = ['assess', 'revise'];
+    const hasReviewStep = workflow.steps.some((step) =>
+        reviewStepKinds.includes(step.stepKind)
+    );
+
+    return {
+        value: `${workflow.workflowName} (${workflow.status})`,
+        explanation: hasReviewStep
+            ? 'Review-related workflow steps are present in this trace.'
+            : 'Workflow metadata is present, but no explicit review step is recorded.',
+    };
+};
 
 const buildDisplayTrace = (traceData: ServerMetadata): DisplayTrace => ({
     responseId: traceData.responseId ?? null,
@@ -400,6 +563,40 @@ const TracePage = (): JSX.Element => {
         ? new Date(traceData.staleAfter).toLocaleString()
         : 'N/A';
     const displayId = traceData?.responseId || responseId;
+    const timestampDisplay = traceData.timestamp
+        ? new Date(traceData.timestamp).toLocaleString()
+        : 'N/A';
+    const provenanceExplanation = getProvenanceExplanation(provenance);
+    const modeSummary = getModeSummary(traceData);
+    const sourceSummary = getSourceSummary(traceData);
+    const safetySummary = getSafetySummary(traceData, safetyLabel);
+    const workflowSummary = getWorkflowSummary(traceData);
+    const summarySignals: SummarySignal[] = [
+        {
+            label: 'Mode',
+            value: modeSummary.value,
+            explanation: modeSummary.explanation,
+        },
+        {
+            label: 'Sources',
+            value: sourceSummary.value,
+            explanation: sourceSummary.explanation,
+        },
+        {
+            label: 'Safety',
+            value: safetySummary.value,
+            explanation: safetySummary.explanation,
+        },
+        {
+            label: 'Workflow',
+            value: workflowSummary.value,
+            explanation: workflowSummary.explanation,
+        },
+    ];
+    const hasWorkflowPlanStep =
+        traceData.workflow?.steps.some((step) => step.stepKind === 'plan') ??
+        false;
+    const showDataCaveats = !hasWorkflowPlanStep || !traceData.trustGraph;
 
     return (
         <section className="site-section">
@@ -418,49 +615,37 @@ const TracePage = (): JSX.Element => {
                 style={{ borderLeft: `4px solid ${safetyColor}` }}
                 aria-label="Trace summary"
             >
-                <h2>Summary</h2>
+                <h2>What happened</h2>
                 <p>
-                    <strong>Provenance:</strong> {provenance}
+                    This page summarizes how this answer was produced and where
+                    you can inspect evidence next.
                 </p>
                 <p>
-                    <strong>Safety Tier:</strong>{' '}
-                    <span
-                        style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                        }}
-                    >
-                        <span
-                            style={{
-                                width: '0.75rem',
-                                height: '0.75rem',
-                                borderRadius: '9999px',
-                                backgroundColor: safetyColor,
-                                display: 'inline-block',
-                            }}
-                        />
-                        {safetyLabel}
-                    </span>
+                    <strong>Provenance label:</strong> {provenance}
                 </p>
+                <p>{provenanceExplanation}</p>
                 <p>
-                    <strong>Model:</strong> {model}
+                    <strong>Generated:</strong> {timestampDisplay}
                 </p>
-                {executionSummary && (
-                    <p>
-                        <strong>Execution:</strong> {executionSummary}
-                    </p>
-                )}
-                {traceData.totalDurationMs !== undefined && (
-                    <p>
-                        <strong>Total Duration:</strong>{' '}
-                        {traceData.totalDurationMs}ms
-                    </p>
-                )}
+                <ul>
+                    {summarySignals.map((signal) => (
+                        <li key={signal.label}>
+                            <strong>{signal.label}:</strong> {signal.value}
+                            <br />
+                            {signal.explanation}
+                        </li>
+                    ))}
+                </ul>
+                <p>
+                    <strong>Next:</strong>{' '}
+                    <a href="#trace-sources">Check sources</a>,{' '}
+                    <a href="#trace-runtime">review model/runtime details</a>,
+                    or <a href="#trace-raw">open raw trace JSON</a>.
+                </p>
             </article>
 
-            <article className="card" aria-label="Citations">
-                <h2>Citations</h2>
+            <article className="card" id="trace-sources" aria-label="Sources">
+                <h2>Sources and Evidence</h2>
                 {traceData?.citations && traceData.citations.length > 0 ? (
                     <ul>
                         {traceData.citations.map(
@@ -505,42 +690,157 @@ const TracePage = (): JSX.Element => {
                         )}
                     </ul>
                 ) : (
-                    <p>No citations available for this response.</p>
+                    <p>
+                        No citations are attached to this response. Use this as
+                        an unsupported answer unless you can verify key claims
+                        independently.
+                    </p>
                 )}
+                <details style={{ marginTop: '0.75rem' }}>
+                    <summary>How source status was determined</summary>
+                    <p style={{ marginTop: '0.5rem' }}>
+                        Citation links are shown when present in trace metadata.
+                        Execution events are used as secondary context only.
+                    </p>
+                </details>
             </article>
 
-            <article className="card" aria-label="Technical details">
-                <h2>Technical Details</h2>
-                <dl>
-                    <div>
-                        <dt>Tradeoff Count</dt>
-                        <dd>{tradeoffCount}</dd>
-                    </div>
-                    <div>
-                        <dt>Chain Hash</dt>
-                        <dd>
-                            <code>{chainHash ?? 'Unavailable'}</code>
-                        </dd>
-                    </div>
-                    <div>
-                        <dt>Stale After</dt>
-                        <dd>{staleAfter}</dd>
-                    </div>
-                    <div>
-                        <dt>License Context</dt>
-                        <dd>
-                            <span>See license strategy for reuse details.</span>{' '}
-                            <a
-                                href="https://github.com/footnote-ai/footnote/blob/main/docs/LICENSE_STRATEGY.md"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                            >
-                                License strategy
-                            </a>
-                        </dd>
-                    </div>
-                </dl>
-                <details style={{ marginTop: '1rem' }}>
+            <article
+                className="card"
+                id="trace-runtime"
+                aria-label="Runtime and workflow details"
+            >
+                <h2>Runtime and Workflow Details</h2>
+                <p>
+                    <strong>Model:</strong> {model}
+                </p>
+                {executionSummary && (
+                    <p>
+                        <strong>Execution summary:</strong> {executionSummary}
+                    </p>
+                )}
+                {traceData.totalDurationMs !== undefined && (
+                    <p>
+                        <strong>Total duration:</strong>{' '}
+                        {traceData.totalDurationMs}ms
+                    </p>
+                )}
+                {traceData.usage && (
+                    <p>
+                        <strong>Token usage:</strong> input{' '}
+                        {traceData.usage.input_tokens}, output{' '}
+                        {traceData.usage.output_tokens}, total{' '}
+                        {traceData.usage.total_tokens}
+                    </p>
+                )}
+                <details style={{ marginTop: '0.75rem' }}>
+                    <summary>Safety and evaluator details</summary>
+                    <dl style={{ marginTop: '0.75rem' }}>
+                        <div>
+                            <dt>Safety Tier</dt>
+                            <dd>
+                                <span
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            width: '0.75rem',
+                                            height: '0.75rem',
+                                            borderRadius: '9999px',
+                                            backgroundColor: safetyColor,
+                                            display: 'inline-block',
+                                        }}
+                                    />
+                                    {safetyLabel}
+                                </span>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Evaluator Mode</dt>
+                            <dd>
+                                {traceData.evaluator?.mode ?? 'Unavailable'}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Evaluator Authority</dt>
+                            <dd>
+                                {traceData.evaluator?.authorityLevel ??
+                                    'Unavailable'}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Safety Action</dt>
+                            <dd>
+                                {traceData.evaluator?.safetyDecision.action ??
+                                    'Unavailable'}
+                            </dd>
+                        </div>
+                    </dl>
+                </details>
+                <details style={{ marginTop: '0.75rem' }}>
+                    <summary>Technical fields</summary>
+                    <dl style={{ marginTop: '0.75rem' }}>
+                        <div>
+                            <dt>Tradeoff Count</dt>
+                            <dd>{tradeoffCount}</dd>
+                        </div>
+                        <div>
+                            <dt>Chain Hash</dt>
+                            <dd>
+                                <code>{chainHash ?? 'Unavailable'}</code>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Stale After</dt>
+                            <dd>{staleAfter}</dd>
+                        </div>
+                        <div>
+                            <dt>Runtime Model Version</dt>
+                            <dd>
+                                {traceData.runtimeContext?.modelVersion ??
+                                    'Unavailable'}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Conversation Snapshot</dt>
+                            <dd>
+                                {sanitizedTraceData.runtimeContext
+                                    ?.conversationSnapshot ?? 'Unavailable'}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>License Context</dt>
+                            <dd>
+                                <span>
+                                    See license strategy for reuse details.
+                                </span>{' '}
+                                <a
+                                    href="https://github.com/footnote-ai/footnote/blob/main/docs/LICENSE_STRATEGY.md"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    License strategy
+                                </a>
+                            </dd>
+                        </div>
+                    </dl>
+                </details>
+            </article>
+
+            <article
+                className="card"
+                id="trace-raw"
+                aria-label="Raw trace data"
+            >
+                <h2>Raw Trace Data</h2>
+                <p>
+                    This is the redacted debug payload used to render the page.
+                </p>
+                <details style={{ marginTop: '0.75rem' }}>
                     <summary>Raw JSON</summary>
                     <pre
                         style={{
@@ -554,6 +854,32 @@ const TracePage = (): JSX.Element => {
                     </pre>
                 </details>
             </article>
+
+            {showDataCaveats && (
+                <article className="card" aria-label="Data caveats">
+                    <h2>Data Caveats</h2>
+                    <dl>
+                        {!hasWorkflowPlanStep && (
+                            <div>
+                                <dt>Planner lineage</dt>
+                                <dd>
+                                    Planner steps appear only when real `plan`
+                                    steps exist in workflow metadata.
+                                </dd>
+                            </div>
+                        )}
+                        {!traceData.trustGraph && (
+                            <div>
+                                <dt>TrustGraph signals</dt>
+                                <dd>
+                                    TrustGraph evidence appears only when this
+                                    trace includes TrustGraph metadata.
+                                </dd>
+                            </div>
+                        )}
+                    </dl>
+                </article>
+            )}
         </section>
     );
 };
