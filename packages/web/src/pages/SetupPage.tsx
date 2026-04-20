@@ -1,7 +1,7 @@
 /**
  * @description: Renders the self-hosting setup page with copyable commands and deployment guidance.
  * @footnote-scope: web
- * @footnote-module: InvitePage
+ * @footnote-module: SetupPage
  * @footnote-risk: medium - Incorrect setup instructions can derail local installs or deployment attempts.
  * @footnote-ethics: medium - Clear setup guidance affects user autonomy, hosting control, and privacy expectations.
  */
@@ -13,7 +13,7 @@ import Footer from '@components/Footer';
 type ToastState = { message: string; visible: boolean };
 type ToastSetter = React.Dispatch<React.SetStateAction<ToastState>>;
 
-const InvitePage: React.FC = () => {
+const SetupPage: React.FC = () => {
     const [cloneToast, setCloneToast] = useState<ToastState>({
         message: '',
         visible: false,
@@ -47,7 +47,7 @@ const InvitePage: React.FC = () => {
         visible: false,
     });
 
-    // Breadcrumb items for invite page
+    // Breadcrumb items for setup page
     const breadcrumbItems = [{ label: 'Self-Hosting Setup' }];
     const optionalEnv = `# Optional generation providers (configure at least one for AI responses)
 OPENAI_API_KEY=your_openai_api_key
@@ -1220,4 +1220,4 @@ DISCORD_GUILD_ID=your_discord_guild_id          # Discord server/guild ID (Strin
     );
 };
 
-export default InvitePage;
+export default SetupPage;

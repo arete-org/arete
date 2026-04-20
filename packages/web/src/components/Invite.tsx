@@ -43,7 +43,7 @@ const Invite = (): JSX.Element => (
         </div>
         <a
             className="inline-cta"
-            href="/invite/"
+            href="/setup/"
             aria-label="View setup instructions"
         >
             <span aria-hidden="true">🛠</span> Open Setup Guide

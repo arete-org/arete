@@ -124,7 +124,7 @@ const Hero = (): JSX.Element => {
                                         <code>pnpm dev</code>
                                     </li>
                                 </ol>
-                                <a href="/invite/" className="inline-cta">
+                                <a href="/setup/" className="inline-cta">
                                     Full setup guide
                                     <span aria-hidden="true">↗</span>
                                 </a>

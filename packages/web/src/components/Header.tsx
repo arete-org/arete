@@ -27,8 +27,11 @@ const Header = ({ breadcrumbItems }: HeaderProps): JSX.Element => {
     const location = useLocation();
     const pathname = location.pathname;
 
-    // Hide Setup button on setup/invite page
-    const showSetupButton = !pathname.startsWith('/invite');
+    // Hide Setup button on setup page
+    const showSetupButton = !pathname.startsWith('/setup');
+
+    // Hide About button on about page
+    const showAboutButton = !pathname.startsWith('/about');
 
     // Hide Blog button on blog pages
     const showBlogButton = !pathname.startsWith('/blog');
@@ -46,10 +49,35 @@ const Header = ({ breadcrumbItems }: HeaderProps): JSX.Element => {
                     <Breadcrumb items={breadcrumbItems} />
                 </div>
                 <div className="site-header-actions">
+                    {showAboutButton && (
+                        <a
+                            className="header-button secondary"
+                            href="/about"
+                            {...(pathname === '/embed'
+                                ? {
+                                      target: '_blank',
+                                      rel: 'noopener noreferrer',
+                                  }
+                                : {})}
+                            aria-label={
+                                pathname === '/embed'
+                                    ? 'About (opens in new tab)'
+                                    : 'About'
+                            }
+                        >
+                            About
+                            {pathname === '/embed' && (
+                                <>
+                                    {' '}
+                                    <span aria-hidden="true">↗</span>
+                                </>
+                            )}
+                        </a>
+                    )}
                     {showSetupButton && (
                         <a
                             className="header-button secondary"
-                            href="/invite/"
+                            href="/setup/"
                             {...(pathname === '/embed'
                                 ? {
                                       target: '_blank',

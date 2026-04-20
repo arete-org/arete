@@ -7,7 +7,7 @@
  */
 
 /**
- * Breadcrumb component displays navigation trail for blog and invite pages.
+ * Breadcrumb component displays navigation trail for blog and standalone pages.
  * Shows current page and provides links back to parent pages and home.
  */
 import { Link } from 'react-router-dom';

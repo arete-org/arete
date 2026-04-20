@@ -33,7 +33,7 @@ const PRINCIPLES: Principle[] = [
         description:
             'Run Footnote in your own environment, with your own credentials and provider choices.',
         link: {
-            href: '/invite/',
+            href: '/setup/',
             label: 'Quickstart setup',
         },
     },

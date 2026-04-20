@@ -38,7 +38,7 @@ const OpenPhilosophy = (): JSX.Element => (
                 <div className="cta-group" aria-label="Primary actions">
                     <a
                         className="cta-button primary"
-                        href="/invite/"
+                        href="/setup/"
                         aria-label="View setup guide"
                     >
                         Setup Guide <span aria-hidden="true">↗</span>
