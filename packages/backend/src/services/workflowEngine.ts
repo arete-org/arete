@@ -415,8 +415,7 @@ const isPlannerReasonCode = (
 > => value === 'planner_runtime_error' || value === 'planner_invalid_output';
 
 /**
- * Builds a planner-specific workflow step record for short-lived lineage
- * bridging while planner execution is still orchestrator-frontloaded.
+ * Builds a planner-specific workflow step record for workflow lineage.
  *
  * Keep this mapper narrow and bounded to planner-safe summary fields only.
  * It must not become a generic workflow-step factory.

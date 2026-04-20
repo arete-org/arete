@@ -74,7 +74,10 @@ const ProvenanceFooter = ({
             }
         });
     }
-    const executionSummary = formatExecutionTimelineSummary(metadata.execution);
+    const executionSummary = formatExecutionTimelineSummary(
+        metadata.execution,
+        metadata.workflow
+    );
     const evaluatorOutcome = metadata.evaluator;
     const searchUnavailableWarning = metadata.execution?.some(
         (event) =>

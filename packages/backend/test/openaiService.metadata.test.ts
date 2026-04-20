@@ -412,19 +412,6 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
 
     assert.deepEqual(metadata.execution, [
         {
-            kind: 'planner',
-            status: 'executed',
-            purpose: 'chat_orchestrator_action_selection',
-            contractType: 'structured',
-            applyOutcome: 'applied',
-            mattered: true,
-            matteredControlIds: ['provider_preference'],
-            profileId: 'openai-text-fast',
-            provider: 'openai',
-            model: 'gpt-5-nano',
-            durationMs: 12,
-        },
-        {
             kind: 'evaluator',
             status: 'executed',
             evaluator: {
@@ -464,6 +451,80 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
             ruleId: null,
         },
     });
+});
+
+test('buildResponseMetadata ignores planner execution bridge fields and keeps execution timeline non-planner only', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            workflow: {
+                workflowId: 'wf_123',
+                workflowName: 'message_with_review_loop',
+                status: 'completed',
+                terminationReason: 'goal_satisfied',
+                stepCount: 2,
+                maxSteps: 3,
+                maxDurationMs: 15000,
+                steps: [
+                    {
+                        stepId: 'step_plan_1',
+                        attempt: 1,
+                        stepKind: 'plan',
+                        startedAt: '2026-04-01T00:00:00.000Z',
+                        finishedAt: '2026-04-01T00:00:00.010Z',
+                        durationMs: 10,
+                        outcome: {
+                            status: 'executed',
+                            summary:
+                                'Planner step emitted bounded action-selection summary.',
+                        },
+                    },
+                    {
+                        stepId: 'step_1',
+                        attempt: 1,
+                        stepKind: 'generate',
+                        startedAt: '2026-04-01T00:00:00.011Z',
+                        finishedAt: '2026-04-01T00:00:00.020Z',
+                        durationMs: 9,
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Generated initial draft response.',
+                        },
+                    },
+                ],
+            },
+            executionContext: {
+                planner: {
+                    status: 'executed',
+                    purpose: 'chat_orchestrator_action_selection',
+                    contractType: 'structured',
+                    applyOutcome: 'applied',
+                    mattered: true,
+                    matteredControlIds: ['provider_preference'],
+                    profileId: 'openai-text-fast',
+                    provider: 'openai',
+                    model: 'gpt-5-nano',
+                    durationMs: 12,
+                },
+                generation: {
+                    status: 'executed',
+                    profileId: 'openai-text-medium',
+                    provider: 'openai',
+                    model: 'gpt-5-mini',
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'generation',
+            status: 'executed',
+            profileId: 'openai-text-medium',
+            provider: 'openai',
+            model: 'gpt-5-mini',
+        },
+    ]);
 });
 
 test('buildResponseMetadata mirrors modelVersion from final generation execution model', () => {
@@ -583,7 +644,7 @@ test('buildResponseMetadata normalizes failed tool event with fallback reasonCod
     ]);
 });
 
-test('buildResponseMetadata keeps failed planner reasonCode in execution timeline', () => {
+test('buildResponseMetadata ignores failed planner execution bridge fields', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
         baseRuntimeContext({
@@ -604,24 +665,10 @@ test('buildResponseMetadata keeps failed planner reasonCode in execution timelin
         })
     );
 
-    assert.deepEqual(metadata.execution, [
-        {
-            kind: 'planner',
-            status: 'failed',
-            reasonCode: 'planner_runtime_error',
-            purpose: 'chat_orchestrator_action_selection',
-            contractType: 'fallback',
-            applyOutcome: 'not_applied',
-            mattered: false,
-            matteredControlIds: [],
-            profileId: 'openai-text-fast',
-            provider: 'openai',
-            model: 'gpt-5-nano',
-        },
-    ]);
+    assert.equal(metadata.execution, undefined);
 });
 
-test('buildResponseMetadata drops invalid planner reasonCode instead of rewriting it', () => {
+test('buildResponseMetadata ignores planner execution bridge fields regardless of planner reasonCode validity', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
         baseRuntimeContext({
@@ -642,23 +689,10 @@ test('buildResponseMetadata drops invalid planner reasonCode instead of rewritin
         })
     );
 
-    assert.deepEqual(metadata.execution, [
-        {
-            kind: 'planner',
-            status: 'failed',
-            purpose: 'chat_orchestrator_action_selection',
-            contractType: 'fallback',
-            applyOutcome: 'not_applied',
-            mattered: false,
-            matteredControlIds: [],
-            profileId: 'openai-text-fast',
-            provider: 'openai',
-            model: 'gpt-5-nano',
-        },
-    ]);
+    assert.equal(metadata.execution, undefined);
 });
 
-test('buildResponseMetadata does not emit planner/evaluator/generation reasonCode for skipped status', () => {
+test('buildResponseMetadata does not emit evaluator/generation reasonCode for skipped status and ignores planner bridge', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
         baseRuntimeContext({
@@ -691,18 +725,6 @@ test('buildResponseMetadata does not emit planner/evaluator/generation reasonCod
     );
 
     assert.deepEqual(metadata.execution, [
-        {
-            kind: 'planner',
-            status: 'skipped',
-            purpose: 'chat_orchestrator_action_selection',
-            contractType: 'fallback',
-            applyOutcome: 'not_applied',
-            mattered: false,
-            matteredControlIds: [],
-            profileId: 'openai-text-fast',
-            provider: 'openai',
-            model: 'gpt-5-nano',
-        },
         {
             kind: 'evaluator',
             status: 'skipped',

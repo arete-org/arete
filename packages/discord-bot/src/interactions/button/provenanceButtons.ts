@@ -358,7 +358,10 @@ function formatExecutionSection(
     }
 
     const lines = ['**Execution**'];
-    const summary = formatExecutionTimelineSummary(payload.execution);
+    const summary = formatExecutionTimelineSummary(
+        payload.execution,
+        payload.workflow
+    );
     if (summary) {
         lines.push(`- Timeline: \`${formatMarkdownValue(summary, 180)}\``);
     } else {

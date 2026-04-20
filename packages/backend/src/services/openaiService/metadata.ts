@@ -14,13 +14,8 @@ import type {
     ExecutionStatus,
     EvaluatorExecutionReasonCode,
     GenerationExecutionReasonCode,
-    PlannerExecutionApplyOutcome,
-    PlannerExecutionContractType,
-    PlannerExecutionPurpose,
-    PlannerExecutionReasonCode,
     ResponseMetadata,
     SafetyTier,
-    SteerabilityControlId,
     ToolInvocationReasonCode,
     TraceAxisScore,
 } from '@footnote/contracts/ethics-core';
@@ -78,67 +73,6 @@ const normalizePlannerTemperament = (
 
     return Object.keys(normalized).length > 0 ? normalized : undefined;
 };
-
-const normalizePlannerReasonCode = (
-    status: ExecutionStatus,
-    reasonCode: ExecutionReasonCode | undefined
-): PlannerExecutionReasonCode | undefined => {
-    if (status === 'executed' || status === 'skipped') {
-        return undefined;
-    }
-
-    if (
-        reasonCode === 'planner_runtime_error' ||
-        reasonCode === 'planner_invalid_output'
-    ) {
-        return reasonCode;
-    }
-
-    return undefined;
-};
-
-const parsePlannerPurpose = (
-    value: unknown
-): PlannerExecutionPurpose | undefined =>
-    value === 'chat_orchestrator_action_selection' ? value : undefined;
-
-const parsePlannerContractType = (
-    value: unknown
-): PlannerExecutionContractType | undefined => {
-    if (
-        value === 'structured' ||
-        value === 'text_json' ||
-        value === 'fallback'
-    ) {
-        return value;
-    }
-
-    return undefined;
-};
-
-const parsePlannerApplyOutcome = (
-    value: unknown
-): PlannerExecutionApplyOutcome | undefined => {
-    if (
-        value === 'applied' ||
-        value === 'adjusted_by_policy' ||
-        value === 'not_applied'
-    ) {
-        return value;
-    }
-
-    return undefined;
-};
-
-const isSteerabilityControlId = (
-    value: unknown
-): value is SteerabilityControlId =>
-    value === 'workflow_mode' ||
-    value === 'evidence_strictness' ||
-    value === 'review_intensity' ||
-    value === 'provider_preference' ||
-    value === 'persona_tone_overlay' ||
-    value === 'tool_allowance';
 
 const normalizeEvaluatorReasonCode = (
     status: ExecutionStatus,
@@ -209,7 +143,7 @@ const normalizeToolReasonCode = (
  * - execution/workflow are structural record surfaces for what happened.
  * - workflowMode is execution-policy metadata.
  * - TRACE (trace_target/trace_final + optional chips) is answer-posture metadata.
- * - planner influence is represented in execution[] planner events.
+ * - planner influence is represented in workflow.steps[] (stepKind=plan).
  * - steerability control influence is represented in steerabilityControls.
  * - provenance/provenanceAssessment are compact grounding classification-method
  *   metadata and may include deterministic heuristic derivation.
@@ -320,121 +254,6 @@ const buildResponseMetadata = (
     const safetyTier: SafetyTier = 'Low';
     const licenseContext = 'MIT + HL3';
     const execution: ExecutionEvent[] = [];
-    const plannerExecution = runtimeContext.executionContext?.planner;
-    if (plannerExecution) {
-        // TODO(workflow-planner-step-metadata): Planner is not workflow-native
-        // in lineage yet. If workflows support multiple planner invocations,
-        // add explicit attempt/correlation metadata without letting planner
-        // events redefine orchestration authority or step ownership.
-        // Treat this block as metadata ingestion only, not a policy hook.
-        // Turn the planner record from runtime context into the shared
-        // execution-event shape. If required fields are missing, drop it here
-        // instead of storing something half-valid.
-        const normalizedPlannerReasonCode = normalizePlannerReasonCode(
-            plannerExecution.status,
-            plannerExecution.reasonCode
-        );
-        const validatedPlannerPurpose = parsePlannerPurpose(
-            plannerExecution.purpose
-        );
-        const validatedPlannerContractType = parsePlannerContractType(
-            plannerExecution.contractType
-        );
-        const validatedPlannerApplyOutcome = parsePlannerApplyOutcome(
-            plannerExecution.applyOutcome
-        );
-        const plannerExecutionSource =
-            'runtimeContext.executionContext.planner';
-        const hasValidMattered = typeof plannerExecution.mattered === 'boolean';
-        const sanitizedMatteredControlIds = Array.isArray(
-            plannerExecution.matteredControlIds
-        )
-            ? plannerExecution.matteredControlIds.filter(
-                  isSteerabilityControlId
-              )
-            : [];
-        const invalidPlannerFields: Array<{
-            field:
-                | 'purpose'
-                | 'contractType'
-                | 'applyOutcome'
-                | 'mattered'
-                | 'matteredControlIds';
-            value: unknown;
-        }> = [];
-        if (validatedPlannerPurpose === undefined) {
-            invalidPlannerFields.push({
-                field: 'purpose',
-                value: plannerExecution.purpose,
-            });
-        }
-        if (validatedPlannerContractType === undefined) {
-            invalidPlannerFields.push({
-                field: 'contractType',
-                value: plannerExecution.contractType,
-            });
-        }
-        if (validatedPlannerApplyOutcome === undefined) {
-            invalidPlannerFields.push({
-                field: 'applyOutcome',
-                value: plannerExecution.applyOutcome,
-            });
-        }
-        if (!hasValidMattered) {
-            invalidPlannerFields.push({
-                field: 'mattered',
-                value: plannerExecution.mattered,
-            });
-        }
-        if (!Array.isArray(plannerExecution.matteredControlIds)) {
-            invalidPlannerFields.push({
-                field: 'matteredControlIds',
-                value: plannerExecution.matteredControlIds,
-            });
-        }
-
-        if (
-            validatedPlannerPurpose === undefined ||
-            validatedPlannerContractType === undefined ||
-            validatedPlannerApplyOutcome === undefined ||
-            !hasValidMattered
-        ) {
-            logger.error(
-                'planner execution metadata dropped due invalid required fields',
-                {
-                    responseId,
-                    source: plannerExecutionSource,
-                    plannerStatus: plannerExecution.status,
-                    invalidPlannerFields,
-                }
-            );
-        } else {
-            execution.push({
-                kind: 'planner',
-                status: plannerExecution.status,
-                purpose: validatedPlannerPurpose,
-                contractType: validatedPlannerContractType,
-                applyOutcome: validatedPlannerApplyOutcome,
-                mattered: plannerExecution.mattered,
-                matteredControlIds: sanitizedMatteredControlIds,
-                profileId: plannerExecution.profileId,
-                ...(plannerExecution.originalProfileId !== undefined && {
-                    originalProfileId: plannerExecution.originalProfileId,
-                }),
-                ...(plannerExecution.effectiveProfileId !== undefined && {
-                    effectiveProfileId: plannerExecution.effectiveProfileId,
-                }),
-                provider: plannerExecution.provider,
-                model: plannerExecution.model,
-                ...(normalizedPlannerReasonCode !== undefined && {
-                    reasonCode: normalizedPlannerReasonCode,
-                }),
-                ...(plannerExecution.durationMs !== undefined && {
-                    durationMs: plannerExecution.durationMs,
-                }),
-            });
-        }
-    }
     const evaluatorExecution = runtimeContext.executionContext?.evaluator;
     if (evaluatorExecution) {
         // The evaluator already decided this. We are only copying that result

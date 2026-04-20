@@ -248,6 +248,62 @@ const OWNERSHIP_DENIAL_PREFIXES: readonly string[] = [
     'insufficient_data:',
 ];
 
+const hasPlannerWorkflowStep = (workflow: WorkflowRecord): boolean =>
+    workflow.steps.some((step) => step.stepKind === 'plan');
+
+const attachPlannerWorkflowLineage = (input: {
+    workflowLineage: WorkflowRecord;
+    executionContext: ResponseMetadataRuntimeContext['executionContext'];
+    generationStartedAtMs: number;
+}): WorkflowRecord => {
+    const plannerExecution = input.executionContext?.planner;
+    if (plannerExecution === undefined) {
+        return input.workflowLineage;
+    }
+
+    if (hasPlannerWorkflowStep(input.workflowLineage)) {
+        return input.workflowLineage;
+    }
+
+    const existingStepIds = new Set(
+        input.workflowLineage.steps.map((step) => step.stepId)
+    );
+    let plannerStepId = 'step_plan_1';
+    let plannerStepIndex = 1;
+    while (existingStepIds.has(plannerStepId)) {
+        plannerStepIndex += 1;
+        plannerStepId = `step_plan_${plannerStepIndex}`;
+    }
+
+    const plannerStep = buildPlannerStepRecord({
+        stepId: plannerStepId,
+        attempt: 1,
+        finishedAtMs: input.generationStartedAtMs,
+        summary: {
+            status: plannerExecution.status,
+            reasonCode: plannerExecution.reasonCode,
+            purpose: plannerExecution.purpose,
+            contractType: plannerExecution.contractType,
+            applyOutcome: plannerExecution.applyOutcome,
+            durationMs: plannerExecution.durationMs,
+            profileId: plannerExecution.profileId,
+            originalProfileId: plannerExecution.originalProfileId,
+            effectiveProfileId: plannerExecution.effectiveProfileId,
+            provider: plannerExecution.provider,
+            model: plannerExecution.model,
+            mattered: plannerExecution.mattered,
+            matteredControlIds: plannerExecution.matteredControlIds,
+        },
+    });
+
+    return {
+        ...input.workflowLineage,
+        stepCount: input.workflowLineage.steps.length + 1,
+        maxSteps: input.workflowLineage.maxSteps + 1,
+        steps: [plannerStep, ...input.workflowLineage.steps],
+    };
+};
+
 const extractOwnershipDenialReason = (
     details: string | undefined
 ):
@@ -937,14 +993,22 @@ export const createChatService = ({
                     durationMs: generationDurationMs,
                 } satisfies GenerationExecutionContext)
               : undefined;
+        const normalizedWorkflowLineage =
+            workflowLineage !== undefined
+                ? attachPlannerWorkflowLineage({
+                      workflowLineage,
+                      executionContext,
+                      generationStartedAtMs: generationStartedAt,
+                  })
+                : undefined;
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
             conversationSnapshot: `${conversationSnapshot}\n\n${generationResult.text}`,
             ...(totalDurationMs !== undefined && { totalDurationMs }),
             plannerTemperament,
-            ...(workflowLineage !== undefined && {
-                workflow: workflowLineage,
+            ...(normalizedWorkflowLineage !== undefined && {
+                workflow: normalizedWorkflowLineage,
             }),
             executionContext: {
                 // Preserve upstream execution context and overlay runtime facts

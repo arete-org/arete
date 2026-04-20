@@ -5,7 +5,7 @@
  * @footnote-risk: low - Formatting mistakes may confuse operator visibility but do not affect runtime behavior.
  * @footnote-ethics: medium - Clear execution rendering supports transparency across user-facing surfaces.
  */
-import type { ExecutionEvent } from './types.js';
+import type { ExecutionEvent, StepRecord, WorkflowRecord } from './types.js';
 
 const formatEvaluatorSummary = (event: ExecutionEvent): string => {
     if (event.kind !== 'evaluator') {
@@ -87,15 +87,46 @@ const formatExecutionEvent = (event: ExecutionEvent): string => {
     return `${event.kind}:${modelOrProfile}(${event.status}${reasonSuffix}${durationSuffix})`;
 };
 
+const formatWorkflowPlannerStep = (step: StepRecord): string => {
+    const durationSuffix =
+        step.durationMs !== undefined ? `, ${step.durationMs}ms` : '';
+    const reasonSuffix =
+        step.outcome.status === 'executed' || !step.reasonCode
+            ? ''
+            : `, ${step.reasonCode}`;
+    const profileIdSignal = step.outcome.signals?.profileId;
+    const modelOrProfile =
+        step.model ??
+        (typeof profileIdSignal === 'string' &&
+        profileIdSignal.trim().length > 0
+            ? profileIdSignal
+            : 'workflow');
+    return `planner:${modelOrProfile}(${step.outcome.status}${reasonSuffix}${durationSuffix})`;
+};
+
 /**
  * Formats execution[] into a compact one-line summary.
  */
 export const formatExecutionTimelineSummary = (
-    execution: ExecutionEvent[] | undefined
+    execution: ExecutionEvent[] | undefined,
+    workflow?: WorkflowRecord
 ): string | null => {
-    if (!execution || execution.length === 0) {
+    const executionEvents = execution ?? [];
+    const workflowPlannerSummaries =
+        workflow?.steps
+            .filter((step) => step.stepKind === 'plan')
+            .map(formatWorkflowPlannerStep) ?? [];
+    const executionSummaries = executionEvents
+        .filter((event) => event.kind !== 'planner')
+        .map(formatExecutionEvent);
+    const timelineSegments = [
+        ...workflowPlannerSummaries,
+        ...executionSummaries,
+    ];
+
+    if (timelineSegments.length === 0) {
         return null;
     }
 
-    return execution.map(formatExecutionEvent).join(' -> ');
+    return timelineSegments.join(' -> ');
 };

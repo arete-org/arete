@@ -372,6 +372,100 @@ test('runChatMessages forwards execution context into metadata runtime context (
     assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
 });
 
+test('runChatMessages records planner lineage in workflow steps for bounded-review runs and avoids duplicate planner execution events', async () => {
+    const chatService = createChatService({
+        generationRuntime: createRuntime({
+            model: 'gpt-5-mini',
+            provenance: 'Inferred',
+            citations: [],
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'grounded',
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        runReviewWorkflow: async (input) =>
+            ({
+                outcome: 'generated',
+                generationResult: {
+                    text: 'workflow generated response',
+                    model: input.generationRequest.model,
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 5,
+                        totalTokens: 15,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                },
+                workflowLineage: {
+                    workflowId: 'wf_lineage',
+                    workflowName: input.workflowConfig.workflowName,
+                    status: 'completed',
+                    terminationReason: 'goal_satisfied',
+                    stepCount: 1,
+                    maxSteps:
+                        input.workflowConfig.executionLimits
+                            ?.maxWorkflowSteps ?? 1,
+                    maxDurationMs: input.workflowConfig.maxDurationMs,
+                    steps: [
+                        {
+                            stepId: 'step_1',
+                            attempt: 1,
+                            stepKind: 'generate',
+                            startedAt: new Date().toISOString(),
+                            finishedAt: new Date().toISOString(),
+                            durationMs: 1,
+                            outcome: {
+                                status: 'executed',
+                                summary:
+                                    'Generated response through workflow path.',
+                            },
+                        },
+                    ],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+        executionContext: {
+            planner: {
+                status: 'executed',
+                purpose: 'chat_orchestrator_action_selection',
+                contractType: 'structured',
+                applyOutcome: 'applied',
+                mattered: true,
+                matteredControlIds: ['tool_allowance'],
+                profileId: 'openai-text-fast',
+                provider: 'openai',
+                model: 'gpt-5-nano',
+                durationMs: 11,
+            },
+            generation: {
+                status: 'executed',
+                profileId: 'openai-text-medium',
+                provider: 'openai',
+                model: 'gpt-5-mini',
+            },
+        },
+    });
+
+    assert.ok(response.metadata.workflow);
+    assert.equal(response.metadata.workflow?.steps[0]?.stepKind, 'plan');
+    assert.equal(response.metadata.workflow?.stepCount, 2);
+    const plannerExecutionEvent = response.metadata.execution?.find(
+        (event) => event.kind === 'planner'
+    );
+    assert.equal(plannerExecutionEvent, undefined);
+});
+
 test('runChatMessages marks tool execution as executed when retrieval was used', async () => {
     let capturedExecutionContext:
         | ResponseMetadataRuntimeContext['executionContext']
