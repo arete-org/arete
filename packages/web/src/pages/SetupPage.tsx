@@ -47,7 +47,7 @@ const SetupPage: React.FC = () => {
         visible: false,
     });
 
-    // Breadcrumb items for invite page
+    // Breadcrumb items for setup page
     const breadcrumbItems = [{ label: 'Self-Hosting Setup' }];
     const optionalEnv = `# Optional generation providers (configure at least one for AI responses)
 OPENAI_API_KEY=your_openai_api_key
