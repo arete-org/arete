@@ -9,9 +9,8 @@
 This RFC is historical design context for the workflow-engine rollout.
 For the current first-read explanation, use:
 
-- [Workflow Mode Routing](./workflow-mode-routing.md)
-- [Workflow Engine And Provenance](./workflow-engine-and-provenance.md)
-- [Workflow Profile Contract](./workflow-profile-contract.md)
+- [Workflow Runtime](./workflow-runtime.md)
+- [Workflow Language](./workflow-language.md)
 
 ## Why This Exists
 
