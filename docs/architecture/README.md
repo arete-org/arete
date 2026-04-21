@@ -15,9 +15,6 @@ the best starting point.
 3. [Response Metadata](./response-metadata.md):
    use this when you need the metadata map for mode, TRACE, planner influence,
    steerability, and provenance.
-4. [Workflow](./workflow.md):
-   use this after the metadata guide for the current engine flow and workflow
-   lineage records.
 
 ## Important Adjacent Docs
 
