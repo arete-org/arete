@@ -9,8 +9,7 @@
 This RFC is historical design context for the workflow-engine rollout.
 For the current first-read explanation, use:
 
-- [Workflow Runtime](./workflow-runtime.md)
-- [Workflow Language](./workflow-language.md)
+- [Workflow](./workflow.md)
 
 ## Why This Exists
 

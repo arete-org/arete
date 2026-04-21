@@ -21,8 +21,7 @@ the main workflow/planner explainer.
 
 Current architecture references:
 
-- `docs/architecture/workflow-runtime.md`
-- `docs/architecture/workflow-language.md`
+- `docs/architecture/workflow.md`
 
 ## Snapshot
 

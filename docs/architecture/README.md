@@ -9,19 +9,19 @@ the best starting point.
 
 1. [Execution Contract Authority Map](./execution-contract-authority-map.md):
    start here for system authority and ownership boundaries.
-2. [Workflow Runtime](./workflow-runtime.md): read this next for the
+2. [Workflow](./workflow.md): read this next for the
    current workflow and planner model, including mode, profile, review/revise,
    and planner boundaries.
 3. [Response Metadata](./response-metadata.md):
    use this when you need the metadata map for mode, TRACE, planner influence,
    steerability, and provenance.
-4. [Workflow Language](./workflow-language.md):
+4. [Workflow](./workflow.md):
    use this after the metadata guide for the current engine flow and workflow
    lineage records.
 
 ## Important Adjacent Docs
 
-- [Workflow Language](./workflow-language.md): current note for workflow-facing
+- [Workflow](./workflow.md): current note for workflow-facing
   wording, placement, and provenance presentation boundaries.
 - [Prompt Resolution Order](./prompt-resolution.md): how prompt layers and
   overrides resolve at runtime.
