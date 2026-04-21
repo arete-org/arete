@@ -241,6 +241,54 @@ replacement of Footnote trace/provenance semantics.
 
 ---
 
+## Longer-Term Direction
+
+There is a larger idea behind this, but it should not be part of the first Langfuse integration.
+
+In the future, Footnote may be able to adjust workflow execution based on evidence gathered outside the current request. That could include things like:
+
+- eval results from previous runs,
+- fallback patterns across providers,
+- known weak prompt/model combinations,
+- TrustGraph evidence about sources or claims,
+- operator-reviewed examples,
+- or aggregate quality signals from observability tools.
+
+Used carefully, that could help Footnote choose a more appropriate workflow path. For example, it might route some requests toward a more careful review path, avoid a weak provider/model combination, require stronger grounding for certain source types, or flag a run for extra trace visibility.
+
+That is not what the first Langfuse experiment should do.
+
+The first Langfuse integration should observe. It should not steer.
+
+Any future adaptive workflow behavior needs its own design decision, because it changes the authority model. The question would no longer be only “what happened?” It would become “what outside evidence is allowed to change what happens next?”
+
+That boundary matters.
+
+If external signals ever influence workflow execution, Footnote should keep a few rules:
+
+- the Execution Contract still sets the allowed run rules;
+- workflow still owns sequencing;
+- external systems provide advisory signals, not hidden authority;
+- any adjustment should be visible in trace/provenance;
+- the reason for the adjustment should be recorded;
+- stale or missing external signals should fail open or fall back predictably;
+- user privacy and consent rules should apply before telemetry becomes control input;
+- and no vendor tool should become the silent policy engine.
+
+Langfuse might eventually help produce useful aggregate signals. TrustGraph might eventually provide source or evidence signals. Operator evals might eventually identify weak paths. But none of those should silently rewrite runtime behavior.
+
+The safe path is:
+
+1. observe runs;
+2. evaluate patterns;
+3. summarize findings;
+4. let Footnote-owned policy decide whether those findings can affect workflow;
+5. record any adjustment when it happens.
+
+That keeps the door open without pretending the door is already safe to walk through.
+
+---
+
 ## References And Notes
 
 - Footnote Workflow Engine And Provenance:
