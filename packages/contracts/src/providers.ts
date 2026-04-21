@@ -27,22 +27,60 @@ export const supportedNodeEnvs = ['production', 'development', 'test'] as const;
 export type SupportedNodeEnv = (typeof supportedNodeEnvs)[number];
 
 /**
- * OpenAI text models Footnote knows how to validate, display, and price today.
- * This list is the shared source of truth for trusted image-task contracts and
- * other curated model pickers.
+ * OpenAI text-capable model ids Footnote knows how to validate and display.
+ * Pricing support is tracked separately in shared pricing tables.
  */
 export const supportedOpenAITextModels = [
-    'gpt-5.2',
+    'gpt-5.4',
+    'gpt-5.4-pro',
     'gpt-5.4-mini',
-    'gpt-5.1',
-    'gpt-5',
+    'gpt-5.4-nano',
     'gpt-5-mini',
     'gpt-5-nano',
+    'gpt-5',
+    'gpt-4.1',
+    'gpt-5-codex',
+    'gpt-5.3-codex',
+    'gpt-5.2',
+    'gpt-5.2-codex',
+    'gpt-5.1',
+    'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
+    'gpt-5.1-codex-mini',
+    'codex-mini-latest',
+    'o3-deep-research',
+    'o4-mini-deep-research',
+    'gpt-oss-120b',
+    'gpt-oss-20b',
+    'gpt-5.2-pro',
+    'gpt-5-pro',
+    'o3-pro',
+    'o3',
+    'o4-mini',
+    'o1-pro',
+    'computer-use-preview',
+    'gpt-4o-mini-search-preview',
+    'gpt-4o-search-preview',
+    'gpt-4.5-preview',
+    'o3-mini',
+    'o1',
+    'o1-mini',
+    'o1-preview',
     'gpt-4o',
     'gpt-4o-mini',
-    'gpt-4.1',
     'gpt-4.1-mini',
     'gpt-4.1-nano',
+    'gpt-4-turbo',
+    'babbage-002',
+    'chatgpt-4o-latest',
+    'davinci-002',
+    'gpt-3.5-turbo',
+    'gpt-4',
+    'gpt-4-turbo-preview',
+    'gpt-5.3-chat-latest',
+    'gpt-5.2-chat-latest',
+    'gpt-5.1-chat-latest',
+    'gpt-5-chat-latest',
 ] as const;
 
 /**
@@ -52,13 +90,16 @@ export type SupportedOpenAITextModel =
     (typeof supportedOpenAITextModels)[number];
 
 /**
- * OpenAI image models Footnote knows how to validate, display, and price
- * today.
+ * OpenAI image models Footnote knows how to validate and display.
  */
 export const supportedOpenAIImageModels = [
+    'gpt-image-2',
     'gpt-image-1.5',
+    'chatgpt-image-latest',
     'gpt-image-1',
     'gpt-image-1-mini',
+    'dall-e-3',
+    'dall-e-2',
 ] as const;
 
 /**
@@ -68,7 +109,7 @@ export type SupportedOpenAIImageModel =
     (typeof supportedOpenAIImageModels)[number];
 
 /**
- * OpenAI TTS models Footnote knows how to validate and price today.
+ * OpenAI TTS models Footnote knows how to validate today.
  */
 export const supportedOpenAITtsModels = [
     'tts-1',
@@ -106,8 +147,11 @@ export type SupportedOpenAITtsVoice = (typeof supportedOpenAITtsVoices)[number];
  * OpenAI realtime models Footnote knows how to validate today.
  */
 export const supportedOpenAIRealtimeModels = [
+    'gpt-realtime-1.5',
     'gpt-realtime',
     'gpt-realtime-mini',
+    'gpt-4o-realtime-preview',
+    'gpt-4o-mini-realtime-preview',
 ] as const;
 
 /**

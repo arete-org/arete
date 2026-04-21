@@ -17,7 +17,6 @@ import {
     resolveOpenAITextPricingModel,
     supportedPricedOpenAITextModels,
 } from '../src/pricing.js';
-import { supportedOpenAITextModels } from '../src/providers.js';
 
 test('estimateOpenAITextCost matches the shared GPT-5 mini pricing table', () => {
     const result = estimateOpenAITextCost('gpt-5-mini', 120, 80);
@@ -86,14 +85,16 @@ test('estimateOpenAIImageGenerationCost adds the partial preview surcharge', () 
     assert.ok(Math.abs(result.totalCost - 0.0316) < 1e-12);
 });
 
-test('supportedPricedOpenAITextModels includes the shared text registry plus embedding models', () => {
-    for (const model of supportedOpenAITextModels) {
-        assert.equal(supportedPricedOpenAITextModels.includes(model), true);
-    }
-
+test('supportedPricedOpenAITextModels includes priced models and embedding models', () => {
+    assert.equal(supportedPricedOpenAITextModels.includes('gpt-5-mini'), true);
     assert.equal(
         supportedPricedOpenAITextModels.includes('text-embedding-3-small'),
         true
+    );
+    assert.equal(supportedPricedOpenAITextModels.includes('gpt-5.4-pro'), true);
+    assert.equal(
+        supportedPricedOpenAITextModels.includes('computer-use-preview'),
+        false
     );
 });
 

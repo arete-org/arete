@@ -8,12 +8,9 @@
 
 import type {
     SupportedOpenAIImageModel,
-    SupportedOpenAIRealtimeModel,
     SupportedOpenAITextModel,
-    SupportedOpenAITtsModel,
     SupportedProvider,
 } from './providers.js';
-import { supportedOpenAITextModels } from './providers.js';
 
 /**
  * Embedding models that still need shared cost math even though they are not
@@ -35,7 +32,24 @@ export type SupportedOpenAIEmbeddingModel =
  * Any OpenAI text-capable model that Footnote knows how to price today.
  */
 export const supportedPricedOpenAITextModels = [
-    ...supportedOpenAITextModels,
+    'gpt-5.4',
+    'gpt-5.4-pro',
+    'gpt-5.2',
+    'gpt-5.4-mini',
+    'gpt-5.4-nano',
+    'gpt-5.1',
+    'gpt-5-pro',
+    'gpt-5.2-pro',
+    'gpt-5.3-codex',
+    'gpt-5.3-chat-latest',
+    'gpt-5',
+    'gpt-5-mini',
+    'gpt-5-nano',
+    'gpt-4o',
+    'gpt-4o-mini',
+    'gpt-4.1',
+    'gpt-4.1-mini',
+    'gpt-4.1-nano',
     ...supportedOpenAIEmbeddingModels,
 ] as const;
 
@@ -44,6 +58,51 @@ export const supportedPricedOpenAITextModels = [
  */
 export type PricedOpenAITextModel =
     (typeof supportedPricedOpenAITextModels)[number];
+
+/**
+ * OpenAI realtime model ids with shared backend pricing data.
+ */
+export const supportedPricedOpenAIRealtimeModels = [
+    'gpt-realtime-1.5',
+    'gpt-realtime',
+    'gpt-realtime-mini',
+] as const;
+
+/**
+ * One priced OpenAI realtime model identifier.
+ */
+export type PricedOpenAIRealtimeModel =
+    (typeof supportedPricedOpenAIRealtimeModels)[number];
+
+/**
+ * OpenAI TTS model ids with shared backend pricing data.
+ */
+export const supportedPricedOpenAITtsModels = [
+    'tts-1',
+    'tts-1-hd',
+    'gpt-4o-mini-tts',
+] as const;
+
+/**
+ * One priced OpenAI TTS model identifier.
+ */
+export type PricedOpenAITtsModel =
+    (typeof supportedPricedOpenAITtsModels)[number];
+
+/**
+ * OpenAI image model ids with shared backend pricing data.
+ */
+export const supportedPricedOpenAIImageModels = [
+    'gpt-image-1.5',
+    'gpt-image-1',
+    'gpt-image-1-mini',
+] as const;
+
+/**
+ * One priced OpenAI image model identifier.
+ */
+export type PricedOpenAIImageModel =
+    (typeof supportedPricedOpenAIImageModels)[number];
 
 /**
  * GPT-5 family identifiers used by Discord's text service layer.
@@ -216,15 +275,22 @@ type OpenAIImageTokenPricingEntry = {
 /**
  * Canonical text pricing per 1M tokens (USD).
  * Source: https://platform.openai.com/pricing
- * Last updated in-repo: 2026-03-29
+ * Last updated in-repo: 2026-04-21
  */
 export const openAITextPricingTable: Record<
     PricedOpenAITextModel,
     OpenAITextPricingEntry
 > = {
+    'gpt-5.4': { input: 2.5, output: 15.0 },
+    'gpt-5.4-pro': { input: 30.0, output: 180.0 },
     'gpt-5.2': { input: 1.75, output: 14.0 },
     'gpt-5.4-mini': { input: 0.75, output: 4.5 },
+    'gpt-5.4-nano': { input: 0.2, output: 1.25 },
     'gpt-5.1': { input: 1.25, output: 10.0 },
+    'gpt-5-pro': { input: 15.0, output: 120.0 },
+    'gpt-5.2-pro': { input: 21.0, output: 168.0 },
+    'gpt-5.3-codex': { input: 1.75, output: 14.0 },
+    'gpt-5.3-chat-latest': { input: 1.75, output: 14.0 },
     'gpt-5': { input: 1.25, output: 10.0 },
     'gpt-5-mini': { input: 0.25, output: 2.0 },
     'gpt-5-nano': { input: 0.05, output: 0.4 },
@@ -241,15 +307,16 @@ export const openAITextPricingTable: Record<
 /**
  * Canonical realtime pricing per 1M text tokens (USD).
  * Source: https://platform.openai.com/docs/models/gpt-realtime
- * Last updated in-repo: 2026-03-20
+ * Last updated in-repo: 2026-04-21
  *
  * We use the text-token row because the realtime usage payload currently
  * arrives as generic prompt/completion token counts at our backend boundary.
  */
 export const openAIRealtimePricingTable: Record<
-    SupportedOpenAIRealtimeModel,
+    PricedOpenAIRealtimeModel,
     OpenAIRealtimePricingEntry
 > = {
+    'gpt-realtime-1.5': { input: 4.0, output: 16.0 },
     'gpt-realtime': { input: 4.0, output: 16.0 },
     'gpt-realtime-mini': { input: 0.6, output: 2.4 },
 };
@@ -259,7 +326,7 @@ export const openAIRealtimePricingTable: Record<
  * Source: https://platform.openai.com/pricing
  * Last updated in-repo: 2026-03-20
  */
-export const openAITtsPricingTable: Record<SupportedOpenAITtsModel, number> = {
+export const openAITtsPricingTable: Record<PricedOpenAITtsModel, number> = {
     'tts-1': 15,
     'tts-1-hd': 30,
     'gpt-4o-mini-tts': 0.6,
@@ -271,7 +338,7 @@ export const openAITtsPricingTable: Record<SupportedOpenAITtsModel, number> = {
  * Last updated in-repo: 2025-12-18
  */
 export const openAIImageGenerationPricingTable: Record<
-    SupportedOpenAIImageModel,
+    PricedOpenAIImageModel,
     Record<
         PricedImageGenerationQuality,
         Record<PricedImageGenerationSize, number>
@@ -336,7 +403,7 @@ export const openAIImageGenerationPricingTable: Record<
  * Last updated in-repo: 2026-03-19
  */
 const openAIImageTokenPricingTable: Record<
-    SupportedOpenAIImageModel,
+    PricedOpenAIImageModel,
     OpenAIImageTokenPricingEntry
 > = {
     'gpt-image-1.5': { input: 8.0, output: 32.0 },
@@ -440,7 +507,7 @@ export const resolveOpenAITextPricingModel = (
  */
 export const resolveOpenAITtsPricingModel = (
     model: string
-): OpenAIModelPricingResolution<SupportedOpenAITtsModel> =>
+): OpenAIModelPricingResolution<PricedOpenAITtsModel> =>
     resolveOpenAIModelPricingKey(model, openAITtsPricingTable);
 
 /**
@@ -448,7 +515,7 @@ export const resolveOpenAITtsPricingModel = (
  */
 export const resolveOpenAIRealtimePricingModel = (
     model: string
-): OpenAIModelPricingResolution<SupportedOpenAIRealtimeModel> =>
+): OpenAIModelPricingResolution<PricedOpenAIRealtimeModel> =>
     resolveOpenAIModelPricingKey(model, openAIRealtimePricingTable);
 
 /**
@@ -457,7 +524,7 @@ export const resolveOpenAIRealtimePricingModel = (
  */
 export const resolveOpenAIImagePricingModel = (
     model: string
-): OpenAIModelPricingResolution<SupportedOpenAIImageModel> =>
+): OpenAIModelPricingResolution<PricedOpenAIImageModel> =>
     resolveOpenAIModelPricingKey(model, openAIImageGenerationPricingTable);
 
 /**
