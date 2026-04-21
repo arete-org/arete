@@ -240,16 +240,72 @@ body::before {
     box-sizing: border-box;
 }
 
-.route-loading {
-    padding: clamp(1.5rem, 4vw, 2.25rem) 0;
+.route-loading-shell {
+    min-height: clamp(18rem, 56vh, 30rem);
+    display: grid;
+    place-items: center;
+    padding: clamp(1.5rem, 4vw, 2.5rem) 0;
+}
+
+.route-loading-card {
+    width: min(100%, 40rem);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: clamp(1.15rem, 3vw, 1.6rem) clamp(1.2rem, 3.2vw, 1.85rem);
+    border-radius: 24px;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, var(--accent) 28%);
+    background-color: color-mix(in srgb, var(--bg-soft) 84%, #f3eee4 16%);
+    box-shadow: 0 18px 36px var(--shadow);
+}
+
+.route-loading-spinner {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: var(--accent);
+}
+
+.route-loading-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.route-loading-title {
+    margin: 0;
     font-family: var(--mono-font);
     font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.route-loading-detail {
+    margin: 0;
+    font-family: var(--body-font);
+    font-size: 0.92rem;
     color: var(--subtle-text);
+}
+
+[data-theme='dark'] .route-loading-card {
+    background-color: color-mix(
+        in srgb,
+        var(--bg-alt) 80%,
+        rgba(255, 255, 255, 0.12) 20%
+    );
+    border-color: color-mix(
+        in srgb,
+        var(--border) 56%,
+        rgba(255, 255, 255, 0.24) 44%
+    );
 }
 
 @media (max-width: 560px) {
     .app-shell {
         padding: clamp(1.35rem, 4vw, 2rem) clamp(1.15rem, 4vw, 1.85rem);
+    }
+
+    .route-loading-card {
+        align-items: flex-start;
     }
 }
 
