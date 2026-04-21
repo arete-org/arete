@@ -97,5 +97,267 @@ profiles:
               routing.generation.expressive-generation: false
       maxInputTokens: 131072
       # maxOutputTokens:
+      costClass: low
+      latencyClass: low
+
+    # ==========
+    # Ollama Playground (manual /chat selection only)
+    # ==========
+    # These profiles are intentionally unbound from text tiers so they do not
+    # change default mode routing. They are available for explicit profileId
+    # selection while workflows and routing policy continue evolving.
+    # Source for model names: https://ollama.com/api/tags and model library pages.
+    # Class rubric:
+    # - costClass approximates cloud spend from model/compute footprint.
+    # - latencyClass approximates turnaround from model size + capability tier.
+    - id: ollama-kimi-k2-6
+      description: Long-horizon agentic model for complex coding and orchestration tasks.
+      provider: ollama
+      providerModel: kimi-k2.6
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 262144
+      costClass: high
+      latencyClass: high
+
+    - id: ollama-glm-5-1
+      description: Flagship engineering model with stronger coding and terminal-task performance.
+      provider: ollama
+      providerModel: glm-5.1
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 262144
+      costClass: high
+      latencyClass: high
+
+    - id: ollama-gemma4-31b
+      description: General-purpose reasoning model with strong long-context performance.
+      provider: ollama
+      providerModel: gemma4:31b
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 262144
+      costClass: high
+      latencyClass: high
+
+    - id: ollama-qwen3-5-397b
+      description: Very large Qwen variant for demanding reasoning and analysis tasks.
+      provider: ollama
+      providerModel: qwen3.5:397b
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 262144
+      costClass: high
+      latencyClass: high
+
+    - id: ollama-qwen3-coder-next
+      description: Coding-focused model tuned for repository-scale development workflows.
+      provider: ollama
+      providerModel: qwen3-coder-next
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 262144
       costClass: medium
       latencyClass: medium
+
+    - id: ollama-ministral-3-14b
+      description: Smaller edge-friendly model for quick general-purpose assistance.
+      provider: ollama
+      providerModel: ministral-3:14b
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 131072
+      costClass: low
+      latencyClass: low
+
+    - id: ollama-devstral-small-2-24b
+      description: Tool-using engineering model for practical multi-file development tasks.
+      provider: ollama
+      providerModel: devstral-small-2:24b
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 131072
+      costClass: medium
+      latencyClass: medium
+
+    - id: ollama-nemotron-3-super
+      description: Large MoE reasoning model for complex multi-step problem solving.
+      provider: ollama
+      providerModel: nemotron-3-super
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 262144
+      costClass: high
+      latencyClass: high
+
+    - id: ollama-qwen3-next-80b
+      description: Efficient high-capability model optimized for speed and long context.
+      provider: ollama
+      providerModel: qwen3-next:80b
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 262144
+      costClass: medium
+      latencyClass: medium
+
+    - id: ollama-minimax-m2-7
+      description: High-end MiniMax model for advanced coding and productivity tasks.
+      provider: ollama
+      providerModel: minimax-m2.7
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 200000
+      costClass: high
+      latencyClass: high
+
+    - id: ollama-rnj-1-8b
+      description: Compact code-and-STEM-focused model for lightweight technical tasks.
+      provider: ollama
+      providerModel: rnj-1:8b
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 131072
+      costClass: low
+      latencyClass: low
+
+    - id: ollama-glm-5
+      description: Reasoning and agentic model for complex systems and engineering queries.
+      provider: ollama
+      providerModel: glm-5
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 262144
+      costClass: high
+      latencyClass: high
+
+    - id: ollama-nemotron-3-nano-30b
+      description: Smaller Nemotron option balancing reasoning quality and efficiency.
+      provider: ollama
+      providerModel: nemotron-3-nano:30b
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 131072
+      costClass: medium
+      latencyClass: low
+
+    - id: ollama-minimax-m2-5
+      description: Strong coding and agentic model with efficient multi-step execution.
+      provider: ollama
+      providerModel: minimax-m2.5
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 200000
+      costClass: medium
+      latencyClass: medium
+
+    - id: ollama-devstral-2-123b
+      description: Large tool-using engineering model for ambitious software tasks.
+      provider: ollama
+      providerModel: devstral-2:123b
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 262144
+      costClass: high
+      latencyClass: high
+
+    - id: ollama-cogito-2-1-671b
+      description: Very large instruction-tuned model for difficult open-ended requests.
+      provider: ollama
+      providerModel: cogito-2.1:671b
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 262144
+      costClass: high
+      latencyClass: high
+
+    - id: ollama-glm-4-7
+      description: Reasoning and coding-focused GLM model for broad technical queries.
+      provider: ollama
+      providerModel: glm-4.7
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 131072
+      costClass: medium
+      latencyClass: low
+
+    - id: ollama-deepseek-v3-2
+      description: Reasoning-forward model tuned for agentic and analysis-heavy tasks.
+      provider: ollama
+      providerModel: deepseek-v3.2
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 131072
+      costClass: high
+      latencyClass: high
+
+    - id: ollama-minimax-m2
+      description: Balanced MiniMax model for general coding and productivity use.
+      provider: ollama
+      providerModel: minimax-m2
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 200000
+      costClass: medium
+      latencyClass: low
+
+    - id: ollama-minimax-m2-1
+      description: Multilingual MiniMax variant with emphasis on code engineering.
+      provider: ollama
+      providerModel: minimax-m2.1
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 200000
+      costClass: medium
+      latencyClass: low
+
+    - id: ollama-gpt-oss-120b
+      description: Open-weight high-capability reasoning model for demanding text tasks.
+      provider: ollama
+      providerModel: gpt-oss:120b
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      maxInputTokens: 131072
+      costClass: high
+      latencyClass: high
