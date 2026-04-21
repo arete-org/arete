@@ -435,5 +435,3 @@ run look cleaner.
 
 - [Execution Contract Authority Map](./execution-contract-authority-map.md)
 - [Response Metadata](./response-metadata.md)
-- [Workflow Profiles V1 Engine Vs Profile Semantics](./workflow-profiles-v1-engine-vs-profile-semantics.md)
-- [Workflow Engine Rollout Status](../status/2026-04-workflow-engine-rollout-status.md)
