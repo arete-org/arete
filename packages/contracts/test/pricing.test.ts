@@ -86,16 +86,15 @@ test('estimateOpenAIImageGenerationCost adds the partial preview surcharge', () 
 });
 
 test('supportedPricedOpenAITextModels includes priced models and embedding models', () => {
+    const pricedModels = supportedPricedOpenAITextModels as readonly string[];
+
     assert.equal(supportedPricedOpenAITextModels.includes('gpt-5-mini'), true);
     assert.equal(
         supportedPricedOpenAITextModels.includes('text-embedding-3-small'),
         true
     );
     assert.equal(supportedPricedOpenAITextModels.includes('gpt-5.4-pro'), true);
-    assert.equal(
-        supportedPricedOpenAITextModels.includes('computer-use-preview'),
-        false
-    );
+    assert.equal(pricedModels.includes('computer-use-preview'), false);
 });
 
 test('canonicalizeOpenAIModelIdForPricing strips only recognized suffix formats', () => {
