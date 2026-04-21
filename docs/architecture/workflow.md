@@ -86,9 +86,8 @@ The selection order is:
 
 1. Use the requested mode when it is recognized.
 2. Otherwise, if the Execution Contract provides a response mode, map it to
-   the canonical workflow mode.
-    - `quality_grounded` maps to `grounded`
-    - `fast_direct` maps to `fast`
+   the canonical workflow mode: `quality_grounded` maps to `grounded`, and
+   `fast_direct` maps to `fast`.
 3. Otherwise, fall back to `grounded`.
 
 That fallback keeps the system available while preferring the more careful
