@@ -51,76 +51,6 @@ The mode ids are `fast`, `balanced`, and `grounded`.
 `balanced` and `grounded` share one profile today. The difference is in the
 contract preset and limits, not in the step pattern.
 
-## Selection
-
-1. Use the requested mode when it is recognized.
-2. Otherwise, if the Execution Contract provides a response mode, map it to canonical mode (`quality_grounded` -> `grounded`, `fast_direct` -> `fast`).
-3. Otherwise, fall back to `grounded`.
-
-This keeps the system available while preferring the more careful default.
-These fallback steps happen only during initial routing. They are not runtime
-mode escalation.
-
-## Review Loop
-
-`generate-only` runs one `generate` step and stops. `bounded-review` runs
-`generate -> assess -> revise` in a bounded loop. That is why the reviewed
-path matters here: it gives the runtime one bounded chance to assess the draft
-and revise it before stopping.
-
-The assess step emits two machine-readable fields: `reviewDecision`
-(`finalize` or `revise`) and `reviewReason`. A review result can request a
-revision, but it does not bypass workflow policy or engine limits.
-
-## Planner Boundary
-
-Planner helps decide how to carry out the request. It can suggest search or
-tool details, choose an action shape, and recommend a capability profile.
-
-Those suggestions stay inside backend policy. Planner cannot change the
-Execution Contract, grant extra tools or steps, bypass policy, or become the
-final authority on mode, profile, safety, or provenance.
-
-Today, planner runs in `chatOrchestrator` before `chatService` starts the
-review loop.
-Planner execution is recorded in `metadata.execution[]` and in steerability
-metadata, but workflow lineage still starts with the generation/review path.
-
-## Future Work
-
-Today, planner is still frontloaded in orchestration. The workflow engine runs
-the reviewed generation path. `plan` and `tool` exist in the shared workflow
-vocabulary, but they are not the main current chat path.
-
-Future work includes planner as a workflow step, tool steps under the same
-engine, and clearer correlation if planner passes or retries are added later.
-That does not change the current rule: planner is advisory, and the workflow
-engine does not yet own planner timing in the current chat path.
-
-## Mode Escalation
-
-Workflow mode escalation is attached at one place in
-`resolveWorkflowRuntimeConfig` (`packages/backend/src/services/workflowProfileRegistry.ts`).
-
-Rules for this seam:
-
-- Resolve initial mode once using the normal selection order.
-- Optionally apply one workflow-owned escalation request.
-- Never run recursive or unbounded mode re-evaluation loops.
-- Keep escalation routing centralized in workflow resolver code, not callers.
-
-## Metadata
-
-`metadata.workflowMode.*` explains the routing choice.
-`metadata.execution[]` planner entries explain planner influence.
-`metadata.workflow` records workflow lineage.
-TRACE fields describe answer behavior, not workflow routing.
-
-The `workflowMode` object includes `modeId`, `selectedBy`,
-`selectionReason`, `initial_mode`, optional `escalated_mode`, optional
-`escalation_reason`, optional `requestedModeId`, optional
-`executionContractResponseMode`, and `behavior`.
-
 # Workflow Profile Contract
 
 ## Purpose
@@ -250,3 +180,73 @@ Current `generate-only` profile uses the same required hooks with
 `enableAssessment=false` and `enableRevision=false`. It reuses the same
 no-generation mapping and metadata rules and does not introduce
 profile-specific blocked-state semantics.
+
+## Selection
+
+1. Use the requested mode when it is recognized.
+2. Otherwise, if the Execution Contract provides a response mode, map it to canonical mode (`quality_grounded` -> `grounded`, `fast_direct` -> `fast`).
+3. Otherwise, fall back to `grounded`.
+
+This keeps the system available while preferring the more careful default.
+These fallback steps happen only during initial routing. They are not runtime
+mode escalation.
+
+## Review Loop
+
+`generate-only` runs one `generate` step and stops. `bounded-review` runs
+`generate -> assess -> revise` in a bounded loop. That is why the reviewed
+path matters here: it gives the runtime one bounded chance to assess the draft
+and revise it before stopping.
+
+The assess step emits two machine-readable fields: `reviewDecision`
+(`finalize` or `revise`) and `reviewReason`. A review result can request a
+revision, but it does not bypass workflow policy or engine limits.
+
+## Planner Boundary
+
+Planner helps decide how to carry out the request. It can suggest search or
+tool details, choose an action shape, and recommend a capability profile.
+
+Those suggestions stay inside backend policy. Planner cannot change the
+Execution Contract, grant extra tools or steps, bypass policy, or become the
+final authority on mode, profile, safety, or provenance.
+
+Today, planner runs in `chatOrchestrator` before `chatService` starts the
+review loop.
+Planner execution is recorded in `metadata.execution[]` and in steerability
+metadata, but workflow lineage still starts with the generation/review path.
+
+## Future Work
+
+Today, planner is still frontloaded in orchestration. The workflow engine runs
+the reviewed generation path. `plan` and `tool` exist in the shared workflow
+vocabulary, but they are not the main current chat path.
+
+Future work includes planner as a workflow step, tool steps under the same
+engine, and clearer correlation if planner passes or retries are added later.
+That does not change the current rule: planner is advisory, and the workflow
+engine does not yet own planner timing in the current chat path.
+
+## Mode Escalation
+
+Workflow mode escalation is attached at one place in
+`resolveWorkflowRuntimeConfig` (`packages/backend/src/services/workflowProfileRegistry.ts`).
+
+Rules for this seam:
+
+- Resolve initial mode once using the normal selection order.
+- Optionally apply one workflow-owned escalation request.
+- Never run recursive or unbounded mode re-evaluation loops.
+- Keep escalation routing centralized in workflow resolver code, not callers.
+
+## Metadata
+
+`metadata.workflowMode.*` explains the routing choice.
+`metadata.execution[]` planner entries explain planner influence.
+`metadata.workflow` records workflow lineage.
+TRACE fields describe answer behavior, not workflow routing.
+
+The `workflowMode` object includes `modeId`, `selectedBy`,
+`selectionReason`, `initial_mode`, optional `escalated_mode`, optional
+`escalation_reason`, optional `requestedModeId`, optional
+`executionContractResponseMode`, and `behavior`.
