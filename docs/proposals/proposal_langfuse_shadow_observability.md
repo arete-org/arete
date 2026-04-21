@@ -6,423 +6,238 @@
 
 ## Overview
 
-This proposal recommends a narrow experiment: optional **Langfuse** integration
-as a shadow observability layer for Footnote maintainers and operators.
+Footnote already records enough information to explain one response: the
+selected mode, workflow lineage, planner influence, provenance, TRACE posture
+(the answer posture metadata described in
+`docs/architecture/response-metadata.md`), tool outcomes, and backend-recorded
+cost.
 
-Footnote already records a lot about one response. Current response metadata
-and trace storage cover routing, workflow lineage, planner influence,
-provenance, TRACE posture, steerability controls, tool outcomes, and
-backend-recorded cost. That is the right foundation for explaining one run.
+That is the right foundation for a user-facing trace.
 
-The missing piece is a good maintainer view across many runs.
+It does not give maintainers a great way to look across many runs.
 
-That gap is where Langfuse may help. Not as a replacement for Footnote traces,
-and not as a new policy or provenance authority. More as an optional operator
-workbench for cross-run inspection, debugging, evaluation collection, and drift
-spotting.
+That is the gap Langfuse might fill. It can help with cross-run inspection,
+debugging, eval collection, cost patterns, and drift spotting. It should not
+replace Footnote traces, own provenance semantics, move prompts out of review,
+or become part of the default self-hosted stack.
 
-The proposed direction is deliberately narrow:
+The proposal is narrow: try Langfuse as optional shadow observability.
 
-- optional,
-- disabled by default,
-- metadata-only by default,
-- fail-open,
-- removable without changing Footnote's public product meaning.
+By default it should be off. If enabled, it should export metadata only. If it
+fails, Footnote should keep running normally.
 
-Langfuse may help us inspect Footnote. It should not become the thing that
-defines Footnote.
+Langfuse can help maintainers inspect runs. Footnote still owns the run.
 
 ---
 
-## Why This Is Worth Considering
+## Why This Is Worth Trying
 
-Footnote's trace and metadata work already answers an important question:
-"what happened here?"
+Footnote's trace and metadata work answers a local question:
 
-For one response, maintainers can inspect:
+> What happened for this response?
 
-- selected workflow mode,
-- workflow lineage,
-- planner influence recorded in `metadata.execution[]`,
-- provenance classification,
-- TRACE target/final posture,
-- tool and evaluator outcomes,
-- and backend-recorded usage/cost metadata.
+That matters. It is part of the product.
 
-That is useful for one run. It is less useful for watching patterns across many
-runs.
+But maintainers also need a broader view sometimes:
 
-A maintainer may want to know:
-
-- which workflow modes are actually common,
-- where planner or provider fallback happens,
+- where fallback happens,
+- which workflow modes are common,
 - which model routes are expensive,
-- whether a prompt change improved anything,
-- whether one workflow path generates noisy review cycles,
+- whether a prompt change helped,
 - which runs should become eval examples,
-- or whether a regression is only visible at aggregate scale.
+- and whether a regression only shows up across many responses.
 
-Footnote could eventually build more of that natively. Some of it may belong in
-Footnote over time. But a full cross-run observability and evaluation surface is
-not the core product right now, and it is not free to build well.
+Footnote could build more of that itself, and some of it may eventually belong
+in the product. But a full observability and evaluation surface is not the core
+product right now.
 
-Langfuse already operates in that space. It is worth trying only if the
-experiment stays small and does not blur Footnote's own architecture.
+Langfuse already works in that space. The useful experiment is not "move
+Footnote observability to Langfuse." The useful experiment is "mirror enough
+safe metadata to see whether Langfuse helps maintainers."
 
 ---
 
-## Footnote Context
+## The Boundary
 
-Footnote is not just a thin wrapper around a model provider.
+Footnote has its own meanings for execution, workflow, provenance, incidents,
+pseudonymization, costs, and traces.
 
-The project already has its own semantics for:
+Those meanings stay in Footnote.
 
-- Execution Contract authority,
-- workflow mode and workflow profile selection,
-- TRACE posture,
-- provenance and response metadata,
-- steerability controls,
-- TrustGraph evidence handling,
-- incident storage and audit,
-- pseudonymization boundaries,
-- and backend cost recording.
+Langfuse uses similar words: traces, observations, scores, prompts, datasets,
+evaluations. Those are Langfuse concepts. They can be useful without becoming
+Footnote's product language.
 
-Those meanings are part of the product. They are not generic telemetry.
+A Langfuse trace is not a Footnote trace.
 
-That matters because Langfuse uses similar words: traces, observations, scores,
-prompts, datasets, evaluations. The overlap is useful, but it is also where the
-risk lives.
+A Langfuse score is not a policy signal.
 
-A Langfuse trace is not automatically the same thing as a Footnote trace.
-A Langfuse score is not automatically a Footnote policy signal.
-A Langfuse prompt version is not automatically a safe replacement for Footnote's
+A Langfuse prompt version is not automatically a safe replacement for Footnote
 prompt resolution.
 
-Footnote's backend should remain the place where those meanings are decided.
-Langfuse can receive a mirrored view of some runtime metadata, but it should not
-become the source of truth for public trace retrieval, user-facing provenance,
-incident records, Execution Contract behavior, or cost accounting.
+Langfuse should not replace:
 
-Put simply: Langfuse can help maintainers inspect runs. Footnote still owns the
-run.
-
----
-
-## Current Code Alignment
-
-This proposal assumes the current architecture and should be read with a few
-repo realities in mind:
-
-- Footnote already has optional observability-related wiring for VoltAgent
-  tracing configuration. This proposal is not introducing the first
-  observability seam in the repo. It is proposing a separate backend-owned
-  shadow exporter for Footnote runtime metadata.
-- The durable public trace key today is `responseId`. The current trace store
-  and public trace routes are keyed around that concept. This proposal should
-  not invent a second first-class "trace ID" concept unless the architecture
-  changes later.
-- Planner metadata affects execution today, but planner is not yet a first-class
-  workflow step in current workflow lineage. Planner influence is recorded in
-  `metadata.execution[]` and related metadata surfaces alongside workflow
-  lineage.
-- Backend is already the authority for LLM cost recording. Any export to
-  Langfuse should mirror that backend-owned value, not replace it.
-- Footnote does not currently have a broad, general-purpose user consent model.
-  There is incident-specific consent metadata (`consentedAt`) in incident
-  records, but this proposal should not imply that Langfuse integration plugs
-  into a wider consent framework that does not yet exist.
-
-These constraints are part of the proposal, not editorial footnotes.
-
----
-
-## The Boundary We Should Keep
-
-The boundary is simple.
-
-Langfuse can inspect runs. It should not decide what a run means.
-
-That means Langfuse should not replace:
-
-- Footnote trace storage,
 - public trace retrieval,
-- response metadata assembly,
-- workflow semantics,
-- provenance labels,
-- steerability semantics,
-- incident storage and audit,
-- pseudonymization boundaries,
-- backend cost recording,
-- or Execution Contract behavior.
-
-It also should not become the place where policy-sensitive prompt layers are
-edited outside normal repo review.
-
-Observability tools can quietly become authority layers if a project stops
-treating them as mirrors. That is the failure mode to avoid here.
-
-If Langfuse is added, it should stay optional shadow telemetry: useful, narrow,
-and removable.
-
----
-
-## Why Langfuse Fits The Narrow Use Case
-
-Langfuse fits best as operator-side observability.
-
-The strongest fit is not the user-facing trace page. Footnote already has that,
-and it should remain Footnote-owned.
-
-The stronger fit is the maintainer view across many runs. That may include:
-
-- finding fallback-heavy runs,
-- comparing `fast`, `balanced`, and `grounded` patterns,
-- spotting expensive provider paths,
-- gathering examples for evals,
-- or checking whether a prompt or workflow change helped in practice.
-
-Langfuse also has practical integration paths through JS/TS SDKs and API-based
-instrumentation. That gives Footnote options.
-
-The first pass should still avoid broad auto-instrumentation. Footnote already
-has meaningful backend-owned metadata. A small explicit exporter is easier to
-review, easier to test, and easier to remove.
-
-Langfuse also has a self-hosting path, which is important for Footnote. But it
-is not lightweight. It adds real infrastructure and operational cost. That
-means Langfuse should not become part of Footnote's default self-hosted stack.
-It should stay optional for operators who decide the extra visibility is worth
-it.
-
----
-
-## What Langfuse Should Not Own
-
-Langfuse should not own Footnote's public product truth.
-
-Footnote should keep ownership of:
-
-- trace storage and retrieval,
 - response metadata,
 - workflow lineage,
-- planner influence metadata,
 - provenance labels,
-- steerability semantics,
 - incident and audit records,
-- pseudonymization,
-- privacy and retention decisions around export,
+- pseudonymization boundaries,
 - backend cost recording,
 - Execution Contract behavior,
-- and policy-sensitive prompt layers.
+- or policy-sensitive prompt layers.
 
-Some of that metadata may later be mirrored to Langfuse. But mirroring is not
-ownership.
+Some metadata can be mirrored. Mirroring is not ownership.
 
-If a user asks what happened for one answer, Footnote should answer from
-Footnote data.
+---
 
-If a maintainer wants to compare many runs, Langfuse may help.
+## Current Repo Fit
 
-That split is the proposal.
+The repo already has a few seams that make this plausible.
+
+Footnote has durable trace storage and public trace routes keyed around
+`responseId`. It already records workflow and planner metadata. It already
+treats backend cost recording as authoritative. It also has some optional
+observability-related wiring around VoltAgent tracing.
+
+That means Langfuse does not need to be pushed into request handling as a new
+authority layer.
+
+The clean fit is a backend-owned exporter that runs after Footnote has
+assembled the metadata it already owns.
+
+One important caveat: Footnote does not currently have a broad user consent
+model. Incident records have incident-specific consent metadata, but that is
+not the same thing as a general consent framework for observability export.
+This proposal should not pretend that framework exists.
+
+One more current-state caveat: planner metadata affects execution today, but
+planner is not yet a first-class workflow step in workflow lineage.
 
 ---
 
 ## Privacy Default
 
-The default export should be conservative.
-
-LLM traces can contain sensitive user text, assistant output, tool results,
-prompt details, provider responses, local paths, secrets, and internal
-metadata. Exporting all of that by default to an optional observability system
-would be a poor fit for Footnote's privacy posture.
-
 The first version should export metadata only.
 
-That likely means things like:
+That can include things like:
 
-- Footnote `responseId`,
+- `responseId`,
 - workflow mode,
-- workflow step kinds and termination reason,
-- planner status if available,
-- evaluator/tool status if available,
+- workflow step kinds,
+- termination reason,
+- planner status,
+- evaluator or tool status,
 - provider and model,
 - duration,
 - token usage,
 - backend-recorded cost,
-- and redacted tags useful for debugging.
+- and redacted debugging tags.
 
-The first version should not export:
+It should not export raw user messages, assistant messages, full prompts, raw
+planner payloads, provider responses, incident details, trace tokens, secrets,
+local paths, or unbounded tool output.
 
-- raw user messages,
-- raw assistant messages,
-- full prompts,
-- raw planner payloads,
-- raw provider responses,
-- incident details,
-- trace API tokens or service secrets,
-- local filesystem paths,
-- or unbounded tool outputs.
+If content export is added later, it should be an explicit opt-in. The default
+should remain off.
 
-If content export is added later, it should be an explicit opt-in with an
-unambiguous config flag. The default should remain `false`.
-
-That is not paranoia. It is basic hygiene.
+That is not a nice-to-have. It is the difference between observability and a
+privacy foot-gun.
 
 ---
 
-## How We Should Try It
+## How To Try It
 
-The first step should be documentation, not code.
+Start with documentation and config, not runtime export.
 
-We should add a short architecture or proposal note that states the stance
-clearly:
+The first implementation pass should add the configuration shape and the
+redaction/export policy. That gives maintainers a place to review the boundary
+before data starts moving.
 
-- Langfuse is optional shadow telemetry.
-- Footnote remains the source of truth.
-- Export is metadata-only by default.
-- Langfuse is disabled by default.
-- Export failures fail open.
-- Raw content export is opt-in.
-- Prompt management is not part of the first pass.
-- Incidents, provenance, workflow authority, and cost stay Footnote-owned.
+A later pass can add the exporter. It should be small, backend-owned, and
+isolated behind an internal interface. Langfuse SDK calls should not spread
+through handlers and services.
 
-After that, add configuration without exporting anything yet. The config should
-be deliberately boring: enabled flag, base URL, public/secret keys, content
-export flag, and maybe an environment or sampling guard if needed.
+When enabled, the exporter should run after Footnote has produced its own
+response metadata. If Langfuse is down, slow, misconfigured, unreachable, or
+throws SDK errors, Footnote should continue normally.
 
-Only then should we add a small shadow exporter.
+After that, test it against a local or development Langfuse instance and ask
+boring practical questions:
 
-That exporter should run after Footnote has already assembled the metadata it
-would own anyway. It should mirror a minimal safe payload to Langfuse when
-enabled. If Langfuse is down, slow, unreachable, misconfigured, or throws SDK
-errors, Footnote should continue normally.
+- Does it make fallback-heavy runs easier to find?
+- Does it help compare workflow modes?
+- Does it make cost patterns easier to inspect?
+- Does it help collect eval examples?
+- Do maintainers actually use it?
 
-The integration should sit behind a small internal interface. Langfuse SDK
-calls should not spread through handlers and services.
-
-If the experiment proves useful, we can ask practical maintainer questions:
-
-- Can we find fallback-heavy runs more easily?
-- Can we compare workflow modes in a useful way?
-- Can we inspect cost patterns without inventing a second cost authority?
-- Can we collect better eval examples?
-- Does this materially help maintainers?
-
-If not, the feature should stay experimental or be removed. The integration
-should earn its keep.
+If not, keep it experimental or remove it.
 
 ---
 
-## Evaluation Work Later
+## What Comes Later
 
-Langfuse evaluation workflows may be useful after shadow observability proves
-itself.
+Langfuse eval workflows may be useful after shadow export proves itself.
+Selected runs could become datasets, experiments, or scored examples.
 
-That could mean selected runs being copied into datasets, experiments, or score
-tracking for prompt/model changes.
+Those scores should stay advisory unless Footnote explicitly decides otherwise.
 
-The important boundary is that eval results remain advisory unless Footnote
-explicitly decides otherwise later.
-
-A Langfuse score should not silently become policy.
-
-If eval results ever influence production behavior, that should be a separate
-proposal and a separate authority decision.
+Prompt management is also later. Footnote prompts are not just strings; some
+carry policy, review posture, provenance expectations, and product meaning. If
+Langfuse prompt management is tested, start with non-governance prompt
+segments. Keep policy, safety, provenance, and review-sensitive prompt layers
+in the repo unless a later proposal changes that boundary.
 
 ---
 
-## Prompt Experiments Later
+## When This Becomes A Bad Idea
 
-Langfuse prompt management is also a later possibility, not a first step.
+This experiment should stop or stay parked if the value does not justify the
+weight.
 
-Footnote's prompts are not just strings. Some prompt layers carry policy,
-review posture, provenance expectations, and product meaning. Moving those
-layers into an external prompt UI too early would blur review and deployment
-boundaries.
+Warning signs:
 
-If prompt management is tested later, start with non-governance prompt segments.
-
-Keep policy, safety, provenance, and review-sensitive prompt layers in-repo
-unless a later proposal explicitly changes that boundary.
-
----
-
-## What Would Make This A Bad Idea
-
-This integration is not automatically worth it just because Langfuse is useful.
-
-It becomes a bad idea if:
-
-- the infrastructure cost is too high for the value returned,
-- maintainers do not actually use it,
-- raw content starts leaking by default,
-- Langfuse labels start replacing Footnote's provenance language,
-- SDK details spread through backend code,
+- maintainers do not use it,
+- the infra cost is too high,
+- raw content starts exporting by default,
+- Langfuse labels start replacing Footnote provenance language,
+- SDK details leak across backend code,
 - prompt management sneaks in before the boundary is clear,
-- or self-hosting Footnote starts feeling incomplete without a separate
-  observability stack.
+- or self-hosting Footnote starts to feel incomplete without Langfuse.
 
-Those are not reasons to reject the experiment now. They are the conditions to
-watch closely if the experiment begins.
+The point is to learn whether the extra visibility is worth it. If it is not,
+delete the integration. Do not let it become permanent just because it exists.
 
 ---
 
-## What This Proposal Does And Does Not Say
+## What This Proposal Says
 
-### This proposal does say
-
-This proposal says Langfuse is worth exploring as optional maintainer/operator
+This proposal says Langfuse is worth trying as optional maintainer/operator
 tooling.
-
-It may help with cross-run observability, debugging, evaluation collection, and
-operational visibility.
 
 It should start as a metadata-only mirror of Footnote-owned execution data.
 
-It should be disabled by default and fail open.
+It should be disabled by default, fail open, and remain removable.
 
-### This proposal does not say
+It does not say Langfuse should replace Footnote traces, provenance, incidents,
+cost accounting, prompt review, consent, or the default self-hosted stack.
 
-It does not say Langfuse should replace Footnote traces.
-
-It does not say Langfuse should own provenance.
-
-It does not say Langfuse should own incidents or audit records.
-
-It does not say Langfuse should own cost accounting.
-
-It does not say prompt management should move to Langfuse.
-
-It does not say Langfuse should become part of Footnote's default self-hosted
-stack.
-
-It does not say user content should be exported by default.
-
-Those would be different decisions.
+Those would be separate decisions.
 
 ---
 
 ## Proposed Direction
 
-Footnote should try Langfuse as optional shadow observability.
+Proceed with a narrow Langfuse experiment:
 
-The first implementation should be narrow:
+1. Document the stance.
+2. Add config and export policy.
+3. Add a small metadata-only shadow exporter.
+4. Test against a local or development Langfuse instance.
+5. Keep it only if it helps maintainers.
 
-- config first,
-- metadata-only export,
-- disabled by default,
-- fail-open,
-- no raw content by default,
-- no prompt management,
-- no incident replacement,
-- no provenance replacement,
-- no cost authority replacement.
-
-If that proves useful, the integration can later grow into evaluation support
-and carefully scoped prompt experiments.
-
-The point is to get maintainer/operator benefits without letting an
-observability tool become Footnote's source of truth.
+No raw content by default. No prompt management in the first pass. No
+replacement of Footnote trace/provenance semantics.
 
 ---
 
