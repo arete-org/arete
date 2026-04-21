@@ -1,287 +1,468 @@
-# Workflow Mode Routing
+# Workflows
 
-## Purpose
+This is the main doc for Footnote workflow behavior today.
 
-A workflow mode is the routing choice for one chat request.
+Read this before the profile contract details, rollout notes, or older RFC
+material.
 
-This is the main doc for workflow and planner behavior today.
-Read this before the profile contract, rollout notes, or RFC material.
+A chat request has to answer a few questions before the model returns
+anything:
 
-When a chat request comes in, Footnote has to decide how careful the run
-should be before it starts generating. Some requests can take the fast path.
-Others should use the reviewed path, with stricter evidence and revision rules.
+- how careful should this run be?
+- should the answer be reviewed?
+- what limits apply?
+- what did the planner influence?
+- what should the trace show afterward?
 
-This doc explains that routing layer.
+Footnote answers those questions through a small set of runtime layers:
 
-The split is simple. The Execution Contract sets the limits for the run.
-Workflow mode chooses the run type. Workflow profile chooses the step pattern.
-Planner can suggest action details inside those limits. Workflow lineage shows
-what actually happened.
+1. The Execution Contract sets the run rules and limits.
+2. The workflow mode chooses the kind of run.
+3. The workflow profile chooses the step pattern.
+4. The planner can suggest action details inside those limits.
+5. Workflow metadata records what happened.
 
-## Runtime Flow
+Keep those layers separate. Most workflow bugs start when one layer quietly
+starts doing another layer's job.
+
+## Runtime shape
 
 The normal chat path starts with the Execution Contract. That contract decides
-the allowed behavior and limits for the request.
+what behavior is allowed for the request.
 
-After that, the backend resolves a workflow mode: `fast`, `balanced`, or
-`grounded`. The mode maps to a workflow profile, which is the step pattern the
-runtime will use. For example, `fast` maps to `generate-only`, while
+After that, the backend resolves a workflow mode:
+
+- `fast`
+- `balanced`
+- `grounded`
+
+The mode maps to a workflow profile. The profile is the step pattern the
+runtime uses.
+
+Today there are two built-in profiles:
+
+| Profile id       | Purpose                       | Main steps                     |
+| ---------------- | ----------------------------- | ------------------------------ |
+| `generate-only`  | direct single-pass generation | `generate`                     |
+| `bounded-review` | reviewed message generation   | `generate -> assess -> revise` |
+
+`fast` uses `generate-only`.
+
 `balanced` and `grounded` both use `bounded-review`.
 
-Planner runs once in `chatOrchestrator` before generation. Its output still
-goes through surface policy, capability policy, and tool policy. Then
-`chatService` runs either direct generation or the bounded review loop.
+The difference between `balanced` and `grounded` is not the step pattern. The
+difference is the contract preset, limits, and evidence posture selected for
+the run.
 
-Response metadata records the selected mode, planner influence, and workflow
-lineage.
+## Modes
 
-Planner affects execution today, but it is not yet a first-class workflow step
-in workflow metadata.
+The mode ids are user-facing enough to appear in product copy, with normal
+casing:
 
-## Modes And Profiles
+- `Fast mode`
+- `Balanced mode`
+- `Grounded mode`
 
-The mode ids are `fast`, `balanced`, and `grounded`.
+The profile ids are internal:
 
-| Mode       | Contract preset    | Workflow profile | Flow                     | Review | Revise | Evidence | Notes                                      |
-| ---------- | ------------------ | ---------------- | ------------------------ | ------ | ------ | -------- | ------------------------------------------ |
-| `fast`     | `fast-direct`      | `generate-only`  | single-pass generation   | no     | no     | minimal  | no workflow review loop                    |
-| `balanced` | `balanced`         | `bounded-review` | reviewed generation path | yes    | yes    | balanced | same profile as `grounded`, lighter limits |
-| `grounded` | `quality-grounded` | `bounded-review` | reviewed generation path | yes    | yes    | strict   | workflow execution is policy-gated         |
+- `generate-only`
+- `bounded-review`
 
-`balanced` and `grounded` share one profile today. The difference is in the
-contract preset and limits, not in the step pattern.
+Do not use profile ids as the main labels under an answer. A user does not
+need to know that `balanced` maps to `bounded-review` to understand that the
+answer was reviewed.
 
-# Workflow Profile Contract
+| Mode       | Contract preset    | Workflow profile | Flow                   | Review | Evidence posture |
+| ---------- | ------------------ | ---------------- | ---------------------- | ------ | ---------------- |
+| `fast`     | `fast-direct`      | `generate-only`  | single-pass generation | no     | minimal          |
+| `balanced` | `balanced`         | `bounded-review` | reviewed generation    | yes    | balanced         |
+| `grounded` | `quality-grounded` | `bounded-review` | reviewed generation    | yes    | stricter         |
 
-## Purpose
+Grounded mode does not mean the answer was verified.
 
-Define the contract that executable workflow profiles must satisfy.
+Reviewed does not mean correct.
 
-This is a contract doc, not the best first explanation of the current runtime
-flow.
-Read [Workflow](./workflow.md) first if you are new.
+Those labels describe what the runtime tried to do. They are not truth
+guarantees.
 
-## Scope
+## Mode selection
 
-This document covers the profile contract, no-generation behavior, required
-termination-reason mapping, workflow metadata requirements, and compatibility
-rules for `bounded-review` and `generate-only`.
+Mode selection happens during initial routing.
 
-It does not cover profile registry runtime implementation, plan-and-generate
-or tool-assisted profiles, or blocked-state UI design.
-
-## Built-In Profiles
-
-Current chat runtime uses two built-in profiles:
-
-| Profile id       | Current purpose              | Main steps                     |
-| ---------------- | ---------------------------- | ------------------------------ |
-| `generate-only`  | direct single-pass execution | `generate`                     |
-| `bounded-review` | reviewed message generation  | `generate -> assess -> revise` |
-
-Modes choose between these profiles. Profiles do not become a second policy
-authority.
-
-## Contract Shape
-
-Type baseline (low risk, backend-local):
-`packages/backend/src/services/workflowProfileContract.ts`
-
-Required fields:
-
-- `profileId`: stable key (for example `bounded-review`, `generate-only`).
-- `profileVersion`: currently fixed to `v1`.
-- `displayName`: human-readable name.
-- `workflowName`: provenance-facing workflow identifier.
-- `policy`: explicit capability toggles (`enablePlanning`, `enableToolUse`, `enableReplanning`, `enableGeneration`, `enableAssessment`, `enableRevision`).
-- `defaultLimits`: explicit quantitative limits (`maxWorkflowSteps`, `maxToolCalls`, `maxDeliberationCalls`, `maxTokensTotal`, `maxDurationMs`).
-- `requiredHooks.initialStep`: declared first step kind.
-- `requiredHooks.canEmitGeneration()`: capability gate for generation emission.
-- `requiredHooks.classifyNoGeneration(reasonCode)`: deterministic classification to disposition + termination reason.
-
-Optional extensions:
-
-- `reviewDecisionPrompt`
-- `revisionPromptPrefix`
-- `parseReviewDecision(text)`
-- `metadata` for profile-local non-control annotations
-
-Contract rule:
-
-- optional extensions cannot override required no-generation classification,
-  disposition, or termination-reason mapping.
-
-Mode chooses the kind of run. Profile chooses the step pattern. The engine
-enforces legality and limits. Adapters connect the profile to runtime calls.
-
-## No-Generation Behavior
-
-| Condition                                              | Surface To Caller                               | Internal Termination | Required `terminationReason`   |
-| ------------------------------------------------------ | ----------------------------------------------- | -------------------- | ------------------------------ |
-| Policy blocks first `generate` transition              | Yes                                             | Yes                  | `transition_blocked_by_policy` |
-| Profile disables generation (`enableGeneration=false`) | Yes                                             | Yes                  | `transition_blocked_by_policy` |
-| Steps budget exhausted before first generation         | No (workflow ends silently inside orchestrator) | Yes                  | `budget_exhausted_steps`       |
-| Token budget exhausted before first generation         | No (workflow ends silently inside orchestrator) | Yes                  | `budget_exhausted_tokens`      |
-| Time budget exhausted before first generation          | No (workflow ends silently inside orchestrator) | Yes                  | `budget_exhausted_time`        |
-| Executor/runtime failure before first generation       | Yes                                             | Yes                  | `executor_error_fail_open`     |
-
-Notes:
-
-- “Surface to caller” means the caller receives an explicit no-generation
-  failure result (or equivalent error) instead of a generated assistant message.
-- “Internal termination” means the workflow record always terminates with a
-  reason code, even when not surfaced as a dedicated blocked UI state.
-
-## Reason Mapping
-
-Reason-code mapping is defined in:
-`WORKFLOW_NO_GENERATION_HANDLING_MAP`
-(`packages/backend/src/services/workflowProfileContract.ts`).
-
-The required mapping is:
-`blocked_by_policy_before_generate` -> `transition_blocked_by_policy`,
-`generation_disabled_by_profile` -> `transition_blocked_by_policy`,
-`budget_exhausted_steps_before_generate` -> `budget_exhausted_steps`,
-`budget_exhausted_tokens_before_generate` -> `budget_exhausted_tokens`,
-`budget_exhausted_time_before_generate` -> `budget_exhausted_time`,
-and `executor_error_before_generate` -> `executor_error_fail_open`.
-
-The disposition mapping is:
-policy-blocked, generation-disabled, and executor-error are surfaced.
-Pre-generation budget exhaustion is internal-only.
-
-## Metadata Requirements
-
-For all profiles, blocked-before-generation and no-generation outcomes must
-produce a valid `WorkflowRecord` with `workflowId`, `workflowName`,
-`status='degraded'`, `terminationReason` from the required map, `stepCount`
-equal to `steps.length`, `maxSteps`, and `maxDurationMs`. A future profile may
-introduce a completed no-output mode, but only with a new reason vocabulary.
-
-When generation never occurred:
-
-- `steps` may be empty (`stepCount=0`) when termination happens before the
-  first executable step.
-- if any step executed before no-generation termination, emitted steps must
-  remain chronologically ordered with valid parent references.
-
-Across profiles, no profile may emit ad-hoc termination reason strings, treat
-the same reason code as surfaced in one path and internal-only in another, or
-omit workflow provenance for no-generation outcomes.
-
-## Compatibility Rules
-
-Current `bounded-review` profile is compatible with this contract through
-policy, limits, and review/revision extensions. Its current no-generation
-hotspot maps to `transition_blocked_by_policy` when generation is blocked
-before the first draft.
-
-Current `generate-only` profile uses the same required hooks with
-`enableAssessment=false` and `enableRevision=false`. It reuses the same
-no-generation mapping and metadata rules and does not introduce
-profile-specific blocked-state semantics.
-
-## Selection
+The selection order is:
 
 1. Use the requested mode when it is recognized.
-2. Otherwise, if the Execution Contract provides a response mode, map it to canonical mode (`quality_grounded` -> `grounded`, `fast_direct` -> `fast`).
+2. Otherwise, if the Execution Contract provides a response mode, map it to
+   the canonical workflow mode.
+    - `quality_grounded` maps to `grounded`
+    - `fast_direct` maps to `fast`
 3. Otherwise, fall back to `grounded`.
 
-This keeps the system available while preferring the more careful default.
+That fallback keeps the system available while preferring the more careful
+default.
+
 These fallback steps happen only during initial routing. They are not runtime
 mode escalation.
 
-## Review Loop
-
-`generate-only` runs one `generate` step and stops. `bounded-review` runs
-`generate -> assess -> revise` in a bounded loop. That is why the reviewed
-path matters here: it gives the runtime one bounded chance to assess the draft
-and revise it before stopping.
-
-The assess step emits two machine-readable fields: `reviewDecision`
-(`finalize` or `revise`) and `reviewReason`. A review result can request a
-revision, but it does not bypass workflow policy or engine limits.
-
-## Planner Boundary
-
-Planner helps decide how to carry out the request. It can suggest search or
-tool details, choose an action shape, and recommend a capability profile.
-
-Those suggestions stay inside backend policy. Planner cannot change the
-Execution Contract, grant extra tools or steps, bypass policy, or become the
-final authority on mode, profile, safety, or provenance.
-
-Today, planner runs in `chatOrchestrator` before `chatService` starts the
-review loop.
-Planner execution is recorded in `metadata.execution[]` and in steerability
-metadata, but workflow lineage still starts with the generation/review path.
-
-## Future Work
-
-Today, planner is still frontloaded in orchestration. The workflow engine runs
-the reviewed generation path. `plan` and `tool` exist in the shared workflow
-vocabulary, but they are not the main current chat path.
-
-Future work includes planner as a workflow step, tool steps under the same
-engine, and clearer correlation if planner passes or retries are added later.
-That does not change the current rule: planner is advisory, and the workflow
-engine does not yet own planner timing in the current chat path.
-
-## Mode Escalation
+## Mode escalation
 
 Workflow mode escalation is attached at one place in
-`resolveWorkflowRuntimeConfig` (`packages/backend/src/services/workflowProfileRegistry.ts`).
+`resolveWorkflowRuntimeConfig`:
+
+```text
+packages/backend/src/services/workflowProfileRegistry.ts
+```
 
 Rules for this seam:
 
-- Resolve initial mode once using the normal selection order.
+- Resolve the initial mode once.
 - Optionally apply one workflow-owned escalation request.
-- Never run recursive or unbounded mode re-evaluation loops.
-- Keep escalation routing centralized in workflow resolver code, not callers.
+- Do not run recursive or unbounded mode re-evaluation loops.
+- Keep escalation routing in workflow resolver code, not callers.
 
-## Metadata
+Mode escalation should stay boring and centralized. Do not scatter it across
+the orchestrator, planner, UI, or adapters.
 
-`metadata.workflowMode.*` explains the routing choice.
-`metadata.execution[]` planner entries explain planner influence.
-`metadata.workflow` records workflow lineage.
+## Runtime flow
+
+The current chat path looks like this:
+
+1. `chatOrchestrator` receives and normalizes the request.
+2. The Execution Contract sets the allowed behavior and limits.
+3. The backend resolves workflow mode and profile.
+4. Planner runs once in `chatOrchestrator` before generation.
+5. Planner output goes through surface policy, capability policy, and tool
+   policy.
+6. `chatService` runs either direct generation or the bounded review loop.
+7. Response metadata records mode, planner influence, workflow lineage, cost,
+   and trace or provenance fields.
+
+Planner affects execution today, but workflow engine timing does not fully own
+planner execution yet.
+
+Planner lineage can appear in workflow metadata as a `plan` step when that
+metadata exists for the run. That is a lineage bridge, not a change in planner
+authority.
+
+So both of these are true:
+
+- planner can be visible in workflow lineage;
+- planner still runs before the main workflow execution path today.
+
+Do not blur those together.
+
+## Review loop
+
+`generate-only` runs one `generate` step and stops.
+
+`bounded-review` runs a bounded review path:
+
+```text
+generate -> assess -> revise
+```
+
+The `generate` step produces the current draft.
+
+The `assess` step returns:
+
+- `reviewDecision`
+- `reviewReason`
+
+`reviewDecision` is either:
+
+- `finalize`
+- `revise`
+
+If the decision is `revise`, the `revise` step produces the next draft.
+
+The loop stops when it reaches a final answer, hits a limit, or fails open.
+
+A review result can request revision, but it does not bypass workflow policy or
+engine limits.
+
+## Planner boundary
+
+Planner helps decide how to carry out the request.
+
+It can suggest things like:
+
+- action shape
+- search or tool details
+- capability profile
+- response posture
+- planner-facing explanation metadata
+
+Those suggestions stay inside backend policy.
+
+Planner cannot:
+
+- change the Execution Contract
+- grant extra tools
+- grant extra steps
+- bypass policy
+- become the final authority on mode
+- become the final authority on profile
+- own safety
+- own provenance
+- own final response behavior
+
+Planner is useful. It is not a second orchestrator.
+
+## Planner lineage
+
+Planner information can appear in workflow metadata as a `plan` step.
+
+Use careful wording around this.
+
+Good wording:
+
+- `Planned, then generated`
+- `Planner fallback`
+- `Plan step recorded in trace`
+
+Bad wording:
+
+- `Planner-driven workflow`
+- `Planner-owned workflow`
+- `Workflow started with planning`
+
+The last one is risky because planner still runs before workflow execution in
+the main chat path today.
+
+The answer receipt should mention planner only when it changes the user-facing
+story, such as planner fallback. Normal planner lineage belongs in the trace.
+
+## Workflow profile contract
+
+Executable workflow profiles satisfy a small contract defined in:
+
+```text
+packages/backend/src/services/workflowProfileContract.ts
+```
+
+The required profile fields are:
+
+- `profileId`
+- `profileVersion`
+- `displayName`
+- `workflowName`
+- `policy`
+- `defaultLimits`
+- `requiredHooks.initialStep`
+- `requiredHooks.canEmitGeneration()`
+- `requiredHooks.classifyNoGeneration(reasonCode)`
+
+The policy defines capability toggles such as:
+
+- `enablePlanning`
+- `enableToolUse`
+- `enableReplanning`
+- `enableGeneration`
+- `enableAssessment`
+- `enableRevision`
+
+The default limits define hard caps such as:
+
+- `maxWorkflowSteps`
+- `maxToolCalls`
+- `maxDeliberationCalls`
+- `maxTokensTotal`
+- `maxDurationMs`
+
+Optional profile extensions can support review and revision behavior, but they
+cannot override required no-generation classification, disposition, or
+termination-reason mapping.
+
+Mode chooses the kind of run.
+
+Profile chooses the step pattern.
+
+The engine enforces legality and limits.
+
+Adapters connect the profile to runtime calls.
+
+## Engine scope
+
+The workflow engine mainly powers the reviewed chat path in:
+
+```text
+packages/backend/src/services/workflowEngine.ts
+```
+
+It handles:
+
+- transition checks
+- hard limits
+- bounded `generate -> assess -> revise` execution
+- termination reasons
+- fail-open handling
+- `WorkflowRecord` output
+- `StepRecord` output
+
+The shared workflow vocabulary includes:
+
+- `plan`
+- `tool`
+- `generate`
+- `assess`
+- `revise`
+- `finalize`
+
+`plan` and `tool` are part of the vocabulary, but they are not the main
+current chat loop. Planner lineage may be attached to metadata, while planner
+timing still lives in orchestration today.
+
+## Step records
+
+Each `StepRecord` includes an outcome with:
+
+- `status`
+- `summary`
+- `artifacts`
+- `signals`
+- optional `recommendations`
+
+`signals` are machine-readable control indicators used by transition logic.
+They are not generic telemetry.
+
+For bounded-review `assess` steps, use:
+
+- `reviewDecision`
+- `reviewReason`
+
+`recommendations` are advisory only. They never override backend legality
+checks.
+
+Step records should stay serializable, bounded, and safe to expose in trace or
+provenance contexts. Do not dump raw prompts, raw model output, full planner
+payloads, or unbounded tool results into step records.
+
+## Limits
+
+Workflow limits are backend-enforced stops, not model suggestions.
+
+`WorkflowPolicy` defines legal transitions and capability toggles.
+
+`ExecutionLimits` defines hard caps:
+
+- `maxWorkflowSteps`
+- `maxToolCalls`
+- `maxDeliberationCalls`
+- `maxTokensTotal`
+- `maxDurationMs`
+
+Model output can recommend transitions only where policy allows.
+
+If a limit stops a run, the workflow record should say so.
+
+## No-generation behavior
+
+No-generation outcomes still need valid workflow metadata.
+
+| Condition                                              | Surface to caller | Internal termination | Required `terminationReason`   |
+| ------------------------------------------------------ | ----------------- | -------------------- | ------------------------------ |
+| Policy blocks first `generate` transition              | yes               | yes                  | `transition_blocked_by_policy` |
+| Profile disables generation (`enableGeneration=false`) | yes               | yes                  | `transition_blocked_by_policy` |
+| Step budget exhausted before first generation          | no                | yes                  | `budget_exhausted_steps`       |
+| Token budget exhausted before first generation         | no                | yes                  | `budget_exhausted_tokens`      |
+| Time budget exhausted before first generation          | no                | yes                  | `budget_exhausted_time`        |
+| Executor or runtime failure before first generation    | yes               | yes                  | `executor_error_fail_open`     |
+
+`Surface to caller` means the caller receives an explicit no-generation result
+or equivalent error instead of a generated assistant message.
+
+`Internal termination` means the workflow record still terminates with a reason
+code, even when there is no dedicated blocked UI state.
+
+The mapping lives in `WORKFLOW_NO_GENERATION_HANDLING_MAP`:
+
+```text
+packages/backend/src/services/workflowProfileContract.ts
+```
+
+Required reason mapping:
+
+| Reason code                               | Termination reason             |
+| ----------------------------------------- | ------------------------------ |
+| `blocked_by_policy_before_generate`       | `transition_blocked_by_policy` |
+| `generation_disabled_by_profile`          | `transition_blocked_by_policy` |
+| `budget_exhausted_steps_before_generate`  | `budget_exhausted_steps`       |
+| `budget_exhausted_tokens_before_generate` | `budget_exhausted_tokens`      |
+| `budget_exhausted_time_before_generate`   | `budget_exhausted_time`        |
+| `executor_error_before_generate`          | `executor_error_fail_open`     |
+
+Policy-blocked, generation-disabled, and executor-error outcomes are surfaced.
+
+Pre-generation budget exhaustion is internal-only.
+
+## Workflow metadata
+
+For all profiles, blocked-before-generation and no-generation outcomes must
+produce a valid `WorkflowRecord`.
+
+That record should include:
+
+- `workflowId`
+- `workflowName`
+- `status='degraded'`
+- `terminationReason`
+- `stepCount`
+- `maxSteps`
+- `maxDurationMs`
+
+When generation never occurred:
+
+- `steps` may be empty when termination happens before the first executable
+  step
+- if any step executed before termination, emitted steps must stay
+  chronologically ordered with valid parent references
+
+Profiles must not:
+
+- emit ad-hoc termination reason strings
+- treat the same reason as surfaced in one path and internal-only in another
+- omit workflow provenance for no-generation outcomes
+
+## Response metadata
+
+Response metadata has a few related surfaces:
+
+- `metadata.workflowMode.*` explains the routing choice
+- `metadata.workflow` records workflow lineage
+- `metadata.execution[]` records execution events, including planner influence
+- TRACE or provenance fields describe answer behavior and trace presentation
+
+`metadata.workflowMode` includes fields such as:
+
+- `modeId`
+- `selectedBy`
+- `selectionReason`
+- `initial_mode`
+- `escalated_mode`
+- `escalation_reason`
+- `requestedModeId`
+- `executionContractResponseMode`
+- `behavior`
+
+Read those records together, but do not treat them as interchangeable.
+
+Planner influence is not workflow authority.
+
 TRACE fields describe answer behavior, not workflow routing.
-
-The `workflowMode` object includes `modeId`, `selectedBy`,
-`selectionReason`, `initial_mode`, optional `escalated_mode`, optional
-`escalation_reason`, optional `requestedModeId`, optional
-`executionContractResponseMode`, and `behavior`.
-
-# Workflow wording
-
-We're starting to show more workflow information near answers and in traces.
-This note is here so that work uses the same language.
-
-The UI should describe what happened during a run. It should not make the run
-sound more certain, more complete, or more automated than it was.
-
-Footnote currently exposes three public modes: `fast`, `balanced`, and
-`grounded`. In product copy, use `Fast mode`, `Balanced mode`, and
-`Grounded mode`.
-
-The internal profiles are `generate-only` and `bounded-review`. Those names are
-useful in code and architecture docs, but they should not appear as the main
-labels under an answer. A user does not need to know that `balanced` maps to
-`bounded-review` to understand that the answer was reviewed.
-
-Fast mode is the single-pass path. Balanced mode can run review before
-returning the answer. Grounded mode uses the stricter evidence posture
-available to the current runtime.
-
-That last part needs careful wording. Grounded does not mean verified. It does
-not mean guaranteed true. If source evidence was not available for a run, the
-trace should say that instead of letting the mode name carry more weight than
-it earned.
 
 ## Answer receipts
 
-The answer footer should stay small. It can say what mode ran, whether review
-ran, whether a fallback happened, and whether a trace link is available. The
-detailed step list belongs in the trace.
+Footnote is starting to show more workflow information near answers and in
+traces.
+
+The answer surface should stay small. It can say:
+
+- what mode ran
+- whether review ran
+- whether fallback happened
+- whether a trace link is available
+
+The detailed step list belongs in the trace.
 
 Good receipt text is short:
 
@@ -291,90 +472,117 @@ Good receipt text is short:
 - `Planner fallback`
 - `Grounding evidence was not available`
 
-Do not show raw workflow chains like `generate -> assess -> revise` under every
-answer. That belongs in architecture docs or trace detail, not in the normal
-reading path.
+Do not show raw workflow chains like `generate -> assess -> revise` under
+every answer. That belongs in architecture docs or trace detail, not in the
+normal reading path.
 
 ## Placement
 
 Keep each kind of workflow information in one main place.
 
-- Answer footer: mode, short review or fallback summary, trace link
-- Trace page: step order, planner lineage, stop reasons, and technical detail
-  that explains the run
-- Docs: internal profile names, architecture terms, and runtime boundaries
+Answer footer:
 
-Do not solve placement questions ad hoc in each ticket. If the information is
-mainly explaining the run after the fact, it belongs in the trace. If it is
-mainly helping the reader understand the answer at a glance, it can belong in
-the footer.
+- mode
+- short review or fallback summary
+- trace link
 
-## Planner wording
+Trace page:
 
-Planner information can appear in workflow metadata as a `plan` step. When a
-run has that metadata, the trace can show it.
+- step order
+- planner lineage
+- stop reasons
+- technical detail that explains the run
 
-Keep the wording narrow. `Planned, then generated` is fine when the metadata
-supports it. `Planner fallback` is fine when fallback happened. Avoid phrases
-that make the planner sound like it owns the workflow.
+Docs:
 
-The answer receipt should mention planner only when it changes the user-facing
-story, such as planner fallback. Normal planner lineage belongs in the trace.
+- internal profile names
+- architecture terms
+- runtime boundaries
 
-Planner still runs before workflow execution in the main chat path today. It
-can shape the response path, but it does not own policy, safety, mode
-selection, provenance, or final response behavior.
+Do not solve placement questions ad hoc in each ticket.
 
-## Review and fallback
+If the information mainly explains the run after the fact, it belongs in the
+trace.
 
-A review label means a review step ran. It does not mean the answer was
-verified.
+If it mainly helps the reader understand the answer at a glance, it can belong
+in the footer.
 
-Use words like `reviewed`, `revised`, `skipped`, and `fallback`. Do not use
-`verified`.
+## Review and fallback wording
+
+A review label means a review step ran.
+
+It does not mean the answer was verified.
+
+Use words like:
+
+- `reviewed`
+- `revised`
+- `skipped`
+- `fallback`
+
+Do not use `verified`.
 
 Fallback should be visible in the trace. A fallback is not automatically a bad
-result; sometimes Footnote should return the best available answer instead of
-hiding everything because one step failed. But if review failed open, search
-was unavailable, or a limit stopped the workflow, the trace should say so.
+result. Sometimes Footnote should return the best available answer instead of
+hiding everything because one step failed.
 
-## Grounded mode
+But if review failed open, search was unavailable, or a limit stopped the
+workflow, the trace should say so.
+
+## Grounded mode wording
 
 Grounded mode should describe evidence posture, not truth.
 
-The UI can say that grounded mode used available source signals, or that
+The UI can say that Grounded mode used available source signals, or that
 grounding evidence was not available for a response. It can say that citations
-were included. It should not say the answer was truth checked, guaranteed, or
-verified.
+were included.
 
-Any grounded wording should be backed by metadata, such as citations, source
-usage, search or tool result evidence, or an explicit evidence-unavailable
-state.
+It should not say the answer was truth checked, guaranteed, or verified.
 
-The mode name alone is not evidence. If the runtime did not retrieve sources,
-check citations, or record grounding evidence, the UI should not imply that it
-did.
+Any grounded wording should be backed by metadata, such as:
+
+- citations
+- source usage
+- search or tool result evidence
+- an explicit evidence-unavailable state
+
+The mode name alone is not evidence.
+
+If the runtime did not retrieve sources, check citations, or record grounding
+evidence, the UI should not imply that it did.
 
 ## Current implementation phase
 
 For the next few workflow-facing tickets, stay close to current runtime
 behavior:
 
-- a short receipt near the answer
-- clearer fallback and stop reasons in the trace
-- review labels that do not overclaim
-- grounded-mode wording that says when evidence was or was not available
-- budget and usage visibility when backend metadata supports it
+- add a short receipt near the answer
+- show clearer fallback and stop reasons in the trace
+- add review labels that do not overclaim
+- make grounded-mode wording say when evidence was or was not available
+- show budget and usage visibility only when backend metadata supports it
 
-Leave bigger workflow controls for later. That includes replanning, generic
-tool steps and broad workflow diagrams. Those may become useful, but they
-should not be described as current behavior.
+Leave bigger workflow controls for later. That includes:
 
-## Boundaries
+- replanning
+- generic tool steps
+- broad workflow diagrams
+- planner timing fully owned by the workflow engine
 
-The Execution Contract sets the run rules. Workflow records the step pattern
-used for the run. The orchestrator coordinates the request and response. The
-planner suggests how to handle the request. Adapters run provider-specific work.
+Those may become useful, but they should not be described as current behavior.
+
+## Runtime boundaries
+
+The Execution Contract sets the run rules.
+
+Workflow records the step pattern used for the run.
+
+The orchestrator coordinates the request and response.
+
+The planner suggests how to handle the request.
+
+Adapters run provider-specific work.
+
 Trace and provenance explain what happened.
 
 The web UI should render backend-owned facts. It should not guess new workflow
@@ -384,115 +592,5 @@ makes the run look less clean.
 ## Related docs
 
 - [Execution Contract Authority Map](./execution-contract-authority-map.md)
-- [Workflow](./workflow.md)
 - [Response Metadata](./response-metadata.md)
 - [Workflow Engine Rollout Status](../status/2026-04-workflow-engine-rollout-status.md)
-
-# Workflow Engine And Provenance
-
-## Purpose
-
-Explain the current workflow engine and the metadata it emits.
-
-This doc covers what is implemented now, not the full plan.
-Read [Workflow](./workflow.md) first if you need the
-big picture.
-
-## Core Principles
-
-- Backend owns orchestration legality and limits.
-- Model participation is bounded and optional, not governing.
-- Workflow metadata is first-class, not a sidecar.
-- Keep public interfaces serializable and explicit.
-- Keep fail-open defaults unless refusal policy requires blocking.
-- Keep backend as cost authority.
-
-## Terms
-
-`WorkflowEngine` runs one bounded workflow loop from start to termination.
-`WorkflowPolicy` defines legal transitions and capability toggles.
-`ExecutionLimits` defines hard caps for steps, calls, tokens, and time.
-`WorkflowState` is the in-memory state for a running workflow.
-`StepExecutor` runs one step.
-`WorkflowRecord` and `StepRecord` are the workflow metadata records.
-
-## Engine Scope
-
-Today the engine mainly powers the reviewed chat path in
-`packages/backend/src/services/workflowEngine.ts`. It handles transition
-checks, hard limits, the bounded `generate -> assess -> revise` flow,
-termination reasons, fail-open handling for generation/review/revise failures,
-and `WorkflowRecord` plus `StepRecord` output.
-
-The shared workflow vocabulary also includes `plan`, `tool`, and replanning or
-tool-call budgets. Those terms exist in the engine, but they are not part of
-the main chat path yet.
-
-## Steps
-
-Step kinds are `plan`, `tool`, `generate`, `assess`, `revise`, and
-`finalize`.
-
-Some steps may be deterministic.
-Some may invoke model deliberation.
-That choice is controlled by `WorkflowPolicy` and `ExecutionLimits`.
-Model-backed deliberation is treated as an optional capability of certain steps,
-not a top-level orchestration authority.
-
-## Review Loop
-
-The reviewed profile uses one bounded pattern. `generate` produces the current
-draft. `assess` returns `reviewDecision` and `reviewReason`. If the decision is
-`revise`, `revise` produces the next draft. The loop stops when it reaches
-`finalize`, hits a limit, or fails open.
-
-## Step Records
-
-Each `StepRecord` includes an `outcome` with `status`, `summary`, `artifacts`,
-`signals`, and optional `recommendations`. This keeps step output explicit
-without a separate handoff type.
-`signals` means machine-readable control indicators used by transition logic
-(for example `goalMet`, `needsMoreEvidence`, `toolResultQuality`), not generic telemetry.
-For bounded review `assess` steps, use `reviewDecision` (`finalize` or
-`revise`) plus `reviewReason` as the machine-readable output.
-`recommendations` is advisory only and never overrides backend legality checks.
-
-## Limits
-
-`WorkflowPolicy` defines legal next steps from the current state. It also owns
-capability toggles such as plan, revise, and tool enablement. Model outputs
-can recommend transitions only where policy allows.
-
-`ExecutionLimits` sets the hard caps: `maxWorkflowSteps`, `maxToolCalls`,
-`maxDeliberationCalls`, `maxTokensTotal`, and `maxDurationMs`. These are
-backend-enforced stops, not model suggestions.
-
-## Failure Behavior
-
-The current workflow can end with `goal_satisfied`,
-`budget_exhausted_steps`, `budget_exhausted_tokens`,
-`budget_exhausted_time`, `transition_blocked_by_policy`,
-`max_tool_calls_reached`, `max_deliberation_calls_reached`, or
-`executor_error_fail_open`.
-
-## Metadata
-
-`WorkflowRecord` is the main workflow record returned for operators and
-response metadata.
-Deeper runtime/debug execution detail can remain in internal logs keyed by
-`workflowId` and `stepId`.
-
-In current chat responses, planner metadata still sits alongside workflow
-lineage, and workflow lineage covers the reviewed generation path. Read those
-records together, but do not confuse planner influence with workflow
-authority.
-
-## Future Work
-
-Future work may extend the same engine flow to planner and tool steps. That is
-not the current first-read explanation.
-Use rollout or RFC docs only when you need historical sequencing or design
-tradeoffs.
-
-For rollout history, see
-`docs/status/2026-04-workflow-engine-rollout-status.md`.
