@@ -27,8 +27,8 @@ it earned.
 ## Answer receipts
 
 The answer footer should stay small. It can say what mode ran, whether review
-ran, whether planning information is available, and whether a fallback happened.
-The detailed step list belongs in the trace.
+ran, whether a fallback happened, and whether a trace link is available. The
+detailed step list belongs in the trace.
 
 Good receipt text is short:
 
@@ -42,6 +42,20 @@ Do not show raw workflow chains like `generate -> assess -> revise` under every
 answer. That belongs in architecture docs or trace detail, not in the normal
 reading path.
 
+## Placement
+
+Keep each kind of workflow information in one main place.
+
+- Answer footer: mode, short review or fallback summary, trace link
+- Trace page: step order, planner lineage, stop reasons, and technical detail
+  that explains the run
+- Docs: internal profile names, architecture terms, and runtime boundaries
+
+Do not solve placement questions ad hoc in each ticket. If the information is
+mainly explaining the run after the fact, it belongs in the trace. If it is
+mainly helping the reader understand the answer at a glance, it can belong in
+the footer.
+
 ## Planner wording
 
 Planner information can appear in workflow metadata as a `plan` step. When a
@@ -50,6 +64,9 @@ run has that metadata, the trace can show it.
 Keep the wording narrow. `Planned, then generated` is fine when the metadata
 supports it. `Planner fallback` is fine when fallback happened. Avoid phrases
 that make the planner sound like it owns the workflow.
+
+The answer receipt should mention planner only when it changes the user-facing
+story, such as planner fallback. Normal planner lineage belongs in the trace.
 
 Planner still runs before workflow execution in the main chat path today. It
 can shape the response path, but it does not own policy, safety, mode
@@ -77,12 +94,18 @@ grounding evidence was not available for a response. It can say that citations
 were included. It should not say the answer was truth checked, guaranteed, or
 verified.
 
-If the runtime did not retrieve sources, check citations, or record grounding
-evidence, the UI should not imply that it did.
+Any grounded wording should be backed by metadata, such as citations, source
+usage, search or tool result evidence, or an explicit evidence-unavailable
+state.
 
-## Next workflow work
+The mode name alone is not evidence. If the runtime did not retrieve sources,
+check citations, or record grounding evidence, the UI should not imply that it
+did.
 
-The next workflow-facing changes should stay close to current runtime behavior:
+## Current implementation phase
+
+For the next few workflow-facing tickets, stay close to current runtime
+behavior:
 
 - a short receipt near the answer
 - clearer fallback and stop reasons in the trace
@@ -91,8 +114,8 @@ The next workflow-facing changes should stay close to current runtime behavior:
 - budget and usage visibility when backend metadata supports it
 
 Leave bigger workflow controls for later. That includes replanning, generic
-tool steps, broad workflow diagrams, and user-facing mode controls. Those may
-become useful, but they should not be described as current behavior.
+tool steps and broad workflow diagrams. Those may become useful, but they
+should not be described as current behavior.
 
 ## Boundaries
 
