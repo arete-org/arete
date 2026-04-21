@@ -2,35 +2,28 @@
 
 Use this section to understand how Footnote is put together.
 
-If you are new, read the core path first. The rest is useful detail, but not
-the best starting point.
+If you are new, start with the first few items below. The later items add more
+detail once you have the main runtime shape in mind.
 
-## Core Path
+## Important Concepts
 
 1. [Execution Contract Authority Map](./execution-contract-authority-map.md):
    start here for system authority and ownership boundaries.
-2. [Workflow Mode Routing](./workflow-mode-routing.md): read this next for the
+2. [Workflow](./workflow.md): read this next for the
    current workflow and planner model, including mode, profile, review/revise,
-   and planner boundaries.
+   planner boundaries, workflow-facing wording, placement, and provenance
+   presentation boundaries.
 3. [Response Metadata](./response-metadata.md):
    use this when you need the metadata map for mode, TRACE, planner influence,
    steerability, and provenance.
-4. [Workflow Engine And Provenance](./workflow-engine-and-provenance.md):
-   use this after the metadata guide for the current engine flow and workflow
-   lineage records.
-
-## Important Adjacent Docs
-
-- [Workflow Profile Contract](./workflow-profile-contract.md): contract details
-  for executable workflow profiles, limits, and no-generation handling.
-- [Prompt Resolution Order](./prompt-resolution.md): how prompt layers and
-  overrides resolve at runtime.
-- [Bounded User Control Mapping](./bounded-user-control-mapping.md): what users
-  can steer directly and what stays backend-owned.
-- [Execution Contract TrustGraph Architecture](./execution_contract_trustgraph/architecture.md):
-  TrustGraph-specific architecture and rollout constraints.
-- [Steerability Foundation (Internal Controls v1)](./2026-04-steerability-foundation.md):
-  internal control-record semantics behind steerability metadata.
+4. [Prompt Resolution Order](./prompt-resolution.md): how prompt layers and
+   overrides resolve at runtime.
+5. [Bounded User Control Mapping](./bounded-user-control-mapping.md): what
+   users can steer directly and what stays backend-owned.
+6. [Execution Contract TrustGraph Architecture](./execution_contract_trustgraph/architecture.md):
+   TrustGraph-specific architecture and rollout constraints.
+7. [Steerability Foundation (Internal Controls v1)](./2026-04-steerability-foundation.md):
+   internal control-record semantics behind steerability metadata.
 
 ## Historical Workflow Notes
 

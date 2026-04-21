@@ -79,6 +79,5 @@ the longer-term shape. Today that mainly means:
 - compatibility mirrors or summary fields kept during contract cleanup
 
 For current workflow behavior, read
-[Workflow Mode Routing](./workflow-mode-routing.md) and
-[Workflow Engine And Provenance](./workflow-engine-and-provenance.md).
+[Workflow](./workflow.md).
 For rationale and history, use the decision and status docs after that.

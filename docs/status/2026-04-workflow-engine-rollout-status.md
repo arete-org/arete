@@ -21,9 +21,7 @@ the main workflow/planner explainer.
 
 Current architecture references:
 
-- `docs/architecture/workflow-mode-routing.md`
-- `docs/architecture/workflow-engine-and-provenance.md`
-- `docs/architecture/workflow-profile-contract.md`
+- `docs/architecture/workflow.md`
 
 ## Snapshot
 
