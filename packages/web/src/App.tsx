@@ -22,13 +22,13 @@ const EmbedPage = lazy(() => import('@pages/EmbedPage'));
 const AboutPage = lazy(() => import('@pages/AboutPage'));
 
 const routeFallback = (
-    <main
-        id="main-content"
-        className="route-loading-shell"
-        role="status"
-        aria-live="polite"
-    >
-        <section className="route-loading-card" aria-label="Page loading state">
+    <main id="main-content" className="route-loading-shell">
+        <section
+            className="route-loading-card"
+            aria-label="Page loading state"
+            role="status"
+            aria-live="polite"
+        >
             <div className="spinner route-loading-spinner" aria-hidden="true" />
             <div className="route-loading-copy">
                 <p className="route-loading-title">Loading page...</p>
