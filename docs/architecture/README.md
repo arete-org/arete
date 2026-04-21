@@ -21,6 +21,9 @@ the best starting point.
 
 ## Important Adjacent Docs
 
+- [Workflow Feature Direction](./workflow-feature-direction.md): current note
+  for workflow-facing feature direction, user-facing wording, and ownership
+  boundaries.
 - [Workflow Profile Contract](./workflow-profile-contract.md): contract details
   for executable workflow profiles, limits, and no-generation handling.
 - [Prompt Resolution Order](./prompt-resolution.md): how prompt layers and
