@@ -97,24 +97,12 @@ default.
 These fallback steps happen only during initial routing. They are not runtime
 mode escalation.
 
-## Mode escalation
-
-Workflow mode escalation is attached at one place in
-`resolveWorkflowRuntimeConfig`:
-
-```text
-packages/backend/src/services/workflowProfileRegistry.ts
-```
-
-Rules for this seam:
-
-- Resolve the initial mode once.
-- Optionally apply one workflow-owned escalation request.
-- Do not run recursive or unbounded mode re-evaluation loops.
-- Keep escalation routing in workflow resolver code, not callers.
-
-Mode escalation should stay boring and centralized. Do not scatter it across
-the orchestrator, planner, UI, or adapters.
+Mode escalation also lives in `resolveWorkflowRuntimeConfig`
+(`packages/backend/src/services/workflowProfileRegistry.ts`). Keep it
+centralized there: resolve the initial mode once, apply at most one
+workflow-owned escalation request, and do not run recursive mode
+re-evaluation. Do not scatter escalation routing across the orchestrator,
+planner, UI, or adapters.
 
 ## Runtime flow
 
@@ -217,7 +205,7 @@ ran, whether fallback happened, and whether a trace link is available.
 
 The detailed step list belongs in the trace.
 
-Good receipt text is short:
+Receipt text should stay short:
 
 - `Answered in Balanced mode`
 - `Reviewed before final answer`
@@ -319,13 +307,8 @@ Optional profile extensions can support review and revision behavior, but they
 cannot override required no-generation classification, disposition, or
 termination-reason mapping.
 
-Mode chooses the kind of run.
-
-Profile chooses the step pattern.
-
-The engine enforces legality and limits.
-
-Adapters connect the profile to runtime calls.
+Mode chooses the kind of run. Profile chooses the step pattern. The engine
+enforces legality and limits. Adapters connect the profile to runtime calls.
 
 ## Engine scope
 
@@ -463,4 +446,5 @@ makes the run look cleaner.
 
 - [Execution Contract Authority Map](./execution-contract-authority-map.md)
 - [Response Metadata](./response-metadata.md)
+- [Workflow Profiles V1 Engine Vs Profile Semantics](./workflow-profiles-v1-engine-vs-profile-semantics.md)
 - [Workflow Engine Rollout Status](../status/2026-04-workflow-engine-rollout-status.md)
