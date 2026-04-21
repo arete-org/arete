@@ -71,12 +71,8 @@ answer was reviewed.
 | `balanced` | `balanced`         | `bounded-review` | reviewed generation    | yes    | balanced         |
 | `grounded` | `quality-grounded` | `bounded-review` | reviewed generation    | yes    | stricter         |
 
-Grounded mode does not mean the answer was verified.
-
-Reviewed does not mean correct.
-
-Those labels describe what the runtime tried to do. They are not truth
-guarantees.
+Grounded and reviewed are runtime labels. They describe the path Footnote
+took, not a guarantee that the answer is true.
 
 ## Mode selection
 
@@ -124,12 +120,8 @@ Planner lineage can appear in workflow metadata as a `plan` step when that
 metadata exists for the run. That is a lineage bridge, not a change in planner
 authority.
 
-So both of these are true:
-
-- planner can be visible in workflow lineage;
-- planner still runs before the main workflow execution path today.
-
-Do not blur those together.
+That means planner can be visible in workflow lineage even though planner
+timing still lives before the main workflow execution path.
 
 ## Review loop
 
@@ -168,9 +160,10 @@ Planner information can appear in workflow metadata as a `plan` step when
 available. That is lineage, not authority. Planner still runs before workflow
 execution in the main chat path today.
 
-Use wording like `Planned, then generated` or `Planner fallback` when the
-metadata supports it. Avoid phrases like `Planner-driven workflow`,
-`Planner-owned workflow`, or `Workflow started with planning`.
+When metadata supports it, trace copy can say `Planned, then generated` or
+`Planner fallback`. Avoid phrasing that makes planner sound like it owns the
+workflow, especially `Planner-driven workflow`, `Planner-owned workflow`, or
+`Workflow started with planning`.
 
 The answer receipt should mention planner only when it changes the user-facing
 story, such as planner fallback. Normal planner lineage belongs in the trace.
@@ -188,7 +181,7 @@ Response metadata has a few related surfaces:
 `selectionReason`, `initial_mode`, `escalated_mode`, `escalation_reason`,
 `requestedModeId`, `executionContractResponseMode`, and `behavior`.
 
-Read those records together, but do not treat them as interchangeable.
+Read those records together. They describe different parts of the run.
 
 Planner influence is not workflow authority.
 
@@ -249,9 +242,7 @@ in the footer.
 
 ## Review and fallback wording
 
-A review label means a review step ran.
-
-It does not mean the answer was verified.
+A review label means a review step ran. It says nothing stronger than that.
 
 Use words like `reviewed`, `revised`, `skipped`, and `fallback`. Do not use
 `verified`.
@@ -271,7 +262,7 @@ The UI can say that Grounded mode used available source signals, or that
 grounding evidence was not available for a response. It can say that citations
 were included.
 
-It should not say the answer was truth checked, guaranteed, or verified.
+Avoid stronger claims like `truth checked`, `guaranteed`, or `verified`.
 
 Any grounded wording should be backed by metadata, such as citations, source
 usage, search or tool result evidence, or an explicit evidence-unavailable
@@ -423,8 +414,7 @@ Future workflow work may add planner timing owned by the workflow engine,
 first-class tool steps, replanning, broader workflow diagrams, and user-facing
 workflow controls.
 
-Those are not current behavior. Do not write UI copy or docs as if they have
-landed.
+Keep UI copy and docs tied to what exists today.
 
 For now, keep workflow-facing UI close to current metadata: mode, review or
 fallback summary, grounding evidence availability, trace links, and
@@ -437,9 +427,9 @@ used for the run. The orchestrator coordinates the request and response.
 Planner suggests how to handle the request. Adapters run provider-specific
 work. Trace and provenance explain what happened.
 
-The web UI should render backend-owned facts. It should not guess new workflow
-meanings from raw metadata, invent budget numbers, or hide fallback because it
-makes the run look cleaner.
+The web UI should render backend-owned facts. It should not infer new workflow
+meanings from raw metadata, invent budget numbers, or hide fallback to make a
+run look cleaner.
 
 ## Related docs
 
