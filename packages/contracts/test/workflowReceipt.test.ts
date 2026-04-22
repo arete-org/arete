@@ -140,6 +140,62 @@ test('buildWorkflowReceiptItems marks reviewed only when assess step ran', () =>
     ]);
 });
 
+test('buildWorkflowReceiptItems surfaces explicit missing grounding evidence states', () => {
+    const metadata: ResponseMetadata = {
+        ...createBaseMetadata(),
+        workflowMode: {
+            modeId: 'grounded',
+            selectedBy: 'requested_mode',
+            selectionReason: 'Requested by user.',
+            initial_mode: 'grounded',
+            behavior: {
+                executionContractPresetId: 'quality-grounded',
+                workflowProfileClass: 'reviewed',
+                workflowProfileId: 'bounded-review',
+                workflowExecution: 'always',
+                reviewPass: 'included',
+                reviseStep: 'allowed',
+                evidencePosture: 'strict',
+                maxWorkflowSteps: 8,
+                maxDeliberationCalls: 3,
+            },
+        },
+        provenanceAssessment: {
+            methodId: 'deterministic_multi_signal_v1',
+            methodLabel:
+                'Deterministic multi-signal provenance classification (backend)',
+            signals: {
+                citationsPresent: false,
+                retrievalRequested: true,
+                retrievalUsed: true,
+                retrievalToolExecuted: true,
+                workflowEvidence: false,
+                trustGraphEvidenceAvailable: false,
+                trustGraphEvidenceUsed: false,
+                assistantDeclaredSpeculative: false,
+            },
+            conflicts: ['retrieval_used_without_citations'],
+            limitations: [
+                'Retrieval ran, but no citations were retained after normalization.',
+            ],
+        },
+    };
+
+    assert.deepEqual(buildWorkflowReceiptItems(metadata), [
+        'Answered in Grounded mode',
+        'Grounding evidence unavailable',
+    ]);
+});
+
+test('buildWorkflowReceiptItems surfaces attached sources when citations are present', () => {
+    const metadata: ResponseMetadata = {
+        ...createBaseMetadata(),
+        citations: [{ title: 'Source', url: 'https://example.com' }],
+    };
+
+    assert.deepEqual(buildWorkflowReceiptItems(metadata), ['Sources attached']);
+});
+
 test('buildWorkflowReceiptItems reports revised label from normalized review runtime summary', () => {
     const metadata: ResponseMetadata = {
         ...createBaseMetadata(),

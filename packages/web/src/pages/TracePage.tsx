@@ -12,15 +12,15 @@
  */
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { formatExecutionTimelineSummary } from '@footnote/contracts/ethics-core';
+import {
+    formatExecutionTimelineSummary,
+    summarizeGroundingEvidence,
+} from '@footnote/contracts/ethics-core';
 import type {
     GetTraceResponse,
     GetTraceStaleResponse,
 } from '@footnote/contracts/web';
-import type {
-    ExecutionEvent,
-    WorkflowStepKind,
-} from '@footnote/contracts/ethics-core';
+import type { WorkflowStepKind } from '@footnote/contracts/ethics-core';
 import { api, isApiClientError } from '../utils/api';
 import { createScopedLogger } from '../utils/logger';
 import {
@@ -91,7 +91,7 @@ const resolveExecutionSummary = (traceData: ServerMetadata): string | null =>
 
 const PROVENANCE_EXPLANATIONS: Record<string, string> = {
     Retrieved:
-        'This answer is classified as grounded in retrieved or workflow evidence recorded in this trace.',
+        'This provenance label means the runtime recorded retrieval-related or workflow evidence signals for this response. Check the grounding evidence section below; the label is not a truth guarantee.',
     Inferred:
         'This answer combines model reasoning with available context; verify key claims when stakes are high.',
     Speculative:
@@ -145,51 +145,16 @@ const getModeSummary = (
     };
 };
 
-const getSourceSummary = (
+const getGroundingEvidenceSummary = (
     traceData: ServerMetadata
 ): Pick<SummarySignal, 'value' | 'explanation'> => {
-    const citationCount = traceData.citations?.length ?? 0;
-    if (citationCount > 0) {
-        return {
-            value:
-                citationCount === 1
-                    ? '1 source linked'
-                    : `${citationCount} sources linked`,
-            explanation:
-                'Source links are available below for direct inspection.',
-        };
-    }
-
-    const toolEvents = (traceData.execution ?? []).filter(
-        (event): event is ExecutionEvent & { kind: 'tool' } =>
-            event.kind === 'tool' && event.toolName === 'web_search'
-    );
-    const searchUnsupported = toolEvents.some(
-        (event) =>
-            event.status === 'skipped' &&
-            event.reasonCode === 'search_not_supported_by_selected_profile'
-    );
-
-    if (searchUnsupported) {
-        return {
-            value: 'No sources linked',
-            explanation:
-                'Search was unavailable for the selected profile, so no source links were attached.',
-        };
-    }
-
-    if (toolEvents.length > 0) {
-        return {
-            value: 'No sources linked',
-            explanation:
-                'A tool/search step is recorded, but no source links were attached.',
-        };
-    }
-
+    const groundingEvidenceSummary = summarizeGroundingEvidence(traceData);
     return {
-        value: 'No sources linked',
-        explanation:
-            'No source links were attached in this trace. Treat unsupported claims as unverified.',
+        value:
+            groundingEvidenceSummary.status === 'not_recorded'
+                ? 'Not recorded'
+                : groundingEvidenceSummary.label,
+        explanation: groundingEvidenceSummary.explanation,
     };
 };
 
@@ -606,7 +571,7 @@ const TracePage = (): JSX.Element => {
         : 'N/A';
     const provenanceExplanation = getProvenanceExplanation(provenance);
     const modeSummary = getModeSummary(traceData);
-    const sourceSummary = getSourceSummary(traceData);
+    const groundingEvidenceSummary = getGroundingEvidenceSummary(traceData);
     const safetySummary = getSafetySummary(traceData, safetyLabel);
     const workflowSummary = getWorkflowSummary(traceData);
     const runOutcomeSummary = traceRunOutcomeSummary;
@@ -617,9 +582,9 @@ const TracePage = (): JSX.Element => {
             explanation: modeSummary.explanation,
         },
         {
-            label: 'Sources',
-            value: sourceSummary.value,
-            explanation: sourceSummary.explanation,
+            label: 'Grounding evidence',
+            value: groundingEvidenceSummary.value,
+            explanation: groundingEvidenceSummary.explanation,
         },
         {
             label: 'Safety',
@@ -731,16 +696,17 @@ const TracePage = (): JSX.Element => {
                     </ul>
                 ) : (
                     <p>
-                        No citations are attached to this response. Use this as
-                        an unsupported answer unless you can verify key claims
-                        independently.
+                        {groundingEvidenceSummary.explanation} Treat key claims
+                        as unverified unless you can confirm them independently.
                     </p>
                 )}
                 <details style={{ marginTop: '0.75rem' }}>
                     <summary>How source status was determined</summary>
                     <p style={{ marginTop: '0.5rem' }}>
                         Citation links are shown when present in trace metadata.
-                        Execution events are used as secondary context only.
+                        Missing-evidence states come from explicit
+                        provenance-assessment or execution metadata. Grounded
+                        mode by itself does not establish evidence.
                     </p>
                 </details>
             </article>

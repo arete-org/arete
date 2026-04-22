@@ -11,6 +11,7 @@ import {
     type ExecutionEvent,
     type ResponseMetadata,
     buildWorkflowReceiptSummary,
+    summarizeGroundingEvidence,
 } from '@footnote/contracts/ethics-core';
 import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 import { botApi } from '../../api/botApi.js';
@@ -262,7 +263,11 @@ function formatSourcesSection(
     }
 
     if (!payload.citations.length) {
-        return ['**Sources**', '- No citations recorded'].join('\n');
+        const groundingEvidenceSummary = summarizeGroundingEvidence(payload);
+        return [
+            '**Sources**',
+            `- ${groundingEvidenceSummary.explanation}`,
+        ].join('\n');
     }
 
     const lines = ['**Sources**'];

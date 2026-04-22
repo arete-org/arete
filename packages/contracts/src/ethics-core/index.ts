@@ -85,9 +85,11 @@ export {
     resolveWorkflowModeLabel,
     resolveReviewReceipt,
     resolvePlannerFallbackReceipt,
+    summarizeGroundingEvidence,
     buildWorkflowReceiptItems,
     buildWorkflowReceiptSummary,
 } from './workflowReceipt.js';
+export type { GroundingEvidenceSummary } from './workflowReceipt.js';
 export {
     SafetyRuleIdSchema,
     SafetyActionSchema,
