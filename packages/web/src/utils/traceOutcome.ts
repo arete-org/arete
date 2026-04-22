@@ -51,8 +51,6 @@ const STOP_REASON_EXPLANATIONS: Record<WorkflowTerminationReason, string> = {
 const FALLBACK_REASON_EXPLANATIONS: Record<string, string> = {
     search_rerouted_to_fallback_profile:
         'Search execution was rerouted to a fallback profile.',
-    planner_contract_fallback:
-        'Planner execution used the fallback contract path.',
 };
 
 const SKIPPED_REASON_EXPLANATIONS: Record<string, string> = {
@@ -90,7 +88,7 @@ const isFallbackPlanStep = (workflow: WorkflowRecord | undefined): boolean =>
     (workflow?.steps ?? []).some(
         (step) =>
             step.stepKind === 'plan' &&
-            step.outcome.signals?.contractType === 'fallback'
+            step.outcome?.signals?.contractType === 'fallback'
     );
 
 const isKnownFallbackReason = (reasonCode: string): boolean =>
@@ -102,6 +100,25 @@ const isKnownSkippedReason = (reasonCode: string): boolean =>
 const isKnownStoppedExecutionReason = (reasonCode: string): boolean =>
     reasonCode in STOPPED_EXECUTION_REASON_EXPLANATIONS;
 
+/**
+ * Derives a conservative run-outcome summary for trace presentation.
+ *
+ * This is an exported UI-boundary formatter for workflow/provenance metadata.
+ * It only uses backend-authored execution/workflow facts and never invents
+ * new backend reason codes.
+ *
+ * Behavior:
+ * - Returns a concrete `RunOutcomeSummary` when outcome signals are present.
+ * - Returns an `unknown` summary when metadata exists but no definitive path
+ *   can be derived.
+ * - Returns `null` when neither workflow nor execution metadata is present.
+ *
+ * Decision assumptions:
+ * - `workflow.terminationReason` is treated as the highest-authority stop/completion signal.
+ * - Explicit runtime failures outrank inferred completion from generation.
+ * - Planner `contractType === "fallback"` is surfaced as fallback posture
+ *   without exposing synthesized reason-code strings.
+ */
 export const buildRunOutcomeSummary = (
     source: TraceOutcomeSource
 ): RunOutcomeSummary | null => {
@@ -112,6 +129,7 @@ export const buildRunOutcomeSummary = (
     const fallbackReasonCodes = new Set<string>();
     const skippedReasonCodes = new Set<string>();
     const failedReasonCodes = new Set<string>();
+    let hasPlannerFallbackSignal = false;
 
     for (const event of execution) {
         if (event.status === 'skipped' && event.reasonCode) {
@@ -124,12 +142,12 @@ export const buildRunOutcomeSummary = (
             fallbackReasonCodes.add(event.reasonCode);
         }
         if (isFallbackPlannerEvent(event)) {
-            fallbackReasonCodes.add('planner_contract_fallback');
+            hasPlannerFallbackSignal = true;
         }
     }
 
     if (isFallbackPlanStep(workflow)) {
-        fallbackReasonCodes.add('planner_contract_fallback');
+        hasPlannerFallbackSignal = true;
     }
 
     const primaryFallbackReason = Array.from(fallbackReasonCodes)[0];
@@ -146,9 +164,12 @@ export const buildRunOutcomeSummary = (
         const stopExplanation =
             STOP_REASON_EXPLANATIONS[terminationReason] ??
             'Workflow terminated before a goal-satisfied completion path.';
-        const fallbackSuffix = primaryFallbackReason
-            ? ` A fallback signal was also recorded (${primaryFallbackReason}).`
-            : '';
+        const fallbackSuffix =
+            primaryFallbackReason !== undefined
+                ? ` A fallback signal was also recorded (${primaryFallbackReason}).`
+                : hasPlannerFallbackSignal
+                  ? ' A fallback planner-contract signal was also recorded.'
+                  : '';
         return {
             category: 'stopped',
             headline: 'Stopped',
@@ -158,13 +179,16 @@ export const buildRunOutcomeSummary = (
         };
     }
 
-    if (primaryFallbackReason) {
+    if (primaryFallbackReason !== undefined || hasPlannerFallbackSignal) {
+        const explanation =
+            primaryFallbackReason !== undefined
+                ? (FALLBACK_REASON_EXPLANATIONS[primaryFallbackReason] ??
+                  'Fallback path signals are present in execution metadata.')
+                : 'Fallback planner-contract metadata is present in this trace.';
         return {
             category: 'fell_back',
             headline: 'Fell back',
-            explanation:
-                FALLBACK_REASON_EXPLANATIONS[primaryFallbackReason] ??
-                'Fallback path signals are present in execution metadata.',
+            explanation,
             reasonCode: primaryFallbackReason,
         };
     }
@@ -180,14 +204,11 @@ export const buildRunOutcomeSummary = (
         };
     }
 
-    if (terminationReason === 'goal_satisfied' || hasExecutedGeneration) {
+    if (terminationReason === 'goal_satisfied') {
         return {
             category: 'completed',
             headline: 'Completed',
-            explanation:
-                terminationReason === 'goal_satisfied'
-                    ? STOP_REASON_EXPLANATIONS.goal_satisfied
-                    : 'Execution reached a generation step without an explicit workflow termination record.',
+            explanation: STOP_REASON_EXPLANATIONS.goal_satisfied,
             reasonCode: terminationReason,
         };
     }
@@ -200,6 +221,16 @@ export const buildRunOutcomeSummary = (
                 STOPPED_EXECUTION_REASON_EXPLANATIONS[primaryFailedReason] ??
                 'Runtime failure signals were recorded in execution metadata.',
             reasonCode: primaryFailedReason,
+        };
+    }
+
+    if (hasExecutedGeneration) {
+        return {
+            category: 'completed',
+            headline: 'Completed',
+            explanation:
+                'Execution reached a generation step without an explicit workflow termination record.',
+            reasonCode: terminationReason,
         };
     }
 

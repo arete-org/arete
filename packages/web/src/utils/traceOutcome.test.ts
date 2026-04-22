@@ -34,7 +34,10 @@ const createSource = ({
 }: {
     workflow?: ResponseMetadata['workflow'];
     execution?: ResponseMetadata['execution'];
-}) => ({
+}): {
+    workflow?: ResponseMetadata['workflow'];
+    execution?: ResponseMetadata['execution'];
+} => ({
     workflow,
     execution,
 });
@@ -47,6 +50,11 @@ test('buildRunOutcomeSummary returns completed for goal_satisfied termination', 
     );
     assert.equal(summary?.category, 'completed');
     assert.equal(summary?.reasonCode, 'goal_satisfied');
+    assert.equal(summary?.headline, 'Completed');
+    assert.equal(
+        summary?.explanation,
+        'Workflow reached its goal-satisfied termination path.'
+    );
 });
 
 test('buildRunOutcomeSummary returns stopped for workflow budget limits', () => {
@@ -57,6 +65,11 @@ test('buildRunOutcomeSummary returns stopped for workflow budget limits', () => 
     );
     assert.equal(summary?.category, 'stopped');
     assert.equal(summary?.reasonCode, 'budget_exhausted_steps');
+    assert.equal(summary?.headline, 'Stopped');
+    assert.equal(
+        summary?.explanation,
+        'Workflow stopped after reaching the configured step budget.'
+    );
 });
 
 test('buildRunOutcomeSummary preserves fallback signal when stop reason exists', () => {
@@ -79,6 +92,11 @@ test('buildRunOutcomeSummary preserves fallback signal when stop reason exists',
         summary?.secondaryReasonCode,
         'search_rerouted_to_fallback_profile'
     );
+    assert.equal(summary?.headline, 'Stopped');
+    assert.equal(
+        summary?.explanation,
+        'Workflow stopped after reaching the configured step budget. A fallback signal was also recorded (search_rerouted_to_fallback_profile).'
+    );
 });
 
 test('buildRunOutcomeSummary returns fallback for explicit reroute reason', () => {
@@ -97,6 +115,37 @@ test('buildRunOutcomeSummary returns fallback for explicit reroute reason', () =
     );
     assert.equal(summary?.category, 'fell_back');
     assert.equal(summary?.reasonCode, 'search_rerouted_to_fallback_profile');
+    assert.equal(summary?.headline, 'Fell back');
+    assert.equal(
+        summary?.explanation,
+        'Search execution was rerouted to a fallback profile.'
+    );
+});
+
+test('buildRunOutcomeSummary returns fallback without synthetic reason code for planner contract fallback', () => {
+    const execution: ExecutionEvent[] = [
+        {
+            kind: 'planner',
+            status: 'executed',
+            purpose: 'chat_orchestrator_action_selection',
+            contractType: 'fallback',
+            applyOutcome: 'applied',
+            mattered: false,
+            matteredControlIds: [],
+        },
+    ];
+    const summary = buildRunOutcomeSummary(
+        createSource({
+            execution,
+        })
+    );
+    assert.equal(summary?.category, 'fell_back');
+    assert.equal(summary?.reasonCode, undefined);
+    assert.equal(summary?.headline, 'Fell back');
+    assert.equal(
+        summary?.explanation,
+        'Fallback planner-contract metadata is present in this trace.'
+    );
 });
 
 test('buildRunOutcomeSummary returns skipped for explicit skipped reason', () => {
@@ -118,6 +167,11 @@ test('buildRunOutcomeSummary returns skipped for explicit skipped reason', () =>
         summary?.reasonCode,
         'search_not_supported_by_selected_profile'
     );
+    assert.equal(summary?.headline, 'Skipped');
+    assert.equal(
+        summary?.explanation,
+        'A search step was skipped because the selected profile does not support search.'
+    );
 });
 
 test('buildRunOutcomeSummary returns unknown for metadata without canonical reason', () => {
@@ -134,6 +188,11 @@ test('buildRunOutcomeSummary returns unknown for metadata without canonical reas
         })
     );
     assert.equal(summary?.category, 'unknown');
+    assert.equal(summary?.headline, 'Outcome not fully recorded');
+    assert.equal(
+        summary?.explanation,
+        'Execution metadata exists, but no canonical completion, stop, skip, or fallback reason was recorded.'
+    );
 });
 
 test('buildRunOutcomeSummary returns null when trace has no workflow or execution metadata', () => {
