@@ -700,10 +700,10 @@ const TracePage = (): JSX.Element => {
                 <details style={{ marginTop: '0.75rem' }}>
                     <summary>How Footnote decided this</summary>
                     <p style={{ marginTop: '0.5rem' }}>
-                        Footnote shows citation links when the trace includes
-                        them. If sources are missing, Footnote only explains why
-                        when the backend recorded a clear reason. Grounded mode
-                        alone does not mean sources were available.
+                        Footnote shows sources when it has them. If no sources
+                        are shown, Footnote only explains why when it has a
+                        clear reason to share. Grounded mode alone does not
+                        mean sources were available.
                     </p>
                 </details>
             </article>
