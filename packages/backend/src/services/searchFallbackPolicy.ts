@@ -34,6 +34,12 @@ const searchFallbackPolicyByRoutingStrategy: Record<
     ExecutionContractRoutingIntent['strategy'],
     SearchFallbackPolicy
 > = {
+    // TODO(workflow-search-profile-split): Replace reroute-only behavior with
+    // explicit split-profile policy:
+    // - retrieval profile selection for tool execution
+    // - generation profile selection for final answer synthesis
+    // Preserve deterministic ranking and reason codes for retrieval profile
+    // fallback without mutating the selected generation profile.
     'capability-first': {
         allowReroute: true,
         rerouteReasonCode: 'search_rerouted_to_fallback_profile',

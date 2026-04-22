@@ -204,6 +204,11 @@ export const resolveExecutionProfile = (
         generationForExecution.search &&
         !selectedResponseProfile.capabilities.canUseSearch
     ) {
+        // TODO(workflow-search-profile-split): Decouple retrieval profile
+        // execution from final generation profile selection. Today this branch
+        // mutates the main selected response profile for search compatibility,
+        // which prevents "search with provider A, generate with provider B"
+        // execution in one request.
         // A plan can ask for search and still land on a profile that cannot
         // search. Handle that mismatch here so the rest of the orchestrator can
         // work with one resolved profile.

@@ -414,6 +414,19 @@ Future workflow work may add planner timing owned by the workflow engine,
 first-class tool steps, replanning, broader workflow diagrams, and user-facing
 workflow controls.
 
+TODO(workflow-search-profile-split): Define and implement explicit split-model
+execution for retrieval vs final generation. Current routing resolves one
+selected response profile and may reroute that profile when search capability
+is required, which prevents "search on profile A, generate on profile B" in
+one request path.
+
+Recommended design boundary for that work:
+
+- retrieval profile selection remains policy-governed and deterministic
+- generation profile selection remains request or planner governed by routing strategy
+- retrieval evidence joins runtime context and provenance before final generation
+- trace and execution metadata report both retrieval and generation profile lineage
+
 Keep UI copy and docs tied to what exists today.
 
 For now, keep workflow-facing UI close to current metadata: mode, review or
