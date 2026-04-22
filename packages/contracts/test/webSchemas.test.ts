@@ -429,6 +429,28 @@ test('ResponseMetadataSchema accepts workflow lineage metadata', () => {
     assert.equal(parsed.success, true);
 });
 
+test('ResponseMetadataSchema accepts normalized review runtime summary labels', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        reviewRuntime: {
+            label: 'reviewed_no_revision',
+        },
+    });
+
+    assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema rejects unknown normalized review runtime labels', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        reviewRuntime: {
+            label: 'approved',
+        },
+    });
+
+    assert.equal(parsed.success, false);
+});
+
 test('ResponseMetadataSchema accepts structured steerability controls metadata', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,

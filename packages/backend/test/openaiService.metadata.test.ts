@@ -845,3 +845,230 @@ test('buildResponseMetadata includes totalDurationMs when runtime context provid
 
     assert.equal(metadata.totalDurationMs, 1234);
 });
+
+test('buildResponseMetadata defaults reviewRuntime to not_reviewed when no review path metadata exists', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext()
+    );
+
+    assert.deepEqual(metadata.reviewRuntime, {
+        label: 'not_reviewed',
+    });
+});
+
+test('buildResponseMetadata sets reviewRuntime to reviewed_no_revision when assess executed without revise', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            workflow: {
+                workflowId: 'wf_1',
+                workflowName: 'message_with_review_loop',
+                status: 'completed',
+                terminationReason: 'goal_satisfied',
+                stepCount: 2,
+                maxSteps: 4,
+                maxDurationMs: 12000,
+                steps: [
+                    {
+                        stepId: 'step_generate_1',
+                        attempt: 1,
+                        stepKind: 'generate',
+                        startedAt: '2026-04-22T00:00:00.000Z',
+                        finishedAt: '2026-04-22T00:00:00.010Z',
+                        durationMs: 10,
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Generated initial draft response.',
+                        },
+                    },
+                    {
+                        stepId: 'step_assess_1',
+                        attempt: 1,
+                        stepKind: 'assess',
+                        startedAt: '2026-04-22T00:00:00.011Z',
+                        finishedAt: '2026-04-22T00:00:00.021Z',
+                        durationMs: 10,
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Assessment step evaluated draft quality.',
+                            signals: {
+                                reviewDecision: 'finalize',
+                                reviewReason:
+                                    'Draft is ready for final response.',
+                            },
+                        },
+                    },
+                ],
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.reviewRuntime, {
+        label: 'reviewed_no_revision',
+    });
+});
+
+test('buildResponseMetadata sets reviewRuntime to revised when revise step executed', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            workflow: {
+                workflowId: 'wf_2',
+                workflowName: 'message_with_review_loop',
+                status: 'completed',
+                terminationReason: 'goal_satisfied',
+                stepCount: 3,
+                maxSteps: 6,
+                maxDurationMs: 15000,
+                steps: [
+                    {
+                        stepId: 'step_generate_1',
+                        attempt: 1,
+                        stepKind: 'generate',
+                        startedAt: '2026-04-22T00:00:00.000Z',
+                        finishedAt: '2026-04-22T00:00:00.010Z',
+                        durationMs: 10,
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Generated initial draft response.',
+                        },
+                    },
+                    {
+                        stepId: 'step_assess_1',
+                        attempt: 1,
+                        stepKind: 'assess',
+                        startedAt: '2026-04-22T00:00:00.011Z',
+                        finishedAt: '2026-04-22T00:00:00.021Z',
+                        durationMs: 10,
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Assessment step evaluated draft quality.',
+                            signals: {
+                                reviewDecision: 'revise',
+                                reviewReason:
+                                    'One revision improves specificity.',
+                            },
+                        },
+                    },
+                    {
+                        stepId: 'step_revise_1',
+                        attempt: 1,
+                        stepKind: 'revise',
+                        startedAt: '2026-04-22T00:00:00.022Z',
+                        finishedAt: '2026-04-22T00:00:00.032Z',
+                        durationMs: 10,
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Revision step produced improved draft.',
+                        },
+                    },
+                ],
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.reviewRuntime, {
+        label: 'revised',
+    });
+});
+
+test('buildResponseMetadata sets reviewRuntime to skipped when review pass was expected but no assess step executed', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            workflowMode: {
+                modeId: 'grounded',
+                selectedBy: 'requested_mode',
+                selectionReason: 'Requested by user.',
+                initial_mode: 'grounded',
+                behavior: {
+                    executionContractPresetId: 'quality-grounded',
+                    workflowProfileClass: 'reviewed',
+                    workflowProfileId: 'bounded-review',
+                    workflowExecution: 'always',
+                    reviewPass: 'included',
+                    reviseStep: 'allowed',
+                    evidencePosture: 'strict',
+                    maxWorkflowSteps: 8,
+                    maxDeliberationCalls: 3,
+                },
+            },
+            workflow: {
+                workflowId: 'wf_3',
+                workflowName: 'message_with_review_loop',
+                status: 'degraded',
+                terminationReason: 'budget_exhausted_steps',
+                stepCount: 1,
+                maxSteps: 1,
+                maxDurationMs: 5000,
+                steps: [
+                    {
+                        stepId: 'step_generate_1',
+                        attempt: 1,
+                        stepKind: 'generate',
+                        startedAt: '2026-04-22T00:00:00.000Z',
+                        finishedAt: '2026-04-22T00:00:00.010Z',
+                        durationMs: 10,
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Generated initial draft response.',
+                        },
+                    },
+                ],
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.reviewRuntime, {
+        label: 'skipped',
+    });
+});
+
+test('buildResponseMetadata sets reviewRuntime to fallback when fail-open fallback path was recorded', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            workflow: {
+                workflowId: 'wf_4',
+                workflowName: 'message_with_review_loop',
+                status: 'degraded',
+                terminationReason: 'executor_error_fail_open',
+                stepCount: 2,
+                maxSteps: 4,
+                maxDurationMs: 12000,
+                steps: [
+                    {
+                        stepId: 'step_generate_1',
+                        attempt: 1,
+                        stepKind: 'generate',
+                        startedAt: '2026-04-22T00:00:00.000Z',
+                        finishedAt: '2026-04-22T00:00:00.010Z',
+                        durationMs: 10,
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Generated initial draft response.',
+                        },
+                    },
+                    {
+                        stepId: 'step_assess_1',
+                        attempt: 1,
+                        stepKind: 'assess',
+                        reasonCode: 'generation_runtime_error',
+                        startedAt: '2026-04-22T00:00:00.011Z',
+                        finishedAt: '2026-04-22T00:00:00.021Z',
+                        durationMs: 10,
+                        outcome: {
+                            status: 'failed',
+                            summary: 'Assessment failed.',
+                        },
+                    },
+                ],
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.reviewRuntime, {
+        label: 'fallback',
+    });
+});

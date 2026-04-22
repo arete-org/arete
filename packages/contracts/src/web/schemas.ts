@@ -9,6 +9,7 @@
 import { z } from 'zod';
 import {
     BOUNDED_REVIEW_ASSESS_DECISIONS,
+    REVIEW_RUNTIME_LABELS,
     WORKFLOW_STEP_KINDS,
     WORKFLOW_STEP_STATUSES,
     WORKFLOW_TERMINATION_REASONS,
@@ -493,6 +494,14 @@ const WorkflowRecordSchema = z
     })
     .strict();
 
+const ReviewRuntimeLabelSchema = z.enum(REVIEW_RUNTIME_LABELS);
+
+const ReviewRuntimeSummarySchema = z
+    .object({
+        label: ReviewRuntimeLabelSchema,
+    })
+    .strict();
+
 const TrustGraphProvenanceReasonCodeSchema = z.enum([
     'external_scope_validation_failed',
     'adapter_scope_mismatch',
@@ -727,6 +736,7 @@ const responseMetadataShape = {
     provenanceAssessment: ProvenanceAssessmentSchema.optional(),
     execution: z.array(ExecutionEventSchema).optional(),
     workflow: WorkflowRecordSchema.optional(),
+    reviewRuntime: ReviewRuntimeSummarySchema.optional(),
     workflowMode: WorkflowModeDecisionSchema.optional(),
     steerabilityControls: SteerabilityControlsSchema.optional(),
     evaluator: EvaluatorOutcomeSchema.optional(),

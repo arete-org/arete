@@ -160,7 +160,7 @@ test('details action renders markdown sections with execution table and trace vi
         assert.match(content, /Open full trace/);
         assert.match(content, /\/traces\/resp_details_sections/);
         assert.match(content, /Answered in Balanced mode/);
-        assert.match(content, /Review skipped/);
+        assert.match(content, /Review fallback/);
         assert.match(content, /Planner fallback/);
         assert.match(content, /Target Attribution: `5`/);
         assert.match(content, /Final Attribution: `3`/);

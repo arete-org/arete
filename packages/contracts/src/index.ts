@@ -20,6 +20,8 @@ export type {
     ExecutionReasonCode,
     ToolInvocationName,
     ToolInvocationReasonCode,
+    ReviewRuntimeLabel,
+    ReviewRuntimeSummary,
     ToolInvocationIntent,
     ToolInvocationRequest,
     ToolExecutionContext,
@@ -40,7 +42,10 @@ export type {
     TrustGraphMetadata,
     ResponseMetadata,
 } from './ethics-core/index.js';
-export { formatExecutionTimelineSummary } from './ethics-core/index.js';
+export {
+    formatExecutionTimelineSummary,
+    deriveReviewRuntimeSummary,
+} from './ethics-core/index.js';
 export {
     SafetyRuleIdSchema,
     SafetyActionSchema,

@@ -54,6 +54,8 @@ export type {
     WorkflowModeEvidencePosture,
     WorkflowModeBehavior,
     WorkflowModeDecision,
+    ReviewRuntimeLabel,
+    ReviewRuntimeSummary,
     SteerabilityControlId,
     SteerabilityControlSource,
     SteerabilityImpactTarget,
@@ -75,8 +77,10 @@ export {
     WORKFLOW_STEP_KINDS,
     WORKFLOW_TERMINATION_REASONS,
     BOUNDED_REVIEW_ASSESS_DECISIONS,
+    REVIEW_RUNTIME_LABELS,
 } from './types.js';
 export { formatExecutionTimelineSummary } from './executionFormatting.js';
+export { deriveReviewRuntimeSummary } from './reviewRuntime.js';
 export {
     resolveWorkflowModeLabel,
     resolveReviewReceipt,
