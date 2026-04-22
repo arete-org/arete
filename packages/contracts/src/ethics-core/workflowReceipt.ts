@@ -7,6 +7,7 @@
  */
 
 import type { ResponseMetadata, WorkflowModeId } from './types.js';
+import { deriveReviewRuntimeSummary } from './reviewRuntime.js';
 
 const WORKFLOW_MODE_LABELS: Record<WorkflowModeId, string> = {
     fast: 'Fast mode',
@@ -46,32 +47,26 @@ export const resolveWorkflowModeLabel = (
  * Returns the review state line for the receipt.
  *
  * Rules:
- * - Show `Reviewed before final answer` only when an `assess` step actually
- *   ran (status is not `skipped`).
- * - Show `Review skipped` when metadata says review was excluded, or when
- *   review was expected but no review step ran.
- * - Return `null` when metadata is missing or not decisive.
+ * - Prefer backend-provided normalized reviewRuntime labels.
+ * - Fall back to deterministic derivation only for legacy traces.
+ * - Keep copy conservative and path-focused.
  */
 export const resolveReviewReceipt = (
     metadata: ResponseMetadata
 ): string | null => {
-    const reviewStepRan =
-        metadata.workflow?.steps?.some(
-            (step) =>
-                step.stepKind === 'assess' && step.outcome.status !== 'skipped'
-        ) ?? false;
-    if (reviewStepRan) {
+    const reviewRuntime =
+        metadata.reviewRuntime ?? deriveReviewRuntimeSummary(metadata);
+    if (reviewRuntime.label === 'reviewed_no_revision') {
         return 'Reviewed before final answer';
     }
-
-    const reviewPass = metadata.workflowMode?.behavior?.reviewPass;
-    if (reviewPass === 'excluded') {
+    if (reviewRuntime.label === 'revised') {
+        return 'Reviewed and revised before final answer';
+    }
+    if (reviewRuntime.label === 'skipped') {
         return 'Review skipped';
     }
-
-    const workflowStepCount = metadata.workflow?.steps?.length ?? 0;
-    if (reviewPass === 'included' && workflowStepCount > 0) {
-        return 'Review skipped';
+    if (reviewRuntime.label === 'fallback') {
+        return 'Review fallback';
     }
 
     return null;

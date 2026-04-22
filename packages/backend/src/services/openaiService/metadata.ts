@@ -19,6 +19,7 @@ import type {
     ToolInvocationReasonCode,
     TraceAxisScore,
 } from '@footnote/contracts/ethics-core';
+import { deriveReviewRuntimeSummary } from '@footnote/contracts/ethics-core';
 import { runtimeConfig } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 import {
@@ -330,6 +331,11 @@ const buildResponseMetadata = (
     const generationEventModel = execution
         .filter((event) => event.kind === 'generation')
         .at(-1)?.model;
+    const reviewRuntime = deriveReviewRuntimeSummary({
+        workflow: runtimeContext.workflow,
+        workflowMode: runtimeContext.workflowMode,
+        execution,
+    });
 
     return {
         responseId,
@@ -356,6 +362,7 @@ const buildResponseMetadata = (
         ...(runtimeContext.workflow !== undefined && {
             workflow: runtimeContext.workflow,
         }),
+        reviewRuntime,
         ...(runtimeContext.workflowMode !== undefined && {
             workflowMode: runtimeContext.workflowMode,
         }),

@@ -73,16 +73,19 @@ test('buildWorkflowReceiptItems renders mode, review, and planner fallback signa
                 reasonCode: 'planner_runtime_error',
             },
         ],
+        reviewRuntime: {
+            label: 'fallback',
+        },
     };
 
     assert.deepEqual(buildWorkflowReceiptItems(metadata), [
         'Answered in Balanced mode',
-        'Review skipped',
+        'Review fallback',
         'Planner fallback',
     ]);
     assert.equal(
         buildWorkflowReceiptSummary(metadata),
-        'Answered in Balanced mode • Review skipped • Planner fallback'
+        'Answered in Balanced mode • Review fallback • Planner fallback'
     );
 });
 
@@ -137,6 +140,19 @@ test('buildWorkflowReceiptItems marks reviewed only when assess step ran', () =>
     ]);
 });
 
+test('buildWorkflowReceiptItems reports revised label from normalized review runtime summary', () => {
+    const metadata: ResponseMetadata = {
+        ...createBaseMetadata(),
+        reviewRuntime: {
+            label: 'revised',
+        },
+    };
+
+    assert.deepEqual(buildWorkflowReceiptItems(metadata), [
+        'Reviewed and revised before final answer',
+    ]);
+});
+
 test('buildWorkflowReceiptSummary stays fail-open for legacy partial metadata', () => {
     const partialMetadata = {
         ...createBaseMetadata(),
@@ -150,4 +166,55 @@ test('buildWorkflowReceiptSummary stays fail-open for legacy partial metadata', 
         buildWorkflowReceiptSummary(partialMetadata),
         'Answered in Fast mode'
     );
+});
+
+test('buildWorkflowReceiptItems falls back to deterministic review derivation for legacy traces without reviewRuntime', () => {
+    const metadata: ResponseMetadata = {
+        ...createBaseMetadata(),
+        workflowMode: {
+            modeId: 'grounded',
+            selectedBy: 'requested_mode',
+            selectionReason: 'Requested by user.',
+            initial_mode: 'grounded',
+            behavior: {
+                executionContractPresetId: 'quality-grounded',
+                workflowProfileClass: 'reviewed',
+                workflowProfileId: 'bounded-review',
+                workflowExecution: 'always',
+                reviewPass: 'included',
+                reviseStep: 'allowed',
+                evidencePosture: 'strict',
+                maxWorkflowSteps: 2,
+                maxDeliberationCalls: 1,
+            },
+        },
+        workflow: {
+            workflowId: 'wf_legacy_1',
+            workflowName: 'message_with_review_loop',
+            status: 'degraded',
+            terminationReason: 'budget_exhausted_steps',
+            stepCount: 1,
+            maxSteps: 2,
+            maxDurationMs: 5000,
+            steps: [
+                {
+                    stepId: 'step_generate_1',
+                    attempt: 1,
+                    stepKind: 'generate',
+                    startedAt: '2026-04-22T00:00:00.000Z',
+                    finishedAt: '2026-04-22T00:00:00.010Z',
+                    durationMs: 10,
+                    outcome: {
+                        status: 'executed',
+                        summary: 'Generated initial draft response.',
+                    },
+                },
+            ],
+        },
+    };
+
+    assert.deepEqual(buildWorkflowReceiptItems(metadata), [
+        'Answered in Grounded mode',
+        'Review skipped',
+    ]);
 });

@@ -501,6 +501,28 @@ export type WorkflowModeDecision = {
 };
 
 /**
+ * Canonical review-runtime labels for UI rendering.
+ * Labels describe execution path semantics only, not answer quality.
+ */
+export const REVIEW_RUNTIME_LABELS = [
+    'not_reviewed',
+    'reviewed_no_revision',
+    'revised',
+    'skipped',
+    'fallback',
+] as const;
+
+export type ReviewRuntimeLabel = (typeof REVIEW_RUNTIME_LABELS)[number];
+
+/**
+ * Compact normalized review-runtime summary for UI surfaces.
+ * This is backend-derived so UI does not infer semantics from raw steps.
+ */
+export type ReviewRuntimeSummary = {
+    label: ReviewRuntimeLabel;
+};
+
+/**
  * Canonical steerability control ids tracked in response metadata.
  * These remain backend-owned/operator-facing until user controls are exposed.
  */
@@ -686,6 +708,7 @@ export type ResponseMetadata = {
     provenanceAssessment?: ProvenanceAssessment; // Classification-method disclosure for provenance, including conflicts and limitations.
     execution?: ExecutionEvent[]; // Structural execution record (evaluator/tool/generation events).
     workflow?: WorkflowRecord; // Optional workflow record of bounded multi-step execution; includes planner lineage via plan steps.
+    reviewRuntime?: ReviewRuntimeSummary; // Normalized review-runtime summary for UI labels (path semantics only).
     workflowMode?: WorkflowModeDecision; // Execution-policy routing decision and behavior mapping.
     steerabilityControls?: SteerabilityControls; // Control-influence records explaining which controls shaped execution/output.
     evaluator?: EvaluatorOutcome; // Deterministic evaluator decision captured before breaker enforcement.
