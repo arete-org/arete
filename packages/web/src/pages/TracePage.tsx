@@ -23,6 +23,10 @@ import type {
 } from '@footnote/contracts/ethics-core';
 import { api, isApiClientError } from '../utils/api';
 import { createScopedLogger } from '../utils/logger';
+import {
+    buildRunOutcomeSummary,
+    type RunOutcomeSummary,
+} from '../utils/traceOutcome';
 // Define the actual server response metadata structure
 type ServerMetadata = GetTraceResponse & {
     timestamp?: string;
@@ -308,6 +312,35 @@ const SAFETY_TIER_COLORS: Record<string, string> = {
     high: '#E27C7C', // High safety tier - soft coral
 };
 
+const renderRunOutcomeSummary = (
+    runOutcomeSummary: RunOutcomeSummary | null
+): JSX.Element | null => {
+    if (!runOutcomeSummary) {
+        return null;
+    }
+
+    return (
+        <>
+            <p>
+                <strong>Run outcome:</strong> {runOutcomeSummary.headline}
+            </p>
+            <p>{runOutcomeSummary.explanation}</p>
+            {runOutcomeSummary.reasonCode && (
+                <p>
+                    <strong>Recorded reason:</strong>{' '}
+                    <code>{runOutcomeSummary.reasonCode}</code>
+                </p>
+            )}
+            {runOutcomeSummary.secondaryReasonCode && (
+                <p>
+                    <strong>Additional signal:</strong>{' '}
+                    <code>{runOutcomeSummary.secondaryReasonCode}</code>
+                </p>
+            )}
+        </>
+    );
+};
+
 const TracePage = (): JSX.Element => {
     const { responseId } = useParams<{ responseId: string }>();
     const [loadingState, setLoadingState] = useState<LoadingState>('loading');
@@ -422,6 +455,10 @@ const TracePage = (): JSX.Element => {
         };
     }, [responseId]);
 
+    const traceRunOutcomeSummary = traceData
+        ? buildRunOutcomeSummary(traceData)
+        : null;
+
     if (loadingState === 'loading') {
         return (
             <section className="interaction-status" aria-live="polite">
@@ -493,6 +530,7 @@ const TracePage = (): JSX.Element => {
                         </header>
                         <article className="card" aria-label="Trace summary">
                             <h2>Summary</h2>
+                            {renderRunOutcomeSummary(traceRunOutcomeSummary)}
                             <p>
                                 <strong>Model:</strong>{' '}
                                 {traceData.model || 'Unspecified'}
@@ -571,6 +609,7 @@ const TracePage = (): JSX.Element => {
     const sourceSummary = getSourceSummary(traceData);
     const safetySummary = getSafetySummary(traceData, safetyLabel);
     const workflowSummary = getWorkflowSummary(traceData);
+    const runOutcomeSummary = traceRunOutcomeSummary;
     const summarySignals: SummarySignal[] = [
         {
             label: 'Mode',
@@ -620,6 +659,7 @@ const TracePage = (): JSX.Element => {
                     This page summarizes how this answer was produced and where
                     you can inspect evidence next.
                 </p>
+                {renderRunOutcomeSummary(runOutcomeSummary)}
                 <p>
                     <strong>Provenance label:</strong> {provenance}
                 </p>
