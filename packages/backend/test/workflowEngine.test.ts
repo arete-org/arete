@@ -412,6 +412,172 @@ test('runBoundedReviewWorkflow normalizes invalid config bounds and keeps lineag
     assert.equal(result.workflowLineage.maxSteps, 1);
     assert.ok(result.workflowLineage.maxDurationMs > 0);
     assert.equal(result.workflowLineage.stepCount, 1);
+    assert.deepEqual(result.workflowLineage.limitStop, {
+        stoppedByLimit: false,
+        terminationReason: 'goal_satisfied',
+    });
+    const tokensLimit = result.workflowLineage.effectiveLimits?.find(
+        (limit) => limit.key === 'maxTokensTotal'
+    );
+    assert.ok(tokensLimit);
+    assert.equal(tokensLimit.state, 'unavailable');
+    assert.equal(tokensLimit.value, undefined);
+});
+
+test('runBoundedReviewWorkflow marks configured-inactive limits when their workflow paths are disabled', async () => {
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            return {
+                text: 'draft',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'hi' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'hi' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop',
+            maxIterations: 0,
+            maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 2,
+                maxToolCalls: 0,
+                maxDeliberationCalls: 0,
+                maxTokensTotal: Number.MAX_SAFE_INTEGER,
+                maxDurationMs: 15000,
+            },
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: false,
+            enableRevision: false,
+        },
+        captureUsage: () => ({
+            model: 'gpt-5-mini',
+            promptTokens: 10,
+            completionTokens: 5,
+            totalTokens: 15,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    const toolLimit = result.workflowLineage.effectiveLimits?.find(
+        (limit) => limit.key === 'maxToolCalls'
+    );
+    const deliberationLimit = result.workflowLineage.effectiveLimits?.find(
+        (limit) => limit.key === 'maxDeliberationCalls'
+    );
+    assert.ok(toolLimit);
+    assert.equal(toolLimit.state, 'configured_inactive');
+    assert.equal(toolLimit.value, 0);
+    assert.equal(toolLimit.stoppedRun, false);
+    assert.ok(deliberationLimit);
+    assert.equal(deliberationLimit.state, 'configured_inactive');
+    assert.equal(deliberationLimit.value, 0);
+    assert.equal(deliberationLimit.stoppedRun, false);
+});
+
+test('runBoundedReviewWorkflow records explicit limit stop attribution for exhausted limits', async () => {
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            return {
+                text: 'draft',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'hi' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'hi' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 4,
+                maxToolCalls: 1,
+                maxDeliberationCalls: 1,
+                maxTokensTotal: 500,
+                maxDurationMs: 15000,
+            },
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: () => ({
+            model: 'gpt-5-mini',
+            promptTokens: 10,
+            completionTokens: 5,
+            totalTokens: 15,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+        parseReviewDecision: () => ({
+            decision: 'revise',
+            reason: 'One revision pass is required.',
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'budget_exhausted_steps'
+    );
+    assert.deepEqual(result.workflowLineage.limitStop, {
+        stoppedByLimit: true,
+        terminationReason: 'budget_exhausted_steps',
+        exhaustedLimitKey: 'maxWorkflowSteps',
+    });
+    const stepsLimit = result.workflowLineage.effectiveLimits?.find(
+        (limit) => limit.key === 'maxWorkflowSteps'
+    );
+    assert.ok(stepsLimit);
+    assert.equal(stepsLimit.state, 'enforced');
+    assert.equal(stepsLimit.stoppedRun, true);
 });
 
 test('runBoundedReviewWorkflow classifies initial generate runtime failure as no_generation with lineage', async () => {

@@ -373,6 +373,41 @@ const createValidWorkflowMetadataPayload = (now: string) => ({
         stepCount: 2,
         maxSteps: 5,
         maxDurationMs: 15000,
+        effectiveLimits: [
+            {
+                key: 'maxWorkflowSteps',
+                state: 'enforced',
+                value: 5,
+                stoppedRun: false,
+            },
+            {
+                key: 'maxToolCalls',
+                state: 'configured_inactive',
+                value: 0,
+                stoppedRun: false,
+            },
+            {
+                key: 'maxDeliberationCalls',
+                state: 'enforced',
+                value: 2,
+                stoppedRun: false,
+            },
+            {
+                key: 'maxTokensTotal',
+                state: 'unavailable',
+                stoppedRun: false,
+            },
+            {
+                key: 'maxDurationMs',
+                state: 'enforced',
+                value: 15000,
+                stoppedRun: false,
+            },
+        ],
+        limitStop: {
+            stoppedByLimit: false,
+            terminationReason: 'goal_satisfied',
+        },
         terminationReason: 'goal_satisfied',
         steps: [
             {
@@ -598,6 +633,38 @@ test('ResponseMetadataSchema rejects workflow lineage with invalid termination r
         },
     });
 
+    assert.equal(parsed.success, false);
+});
+
+test('ResponseMetadataSchema rejects workflow lineage limitStop without exhaustedLimitKey when stoppedByLimit is true', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    if (payload.workflow.limitStop === undefined) {
+        throw new Error('Expected limitStop fixture to be present.');
+    }
+    payload.workflow.limitStop = {
+        stoppedByLimit: true,
+        terminationReason: 'budget_exhausted_steps',
+    };
+
+    const parsed = ResponseMetadataSchema.safeParse(payload);
+    assert.equal(parsed.success, false);
+});
+
+test('ResponseMetadataSchema rejects workflow lineage with duplicate effective limit keys', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    if (payload.workflow.effectiveLimits === undefined) {
+        throw new Error('Expected effectiveLimits fixture to be present.');
+    }
+    payload.workflow.effectiveLimits.push({
+        key: 'maxWorkflowSteps',
+        state: 'enforced',
+        value: 7,
+        stoppedRun: false,
+    });
+
+    const parsed = ResponseMetadataSchema.safeParse(payload);
     assert.equal(parsed.success, false);
 });
 

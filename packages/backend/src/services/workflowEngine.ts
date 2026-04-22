@@ -15,6 +15,9 @@ import type {
     PlannerExecutionPurpose,
     ExecutionReasonCode,
     StepRecord,
+    WorkflowEffectiveLimit,
+    WorkflowLimitKey,
+    WorkflowLimitStop,
     WorkflowRecord,
 } from '@footnote/contracts/ethics-core';
 import type {
@@ -42,12 +45,7 @@ export type WorkflowPolicy = WorkflowProfilePolicyContract;
  */
 export type ExecutionLimits = WorkflowProfileExecutionLimitsContract;
 
-export type ExhaustedLimit =
-    | 'maxWorkflowSteps'
-    | 'maxToolCalls'
-    | 'maxDeliberationCalls'
-    | 'maxTokensTotal'
-    | 'maxDurationMs';
+export type ExhaustedLimit = WorkflowLimitKey;
 
 export type WorkflowState = {
     workflowId: string;
@@ -360,6 +358,73 @@ export const mapExhaustedLimitToTerminationReason = (
     );
 };
 
+const UNBOUNDED_LIMIT_SENTINEL = Number.MAX_SAFE_INTEGER;
+
+const isUnavailableExecutionLimit = (value: number): boolean =>
+    !Number.isFinite(value) || value >= UNBOUNDED_LIMIT_SENTINEL;
+
+const isExecutionLimitPathActive = (
+    key: WorkflowLimitKey,
+    policy: WorkflowPolicy
+): boolean => {
+    if (key === 'maxToolCalls') {
+        return policy.enableToolUse;
+    }
+
+    if (key === 'maxDeliberationCalls') {
+        return (
+            policy.enablePlanning ||
+            policy.enableAssessment ||
+            policy.enableRevision
+        );
+    }
+
+    return true;
+};
+
+const buildWorkflowEffectiveLimits = (input: {
+    limits: ExecutionLimits;
+    policy: WorkflowPolicy;
+    exhaustedLimitKey?: WorkflowLimitKey;
+}): WorkflowEffectiveLimit[] => {
+    const orderedKeys: WorkflowLimitKey[] = [
+        'maxWorkflowSteps',
+        'maxToolCalls',
+        'maxDeliberationCalls',
+        'maxTokensTotal',
+        'maxDurationMs',
+    ];
+
+    return orderedKeys.map((key) => {
+        const value = input.limits[key];
+        const limitAvailable = !isUnavailableExecutionLimit(value);
+        const pathActive = isExecutionLimitPathActive(key, input.policy);
+        const state = !limitAvailable
+            ? 'unavailable'
+            : !pathActive
+              ? 'configured_inactive'
+              : 'enforced';
+
+        return {
+            key,
+            state,
+            ...(limitAvailable && { value }),
+            stoppedRun: input.exhaustedLimitKey === key,
+        };
+    });
+};
+
+const buildWorkflowLimitStop = (input: {
+    terminationReason: WorkflowTerminationReason;
+    exhaustedLimitKey?: WorkflowLimitKey;
+}): WorkflowLimitStop => ({
+    stoppedByLimit: input.exhaustedLimitKey !== undefined,
+    terminationReason: input.terminationReason,
+    ...(input.exhaustedLimitKey !== undefined && {
+        exhaustedLimitKey: input.exhaustedLimitKey,
+    }),
+});
+
 type PlannerStepRecordSummary = {
     status: ExecutionStatus;
     reasonCode?: ExecutionReasonCode;
@@ -559,7 +624,7 @@ export const runBoundedReviewWorkflow = async ({
     captureUsage,
     plannerStepRecord,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
-    const UNBOUNDED_LIMIT = Number.MAX_SAFE_INTEGER;
+    const UNBOUNDED_LIMIT = UNBOUNDED_LIMIT_SENTINEL;
     const sanitizeNonNegativeInteger = (
         value: number,
         fallback: number
@@ -604,6 +669,7 @@ export const runBoundedReviewWorkflow = async ({
     let draftParentStepId: string | undefined;
     let latestReviewReason: string | undefined;
     let shouldStop = false;
+    let exhaustedLimitKey: WorkflowLimitKey | undefined;
     const effectiveReviewDecisionPrompt =
         reviewDecisionPrompt ?? profileStrategy.reviewDecisionPrompt;
     const effectiveRevisionPromptPrefix =
@@ -724,9 +790,10 @@ export const runBoundedReviewWorkflow = async ({
             return false;
         }
 
+        exhaustedLimitKey = limitsCheck.exhaustedBy;
         terminationReason =
-            limitsCheck.exhaustedBy !== undefined
-                ? mapExhaustedLimitToTerminationReason(limitsCheck.exhaustedBy)
+            exhaustedLimitKey !== undefined
+                ? mapExhaustedLimitToTerminationReason(exhaustedLimitKey)
                 : 'budget_exhausted_steps';
         workflowStatus = 'degraded';
         shouldStop = true;
@@ -927,6 +994,7 @@ export const runBoundedReviewWorkflow = async ({
 
             if (iteration >= effectiveMaxIterations) {
                 terminationReason = 'budget_exhausted_steps';
+                exhaustedLimitKey = 'maxWorkflowSteps';
                 workflowStatus = 'degraded';
                 shouldStop = true;
                 break;
@@ -1054,6 +1122,15 @@ export const runBoundedReviewWorkflow = async ({
         stepCount: workflowSteps.length,
         maxSteps: executionLimits.maxWorkflowSteps,
         maxDurationMs: executionLimits.maxDurationMs,
+        effectiveLimits: buildWorkflowEffectiveLimits({
+            limits: executionLimits,
+            policy: workflowPolicy,
+            exhaustedLimitKey,
+        }),
+        limitStop: buildWorkflowLimitStop({
+            terminationReason,
+            exhaustedLimitKey,
+        }),
         terminationReason,
         steps: workflowSteps,
     };

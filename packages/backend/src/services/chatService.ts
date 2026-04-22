@@ -300,6 +300,18 @@ const attachPlannerWorkflowLineage = (input: {
         ...input.workflowLineage,
         stepCount: input.workflowLineage.steps.length + 1,
         maxSteps: input.workflowLineage.maxSteps + 1,
+        ...(input.workflowLineage.effectiveLimits !== undefined && {
+            effectiveLimits: input.workflowLineage.effectiveLimits.map(
+                (limit) =>
+                    limit.key === 'maxWorkflowSteps' &&
+                    typeof limit.value === 'number'
+                        ? {
+                              ...limit,
+                              value: limit.value + 1,
+                          }
+                        : limit
+            ),
+        }),
         steps: [plannerStep, ...input.workflowLineage.steps],
     };
 };
