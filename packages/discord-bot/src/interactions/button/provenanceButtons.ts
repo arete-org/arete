@@ -10,6 +10,7 @@ import {
     formatExecutionTimelineSummary,
     type ExecutionEvent,
     type ResponseMetadata,
+    type WorkflowModeId,
 } from '@footnote/contracts/ethics-core';
 import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 import { botApi } from '../../api/botApi.js';
@@ -150,6 +151,113 @@ function escapeMarkdownLinkUrl(value: string): string {
     return value.replace(/\\/g, '\\\\').replace(/\)/g, '\\)');
 }
 
+const WORKFLOW_MODE_LABELS: Record<WorkflowModeId, string> = {
+    fast: 'Fast mode',
+    balanced: 'Balanced mode',
+    grounded: 'Grounded mode',
+};
+
+function resolveWorkflowModeLabel(metadata: ResponseMetadata): string | null {
+    const modeId = metadata.workflowMode?.modeId;
+    if (modeId) {
+        return WORKFLOW_MODE_LABELS[modeId];
+    }
+
+    const presetId = metadata.workflowMode?.behavior.executionContractPresetId;
+    if (presetId === 'fast-direct') {
+        return WORKFLOW_MODE_LABELS.fast;
+    }
+    if (presetId === 'balanced') {
+        return WORKFLOW_MODE_LABELS.balanced;
+    }
+    if (presetId === 'quality-grounded') {
+        return WORKFLOW_MODE_LABELS.grounded;
+    }
+
+    return null;
+}
+
+function resolveReviewReceipt(metadata: ResponseMetadata): string | null {
+    const reviewStepRan =
+        metadata.workflow?.steps.some(
+            (step) =>
+                step.stepKind === 'assess' && step.outcome.status !== 'skipped'
+        ) ?? false;
+    if (reviewStepRan) {
+        return 'Reviewed before final answer';
+    }
+
+    const reviewPass = metadata.workflowMode?.behavior.reviewPass;
+    if (reviewPass === 'excluded') {
+        return 'Review skipped';
+    }
+
+    if (
+        reviewPass === 'included' &&
+        metadata.workflow !== undefined &&
+        metadata.workflow.steps.length > 0
+    ) {
+        return 'Review skipped';
+    }
+
+    return null;
+}
+
+function resolvePlannerFallbackReceipt(
+    metadata: ResponseMetadata
+): string | null {
+    const plannerFallbackInWorkflow =
+        metadata.workflow?.steps.some((step) => {
+            if (step.stepKind !== 'plan') {
+                return false;
+            }
+            if (
+                step.reasonCode === 'planner_runtime_error' ||
+                step.reasonCode === 'planner_invalid_output'
+            ) {
+                return true;
+            }
+            return step.outcome.signals?.contractType === 'fallback';
+        }) ?? false;
+
+    const plannerFallbackInExecution =
+        metadata.execution?.some((event) => {
+            if (event.kind !== 'planner') {
+                return false;
+            }
+            if (event.contractType === 'fallback') {
+                return true;
+            }
+            return (
+                event.reasonCode === 'planner_runtime_error' ||
+                event.reasonCode === 'planner_invalid_output'
+            );
+        }) ?? false;
+
+    return plannerFallbackInWorkflow || plannerFallbackInExecution
+        ? 'Planner fallback'
+        : null;
+}
+
+function buildWorkflowReceiptSummary(
+    metadata: ResponseMetadata
+): string | null {
+    const workflowModeLabel = resolveWorkflowModeLabel(metadata);
+    const reviewReceipt = resolveReviewReceipt(metadata);
+    const plannerFallbackReceipt = resolvePlannerFallbackReceipt(metadata);
+    const workflowReceiptItems = [
+        workflowModeLabel ? `Answered in ${workflowModeLabel}` : null,
+        reviewReceipt,
+        plannerFallbackReceipt,
+    ].filter((item): item is string => item !== null);
+
+    if (workflowReceiptItems.length === 0) {
+        return null;
+    }
+
+    return workflowReceiptItems.join(' • ');
+}
+
 /**
  * Builds the Markdown "Summary" section for provenance details displayed in Discord.
  *
@@ -168,7 +276,7 @@ function formatSummarySection(
         ].join('\n');
     }
 
-    return [
+    const lines = [
         '**Summary**',
         `- Response ID: \`${formatMarkdownValue(payload.responseId)}\``,
         `- Provenance: \`${formatMarkdownValue(payload.provenance)}\``,
@@ -176,7 +284,15 @@ function formatSummarySection(
         `- Tradeoffs: \`${formatMarkdownValue(payload.tradeoffCount)}\``,
         `- Model: \`${formatMarkdownValue(payload.modelVersion)}\``,
         `- Stale After: \`${formatMarkdownValue(payload.staleAfter)}\``,
-    ].join('\n');
+    ];
+    const workflowReceiptSummary = buildWorkflowReceiptSummary(payload);
+    if (workflowReceiptSummary) {
+        lines.push(
+            `- Workflow Receipt: \`${formatMarkdownValue(workflowReceiptSummary, 220)}\``
+        );
+    }
+
+    return lines.join('\n');
 }
 
 /**
