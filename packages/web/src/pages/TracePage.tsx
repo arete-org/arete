@@ -23,6 +23,7 @@ import type {
 } from '@footnote/contracts/ethics-core';
 import { api, isApiClientError } from '../utils/api';
 import { createScopedLogger } from '../utils/logger';
+import { buildRunOutcomeSummary } from '../utils/traceOutcome';
 // Define the actual server response metadata structure
 type ServerMetadata = GetTraceResponse & {
     timestamp?: string;
@@ -571,6 +572,7 @@ const TracePage = (): JSX.Element => {
     const sourceSummary = getSourceSummary(traceData);
     const safetySummary = getSafetySummary(traceData, safetyLabel);
     const workflowSummary = getWorkflowSummary(traceData);
+    const runOutcomeSummary = buildRunOutcomeSummary(traceData);
     const summarySignals: SummarySignal[] = [
         {
             label: 'Mode',
@@ -620,6 +622,29 @@ const TracePage = (): JSX.Element => {
                     This page summarizes how this answer was produced and where
                     you can inspect evidence next.
                 </p>
+                {runOutcomeSummary && (
+                    <>
+                        <p>
+                            <strong>Run outcome:</strong>{' '}
+                            {runOutcomeSummary.headline}
+                        </p>
+                        <p>{runOutcomeSummary.explanation}</p>
+                        {runOutcomeSummary.reasonCode && (
+                            <p>
+                                <strong>Recorded reason:</strong>{' '}
+                                <code>{runOutcomeSummary.reasonCode}</code>
+                            </p>
+                        )}
+                        {runOutcomeSummary.secondaryReasonCode && (
+                            <p>
+                                <strong>Additional signal:</strong>{' '}
+                                <code>
+                                    {runOutcomeSummary.secondaryReasonCode}
+                                </code>
+                            </p>
+                        )}
+                    </>
+                )}
                 <p>
                     <strong>Provenance label:</strong> {provenance}
                 </p>
