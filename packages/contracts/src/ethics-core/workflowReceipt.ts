@@ -21,7 +21,12 @@ const WORKFLOW_MODE_LABELS: Record<WorkflowModeId, string> = {
 };
 
 export type GroundingEvidenceSummary = {
-    status: 'sources_attached' | 'evidence_unavailable' | 'not_recorded';
+    status:
+        | 'sources_available'
+        | 'sources_missing_after_retrieval'
+        | 'search_unavailable'
+        | 'retrieval_not_used'
+        | 'not_recorded';
     label: string;
     explanation: string;
 };
@@ -155,12 +160,12 @@ export const summarizeGroundingEvidence = (
     if (metadata.citations.length > 0) {
         const sourceCount = metadata.citations.length;
         return {
-            status: 'sources_attached',
-            label: 'Sources attached',
+            status: 'sources_available',
+            label: 'Sources available',
             explanation:
                 sourceCount === 1
-                    ? 'This trace includes 1 citation for inspection.'
-                    : `This trace includes ${sourceCount} citations for inspection.`,
+                    ? 'This trace includes 1 source you can inspect.'
+                    : `This trace includes ${sourceCount} sources you can inspect.`,
         };
     }
 
@@ -171,15 +176,10 @@ export const summarizeGroundingEvidence = (
         ) ?? false;
     if (retrievalWithoutCitations) {
         return {
-            status: 'evidence_unavailable',
-            label: 'Grounding evidence unavailable',
+            status: 'sources_missing_after_retrieval',
+            label: 'No sources available',
             explanation:
-                provenanceAssessment?.limitations.find((limitation) =>
-                    limitation
-                        .toLowerCase()
-                        .includes('no citations were retained')
-                ) ??
-                'Retrieval ran, but no citations were retained after normalization.',
+                'Footnote tried to use retrieval, but no citations were kept for this response. Treat important claims as unverified.',
         };
     }
 
@@ -187,10 +187,10 @@ export const summarizeGroundingEvidence = (
         metadata.execution?.some(isSearchUnsupportedToolEvent) ?? false;
     if (searchUnsupported) {
         return {
-            status: 'evidence_unavailable',
-            label: 'Grounding evidence unavailable',
+            status: 'search_unavailable',
+            label: 'Search unavailable',
             explanation:
-                'Search was unavailable for the selected profile, so no source links were attached.',
+                'Search was unavailable for this mode, so this response has no source links. Treat important claims as unverified.',
         };
     }
 
@@ -199,23 +199,18 @@ export const summarizeGroundingEvidence = (
         provenanceAssessment.signals.retrievalUsed === false;
     if (retrievalRequestedButUnused) {
         return {
-            status: 'evidence_unavailable',
-            label: 'Grounding evidence unavailable',
+            status: 'retrieval_not_used',
+            label: 'No sources available',
             explanation:
-                provenanceAssessment?.limitations.find((limitation) =>
-                    limitation
-                        .toLowerCase()
-                        .includes('retrieval was requested but not used')
-                ) ??
-                'Retrieval was requested but not used by execution, reducing grounding confidence.',
+                'Footnote requested retrieval for this response, but it was not used. Treat important claims as unverified.',
         };
     }
 
     return {
         status: 'not_recorded',
-        label: 'Grounding evidence not recorded',
+        label: 'No grounding evidence recorded',
         explanation:
-            'This trace does not include citations or an explicit evidence-unavailable state.',
+            'This trace does not include sources or a recorded reason for missing evidence. Treat important claims as unverified.',
     };
 };
 

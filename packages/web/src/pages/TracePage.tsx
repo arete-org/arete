@@ -91,7 +91,7 @@ const resolveExecutionSummary = (traceData: ServerMetadata): string | null =>
 
 const PROVENANCE_EXPLANATIONS: Record<string, string> = {
     Retrieved:
-        'This provenance label means the runtime recorded retrieval-related or workflow evidence signals for this response. Check the grounding evidence section below; the label is not a truth guarantee.',
+        'Footnote recorded evidence signals for this response. Review the sources section below before relying on specific claims.',
     Inferred:
         'This answer combines model reasoning with available context; verify key claims when stakes are high.',
     Speculative:
@@ -582,7 +582,7 @@ const TracePage = (): JSX.Element => {
             explanation: modeSummary.explanation,
         },
         {
-            label: 'Grounding evidence',
+            label: 'Sources',
             value: groundingEvidenceSummary.value,
             explanation: groundingEvidenceSummary.explanation,
         },
@@ -695,18 +695,15 @@ const TracePage = (): JSX.Element => {
                         )}
                     </ul>
                 ) : (
-                    <p>
-                        {groundingEvidenceSummary.explanation} Treat key claims
-                        as unverified unless you can confirm them independently.
-                    </p>
+                    <p>{groundingEvidenceSummary.explanation}</p>
                 )}
                 <details style={{ marginTop: '0.75rem' }}>
-                    <summary>How source status was determined</summary>
+                    <summary>How Footnote decided this</summary>
                     <p style={{ marginTop: '0.5rem' }}>
-                        Citation links are shown when present in trace metadata.
-                        Missing-evidence states come from explicit
-                        provenance-assessment or execution metadata. Grounded
-                        mode by itself does not establish evidence.
+                        Footnote shows citation links when the trace includes
+                        them. If sources are missing, Footnote only explains why
+                        when the backend recorded a clear reason. Grounded mode
+                        alone does not mean sources were available.
                     </p>
                 </details>
             </article>

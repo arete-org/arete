@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import {
     buildWorkflowReceiptItems,
     buildWorkflowReceiptSummary,
+    summarizeGroundingEvidence,
     type ResponseMetadata,
 } from '../src/ethics-core';
 
@@ -183,7 +184,7 @@ test('buildWorkflowReceiptItems surfaces explicit missing grounding evidence sta
 
     assert.deepEqual(buildWorkflowReceiptItems(metadata), [
         'Answered in Grounded mode',
-        'Grounding evidence unavailable',
+        'No sources available',
     ]);
 });
 
@@ -193,7 +194,41 @@ test('buildWorkflowReceiptItems surfaces attached sources when citations are pre
         citations: [{ title: 'Source', url: 'https://example.com' }],
     };
 
-    assert.deepEqual(buildWorkflowReceiptItems(metadata), ['Sources attached']);
+    assert.deepEqual(buildWorkflowReceiptItems(metadata), [
+        'Sources available',
+    ]);
+});
+
+test('summarizeGroundingEvidence reports search-unavailable copy from execution metadata', () => {
+    const metadata: ResponseMetadata = {
+        ...createBaseMetadata(),
+        execution: [
+            {
+                kind: 'tool',
+                status: 'skipped',
+                toolName: 'web_search',
+                reasonCode: 'search_not_supported_by_selected_profile',
+            },
+        ],
+    };
+
+    assert.deepEqual(summarizeGroundingEvidence(metadata), {
+        status: 'search_unavailable',
+        label: 'Search unavailable',
+        explanation:
+            'Search was unavailable for this mode, so this response has no source links. Treat important claims as unverified.',
+    });
+});
+
+test('summarizeGroundingEvidence stays conservative when no evidence reason was recorded', () => {
+    const metadata: ResponseMetadata = createBaseMetadata();
+
+    assert.deepEqual(summarizeGroundingEvidence(metadata), {
+        status: 'not_recorded',
+        label: 'No grounding evidence recorded',
+        explanation:
+            'This trace does not include sources or a recorded reason for missing evidence. Treat important claims as unverified.',
+    });
 });
 
 test('buildWorkflowReceiptItems reports revised label from normalized review runtime summary', () => {

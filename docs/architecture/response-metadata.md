@@ -24,10 +24,12 @@ Mode is the routing choice. It tells you how the backend ran the request:
 which path it took, where that choice came from, and whether workflow-owned
 escalation happened.
 
-Mode is not a grounding proof. `workflowMode.modeId = grounded` tells you the
-backend selected the grounded runtime posture. It does not, by itself, prove
-that sources were retrieved, citations were attached, or evidence remained
-available at the end of the run.
+Mode describes routing. Evidence comes from citations, provenance assessment,
+or recorded execution details.
+
+`workflowMode.modeId = grounded` means the backend selected the grounded
+runtime posture. To know whether sources were actually available, check
+citations, `provenanceAssessment`, and execution events.
 
 TRACE is the posture of the answer. It tells you how the answer was shaped,
 not how the request was routed. `trace_target` is the intended posture.

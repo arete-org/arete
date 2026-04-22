@@ -162,7 +162,7 @@ test('details action renders markdown sections with execution table and trace vi
         assert.match(content, /Answered in Balanced mode/);
         assert.match(content, /Review fallback/);
         assert.match(content, /Planner fallback/);
-        assert.match(content, /Sources attached/);
+        assert.match(content, /Sources available/);
         assert.match(content, /Target Attribution: `5`/);
         assert.match(content, /Final Attribution: `3`/);
         assert.match(content, /Final Reason: `runtime_posture_adjustment`/);
@@ -344,10 +344,10 @@ test('details action shows explicit missing grounding evidence state when metada
         const content = String(
             (editReplyPayloads[0] as { content?: string }).content
         );
-        assert.match(content, /Grounding evidence unavailable/);
+        assert.match(content, /No sources available/);
         assert.match(
             content,
-            /Retrieval ran, but no citations were retained after normalization\./
+            /Footnote tried to use retrieval, but no citations were kept for this response\./
         );
     } finally {
         botApi.getTrace = originalGetTrace;
