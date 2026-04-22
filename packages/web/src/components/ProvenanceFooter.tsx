@@ -13,7 +13,10 @@ import type {
     SafetyTier,
     Citation,
 } from '@footnote/contracts/ethics-core';
-import { formatExecutionTimelineSummary } from '@footnote/contracts/ethics-core';
+import {
+    formatExecutionTimelineSummary,
+    buildWorkflowReceiptItems,
+} from '@footnote/contracts/ethics-core';
 
 interface ProvenanceFooterProps {
     metadata?: ResponseMetadata | null;
@@ -78,6 +81,8 @@ const ProvenanceFooter = ({
         metadata.execution,
         metadata.workflow
     );
+    // Shared helper keeps web/Discord copy and decision rules in sync.
+    const workflowReceiptItems = buildWorkflowReceiptItems(metadata);
     const evaluatorOutcome = metadata.evaluator;
     const searchUnavailableWarning = metadata.execution?.some(
         (event) =>
@@ -107,6 +112,25 @@ const ProvenanceFooter = ({
             <div className="provenance-header">
                 Reasoning - {metadata.provenance}
             </div>
+            {workflowReceiptItems.length > 0 && (
+                <div
+                    className="provenance-workflow-receipt"
+                    role="status"
+                    aria-live="polite"
+                >
+                    {workflowReceiptItems.map((item, index) => (
+                        <span key={item}>
+                            {item}
+                            {index < workflowReceiptItems.length - 1 && (
+                                <span className="provenance-separator">
+                                    {' '}
+                                    •{' '}
+                                </span>
+                            )}
+                        </span>
+                    ))}
+                </div>
+            )}
 
             <div className="provenance-main">
                 {searchUnavailableWarning && (

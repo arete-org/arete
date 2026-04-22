@@ -75,7 +75,34 @@ test('details action renders markdown sections with execution table and trace vi
                     snippet: 'Evidence',
                 },
             ],
+            workflowMode: {
+                modeId: 'balanced',
+                selectedBy: 'requested_mode',
+                selectionReason: 'User requested balanced workflow mode.',
+                initial_mode: 'balanced',
+                behavior: {
+                    executionContractPresetId: 'balanced',
+                    workflowProfileClass: 'reviewed',
+                    workflowProfileId: 'bounded-review',
+                    workflowExecution: 'policy_gated',
+                    reviewPass: 'excluded',
+                    reviseStep: 'allowed',
+                    evidencePosture: 'balanced',
+                    maxWorkflowSteps: 6,
+                    maxDeliberationCalls: 2,
+                },
+            },
             execution: [
+                {
+                    kind: 'planner',
+                    status: 'failed',
+                    purpose: 'chat_orchestrator_action_selection',
+                    contractType: 'fallback',
+                    applyOutcome: 'not_applied',
+                    mattered: false,
+                    matteredControlIds: [],
+                    reasonCode: 'planner_runtime_error',
+                },
                 {
                     kind: 'generation',
                     status: 'executed',
@@ -132,6 +159,9 @@ test('details action renders markdown sections with execution table and trace vi
         assert.match(content, /\*\*Trace Viewer\*\*/);
         assert.match(content, /Open full trace/);
         assert.match(content, /\/traces\/resp_details_sections/);
+        assert.match(content, /Answered in Balanced mode/);
+        assert.match(content, /Review skipped/);
+        assert.match(content, /Planner fallback/);
         assert.match(content, /Target Attribution: `5`/);
         assert.match(content, /Final Attribution: `3`/);
         assert.match(content, /Final Reason: `runtime_posture_adjustment`/);

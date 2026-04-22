@@ -1532,6 +1532,13 @@ div.interaction-status:not(.interaction-status-visible) *,
     line-height: 1.5;
 }
 
+.provenance-workflow-receipt {
+    margin-bottom: 0.45rem;
+    font-size: 0.82rem;
+    color: color-mix(in srgb, var(--subtle-text) 92%, var(--accent) 8%);
+    line-height: 1.4;
+}
+
 .provenance-separator {
     color: var(--subtle-text);
     font-weight: 300;

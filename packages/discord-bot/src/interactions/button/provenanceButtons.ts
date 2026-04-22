@@ -10,6 +10,7 @@ import {
     formatExecutionTimelineSummary,
     type ExecutionEvent,
     type ResponseMetadata,
+    buildWorkflowReceiptSummary,
 } from '@footnote/contracts/ethics-core';
 import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 import { botApi } from '../../api/botApi.js';
@@ -168,7 +169,7 @@ function formatSummarySection(
         ].join('\n');
     }
 
-    return [
+    const lines = [
         '**Summary**',
         `- Response ID: \`${formatMarkdownValue(payload.responseId)}\``,
         `- Provenance: \`${formatMarkdownValue(payload.provenance)}\``,
@@ -176,7 +177,16 @@ function formatSummarySection(
         `- Tradeoffs: \`${formatMarkdownValue(payload.tradeoffCount)}\``,
         `- Model: \`${formatMarkdownValue(payload.modelVersion)}\``,
         `- Stale After: \`${formatMarkdownValue(payload.staleAfter)}\``,
-    ].join('\n');
+    ];
+    // Shared helper keeps Discord and web workflow-receipt wording aligned.
+    const workflowReceiptSummary = buildWorkflowReceiptSummary(payload);
+    if (workflowReceiptSummary) {
+        lines.push(
+            `- Workflow Receipt: \`${formatMarkdownValue(workflowReceiptSummary, 220)}\``
+        );
+    }
+
+    return lines.join('\n');
 }
 
 /**

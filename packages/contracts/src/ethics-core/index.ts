@@ -78,6 +78,13 @@ export {
 } from './types.js';
 export { formatExecutionTimelineSummary } from './executionFormatting.js';
 export {
+    resolveWorkflowModeLabel,
+    resolveReviewReceipt,
+    resolvePlannerFallbackReceipt,
+    buildWorkflowReceiptItems,
+    buildWorkflowReceiptSummary,
+} from './workflowReceipt.js';
+export {
     SafetyRuleIdSchema,
     SafetyActionSchema,
     SafetyReasonCodeSchema,
