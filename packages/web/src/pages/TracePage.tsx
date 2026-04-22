@@ -702,8 +702,8 @@ const TracePage = (): JSX.Element => {
                     <p style={{ marginTop: '0.5rem' }}>
                         Footnote shows sources when it has them. If no sources
                         are shown, Footnote only explains why when it has a
-                        clear reason to share. Grounded mode alone does not
-                        mean sources were available.
+                        clear reason to share. A careful response can still be
+                        missing sources.
                     </p>
                 </details>
             </article>
