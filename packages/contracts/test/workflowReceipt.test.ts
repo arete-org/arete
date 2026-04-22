@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import {
     buildWorkflowReceiptItems,
     buildWorkflowReceiptSummary,
+    summarizeGroundingEvidence,
     type ResponseMetadata,
 } from '../src/ethics-core';
 
@@ -138,6 +139,96 @@ test('buildWorkflowReceiptItems marks reviewed only when assess step ran', () =>
         'Answered in Grounded mode',
         'Reviewed before final answer',
     ]);
+});
+
+test('buildWorkflowReceiptItems surfaces explicit missing grounding evidence states', () => {
+    const metadata: ResponseMetadata = {
+        ...createBaseMetadata(),
+        workflowMode: {
+            modeId: 'grounded',
+            selectedBy: 'requested_mode',
+            selectionReason: 'Requested by user.',
+            initial_mode: 'grounded',
+            behavior: {
+                executionContractPresetId: 'quality-grounded',
+                workflowProfileClass: 'reviewed',
+                workflowProfileId: 'bounded-review',
+                workflowExecution: 'always',
+                reviewPass: 'included',
+                reviseStep: 'allowed',
+                evidencePosture: 'strict',
+                maxWorkflowSteps: 8,
+                maxDeliberationCalls: 3,
+            },
+        },
+        provenanceAssessment: {
+            methodId: 'deterministic_multi_signal_v1',
+            methodLabel:
+                'Deterministic multi-signal provenance classification (backend)',
+            signals: {
+                citationsPresent: false,
+                retrievalRequested: true,
+                retrievalUsed: true,
+                retrievalToolExecuted: true,
+                workflowEvidence: false,
+                trustGraphEvidenceAvailable: false,
+                trustGraphEvidenceUsed: false,
+                assistantDeclaredSpeculative: false,
+            },
+            conflicts: ['retrieval_used_without_citations'],
+            limitations: [
+                'Retrieval ran, but no citations were retained after normalization.',
+            ],
+        },
+    };
+
+    assert.deepEqual(buildWorkflowReceiptItems(metadata), [
+        'Answered in Grounded mode',
+        'No sources available',
+    ]);
+});
+
+test('buildWorkflowReceiptItems surfaces attached sources when citations are present', () => {
+    const metadata: ResponseMetadata = {
+        ...createBaseMetadata(),
+        citations: [{ title: 'Source', url: 'https://example.com' }],
+    };
+
+    assert.deepEqual(buildWorkflowReceiptItems(metadata), [
+        'Sources available',
+    ]);
+});
+
+test('summarizeGroundingEvidence reports search-unavailable copy from execution metadata', () => {
+    const metadata: ResponseMetadata = {
+        ...createBaseMetadata(),
+        execution: [
+            {
+                kind: 'tool',
+                status: 'skipped',
+                toolName: 'web_search',
+                reasonCode: 'search_not_supported_by_selected_profile',
+            },
+        ],
+    };
+
+    assert.deepEqual(summarizeGroundingEvidence(metadata), {
+        status: 'search_unavailable',
+        label: 'Search unavailable',
+        explanation:
+            'Search was unavailable for this mode, so this response has no source links. Treat important claims as unverified.',
+    });
+});
+
+test('summarizeGroundingEvidence stays conservative when no evidence reason was recorded', () => {
+    const metadata: ResponseMetadata = createBaseMetadata();
+
+    assert.deepEqual(summarizeGroundingEvidence(metadata), {
+        status: 'not_recorded',
+        label: 'No grounding evidence recorded',
+        explanation:
+            'This trace does not include sources or a recorded reason for missing evidence. Treat important claims as unverified.',
+    });
 });
 
 test('buildWorkflowReceiptItems reports revised label from normalized review runtime summary', () => {

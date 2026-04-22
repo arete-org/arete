@@ -24,6 +24,13 @@ Mode is the routing choice. It tells you how the backend ran the request:
 which path it took, where that choice came from, and whether workflow-owned
 escalation happened.
 
+Mode describes routing. Evidence comes from citations, provenance assessment,
+or recorded execution details.
+
+`workflowMode.modeId = grounded` means the backend selected the grounded
+runtime posture. To know whether sources were actually available, check
+citations, `provenanceAssessment`, and execution events.
+
 TRACE is the posture of the answer. It tells you how the answer was shaped,
 not how the request was routed. `trace_target` is the intended posture.
 `trace_final` is the delivered posture. `trace_final_reason_code` explains the
@@ -45,6 +52,8 @@ and TrustGraph records provide the structural detail behind it.
 If you have a trace payload open, a common pattern is:
 
 - `workflowMode` tells you the request ran `grounded`
+- `provenanceAssessment` tells you whether citations were present or evidence
+  was unavailable
 - the planner event shows a tool suggestion was adjusted by policy
 - `trace_final` shows a more cautious delivered answer
 - provenance fields tell you how the run was classified after the fact

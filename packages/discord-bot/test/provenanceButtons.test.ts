@@ -162,6 +162,7 @@ test('details action renders markdown sections with execution table and trace vi
         assert.match(content, /Answered in Balanced mode/);
         assert.match(content, /Review fallback/);
         assert.match(content, /Planner fallback/);
+        assert.match(content, /Sources available/);
         assert.match(content, /Target Attribution: `5`/);
         assert.match(content, /Final Attribution: `3`/);
         assert.match(content, /Final Reason: `runtime_posture_adjustment`/);
@@ -284,6 +285,70 @@ test('details action stays fail-open with fallback sections when trace metadata 
         assert.match(content, /\*\*Sources\*\*/);
         assert.match(content, /\*\*Execution\*\*/);
         assert.match(content, /metadata_unavailable/);
+    } finally {
+        botApi.getTrace = originalGetTrace;
+    }
+});
+
+test('details action shows explicit missing grounding evidence state when metadata records it', async () => {
+    const originalGetTrace = botApi.getTrace;
+    const deferReplyPayloads: unknown[] = [];
+    const editReplyPayloads: unknown[] = [];
+
+    botApi.getTrace = (async () => ({
+        status: 200,
+        data: {
+            responseId: 'resp_grounding_missing',
+            provenance: 'Retrieved',
+            safetyTier: 'Low',
+            tradeoffCount: 1,
+            chainHash: 'hash_missing',
+            licenseContext: 'MIT',
+            modelVersion: 'gpt-5-mini',
+            staleAfter: new Date(Date.now() + 60000).toISOString(),
+            citations: [],
+            provenanceAssessment: {
+                methodId: 'deterministic_multi_signal_v1',
+                methodLabel:
+                    'Deterministic multi-signal provenance classification (backend)',
+                signals: {
+                    citationsPresent: false,
+                    retrievalRequested: true,
+                    retrievalUsed: true,
+                    retrievalToolExecuted: true,
+                    workflowEvidence: false,
+                    trustGraphEvidenceAvailable: false,
+                    trustGraphEvidenceUsed: false,
+                    assistantDeclaredSpeculative: false,
+                },
+                conflicts: ['retrieval_used_without_citations'],
+                limitations: [
+                    'Retrieval ran, but no citations were retained after normalization.',
+                ],
+            },
+            trace_target: {},
+            trace_final: {},
+        },
+    })) as typeof botApi.getTrace;
+
+    try {
+        const handled = await handleProvenanceButtonInteraction(
+            createDetailsInteraction(
+                'resp_grounding_missing',
+                editReplyPayloads,
+                deferReplyPayloads
+            ) as unknown as ButtonInteraction
+        );
+
+        assert.equal(handled, true);
+        const content = String(
+            (editReplyPayloads[0] as { content?: string }).content
+        );
+        assert.match(content, /No sources available/);
+        assert.match(
+            content,
+            /Footnote tried to use retrieval, but no citations were kept for this response\./
+        );
     } finally {
         botApi.getTrace = originalGetTrace;
     }

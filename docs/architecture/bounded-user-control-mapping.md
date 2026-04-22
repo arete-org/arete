@@ -16,8 +16,8 @@ Do not add aliases, advanced toggles, or secondary sub-controls in this phase.
 
 - `fast`: quickest path, with lighter checking and minimal evidence work
 - `balanced`: standard reviewed path, with moderate evidence and review
-- `grounded`: most careful path in this set, with stricter evidence and review
-  expectations
+- `grounded`: most careful path in this set, with stricter evidence posture and
+  review expectations when sources are available
 
 These labels should be easy to understand. A user should not need to know
 workflow internals, provider routing, or policy terms to pick one.
@@ -65,7 +65,7 @@ it should stay internal until Footnote has a stronger public control model.
 ## Examples
 
 - If a user picks `grounded`, expose that choice as a stricter answer posture.
-  Do not expose separate review-pass or evidence-threshold controls next to it.
+  Show actual evidence separately through citations or recorded trace details.
 - If a user picks `fast`, do not also surface provider or tool-routing choices
   as if they are equal policy controls. Those remain backend-owned.
 

@@ -6,7 +6,12 @@
  * @footnote-ethics: high - Receipt copy influences user trust, so language must remain conservative and non-overclaiming.
  */
 
-import type { ResponseMetadata, WorkflowModeId } from './types.js';
+import type {
+    ExecutionEvent,
+    ResponseMetadata,
+    ToolExecutionEvent,
+    WorkflowModeId,
+} from './types.js';
 import { deriveReviewRuntimeSummary } from './reviewRuntime.js';
 
 const WORKFLOW_MODE_LABELS: Record<WorkflowModeId, string> = {
@@ -14,6 +19,28 @@ const WORKFLOW_MODE_LABELS: Record<WorkflowModeId, string> = {
     balanced: 'Balanced mode',
     grounded: 'Grounded mode',
 };
+
+export type GroundingEvidenceSummary = {
+    status:
+        | 'sources_available'
+        | 'sources_missing_after_retrieval'
+        | 'search_unavailable'
+        | 'retrieval_not_used'
+        | 'not_recorded';
+    label: string;
+    explanation: string;
+};
+
+const SEARCH_UNSUPPORTED_REASON_CODE =
+    'search_not_supported_by_selected_profile';
+
+const isSearchUnsupportedToolEvent = (
+    event: ExecutionEvent
+): event is ToolExecutionEvent =>
+    event.kind === 'tool' &&
+    event.toolName === 'web_search' &&
+    event.status === 'skipped' &&
+    event.reasonCode === SEARCH_UNSUPPORTED_REASON_CODE;
 
 /**
  * Returns the user-facing mode label for the receipt.
@@ -116,6 +143,78 @@ export const resolvePlannerFallbackReceipt = (
 };
 
 /**
+ * Returns a conservative grounding-evidence summary derived only from
+ * citations, provenanceAssessment, and explicit execution reason codes.
+ *
+ * Rules:
+ * - Citations are the clearest user-visible evidence signal, so prefer them.
+ * - If metadata explicitly records that retrieval ran without surviving
+ *   citations, or that search support was unavailable, surface that as an
+ *   evidence-unavailable state.
+ * - Otherwise stay conservative and say evidence is not recorded rather than
+ *   inferring it from mode names or posture labels.
+ */
+export const summarizeGroundingEvidence = (
+    metadata: ResponseMetadata
+): GroundingEvidenceSummary => {
+    if (metadata.citations.length > 0) {
+        const sourceCount = metadata.citations.length;
+        return {
+            status: 'sources_available',
+            label: 'Sources available',
+            explanation:
+                sourceCount === 1
+                    ? 'This trace includes 1 source you can inspect.'
+                    : `This trace includes ${sourceCount} sources you can inspect.`,
+        };
+    }
+
+    const provenanceAssessment = metadata.provenanceAssessment;
+    const retrievalWithoutCitations =
+        provenanceAssessment?.conflicts.includes(
+            'retrieval_used_without_citations'
+        ) ?? false;
+    if (retrievalWithoutCitations) {
+        return {
+            status: 'sources_missing_after_retrieval',
+            label: 'No sources available',
+            explanation:
+                'Footnote tried to use retrieval, but no citations were kept for this response. Treat important claims as unverified.',
+        };
+    }
+
+    const searchUnsupported =
+        metadata.execution?.some(isSearchUnsupportedToolEvent) ?? false;
+    if (searchUnsupported) {
+        return {
+            status: 'search_unavailable',
+            label: 'Search unavailable',
+            explanation:
+                'Search was unavailable for this mode, so this response has no source links. Treat important claims as unverified.',
+        };
+    }
+
+    const retrievalRequestedButUnused =
+        provenanceAssessment?.signals.retrievalRequested === true &&
+        provenanceAssessment.signals.retrievalUsed === false;
+    if (retrievalRequestedButUnused) {
+        return {
+            status: 'retrieval_not_used',
+            label: 'No sources available',
+            explanation:
+                'Footnote requested retrieval for this response, but it was not used. Treat important claims as unverified.',
+        };
+    }
+
+    return {
+        status: 'not_recorded',
+        label: 'No grounding evidence recorded',
+        explanation:
+            'This trace does not include sources or a recorded reason for missing evidence. Treat important claims as unverified.',
+    };
+};
+
+/**
  * Builds receipt lines in a stable order for UI rendering.
  *
  * The copy is intentionally conservative and path-focused. It does not claim
@@ -131,6 +230,15 @@ export const buildWorkflowReceiptItems = (
         })(),
         resolveReviewReceipt(metadata),
         resolvePlannerFallbackReceipt(metadata),
+        (() => {
+            const groundingEvidenceSummary =
+                summarizeGroundingEvidence(metadata);
+            if (groundingEvidenceSummary.status === 'not_recorded') {
+                return null;
+            }
+
+            return groundingEvidenceSummary.label;
+        })(),
     ].filter((item): item is string => item !== null);
 
 /**
