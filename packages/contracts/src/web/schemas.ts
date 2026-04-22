@@ -9,6 +9,8 @@
 import { z } from 'zod';
 import {
     BOUNDED_REVIEW_ASSESS_DECISIONS,
+    WORKFLOW_LIMIT_KEYS,
+    WORKFLOW_LIMIT_STATES,
     REVIEW_RUNTIME_LABELS,
     WORKFLOW_STEP_KINDS,
     WORKFLOW_STEP_STATUSES,
@@ -447,6 +449,26 @@ const WorkflowRecordSchema = z
         stepCount: z.number().int().nonnegative(),
         maxSteps: z.number().int().positive(),
         maxDurationMs: z.number().int().positive(),
+        effectiveLimits: z
+            .array(
+                z
+                    .object({
+                        key: z.enum(WORKFLOW_LIMIT_KEYS),
+                        state: z.enum(WORKFLOW_LIMIT_STATES),
+                        value: z.number().int().nonnegative().optional(),
+                        stoppedRun: z.boolean(),
+                    })
+                    .strict()
+            )
+            .optional(),
+        limitStop: z
+            .object({
+                stoppedByLimit: z.boolean(),
+                terminationReason: z.enum(WORKFLOW_TERMINATION_REASONS),
+                exhaustedLimitKey: z.enum(WORKFLOW_LIMIT_KEYS).optional(),
+            })
+            .strict()
+            .optional(),
         terminationReason: z.enum(WORKFLOW_TERMINATION_REASONS),
         steps: z.array(StepRecordSchema),
     })
@@ -490,6 +512,41 @@ const WorkflowRecordSchema = z
                     message: `parentStepId "${step.parentStepId}" must reference a stepId in the same workflow.`,
                 });
             }
+        }
+
+        const seenLimitKeys = new Set<string>();
+        for (const limit of value.effectiveLimits ?? []) {
+            if (seenLimitKeys.has(limit.key)) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `effective limit key "${limit.key}" must be unique.`,
+                });
+            }
+            seenLimitKeys.add(limit.key);
+        }
+
+        if (
+            value.limitStop?.stoppedByLimit === true &&
+            value.limitStop.exhaustedLimitKey === undefined
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['limitStop', 'exhaustedLimitKey'],
+                message:
+                    'limitStop.exhaustedLimitKey is required when stoppedByLimit is true.',
+            });
+        }
+
+        if (
+            value.limitStop?.stoppedByLimit === false &&
+            value.limitStop.exhaustedLimitKey !== undefined
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['limitStop', 'exhaustedLimitKey'],
+                message:
+                    'limitStop.exhaustedLimitKey must be omitted when stoppedByLimit is false.',
+            });
         }
     })
     .strict();

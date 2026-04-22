@@ -395,6 +395,37 @@ export const WORKFLOW_TERMINATION_REASONS = [
 export type WorkflowTerminationReason =
     (typeof WORKFLOW_TERMINATION_REASONS)[number];
 
+export const WORKFLOW_LIMIT_KEYS = [
+    'maxWorkflowSteps',
+    'maxToolCalls',
+    'maxDeliberationCalls',
+    'maxTokensTotal',
+    'maxDurationMs',
+] as const;
+
+export type WorkflowLimitKey = (typeof WORKFLOW_LIMIT_KEYS)[number];
+
+export const WORKFLOW_LIMIT_STATES = [
+    'enforced',
+    'configured_inactive',
+    'unavailable',
+] as const;
+
+export type WorkflowLimitState = (typeof WORKFLOW_LIMIT_STATES)[number];
+
+export type WorkflowEffectiveLimit = {
+    key: WorkflowLimitKey;
+    state: WorkflowLimitState;
+    value?: number;
+    stoppedRun: boolean;
+};
+
+export type WorkflowLimitStop = {
+    stoppedByLimit: boolean;
+    terminationReason: WorkflowTerminationReason;
+    exhaustedLimitKey?: WorkflowLimitKey;
+};
+
 /**
  * Canonical assess-step decisions emitted by bounded review profiles.
  * These are advisory outputs used by workflow transitions, not policy authority.
@@ -460,6 +491,8 @@ export type WorkflowRecord = {
     stepCount: number;
     maxSteps: number;
     maxDurationMs: number;
+    effectiveLimits?: WorkflowEffectiveLimit[];
+    limitStop?: WorkflowLimitStop;
     steps: StepRecord[];
 };
 
