@@ -81,6 +81,7 @@ const ProvenanceFooter = ({
         metadata.execution,
         metadata.workflow
     );
+    // Shared helper keeps web/Discord copy and decision rules in sync.
     const workflowReceiptItems = buildWorkflowReceiptItems(metadata);
     const evaluatorOutcome = metadata.evaluator;
     const searchUnavailableWarning = metadata.execution?.some(

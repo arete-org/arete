@@ -15,12 +15,10 @@ const WORKFLOW_MODE_LABELS: Record<WorkflowModeId, string> = {
 };
 
 /**
- * Resolves user-facing workflow mode label from explicit metadata only.
+ * Returns the user-facing mode label for the receipt.
  *
- * Authority and decision rules:
- * - Primary: `workflowMode.modeId`.
- * - Fallback: `workflowMode.behavior.executionContractPresetId`.
- * - Fail-open: returns `null` for unknown/missing fields.
+ * We only read explicit metadata fields. We do not infer from model names or
+ * workflow profile IDs. If fields are missing or unknown, we return `null`.
  */
 export const resolveWorkflowModeLabel = (
     metadata: ResponseMetadata
@@ -45,15 +43,14 @@ export const resolveWorkflowModeLabel = (
 };
 
 /**
- * Resolves review receipt state from explicit metadata only.
+ * Returns the review state line for the receipt.
  *
- * Authority and decision rules:
- * - `Reviewed before final answer` only when an `assess` step ran
- *   (`workflow.steps[].stepKind === "assess"` and status is not `skipped`).
- * - `Review skipped` when `workflowMode.behavior.reviewPass === "excluded"`.
- * - `Review skipped` when review pass is included, workflow has steps, and no
- *   review step ran.
- * - Fail-open: returns `null` when metadata is missing/unknown.
+ * Rules:
+ * - Show `Reviewed before final answer` only when an `assess` step actually
+ *   ran (status is not `skipped`).
+ * - Show `Review skipped` when metadata says review was excluded, or when
+ *   review was expected but no review step ran.
+ * - Return `null` when metadata is missing or not decisive.
  */
 export const resolveReviewReceipt = (
     metadata: ResponseMetadata
@@ -81,14 +78,11 @@ export const resolveReviewReceipt = (
 };
 
 /**
- * Resolves planner-fallback receipt state from explicit metadata only.
+ * Returns planner fallback status for the receipt.
  *
- * Authority and decision rules:
- * - Emits `Planner fallback` when workflow plan steps or planner execution
- *   events explicitly record fallback via:
- *   - reasonCode: `planner_runtime_error` / `planner_invalid_output`
- *   - contractType: `fallback`
- * - Fail-open: returns `null` when metadata is missing/unknown.
+ * We only emit `Planner fallback` when fallback is explicitly recorded in
+ * workflow plan steps or planner execution events. If not explicit, return
+ * `null`.
  */
 export const resolvePlannerFallbackReceipt = (
     metadata: ResponseMetadata
@@ -127,12 +121,10 @@ export const resolvePlannerFallbackReceipt = (
 };
 
 /**
- * Builds compact user-facing workflow receipt items from explicit metadata.
+ * Builds receipt lines in a stable order for UI rendering.
  *
- * Returned items are conservative and path-semantic:
- * - `Answered in <mode>`
- * - `Reviewed before final answer` / `Review skipped`
- * - `Planner fallback`
+ * The copy is intentionally conservative and path-focused. It does not claim
+ * correctness, verification, or guarantees.
  */
 export const buildWorkflowReceiptItems = (
     metadata: ResponseMetadata
@@ -147,10 +139,8 @@ export const buildWorkflowReceiptItems = (
     ].filter((item): item is string => item !== null);
 
 /**
- * Builds one markdown-friendly summary line from workflow receipt items.
- *
- * Fail-open behavior: returns `null` when no explicit receipt items are
- * available.
+ * Joins receipt lines into one summary sentence for markdown surfaces.
+ * Returns `null` when no receipt lines are available.
  */
 export const buildWorkflowReceiptSummary = (
     metadata: ResponseMetadata

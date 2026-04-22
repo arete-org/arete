@@ -178,6 +178,7 @@ function formatSummarySection(
         `- Model: \`${formatMarkdownValue(payload.modelVersion)}\``,
         `- Stale After: \`${formatMarkdownValue(payload.staleAfter)}\``,
     ];
+    // Shared helper keeps Discord and web workflow-receipt wording aligned.
     const workflowReceiptSummary = buildWorkflowReceiptSummary(payload);
     if (workflowReceiptSummary) {
         lines.push(
