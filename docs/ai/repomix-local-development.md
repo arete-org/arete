@@ -81,6 +81,12 @@ Preset intent:
 - `workflow-trace`: architecture + contracts + backend/web trace anchors
 - `docs-proposal`: architecture docs + active proposals + minimal code anchors
 
+Important:
+
+These presets are intentionally narrow starter bundles. They are not
+authoritative slices of the full system. Expand include paths for task-specific
+work when needed, but keep bundles focused and reviewable.
+
 ## 7. Troubleshooting
 
 - Command not found:
