@@ -30,8 +30,8 @@ Use one local output root for generated bundles:
 mkdir -p artifacts/repomix
 ```
 
-The `artifacts/` path is intended for generated outputs and should remain
-gitignored.
+The `artifacts/repomix/` path is intended for generated outputs and should
+remain gitignored via the `.gitignore` `artifacts/repomix/` rule.
 
 ## 4. Run Project Presets
 
