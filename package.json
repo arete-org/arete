@@ -71,7 +71,7 @@
         "eslint-config-prettier": "catalog:",
         "eslint-plugin-react-hooks": "catalog:",
         "prettier": "catalog:",
-        "repomix": "^1.13.1",
+        "repomix": "catalog:",
         "tsx": "catalog:",
         "typescript": "catalog:"
     },
