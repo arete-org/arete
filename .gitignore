@@ -59,6 +59,7 @@ data/
 # Logs
 packages/discord-bot/logs
 logs/
+artifacts/repomix/
 
 # the 2>nul commmand creates a "nul" file on Unix systems, so we ignore it
 nul

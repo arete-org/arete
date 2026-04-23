@@ -1,0 +1,32 @@
+{
+    "$schema": "https://repomix.com/schemas/latest/schema.json",
+    "output": {
+        "filePath": "artifacts/repomix/docs-proposal/repomix-docs-proposal.xml",
+        "style": "xml",
+        "compress": true,
+        "parsableStyle": false,
+        "fileSummary": true,
+        "directoryStructure": true,
+        "showLineNumbers": true,
+        "instructionFilePath": "tools/repomix/instructions/docs-proposal.md"
+    },
+    "include": [
+        "docs/README.md",
+        "docs/architecture/**/*",
+        "docs/decisions/**/*",
+        "docs/proposals/**/*",
+        "packages/backend/src/services/workflowEngine.ts",
+        "packages/contracts/src/ethics-core/index.ts",
+        "packages/web/src/pages/TracePage.tsx"
+    ],
+    "ignore": {
+        "useGitignore": true,
+        "useDefaultPatterns": true,
+        "customPatterns": [
+            "docs/status/archive/**"
+        ]
+    },
+    "security": {
+        "enableSecurityCheck": true
+    }
+}
