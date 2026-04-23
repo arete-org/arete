@@ -1,10 +1,2 @@
-.env
-.env.*
-keys/**
-*.pem
-data/**
-logs/**
-artifacts/**
-**/dist/**
 **/output/**
 docs/status/archive/dependency-graphs/**
