@@ -37,6 +37,9 @@
         "refactor:lookup": "node scripts/refactor-lookup.cjs",
         "blog-sync": "node scripts/blog-sync.cjs",
         "review": "node scripts/review.cjs",
+        "repomix:workflow-trace": "pnpm exec repomix --config tools/repomix/workflow-trace.config.json .",
+        "repomix:docs-proposal": "pnpm exec repomix --config tools/repomix/docs-proposal.config.json .",
+        "repomix:all": "pnpm repomix:workflow-trace && pnpm repomix:docs-proposal",
         "test:annotation-governance": "pnpm exec tsx --test scripts/annotation-schema.test.ts scripts/validate-footnote-tags.test.ts scripts/review.test.ts",
         "test:refactor-lookup": "pnpm exec tsx --test scripts/refactor-lookup.test.ts",
         "type-check": "pnpm exec tsc --noEmit",
@@ -68,6 +71,7 @@
         "eslint-config-prettier": "catalog:",
         "eslint-plugin-react-hooks": "catalog:",
         "prettier": "catalog:",
+        "repomix": "catalog:",
         "tsx": "catalog:",
         "typescript": "catalog:"
     },
