@@ -1,6 +1,7 @@
 {
     "$schema": "https://repomix.com/schemas/latest/schema.json",
     "output": {
+        "filePath": "artifacts/repomix/default/repomix-default.xml",
         "style": "xml",
         "compress": true,
         "parsableStyle": false,
