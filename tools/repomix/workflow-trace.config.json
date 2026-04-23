@@ -27,8 +27,7 @@
         "useGitignore": true,
         "useDefaultPatterns": true,
         "customPatterns": [
-            "docs/status/archive/**",
-            "docs/status/archive/dependency-graphs/**"
+            "docs/status/archive/**"
         ]
     },
     "security": {
