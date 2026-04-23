@@ -70,7 +70,7 @@ Minimum review checklist:
 If you need a one-off bundle outside preset scope, run Repomix directly:
 
 ```bash
-pnpm exec repomix . --output artifacts/repomix/local-starter.xml --style xml --compress
+pnpm exec repomix . --include "docs/architecture/**/*.md,packages/backend/src/services/workflow*.ts,packages/backend/src/http/traceRoutes.ts" --ignore "docs/status/archive/**" --output artifacts/repomix/local-starter.xml --style xml --compress
 ```
 
 Prefer presets first. They are easier to review and keep aligned with Footnote
