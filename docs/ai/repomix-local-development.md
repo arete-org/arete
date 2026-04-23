@@ -33,16 +33,25 @@ mkdir -p artifacts/repomix
 The `artifacts/` path is intended for generated outputs and should remain
 gitignored.
 
-## 4. Run A Starter Bundle
+## 4. Run Project Presets
 
-Before repo preset scripts are added, you can run Repomix directly against this
-repo:
+Use the repo presets for stable, reviewable bundles:
 
 ```bash
-pnpm exec repomix . --output artifacts/repomix/local-starter.xml --style xml --compress
+pnpm repomix:workflow-trace
+pnpm repomix:docs-proposal
 ```
 
-This produces one local bundle you can inspect or share after review.
+Or run both:
+
+```bash
+pnpm repomix:all
+```
+
+Generated outputs:
+
+- `artifacts/repomix/workflow-trace/repomix-workflow-trace.xml`
+- `artifacts/repomix/docs-proposal/repomix-docs-proposal.xml`
 
 ## 5. Safety Review Before Sharing
 
@@ -56,13 +65,18 @@ Minimum review checklist:
 - no local data dumps
 - no deployment-only confidential material
 
-## 6. Preferred Workflow In Footnote
+## 6. Ad Hoc Bundles (Optional)
 
-When project scripts are available, prefer named preset scripts over ad hoc
-commands. Presets are easier to review and keep aligned with Footnote
+If you need a one-off bundle outside preset scope, run Repomix directly:
+
+```bash
+pnpm exec repomix . --output artifacts/repomix/local-starter.xml --style xml --compress
+```
+
+Prefer presets first. They are easier to review and keep aligned with Footnote
 architecture boundaries.
 
-Expected preset intent:
+Preset intent:
 
 - `workflow-trace`: architecture + contracts + backend/web trace anchors
 - `docs-proposal`: architecture docs + active proposals + minimal code anchors
