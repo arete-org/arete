@@ -23,6 +23,12 @@ If you see conflicting guidance, trust `AGENTS.md`.
 3. Validate the result with project checks.
 4. Do a human pass before opening a PR.
 
+## Optional: Repomix Local Setup
+
+For local AI-context bundle tooling, use:
+
+- [Repomix Local Development Setup](./repomix-local-development.md)
+
 ## Checks to Run
 
 Always:
