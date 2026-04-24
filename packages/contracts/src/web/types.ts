@@ -516,6 +516,19 @@ export type InternalImageChannelContext = {
 };
 
 /**
+ * Optional prompt-policy details included by trusted callers so backend trace
+ * metadata can preserve policy outcomes independent of Discord presentation.
+ *
+ * TODO(auth-memory-governance): Treat these fields as sensitive prompt
+ * metadata once user opt-in auth/memory/governance controls are available.
+ */
+export type InternalImagePromptPolicyContext = {
+    originalPrompt?: string;
+    maxInputChars?: number;
+    policyTruncated?: boolean;
+};
+
+/**
  * Trusted internal request for backend-owned image generation.
  *
  * @api.operationId: postInternalImageTask
@@ -533,6 +546,8 @@ export type PostInternalImageGenerateRequest = {
     allowPromptAdjustment: boolean;
     outputFormat: SupportedImageOutputFormat;
     outputCompression: number;
+    aspectRatio?: 'auto' | 'square' | 'portrait' | 'landscape';
+    promptPolicy?: InternalImagePromptPolicyContext;
     user: InternalImageUserContext;
     followUpResponseId?: string;
     channelContext?: InternalImageChannelContext;

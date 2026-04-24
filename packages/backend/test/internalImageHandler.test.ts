@@ -35,6 +35,12 @@ const createImageRequestPayload = () => ({
     allowPromptAdjustment: true,
     outputFormat: 'png' as const,
     outputCompression: 100,
+    aspectRatio: 'square' as const,
+    promptPolicy: {
+        originalPrompt: 'draw a reflective skyline',
+        maxInputChars: 8000,
+        policyTruncated: false,
+    },
     user: {
         username: 'Jordan',
         nickname: 'Jordan',
@@ -558,4 +564,110 @@ test('internal image task service keeps a successful result when usage recording
     const response = await service.runImageTask(createImageRequestPayload());
 
     assert.equal(response.result.responseId, 'resp_123');
+});
+
+test('internal image task service stores trace metadata for image responses', async () => {
+    let storedResponseId: string | null = null;
+    let storedPrompt: string | null = null;
+    let storedActivePrompt: string | null = null;
+    let storedFollowUpResponseId: string | null = null;
+    const service = createInternalImageTaskService({
+        imageGenerationRuntime: {
+            kind: 'test-image-runtime',
+            async generateImage(request) {
+                return {
+                    responseId: 'resp_trace_123',
+                    textModel: request.textModel,
+                    imageModel: request.imageModel,
+                    revisedPrompt: 'draw a reflective skyline at dusk',
+                    finalStyle: request.style,
+                    annotations: {
+                        title: null,
+                        description: null,
+                        note: null,
+                        adjustedPrompt: null,
+                    },
+                    finalImageBase64: 'base64-image',
+                    outputFormat: request.outputFormat,
+                    outputCompression: request.outputCompression,
+                    usage: {
+                        inputTokens: 12,
+                        outputTokens: 8,
+                        totalTokens: 20,
+                        imageCount: 1,
+                    },
+                    costs: {
+                        text: 0.00002,
+                        image: 0.011,
+                        total: 0.01102,
+                        perImage: 0.011,
+                    },
+                    generationTimeMs: 2,
+                };
+            },
+        },
+        recordUsage: () => undefined,
+        storeTrace: async (metadata) => {
+            storedResponseId = metadata.responseId;
+            storedPrompt = metadata.imageGeneration?.prompts.original ?? null;
+            storedActivePrompt = metadata.imageGeneration?.prompts.active ?? null;
+            storedFollowUpResponseId =
+                metadata.imageGeneration?.linkage.followUpResponseId ?? null;
+        },
+    });
+
+    const response = await service.runImageTask(createImageRequestPayload());
+
+    assert.equal(response.result.responseId, 'resp_trace_123');
+    assert.equal(storedResponseId, 'resp_trace_123');
+    assert.equal(storedPrompt, 'draw a reflective skyline');
+    assert.equal(storedActivePrompt, 'draw a reflective skyline at dusk');
+    assert.equal(storedFollowUpResponseId, 'resp_prev_123');
+});
+
+test('internal image task service keeps success path when trace storage fails', async () => {
+    const service = createInternalImageTaskService({
+        imageGenerationRuntime: {
+            kind: 'test-image-runtime',
+            async generateImage(request) {
+                return {
+                    responseId: 'resp_trace_fail_open',
+                    textModel: request.textModel,
+                    imageModel: request.imageModel,
+                    revisedPrompt: null,
+                    finalStyle: request.style,
+                    annotations: {
+                        title: null,
+                        description: null,
+                        note: null,
+                        adjustedPrompt: null,
+                    },
+                    finalImageBase64: 'base64-image',
+                    outputFormat: request.outputFormat,
+                    outputCompression: request.outputCompression,
+                    usage: {
+                        inputTokens: 12,
+                        outputTokens: 8,
+                        totalTokens: 20,
+                        imageCount: 1,
+                    },
+                    costs: {
+                        text: 0.00002,
+                        image: 0.011,
+                        total: 0.01102,
+                        perImage: 0.011,
+                    },
+                    generationTimeMs: 2,
+                };
+            },
+        },
+        recordUsage: () => undefined,
+        storeTrace: async () => {
+            throw new Error('trace unavailable');
+        },
+    });
+
+    const response = await service.runImageTask(createImageRequestPayload());
+
+    assert.equal(response.result.responseId, 'resp_trace_fail_open');
 });

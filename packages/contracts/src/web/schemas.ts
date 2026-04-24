@@ -1180,6 +1180,17 @@ export const PostInternalImageGenerateRequestSchema = z
         allowPromptAdjustment: z.boolean(),
         outputFormat: z.enum(supportedImageOutputFormats),
         outputCompression: z.number().int().min(0).max(100),
+        aspectRatio: z
+            .enum(['auto', 'square', 'portrait', 'landscape'])
+            .optional(),
+        promptPolicy: z
+            .object({
+                originalPrompt: z.string().min(1).max(8000).optional(),
+                maxInputChars: z.number().int().positive().optional(),
+                policyTruncated: z.boolean().optional(),
+            })
+            .strict()
+            .optional(),
         user: z
             .object({
                 username: z.string().min(1).max(128),

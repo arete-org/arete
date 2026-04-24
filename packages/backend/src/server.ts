@@ -298,6 +298,12 @@ const initializeServices = () => {
             });
         internalImageTaskService = createInternalImageTaskService({
             imageGenerationRuntime,
+            storeTrace: async (metadata) => {
+                if (!traceStore) {
+                    throw new Error('Trace store is not initialized');
+                }
+                await storeTrace(traceStore, metadata);
+            },
         });
         internalVoiceTtsService = createInternalVoiceTtsService({
             ttsRuntime: createOpenAiTtsRuntime({
