@@ -74,6 +74,7 @@ export type {
     EvaluatorOutcome,
     ExecutionEvent,
     TrustGraphMetadata,
+    ImageGenerationMetadata,
     ResponseMetadata,
 } from './types.js';
 export {

@@ -16,6 +16,7 @@ import {
     WORKFLOW_STEP_STATUSES,
     WORKFLOW_TERMINATION_REASONS,
     type ExecutionEvent,
+    type ImageGenerationMetadata,
     type ProvenanceAssessment,
     type ResponseMetadata,
     type SteerabilityControls,
@@ -778,6 +779,79 @@ type _AssertSteerabilityControls =
 const _assertSteerabilityControls: _AssertSteerabilityControls = true;
 void _assertSteerabilityControls;
 
+const ImageGenerationMetadataSchema = z
+    .object({
+        version: z.literal('v1'),
+        prompts: z
+            .object({
+                original: z.string(),
+                active: z.string(),
+                revised: z.string().nullable(),
+                maxInputChars: z.number().int().positive(),
+                policyTruncated: z.boolean(),
+            })
+            .strict(),
+        request: z
+            .object({
+                textModel: z.string().min(1),
+                imageModel: z.string().min(1),
+                quality: z.enum(['low', 'medium', 'high', 'auto']),
+                size: z.enum(['auto', '1024x1024', '1024x1536', '1536x1024']),
+                aspectRatio: z.enum([
+                    'auto',
+                    'square',
+                    'portrait',
+                    'landscape',
+                ]),
+                background: z.enum(['auto', 'transparent', 'opaque']),
+                style: z.string(),
+                allowPromptAdjustment: z.boolean(),
+                outputFormat: z.enum(['png', 'webp', 'jpeg']),
+                outputCompression: z.number().int().min(1).max(100),
+            })
+            .strict(),
+        linkage: z
+            .object({
+                followUpResponseId: z.string().min(1).nullable(),
+            })
+            .strict(),
+        result: z
+            .object({
+                outputResponseId: z.string().min(1).nullable(),
+                finalStyle: z.string(),
+                generationTimeMs: z.number().int().nonnegative(),
+            })
+            .strict(),
+        usage: z
+            .object({
+                inputTokens: z.number().int().nonnegative(),
+                outputTokens: z.number().int().nonnegative(),
+                totalTokens: z.number().int().nonnegative(),
+                imageCount: z.number().int().nonnegative(),
+            })
+            .strict(),
+        costs: z
+            .object({
+                text: z.number().nonnegative(),
+                image: z.number().nonnegative(),
+                total: z.number().nonnegative(),
+                perImage: z.number().nonnegative(),
+            })
+            .strict(),
+    })
+    .strict();
+
+type _AssertImageGenerationMetadata =
+    z.infer<typeof ImageGenerationMetadataSchema> extends ImageGenerationMetadata
+        ? ImageGenerationMetadata extends z.infer<
+              typeof ImageGenerationMetadataSchema
+          >
+            ? true
+            : false
+        : false;
+const _assertImageGenerationMetadata: _AssertImageGenerationMetadata = true;
+void _assertImageGenerationMetadata;
+
 const responseMetadataShape = {
     responseId: z.string().min(1),
     provenance: ProvenanceSchema,
@@ -806,6 +880,9 @@ const responseMetadataShape = {
     trace_final: PartialResponseTemperamentSchema,
     trace_final_reason_code: TraceFinalizationReasonCodeSchema.optional(),
     trustGraph: TrustGraphMetadataSchema.optional(),
+    // TODO(auth-memory-governance): Apply user opt-in auth/memory/governance
+    // policy before broad prompt-rich image metadata exposure/retention.
+    imageGeneration: ImageGenerationMetadataSchema.optional(),
 } as const;
 
 const hasDifferentTracePosture = (
