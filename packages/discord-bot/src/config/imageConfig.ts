@@ -88,6 +88,25 @@ function readPositiveIntegerEnv(key: string, fallback: number): number {
 }
 
 /**
+ * Reads positive integer overrides with an explicit upper bound.
+ */
+function readBoundedPositiveIntegerEnv(
+    key: string,
+    fallback: number,
+    max: number
+): number {
+    const parsed = readPositiveIntegerEnv(key, fallback);
+    if (parsed <= max) {
+        return parsed;
+    }
+
+    logger.warn(
+        `Ignoring ${key} value "${parsed}" because it exceeds the supported maximum of ${max}.`
+    );
+    return max;
+}
+
+/**
  * Parses the optional JSON map stored in IMAGE_MODEL_MULTIPLIERS. This allows a
  * single variable to override multiple models when desired.
  */
@@ -323,9 +342,12 @@ export const imageConfig: ImageConfiguration = {
         modelTokenMultipliers: parseMultiplierOverrides(),
     },
     promptPolicy: {
-        maxInputChars: readPositiveIntegerEnv(
+        // Keep Discord-side policy aligned with backend request validation.
+        // The backend currently accepts image prompts up to 8000 chars.
+        maxInputChars: readBoundedPositiveIntegerEnv(
             'IMAGE_PROMPT_MAX_INPUT_CHARS',
-            FALLBACK_PROMPT_MAX_INPUT_CHARS
+            FALLBACK_PROMPT_MAX_INPUT_CHARS,
+            8000
         ),
     },
 };

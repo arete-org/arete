@@ -9,7 +9,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { botApi } from '../src/api/botApi.js';
-import { EMBED_FIELD_VALUE_LIMIT } from '../src/commands/image/constants.js';
+import {
+    EMBED_FIELD_VALUE_LIMIT,
+    IMAGE_PROMPT_MAX_INPUT_CHARS,
+} from '../src/commands/image/constants.js';
 import {
     buildImageResultPresentation,
     executeImageGeneration,
@@ -195,5 +198,60 @@ test('buildImageResultPresentation keeps generation context prompts beyond embed
     assert.equal(
         traceField?.value,
         `[Open trace](${expectedTraceBase}/traces/resp_long_prompt)`
+    );
+});
+
+test('buildImageResultPresentation enforces prompt policy cap for generation/storage context', () => {
+    const tooLongPrompt = 'B'.repeat(IMAGE_PROMPT_MAX_INPUT_CHARS + 250);
+    const context: ImageGenerationContext = {
+        ...createContext(),
+        prompt: tooLongPrompt,
+        originalPrompt: tooLongPrompt,
+    };
+
+    const presentation = buildImageResultPresentation(context, {
+        responseId: 'resp_policy_prompt',
+        textModel: context.textModel,
+        imageModel: context.imageModel,
+        revisedPrompt: null,
+        finalStyle: context.style,
+        annotations: {
+            title: 'Policy prompt test',
+            description: null,
+            note: null,
+            adjustedPrompt: null,
+        },
+        finalImageBuffer: Buffer.from('hello'),
+        finalImageFileName: 'policy-prompt.png',
+        imageUrl: 'https://example.com/policy-prompt.png',
+        outputFormat: context.outputFormat,
+        outputCompression: context.outputCompression,
+        usage: {
+            inputTokens: 15,
+            outputTokens: 7,
+            totalTokens: 22,
+            imageCount: 1,
+        },
+        costs: {
+            text: 0.00002,
+            image: 0.0012,
+            total: 0.00122,
+            perImage: 0.0012,
+        },
+        generationTimeMs: 1500,
+    });
+
+    assert.equal(
+        presentation.retryContext.prompt.length,
+        IMAGE_PROMPT_MAX_INPUT_CHARS
+    );
+    assert.equal(
+        presentation.retryContext.originalPrompt.length,
+        IMAGE_PROMPT_MAX_INPUT_CHARS
+    );
+    assert.equal(presentation.retryContext.promptPolicyTruncated, true);
+    assert.equal(
+        presentation.retryContext.promptPolicyMaxInputChars,
+        IMAGE_PROMPT_MAX_INPUT_CHARS
     );
 });

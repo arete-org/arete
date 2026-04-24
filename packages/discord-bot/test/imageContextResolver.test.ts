@@ -121,6 +121,27 @@ test('recoverContextDetailsFromTrace fails open when trace is not found', async 
     }
 });
 
+test('recoverContextDetailsFromTrace accepts stale trace envelopes and preserves prompt policy fields', async () => {
+    const originalGetTrace = botApi.getTrace;
+    botApi.getTrace = (async () => ({
+        status: 410,
+        data: {
+            message: 'Trace is stale',
+            metadata: createTraceMetadata(),
+        },
+    })) as typeof botApi.getTrace;
+
+    try {
+        const recovered =
+            await recoverContextDetailsFromTrace('resp_trace_image_1');
+        assert.ok(recovered);
+        assert.equal(recovered?.context.promptPolicyMaxInputChars, 8000);
+        assert.equal(recovered?.context.promptPolicyTruncated, false);
+    } finally {
+        botApi.getTrace = originalGetTrace;
+    }
+});
+
 test('recoverContextDetailsFromMessage parses legacy embed fields for fallback context', async () => {
     const recovered = await recoverContextDetailsFromMessage({
         id: 'message-legacy-1',

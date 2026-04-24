@@ -349,6 +349,20 @@ const renderImageGenerationSection = (
 ): JSX.Element => {
     const outputId = imageGeneration.result.outputResponseId ?? 'Unavailable';
     const inputId = imageGeneration.linkage.followUpResponseId ?? 'None';
+    const usage = imageGeneration.usage;
+    const costs = imageGeneration.costs;
+    const hasUsage =
+        usage &&
+        Number.isFinite(usage.inputTokens) &&
+        Number.isFinite(usage.outputTokens) &&
+        Number.isFinite(usage.totalTokens) &&
+        Number.isFinite(usage.imageCount);
+    const hasCosts =
+        costs &&
+        Number.isFinite(costs.text) &&
+        Number.isFinite(costs.image) &&
+        Number.isFinite(costs.total) &&
+        Number.isFinite(costs.perImage);
 
     return (
         <article
@@ -362,7 +376,9 @@ const renderImageGenerationSection = (
                 <code>{imageGeneration.request.imageModel}</code> using{' '}
                 <code>{imageGeneration.request.textModel}</code>, style{' '}
                 <code>{imageGeneration.result.finalStyle}</code>, and output{' '}
-                <code>{imageGeneration.request.outputFormat.toUpperCase()}</code>
+                <code>
+                    {imageGeneration.request.outputFormat.toUpperCase()}
+                </code>
                 .
             </p>
             <p>
@@ -436,20 +452,17 @@ const renderImageGenerationSection = (
                     <div>
                         <dt>Usage</dt>
                         <dd>
-                            input {imageGeneration.usage.inputTokens}, output{' '}
-                            {imageGeneration.usage.outputTokens}, total{' '}
-                            {imageGeneration.usage.totalTokens}, images{' '}
-                            {imageGeneration.usage.imageCount}
+                            {hasUsage
+                                ? `input ${usage.inputTokens}, output ${usage.outputTokens}, total ${usage.totalTokens}, images ${usage.imageCount}`
+                                : 'Unavailable'}
                         </dd>
                     </div>
                     <div>
                         <dt>Costs</dt>
                         <dd>
-                            text ${imageGeneration.costs.text.toFixed(6)},
-                            image ${imageGeneration.costs.image.toFixed(6)},
-                            total ${imageGeneration.costs.total.toFixed(6)} (
-                            per image $
-                            {imageGeneration.costs.perImage.toFixed(6)})
+                            {hasCosts
+                                ? `text $${costs.text.toFixed(6)}, image $${costs.image.toFixed(6)}, total $${costs.total.toFixed(6)} (per image $${costs.perImage.toFixed(6)})`
+                                : 'Unavailable'}
                         </dd>
                     </div>
                 </dl>
