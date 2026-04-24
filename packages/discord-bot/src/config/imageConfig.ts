@@ -38,6 +38,8 @@ const FALLBACK_OUTPUT_COMPRESSION =
 const FALLBACK_TOKENS_PER_REFRESH = envDefaultValues.IMAGE_TOKENS_PER_REFRESH;
 const FALLBACK_REFRESH_INTERVAL_MS =
     envDefaultValues.IMAGE_TOKEN_REFRESH_INTERVAL_MS;
+const FALLBACK_PROMPT_MAX_INPUT_CHARS =
+    envDefaultValues.IMAGE_PROMPT_MAX_INPUT_CHARS;
 const FALLBACK_MODEL_MULTIPLIERS =
     envDefaultValues.IMAGE_MODEL_MULTIPLIERS as Record<
         ImageRenderModel,
@@ -58,6 +60,26 @@ function readNumberEnv(key: string, fallback: number): number {
     if (!Number.isFinite(parsed) || parsed <= 0) {
         logger.warn(
             `Ignoring invalid numeric override for ${key}: "${raw}" (expected a positive number).`
+        );
+        return fallback;
+    }
+
+    return parsed;
+}
+
+/**
+ * Reads positive integer overrides used by strict policy limits.
+ */
+function readPositiveIntegerEnv(key: string, fallback: number): number {
+    const raw = process.env[key];
+    if (raw === undefined) {
+        return fallback;
+    }
+
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed <= 0 || !Number.isInteger(parsed)) {
+        logger.warn(
+            `Ignoring invalid integer override for ${key}: "${raw}" (expected a positive integer).`
         );
         return fallback;
     }
@@ -254,6 +276,9 @@ export interface ImageConfiguration {
         refreshIntervalMs: number;
         modelTokenMultipliers: Record<ImageRenderModel, number>;
     };
+    promptPolicy: {
+        maxInputChars: number;
+    };
 }
 
 /**
@@ -296,6 +321,12 @@ export const imageConfig: ImageConfiguration = {
             FALLBACK_REFRESH_INTERVAL_MS
         ),
         modelTokenMultipliers: parseMultiplierOverrides(),
+    },
+    promptPolicy: {
+        maxInputChars: readPositiveIntegerEnv(
+            'IMAGE_PROMPT_MAX_INPUT_CHARS',
+            FALLBACK_PROMPT_MAX_INPUT_CHARS
+        ),
     },
 };
 

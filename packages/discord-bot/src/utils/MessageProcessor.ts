@@ -31,14 +31,14 @@ import {
     DEFAULT_IMAGE_OUTPUT_COMPRESSION,
     DEFAULT_IMAGE_OUTPUT_FORMAT,
     DEFAULT_IMAGE_QUALITY,
+    IMAGE_PROMPT_MAX_INPUT_CHARS,
     DEFAULT_TEXT_MODEL,
     PROMPT_ADJUSTMENT_MIN_REMAINING_RATIO,
-    EMBED_FIELD_VALUE_LIMIT,
 } from '../commands/image/constants.js';
 import { resolveAspectRatioSettings } from '../commands/image/aspect.js';
 import {
+    applyPromptPolicy,
     buildImageResultPresentation,
-    clampPromptForContext,
     executeImageGeneration,
 } from '../commands/image/sessionHelpers.js';
 import {
@@ -1263,7 +1263,8 @@ export class MessageProcessor {
             return;
         }
 
-        const normalizedPrompt = clampPromptForContext(trimmedPrompt);
+        const promptPolicy = applyPromptPolicy(trimmedPrompt);
+        const normalizedPrompt = promptPolicy.prompt;
         let { size, aspectRatio, aspectRatioLabel } =
             resolveAspectRatioSettings(
                 (request.aspectRatio ??
@@ -1367,16 +1368,16 @@ export class MessageProcessor {
                 DEFAULT_IMAGE_OUTPUT_COMPRESSION
         );
 
-        if (trimmedPrompt.length > normalizedPrompt.length) {
+        if (promptPolicy.policyTruncated) {
             logger.warn(
-                'Automated image prompt exceeded embed limits; truncating to preserve follow-up usability.'
+                'Automated image prompt exceeded configured input policy; truncating before generation.'
             );
         }
 
         const remainingRatio = Math.max(
             0,
-            (EMBED_FIELD_VALUE_LIMIT - normalizedPrompt.length) /
-                EMBED_FIELD_VALUE_LIMIT
+            (IMAGE_PROMPT_MAX_INPUT_CHARS - normalizedPrompt.length) /
+                IMAGE_PROMPT_MAX_INPUT_CHARS
         );
         const hasRoomForAdjustment =
             remainingRatio > PROMPT_ADJUSTMENT_MIN_REMAINING_RATIO;
@@ -1395,6 +1396,8 @@ export class MessageProcessor {
             prompt: normalizedPrompt,
             originalPrompt: normalizedPrompt,
             refinedPrompt: null,
+            promptPolicyMaxInputChars: promptPolicy.maxInputChars,
+            promptPolicyTruncated: promptPolicy.policyTruncated,
             textModel,
             imageModel,
             size,

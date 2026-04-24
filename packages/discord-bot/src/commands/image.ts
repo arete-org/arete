@@ -30,8 +30,8 @@ import {
 } from './image/constants.js';
 import { resolveAspectRatioSettings } from './image/aspect.js';
 import {
+    applyPromptPolicy,
     buildImageResultPresentation,
-    clampPromptForContext,
     createRetryButtonRow,
     executeImageGeneration,
     formatRetryCountdown,
@@ -550,10 +550,11 @@ const imageCommand: Command = {
             });
             return;
         }
-        const normalizedPrompt = clampPromptForContext(prompt);
-        if (prompt.length > normalizedPrompt.length) {
+        const promptPolicy = applyPromptPolicy(prompt);
+        const normalizedPrompt = promptPolicy.prompt;
+        if (promptPolicy.policyTruncated) {
             logger.warn(
-                'Slash command prompt exceeded embed limits; truncating to preserve follow-up usability.'
+                'Slash command prompt exceeded configured input policy; truncating before generation.'
             );
         }
         logger.debug(
@@ -612,6 +613,8 @@ const imageCommand: Command = {
             prompt: normalizedPrompt,
             originalPrompt: normalizedPrompt,
             refinedPrompt: null,
+            promptPolicyMaxInputChars: promptPolicy.maxInputChars,
+            promptPolicyTruncated: promptPolicy.policyTruncated,
             textModel,
             imageModel,
             size,

@@ -1199,6 +1199,20 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'IMAGE_PROMPT_MAX_INPUT_CHARS',
+        owner: 'discord-bot',
+        stage: 'runtime',
+        section: 'image',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Maximum prompt length allowed for image generation input/storage policy.',
+        defaultValue: literal(8000),
+        usedBy: ['packages/discord-bot/src/config/imageConfig.ts'],
+    }),
+
+    defineEnv({
         key: 'IMAGE_TOKENS_PER_REFRESH',
         owner: 'discord-bot',
         stage: 'runtime',

@@ -28,6 +28,8 @@ export const DEFAULT_IMAGE_QUALITY = imageConfig.defaults.quality;
 export const DEFAULT_IMAGE_OUTPUT_FORMAT = imageConfig.defaults.outputFormat;
 export const DEFAULT_IMAGE_OUTPUT_COMPRESSION =
     imageConfig.defaults.outputCompression;
+export const IMAGE_PROMPT_MAX_INPUT_CHARS =
+    imageConfig.promptPolicy.maxInputChars;
 export const IMAGE_VARIATION_CUSTOM_ID_PREFIX = 'image:variation:';
 export const IMAGE_RETRY_CUSTOM_ID_PREFIX = 'image:retry:';
 export const IMAGE_VARIATION_GENERATE_CUSTOM_ID_PREFIX =

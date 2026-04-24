@@ -21,6 +21,7 @@ import {
     EMBED_MAX_FIELDS,
     EMBED_TOTAL_FIELD_CHAR_LIMIT,
     EMBED_TITLE_LIMIT,
+    IMAGE_PROMPT_MAX_INPUT_CHARS,
     IMAGE_RETRY_CUSTOM_ID_PREFIX,
     IMAGE_VARIATION_CUSTOM_ID_PREFIX,
 } from './constants.js';
@@ -40,6 +41,7 @@ import {
     setEmbedFooterText,
     truncateForEmbed,
 } from './embed.js';
+import { runtimeConfig } from '../../config.js';
 
 /**
  * Provides structured metadata about a generated image so that different
@@ -88,6 +90,20 @@ interface ExecuteImageGenerationOptions {
     };
 }
 
+export interface PromptPolicyResult {
+    prompt: string;
+    maxInputChars: number;
+    policyTruncated: boolean;
+}
+
+function buildTraceViewerUrl(responseId: string | null): string | null {
+    if (!responseId || responseId.trim().length === 0) {
+        return null;
+    }
+    const baseUrl = runtimeConfig.webBaseUrl.trim().replace(/\/+$/, '');
+    return `${baseUrl}/traces/${encodeURIComponent(responseId.trim())}`;
+}
+
 const buildImageTaskRequest = (
     context: ImageGenerationContext,
     options: ExecuteImageGenerationOptions
@@ -100,12 +116,22 @@ const buildImageTaskRequest = (
         textModel: context.textModel,
         imageModel: context.imageModel,
         size: context.size,
+        aspectRatio: context.aspectRatio,
         quality: context.quality,
         background: context.background,
         style: context.style,
         allowPromptAdjustment: context.allowPromptAdjustment,
         outputFormat: context.outputFormat,
         outputCompression: context.outputCompression,
+        promptPolicy: {
+            originalPrompt: context.originalPrompt,
+            maxInputChars:
+                Number.isFinite(context.promptPolicyMaxInputChars) &&
+                context.promptPolicyMaxInputChars > 0
+                    ? context.promptPolicyMaxInputChars
+                    : IMAGE_PROMPT_MAX_INPUT_CHARS,
+            policyTruncated: context.promptPolicyTruncated,
+        },
         user: options.user,
         followUpResponseId: options.followUpResponseId ?? undefined,
         channelContext: options.channelContext,
@@ -256,16 +282,34 @@ export function buildImageResultPresentation(
             : null;
     const activePrompt = refinedPrompt ?? context.prompt;
 
-    const normalizedOriginalPrompt = clampPromptForContext(originalPrompt);
+    const normalizedOriginal = applyPromptPolicy(originalPrompt);
     const normalizedRefinedCandidate = refinedPrompt
-        ? clampPromptForContext(refinedPrompt)
+        ? applyPromptPolicy(refinedPrompt)
         : null;
-    const normalizedActivePrompt = clampPromptForContext(activePrompt);
+    const normalizedActive = applyPromptPolicy(activePrompt);
+    const normalizedOriginalPrompt = normalizedOriginal.prompt;
+    const normalizedActivePrompt = normalizedActive.prompt;
     const normalizedRefinedPrompt =
         normalizedRefinedCandidate &&
-        normalizedRefinedCandidate !== normalizedOriginalPrompt
-            ? normalizedRefinedCandidate
+        normalizedRefinedCandidate.prompt !== normalizedOriginalPrompt
+            ? normalizedRefinedCandidate.prompt
             : null;
+    const policyTruncated =
+        context.promptPolicyTruncated ||
+        normalizedOriginal.policyTruncated ||
+        normalizedActive.policyTruncated ||
+        Boolean(normalizedRefinedCandidate?.policyTruncated);
+    const contextPromptPolicyMax =
+        Number.isFinite(context.promptPolicyMaxInputChars) &&
+        context.promptPolicyMaxInputChars > 0
+            ? context.promptPolicyMaxInputChars
+            : IMAGE_PROMPT_MAX_INPUT_CHARS;
+    const promptPolicyMaxInputChars = Math.max(
+        contextPromptPolicyMax,
+        normalizedOriginal.maxInputChars,
+        normalizedActive.maxInputChars,
+        normalizedRefinedCandidate?.maxInputChars ?? 0
+    );
 
     const followUpContext: ImageGenerationContext = {
         ...context,
@@ -274,6 +318,8 @@ export function buildImageResultPresentation(
         prompt: normalizedActivePrompt,
         originalPrompt: normalizedOriginalPrompt,
         refinedPrompt: normalizedRefinedPrompt,
+        promptPolicyMaxInputChars,
+        promptPolicyTruncated: policyTruncated,
         style: artifacts.finalStyle,
         allowPromptAdjustment: Boolean(context.allowPromptAdjustment),
     };
@@ -419,6 +465,10 @@ export function buildImageResultPresentation(
         artifacts.responseId ? `\`${artifacts.responseId}\`` : 'n/a',
         { inline: true }
     );
+    const traceUrl = buildTraceViewerUrl(artifacts.responseId);
+    if (traceUrl) {
+        assertField('Trace', `[Open trace](${traceUrl})`);
+    }
 
     const refinedTruncated = normalizedRefinedPrompt ? promptTruncated : false;
     const activeTruncated = promptTruncated;
@@ -476,21 +526,31 @@ export function buildImageResultPresentation(
 }
 
 /**
- * Clamps prompts so they always fit within a single embed field. This keeps the
- * presentation compact while ensuring reboot recovery keeps working because the
- * embed never spills into continuation fields that might get pruned.
+ * Applies the configured image prompt input policy before requests are sent to
+ * backend image generation. Embed rendering still applies its own display caps.
  */
-export function clampPromptForContext(rawPrompt: string): string {
+export function applyPromptPolicy(rawPrompt: string): PromptPolicyResult {
     const sanitized = sanitizeForEmbed(rawPrompt).trim();
-
-    if (sanitized.length <= EMBED_FIELD_VALUE_LIMIT) {
-        return sanitized;
+    if (sanitized.length <= IMAGE_PROMPT_MAX_INPUT_CHARS) {
+        return {
+            prompt: sanitized,
+            maxInputChars: IMAGE_PROMPT_MAX_INPUT_CHARS,
+            policyTruncated: false,
+        };
     }
 
     logger.warn(
-        `Prompt exceeded embed field limit; truncating to ${EMBED_FIELD_VALUE_LIMIT} characters to preserve layout.`
+        `Prompt exceeded input policy limit; truncating to ${IMAGE_PROMPT_MAX_INPUT_CHARS} characters.`
     );
-    return sanitized.slice(0, EMBED_FIELD_VALUE_LIMIT);
+    return {
+        prompt: sanitized.slice(0, IMAGE_PROMPT_MAX_INPUT_CHARS),
+        maxInputChars: IMAGE_PROMPT_MAX_INPUT_CHARS,
+        policyTruncated: true,
+    };
+}
+
+export function clampPromptForContext(rawPrompt: string): string {
+    return applyPromptPolicy(rawPrompt).prompt;
 }
 
 /**

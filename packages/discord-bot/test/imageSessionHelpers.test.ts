@@ -16,6 +16,8 @@ const createContext = (): ImageGenerationContext => ({
     prompt: 'draw a reflective skyline',
     originalPrompt: 'draw a reflective skyline',
     refinedPrompt: null,
+    promptPolicyMaxInputChars: 8000,
+    promptPolicyTruncated: false,
     textModel: 'gpt-5-mini',
     imageModel: 'gpt-image-1-mini',
     size: '1024x1024',
@@ -99,6 +101,18 @@ test('executeImageGeneration uses the streaming backend image task path when par
             (seenRequests[0] as { followUpResponseId?: string })
                 .followUpResponseId,
             'resp_prev_123'
+        );
+        assert.deepEqual(
+            (seenRequests[0] as { promptPolicy?: unknown }).promptPolicy,
+            {
+                originalPrompt: 'draw a reflective skyline',
+                maxInputChars: 8000,
+                policyTruncated: false,
+            }
+        );
+        assert.equal(
+            (seenRequests[0] as { aspectRatio?: string }).aspectRatio,
+            'square'
         );
         assert.equal(artifacts.responseId, 'resp_123');
         assert.equal(artifacts.finalImageBuffer.toString('utf8'), 'hello');

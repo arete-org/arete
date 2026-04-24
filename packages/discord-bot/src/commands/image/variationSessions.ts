@@ -29,7 +29,7 @@ import {
     IMAGE_VARIATION_RESET_PROMPT_CUSTOM_ID_PREFIX,
     IMAGE_VARIATION_PROMPT_ADJUST_SELECT_PREFIX,
     IMAGE_VARIATION_IMAGE_MODEL_SELECT_PREFIX,
-    EMBED_FIELD_VALUE_LIMIT,
+    IMAGE_PROMPT_MAX_INPUT_CHARS,
 } from './constants.js';
 import {
     clampPromptForContext,
@@ -66,6 +66,8 @@ export interface VariationSessionState {
     prompt: string;
     originalPrompt: string;
     refinedPrompt: string | null;
+    promptPolicyMaxInputChars: number;
+    promptPolicyTruncated: boolean;
     textModel: ImageTextModel;
     imageModel: ImageRenderModel;
     size: ImageSizeType;
@@ -209,6 +211,8 @@ export function initialiseVariationSession(
         prompt: initialPrompt,
         originalPrompt: normalizedOriginal,
         refinedPrompt: normalizedRefined,
+        promptPolicyMaxInputChars: context.promptPolicyMaxInputChars,
+        promptPolicyTruncated: context.promptPolicyTruncated,
         textModel: context.textModel,
         imageModel: context.imageModel,
         size: context.size,
@@ -572,7 +576,7 @@ export function buildPromptModal(
         .setLabel('Prompt to send to the model')
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(true)
-        .setMaxLength(EMBED_FIELD_VALUE_LIMIT)
+        .setMaxLength(IMAGE_PROMPT_MAX_INPUT_CHARS)
         .setValue(clampPromptForContext(currentPrompt));
 
     return modal.addComponents(

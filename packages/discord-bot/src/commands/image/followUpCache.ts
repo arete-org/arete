@@ -40,6 +40,8 @@ export interface ImageGenerationContext {
      * choose not to alter the prompt.
      */
     refinedPrompt?: string | null;
+    promptPolicyMaxInputChars: number;
+    promptPolicyTruncated: boolean;
     textModel: ImageTextModel;
     imageModel: ImageRenderModel;
     size: ImageSizeType;

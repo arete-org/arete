@@ -155,6 +155,8 @@ async function handleGenerateVariationButton(
             prompt: session.prompt,
             originalPrompt: session.originalPrompt,
             refinedPrompt: session.refinedPrompt,
+            promptPolicyMaxInputChars: session.promptPolicyMaxInputChars,
+            promptPolicyTruncated: session.promptPolicyTruncated,
             textModel: session.textModel,
             imageModel: session.imageModel,
             size: session.size,

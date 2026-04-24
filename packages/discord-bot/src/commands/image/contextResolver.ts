@@ -14,6 +14,7 @@ import {
     DEFAULT_IMAGE_OUTPUT_COMPRESSION,
     DEFAULT_IMAGE_OUTPUT_FORMAT,
     DEFAULT_IMAGE_QUALITY,
+    IMAGE_PROMPT_MAX_INPUT_CHARS,
     DEFAULT_TEXT_MODEL,
 } from './constants.js';
 import { clampPromptForContext } from './sessionHelpers.js';
@@ -441,6 +442,11 @@ function buildContextFromEmbed(
             prompt: normalizedPrompt,
             originalPrompt: normalizedOriginal,
             refinedPrompt: normalizedRefined,
+            promptPolicyMaxInputChars: IMAGE_PROMPT_MAX_INPUT_CHARS,
+            promptPolicyTruncated:
+                currentPromptResult.truncated ||
+                originalPromptResult.truncated ||
+                refinedPromptTruncated,
             textModel: parseTextModel(textModelHint),
             imageModel: parseImageModel(imageModelHint),
             size,
