@@ -6,6 +6,15 @@
  * @footnote-ethics: medium - Context affects user intent and safety handling.
  */
 import type { Message } from 'discord.js';
+import type {
+    ImageGenerationMetadata,
+    ResponseMetadata,
+} from '@footnote/contracts/ethics-core';
+import type {
+    GetTraceResponse,
+    GetTraceStaleResponse,
+} from '@footnote/contracts/web';
+import { botApi, isDiscordApiClientError } from '../../api/botApi.js';
 import { logger } from '../../utils/logger.js';
 // Defaults stay in sync with environment overrides via the shared constants
 // module, so every recovery path mirrors the slash-command behaviour.
@@ -213,6 +222,72 @@ interface RecoveredContextDetails {
      */
     inputId: string | null;
 }
+
+const resolveTracePayload = (
+    payload: GetTraceResponse | GetTraceStaleResponse
+): ResponseMetadata =>
+    'metadata' in payload ? payload.metadata : payload;
+
+const getPromptPolicyMaxInputChars = (
+    imageGeneration: ImageGenerationMetadata
+): number => {
+    const candidate = imageGeneration.prompts.maxInputChars;
+    if (Number.isFinite(candidate) && candidate > 0) {
+        return Math.round(candidate);
+    }
+
+    return IMAGE_PROMPT_MAX_INPUT_CHARS;
+};
+
+const buildContextFromImageGeneration = (
+    imageGeneration: ImageGenerationMetadata
+): ImageGenerationContext => {
+    const rawOriginalPrompt =
+        imageGeneration.prompts.original?.trim() ?? '';
+    const rawActivePrompt = imageGeneration.prompts.active?.trim() ?? '';
+    const rawPrompt = rawActivePrompt || rawOriginalPrompt;
+    const rawRefinedPrompt = imageGeneration.prompts.revised?.trim() ?? null;
+
+    const normalizedPrompt = clampPromptForContext(rawPrompt);
+    const normalizedOriginalPrompt = clampPromptForContext(
+        rawOriginalPrompt || rawPrompt
+    );
+    const normalizedRefinedCandidate = rawRefinedPrompt
+        ? clampPromptForContext(rawRefinedPrompt)
+        : null;
+    const normalizedRefinedPrompt =
+        normalizedRefinedCandidate &&
+        normalizedRefinedCandidate !== normalizedPrompt
+            ? normalizedRefinedCandidate
+            : null;
+
+    const aspectRatio = parseAspectRatio(imageGeneration.request.aspectRatio);
+    const fallbackStyle =
+        imageGeneration.result.finalStyle || imageGeneration.request.style;
+
+    return {
+        prompt: normalizedPrompt,
+        originalPrompt: normalizedOriginalPrompt,
+        refinedPrompt: normalizedRefinedPrompt,
+        promptPolicyMaxInputChars: getPromptPolicyMaxInputChars(
+            imageGeneration
+        ),
+        promptPolicyTruncated: Boolean(imageGeneration.prompts.policyTruncated),
+        textModel: parseTextModel(imageGeneration.request.textModel),
+        imageModel: parseImageModel(imageGeneration.request.imageModel),
+        size: parseSize(imageGeneration.request.size),
+        aspectRatio,
+        aspectRatioLabel: ASPECT_RATIO_LABELS[aspectRatio],
+        quality: parseQuality(imageGeneration.request.quality),
+        background: parseBackground(imageGeneration.request.background),
+        style: parseStyle(fallbackStyle),
+        allowPromptAdjustment: imageGeneration.request.allowPromptAdjustment,
+        outputFormat: parseOutputFormat(imageGeneration.request.outputFormat),
+        outputCompression: parseOutputCompression(
+            imageGeneration.request.outputCompression
+        ),
+    };
+};
 
 // Prompt labels are now dynamic (e.g., "Refined Prompt (gpt-4.1-mini)") so we
 // need to locate entries by prefix rather than assuming a fixed field name.
@@ -477,6 +552,66 @@ function buildContextFromEmbed(
  * during interaction handling without awaiting network I/O.
  */
 export interface RecoveredImageContext extends RecoveredContextDetails {}
+
+/**
+ * Rebuilds image context from canonical trace metadata.
+ *
+ * TODO(auth-memory-governance): Enforce user opt-in auth/memory/governance
+ * checks before exposing prompt-rich trace payloads to interaction handlers.
+ */
+export async function recoverContextDetailsFromTrace(
+    responseId: string
+): Promise<RecoveredImageContext | null> {
+    const normalizedResponseId = parseIdentifier(responseId);
+    if (!normalizedResponseId) {
+        return null;
+    }
+
+    try {
+        const traceResult = await botApi.getTrace(normalizedResponseId);
+        const tracePayload = resolveTracePayload(traceResult.data);
+        const imageGeneration = tracePayload.imageGeneration;
+
+        if (!imageGeneration) {
+            logger.debug(
+                `Trace ${normalizedResponseId} has no imageGeneration metadata.`
+            );
+            return null;
+        }
+
+        const outputResponseId =
+            parseIdentifier(imageGeneration.result.outputResponseId ?? undefined) ??
+            normalizedResponseId;
+        const inputResponseId = parseIdentifier(
+            imageGeneration.linkage.followUpResponseId ?? undefined
+        );
+
+        return {
+            context: buildContextFromImageGeneration(imageGeneration),
+            responseId: outputResponseId,
+            inputId: inputResponseId,
+        };
+    } catch (error) {
+        if (isDiscordApiClientError(error) && error.status === 404) {
+            logger.debug(
+                `No trace metadata found for follow-up response ${normalizedResponseId}.`
+            );
+            return null;
+        }
+
+        logger.warn(
+            `Failed to recover image context from trace ${normalizedResponseId}: ${error}`
+        );
+        return null;
+    }
+}
+
+export async function recoverContextFromTrace(
+    responseId: string
+): Promise<ImageGenerationContext | null> {
+    const recovered = await recoverContextDetailsFromTrace(responseId);
+    return recovered ? recovered.context : null;
+}
 
 export async function recoverContextFromMessage(
     message: Message

@@ -10,7 +10,6 @@ import { IMAGE_RETRY_CUSTOM_ID_PREFIX } from '../../commands/image/constants.js'
 import {
     evictFollowUpContext,
     readFollowUpContext,
-    saveFollowUpContext,
 } from '../../commands/image/followUpCache.js';
 import {
     buildImageResultPresentation,
@@ -119,12 +118,6 @@ export async function handleImageRetryButtonInteraction(
             artifacts
         );
 
-        if (artifacts.responseId) {
-            saveFollowUpContext(
-                artifacts.responseId,
-                presentation.followUpContext
-            );
-        }
         evictFollowUpContext(retryKey);
 
         await interaction.editReply({

@@ -49,7 +49,6 @@ import type {
 } from './image/types.js';
 import { imageRenderModels, imageTextModels } from './image/types.js';
 import {
-    evictFollowUpContext,
     saveFollowUpContext,
     type ImageGenerationContext,
 } from './image/followUpCache.js';
@@ -341,19 +340,6 @@ export async function runImageGenerationSession(
         const presentation = buildImageResultPresentation(context, artifacts, {
             followUpResponseId: followUpResponseId ?? undefined,
         });
-
-        if (artifacts.responseId) {
-            saveFollowUpContext(
-                artifacts.responseId,
-                presentation.followUpContext
-            );
-            if (
-                followUpResponseId &&
-                followUpResponseId !== artifacts.responseId
-            ) {
-                evictFollowUpContext(followUpResponseId);
-            }
-        }
 
         await interaction.editReply({
             content: presentation.content,

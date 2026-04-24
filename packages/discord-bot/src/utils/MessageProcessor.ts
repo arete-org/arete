@@ -42,12 +42,11 @@ import {
     executeImageGeneration,
 } from '../commands/image/sessionHelpers.js';
 import {
-    readFollowUpContext,
-    saveFollowUpContext,
     type ImageGenerationContext,
 } from '../commands/image/followUpCache.js';
 import {
     recoverContextDetailsFromMessage,
+    recoverContextDetailsFromTrace,
     type RecoveredImageContext,
 } from '../commands/image/contextResolver.js';
 import {
@@ -200,6 +199,43 @@ const hasResponseMetadata = (value: unknown): value is ResponseMetadata =>
         typeof value === 'object' &&
         typeof (value as { responseId?: unknown }).responseId === 'string'
     );
+
+const collectRecoveredContextIds = (
+    recovered: RecoveredImageContext | null
+): string[] => {
+    if (!recovered) {
+        return [];
+    }
+
+    const candidates = [recovered.responseId, recovered.inputId];
+    const uniqueIds = new Set<string>();
+    for (const candidate of candidates) {
+        const normalized = candidate?.trim();
+        if (normalized) {
+            uniqueIds.add(normalized);
+        }
+    }
+
+    return Array.from(uniqueIds);
+};
+
+const preferTraceBackedImageContext = async (
+    recovered: RecoveredImageContext | null
+): Promise<RecoveredImageContext | null> => {
+    if (!recovered) {
+        return null;
+    }
+
+    const lookupIds = collectRecoveredContextIds(recovered);
+    for (const lookupId of lookupIds) {
+        const fromTrace = await recoverContextDetailsFromTrace(lookupId);
+        if (fromTrace) {
+            return fromTrace;
+        }
+    }
+
+    return recovered;
+};
 
 /**
  * Maps one safety decision into Discord response behavior.
@@ -599,14 +635,16 @@ export class MessageProcessor {
 
         let recoveredImageContext: RecoveredImageContext | null = null;
         try {
-            recoveredImageContext =
+            const recoveredFromMessage =
                 await recoverContextDetailsFromMessage(message);
+            recoveredImageContext =
+                await preferTraceBackedImageContext(recoveredFromMessage);
             if (recoveredImageContext) {
                 const recoveredContext = recoveredImageContext.context;
                 conversation.push({
                     role: 'system',
                     content:
-                        `Recovered image embed context for follow-ups:\n` +
+                        `Recovered image context for follow-ups:\n` +
                         `prompt="${recoveredContext.prompt}"\n` +
                         `textModel=${recoveredContext.textModel} imageModel=${recoveredContext.imageModel}\n` +
                         `aspect=${recoveredContext.aspectRatio} size=${recoveredContext.size} background=${recoveredContext.background} style=${recoveredContext.style}\n` +
@@ -614,12 +652,12 @@ export class MessageProcessor {
                         `outputId=${recoveredImageContext.responseId ?? 'n/a'} inputId=${recoveredImageContext.inputId ?? 'n/a'}`,
                 });
                 logger.debug(
-                    `Recovered image embed for backend chat: outputId=${recoveredImageContext.responseId ?? 'n/a'}, inputId=${recoveredImageContext.inputId ?? 'n/a'}, promptLength=${recoveredContext.prompt.length}.`
+                    `Recovered image context for backend chat: outputId=${recoveredImageContext.responseId ?? 'n/a'}, inputId=${recoveredImageContext.inputId ?? 'n/a'}, promptLength=${recoveredContext.prompt.length}.`
                 );
             }
         } catch (error) {
             logger.debug(
-                'Failed to recover image embed context for backend chat:',
+                'Failed to recover image context for backend chat:',
                 error
             );
         }
@@ -1299,22 +1337,24 @@ export class MessageProcessor {
 
         const followUpCandidate = request.followUpResponseId?.trim();
         if (followUpCandidate) {
-            const cached = readFollowUpContext(followUpCandidate);
+            const recoveredFromTrace =
+                await recoverContextDetailsFromTrace(followUpCandidate);
             const matchesRecovered =
                 recoveredImageContext &&
                 (recoveredImageContext.responseId === followUpCandidate ||
                     recoveredImageContext.inputId === followUpCandidate);
 
-            if (cached || matchesRecovered) {
+            if (recoveredFromTrace || matchesRecovered) {
                 referencedContext =
                     referencedContext ??
-                    cached ??
+                    recoveredFromTrace?.context ??
                     recoveredImageContext?.context ??
                     null;
-                followUpResponseId = followUpCandidate;
+                followUpResponseId =
+                    recoveredFromTrace?.responseId ?? followUpCandidate;
             } else {
                 logger.warn(
-                    `Backend chat supplied follow-up response ID "${followUpCandidate}" that was not found in cache or recovery; ignoring.`
+                    `Backend chat supplied follow-up response ID "${followUpCandidate}" that was not found in trace metadata or recovery; ignoring.`
                 );
             }
         }
@@ -1322,8 +1362,11 @@ export class MessageProcessor {
         if (!referencedContext && message.reference?.messageId) {
             try {
                 const referencedMessage = await message.fetchReference();
-                const recovered =
+                const recoveredFromMessage =
                     await recoverContextDetailsFromMessage(referencedMessage);
+                const recovered = await preferTraceBackedImageContext(
+                    recoveredFromMessage
+                );
 
                 if (recovered) {
                     referencedContext = recovered.context;
@@ -1434,13 +1477,6 @@ export class MessageProcessor {
                 context,
                 artifacts
             );
-
-            if (artifacts.responseId) {
-                saveFollowUpContext(
-                    artifacts.responseId,
-                    presentation.followUpContext
-                );
-            }
 
             const files = presentation.attachments.map((attachment) => ({
                 filename: attachment.name ?? 'daneel-attachment.dat',
