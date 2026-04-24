@@ -9,8 +9,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { botApi } from '../src/api/botApi.js';
-import { executeImageGeneration } from '../src/commands/image/sessionHelpers.js';
+import { EMBED_FIELD_VALUE_LIMIT } from '../src/commands/image/constants.js';
+import {
+    buildImageResultPresentation,
+    executeImageGeneration,
+} from '../src/commands/image/sessionHelpers.js';
 import type { ImageGenerationContext } from '../src/commands/image/followUpCache.js';
+import { runtimeConfig } from '../src/config.js';
 
 const createContext = (): ImageGenerationContext => ({
     prompt: 'draw a reflective skyline',
@@ -121,4 +126,74 @@ test('executeImageGeneration uses the streaming backend image task path when par
         botApi.runImageTaskViaApi = originalRunImageTaskViaApi;
         botApi.runImageTaskStreamViaApi = originalRunImageTaskStreamViaApi;
     }
+});
+
+test('buildImageResultPresentation keeps generation context prompts beyond embed field limits', () => {
+    const longPrompt = 'A'.repeat(EMBED_FIELD_VALUE_LIMIT + 400);
+    const context: ImageGenerationContext = {
+        ...createContext(),
+        prompt: longPrompt,
+        originalPrompt: longPrompt,
+        refinedPrompt: null,
+    };
+
+    const presentation = buildImageResultPresentation(context, {
+        responseId: 'resp_long_prompt',
+        textModel: context.textModel,
+        imageModel: context.imageModel,
+        revisedPrompt: null,
+        finalStyle: context.style,
+        annotations: {
+            title: 'Long prompt test',
+            description: null,
+            note: null,
+            adjustedPrompt: null,
+        },
+        finalImageBuffer: Buffer.from('hello'),
+        finalImageFileName: 'long-prompt.png',
+        imageUrl: 'https://example.com/long-prompt.png',
+        outputFormat: context.outputFormat,
+        outputCompression: context.outputCompression,
+        usage: {
+            inputTokens: 11,
+            outputTokens: 5,
+            totalTokens: 16,
+            imageCount: 1,
+        },
+        costs: {
+            text: 0.00001,
+            image: 0.001,
+            total: 0.00101,
+            perImage: 0.001,
+        },
+        generationTimeMs: 1024,
+    });
+
+    assert.equal(presentation.retryContext.prompt.length, longPrompt.length);
+    assert.equal(
+        presentation.retryContext.originalPrompt.length,
+        longPrompt.length
+    );
+
+    const promptField = presentation.embed.data.fields?.find(
+        (field) => field.name === 'Original prompt'
+    );
+    assert.ok(promptField);
+    assert.equal(
+        (promptField?.value ?? '').length <= EMBED_FIELD_VALUE_LIMIT,
+        true
+    );
+    assert.match(promptField?.value ?? '', /\*\(truncated\)\*/);
+
+    const traceField = presentation.embed.data.fields?.find(
+        (field) => field.name === 'Trace'
+    );
+    assert.ok(traceField);
+    const expectedTraceBase = runtimeConfig.webBaseUrl
+        .trim()
+        .replace(/\/+$/, '');
+    assert.equal(
+        traceField?.value,
+        `[Open trace](${expectedTraceBase}/traces/resp_long_prompt)`
+    );
 });

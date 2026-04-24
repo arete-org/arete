@@ -142,8 +142,8 @@ const buildImageTaskRequest = (
 /**
  * Runs the backend-owned image pipeline, uploads the final asset, and returns
  * a normalized payload describing the generation. The caller is responsible
- * for presenting the result (embed, plain message, etc.) and for caching
- * follow-up context entries.
+ * for presenting the result (embed, plain message, etc.) and for storing
+ * short-lived retry context when needed.
  */
 export async function executeImageGeneration(
     context: ImageGenerationContext,
@@ -252,19 +252,19 @@ export interface ImageResultPresentation {
     embed: EmbedBuilder;
     attachments: AttachmentBuilder[];
     components: ActionRowBuilder<ButtonBuilder>[];
-    followUpContext: ImageGenerationContext;
+    retryContext: ImageGenerationContext;
 }
 
 /**
- * Build a Discord-ready presentation (embed, attachments, components) and a follow-up context for a completed image generation.
+ * Build a Discord-ready presentation (embed, attachments, components) and retry context for a completed image generation.
  *
- * Produces an embed containing machine-readable metadata and visible fields, any required image attachments, optional variation/retry components, and a follow-up context that captures the normalized prompts, selected models/style, and prompt-adjustment setting for future retries or recovery.
+ * Produces an embed containing machine-readable metadata and visible fields, any required image attachments, optional variation/retry components, and a retry context that captures the normalized prompts, selected models/style, and prompt-adjustment setting for retry flows.
  *
  * `@param` context - The original image generation context (user-visible settings and flags).
  * `@param` artifacts - Normalized results from the image generation pipeline (final image buffer/URL, models, prompts, annotations, costs, timing, and IDs).
  * `@param` options - Optional presentation options.
- * `@param` options.followUpResponseId - Optional upstream response ID to include as the Input ID field and in the follow-up context.
- * `@returns` An ImageResultPresentation containing the prepared embed, attachments, component rows, and follow-up context suitable for sending to Discord.
+ * `@param` options.followUpResponseId - Optional upstream response ID to include as the Input ID field in embed metadata.
+ * `@returns` An ImageResultPresentation containing the prepared embed, attachments, component rows, and retry context suitable for Discord responses.
  */
 export function buildImageResultPresentation(
     context: ImageGenerationContext,
@@ -311,7 +311,7 @@ export function buildImageResultPresentation(
         normalizedRefinedCandidate?.maxInputChars ?? 0
     );
 
-    const followUpContext: ImageGenerationContext = {
+    const resolvedContext: ImageGenerationContext = {
         ...context,
         textModel: artifacts.textModel,
         imageModel: artifacts.imageModel,
@@ -413,7 +413,7 @@ export function buildImageResultPresentation(
     let promptTruncated: boolean;
     let originalTruncated = false;
 
-    const originalLabel = followUpContext.allowPromptAdjustment
+    const originalLabel = resolvedContext.allowPromptAdjustment
         ? 'Original prompt'
         : 'Prompt';
 
@@ -427,34 +427,34 @@ export function buildImageResultPresentation(
         promptTruncated = recordPrompt(originalLabel, normalizedOriginalPrompt);
     }
 
-    assertField('Image model', followUpContext.imageModel, { inline: true });
-    assertField('Text model', followUpContext.textModel, { inline: true });
-    assertField('Quality', toTitleCase(followUpContext.quality), {
+    assertField('Image model', resolvedContext.imageModel, { inline: true });
+    assertField('Text model', resolvedContext.textModel, { inline: true });
+    assertField('Quality', toTitleCase(resolvedContext.quality), {
         inline: true,
     });
-    assertField('Aspect ratio', followUpContext.aspectRatioLabel, {
+    assertField('Aspect ratio', resolvedContext.aspectRatioLabel, {
         inline: true,
     });
     assertField(
         'Resolution',
-        followUpContext.size === 'auto' ? 'Auto' : followUpContext.size,
+        resolvedContext.size === 'auto' ? 'Auto' : resolvedContext.size,
         { inline: true }
     );
-    assertField('Background', toTitleCase(followUpContext.background), {
+    assertField('Background', toTitleCase(resolvedContext.background), {
         inline: true,
     });
     assertField(
         'Prompt adjustment',
-        followUpContext.allowPromptAdjustment ? 'Enabled' : 'Disabled',
+        resolvedContext.allowPromptAdjustment ? 'Enabled' : 'Disabled',
         { inline: true }
     );
-    assertField('Output format', followUpContext.outputFormat.toUpperCase(), {
+    assertField('Output format', resolvedContext.outputFormat.toUpperCase(), {
         inline: true,
     });
-    assertField('Compression', `${followUpContext.outputCompression}%`, {
+    assertField('Compression', `${resolvedContext.outputCompression}%`, {
         inline: true,
     });
-    assertField('Style', formatStylePreset(followUpContext.style), {
+    assertField('Style', formatStylePreset(resolvedContext.style), {
         inline: true,
     });
     if (followUpResponseId) {
@@ -521,7 +521,7 @@ export function buildImageResultPresentation(
         embed,
         attachments,
         components,
-        followUpContext,
+        retryContext: resolvedContext,
     };
 }
 

@@ -175,7 +175,9 @@ function parseOutputFormat(
     return DEFAULT_IMAGE_OUTPUT_FORMAT;
 }
 
-function parseOutputCompression(value: string | null | undefined): number {
+function parseOutputCompression(
+    value: string | number | null | undefined
+): number {
     const parsed = Number(value);
     if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 100) {
         return Math.round(parsed);
@@ -225,8 +227,7 @@ interface RecoveredContextDetails {
 
 const resolveTracePayload = (
     payload: GetTraceResponse | GetTraceStaleResponse
-): ResponseMetadata =>
-    'metadata' in payload ? payload.metadata : payload;
+): ResponseMetadata => ('metadata' in payload ? payload.metadata : payload);
 
 const getPromptPolicyMaxInputChars = (
     imageGeneration: ImageGenerationMetadata
@@ -242,8 +243,7 @@ const getPromptPolicyMaxInputChars = (
 const buildContextFromImageGeneration = (
     imageGeneration: ImageGenerationMetadata
 ): ImageGenerationContext => {
-    const rawOriginalPrompt =
-        imageGeneration.prompts.original?.trim() ?? '';
+    const rawOriginalPrompt = imageGeneration.prompts.original?.trim() ?? '';
     const rawActivePrompt = imageGeneration.prompts.active?.trim() ?? '';
     const rawPrompt = rawActivePrompt || rawOriginalPrompt;
     const rawRefinedPrompt = imageGeneration.prompts.revised?.trim() ?? null;
@@ -269,9 +269,8 @@ const buildContextFromImageGeneration = (
         prompt: normalizedPrompt,
         originalPrompt: normalizedOriginalPrompt,
         refinedPrompt: normalizedRefinedPrompt,
-        promptPolicyMaxInputChars: getPromptPolicyMaxInputChars(
-            imageGeneration
-        ),
+        promptPolicyMaxInputChars:
+            getPromptPolicyMaxInputChars(imageGeneration),
         promptPolicyTruncated: Boolean(imageGeneration.prompts.policyTruncated),
         textModel: parseTextModel(imageGeneration.request.textModel),
         imageModel: parseImageModel(imageGeneration.request.imageModel),
@@ -580,8 +579,9 @@ export async function recoverContextDetailsFromTrace(
         }
 
         const outputResponseId =
-            parseIdentifier(imageGeneration.result.outputResponseId ?? undefined) ??
-            normalizedResponseId;
+            parseIdentifier(
+                imageGeneration.result.outputResponseId ?? undefined
+            ) ?? normalizedResponseId;
         const inputResponseId = parseIdentifier(
             imageGeneration.linkage.followUpResponseId ?? undefined
         );

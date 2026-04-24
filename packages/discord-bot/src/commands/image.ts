@@ -49,7 +49,7 @@ import type {
 } from './image/types.js';
 import { imageRenderModels, imageTextModels } from './image/types.js';
 import {
-    saveFollowUpContext,
+    saveRetryContext,
     type ImageGenerationContext,
 } from './image/followUpCache.js';
 import {
@@ -629,7 +629,7 @@ const imageCommand: Command = {
             );
             if (!spendResult.allowed) {
                 const retryKey = `retry:${interaction.id}`;
-                saveFollowUpContext(retryKey, context);
+                saveRetryContext(retryKey, context);
                 const summary = buildTokenSummaryLine(interaction.user.id);
                 const message = `${describeTokenAvailability(quality, spendResult, imageModel)}\n\n${summary}`;
                 const countdown = spendResult.refreshInSeconds;
