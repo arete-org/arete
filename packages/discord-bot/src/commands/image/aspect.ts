@@ -5,7 +5,7 @@
  * @footnote-risk: low - Incorrect mapping can yield unexpected dimensions or UI labels.
  * @footnote-ethics: low - This module handles formatting without sensitive data.
  */
-import type { ImageGenerationContext } from './followUpCache.js';
+import type { ImageGenerationContext } from './retryCache.js';
 import type { ImageSizeType } from './types.js';
 
 /**

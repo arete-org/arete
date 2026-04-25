@@ -10,7 +10,7 @@ import { IMAGE_RETRY_CUSTOM_ID_PREFIX } from '../../commands/image/constants.js'
 import {
     evictRetryContext,
     readRetryContext,
-} from '../../commands/image/followUpCache.js';
+} from '../../commands/image/retryCache.js';
 import {
     buildImageResultPresentation,
     createRetryButtonRow,

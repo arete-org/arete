@@ -51,7 +51,7 @@ import { imageRenderModels, imageTextModels } from './image/types.js';
 import {
     saveRetryContext,
     type ImageGenerationContext,
-} from './image/followUpCache.js';
+} from './image/retryCache.js';
 import {
     buildTokenSummaryLine,
     consumeImageTokens,
@@ -540,7 +540,7 @@ const imageCommand: Command = {
         const normalizedPrompt = promptPolicy.prompt;
         if (promptPolicy.policyTruncated) {
             logger.warn(
-                'Slash command prompt exceeded configured input policy; truncating before generation.'
+                `Slash command prompt truncated by input policy: originalLength=${prompt.length} maxInputChars=${promptPolicy.maxInputChars}`
             );
         }
         logger.debug(

@@ -142,6 +142,36 @@ test('recoverContextDetailsFromTrace accepts stale trace envelopes and preserves
     }
 });
 
+test('recoverContextDetailsFromTrace returns null for non-image traces', async () => {
+    const originalGetTrace = botApi.getTrace;
+    botApi.getTrace = (async () => ({
+        status: 200,
+        data: {
+            metadata: {
+                responseId: 'resp_non_image_1',
+                provenance: 'Inferred',
+                safetyTier: 'Low',
+                tradeoffCount: 0,
+                chainHash: 'chain_hash_non_image_1',
+                licenseContext: 'MIT + HL3',
+                modelVersion: 'gpt-5-mini',
+                staleAfter: new Date(Date.now() + 60_000).toISOString(),
+                citations: [],
+                trace_target: {},
+                trace_final: {},
+            },
+        },
+    })) as unknown as typeof botApi.getTrace;
+
+    try {
+        const recovered =
+            await recoverContextDetailsFromTrace('resp_non_image_1');
+        assert.equal(recovered, null);
+    } finally {
+        botApi.getTrace = originalGetTrace;
+    }
+});
+
 test('recoverContextDetailsFromMessage parses legacy embed fields for fallback context', async () => {
     const recovered = await recoverContextDetailsFromMessage({
         id: 'message-legacy-1',

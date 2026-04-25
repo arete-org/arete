@@ -1207,7 +1207,7 @@ export const envEntries = [
         secret: false,
         kind: 'integer',
         description:
-            'Maximum prompt length allowed for image generation input/storage policy.',
+            'Maximum prompt length allowed for image generation input/storage policy. Values above 8000 are clamped to 8000 by runtime config parsing (with a warning log).',
         defaultValue: literal(8000),
         usedBy: ['packages/discord-bot/src/config/imageConfig.ts'],
     }),

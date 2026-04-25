@@ -40,7 +40,15 @@ export interface ImageGenerationContext {
      * choose not to alter the prompt.
      */
     refinedPrompt?: string | null;
+    /**
+     * Policy-enforced maximum prompt length used for image generation/storage
+     * truncation decisions (not the embed/display character limit).
+     */
     promptPolicyMaxInputChars: number;
+    /**
+     * True when original user input exceeded `promptPolicyMaxInputChars` and
+     * was truncated to satisfy policy before generation/storage.
+     */
     promptPolicyTruncated: boolean;
     textModel: ImageTextModel;
     imageModel: ImageRenderModel;

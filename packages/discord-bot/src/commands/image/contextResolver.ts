@@ -27,7 +27,7 @@ import {
     DEFAULT_TEXT_MODEL,
 } from './constants.js';
 import { clampPromptForContext } from './sessionHelpers.js';
-import type { ImageGenerationContext } from './followUpCache.js';
+import type { ImageGenerationContext } from './retryCache.js';
 import type {
     ImageBackgroundType,
     ImageOutputFormat,
@@ -606,6 +606,13 @@ export async function recoverContextDetailsFromTrace(
     }
 }
 
+/**
+ * Resolves image generation context from trace metadata.
+ *
+ * Returns the recovered `ImageGenerationContext` when
+ * `recoverContextDetailsFromTrace` succeeds, otherwise returns `null`
+ * (fail-open). Callers must handle the null-on-miss path explicitly.
+ */
 export async function recoverContextFromTrace(
     responseId: string
 ): Promise<ImageGenerationContext | null> {

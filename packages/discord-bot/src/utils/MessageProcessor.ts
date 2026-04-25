@@ -41,9 +41,7 @@ import {
     buildImageResultPresentation,
     executeImageGeneration,
 } from '../commands/image/sessionHelpers.js';
-import {
-    type ImageGenerationContext,
-} from '../commands/image/followUpCache.js';
+import { type ImageGenerationContext } from '../commands/image/retryCache.js';
 import {
     recoverContextDetailsFromMessage,
     recoverContextDetailsFromTrace,
@@ -1350,8 +1348,10 @@ export class MessageProcessor {
                     recoveredFromTrace?.context ??
                     recoveredImageContext?.context ??
                     null;
-                followUpResponseId =
-                    recoveredFromTrace?.responseId ?? followUpCandidate;
+                if (!followUpResponseId) {
+                    followUpResponseId =
+                        recoveredFromTrace?.responseId ?? followUpCandidate;
+                }
             } else {
                 logger.warn(
                     `Backend chat supplied follow-up response ID "${followUpCandidate}" that was not found in trace metadata or recovery; ignoring.`
@@ -1364,9 +1364,8 @@ export class MessageProcessor {
                 const referencedMessage = await message.fetchReference();
                 const recoveredFromMessage =
                     await recoverContextDetailsFromMessage(referencedMessage);
-                const recovered = await preferTraceBackedImageContext(
-                    recoveredFromMessage
-                );
+                const recovered =
+                    await preferTraceBackedImageContext(recoveredFromMessage);
 
                 if (recovered) {
                     referencedContext = recovered.context;

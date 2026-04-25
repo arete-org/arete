@@ -41,7 +41,7 @@ import {
     buildModelTokenDescription,
     buildQualityTokenDescription,
 } from '../../utils/imageTokens.js';
-import type { ImageGenerationContext } from './followUpCache.js';
+import type { ImageGenerationContext } from './retryCache.js';
 import type {
     ImageBackgroundType,
     ImageQualityType,
@@ -576,7 +576,7 @@ export function buildPromptModal(
         .setLabel('Prompt to send to the model')
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(true)
-        .setMaxLength(IMAGE_PROMPT_MAX_INPUT_CHARS)
+        .setMaxLength(Math.min(IMAGE_PROMPT_MAX_INPUT_CHARS, 4000))
         .setValue(clampPromptForContext(currentPrompt));
 
     return modal.addComponents(

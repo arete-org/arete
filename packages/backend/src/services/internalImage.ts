@@ -220,11 +220,23 @@ export const createInternalImageTaskService = ({
         });
         if (traceMetadata && storeTrace) {
             // Keep image generation fail-open even if trace persistence fails.
-            storeTrace(traceMetadata).catch((error) => {
+            try {
+                const traceWritePromise = storeTrace(traceMetadata);
+                if (
+                    traceWritePromise &&
+                    typeof traceWritePromise.catch === 'function'
+                ) {
+                    traceWritePromise.catch((error) => {
+                        imageTaskLogger.warn(
+                            `Internal image trace storage failed for response ${traceMetadata.responseId}: ${error instanceof Error ? error.message : String(error)}`
+                        );
+                    });
+                }
+            } catch (error) {
                 imageTaskLogger.warn(
                     `Internal image trace storage failed for response ${traceMetadata.responseId}: ${error instanceof Error ? error.message : String(error)}`
                 );
-            });
+            }
         }
 
         return parsed.data;

@@ -19,7 +19,7 @@ import {
     resetVariationCooldown,
     updateVariationSession,
 } from '../commands/image/variationSessions.js';
-import type { ImageGenerationContext } from '../commands/image/followUpCache.js';
+import type { ImageGenerationContext } from '../commands/image/retryCache.js';
 import type {
     ImageQualityType,
     ImageRenderModel,

@@ -17,7 +17,7 @@ import {
     buildImageResultPresentation,
     executeImageGeneration,
 } from '../src/commands/image/sessionHelpers.js';
-import type { ImageGenerationContext } from '../src/commands/image/followUpCache.js';
+import type { ImageGenerationContext } from '../src/commands/image/retryCache.js';
 import { runtimeConfig } from '../src/config.js';
 
 const createContext = (): ImageGenerationContext => ({

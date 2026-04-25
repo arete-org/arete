@@ -35,7 +35,7 @@ import type {
     ImageOutputFormat,
     ImageOutputCompression,
 } from './types.js';
-import type { ImageGenerationContext } from './followUpCache.js';
+import type { ImageGenerationContext } from './retryCache.js';
 import {
     sanitizeForEmbed,
     setEmbedFooterText,
@@ -128,7 +128,10 @@ const buildImageTaskRequest = (
             maxInputChars:
                 Number.isFinite(context.promptPolicyMaxInputChars) &&
                 context.promptPolicyMaxInputChars > 0
-                    ? context.promptPolicyMaxInputChars
+                    ? Math.min(
+                          context.promptPolicyMaxInputChars,
+                          IMAGE_PROMPT_MAX_INPUT_CHARS
+                      )
                     : IMAGE_PROMPT_MAX_INPUT_CHARS,
             policyTruncated: context.promptPolicyTruncated,
         },
