@@ -45,7 +45,7 @@ export type InternalImageApi = {
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const MAX_STREAM_ITERATIONS = 10_000;
-const MAX_STREAM_BYTES = 10 * 1024 * 1024;
+const MAX_STREAM_BYTES = 30 * 1024 * 1024;
 
 const buildTrustedHeaders = (
     traceApiToken?: string

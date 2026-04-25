@@ -416,11 +416,15 @@ export function buildImageResultPresentation(
     let promptTruncated: boolean;
     let originalTruncated = false;
 
-    const originalLabel = resolvedContext.allowPromptAdjustment
-        ? 'Original prompt'
-        : 'Prompt';
+    const isVariationPresentation = Boolean(followUpResponseId);
+    const originalLabel =
+        isVariationPresentation || !followUpContext.allowPromptAdjustment
+            ? 'Prompt'
+            : 'Original prompt';
 
-    if (normalizedRefinedPrompt) {
+    if (isVariationPresentation) {
+        promptTruncated = recordPrompt('Prompt', normalizedActivePrompt);
+    } else if (normalizedRefinedPrompt) {
         promptTruncated = recordPrompt('Prompt', normalizedActivePrompt);
         originalTruncated = recordPrompt(
             originalLabel,

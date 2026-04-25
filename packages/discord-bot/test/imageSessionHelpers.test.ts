@@ -255,3 +255,54 @@ test('buildImageResultPresentation enforces prompt policy cap for generation/sto
         IMAGE_PROMPT_MAX_INPUT_CHARS
     );
 });
+
+test('buildImageResultPresentation shows only "Prompt" for variation outputs', () => {
+    const context: ImageGenerationContext = {
+        ...createContext(),
+        prompt: 'active variation prompt',
+        originalPrompt: 'original source prompt',
+        refinedPrompt: 'active variation prompt',
+    };
+
+    const presentation = buildImageResultPresentation(
+        context,
+        {
+            responseId: 'resp_new',
+            textModel: 'gpt-5-mini',
+            imageModel: 'gpt-image-1-mini',
+            revisedPrompt: null,
+            finalStyle: 'vivid',
+            annotations: {
+                title: 'Variation output',
+                description: null,
+                note: null,
+                adjustedPrompt: null,
+            },
+            finalImageBuffer: Buffer.from('hello'),
+            finalImageFileName: 'variation.png',
+            imageUrl: null,
+            outputFormat: 'png',
+            outputCompression: 100,
+            usage: {
+                inputTokens: 10,
+                outputTokens: 4,
+                totalTokens: 14,
+                imageCount: 1,
+            },
+            costs: {
+                text: 0.001,
+                image: 0.01,
+                total: 0.011,
+                perImage: 0.01,
+            },
+            generationTimeMs: 1000,
+        },
+        { followUpResponseId: 'resp_prev' }
+    );
+
+    const fieldNames = (presentation.embed.toJSON().fields ?? []).map(
+        (field) => field.name
+    );
+    assert.ok(fieldNames.includes('Prompt'));
+    assert.ok(!fieldNames.includes('Original prompt'));
+});

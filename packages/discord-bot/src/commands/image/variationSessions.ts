@@ -388,16 +388,9 @@ export function buildVariationConfiguratorView(
         .setDescription(truncateForEmbed(statusText, 2048));
 
     embed.addFields({
-        name: 'Current prompt',
+        name: 'Prompt',
         value: buildPromptFieldValue(session.prompt, {
             label: 'variation prompt',
-        }),
-    });
-
-    embed.addFields({
-        name: 'Original prompt',
-        value: buildPromptFieldValue(session.originalPrompt, {
-            label: 'original prompt',
         }),
     });
 
