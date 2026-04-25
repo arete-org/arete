@@ -418,7 +418,7 @@ export function buildImageResultPresentation(
 
     const isVariationPresentation = Boolean(followUpResponseId);
     const originalLabel =
-        isVariationPresentation || !followUpContext.allowPromptAdjustment
+        isVariationPresentation || !resolvedContext.allowPromptAdjustment
             ? 'Prompt'
             : 'Original prompt';
 
