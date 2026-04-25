@@ -715,6 +715,55 @@ export type TrustGraphMetadata = {
 };
 
 /**
+ * Canonical image-generation trace payload attached to response metadata.
+ *
+ * TODO(auth-memory-governance): Gate prompt visibility/storage through the
+ * upcoming user opt-in auth/memory/governance controls before broad exposure.
+ */
+export type ImageGenerationMetadata = {
+    version: 'v1';
+    prompts: {
+        original: string;
+        active: string;
+        revised: string | null;
+        maxInputChars: number;
+        policyTruncated: boolean;
+    };
+    request: {
+        textModel: string;
+        imageModel: string;
+        quality: 'low' | 'medium' | 'high' | 'auto';
+        size: 'auto' | '1024x1024' | '1024x1536' | '1536x1024';
+        aspectRatio: 'auto' | 'square' | 'portrait' | 'landscape';
+        background: 'auto' | 'transparent' | 'opaque';
+        style: string;
+        allowPromptAdjustment: boolean;
+        outputFormat: 'png' | 'webp' | 'jpeg';
+        outputCompression: number;
+    };
+    linkage: {
+        followUpResponseId: string | null;
+    };
+    result: {
+        outputResponseId: string | null;
+        finalStyle: string;
+        generationTimeMs: number;
+    };
+    usage: {
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+        imageCount: number;
+    };
+    costs: {
+        text: number;
+        image: number;
+        total: number;
+        perImage: number;
+    };
+};
+
+/**
  * ResponseMetadata is the compact record attached to a model response.
  *
  * Not every field means the same thing. Some values are direct runtime facts,
@@ -758,4 +807,5 @@ export type ResponseMetadata = {
     trace_final: PartialResponseTemperament;
     trace_final_reason_code?: TraceFinalizationReasonCode;
     trustGraph?: TrustGraphMetadata;
+    imageGeneration?: ImageGenerationMetadata;
 };

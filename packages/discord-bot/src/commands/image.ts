@@ -30,8 +30,8 @@ import {
 } from './image/constants.js';
 import { resolveAspectRatioSettings } from './image/aspect.js';
 import {
+    applyPromptPolicy,
     buildImageResultPresentation,
-    clampPromptForContext,
     createRetryButtonRow,
     executeImageGeneration,
     formatRetryCountdown,
@@ -49,10 +49,9 @@ import type {
 } from './image/types.js';
 import { imageRenderModels, imageTextModels } from './image/types.js';
 import {
-    evictFollowUpContext,
-    saveFollowUpContext,
+    saveRetryContext,
     type ImageGenerationContext,
-} from './image/followUpCache.js';
+} from './image/retryCache.js';
 import {
     buildTokenSummaryLine,
     consumeImageTokens,
@@ -342,19 +341,6 @@ export async function runImageGenerationSession(
             followUpResponseId: followUpResponseId ?? undefined,
         });
 
-        if (artifacts.responseId) {
-            saveFollowUpContext(
-                artifacts.responseId,
-                presentation.followUpContext
-            );
-            if (
-                followUpResponseId &&
-                followUpResponseId !== artifacts.responseId
-            ) {
-                evictFollowUpContext(followUpResponseId);
-            }
-        }
-
         await interaction.editReply({
             content: presentation.content,
             embeds: [presentation.embed],
@@ -550,10 +536,11 @@ const imageCommand: Command = {
             });
             return;
         }
-        const normalizedPrompt = clampPromptForContext(prompt);
-        if (prompt.length > normalizedPrompt.length) {
+        const promptPolicy = applyPromptPolicy(prompt);
+        const normalizedPrompt = promptPolicy.prompt;
+        if (promptPolicy.policyTruncated) {
             logger.warn(
-                'Slash command prompt exceeded embed limits; truncating to preserve follow-up usability.'
+                `Slash command prompt truncated by input policy: originalLength=${prompt.length} maxInputChars=${promptPolicy.maxInputChars}`
             );
         }
         logger.debug(
@@ -612,6 +599,8 @@ const imageCommand: Command = {
             prompt: normalizedPrompt,
             originalPrompt: normalizedPrompt,
             refinedPrompt: null,
+            promptPolicyMaxInputChars: promptPolicy.maxInputChars,
+            promptPolicyTruncated: promptPolicy.policyTruncated,
             textModel,
             imageModel,
             size,
@@ -640,7 +629,7 @@ const imageCommand: Command = {
             );
             if (!spendResult.allowed) {
                 const retryKey = `retry:${interaction.id}`;
-                saveFollowUpContext(retryKey, context);
+                saveRetryContext(retryKey, context);
                 const summary = buildTokenSummaryLine(interaction.user.id);
                 const message = `${describeTokenAvailability(quality, spendResult, imageModel)}\n\n${summary}`;
                 const countdown = spendResult.refreshInSeconds;

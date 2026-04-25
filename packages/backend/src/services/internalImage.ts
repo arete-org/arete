@@ -15,6 +15,7 @@ import type {
     PostInternalImageGenerateRequest,
     PostInternalImageGenerateResponse,
 } from '@footnote/contracts/web';
+import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import {
     internalImageRenderModels,
     internalImageTextModels,
@@ -25,6 +26,7 @@ import {
     type BackendLLMCostRecord,
 } from './llmCostRecorder.js';
 import { composeImagePrompts } from './prompts/imagePromptComposer.js';
+import { buildInternalImageTraceMetadata } from './internalImageTraceMetadata.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -41,6 +43,7 @@ const imageTaskLogger =
 export type CreateInternalImageTaskServiceOptions = {
     imageGenerationRuntime: ImageGenerationRuntime;
     recordUsage?: (record: BackendLLMCostRecord) => void;
+    storeTrace?: (metadata: ResponseMetadata) => Promise<void>;
 };
 
 export type RunInternalImageTaskOptions = {
@@ -117,6 +120,7 @@ const toInternalImageResponse = (
 export const createInternalImageTaskService = ({
     imageGenerationRuntime,
     recordUsage = recordBackendLLMUsage,
+    storeTrace,
 }: CreateInternalImageTaskServiceOptions): InternalImageTaskService => {
     const runImageTask = async (
         request: PostInternalImageGenerateRequest,
@@ -208,6 +212,31 @@ export const createInternalImageTaskService = ({
             throw new Error(
                 `Internal image task returned invalid artifact output: ${firstIssue?.path.join('.') ?? 'body'} ${firstIssue?.message ?? 'Invalid response'}`
             );
+        }
+
+        const traceMetadata = buildInternalImageTraceMetadata({
+            request,
+            response: parsed.data,
+        });
+        if (traceMetadata && storeTrace) {
+            // Keep image generation fail-open even if trace persistence fails.
+            try {
+                const traceWritePromise = storeTrace(traceMetadata);
+                if (
+                    traceWritePromise &&
+                    typeof traceWritePromise.catch === 'function'
+                ) {
+                    traceWritePromise.catch((error) => {
+                        imageTaskLogger.warn(
+                            `Internal image trace storage failed for response ${traceMetadata.responseId}: ${error instanceof Error ? error.message : String(error)}`
+                        );
+                    });
+                }
+            } catch (error) {
+                imageTaskLogger.warn(
+                    `Internal image trace storage failed for response ${traceMetadata.responseId}: ${error instanceof Error ? error.message : String(error)}`
+                );
+            }
         }
 
         return parsed.data;

@@ -10,7 +10,7 @@ import {
     IMAGE_VARIATION_PROMPT_INPUT_ID,
     IMAGE_VARIATION_PROMPT_MODAL_ID_PREFIX,
 } from '../commands/image/constants.js';
-import { clampPromptForContext } from '../commands/image/sessionHelpers.js';
+import { applyPromptPolicy } from '../commands/image/sessionHelpers.js';
 import {
     buildVariationConfiguratorView,
     resetVariationCooldown,
@@ -69,9 +69,11 @@ export async function handleModalSubmitInteraction(
         interaction.user.id,
         responseId,
         (current) => {
-            const normalized = clampPromptForContext(trimmedPrompt);
-            current.prompt = normalized;
-            current.refinedPrompt = normalized;
+            const promptPolicy = applyPromptPolicy(trimmedPrompt);
+            current.prompt = promptPolicy.prompt;
+            current.refinedPrompt = promptPolicy.prompt;
+            current.promptPolicyMaxInputChars = promptPolicy.maxInputChars;
+            current.promptPolicyTruncated = promptPolicy.policyTruncated;
         }
     );
 

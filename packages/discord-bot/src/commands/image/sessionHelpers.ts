@@ -21,6 +21,7 @@ import {
     EMBED_MAX_FIELDS,
     EMBED_TOTAL_FIELD_CHAR_LIMIT,
     EMBED_TITLE_LIMIT,
+    IMAGE_PROMPT_MAX_INPUT_CHARS,
     IMAGE_RETRY_CUSTOM_ID_PREFIX,
     IMAGE_VARIATION_CUSTOM_ID_PREFIX,
 } from './constants.js';
@@ -34,12 +35,13 @@ import type {
     ImageOutputFormat,
     ImageOutputCompression,
 } from './types.js';
-import type { ImageGenerationContext } from './followUpCache.js';
+import type { ImageGenerationContext } from './retryCache.js';
 import {
     sanitizeForEmbed,
     setEmbedFooterText,
     truncateForEmbed,
 } from './embed.js';
+import { runtimeConfig } from '../../config.js';
 
 /**
  * Provides structured metadata about a generated image so that different
@@ -88,6 +90,20 @@ interface ExecuteImageGenerationOptions {
     };
 }
 
+export interface PromptPolicyResult {
+    prompt: string;
+    maxInputChars: number;
+    policyTruncated: boolean;
+}
+
+function buildTraceViewerUrl(responseId: string | null): string | null {
+    if (!responseId || responseId.trim().length === 0) {
+        return null;
+    }
+    const baseUrl = runtimeConfig.webBaseUrl.trim().replace(/\/+$/, '');
+    return `${baseUrl}/traces/${encodeURIComponent(responseId.trim())}`;
+}
+
 const buildImageTaskRequest = (
     context: ImageGenerationContext,
     options: ExecuteImageGenerationOptions
@@ -100,12 +116,25 @@ const buildImageTaskRequest = (
         textModel: context.textModel,
         imageModel: context.imageModel,
         size: context.size,
+        aspectRatio: context.aspectRatio,
         quality: context.quality,
         background: context.background,
         style: context.style,
         allowPromptAdjustment: context.allowPromptAdjustment,
         outputFormat: context.outputFormat,
         outputCompression: context.outputCompression,
+        promptPolicy: {
+            originalPrompt: context.originalPrompt,
+            maxInputChars:
+                Number.isFinite(context.promptPolicyMaxInputChars) &&
+                context.promptPolicyMaxInputChars > 0
+                    ? Math.min(
+                          context.promptPolicyMaxInputChars,
+                          IMAGE_PROMPT_MAX_INPUT_CHARS
+                      )
+                    : IMAGE_PROMPT_MAX_INPUT_CHARS,
+            policyTruncated: context.promptPolicyTruncated,
+        },
         user: options.user,
         followUpResponseId: options.followUpResponseId ?? undefined,
         channelContext: options.channelContext,
@@ -116,8 +145,8 @@ const buildImageTaskRequest = (
 /**
  * Runs the backend-owned image pipeline, uploads the final asset, and returns
  * a normalized payload describing the generation. The caller is responsible
- * for presenting the result (embed, plain message, etc.) and for caching
- * follow-up context entries.
+ * for presenting the result (embed, plain message, etc.) and for storing
+ * short-lived retry context when needed.
  */
 export async function executeImageGeneration(
     context: ImageGenerationContext,
@@ -226,19 +255,19 @@ export interface ImageResultPresentation {
     embed: EmbedBuilder;
     attachments: AttachmentBuilder[];
     components: ActionRowBuilder<ButtonBuilder>[];
-    followUpContext: ImageGenerationContext;
+    retryContext: ImageGenerationContext;
 }
 
 /**
- * Build a Discord-ready presentation (embed, attachments, components) and a follow-up context for a completed image generation.
+ * Build a Discord-ready presentation (embed, attachments, components) and retry context for a completed image generation.
  *
- * Produces an embed containing machine-readable metadata and visible fields, any required image attachments, optional variation/retry components, and a follow-up context that captures the normalized prompts, selected models/style, and prompt-adjustment setting for future retries or recovery.
+ * Produces an embed containing machine-readable metadata and visible fields, any required image attachments, optional variation/retry components, and a retry context that captures the normalized prompts, selected models/style, and prompt-adjustment setting for retry flows.
  *
  * `@param` context - The original image generation context (user-visible settings and flags).
  * `@param` artifacts - Normalized results from the image generation pipeline (final image buffer/URL, models, prompts, annotations, costs, timing, and IDs).
  * `@param` options - Optional presentation options.
- * `@param` options.followUpResponseId - Optional upstream response ID to include as the Input ID field and in the follow-up context.
- * `@returns` An ImageResultPresentation containing the prepared embed, attachments, component rows, and follow-up context suitable for sending to Discord.
+ * `@param` options.followUpResponseId - Optional upstream response ID to include as the Input ID field in embed metadata.
+ * `@returns` An ImageResultPresentation containing the prepared embed, attachments, component rows, and retry context suitable for Discord responses.
  */
 export function buildImageResultPresentation(
     context: ImageGenerationContext,
@@ -256,24 +285,44 @@ export function buildImageResultPresentation(
             : null;
     const activePrompt = refinedPrompt ?? context.prompt;
 
-    const normalizedOriginalPrompt = clampPromptForContext(originalPrompt);
+    const normalizedOriginal = applyPromptPolicy(originalPrompt);
     const normalizedRefinedCandidate = refinedPrompt
-        ? clampPromptForContext(refinedPrompt)
+        ? applyPromptPolicy(refinedPrompt)
         : null;
-    const normalizedActivePrompt = clampPromptForContext(activePrompt);
+    const normalizedActive = applyPromptPolicy(activePrompt);
+    const normalizedOriginalPrompt = normalizedOriginal.prompt;
+    const normalizedActivePrompt = normalizedActive.prompt;
     const normalizedRefinedPrompt =
         normalizedRefinedCandidate &&
-        normalizedRefinedCandidate !== normalizedOriginalPrompt
-            ? normalizedRefinedCandidate
+        normalizedRefinedCandidate.prompt !== normalizedOriginalPrompt
+            ? normalizedRefinedCandidate.prompt
             : null;
+    const policyTruncated =
+        context.promptPolicyTruncated ||
+        normalizedOriginal.policyTruncated ||
+        normalizedActive.policyTruncated ||
+        Boolean(normalizedRefinedCandidate?.policyTruncated);
+    const contextPromptPolicyMax =
+        Number.isFinite(context.promptPolicyMaxInputChars) &&
+        context.promptPolicyMaxInputChars > 0
+            ? context.promptPolicyMaxInputChars
+            : IMAGE_PROMPT_MAX_INPUT_CHARS;
+    const promptPolicyMaxInputChars = Math.max(
+        contextPromptPolicyMax,
+        normalizedOriginal.maxInputChars,
+        normalizedActive.maxInputChars,
+        normalizedRefinedCandidate?.maxInputChars ?? 0
+    );
 
-    const followUpContext: ImageGenerationContext = {
+    const resolvedContext: ImageGenerationContext = {
         ...context,
         textModel: artifacts.textModel,
         imageModel: artifacts.imageModel,
         prompt: normalizedActivePrompt,
         originalPrompt: normalizedOriginalPrompt,
         refinedPrompt: normalizedRefinedPrompt,
+        promptPolicyMaxInputChars,
+        promptPolicyTruncated: policyTruncated,
         style: artifacts.finalStyle,
         allowPromptAdjustment: Boolean(context.allowPromptAdjustment),
     };
@@ -367,7 +416,7 @@ export function buildImageResultPresentation(
     let promptTruncated: boolean;
     let originalTruncated = false;
 
-    const originalLabel = followUpContext.allowPromptAdjustment
+    const originalLabel = resolvedContext.allowPromptAdjustment
         ? 'Original prompt'
         : 'Prompt';
 
@@ -381,34 +430,34 @@ export function buildImageResultPresentation(
         promptTruncated = recordPrompt(originalLabel, normalizedOriginalPrompt);
     }
 
-    assertField('Image model', followUpContext.imageModel, { inline: true });
-    assertField('Text model', followUpContext.textModel, { inline: true });
-    assertField('Quality', toTitleCase(followUpContext.quality), {
+    assertField('Image model', resolvedContext.imageModel, { inline: true });
+    assertField('Text model', resolvedContext.textModel, { inline: true });
+    assertField('Quality', toTitleCase(resolvedContext.quality), {
         inline: true,
     });
-    assertField('Aspect ratio', followUpContext.aspectRatioLabel, {
+    assertField('Aspect ratio', resolvedContext.aspectRatioLabel, {
         inline: true,
     });
     assertField(
         'Resolution',
-        followUpContext.size === 'auto' ? 'Auto' : followUpContext.size,
+        resolvedContext.size === 'auto' ? 'Auto' : resolvedContext.size,
         { inline: true }
     );
-    assertField('Background', toTitleCase(followUpContext.background), {
+    assertField('Background', toTitleCase(resolvedContext.background), {
         inline: true,
     });
     assertField(
         'Prompt adjustment',
-        followUpContext.allowPromptAdjustment ? 'Enabled' : 'Disabled',
+        resolvedContext.allowPromptAdjustment ? 'Enabled' : 'Disabled',
         { inline: true }
     );
-    assertField('Output format', followUpContext.outputFormat.toUpperCase(), {
+    assertField('Output format', resolvedContext.outputFormat.toUpperCase(), {
         inline: true,
     });
-    assertField('Compression', `${followUpContext.outputCompression}%`, {
+    assertField('Compression', `${resolvedContext.outputCompression}%`, {
         inline: true,
     });
-    assertField('Style', formatStylePreset(followUpContext.style), {
+    assertField('Style', formatStylePreset(resolvedContext.style), {
         inline: true,
     });
     if (followUpResponseId) {
@@ -419,6 +468,10 @@ export function buildImageResultPresentation(
         artifacts.responseId ? `\`${artifacts.responseId}\`` : 'n/a',
         { inline: true }
     );
+    const traceUrl = buildTraceViewerUrl(artifacts.responseId);
+    if (traceUrl) {
+        assertField('Trace', `[Open trace](${traceUrl})`);
+    }
 
     const refinedTruncated = normalizedRefinedPrompt ? promptTruncated : false;
     const activeTruncated = promptTruncated;
@@ -471,26 +524,36 @@ export function buildImageResultPresentation(
         embed,
         attachments,
         components,
-        followUpContext,
+        retryContext: resolvedContext,
     };
 }
 
 /**
- * Clamps prompts so they always fit within a single embed field. This keeps the
- * presentation compact while ensuring reboot recovery keeps working because the
- * embed never spills into continuation fields that might get pruned.
+ * Applies the configured image prompt input policy before requests are sent to
+ * backend image generation. Embed rendering still applies its own display caps.
  */
-export function clampPromptForContext(rawPrompt: string): string {
+export function applyPromptPolicy(rawPrompt: string): PromptPolicyResult {
     const sanitized = sanitizeForEmbed(rawPrompt).trim();
-
-    if (sanitized.length <= EMBED_FIELD_VALUE_LIMIT) {
-        return sanitized;
+    if (sanitized.length <= IMAGE_PROMPT_MAX_INPUT_CHARS) {
+        return {
+            prompt: sanitized,
+            maxInputChars: IMAGE_PROMPT_MAX_INPUT_CHARS,
+            policyTruncated: false,
+        };
     }
 
     logger.warn(
-        `Prompt exceeded embed field limit; truncating to ${EMBED_FIELD_VALUE_LIMIT} characters to preserve layout.`
+        `Prompt exceeded input policy limit; truncating to ${IMAGE_PROMPT_MAX_INPUT_CHARS} characters.`
     );
-    return sanitized.slice(0, EMBED_FIELD_VALUE_LIMIT);
+    return {
+        prompt: sanitized.slice(0, IMAGE_PROMPT_MAX_INPUT_CHARS),
+        maxInputChars: IMAGE_PROMPT_MAX_INPUT_CHARS,
+        policyTruncated: true,
+    };
+}
+
+export function clampPromptForContext(rawPrompt: string): string {
+    return applyPromptPolicy(rawPrompt).prompt;
 }
 
 /**

@@ -1,9 +1,9 @@
 /**
- * @description: Stores follow-up image generation context for retries and variations.
+ * @description: Stores retry-scoped image generation context for token retry UX.
  * @footnote-scope: utility
- * @footnote-module: ImageFollowUpCache
- * @footnote-risk: medium - Cache mistakes can repeat incorrect prompts or settings.
- * @footnote-ethics: low - Caches user-provided inputs without additional inference.
+ * @footnote-module: ImageRetryCache
+ * @footnote-risk: medium - Retry cache mistakes can repeat incorrect prompts or settings.
+ * @footnote-ethics: low - Caches user-provided prompts for short-lived retry interactions.
  */
 import type {
     ImageBackgroundType,
@@ -40,6 +40,16 @@ export interface ImageGenerationContext {
      * choose not to alter the prompt.
      */
     refinedPrompt?: string | null;
+    /**
+     * Policy-enforced maximum prompt length used for image generation/storage
+     * truncation decisions (not the embed/display character limit).
+     */
+    promptPolicyMaxInputChars: number;
+    /**
+     * True when original user input exceeded `promptPolicyMaxInputChars` and
+     * was truncated to satisfy policy before generation/storage.
+     */
+    promptPolicyTruncated: boolean;
     textModel: ImageTextModel;
     imageModel: ImageRenderModel;
     size: ImageSizeType;
@@ -53,52 +63,52 @@ export interface ImageGenerationContext {
     outputCompression: ImageOutputCompression;
 }
 
-interface FollowUpCacheEntry {
+interface RetryCacheEntry {
     context: ImageGenerationContext;
     expiresAt: number;
     timeout: NodeJS.Timeout;
 }
 
-const DEFAULT_FOLLOW_UP_TTL_MS = 15 * 60 * 1000; // 15 minutes
-const followUpCache = new Map<string, FollowUpCacheEntry>();
+const DEFAULT_RETRY_CONTEXT_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const retryContextCache = new Map<string, RetryCacheEntry>();
 
 /**
- * Stores a follow-up context for later retrieval. Existing entries with the
- * same key are replaced and their eviction timers cleared.
+ * Stores a retry context for later retrieval. Existing entries with the same
+ * key are replaced and their eviction timers cleared.
  */
-export function saveFollowUpContext(
-    responseId: string,
+export function saveRetryContext(
+    retryKey: string,
     context: ImageGenerationContext,
-    ttlMs: number = DEFAULT_FOLLOW_UP_TTL_MS
+    ttlMs: number = DEFAULT_RETRY_CONTEXT_TTL_MS
 ): void {
-    const existing = followUpCache.get(responseId);
+    const existing = retryContextCache.get(retryKey);
     if (existing) {
         clearTimeout(existing.timeout);
     }
 
     const expiresAt = Date.now() + ttlMs;
     const timeout = setTimeout(() => {
-        followUpCache.delete(responseId);
+        retryContextCache.delete(retryKey);
     }, ttlMs);
 
-    followUpCache.set(responseId, { context, expiresAt, timeout });
+    retryContextCache.set(retryKey, { context, expiresAt, timeout });
 }
 
 /**
- * Retrieves a cached follow-up context if it has not expired yet. Expired
+ * Retrieves a cached retry context if it has not expired yet. Expired
  * entries are removed and `null` is returned.
  */
-export function readFollowUpContext(
-    responseId: string
+export function readRetryContext(
+    retryKey: string
 ): ImageGenerationContext | null {
-    const entry = followUpCache.get(responseId);
+    const entry = retryContextCache.get(retryKey);
     if (!entry) {
         return null;
     }
 
     if (entry.expiresAt <= Date.now()) {
         clearTimeout(entry.timeout);
-        followUpCache.delete(responseId);
+        retryContextCache.delete(retryKey);
         return null;
     }
 
@@ -106,17 +116,16 @@ export function readFollowUpContext(
 }
 
 /**
- * Forcefully evicts a cached follow-up context. This is helpful when a
- * variation chain needs to move from one response ID to the next.
+ * Forcefully evicts a cached retry context.
  */
-export function evictFollowUpContext(responseId: string): void {
-    const entry = followUpCache.get(responseId);
+export function evictRetryContext(retryKey: string): void {
+    const entry = retryContextCache.get(retryKey);
     if (!entry) {
         return;
     }
 
     clearTimeout(entry.timeout);
-    followUpCache.delete(responseId);
+    retryContextCache.delete(retryKey);
 }
 
-export { DEFAULT_FOLLOW_UP_TTL_MS };
+export { DEFAULT_RETRY_CONTEXT_TTL_MS };

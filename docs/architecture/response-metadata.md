@@ -19,6 +19,7 @@ provenance if you need the classified record of what happened.
 | Did planner output affect the run?                                   | **Planner metadata**      | planner entries in `metadata.execution[]`                                                                                                                          |
 | Which internal controls materially affected execution or output?     | **Steerability controls** | `metadata.steerabilityControls.controls[]`                                                                                                                         |
 | What happened, and how was it classified?                            | **Provenance**            | `metadata.provenance`, `metadata.provenanceAssessment`, with supporting records in `metadata.execution`, `metadata.workflow`, and `metadata.trustGraph`            |
+| How was an image request generated and linked to prior runs?         | **Image generation**      | `metadata.imageGeneration` (prompts, request settings, linkage, usage, and costs)                                                                                  |
 
 Mode is the routing choice. It tells you how the backend ran the request:
 which path it took, where that choice came from, and whether workflow-owned
@@ -48,6 +49,10 @@ materially affected execution or output.
 Provenance is the classified record of what happened. The label and assessment
 fields give the reviewer-facing summary. The supporting execution, workflow,
 and TrustGraph records provide the structural detail behind it.
+
+Image generation metadata is the canonical record for `/image` follow-ups. The
+Discord surface should keep embeds compact and treat `metadata.imageGeneration`
+as the source of truth for prompt provenance and follow-up linkage.
 
 If you have a trace payload open, a common pattern is:
 

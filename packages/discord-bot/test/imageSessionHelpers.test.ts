@@ -9,13 +9,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { botApi } from '../src/api/botApi.js';
-import { executeImageGeneration } from '../src/commands/image/sessionHelpers.js';
-import type { ImageGenerationContext } from '../src/commands/image/followUpCache.js';
+import {
+    EMBED_FIELD_VALUE_LIMIT,
+    IMAGE_PROMPT_MAX_INPUT_CHARS,
+} from '../src/commands/image/constants.js';
+import {
+    buildImageResultPresentation,
+    executeImageGeneration,
+} from '../src/commands/image/sessionHelpers.js';
+import type { ImageGenerationContext } from '../src/commands/image/retryCache.js';
+import { runtimeConfig } from '../src/config.js';
 
 const createContext = (): ImageGenerationContext => ({
     prompt: 'draw a reflective skyline',
     originalPrompt: 'draw a reflective skyline',
     refinedPrompt: null,
+    promptPolicyMaxInputChars: 8000,
+    promptPolicyTruncated: false,
     textModel: 'gpt-5-mini',
     imageModel: 'gpt-image-1-mini',
     size: '1024x1024',
@@ -100,6 +110,18 @@ test('executeImageGeneration uses the streaming backend image task path when par
                 .followUpResponseId,
             'resp_prev_123'
         );
+        assert.deepEqual(
+            (seenRequests[0] as { promptPolicy?: unknown }).promptPolicy,
+            {
+                originalPrompt: 'draw a reflective skyline',
+                maxInputChars: 8000,
+                policyTruncated: false,
+            }
+        );
+        assert.equal(
+            (seenRequests[0] as { aspectRatio?: string }).aspectRatio,
+            'square'
+        );
         assert.equal(artifacts.responseId, 'resp_123');
         assert.equal(artifacts.finalImageBuffer.toString('utf8'), 'hello');
         assert.deepEqual(partials, [{ index: 0, base64: 'partial-one' }]);
@@ -107,4 +129,129 @@ test('executeImageGeneration uses the streaming backend image task path when par
         botApi.runImageTaskViaApi = originalRunImageTaskViaApi;
         botApi.runImageTaskStreamViaApi = originalRunImageTaskStreamViaApi;
     }
+});
+
+test('buildImageResultPresentation keeps generation context prompts beyond embed field limits', () => {
+    const longPrompt = 'A'.repeat(EMBED_FIELD_VALUE_LIMIT + 400);
+    const context: ImageGenerationContext = {
+        ...createContext(),
+        prompt: longPrompt,
+        originalPrompt: longPrompt,
+        refinedPrompt: null,
+    };
+
+    const presentation = buildImageResultPresentation(context, {
+        responseId: 'resp_long_prompt',
+        textModel: context.textModel,
+        imageModel: context.imageModel,
+        revisedPrompt: null,
+        finalStyle: context.style,
+        annotations: {
+            title: 'Long prompt test',
+            description: null,
+            note: null,
+            adjustedPrompt: null,
+        },
+        finalImageBuffer: Buffer.from('hello'),
+        finalImageFileName: 'long-prompt.png',
+        imageUrl: 'https://example.com/long-prompt.png',
+        outputFormat: context.outputFormat,
+        outputCompression: context.outputCompression,
+        usage: {
+            inputTokens: 11,
+            outputTokens: 5,
+            totalTokens: 16,
+            imageCount: 1,
+        },
+        costs: {
+            text: 0.00001,
+            image: 0.001,
+            total: 0.00101,
+            perImage: 0.001,
+        },
+        generationTimeMs: 1024,
+    });
+
+    assert.equal(presentation.retryContext.prompt.length, longPrompt.length);
+    assert.equal(
+        presentation.retryContext.originalPrompt.length,
+        longPrompt.length
+    );
+
+    const promptField = presentation.embed.data.fields?.find(
+        (field) => field.name === 'Original prompt'
+    );
+    assert.ok(promptField);
+    assert.equal(
+        (promptField?.value ?? '').length <= EMBED_FIELD_VALUE_LIMIT,
+        true
+    );
+    assert.match(promptField?.value ?? '', /\*\(truncated\)\*/);
+
+    const traceField = presentation.embed.data.fields?.find(
+        (field) => field.name === 'Trace'
+    );
+    assert.ok(traceField);
+    const expectedTraceBase = runtimeConfig.webBaseUrl
+        .trim()
+        .replace(/\/+$/, '');
+    assert.equal(
+        traceField?.value,
+        `[Open trace](${expectedTraceBase}/traces/resp_long_prompt)`
+    );
+});
+
+test('buildImageResultPresentation enforces prompt policy cap for generation/storage context', () => {
+    const tooLongPrompt = 'B'.repeat(IMAGE_PROMPT_MAX_INPUT_CHARS + 250);
+    const context: ImageGenerationContext = {
+        ...createContext(),
+        prompt: tooLongPrompt,
+        originalPrompt: tooLongPrompt,
+    };
+
+    const presentation = buildImageResultPresentation(context, {
+        responseId: 'resp_policy_prompt',
+        textModel: context.textModel,
+        imageModel: context.imageModel,
+        revisedPrompt: null,
+        finalStyle: context.style,
+        annotations: {
+            title: 'Policy prompt test',
+            description: null,
+            note: null,
+            adjustedPrompt: null,
+        },
+        finalImageBuffer: Buffer.from('hello'),
+        finalImageFileName: 'policy-prompt.png',
+        imageUrl: 'https://example.com/policy-prompt.png',
+        outputFormat: context.outputFormat,
+        outputCompression: context.outputCompression,
+        usage: {
+            inputTokens: 15,
+            outputTokens: 7,
+            totalTokens: 22,
+            imageCount: 1,
+        },
+        costs: {
+            text: 0.00002,
+            image: 0.0012,
+            total: 0.00122,
+            perImage: 0.0012,
+        },
+        generationTimeMs: 1500,
+    });
+
+    assert.equal(
+        presentation.retryContext.prompt.length,
+        IMAGE_PROMPT_MAX_INPUT_CHARS
+    );
+    assert.equal(
+        presentation.retryContext.originalPrompt.length,
+        IMAGE_PROMPT_MAX_INPUT_CHARS
+    );
+    assert.equal(presentation.retryContext.promptPolicyTruncated, true);
+    assert.equal(
+        presentation.retryContext.promptPolicyMaxInputChars,
+        IMAGE_PROMPT_MAX_INPUT_CHARS
+    );
 });

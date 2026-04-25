@@ -20,7 +20,10 @@ import type {
     GetTraceResponse,
     GetTraceStaleResponse,
 } from '@footnote/contracts/web';
-import type { WorkflowStepKind } from '@footnote/contracts/ethics-core';
+import type {
+    ImageGenerationMetadata,
+    WorkflowStepKind,
+} from '@footnote/contracts/ethics-core';
 import { api, isApiClientError } from '../utils/api';
 import { createScopedLogger } from '../utils/logger';
 import {
@@ -303,6 +306,168 @@ const renderRunOutcomeSummary = (
                 </p>
             )}
         </>
+    );
+};
+
+const formatPromptForDisplay = (
+    value: string | null | undefined
+): string | null => {
+    const normalized = value?.trim();
+    return normalized && normalized.length > 0 ? normalized : null;
+};
+
+const renderImagePromptBlock = (
+    label: string,
+    value: string | null | undefined
+): JSX.Element => (
+    <div>
+        <dt>{label}</dt>
+        <dd>
+            {formatPromptForDisplay(value) ? (
+                <pre
+                    style={{
+                        marginTop: '0.5rem',
+                        padding: '0.75rem',
+                        borderRadius: '0.5rem',
+                        background: '#f8fafc',
+                        color: '#111827',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                    }}
+                >
+                    {formatPromptForDisplay(value)}
+                </pre>
+            ) : (
+                'Unavailable'
+            )}
+        </dd>
+    </div>
+);
+
+const renderImageGenerationSection = (
+    imageGeneration: ImageGenerationMetadata
+): JSX.Element => {
+    const outputId = imageGeneration.result.outputResponseId ?? 'Unavailable';
+    const inputId = imageGeneration.linkage.followUpResponseId ?? 'None';
+    const usage = imageGeneration.usage;
+    const costs = imageGeneration.costs;
+    const hasUsage =
+        usage &&
+        Number.isFinite(usage.inputTokens) &&
+        Number.isFinite(usage.outputTokens) &&
+        Number.isFinite(usage.totalTokens) &&
+        Number.isFinite(usage.imageCount);
+    const hasCosts =
+        costs &&
+        Number.isFinite(costs.text) &&
+        Number.isFinite(costs.image) &&
+        Number.isFinite(costs.total) &&
+        Number.isFinite(costs.perImage);
+
+    return (
+        <article
+            className="card"
+            id="trace-image"
+            aria-label="Image generation details"
+        >
+            <h2>Image Generation Details</h2>
+            <p>
+                <strong>Summary:</strong> rendered with{' '}
+                <code>{imageGeneration.request.imageModel}</code> using{' '}
+                <code>{imageGeneration.request.textModel}</code>, style{' '}
+                <code>{imageGeneration.result.finalStyle}</code>, and output{' '}
+                <code>
+                    {imageGeneration.request.outputFormat.toUpperCase()}
+                </code>
+                .
+            </p>
+            <p>
+                <strong>Linkage:</strong> output <code>{outputId}</code> from
+                input <code>{inputId}</code>.
+            </p>
+            <p>
+                <strong>Generation time:</strong>{' '}
+                {imageGeneration.result.generationTimeMs}ms
+            </p>
+            <details style={{ marginTop: '0.75rem' }} open>
+                <summary>Prompt provenance</summary>
+                <p style={{ marginTop: '0.75rem' }}>
+                    <strong>Policy:</strong>{' '}
+                    {imageGeneration.prompts.policyTruncated
+                        ? 'Prompt input was policy-truncated before generation.'
+                        : 'No policy truncation recorded.'}{' '}
+                    Max input chars: {imageGeneration.prompts.maxInputChars}.
+                </p>
+                {/* TODO(auth-memory-governance): Gate prompt visibility with user opt-in auth/memory/governance controls before broad exposure. */}
+                <dl style={{ marginTop: '0.75rem' }}>
+                    {renderImagePromptBlock(
+                        'Original prompt',
+                        imageGeneration.prompts.original
+                    )}
+                    {renderImagePromptBlock(
+                        'Active prompt',
+                        imageGeneration.prompts.active
+                    )}
+                    {renderImagePromptBlock(
+                        'Revised prompt',
+                        imageGeneration.prompts.revised
+                    )}
+                </dl>
+            </details>
+            <details style={{ marginTop: '0.75rem' }}>
+                <summary>Generation settings and usage</summary>
+                <dl style={{ marginTop: '0.75rem' }}>
+                    <div>
+                        <dt>Quality</dt>
+                        <dd>{imageGeneration.request.quality}</dd>
+                    </div>
+                    <div>
+                        <dt>Size</dt>
+                        <dd>{imageGeneration.request.size}</dd>
+                    </div>
+                    <div>
+                        <dt>Aspect ratio</dt>
+                        <dd>{imageGeneration.request.aspectRatio}</dd>
+                    </div>
+                    <div>
+                        <dt>Background</dt>
+                        <dd>{imageGeneration.request.background}</dd>
+                    </div>
+                    <div>
+                        <dt>Style request</dt>
+                        <dd>{imageGeneration.request.style}</dd>
+                    </div>
+                    <div>
+                        <dt>Prompt adjustment</dt>
+                        <dd>
+                            {imageGeneration.request.allowPromptAdjustment
+                                ? 'Enabled'
+                                : 'Disabled'}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Output compression</dt>
+                        <dd>{imageGeneration.request.outputCompression}%</dd>
+                    </div>
+                    <div>
+                        <dt>Usage</dt>
+                        <dd>
+                            {hasUsage
+                                ? `input ${usage.inputTokens}, output ${usage.outputTokens}, total ${usage.totalTokens}, images ${usage.imageCount}`
+                                : 'Unavailable'}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Costs</dt>
+                        <dd>
+                            {hasCosts
+                                ? `text $${costs.text.toFixed(6)}, image $${costs.image.toFixed(6)}, total $${costs.total.toFixed(6)} (per image $${costs.perImage.toFixed(6)})`
+                                : 'Unavailable'}
+                        </dd>
+                    </div>
+                </dl>
+            </details>
+        </article>
     );
 };
 
@@ -648,6 +813,9 @@ const TracePage = (): JSX.Element => {
                     or <a href="#trace-raw">open raw trace JSON</a>.
                 </p>
             </article>
+
+            {traceData.imageGeneration &&
+                renderImageGenerationSection(traceData.imageGeneration)}
 
             <article className="card" id="trace-sources" aria-label="Sources">
                 <h2>Sources and Evidence</h2>

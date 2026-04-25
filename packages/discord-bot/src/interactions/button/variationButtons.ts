@@ -14,10 +14,9 @@ import {
     IMAGE_VARIATION_RESET_PROMPT_CUSTOM_ID_PREFIX,
 } from '../../commands/image/constants.js';
 import {
-    readFollowUpContext,
-    saveFollowUpContext,
-} from '../../commands/image/followUpCache.js';
-import { recoverContextFromMessage } from '../../commands/image/contextResolver.js';
+    recoverContextDetailsFromMessage,
+    recoverContextDetailsFromTrace,
+} from '../../commands/image/contextResolver.js';
 import { runImageGenerationSession } from '../../commands/image.js';
 import { formatRetryCountdown } from '../../commands/image/sessionHelpers.js';
 import {
@@ -155,6 +154,8 @@ async function handleGenerateVariationButton(
             prompt: session.prompt,
             originalPrompt: session.originalPrompt,
             refinedPrompt: session.refinedPrompt,
+            promptPolicyMaxInputChars: session.promptPolicyMaxInputChars,
+            promptPolicyTruncated: session.promptPolicyTruncated,
             textModel: session.textModel,
             imageModel: session.imageModel,
             size: session.size,
@@ -314,26 +315,26 @@ async function handleVariationEntryButton(
         return true;
     }
 
-    let cachedContext = readFollowUpContext(followUpResponseId);
+    let recoveredDetails = await recoverContextDetailsFromTrace(
+        followUpResponseId
+    );
 
-    // Recover from message metadata when cache entries have aged out.
-    if (!cachedContext) {
+    // Legacy fallback: recover context from embed fields when trace metadata is
+    // unavailable (for pre-cutover or malformed records).
+    if (!recoveredDetails) {
         try {
-            const recovered = await recoverContextFromMessage(
+            recoveredDetails = await recoverContextDetailsFromMessage(
                 interaction.message
             );
-            if (recovered) {
-                cachedContext = recovered;
-                saveFollowUpContext(followUpResponseId, recovered);
-            }
         } catch (error) {
             logger.error(
-                'Failed to recover cached context for variation button:' + error
+                'Failed to recover legacy embed context for variation button:' +
+                    error
             );
         }
     }
 
-    if (!cachedContext) {
+    if (!recoveredDetails?.context) {
         await interaction.reply({
             content:
                 '⚠️ Sorry, I can no longer create a variation for that image. Please run /image again.',
@@ -342,15 +343,18 @@ async function handleVariationEntryButton(
         return true;
     }
 
-    cachedContext.originalPrompt =
-        cachedContext.originalPrompt ?? cachedContext.prompt;
-    cachedContext.refinedPrompt = cachedContext.refinedPrompt ?? null;
-    saveFollowUpContext(followUpResponseId, cachedContext);
+    const recoveredContext = {
+        ...recoveredDetails.context,
+        originalPrompt:
+            recoveredDetails.context.originalPrompt ??
+            recoveredDetails.context.prompt,
+        refinedPrompt: recoveredDetails.context.refinedPrompt ?? null,
+    };
 
     const session = initialiseVariationSession(
         interaction.user.id,
         followUpResponseId,
-        cachedContext
+        recoveredContext
     );
 
     // Store an updater callback so later select/modal/button actions can

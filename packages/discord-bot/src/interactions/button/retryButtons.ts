@@ -8,10 +8,9 @@
 import type { ButtonInteraction } from 'discord.js';
 import { IMAGE_RETRY_CUSTOM_ID_PREFIX } from '../../commands/image/constants.js';
 import {
-    evictFollowUpContext,
-    readFollowUpContext,
-    saveFollowUpContext,
-} from '../../commands/image/followUpCache.js';
+    evictRetryContext,
+    readRetryContext,
+} from '../../commands/image/retryCache.js';
 import {
     buildImageResultPresentation,
     createRetryButtonRow,
@@ -50,7 +49,7 @@ export async function handleImageRetryButtonInteraction(
         return true;
     }
 
-    const cachedContext = readFollowUpContext(retryKey);
+    const cachedContext = readRetryContext(retryKey);
     if (!cachedContext) {
         await interaction.reply({
             content:
@@ -119,13 +118,7 @@ export async function handleImageRetryButtonInteraction(
             artifacts
         );
 
-        if (artifacts.responseId) {
-            saveFollowUpContext(
-                artifacts.responseId,
-                presentation.followUpContext
-            );
-        }
-        evictFollowUpContext(retryKey);
+        evictRetryContext(retryKey);
 
         await interaction.editReply({
             content: presentation.content,
