@@ -121,6 +121,25 @@ test('resolveOpenAITextPricingModel resolves versioned gpt-5.4-mini ids after ca
     assert.equal(resolved.matchedModel, 'gpt-5.4-mini');
 });
 
+test('resolveOpenAITextPricingModel resolves provider-prefixed gpt-5.5 ids', () => {
+    const resolved = resolveOpenAITextPricingModel('openai/gpt-5.5');
+
+    assert.equal(resolved.canonicalModel, 'gpt-5.5');
+    assert.equal(resolved.matchedModel, 'gpt-5.5');
+});
+
+test('estimateOpenAIImageGenerationCost computes gpt-image-2 medium 1024x1536 pricing', () => {
+    const result = estimateOpenAIImageGenerationCost({
+        model: 'gpt-image-2',
+        quality: 'medium',
+        size: '1024x1536',
+        imageCount: 2,
+    });
+
+    assert.equal(result.perImageCost, 0.041);
+    assert.equal(result.totalCost, 0.082);
+});
+
 test('classifyModelProfileTextPricingCoverage marks non-openai providers as explicit policy unpriced', () => {
     const coverage = classifyModelProfileTextPricingCoverage(
         'ollama',

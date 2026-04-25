@@ -32,6 +32,7 @@ export type SupportedOpenAIEmbeddingModel =
  * Any OpenAI text-capable model that Footnote knows how to price today.
  */
 export const supportedPricedOpenAITextModels = [
+    'gpt-5.5',
     'gpt-5.4',
     'gpt-5.4-pro',
     'gpt-5.2',
@@ -93,6 +94,7 @@ export type PricedOpenAITtsModel =
  * OpenAI image model ids with shared backend pricing data.
  */
 export const supportedPricedOpenAIImageModels = [
+    'gpt-image-2',
     'gpt-image-1.5',
     'gpt-image-1',
     'gpt-image-1-mini',
@@ -274,13 +276,14 @@ type OpenAIImageTokenPricingEntry = {
 
 /**
  * Canonical text pricing per 1M tokens (USD).
- * Source: https://platform.openai.com/pricing
- * Last updated in-repo: 2026-04-21
+ * Source: https://developers.openai.com/api/docs/pricing
+ * Last updated in-repo: 2026-04-24
  */
 export const openAITextPricingTable: Record<
     PricedOpenAITextModel,
     OpenAITextPricingEntry
 > = {
+    'gpt-5.5': { input: 2.5, output: 15.0 },
     'gpt-5.4': { input: 2.5, output: 15.0 },
     'gpt-5.4-pro': { input: 30.0, output: 180.0 },
     'gpt-5.2': { input: 1.75, output: 14.0 },
@@ -334,8 +337,8 @@ export const openAITtsPricingTable: Record<PricedOpenAITtsModel, number> = {
 
 /**
  * Canonical image pricing per generated image (USD).
- * Source: https://platform.openai.com/pricing
- * Last updated in-repo: 2025-12-18
+ * Source: https://developers.openai.com/api/docs/guides/image-generation
+ * Last updated in-repo: 2026-04-24
  */
 export const openAIImageGenerationPricingTable: Record<
     PricedOpenAIImageModel,
@@ -344,6 +347,23 @@ export const openAIImageGenerationPricingTable: Record<
         Record<PricedImageGenerationSize, number>
     >
 > = {
+    'gpt-image-2': {
+        low: {
+            '1024x1024': 0.006,
+            '1024x1536': 0.005,
+            '1536x1024': 0.005,
+        },
+        medium: {
+            '1024x1024': 0.053,
+            '1024x1536': 0.041,
+            '1536x1024': 0.041,
+        },
+        high: {
+            '1024x1024': 0.211,
+            '1024x1536': 0.165,
+            '1536x1024': 0.165,
+        },
+    },
     'gpt-image-1.5': {
         low: {
             '1024x1024': 0.009,
@@ -399,13 +419,14 @@ export const openAIImageGenerationPricingTable: Record<
 
 /**
  * Canonical image token pricing per 1M tokens (USD).
- * Source: https://platform.openai.com/docs/pricing
- * Last updated in-repo: 2026-03-19
+ * Source: https://developers.openai.com/api/docs/pricing
+ * Last updated in-repo: 2026-04-24
  */
 const openAIImageTokenPricingTable: Record<
     PricedOpenAIImageModel,
     OpenAIImageTokenPricingEntry
 > = {
+    'gpt-image-2': { input: 8.0, output: 30.0 },
     'gpt-image-1.5': { input: 8.0, output: 32.0 },
     'gpt-image-1': { input: 10.0, output: 40.0 },
     'gpt-image-1-mini': { input: 2.5, output: 8.0 },
