@@ -135,6 +135,7 @@ export type ExecutionReasonCode =
     | 'tool_http_error'
     | 'tool_network_error'
     | 'tool_invalid_response'
+    | 'location_not_resolved'
     | 'search_not_supported_by_selected_profile'
     | 'unspecified_tool_outcome';
 

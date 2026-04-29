@@ -22,7 +22,8 @@ type WeatherToolErrorCode =
     | 'timeout'
     | 'http_error'
     | 'network_error'
-    | 'invalid_response';
+    | 'invalid_response'
+    | 'location_not_resolved';
 
 type JsonFetchSuccess<TValue> = {
     ok: true;
@@ -386,8 +387,18 @@ export const createOpenMeteoForecastTool = ({
             }
 
             const firstResult = geocodingResponse.data.results?.[0];
+            if (!firstResult) {
+                return buildErrorResult({
+                    request,
+                    requestedAt,
+                    endpoint: resolvedFromEndpoint,
+                    code: 'location_not_resolved',
+                    message:
+                        'open-meteo geocoding found no matching location for query.',
+                });
+            }
+
             if (
-                !firstResult ||
                 typeof firstResult.latitude !== 'number' ||
                 typeof firstResult.longitude !== 'number'
             ) {
@@ -397,7 +408,7 @@ export const createOpenMeteoForecastTool = ({
                     endpoint: resolvedFromEndpoint,
                     code: 'invalid_response',
                     message:
-                        'open-meteo geocoding did not return a usable location.',
+                        'open-meteo geocoding returned a location without usable coordinates.',
                 });
             }
 
