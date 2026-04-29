@@ -36,8 +36,8 @@ Record exactly what was consolidated for TrustGraph foundation/seam work, and wh
 
 ## Evidence Anchors Reviewed
 
-- [architecture.md](../../architecture/execution_contract_trustgraph/architecture.md)
-- [execution-contract-authority-map.md](../../architecture/execution-contract-authority-map.md)
+- [trustgraph.md](../../architecture/context-integrations/trustgraph.md)
+- [README.md](../../architecture/context-integrations/README.md)
 - [runtimeWiring.ts](../../packages/backend/src/services/executionContractTrustGraph/runtimeWiring.ts)
 - [executionContractTrustGraph.ts](../../packages/backend/src/config/sections/executionContractTrustGraph.ts)
 - [chatOrchestrator.ts](../../packages/backend/src/services/chatOrchestrator.ts)

@@ -511,6 +511,6 @@ run look cleaner.
 
 ## Related docs
 
-- [Execution Contract Authority Map](./execution-contract-authority-map.md)
+- [Context Integrations](./context-integrations/README.md)
 - [Answer Posture And Control Influence](./answer-posture-and-control-influence.md)
 - [Workflow Rollout Status](../status/2026-04-workflow-engine-rollout-status.md)

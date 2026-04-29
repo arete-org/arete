@@ -7,21 +7,24 @@ detail once you have the main runtime shape in mind.
 
 ## Important Concepts
 
-1. [Execution Contract Authority Map](./execution-contract-authority-map.md):
-   start here for system authority and ownership boundaries.
-2. [Workflow](./workflow.md): read this next for the
+1. [Workflow](./workflow.md): read this next for the
    current workflow and planner model, including mode, profile, review/revise,
    planner boundaries, workflow-facing wording, placement, and provenance
    presentation boundaries.
-3. [Answer Posture And Control Influence](./answer-posture-and-control-influence.md):
+2. [Answer Posture And Control Influence](./answer-posture-and-control-influence.md):
    use this when you need the metadata map for mode, TRACE, planner influence,
    control influence, and provenance.
-4. [Prompt Resolution Order](./prompt-resolution.md): how prompt layers and
+3. [Prompt Resolution Order](./prompt-resolution.md): how prompt layers and
    overrides resolve at runtime.
-5. [Bounded User Control Mapping](./bounded-user-control-mapping.md): what
+4. [Bounded User Control Mapping](./bounded-user-control-mapping.md): what
    users can steer directly and what stays backend-owned.
-6. [Execution Contract TrustGraph Architecture](./execution_contract_trustgraph/architecture.md):
-   TrustGraph-specific architecture and rollout constraints.
+5. [Context Integrations](./context-integrations/README.md): shared rules for
+   external systems that can add context without taking execution authority.
+
+## Context Integrations
+
+- [TrustGraph](./context-integrations/trustgraph.md): current TrustGraph seam,
+  runtime boundaries, scope rules, and activation posture.
 
 ## Active Workflow Note
 

@@ -214,8 +214,8 @@ replacement of Footnote trace/provenance semantics.
   `docs/architecture/workflow-engine-and-provenance.md`
 - Footnote Workflow Mode Routing:
   `docs/architecture/workflow-mode-routing.md`
-- Footnote Execution Contract Authority Map:
-  `docs/architecture/execution-contract-authority-map.md`
+- Footnote Context Integrations:
+  `docs/architecture/context-integrations/README.md`
 - Footnote Answer Posture And Control Influence:
   `docs/architecture/answer-posture-and-control-influence.md`
 - Footnote Incident Handling:
