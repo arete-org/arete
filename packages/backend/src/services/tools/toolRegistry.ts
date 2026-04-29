@@ -127,6 +127,7 @@ export const executeSelectedTool = async ({
 }> => {
     if (
         toolSelection.toolRequest.toolName !== 'weather_forecast' ||
+        !toolSelection.toolRequest.requested ||
         !toolSelection.toolRequest.eligible ||
         !toolSelection.toolIntent?.input ||
         !weatherForecastTool

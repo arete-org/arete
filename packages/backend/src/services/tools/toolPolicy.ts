@@ -1,6 +1,8 @@
 /**
  * @description: Applies deterministic tool-selection policy before orchestration.
- * Tool selection is now unified through context integration - this policy is a no-op.
+ * TEMPORARY: This is a no-op while tool selection is handled by the backend registry.
+ * TODO: Delete this file once context integration owns tool adapter arbitration.
+ *       Tool selection will then be handled by the context-integration execution layer.
  * @footnote-scope: core
  * @footnote-module: ChatToolPolicy
  * @footnote-risk: low - Policy no-op since unified tool intent replaces weather/search branching.

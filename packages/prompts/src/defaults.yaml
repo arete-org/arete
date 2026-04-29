@@ -232,17 +232,23 @@ chat:
                       "intent": "repo_explainer" | "current_facts",
                       "repoHints"?: ["architecture" | "backend" | "contracts" | "discord" | "images" | "onboarding" | "web" | "observability" | "openapi" | "prompts" | "provenance" | "chat" | "traces" | "voice", ...]
                     },
-                    "weather"?: {
-                      "location": {
-                        "type": "lat_lon",
-                        "latitude": number,
-                        "longitude": number
-                      } | {
-                        "type": "place_query",
-                        "query": string,
-                        "countryCode"?: 2-letter country code
-                      },
-                      "horizonPeriods"?: integer (1-12)
+                    "toolIntent"?: {
+                      "toolName": "weather_forecast" | "web_search",
+                      "requested": boolean,
+                      "input": {
+                        // for weather_forecast:
+                        "location": {
+                          "type": "lat_lon",
+                          "latitude": number,
+                          "longitude": number
+                        } | {
+                          "type": "place_query",
+                          "query": string,
+                          "countryCode"?: 2-letter country code
+                        },
+                        "horizonPeriods"?: integer (1-12)
+                        // for web_search: see search schema above
+                      }
                     }
                   }
                 }
@@ -270,10 +276,10 @@ chat:
                   - For repo_explainer, include repoHints only from this allowed list: architecture, backend, contracts, discord, images, onboarding, web, observability, openapi, prompts, provenance, chat, traces, voice.
                   - For repo_explainer, anchor the query around Footnote's canonical repo identity: footnote-ai/footnote.
                   - For repo_explainer, prefer contextSize broad enough to find DeepWiki or Footnote-specific documentation.
-                  - Include generation.weather for forecast-oriented weather requests when the user provides either explicit coordinates (latitude/longitude) or a place name query that can be resolved by backend geocoding.
-                  - For place-name weather requests, set location as type "place_query" with a concise query string (for example city, ZIP/postal code, or city+state/country) and optional two-letter countryCode when the user gives it.
-                  - If weather and search both seem possible, prefer generation.weather and do not also propose generation.search for the same weather query.
-                  - When generation.weather is included, set location using one valid shape and include horizonPeriods only when applicable (1-12).
+                  - Include generation.toolIntent for forecast-oriented weather requests when the user provides either explicit coordinates (latitude/longitude) or a place name query that can be resolved by backend geocoding.
+                  - Set toolIntent.toolName to "weather_forecast", requested to true, and input.location using either "lat_lon" with latitude/longitude or "place_query" with query string and optional countryCode.
+                  - Include horizonPeriods only when applicable (1-12).
+                  - If weather and search both seem possible, prefer toolIntent and do not also propose generation.search for the same weather query.
                   - generation.temperament is required for message responses and must include all five TRACE axes.
                   - Every TRACE axis must be an integer from 1 to 5.
                   - TRACE scoring rubric for message responses:
