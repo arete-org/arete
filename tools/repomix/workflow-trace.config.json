@@ -12,8 +12,6 @@
     },
     "include": [
         "docs/architecture/workflow.md",
-        "docs/architecture/response-metadata.md",
-        "docs/architecture/execution-contract-authority-map.md",
         "packages/contracts/src/ethics-core/**/*",
         "packages/backend/src/services/workflowEngine.ts",
         "packages/backend/src/services/workflowProfileContract.ts",
@@ -26,9 +24,7 @@
     "ignore": {
         "useGitignore": true,
         "useDefaultPatterns": true,
-        "customPatterns": [
-            "docs/status/archive/**"
-        ]
+        "customPatterns": ["docs/status/archive/**"]
     },
     "security": {
         "enableSecurityCheck": true
