@@ -89,6 +89,18 @@ Conditional (must explain if skipped):
 - Do not invent runtime facts, command output, or test results.
 - If a check was not run, say that clearly.
 
+## Repomix Context Use
+
+Use normal file reads for small, local edits.
+
+Use Repomix when a task spans multiple packages, touches workflow/trace/provenance behavior, or needs architecture context before editing. Prefer the existing focused presets first, then expand only if the pack is missing needed context.
+
+When using Repomix MCP, pack a focused slice, then use grep/read tools against that output before creating another pack. Avoid whole-repo packs unless the task is explicitly broad review or planning.
+
+Do not paste Repomix bundle contents into chat unless asked. Review bundles before sharing them outside the project.
+
+The `pnpm repomix:*` scripts are available for local CLI use. If your agent environment has the Repomix MCP configured, prefer MCP grep/read tools after creating a focused pack.
+
 ## Communication Style
 
 Write for a junior contributor:
