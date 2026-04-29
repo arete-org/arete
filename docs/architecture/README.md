@@ -25,15 +25,11 @@ detail once you have the main runtime shape in mind.
 7. [Steerability Foundation (Internal Controls v1)](./2026-04-steerability-foundation.md):
    internal control-record semantics behind steerability metadata.
 
-## Historical Workflow Notes
+## Active Workflow Note
 
-Read these after the docs above if you need rollout history or older design
-notes. They are rationale or rollout context, not the main current explanation.
-
-- [Workflow Profiles V1 RFC: Engine Core vs Profile Semantics](./workflow-profiles-v1-engine-vs-profile-semantics.md):
-  design notes and ownership reasoning from the workflow-engine rollout.
-- [Workflow Engine Rollout Status](../status/2026-04-workflow-engine-rollout-status.md):
-  rollout tracking and landing history for workflow-engine work.
+- [Workflow Rollout Status](../status/2026-04-workflow-engine-rollout-status.md):
+  active note for the small amount of workflow work that is still open after
+  the main workflow architecture described in [Workflow](./workflow.md).
 
 ## Incident And Safety
 

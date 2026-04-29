@@ -1,9 +1,12 @@
 # Workflows
 
-This is the main doc for Footnote workflow behavior today.
+A workflow is the step pattern Footnote uses to answer one request.
 
-Read this before the profile contract details, rollout notes, or older RFC
-material.
+It decides whether the system generates once, runs a review pass, stops
+because of policy or limits, and records metadata about what happened.
+
+This page explains how mode, profile, planner, limits, and workflow metadata
+fit together in the current chat path.
 
 A chat request has to answer a few questions before the model returns
 anything:
@@ -24,6 +27,28 @@ Footnote answers those questions through a small set of runtime layers:
 
 Keep those layers separate. Most workflow bugs start when one layer quietly
 starts doing another layer's job.
+
+## Ownership boundaries
+
+Workflow logic is spread across a few backend layers on purpose.
+
+Keep the ownership split clear:
+
+- Engine core owns transition legality, hard limits, workflow state, and
+  canonical termination reasons.
+- Workflow profile owns the step shape and step-specific semantics for one
+  workflow kind.
+- Adapters and callers own request assembly, runtime calls, metadata
+  persistence, and route integration.
+
+That means:
+
+- the engine decides whether a step is legal
+- the profile describes what kind of workflow it is
+- the adapter connects that workflow to the real route and model calls
+
+Adapters should not decide what step comes next or invent their own stop
+reasons. Profiles should not bypass engine legality checks or hard limits.
 
 ## Runtime shape
 
@@ -300,6 +325,21 @@ termination-reason mapping.
 Mode chooses the kind of run. Profile chooses the step pattern. The engine
 enforces legality and limits. Adapters connect the profile to runtime calls.
 
+## Engine, profile, and adapter roles
+
+Use this split when ownership is unclear:
+
+| Concern             | Engine core                                                          | Workflow profile                                                             | Adapters and callers                                                  |
+| ------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Step legality       | owns the canonical legality check before execution                   | declares intended flow and policy toggles                                    | supplies policy, but must not bypass legality checks                  |
+| Limits              | owns hard-stop checks and stop-reason mapping                        | declares default budgets within the shared limits model                      | passes config and surfaces the final result                           |
+| Workflow state      | owns step count, token totals, current step, and lineage progression | declares expected step shape                                                 | treats engine-produced workflow state as authoritative                |
+| Step execution      | owns the orchestration envelope and step recording rules             | defines step-specific semantics such as review parsing                       | builds requests and calls runtimes or providers                       |
+| Termination reasons | owns canonical termination reasons                                   | can request stop, but cannot invent new canonical reasons                    | persists and returns engine-assigned reasons unchanged                |
+| Fail-open behavior  | owns degraded fail-open workflow behavior                            | can define recoverable profile behavior, but not canonical fail-open meaning | must not block the user response on telemetry or persistence failures |
+
+If a workflow bug looks like "who decided that?", start with this table.
+
 ## Engine scope
 
 The workflow engine mainly powers the reviewed chat path in:
@@ -349,6 +389,10 @@ Model output can recommend transitions only where policy allows.
 
 If a limit stops a run, the workflow record should say so.
 
+Profiles may narrow budgets, but they may not suppress hard-limit enforcement.
+Adapters may pass configured limits, but they do not assign exhausted-limit
+reason codes.
+
 ## No-generation behavior
 
 No-generation outcomes still need valid workflow metadata.
@@ -389,6 +433,14 @@ Policy-blocked, generation-disabled, and executor-error outcomes are surfaced.
 
 Pre-generation budget exhaustion is internal-only.
 
+Keep these rules stable:
+
+- blocked or no-generation outcomes must be explicit
+- callers must not fabricate generated content when no generation happened
+- profiles must not emit ad hoc termination strings
+- the same stop reason should not be surfaced in one path and hidden in
+  another without a documented rule
+
 ## Workflow metadata
 
 For all profiles, blocked-before-generation and no-generation outcomes must
@@ -407,6 +459,19 @@ When generation never occurred:
 Profiles must not emit ad-hoc termination reason strings, treat the same
 reason as surfaced in one path and internal-only in another, or omit workflow
 provenance for no-generation outcomes.
+
+## Stable rules
+
+These workflow rules should stay true even as profiles expand:
+
+- no step runs unless policy and legality allow it
+- engine checks limits before bounded step execution
+- engine assigns canonical limit-exhaustion reasons
+- profile recommendations are advisory, not authority
+- mode chooses the kind of run first
+- profile chooses the executable step shape second
+- adapters wire the workflow into the real app, but do not own workflow
+  control-plane decisions
 
 ## Future work
 
@@ -448,3 +513,4 @@ run look cleaner.
 
 - [Execution Contract Authority Map](./execution-contract-authority-map.md)
 - [Response Metadata](./response-metadata.md)
+- [Workflow Rollout Status](../status/2026-04-workflow-engine-rollout-status.md)

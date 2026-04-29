@@ -9,8 +9,8 @@ good entrypoint for current architecture.
 ## Current Rollout Notes
 
 - [Workflow Engine Rollout Status](./2026-04-workflow-engine-rollout-status.md):
-  rollout state and landing history for workflow-engine work. Read the
-  architecture docs first for the current workflow/planner explanation.
+  only the remaining open workflow-engine work. Read the architecture docs
+  first for the current workflow/planner explanation.
 - [Weather.gov Tool Pilot Eval](./2026-03-weathergov-pilot-eval.md): bounded
   pilot evaluation notes for one tool path. This is specialized status, not the
   main architecture reading path.
