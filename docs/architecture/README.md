@@ -13,17 +13,15 @@ detail once you have the main runtime shape in mind.
    current workflow and planner model, including mode, profile, review/revise,
    planner boundaries, workflow-facing wording, placement, and provenance
    presentation boundaries.
-3. [Response Metadata](./response-metadata.md):
+3. [Answer Posture And Control Influence](./answer-posture-and-control-influence.md):
    use this when you need the metadata map for mode, TRACE, planner influence,
-   steerability, and provenance.
+   control influence, and provenance.
 4. [Prompt Resolution Order](./prompt-resolution.md): how prompt layers and
    overrides resolve at runtime.
 5. [Bounded User Control Mapping](./bounded-user-control-mapping.md): what
    users can steer directly and what stays backend-owned.
 6. [Execution Contract TrustGraph Architecture](./execution_contract_trustgraph/architecture.md):
    TrustGraph-specific architecture and rollout constraints.
-7. [Steerability Foundation (Internal Controls v1)](./2026-04-steerability-foundation.md):
-   internal control-record semantics behind steerability metadata.
 
 ## Active Workflow Note
 

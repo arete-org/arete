@@ -11,7 +11,7 @@ We should try Langfuse as optional shadow observability for Footnote.
 Footnote already records enough information to explain one response: the
 selected mode, workflow lineage, planner influence, provenance, TRACE posture
 (the answer posture metadata described in
-`docs/architecture/response-metadata.md`), tool outcomes, and backend-recorded
+`docs/architecture/answer-posture-and-control-influence.md`), tool outcomes, and backend-recorded
 cost. That works well for a user-facing trace.
 
 It does not give maintainers a great view across many runs.
@@ -216,8 +216,8 @@ replacement of Footnote trace/provenance semantics.
   `docs/architecture/workflow-mode-routing.md`
 - Footnote Execution Contract Authority Map:
   `docs/architecture/execution-contract-authority-map.md`
-- Footnote Response Metadata:
-  `docs/architecture/response-metadata.md`
+- Footnote Answer Posture And Control Influence:
+  `docs/architecture/answer-posture-and-control-influence.md`
 - Footnote Incident Handling:
   `docs/architecture/incident-handling.md`
 - Footnote Prompt Resolution:
