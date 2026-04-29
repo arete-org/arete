@@ -1,4 +1,4 @@
-# Weather.gov Tool Pilot Eval (2026-03-27)
+# Weather.gov Tool Pilot Eval
 
 ## Scope
 

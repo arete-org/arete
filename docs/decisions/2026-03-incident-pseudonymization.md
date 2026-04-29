@@ -84,4 +84,4 @@ Tradeoffs:
 ## 6. Related Documents
 
 - `docs/architecture/incident-handling.md`
-- `docs/status/archive/2026-03-incident-breakers-status.md`
+- `docs/architecture/safety-evaluation.md`

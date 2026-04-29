@@ -7,7 +7,7 @@
 
 **How to read this document:** This is an architectural decision record. The context section explains the mixed state that motivated the decision, while the latest branch outcomes live in `docs/status/`.
 
-**Implementation context:** The motivating mixed state is summarized below and in [VoltAgent Reflect Runtime Status](../status/archive/2026-03-voltagent-reflect-runtime-status.md).
+**Implementation context:** The motivating mixed state is summarized below.
 
 ---
 
@@ -63,11 +63,7 @@ The earlier VoltAgent adoption decision intentionally scoped the first step to t
 
 The remaining legacy OpenAI system should now be treated as transitional compatibility code that is scheduled for removal, not as a permanent parallel architecture.
 
-Those migration gaps have since been closed for the text, image, and voice branch scopes documented in:
-
-- [Legacy OpenAI Text Migration Status](../status/archive/2026-03-legacy-openai-text-migration-status.md)
-- [Legacy OpenAI Image Migration Status](../status/archive/2026-03-legacy-openai-image-migration-status.md)
-- [Legacy OpenAI Voice Migration Status](../status/archive/2026-03-legacy-openai-voice-migration-status.md)
+Those migration gaps have since been closed for the text, image, and voice branch scopes.
 
 ---
 
@@ -262,11 +258,7 @@ This decision intentionally separates "remove legacy OpenAI architecture" from "
 
 ## 10. Tracking and Validation
 
-This decision record is architectural. Branch-level inventories, code hotspots, and rollout tracking should live in separate status docs:
-
-- [Legacy OpenAI Text Migration Status](../status/archive/2026-03-legacy-openai-text-migration-status.md)
-- [Legacy OpenAI Image Migration Status](../status/archive/2026-03-legacy-openai-image-migration-status.md)
-- [Legacy OpenAI Voice Migration Status](../status/archive/2026-03-legacy-openai-voice-migration-status.md)
+This decision record is architectural. Branch-level inventories, code hotspots, and rollout tracking should live in status docs when active.
 
 The decision itself should remain aligned with:
 
