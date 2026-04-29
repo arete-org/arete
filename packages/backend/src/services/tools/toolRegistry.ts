@@ -1,6 +1,6 @@
 /**
  * @description: Central backend registry for tool request selection and execution handoff.
- * Keeps tool wiring additive so new tools are added with one adapter + one registry entry.
+ * Tool selection is now unified through context integration - uses toolIntent directly.
  * @footnote-scope: core
  * @footnote-module: ChatToolRegistry
  * @footnote-risk: medium - Registry mistakes can request the wrong tool or misreport telemetry.
@@ -42,20 +42,6 @@ const buildWebSearchToolIntent = (
               requested: false,
           };
 
-const buildWeatherForecastToolIntent = (
-    generation: ChatGenerationPlan
-): ToolInvocationIntent =>
-    generation.weather
-        ? {
-              toolName: 'weather_forecast',
-              requested: true,
-              input: generation.weather,
-          }
-        : {
-              toolName: 'weather_forecast',
-              requested: false,
-          };
-
 export const resolveToolSelection = ({
     generation,
     weatherForecastTool,
@@ -67,23 +53,26 @@ export const resolveToolSelection = ({
     webSearchToolRequestOverride?: ToolInvocationRequest;
     inheritedToolExecution?: ToolExecutionContext;
 }): BackendToolSelection => {
-    const weatherToolIntent = buildWeatherForecastToolIntent(generation);
-    if (weatherToolIntent.requested) {
-        const weatherToolAvailable = weatherForecastTool !== undefined;
+    if (generation.toolIntent) {
+        const toolIntent = generation.toolIntent;
+        const toolAvailable =
+            toolIntent.toolName === 'weather_forecast'
+                ? weatherForecastTool !== undefined
+                : true;
         return {
             generation,
-            toolIntent: weatherToolIntent,
+            toolIntent,
             toolRequest: {
-                toolName: 'weather_forecast',
-                requested: true,
-                eligible: weatherToolAvailable,
-                ...(!weatherToolAvailable && {
+                toolName: toolIntent.toolName,
+                requested: toolIntent.requested,
+                eligible: toolAvailable,
+                ...(!toolAvailable && {
                     reasonCode: 'tool_unavailable',
                 }),
             },
-            ...(!weatherToolAvailable && {
+            ...(!toolAvailable && {
                 toolExecution: {
-                    toolName: 'weather_forecast',
+                    toolName: toolIntent.toolName,
                     status: 'skipped',
                     reasonCode: 'tool_unavailable',
                 } satisfies ToolExecutionContext,
@@ -103,8 +92,6 @@ export const resolveToolSelection = ({
     }
 
     const webSearchToolIntent = buildWebSearchToolIntent(generation);
-    // TODO(JBA-20): Promote web_search to an explicit adapter registration for
-    // symmetry with backend-executed tools, even when execution remains runtime-owned.
     return {
         generation,
         toolIntent: webSearchToolIntent,
@@ -141,7 +128,7 @@ export const executeSelectedTool = async ({
     if (
         toolSelection.toolRequest.toolName !== 'weather_forecast' ||
         !toolSelection.toolRequest.eligible ||
-        !toolSelection.generation.weather ||
+        !toolSelection.toolIntent?.input ||
         !weatherForecastTool
     ) {
         return {
@@ -151,8 +138,25 @@ export const executeSelectedTool = async ({
         };
     }
 
+    const weatherInput = toolSelection.toolIntent.input as {
+        location: unknown;
+        horizonPeriods?: number;
+    };
     const weatherExecution = await executeWeatherForecastTool({
-        request: toolSelection.generation.weather,
+        request: {
+            location: weatherInput.location as
+                | {
+                      type: 'lat_lon';
+                      latitude: number;
+                      longitude: number;
+                  }
+                | {
+                      type: 'place_query';
+                      query: string;
+                      countryCode?: string;
+                  },
+            horizonPeriods: weatherInput.horizonPeriods,
+        },
         weatherForecastTool,
         onWarn,
     });

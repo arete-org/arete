@@ -429,29 +429,58 @@ const normalizeWeatherLocation = (
     return undefined;
 };
 
-const normalizeWeatherRequest = (
+const normalizeToolIntent = (
     value: unknown
-): ChatGenerationPlan['weather'] | undefined => {
+): ChatGenerationPlan['toolIntent'] | undefined => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return undefined;
     }
 
     const candidate = value as Record<string, unknown>;
-    const location = normalizeWeatherLocation(candidate.location ?? candidate);
-    if (!location) {
+    const toolName = candidate.toolName;
+    if (typeof toolName !== 'string') {
         return undefined;
     }
 
-    const horizonPeriods =
-        typeof candidate.horizonPeriods === 'number' &&
-        Number.isFinite(candidate.horizonPeriods)
-            ? Math.min(12, Math.max(1, Math.round(candidate.horizonPeriods)))
-            : undefined;
+    if (toolName === 'weather_forecast') {
+        const input = candidate.input as
+            | { location?: unknown; horizonPeriods?: unknown }
+            | undefined;
+        const locationInput = input?.location ?? input ?? candidate;
+        const location = normalizeWeatherLocation(locationInput);
+        if (!location) {
+            return undefined;
+        }
 
-    return {
-        location,
-        ...(horizonPeriods !== undefined && { horizonPeriods }),
-    };
+        const horizonPeriods =
+            typeof input?.horizonPeriods === 'number' &&
+            Number.isFinite(input.horizonPeriods)
+                ? Math.min(12, Math.max(1, Math.round(input.horizonPeriods)))
+                : undefined;
+
+        return {
+            toolName: 'weather_forecast',
+            requested: true,
+            input: {
+                location,
+                ...(horizonPeriods !== undefined && { horizonPeriods }),
+            },
+        };
+    }
+
+    if (toolName === 'web_search') {
+        const input = candidate.input as Record<string, unknown> | undefined;
+        if (!input || typeof input !== 'object') {
+            return undefined;
+        }
+        return {
+            toolName: 'web_search',
+            requested: true,
+            input: input,
+        };
+    }
+
+    return undefined;
 };
 
 const normalizeTraceAxisScore = (
@@ -745,8 +774,8 @@ const hasMaterialPlanChange = (
             }) ||
         JSON.stringify(initialPlan.generation.search) !==
             JSON.stringify(expandedPlan.generation.search) ||
-        JSON.stringify(initialPlan.generation.weather) !==
-            JSON.stringify(expandedPlan.generation.weather)
+        JSON.stringify(initialPlan.generation.toolIntent) !==
+            JSON.stringify(expandedPlan.generation.toolIntent)
     );
 };
 
@@ -842,21 +871,11 @@ const normalizeGeneration = (
     if (normalizedTemperament) {
         baseGeneration.temperament = normalizedTemperament;
     }
-    const normalizedWeather = normalizeWeatherRequest(candidate?.weather);
-    if (normalizedWeather) {
-        baseGeneration.weather = normalizedWeather;
-    } else if (candidate?.weather !== undefined) {
-        correctionCodes.push('weather_location_invalid');
-        if (
-            !reasoning.includes('weather tool request was disabled safely') &&
-            !reasoningSuffixes.some((suffix) =>
-                suffix.includes('weather tool request was disabled safely')
-            )
-        ) {
-            reasoningSuffixes.push(
-                'The planner requested weather without a valid location contract, so weather tool request was disabled safely.'
-            );
-        }
+    const normalizedToolIntent = normalizeToolIntent(candidate?.toolIntent);
+    if (normalizedToolIntent) {
+        baseGeneration.toolIntent = normalizedToolIntent;
+    } else if (candidate?.toolIntent !== undefined) {
+        correctionCodes.push('tool_intent_invalid');
     }
 
     if (!candidate?.search) {
@@ -1091,7 +1110,27 @@ const normalizePlan = (
                 generation: {
                     ...normalizedPlan.generation,
                     search: undefined,
-                    weather: undefined,
+                    toolIntent: undefined,
+                },
+            },
+            fallbackTier:
+                correctionCodes.length > 0 ? 'field_corrections' : 'none',
+            correctionCodes,
+            contextNeed,
+            contextTier,
+            contractAssessment,
+        });
+    }
+
+    if (normalizedPlan.action === 'ignore') {
+        return buildNormalizationResult({
+            plan: {
+                ...normalizedPlan,
+                modality: 'text',
+                generation: {
+                    ...normalizedPlan.generation,
+                    search: undefined,
+                    toolIntent: undefined,
                 },
             },
             fallbackTier:
@@ -1143,27 +1182,7 @@ const normalizePlan = (
                 generation: {
                     ...normalizedPlan.generation,
                     search: undefined,
-                    weather: undefined,
-                },
-            },
-            fallbackTier:
-                correctionCodes.length > 0 ? 'field_corrections' : 'none',
-            correctionCodes,
-            contextNeed,
-            contextTier,
-            contractAssessment,
-        });
-    }
-
-    if (normalizedPlan.action === 'ignore') {
-        return buildNormalizationResult({
-            plan: {
-                ...normalizedPlan,
-                modality: 'text',
-                generation: {
-                    ...normalizedPlan.generation,
-                    search: undefined,
-                    weather: undefined,
+                    toolIntent: undefined,
                 },
             },
             fallbackTier:

@@ -9,20 +9,11 @@
 import type { ChatPlan } from '../chatPlanner.js';
 import type { ChatGenerationPlan } from '../chatGenerationTypes.js';
 
-type PlannerWeatherFailureMarker = {
-    failed: true;
-    reason: 'weather_tool_failed';
-};
-
 /**
  * Planner generation payload after execution-time normalization.
- *
- * This stays close to `ChatGenerationPlan`, but it can carry a small amount of
- * transitional runtime context needed by prompt rendering.
+ * Uses unified toolIntent for context integration.
  */
-export type PlannerGenerationForPrompt = Omit<ChatGenerationPlan, 'weather'> & {
-    weather?: ChatGenerationPlan['weather'] | PlannerWeatherFailureMarker;
-};
+export type PlannerGenerationForPrompt = ChatGenerationPlan;
 
 /**
  * Planner decision payload serialized into generation prompts.

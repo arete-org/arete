@@ -67,16 +67,10 @@ const PLANNER_ALLOWED_FIELD_TREE: AllowedFieldTree = {
             repoHints: true,
             topicHints: true,
         },
-        weather: {
-            location: {
-                type: true,
-                latitude: true,
-                longitude: true,
-                office: true,
-                gridX: true,
-                gridY: true,
-            },
-            horizonPeriods: true,
+        toolIntent: {
+            toolName: true,
+            requested: true,
+            input: true,
         },
     },
 };
@@ -358,50 +352,18 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
                     },
                     required: ['query', 'contextSize', 'intent'],
                 },
-                weather: {
+                toolIntent: {
                     type: 'object',
                     additionalProperties: false,
                     properties: {
-                        location: {
-                            oneOf: [
-                                {
-                                    type: 'object',
-                                    additionalProperties: false,
-                                    properties: {
-                                        type: {
-                                            type: 'string',
-                                            enum: ['lat_lon'],
-                                        },
-                                        latitude: { type: 'number' },
-                                        longitude: { type: 'number' },
-                                    },
-                                    required: ['type', 'latitude', 'longitude'],
-                                },
-                                {
-                                    type: 'object',
-                                    additionalProperties: false,
-                                    properties: {
-                                        type: {
-                                            type: 'string',
-                                            enum: ['place_query'],
-                                        },
-                                        query: { type: 'string' },
-                                        countryCode: {
-                                            type: 'string',
-                                            pattern: '^[A-Za-z]{2}$',
-                                        },
-                                    },
-                                    required: ['type', 'query'],
-                                },
-                            ],
+                        toolName: {
+                            type: 'string',
+                            enum: ['weather_forecast', 'web_search'],
                         },
-                        horizonPeriods: {
-                            type: 'integer',
-                            minimum: 1,
-                            maximum: 12,
-                        },
+                        requested: { type: 'boolean' },
+                        input: { type: 'object' },
                     },
-                    required: ['location'],
+                    required: ['toolName', 'requested'],
                 },
             },
             required: ['reasoningEffort', 'verbosity'],

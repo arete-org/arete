@@ -61,7 +61,6 @@ import { resolveExecutionProfile } from './chatOrchestrator/profileResolution.js
 import { resolveNonMessagePlannerAction } from './chatOrchestrator/actionResolution.js';
 import {
     buildPlannerPayload,
-    type PlannerGenerationForPrompt,
     type PlannerPayloadChatPlan,
 } from './chatOrchestrator/plannerPayload.js';
 import {
@@ -583,27 +582,12 @@ export const createChatOrchestrator = ({
                 chatOrchestratorLogger.warn(message, meta);
             },
         });
-        const weatherToolResultMessage = toolExecution.toolResultMessage;
+        const toolResultMessage = toolExecution.toolResultMessage;
         toolExecutionContext =
             toolExecution.toolExecutionContext ?? toolExecutionContext;
-        const weatherToolRequested =
-            toolSelection.toolRequest.toolName === 'weather_forecast' &&
-            toolSelection.toolRequest.requested;
-        const plannerGenerationForPrompt: PlannerGenerationForPrompt =
-            weatherToolResultMessage
-                ? executionPlan.generation
-                : weatherToolRequested
-                  ? {
-                        ...executionPlan.generation,
-                        weather: {
-                            failed: true,
-                            reason: 'weather_tool_failed',
-                        },
-                    }
-                  : executionPlan.generation;
         const executionPlanForPrompt: PlannerPayloadChatPlan = {
             ...executionPlan,
-            generation: plannerGenerationForPrompt,
+            generation: executionPlan.generation,
         };
 
         // Planner output is injected as a final system message so generation
@@ -621,11 +605,11 @@ export const createChatOrchestrator = ({
                 content: personaPrompt,
             },
             ...normalizedConversation,
-            ...(weatherToolResultMessage
+            ...(toolResultMessage
                 ? [
                       {
                           role: 'system' as const,
-                          content: weatherToolResultMessage,
+                          content: toolResultMessage,
                       },
                   ]
                 : []),
@@ -670,7 +654,7 @@ export const createChatOrchestrator = ({
                     modality: executionPlan.modality,
                     profileId: executionPlan.profileId,
                     safetyTier: orchestrationSafetyTier,
-                    generation: plannerGenerationForPrompt,
+                    generation: executionPlan.generation,
                     toolIntent,
                     toolRequest: toolRequestContext,
                     ...(surfacePolicy && { surfacePolicy }),

@@ -1,10 +1,10 @@
 /**
  * @description: Applies deterministic tool-selection policy before orchestration.
- * Keeps one-tool-at-a-time behavior explicit and backend-owned.
+ * Tool selection is now unified through context integration - this policy is a no-op.
  * @footnote-scope: core
  * @footnote-module: ChatToolPolicy
- * @footnote-risk: medium - Policy errors can route the wrong tool and degrade retrieval quality.
- * @footnote-ethics: medium - Tool selection policy affects source grounding and user trust in answer provenance.
+ * @footnote-risk: low - Policy no-op since unified tool intent replaces weather/search branching.
+ * @footnote-ethics: low - Tool selection now flows through unified context integration path.
  */
 import type { ChatGenerationPlan } from '../chatGenerationTypes.js';
 import type { ToolPolicyLogEvent } from './toolTypes.js';
@@ -17,22 +17,5 @@ export type ToolPolicyDecision = {
 export const applySingleToolPolicy = (
     generation: ChatGenerationPlan
 ): ToolPolicyDecision => {
-    const weatherRequested = generation.weather !== undefined;
-    const searchRequested = generation.search !== undefined;
-    if (!weatherRequested || !searchRequested) {
-        return { generation };
-    }
-
-    return {
-        generation: {
-            ...generation,
-            search: undefined,
-        },
-        logEvent: {
-            event: 'chat.orchestration.tool_policy',
-            policy: 'single_tool_weather_priority_v1',
-            droppedToolName: 'web_search',
-            selectedToolName: 'weather_forecast',
-        },
-    };
+    return { generation };
 };

@@ -14,6 +14,7 @@ import type {
     ResponseTemperament,
 } from '@footnote/contracts';
 import type { ExecutionResponseMode } from './executionContract.js';
+import type { ToolInvocationIntent } from '@footnote/contracts/ethics-core';
 export type { ChatRepoSearchHint } from '@footnote/contracts';
 
 /**
@@ -28,6 +29,16 @@ export type ChatGenerationSearch = Omit<
     topicHints?: string[];
 };
 
+/**
+ * Unified tool intent for context integration.
+ * Replaces separate weather/search fields with single tool plane.
+ */
+export type ChatGenerationToolIntent = ToolInvocationIntent;
+
+/**
+ * Internal weather request type used by the weather tool adapter.
+ * Not exposed in planner output contract.
+ */
 export type ChatGenerationWeatherLocation =
     | {
           type: 'lat_lon';
@@ -70,7 +81,7 @@ export type ChatGenerationPlan = {
     reasoningEffort: NonNullable<GenerationRequest['reasoningEffort']>;
     verbosity: NonNullable<GenerationRequest['verbosity']>;
     search?: ChatGenerationSearch;
-    weather?: ChatGenerationWeatherRequest;
+    toolIntent?: ChatGenerationToolIntent;
     responseIntentHint?: ChatGenerationResponseIntentHint;
     temperament?: ResponseTemperament;
 };

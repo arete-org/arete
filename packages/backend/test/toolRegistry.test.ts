@@ -14,15 +14,19 @@ import {
     resolveToolSelection,
 } from '../src/services/tools/toolRegistry.js';
 
-test('single-tool policy drops web_search when weather and search are both requested', () => {
+test('single-tool policy is now a no-op with unified toolIntent', () => {
     const decision = applySingleToolPolicy({
         reasoningEffort: 'low',
         verbosity: 'low',
-        weather: {
-            location: {
-                type: 'lat_lon',
-                latitude: 39.7684,
-                longitude: -86.1581,
+        toolIntent: {
+            toolName: 'weather_forecast',
+            requested: true,
+            input: {
+                location: {
+                    type: 'lat_lon',
+                    latitude: 39.7684,
+                    longitude: -86.1581,
+                },
             },
         },
         search: {
@@ -32,9 +36,15 @@ test('single-tool policy drops web_search when weather and search are both reque
         },
     });
 
-    assert.equal(decision.generation.weather?.location.type, 'lat_lon');
-    assert.equal(decision.generation.search, undefined);
-    assert.equal(decision.logEvent?.policy, 'single_tool_weather_priority_v1');
+    assert.equal(
+        decision.generation.toolIntent?.input.location.type,
+        'lat_lon'
+    );
+    assert.equal(
+        decision.generation.search?.query,
+        'Indianapolis weather alerts'
+    );
+    assert.equal(decision.logEvent, undefined);
 });
 
 test('registry marks weather tool unavailable with skipped execution metadata when adapter is absent', () => {
@@ -42,11 +52,15 @@ test('registry marks weather tool unavailable with skipped execution metadata wh
         generation: {
             reasoningEffort: 'low',
             verbosity: 'low',
-            weather: {
-                location: {
-                    type: 'lat_lon',
-                    latitude: 39.7684,
-                    longitude: -86.1581,
+            toolIntent: {
+                toolName: 'weather_forecast',
+                requested: true,
+                input: {
+                    location: {
+                        type: 'lat_lon',
+                        latitude: 39.7684,
+                        longitude: -86.1581,
+                    },
                 },
             },
         },
@@ -71,11 +85,15 @@ test('weather adapter execution fails open and returns tool_execution_error when
         generation: {
             reasoningEffort: 'low',
             verbosity: 'low',
-            weather: {
-                location: {
-                    type: 'lat_lon',
-                    latitude: 39.7684,
-                    longitude: -86.1581,
+            toolIntent: {
+                toolName: 'weather_forecast',
+                requested: true,
+                input: {
+                    location: {
+                        type: 'lat_lon',
+                        latitude: 39.7684,
+                        longitude: -86.1581,
+                    },
                 },
             },
         },

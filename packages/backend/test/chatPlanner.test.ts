@@ -788,12 +788,16 @@ test('planner weather request is normalized when location contract is valid', as
                     caution: 3,
                     extent: 4,
                 },
-                weather: {
-                    location: {
-                        query: 'Indianapolis',
-                        countryCode: 'us',
+                toolIntent: {
+                    toolName: 'weather_forecast',
+                    requested: true,
+                    input: {
+                        location: {
+                            query: 'Indianapolis',
+                            countryCode: 'us',
+                        },
+                        horizonPeriods: 8,
                     },
-                    horizonPeriods: 8,
                 },
             },
         })
@@ -801,13 +805,17 @@ test('planner weather request is normalized when location contract is valid', as
 
     const { plan } = await planFromWorkflow(planner, createChatRequest());
 
-    assert.deepEqual(plan.generation.weather, {
-        location: {
-            type: 'place_query',
-            query: 'Indianapolis',
-            countryCode: 'US',
+    assert.deepEqual(plan.generation.toolIntent, {
+        toolName: 'weather_forecast',
+        requested: true,
+        input: {
+            location: {
+                type: 'place_query',
+                query: 'Indianapolis',
+                countryCode: 'US',
+            },
+            horizonPeriods: 8,
         },
-        horizonPeriods: 8,
     });
 });
 
@@ -829,9 +837,13 @@ test('invalid weather request is disabled safely', async () => {
                     caution: 3,
                     extent: 4,
                 },
-                weather: {
-                    location: {
-                        city: 'Indianapolis',
+                toolIntent: {
+                    toolName: 'weather_forecast',
+                    requested: true,
+                    input: {
+                        location: {
+                            city: 'Indianapolis',
+                        },
                     },
                 },
             },
@@ -840,8 +852,7 @@ test('invalid weather request is disabled safely', async () => {
 
     const { plan } = await planFromWorkflow(planner, createChatRequest());
 
-    assert.equal(plan.generation.weather, undefined);
-    assert.match(plan.reasoning, /weather tool request was disabled safely/i);
+    assert.equal(plan.generation.toolIntent, undefined);
 });
 
 test('out-of-range lat/lon weather request is disabled safely', async () => {
@@ -862,10 +873,14 @@ test('out-of-range lat/lon weather request is disabled safely', async () => {
                     caution: 3,
                     extent: 4,
                 },
-                weather: {
-                    location: {
-                        latitude: 123.45,
-                        longitude: -86.1581,
+                toolIntent: {
+                    toolName: 'weather_forecast',
+                    requested: true,
+                    input: {
+                        location: {
+                            latitude: 123.45,
+                            longitude: -86.1581,
+                        },
                     },
                 },
             },
@@ -874,8 +889,7 @@ test('out-of-range lat/lon weather request is disabled safely', async () => {
 
     const { plan } = await planFromWorkflow(planner, createChatRequest());
 
-    assert.equal(plan.generation.weather, undefined);
-    assert.match(plan.reasoning, /weather tool request was disabled safely/i);
+    assert.equal(plan.generation.toolIntent, undefined);
 });
 
 test('empty place query weather request is disabled safely', async () => {
@@ -896,9 +910,13 @@ test('empty place query weather request is disabled safely', async () => {
                     caution: 3,
                     extent: 4,
                 },
-                weather: {
-                    location: {
-                        query: '   ',
+                toolIntent: {
+                    toolName: 'weather_forecast',
+                    requested: true,
+                    input: {
+                        location: {
+                            query: '   ',
+                        },
                     },
                 },
             },
@@ -907,8 +925,7 @@ test('empty place query weather request is disabled safely', async () => {
 
     const { plan } = await planFromWorkflow(planner, createChatRequest());
 
-    assert.equal(plan.generation.weather, undefined);
-    assert.match(plan.reasoning, /weather tool request was disabled safely/i);
+    assert.equal(plan.generation.toolIntent, undefined);
 });
 
 test('mixed lat/lon and place_query weather location is disabled safely', async () => {
@@ -929,11 +946,15 @@ test('mixed lat/lon and place_query weather location is disabled safely', async 
                     caution: 3,
                     extent: 4,
                 },
-                weather: {
-                    location: {
-                        latitude: 39.7684,
-                        longitude: -86.1581,
-                        query: 'Indianapolis',
+                toolIntent: {
+                    toolName: 'weather_forecast',
+                    requested: true,
+                    input: {
+                        location: {
+                            latitude: 39.7684,
+                            longitude: -86.1581,
+                            query: 'Indianapolis',
+                        },
                     },
                 },
             },
@@ -942,8 +963,7 @@ test('mixed lat/lon and place_query weather location is disabled safely', async 
 
     const { plan } = await planFromWorkflow(planner, createChatRequest());
 
-    assert.equal(plan.generation.weather, undefined);
-    assert.match(plan.reasoning, /weather tool request was disabled safely/i);
+    assert.equal(plan.generation.toolIntent, undefined);
 });
 
 test('invalid weather request does not suppress valid search normalization', async () => {
@@ -964,9 +984,13 @@ test('invalid weather request does not suppress valid search normalization', asy
                     caution: 3,
                     extent: 4,
                 },
-                weather: {
-                    location: {
-                        city: 'Indianapolis',
+                toolIntent: {
+                    toolName: 'weather_forecast',
+                    requested: true,
+                    input: {
+                        location: {
+                            city: 'Indianapolis',
+                        },
                     },
                 },
                 search: {
@@ -980,12 +1004,11 @@ test('invalid weather request does not suppress valid search normalization', asy
 
     const { plan } = await planFromWorkflow(planner, createChatRequest());
 
-    assert.equal(plan.generation.weather, undefined);
+    assert.equal(plan.generation.toolIntent, undefined);
     assert.equal(
         plan.generation.search?.query,
         'Indianapolis weather headline'
     );
-    assert.match(plan.reasoning, /weather tool request was disabled safely/i);
 });
 
 test('planner temperament is accepted when all TRACE axes are integer 1..5', async () => {
