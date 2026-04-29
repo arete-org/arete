@@ -167,3 +167,130 @@ test('open-meteo tool returns timeout error result and remains serializable', as
         assert.equal(typeof JSON.stringify(result), 'string');
     }
 });
+
+test('open-meteo tool returns location_not_resolved when geocoding returns no results', async () => {
+    const tool = createOpenMeteoForecastTool({
+        fetchImpl: async (input) => {
+            const url = String(input);
+            if (url.includes('/v1/search')) {
+                return createMockResponse({
+                    ok: true,
+                    status: 200,
+                    body: {},
+                });
+            }
+            throw new Error('should not reach forecast call');
+        },
+    });
+
+    const result = await tool.fetchForecast({
+        location: {
+            type: 'place_query',
+            query: 'NonExistentPlace12345',
+        },
+    });
+
+    assert.equal(result.status, 'error');
+    if (result.status === 'error') {
+        assert.equal(result.error.code, 'location_not_resolved');
+        assert.match(result.error.message, /no matching location/i);
+    }
+});
+
+test('open-meteo tool returns invalid_response when geocoding returns result without coords', async () => {
+    const tool = createOpenMeteoForecastTool({
+        fetchImpl: async (input) => {
+            const url = String(input);
+            if (url.includes('/v1/search')) {
+                return createMockResponse({
+                    ok: true,
+                    status: 200,
+                    body: {
+                        results: [
+                            {
+                                name: 'Ambiguous',
+                            },
+                        ],
+                    },
+                });
+            }
+            throw new Error('should not reach forecast call');
+        },
+    });
+
+    const result = await tool.fetchForecast({
+        location: {
+            type: 'place_query',
+            query: 'Ambiguous',
+        },
+    });
+
+    assert.equal(result.status, 'error');
+    if (result.status === 'error') {
+        assert.equal(result.error.code, 'invalid_response');
+        assert.match(result.error.message, /without usable coordinates/i);
+    }
+});
+
+test('open-meteo tool resolves place query with countryCode context', async () => {
+    const calls: string[] = [];
+    const tool = createOpenMeteoForecastTool({
+        fetchImpl: async (input) => {
+            const url = String(input);
+            calls.push(url);
+            if (url.includes('/v1/search')) {
+                assert.match(url, /countryCode=US/);
+                return createMockResponse({
+                    ok: true,
+                    status: 200,
+                    body: {
+                        results: [
+                            {
+                                name: 'Indianapolis',
+                                latitude: 39.7684,
+                                longitude: -86.1581,
+                                country_code: 'US',
+                                admin1: 'Indiana',
+                                timezone: 'America/Indiana/Indianapolis',
+                            },
+                        ],
+                    },
+                });
+            }
+            return createMockResponse({
+                ok: true,
+                status: 200,
+                body: {
+                    daily_units: {
+                        temperature_2m_max: 'C',
+                        wind_speed_10m_max: 'km/h',
+                    },
+                    daily: {
+                        time: ['2026-04-29'],
+                        temperature_2m_max: [18],
+                        temperature_2m_min: [8],
+                        weather_code: [3],
+                        precipitation_probability_max: [20],
+                        wind_speed_10m_max: [20],
+                        wind_direction_10m_dominant: [180],
+                    },
+                },
+            });
+        },
+    });
+
+    const result = await tool.fetchForecast({
+        location: {
+            type: 'place_query',
+            query: 'Indianapolis',
+            countryCode: 'US',
+        },
+    });
+
+    assert.equal(calls.length, 2);
+    assert.equal(result.status, 'ok');
+    if (result.status === 'ok') {
+        assert.equal(result.location.name, 'Indianapolis');
+        assert.equal(result.location.admin1, 'Indiana');
+    }
+});
