@@ -14,6 +14,7 @@ import {
     type ChatPlannerCapabilityProfileOption,
     type ChatPlannerInvocationContext,
 } from '../src/services/chatPlanner.js';
+import { assessPlannerOutputContract } from '../src/services/chatPlannerOutputContract.js';
 import { logger } from '../src/utils/logger.js';
 
 const createChatRequest = (
@@ -1470,4 +1471,57 @@ test('chatPlanner marks budget exhausted when expansion is requested with no ext
     );
     assert.equal(response.execution.plannerAttemptIndex, 1);
     assert.equal(callCount, 1);
+});
+
+test('toolIntent with weather_forecast survives contract sanitization', () => {
+    const toolIntent = {
+        toolName: 'weather_forecast' as const,
+        requested: true,
+        input: {
+            location: {
+                type: 'place_query' as const,
+                query: 'Indianapolis',
+                countryCode: 'US',
+            },
+            horizonPeriods: 3,
+        },
+    };
+
+    const result = assessPlannerOutputContract({
+        action: 'message',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            toolIntent,
+        },
+    });
+
+    assert.equal(result.shape, 'message');
+    assert.equal(result.outOfContractFields.length, 0);
+    assert.equal(result.authorityFieldAttempts.length, 0);
+});
+
+test('toolIntent with web_search survives contract sanitization', () => {
+    const toolIntent = {
+        toolName: 'web_search' as const,
+        requested: true,
+        input: {
+            query: 'test query',
+            contextSize: 'low' as const,
+            intent: 'current_facts' as const,
+        },
+    };
+
+    const result = assessPlannerOutputContract({
+        action: 'message',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            toolIntent,
+        },
+    });
+
+    assert.equal(result.shape, 'message');
+    assert.equal(result.outOfContractFields.length, 0);
+    assert.equal(result.authorityFieldAttempts.length, 0);
 });
