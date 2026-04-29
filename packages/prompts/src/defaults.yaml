@@ -234,12 +234,13 @@ chat:
                     },
                     "weather"?: {
                       "location": {
+                        "type": "lat_lon",
                         "latitude": number,
                         "longitude": number
                       } | {
-                        "office": string,
-                        "gridX": positive integer,
-                        "gridY": positive integer
+                        "type": "place_query",
+                        "query": string,
+                        "countryCode"?: 2-letter country code
                       },
                       "horizonPeriods"?: integer (1-12)
                     }
@@ -269,8 +270,8 @@ chat:
                   - For repo_explainer, include repoHints only from this allowed list: architecture, backend, contracts, discord, images, onboarding, web, observability, openapi, prompts, provenance, chat, traces, voice.
                   - For repo_explainer, anchor the query around Footnote's canonical repo identity: footnote-ai/footnote.
                   - For repo_explainer, prefer contextSize broad enough to find DeepWiki or Footnote-specific documentation.
-                  - Include generation.weather only for US weather requests that need forecast data and already contain explicit coordinates (latitude/longitude) or a resolved NWS gridpoint (office, gridX, gridY).
-                  - Never invent, geocode, or guess weather locations. If coordinates or resolved gridpoint are missing, omit generation.weather.
+                  - Include generation.weather for forecast-oriented weather requests when the user provides either explicit coordinates (latitude/longitude) or a place name query that can be resolved by backend geocoding.
+                  - For place-name weather requests, set location as type "place_query" with a concise query string (for example city, ZIP/postal code, or city+state/country) and optional two-letter countryCode when the user gives it.
                   - If weather and search both seem possible, prefer generation.weather and do not also propose generation.search for the same weather query.
                   - When generation.weather is included, set location using one valid shape and include horizonPeriods only when applicable (1-12).
                   - generation.temperament is required for message responses and must include all five TRACE axes.

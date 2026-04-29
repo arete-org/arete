@@ -790,8 +790,8 @@ test('planner weather request is normalized when location contract is valid', as
                 },
                 weather: {
                     location: {
-                        latitude: 39.0458,
-                        longitude: -95.6694,
+                        query: 'Indianapolis',
+                        countryCode: 'us',
                     },
                     horizonPeriods: 8,
                 },
@@ -803,9 +803,9 @@ test('planner weather request is normalized when location contract is valid', as
 
     assert.deepEqual(plan.generation.weather, {
         location: {
-            type: 'lat_lon',
-            latitude: 39.0458,
-            longitude: -95.6694,
+            type: 'place_query',
+            query: 'Indianapolis',
+            countryCode: 'US',
         },
         horizonPeriods: 8,
     });
@@ -878,7 +878,7 @@ test('out-of-range lat/lon weather request is disabled safely', async () => {
     assert.match(plan.reasoning, /weather tool request was disabled safely/i);
 });
 
-test('non-positive gridpoint weather request is disabled safely', async () => {
+test('empty place query weather request is disabled safely', async () => {
     const planner = createPlanner(
         JSON.stringify({
             action: 'message',
@@ -898,9 +898,7 @@ test('non-positive gridpoint weather request is disabled safely', async () => {
                 },
                 weather: {
                     location: {
-                        office: 'IND',
-                        gridX: 0,
-                        gridY: 69,
+                        query: '   ',
                     },
                 },
             },
@@ -913,7 +911,7 @@ test('non-positive gridpoint weather request is disabled safely', async () => {
     assert.match(plan.reasoning, /weather tool request was disabled safely/i);
 });
 
-test('mixed lat/lon and gridpoint weather location is disabled safely', async () => {
+test('mixed lat/lon and place_query weather location is disabled safely', async () => {
     const planner = createPlanner(
         JSON.stringify({
             action: 'message',
@@ -935,9 +933,7 @@ test('mixed lat/lon and gridpoint weather location is disabled safely', async ()
                     location: {
                         latitude: 39.7684,
                         longitude: -86.1581,
-                        office: 'IND',
-                        gridX: 54,
-                        gridY: 69,
+                        query: 'Indianapolis',
                     },
                 },
             },

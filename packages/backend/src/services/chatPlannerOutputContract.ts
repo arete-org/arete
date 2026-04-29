@@ -383,24 +383,15 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
                                     properties: {
                                         type: {
                                             type: 'string',
-                                            enum: ['gridpoint'],
+                                            enum: ['place_query'],
                                         },
-                                        office: { type: 'string' },
-                                        gridX: {
-                                            type: 'integer',
-                                            minimum: 1,
-                                        },
-                                        gridY: {
-                                            type: 'integer',
-                                            minimum: 1,
+                                        query: { type: 'string' },
+                                        countryCode: {
+                                            type: 'string',
+                                            pattern: '^[A-Za-z]{2}$',
                                         },
                                     },
-                                    required: [
-                                        'type',
-                                        'office',
-                                        'gridX',
-                                        'gridY',
-                                    ],
+                                    required: ['type', 'query'],
                                 },
                             ],
                         },

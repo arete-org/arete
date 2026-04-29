@@ -393,21 +393,18 @@ const normalizeWeatherLocation = (
         longitude >= -180 &&
         longitude <= 180;
 
-    const office =
-        typeof candidate.office === 'string' ? candidate.office.trim() : '';
-    const gridX = candidate.gridX;
-    const gridY = candidate.gridY;
-    const hasValidGridpoint =
-        office.length > 0 &&
-        typeof gridX === 'number' &&
-        Number.isInteger(gridX) &&
-        gridX > 0 &&
-        typeof gridY === 'number' &&
-        Number.isInteger(gridY) &&
-        gridY > 0;
+    const query = typeof candidate.query === 'string' ? candidate.query : '';
+    const trimmedQuery = query.trim();
+    const countryCodeRaw =
+        typeof candidate.countryCode === 'string' ? candidate.countryCode : '';
+    const countryCodeNormalized = countryCodeRaw.trim().toUpperCase();
+    const hasValidPlaceQuery = trimmedQuery.length > 0;
+    const hasValidCountryCode =
+        countryCodeNormalized.length === 2 &&
+        /^[A-Z]{2}$/.test(countryCodeNormalized);
 
     // Mixed location shapes are ambiguous; fail open by disabling weather.
-    if (hasValidLatLon && hasValidGridpoint) {
+    if (hasValidLatLon && hasValidPlaceQuery) {
         return undefined;
     }
 
@@ -419,12 +416,13 @@ const normalizeWeatherLocation = (
         };
     }
 
-    if (hasValidGridpoint) {
+    if (hasValidPlaceQuery) {
         return {
-            type: 'gridpoint',
-            office,
-            gridX,
-            gridY,
+            type: 'place_query',
+            query: trimmedQuery,
+            ...(hasValidCountryCode && {
+                countryCode: countryCodeNormalized,
+            }),
         };
     }
 

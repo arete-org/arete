@@ -13,7 +13,7 @@ import type {
 import type {
     WeatherForecastTool,
     WeatherForecastToolResult,
-} from '../weatherGovForecastTool.js';
+} from '../openMeteoForecastTool.js';
 import type { ChatGenerationWeatherRequest } from '../chatGenerationTypes.js';
 
 const formatWeatherToolResultMessage = (
@@ -111,7 +111,7 @@ export const executeWeatherForecastTool = async ({
             Date.now() - weatherToolStartedAt
         );
         onWarn(
-            'weather.gov tool failed open; continuing generation without weather context',
+            'weather tool failed open; continuing generation without weather context',
             {
                 error: error instanceof Error ? error.message : String(error),
             }

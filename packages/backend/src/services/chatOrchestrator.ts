@@ -39,7 +39,7 @@ import {
 import { resolveExecutionContract } from './executionContractResolver.js';
 import { resolveWorkflowModeDecision } from './workflowProfileRegistry.js';
 import { buildSteerabilityControls } from './steerabilityControls.js';
-import type { WeatherForecastTool } from './weatherGovForecastTool.js';
+import type { WeatherForecastTool } from './openMeteoForecastTool.js';
 import { applySingleToolPolicy } from './tools/toolPolicy.js';
 import {
     executeSelectedTool,

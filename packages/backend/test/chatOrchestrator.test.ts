@@ -20,7 +20,7 @@ import {
     type ResponseMetadataRuntimeContext,
 } from '../src/services/openaiService.js';
 import { renderConversationPromptLayers } from '../src/services/prompts/conversationPromptLayers.js';
-import type { WeatherForecastTool } from '../src/services/weatherGovForecastTool.js';
+import type { WeatherForecastTool } from '../src/services/openMeteoForecastTool.js';
 import { logger } from '../src/utils/logger.js';
 
 const PLANNER_TOKEN_SENTINEL = 1200;
@@ -1366,9 +1366,8 @@ test('orchestrator injects backend weather tool context and records executed too
                 ],
             },
             provenance: {
-                provider: 'weather.gov',
-                endpoint:
-                    'https://api.weather.gov/gridpoints/IND/56,69/forecast',
+                provider: 'open-meteo',
+                endpoint: 'https://api.open-meteo.com/v1/forecast',
                 requestedAt: '2026-03-27T12:00:00.000Z',
             },
         }),
@@ -1504,9 +1503,8 @@ test('planner mixed weather and search requests apply single-tool weather priori
                 ],
             },
             provenance: {
-                provider: 'weather.gov',
-                endpoint:
-                    'https://api.weather.gov/gridpoints/IND/56,69/forecast',
+                provider: 'open-meteo',
+                endpoint: 'https://api.open-meteo.com/v1/forecast',
                 requestedAt: '2026-03-27T12:00:00.000Z',
             },
         }),

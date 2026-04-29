@@ -35,10 +35,9 @@ export type ChatGenerationWeatherLocation =
           longitude: number;
       }
     | {
-          type: 'gridpoint';
-          office: string;
-          gridX: number;
-          gridY: number;
+          type: 'place_query';
+          query: string;
+          countryCode?: string;
       };
 
 export type ChatGenerationWeatherRequest = {

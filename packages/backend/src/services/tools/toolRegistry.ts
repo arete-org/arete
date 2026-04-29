@@ -12,7 +12,7 @@ import type {
     ToolInvocationRequest,
 } from '@footnote/contracts/ethics-core';
 import type { ChatGenerationPlan } from '../chatGenerationTypes.js';
-import type { WeatherForecastTool } from '../weatherGovForecastTool.js';
+import type { WeatherForecastTool } from '../openMeteoForecastTool.js';
 import { executeWeatherForecastTool } from './weatherForecastToolAdapter.js';
 import type { BackendToolSelection } from './toolTypes.js';
 

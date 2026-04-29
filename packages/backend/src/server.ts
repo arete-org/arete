@@ -60,7 +60,7 @@ import { createInternalVoiceTtsHandler } from './handlers/internalVoiceTts.js';
 import { createInternalVoiceRealtimeHandler } from './handlers/internalVoiceRealtime.js';
 import { buildRealtimeInstructions } from './services/prompts/realtimePromptComposer.js';
 import { createChatProfilesHandler } from './handlers/chatProfiles.js';
-import { createWeatherGovForecastTool } from './services/weatherGovForecastTool.js';
+import { createOpenMeteoForecastTool } from './services/openMeteoForecastTool.js';
 import { resolveExecutionContractTrustGraphRuntimeOptions } from './services/executionContractTrustGraph/index.js';
 import { createModelProfileResolver } from './services/modelProfileResolver.js';
 
@@ -95,9 +95,8 @@ let incidentStore: ReturnType<typeof getDefaultIncidentStore> | null = null;
 let incidentStoreUnavailableReason: string | null = null;
 let generationRuntime: GenerationRuntime | null = null;
 let imageGenerationRuntime: ImageGenerationRuntime | null = null;
-let weatherForecastTool: ReturnType<
-    typeof createWeatherGovForecastTool
-> | null = null;
+let weatherForecastTool: ReturnType<typeof createOpenMeteoForecastTool> | null =
+    null;
 let internalNewsTaskService: ReturnType<
     typeof createInternalNewsTaskService
 > | null = null;
@@ -281,7 +280,7 @@ const initializeServices = () => {
 
     // Keep weather adapter construction in service bootstrap so runtime config
     // can control pilot enablement/behavior without import-time wiring.
-    weatherForecastTool = createWeatherGovForecastTool();
+    weatherForecastTool = createOpenMeteoForecastTool();
 
     // --- OpenAI-only services ---
     if (runtimeConfig.openai.apiKey) {
