@@ -36,10 +36,10 @@ test('single-tool policy is now a no-op with unified toolIntent', () => {
         },
     });
 
-    assert.equal(
-        decision.generation.toolIntent?.input.location.type,
-        'lat_lon'
-    );
+    const toolInput = decision.generation.toolIntent?.input as
+        | { location: { type: string } }
+        | undefined;
+    assert.equal(toolInput?.location.type, 'lat_lon');
     assert.equal(
         decision.generation.search?.query,
         'Indianapolis weather alerts'
