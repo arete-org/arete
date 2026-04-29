@@ -442,11 +442,27 @@ const normalizeToolIntent = (
         return undefined;
     }
 
+    const requested =
+        typeof candidate.requested === 'boolean' ? candidate.requested : true;
+
     if (toolName === 'weather_forecast') {
         const input = candidate.input as
             | { location?: unknown; horizonPeriods?: unknown }
             | undefined;
-        const locationInput = input?.location ?? input ?? candidate;
+        const hasLocation = input?.location !== undefined;
+        const locationInput = hasLocation
+            ? input.location
+            : (input ?? candidate);
+        if (!hasLocation) {
+            logger.warn(
+                `weather_forecast: using fallback location input (input.location missing)`,
+                {
+                    toolName: 'weather_forecast',
+                    hasInput: input !== undefined,
+                    hasLocation: false,
+                }
+            );
+        }
         const location = normalizeWeatherLocation(locationInput);
         if (!location) {
             return undefined;
@@ -460,7 +476,7 @@ const normalizeToolIntent = (
 
         return {
             toolName: 'weather_forecast',
-            requested: true,
+            requested,
             input: {
                 location,
                 ...(horizonPeriods !== undefined && { horizonPeriods }),
@@ -468,15 +484,43 @@ const normalizeToolIntent = (
         };
     }
 
+    // generation.search is the canonical planner path for search. This branch is
+    // kept as a compatibility guard for older or stale planner outputs that still
+    // emit toolIntent.web_search. It validates and normalizes the payload rather
+    // than treating arbitrary input as executable.
     if (toolName === 'web_search') {
         const input = candidate.input as Record<string, unknown> | undefined;
         if (!input || typeof input !== 'object') {
             return undefined;
         }
+        const query = input.query;
+        if (typeof query !== 'string' || query.trim().length === 0) {
+            logger.warn('web_search: missing or invalid query', {
+                toolName: 'web_search',
+                hasQuery: typeof query === 'string',
+            });
+            return undefined;
+        }
+        const contextSize = input.contextSize;
+        if (
+            contextSize !== undefined &&
+            (typeof contextSize !== 'string' ||
+                !['low', 'medium', 'high'].includes(contextSize))
+        ) {
+            logger.warn('web_search: invalid contextSize', {
+                toolName: 'web_search',
+                contextSize,
+            });
+            return undefined;
+        }
         return {
             toolName: 'web_search',
-            requested: true,
-            input: input,
+            requested,
+            input: {
+                query: query.trim(),
+                ...(contextSize !== undefined && { contextSize }),
+                ...(typeof input.intent === 'string' && { intent: input.intent }),
+            },
         };
     }
 
