@@ -354,6 +354,7 @@ export type EvaluatorExecutionEvent = BaseExecutionEvent & {
 export type ToolExecutionEvent = BaseExecutionEvent & {
     kind: 'tool';
     toolName: string;
+    clarification?: ToolClarification;
     reasonCode?: ToolInvocationReasonCode;
 };
 
@@ -632,12 +633,35 @@ export type ToolInvocationRequest = {
 };
 
 /**
+ * Tool clarification options returned when a tool needs more user input.
+ */
+export type ToolClarificationOption = {
+    id: string;
+    label: string;
+    value?: {
+        toolName?: ToolInvocationName;
+        input?: Record<string, unknown>;
+    };
+};
+
+/**
+ * Tool clarification payload returned when a tool needs more user input.
+ * Clarification is a stop condition, not a failure or extra generation context.
+ */
+export type ToolClarification = {
+    reasonCode: 'ambiguous_location';
+    question: string;
+    options: ToolClarificationOption[];
+};
+
+/**
  * Runtime-owned final tool outcome emitted into execution metadata.
  * This is the outcome after that check: ran, skipped, or failed.
  */
 export type ToolExecutionContext = {
     toolName: ToolInvocationName;
     status: ExecutionStatus;
+    clarification?: ToolClarification;
     reasonCode?: ToolInvocationReasonCode;
     durationMs?: number;
 };

@@ -10,7 +10,11 @@ import type {
     PostChatResponse,
     ChatConversationMessage,
 } from '@footnote/contracts/web';
-import type { SafetyTier } from '@footnote/contracts/ethics-core';
+import type {
+    SafetyTier,
+    ToolExecutionContext,
+    ToolExecutionEvent,
+} from '@footnote/contracts/ethics-core';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
     createChatService,
@@ -36,6 +40,7 @@ import {
     type PlannerFallbackReason,
     type PlannerSelectionSource,
 } from './plannerFallbackTelemetryRollup.js';
+import type { ResponseMetadataRuntimeContext } from './openaiService.js';
 import { resolveExecutionContract } from './executionContractResolver.js';
 import { resolveWorkflowModeDecision } from './workflowProfileRegistry.js';
 import { buildSteerabilityControls } from './steerabilityControls.js';
@@ -183,6 +188,90 @@ export const createChatOrchestrator = ({
         defaultModel: plannerProfile.providerModel,
         recordUsage,
     });
+
+    const handleToolClarification = (input: {
+        toolContext: ToolExecutionContext;
+        conversationSnapshot: string;
+        modelVersion: string;
+        generationProfile: {
+            profileId: string;
+            originalProfileId?: string;
+            effectiveProfileId?: string;
+            provider: string;
+            model: string;
+        };
+        plannerExecutionContext: NonNullable<
+            ResponseMetadataRuntimeContext['executionContext']
+        >['planner'];
+        evaluatorExecutionContext?: EvaluatorExecutionContext;
+    }): PostChatResponse => {
+        const {
+            toolContext,
+            conversationSnapshot,
+            modelVersion,
+            generationProfile,
+            plannerExecutionContext,
+            evaluatorExecutionContext,
+        } = input;
+        const { clarification, toolName, status, durationMs } = toolContext;
+        const clarificationMessage = [
+            clarification?.question ?? 'Which location did you mean?',
+            '',
+            ...(clarification?.options ?? []).map(
+                (option, index) => `${index + 1}. ${option.label}`
+            ),
+            '',
+            'Please reply with your choice.',
+        ].join('\n');
+
+        const toolExecutionEvent: ToolExecutionEvent = {
+            kind: 'tool',
+            toolName,
+            status,
+            clarification,
+            durationMs,
+        };
+
+        const metadata = buildResponseMetadata(
+            {
+                model: modelVersion,
+                citations: [],
+            },
+            {
+                modelVersion,
+                conversationSnapshot,
+                executionContext: {
+                    planner: plannerExecutionContext,
+                    evaluator: evaluatorExecutionContext,
+                    generation: {
+                        status: 'skipped',
+                        profileId: generationProfile.profileId,
+                        originalProfileId: generationProfile.originalProfileId,
+                        effectiveProfileId:
+                            generationProfile.effectiveProfileId,
+                        provider: generationProfile.provider,
+                        model: generationProfile.model,
+                    },
+                    tool: toolContext,
+                },
+            }
+        );
+
+        return {
+            action: 'message',
+            message: clarificationMessage,
+            modality: 'text',
+            metadata: {
+                ...metadata,
+                execution: [
+                    ...(metadata.execution ?? []).filter(
+                        (event) => event.kind !== 'tool'
+                    ),
+                    toolExecutionEvent,
+                ],
+            },
+        };
+    };
 
     /**
      * Runs one chat request end-to-end.
@@ -585,6 +674,71 @@ export const createChatOrchestrator = ({
         const toolResultMessage = toolExecution.toolResultMessage;
         toolExecutionContext =
             toolExecution.toolExecutionContext ?? toolExecutionContext;
+
+        if (
+            toolExecutionContext?.clarification &&
+            toolExecutionContext.status === 'executed'
+        ) {
+            chatOrchestratorLogger.info(
+                'tool returned clarification, short-circuiting generation',
+                {
+                    toolName: toolExecutionContext.toolName,
+                    reasonCode: toolExecutionContext.clarification.reasonCode,
+                    optionCount:
+                        toolExecutionContext.clarification.options.length,
+                }
+            );
+            return handleToolClarification({
+                toolContext: toolExecutionContext,
+                conversationSnapshot: JSON.stringify({
+                    request: normalizedRequest,
+                    planner: {
+                        action: executionPlan.action,
+                        modality: executionPlan.modality,
+                        profileId: executionPlan.profileId,
+                        safetyTier: executionPlan.safetyTier,
+                        generation: executionPlan.generation,
+                        toolIntent,
+                        toolRequest: toolRequestContext,
+                        ...(surfacePolicy && { surfacePolicy }),
+                    },
+                    executionContract: {
+                        policyId: resolvedExecutionContract.policyId,
+                        policyVersion: resolvedExecutionContract.policyVersion,
+                    },
+                    clarification: {
+                        toolName: toolExecutionContext.toolName,
+                        reasonCode:
+                            toolExecutionContext.clarification.reasonCode,
+                    },
+                }),
+                modelVersion: selectedResponseProfile.providerModel,
+                generationProfile: {
+                    profileId: selectedResponseProfile.id,
+                    originalProfileId: originalSelectedProfileId,
+                    effectiveProfileId: effectiveSelectedProfileId,
+                    provider: selectedResponseProfile.provider,
+                    model: selectedResponseProfile.providerModel,
+                },
+                plannerExecutionContext: {
+                    status: plannerExecution.status,
+                    reasonCode: plannerExecution.reasonCode,
+                    purpose: plannerExecution.purpose,
+                    contractType: plannerExecution.contractType,
+                    applyOutcome: plannerApplyOutcome,
+                    mattered: plannerMattered,
+                    matteredControlIds: plannerMatteredControlIds,
+                    profileId: plannerProfile.id,
+                    originalProfileId: plannerProfile.id,
+                    effectiveProfileId: plannerProfile.id,
+                    provider: plannerProfile.provider,
+                    model: plannerProfile.providerModel,
+                    durationMs: plannerExecution.durationMs,
+                },
+                evaluatorExecutionContext,
+            });
+        }
+
         const executionPlanForPrompt: PlannerPayloadChatPlan = {
             ...executionPlan,
             generation: executionPlan.generation,
