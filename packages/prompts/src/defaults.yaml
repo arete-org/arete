@@ -233,10 +233,10 @@ chat:
                       "repoHints"?: ["architecture" | "backend" | "contracts" | "discord" | "images" | "onboarding" | "web" | "observability" | "openapi" | "prompts" | "provenance" | "chat" | "traces" | "voice", ...]
                     },
                     "toolIntent"?: {
-                      "toolName": "weather_forecast" | "web_search",
+                      // web_search uses generation.search, not toolIntent. This is for weather_forecast only.
+                      "toolName": "weather_forecast",
                       "requested": boolean,
                       "input": {
-                        // for weather_forecast:
                         "location": {
                           "type": "lat_lon",
                           "latitude": number,
@@ -247,7 +247,6 @@ chat:
                           "countryCode"?: 2-letter country code
                         },
                         "horizonPeriods"?: integer (1-12)
-                        // for web_search: see search schema above
                       }
                     }
                   }

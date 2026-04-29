@@ -139,6 +139,9 @@ export const executeSelectedTool = async ({
         };
     }
 
+    // This cast relies on normalizeToolIntent in chatPlanner.ts, which validates
+    // and normalizes weather_forecast input before execution. The guard above
+    // ensures execution only proceeds when toolIntent.input exists.
     const weatherInput = toolSelection.toolIntent.input as {
         location: unknown;
         horizonPeriods?: number;
