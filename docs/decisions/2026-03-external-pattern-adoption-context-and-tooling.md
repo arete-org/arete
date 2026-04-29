@@ -38,7 +38,7 @@ This decision is inspired by:
     - <https://docs.trustgraph.ai/>
 - Internal Footnote direction already recorded in:
     - docs/decisions/2026-03-voltagent-runtime-adoption.md
-    - docs/architecture/risk-evaluation-and-breakers.md
+    - docs/architecture/safety-evaluation.md
 
 These are **reference inputs**, not adoption mandates.
 

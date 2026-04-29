@@ -218,8 +218,8 @@ replacement of Footnote trace/provenance semantics.
   `docs/architecture/execution-contract-authority-map.md`
 - Footnote Response Metadata:
   `docs/architecture/response-metadata.md`
-- Footnote Incident Storage And Audit:
-  `docs/architecture/incident-storage-and-audit.md`
+- Footnote Incident Handling:
+  `docs/architecture/incident-handling.md`
 - Footnote Prompt Resolution:
   `docs/architecture/prompt-resolution.md`
 - VoltAgent Runtime Adoption:

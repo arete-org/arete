@@ -37,11 +37,8 @@ notes. They are rationale or rollout context, not the main current explanation.
 
 ## Incident And Safety
 
-- [Incident Reporting](./incident-reporting.md)
-- [Incident Storage And Audit](./incident-storage-and-audit.md)
-- [Incident And Breaker Logging](./incident-and-breaker-logging.md)
-- [Safety Evaluation And Breakers](./risk-evaluation-and-breakers.md)
-- [Deterministic Safety Evaluator V1](./deterministic-breaker-evaluator-v1.md)
+- [Incident Handling](./incident-handling.md)
+- [Safety Evaluation](./safety-evaluation.md)
 
 ## Subsystem Notes
 
