@@ -209,6 +209,17 @@ const fetchJson = async <TValue>(
         }
 
         const payload = (await response.json()) as unknown;
+        if (
+            typeof payload !== 'object' ||
+            payload === null ||
+            Array.isArray(payload)
+        ) {
+            return {
+                ok: false,
+                code: 'invalid_response',
+                message: 'Open-Meteo response is not a valid object',
+            };
+        }
         return {
             ok: true,
             data: payload as TValue,
@@ -247,8 +258,14 @@ const weatherCodeToLabel = (weatherCode: number): string => {
     if (weatherCode === 45 || weatherCode === 48) {
         return 'Fog';
     }
-    if (weatherCode >= 51 && weatherCode <= 67) {
+    if (weatherCode >= 51 && weatherCode <= 57) {
         return 'Drizzle';
+    }
+    if (weatherCode >= 58 && weatherCode <= 60) {
+        return 'Mixed rain and drizzle';
+    }
+    if (weatherCode >= 61 && weatherCode <= 67) {
+        return 'Rain';
     }
     if (weatherCode >= 71 && weatherCode <= 77) {
         return 'Snow';
@@ -593,10 +610,6 @@ export const createOpenMeteoForecastTool = ({
             },
             forecast: {
                 generatedAt: requestedAt,
-                ...(typeof forecastResponse.data.generationtime_ms ===
-                    'number' && {
-                    updatedAt: requestedAt,
-                }),
                 periods,
             },
             provenance: {
