@@ -14,6 +14,7 @@ import type {
     PlannerExecutionPurpose,
     ToolExecutionContext,
     ToolInvocationRequest,
+    SteerabilityControlId,
 } from '@footnote/contracts/ethics-core';
 import type { ModelProfile } from '@footnote/contracts';
 import type {
@@ -123,13 +124,54 @@ export type PostPlannerWorkflowAdapterInput = {
     baseGenerationRequest: GenerationRequest;
 };
 
-export type PostPlannerWorkflowAdapterResult = {
-    terminalAction?: PlannerTerminalAction;
-    messagesWithHints: RuntimeMessage[];
-    generationRequest: GenerationRequest;
-    contextStepRequest?: ContextStepRequest;
-    plannerApplication?: PlannerApplicationResult;
+export type PostPlannerDiagnosticsSummary = Pick<
+    PlannerToolIntentDiagnostics,
+    | 'rawToolIntentPresent'
+    | 'rawToolIntentName'
+    | 'normalizedToolIntentPresent'
+    | 'normalizedToolIntentName'
+    | 'toolIntentRejected'
+    | 'toolIntentRejectionReasons'
+>;
+
+export type PostPlannerWorkflowSummary = {
+    executionPlan: ChatPlan;
+    generationForExecution: ChatGenerationPlan;
+    selectedResponseProfile: Pick<
+        ModelProfile,
+        'id' | 'provider' | 'providerModel' | 'capabilities'
+    >;
+    originalSelectedProfileId: string;
+    effectiveSelectedProfileId: string;
+    selectedCapabilityProfile?: CapabilityProfileId;
+    capabilityReasonCode?: string;
+    toolRequestContext: ToolInvocationRequest;
+    toolExecutionContext?: ToolExecutionContext;
+    plannerDiagnostics: PostPlannerDiagnosticsSummary;
+    plannerApplyOutcome: PlannerExecutionApplyOutcome;
+    plannerMattered: boolean;
+    plannerMatteredControlIds: SteerabilityControlId[];
+    fallbackReasons: string[];
+    fallbackRollupSelectionSource: 'default' | 'planner' | 'request_override';
+    modality: ChatPlan['modality'];
+    safetyTier: ChatPlan['safetyTier'];
+    searchRequested: boolean;
 };
+
+export type PostPlannerWorkflowAdapterResult = {
+    plannerSummary: PostPlannerWorkflowSummary;
+} & (
+    | {
+          continuation: 'terminal_action';
+          terminalAction: PlannerTerminalAction;
+      }
+    | {
+          continuation: 'continue_message';
+          messagesWithHints: RuntimeMessage[];
+          generationRequest: GenerationRequest;
+          contextStepRequest?: ContextStepRequest;
+      }
+);
 
 export type PostPlannerWorkflowAdapter = (
     input: PostPlannerWorkflowAdapterInput

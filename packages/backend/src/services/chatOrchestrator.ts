@@ -37,7 +37,6 @@ import { resolveExecutionContract } from './executionContractResolver.js';
 import { resolveWorkflowModeDecision } from './workflowProfileRegistry.js';
 import { buildSteerabilityControls } from './steerabilityControls.js';
 import type { WeatherForecastTool } from './openMeteoForecastTool.js';
-import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
 import { resolveWeatherClarificationContinuation } from './tools/weatherClarificationContinuation.js';
 import { createToolRegistryContextStepExecutor } from './contextIntegrations/toolRegistryContextStepAdapter.js';
 import { createPlannerResultApplier } from './chatOrchestrator/plannerResultApplier.js';
@@ -53,17 +52,18 @@ import {
     runDeterministicEvaluator,
     type EvaluatorExecutionContext,
 } from './chatOrchestrator/evaluatorCoordination.js';
-import { type PlannerPayloadChatPlan } from './chatOrchestrator/plannerPayload.js';
 import { assemblePostPlanGenerationInput } from './chatService/postPlanAssembly.js';
-import {
-    resolvePlannerActionOutcome,
-    plannerTerminalActionToResponse,
-} from './chatService/plannerActionOutcome.js';
+import { resolvePlannerActionOutcome } from './chatService/plannerActionOutcome.js';
 import {
     buildControlObservabilityEnvelope,
     emitControlObservabilityEnvelope,
 } from './steerabilityControlObservability.js';
-import { resolveInternalSteerabilityControlConflicts } from './steerabilityControlPrecedence.js';
+import type {
+    PlannerStepExecutor,
+    PlannerStepResult,
+    PostPlannerWorkflowAdapter,
+    PostPlannerWorkflowSummary,
+} from './plannerWorkflowSeams.js';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
     weatherForecastTool?: WeatherForecastTool;
@@ -302,22 +302,37 @@ export const createChatOrchestrator = ({
             stepKind: 'plan',
             purpose: 'chat_orchestrator_action_selection',
         };
-        const planned = await chatPlanner.planChat(
-            normalizedRequest,
-            plannerInvocationContext
-        );
-        const plannerExecution = planned.execution;
-        const plannerDiagnostics = planned.diagnostics;
+        const toPlannerStepResult = (
+            plannerResult: Awaited<ReturnType<typeof chatPlanner.planChat>>
+        ): PlannerStepResult => ({
+            plan: plannerResult.plan,
+            execution: plannerResult.execution,
+            ingestion: {
+                outputApplyOutcome:
+                    plannerResult.execution.status === 'executed'
+                        ? 'accepted'
+                        : 'rejected',
+                fallbackTier:
+                    plannerResult.execution.status === 'executed'
+                        ? 'none'
+                        : 'safe_default_plan',
+                correctionCodes: [],
+                outOfContractFields: [],
+                authorityFieldAttempts: [],
+            },
+            diagnostics: plannerResult.diagnostics,
+        });
+        const plannerStepExecutor: PlannerStepExecutor = async (input) =>
+            toPlannerStepResult(
+                await chatPlanner.planChat(
+                    input.request,
+                    input.invocationContext
+                )
+            );
         const fallbackReasons: PlannerFallbackReason[] = [];
-        if (plannerExecution.status === 'failed') {
-            const plannerFailureReason =
-                plannerExecution.reasonCode === 'planner_invalid_output'
-                    ? 'planner_execution_failed_planner_invalid_output'
-                    : plannerExecution.reasonCode === 'planner_runtime_error'
-                      ? 'planner_execution_failed_planner_runtime_error'
-                      : 'planner_execution_failed_unknown';
-            fallbackReasons.push(plannerFailureReason);
-        }
+        const fallbackRollupSelectionSourceRef: {
+            value: PlannerSelectionSource;
+        } = { value: 'default' };
         const emitFallbackRollup = (
             selectionSource: PlannerSelectionSource
         ): void => {
@@ -355,213 +370,26 @@ export const createChatOrchestrator = ({
             weatherForecastTool,
             logger: chatOrchestratorLogger,
         });
-        const plannerApplication = plannerResultApplier({
-            normalizedRequest,
-            plannerStepResult: {
-                plan: planned.plan,
-                execution: planned.execution,
-                ingestion: {
-                    outputApplyOutcome:
-                        planned.execution.status === 'executed'
-                            ? 'accepted'
-                            : 'rejected',
-                    fallbackTier:
-                        planned.execution.status === 'executed'
-                            ? 'none'
-                            : 'safe_default_plan',
-                    correctionCodes: [],
-                    outOfContractFields: [],
-                    authorityFieldAttempts: [],
-                },
-                diagnostics: planned.diagnostics,
-            },
-            clarificationContinuation,
-            resolvedExecutionPolicy: resolvedExecutionContract,
-        });
-        fallbackReasons.push(
-            ...(plannerApplication.fallbackReasons as PlannerFallbackReason[])
-        );
-        const plan = plannerApplication.plan;
-        const surfacePolicy = plannerApplication.surfacePolicy;
-        const generationForExecution =
-            plannerApplication.generationForExecution;
-        const selectedResponseProfile =
-            plannerApplication.selectedResponseProfile;
-        const fallbackRollupSelectionSource =
-            plannerApplication.fallbackRollupSelectionSource as PlannerSelectionSource;
-        const originalSelectedProfileId =
-            plannerApplication.originalSelectedProfileId;
-        const effectiveSelectedProfileId =
-            plannerApplication.effectiveSelectedProfileId;
-        const rerouteApplied = plannerApplication.rerouteApplied;
-        const toolRequestContext = plannerApplication.toolRequestContext;
-        const toolIntent = generationForExecution.toolIntent;
-        const toolExecutionContext = plannerApplication.toolExecutionContext;
-        const weatherContextStepRequest = plannerApplication.contextStepRequest;
-        const weatherContextStepExecutor =
-            weatherContextStepRequest !== undefined
-                ? createToolRegistryContextStepExecutor({
-                      weatherForecastTool,
-                      onWarn: (message, meta) => {
-                          chatOrchestratorLogger.warn(message, meta);
-                      },
-                  })
-                : undefined;
-        const weatherRouting = {
-            weatherLikeRequest: isWeatherLikeRequest(
-                normalizedRequest.latestUserInput
-            ),
-            plannerToolIntentPresent:
-                plannerDiagnostics.normalizedToolIntentPresent,
-            plannerRawToolIntentPresent:
-                plannerDiagnostics.rawToolIntentPresent,
-            plannerRawToolIntentName: plannerDiagnostics.rawToolIntentName,
-            plannerNormalizedToolIntentName:
-                plannerDiagnostics.normalizedToolIntentName,
-            plannerToolIntentRejected: plannerDiagnostics.toolIntentRejected,
-            plannerToolIntentRejectionReasons:
-                plannerDiagnostics.toolIntentRejectionReasons,
-            plannerRequestedWeather:
-                plannerDiagnostics.normalizedToolIntentName ===
-                'weather_forecast',
-            toolSelectionRequested: toolRequestContext.requested,
-            toolSelectionEligible: toolRequestContext.eligible,
-            toolSelectionToolName: toolRequestContext.toolName,
-            toolSelectionReasonCode: toolRequestContext.reasonCode,
-            selectedWeather: toolRequestContext.toolName === 'weather_forecast',
-        };
-        if (
-            weatherRouting.weatherLikeRequest ||
-            weatherRouting.selectedWeather
-        ) {
-            chatOrchestratorLogger.info('chat.weather.routing', {
-                event: 'chat.weather.routing',
-                stage: 'selection',
-                surface: normalizedRequest.surface,
-                ...weatherRouting,
-            });
-        }
         const steerabilityControls = buildSteerabilityControls({
             workflowMode: workflowModeResolution.modeDecision,
             executionContractResponseMode:
                 resolvedExecutionContract.response.responseMode,
             requestedProfileId: normalizedRequest.profileId,
-            plannerSelectedProfileId: plan.profileId,
+            plannerSelectedProfileId: defaultResponseProfile.id,
             selectedProfile: {
-                profileId: selectedResponseProfile.id,
-                provider: selectedResponseProfile.provider,
-                model: selectedResponseProfile.providerModel,
+                profileId: defaultResponseProfile.id,
+                provider: defaultResponseProfile.provider,
+                model: defaultResponseProfile.providerModel,
             },
             persona: {
                 personaId: personaProfile.id,
                 overlaySource: personaProfile.promptOverlay.source,
             },
-            toolRequest: toolRequestContext,
-        });
-        const steerabilityConflictResolution =
-            resolveInternalSteerabilityControlConflicts({
-                requestedProfileId: normalizedRequest.profileId,
-                plannerSelectedProfileId: plan.profileId,
-                selectedProfileId: selectedResponseProfile.id,
-                personaOverlaySource: personaProfile.promptOverlay.source,
-            });
-        const plannerMatteredControlIds =
-            plannerExecution.status === 'executed'
-                ? steerabilityControls.controls
-                      .filter(
-                          (control) =>
-                              (control.source === 'planner_output' ||
-                                  control.source === 'tool_policy' ||
-                                  control.source === 'capability_policy') &&
-                              control.mattered
-                      )
-                      .map((control) => control.controlId)
-                : [];
-        const providerPreferencePolicyAdjusted =
-            steerabilityConflictResolution.providerPreference
-                .wasOverriddenByExecutionPolicy;
-        // Planner influence is emitted on execution[] planner fields.
-        // Control influence is emitted separately via steerabilityControls.
-        // `mattered` remains an observed-material-effect signal, not full causal proof.
-        const plannerMattered = plannerMatteredControlIds.length > 0;
-        // TODO(planner-adjustment-taxonomy): Split this top-level
-        // `adjusted_by_policy` bucket only after materially distinct classes
-        // appear in practice. Keep one stable top-level outcome and add detail
-        // alongside it, rather than overloading enum semantics.
-        const plannerApplyOutcome =
-            plannerExecution.status !== 'executed'
-                ? 'not_applied'
-                : surfacePolicy !== undefined ||
-                    providerPreferencePolicyAdjusted ||
-                    rerouteApplied ||
-                    plannerApplication.plannerApplyOutcome ===
-                        'adjusted_by_policy'
-                  ? 'adjusted_by_policy'
-                  : 'applied';
-        const emitControlObservability = (input: {
-            responseAction: 'message' | 'ignore' | 'react' | 'image';
-            responseModality: ChatPlan['modality'];
-        }): void => {
-            try {
-                const observabilityEnvelope = buildControlObservabilityEnvelope(
-                    {
-                        surface: normalizedRequest.surface,
-                        workflowModeId:
-                            workflowModeResolution.modeDecision.modeId,
-                        executionContractResponseMode:
-                            resolvedExecutionContract.response.responseMode,
-                        requestedProfileId: normalizedRequest.profileId,
-                        plannerSelectedProfileId: plan.profileId,
-                        selectedProfileId: selectedResponseProfile.id,
-                        personaOverlaySource:
-                            personaProfile.promptOverlay.source,
-                        toolRequest: toolRequestContext,
-                        plannerApplyOutcome,
-                        plannerMatteredControlIds,
-                        plannerStatus: plannerExecution.status,
-                        plannerReasonCode: plannerExecution.reasonCode,
-                        responseAction: input.responseAction,
-                        responseModality: input.responseModality,
-                        steerabilityControls,
-                    }
-                );
-                emitControlObservabilityEnvelope(
-                    chatOrchestratorLogger,
-                    observabilityEnvelope
-                );
-            } catch (error) {
-                chatOrchestratorLogger.warn(
-                    'chat.steerability.control_observability_failed_open',
-                    {
-                        event: 'chat.steerability.control_observability_failed_open',
-                        reason:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                        surface: normalizedRequest.surface,
-                        plannerStatus: plannerExecution.status,
-                    }
-                );
-            }
-        };
-        // TODO(planner-correlation-id): If chat orchestration ever runs
-        // multiple planner passes/retries per response, add explicit correlation
-        // fields while preserving workflow-owned planner boundaries.
-        // Persist the effective profile id in planner payload/snapshot so traces
-        // reflect what was actually executed.
-        const executionPlan: ChatPlan = {
-            ...plan,
-            generation: generationForExecution,
-            profileId: selectedResponseProfile.id,
-            ...(plannerApplication.selectedCapabilityProfile !== undefined && {
-                selectedCapabilityProfile:
-                    plannerApplication.selectedCapabilityProfile,
-            }),
-        };
-
-        const plannerActionOutcome = resolvePlannerActionOutcome({
-            executionPlan,
-            normalizedRequest,
+            toolRequest: {
+                toolName: 'web_search',
+                requested: false,
+                eligible: false,
+            },
         });
         const promptLayers = renderConversationPromptLayers(
             normalizedRequest.surface === 'discord'
@@ -582,13 +410,331 @@ export const createChatOrchestrator = ({
         // Web keeps default prompt persona layers.
         const personaPrompt =
             backendOwnedProfileOverlay ?? promptLayers.personaPrompt;
+        const weatherContextStepExecutor =
+            createToolRegistryContextStepExecutor({
+                weatherForecastTool,
+                onWarn: (message, meta) => {
+                    chatOrchestratorLogger.warn(message, meta);
+                },
+            });
+        const buildPlannerSummary = (input: {
+            plannerStepResult: PlannerStepResult;
+            plannerApplication: ReturnType<typeof plannerResultApplier>;
+            executionPlan: ChatPlan;
+        }): PostPlannerWorkflowSummary => ({
+            executionPlan: input.executionPlan,
+            generationForExecution:
+                input.plannerApplication.generationForExecution,
+            selectedResponseProfile: {
+                id: input.plannerApplication.selectedResponseProfile.id,
+                provider:
+                    input.plannerApplication.selectedResponseProfile.provider,
+                providerModel:
+                    input.plannerApplication.selectedResponseProfile
+                        .providerModel,
+                capabilities:
+                    input.plannerApplication.selectedResponseProfile
+                        .capabilities,
+            },
+            originalSelectedProfileId:
+                input.plannerApplication.originalSelectedProfileId,
+            effectiveSelectedProfileId:
+                input.plannerApplication.effectiveSelectedProfileId,
+            ...(input.plannerApplication.selectedCapabilityProfile !==
+                undefined && {
+                selectedCapabilityProfile:
+                    input.plannerApplication.selectedCapabilityProfile,
+            }),
+            ...(input.plannerApplication.capabilityReasonCode !== undefined && {
+                capabilityReasonCode:
+                    input.plannerApplication.capabilityReasonCode,
+            }),
+            toolRequestContext: input.plannerApplication.toolRequestContext,
+            ...(input.plannerApplication.toolExecutionContext !== undefined && {
+                toolExecutionContext:
+                    input.plannerApplication.toolExecutionContext,
+            }),
+            plannerDiagnostics: {
+                rawToolIntentPresent:
+                    input.plannerStepResult.diagnostics.rawToolIntentPresent,
+                ...(input.plannerStepResult.diagnostics.rawToolIntentName !==
+                    undefined && {
+                    rawToolIntentName:
+                        input.plannerStepResult.diagnostics.rawToolIntentName,
+                }),
+                normalizedToolIntentPresent:
+                    input.plannerStepResult.diagnostics
+                        .normalizedToolIntentPresent,
+                ...(input.plannerStepResult.diagnostics
+                    .normalizedToolIntentName !== undefined && {
+                    normalizedToolIntentName:
+                        input.plannerStepResult.diagnostics
+                            .normalizedToolIntentName,
+                }),
+                toolIntentRejected:
+                    input.plannerStepResult.diagnostics.toolIntentRejected,
+                toolIntentRejectionReasons:
+                    input.plannerStepResult.diagnostics
+                        .toolIntentRejectionReasons,
+            },
+            plannerApplyOutcome: input.plannerApplication.plannerApplyOutcome,
+            plannerMattered: input.plannerApplication.plannerMattered,
+            plannerMatteredControlIds: input.plannerApplication
+                .plannerMatteredControlIds as PostPlannerWorkflowSummary['plannerMatteredControlIds'],
+            fallbackReasons: [...fallbackReasons],
+            fallbackRollupSelectionSource:
+                input.plannerApplication.fallbackRollupSelectionSource,
+            modality: input.executionPlan.modality,
+            safetyTier: input.executionPlan.safetyTier,
+            searchRequested:
+                input.plannerApplication.generationForExecution.search !==
+                undefined,
+        });
+        const plannerStepRequest = {
+            workflowId: 'wf_chat_orchestration',
+            workflowName: 'chat_orchestration',
+            attempt: 1,
+            request: normalizedRequest,
+            invocationContext: plannerInvocationContext,
+            capabilityProfiles: plannerCapabilityOptions,
+        };
+        const postPlannerWorkflowAdapter: PostPlannerWorkflowAdapter = (
+            input
+        ) => {
+            if (input.plannerStepResult.execution.status === 'failed') {
+                const plannerFailureReason: PlannerFallbackReason =
+                    input.plannerStepResult.execution.reasonCode ===
+                    'planner_invalid_output'
+                        ? 'planner_execution_failed_planner_invalid_output'
+                        : input.plannerStepResult.execution.reasonCode ===
+                            'planner_runtime_error'
+                          ? 'planner_execution_failed_planner_runtime_error'
+                          : 'planner_execution_failed_unknown';
+                fallbackReasons.push(plannerFailureReason);
+            }
+            const plannerApplication = plannerResultApplier({
+                normalizedRequest,
+                plannerStepResult: input.plannerStepResult,
+                clarificationContinuation,
+                resolvedExecutionPolicy: resolvedExecutionContract,
+            });
+            fallbackReasons.push(
+                ...(plannerApplication.fallbackReasons as PlannerFallbackReason[])
+            );
+            fallbackRollupSelectionSourceRef.value =
+                plannerApplication.fallbackRollupSelectionSource as PlannerSelectionSource;
+            const executionPlan: ChatPlan = {
+                ...plannerApplication.plan,
+                generation: plannerApplication.generationForExecution,
+                profileId: plannerApplication.selectedResponseProfile.id,
+                ...(plannerApplication.selectedCapabilityProfile !==
+                    undefined && {
+                    selectedCapabilityProfile:
+                        plannerApplication.selectedCapabilityProfile,
+                }),
+            };
+            const plannerActionOutcome = resolvePlannerActionOutcome({
+                executionPlan,
+                normalizedRequest,
+            });
+            if (plannerActionOutcome.kind === 'terminal_action') {
+                if (plannerActionOutcome.fallbackReason !== undefined) {
+                    fallbackReasons.push(plannerActionOutcome.fallbackReason);
+                }
+                if (plannerActionOutcome.warningMessage !== undefined) {
+                    chatOrchestratorLogger.warn(
+                        plannerActionOutcome.warningMessage
+                    );
+                }
+                return {
+                    continuation: 'terminal_action' as const,
+                    terminalAction: plannerActionOutcome.terminalAction,
+                    plannerSummary: buildPlannerSummary({
+                        plannerStepResult: input.plannerStepResult,
+                        plannerApplication,
+                        executionPlan,
+                    }),
+                };
+            }
+            const safetyTierRank: Record<SafetyTier, number> = {
+                Low: 1,
+                Medium: 2,
+                High: 3,
+            };
+            const orchestrationSafetyTier =
+                evaluatorSafetyTierHint &&
+                safetyTierRank[evaluatorSafetyTierHint] >
+                    safetyTierRank[executionPlan.safetyTier]
+                    ? evaluatorSafetyTierHint
+                    : executionPlan.safetyTier;
+            const postPlanAssembly = assemblePostPlanGenerationInput({
+                systemPrompt: promptLayers.systemPrompt,
+                personaPrompt,
+                normalizedConversation,
+                executionPlanForPrompt: executionPlan,
+                ...(plannerApplication.surfacePolicy !== undefined && {
+                    surfacePolicy: plannerApplication.surfacePolicy,
+                }),
+                normalizedRequest,
+                orchestrationSafetyTier,
+                toolIntent:
+                    plannerApplication.generationForExecution.toolIntent,
+                toolRequestContext: plannerApplication.toolRequestContext,
+                executionContract: {
+                    policyId: resolvedExecutionContract.policyId,
+                    policyVersion: resolvedExecutionContract.policyVersion,
+                },
+            });
+            return {
+                continuation: 'continue_message' as const,
+                messagesWithHints: postPlanAssembly.conversationMessages,
+                generationRequest: {
+                    messages: postPlanAssembly.conversationMessages,
+                    model: plannerApplication.selectedResponseProfile
+                        .providerModel,
+                    provider:
+                        plannerApplication.selectedResponseProfile.provider,
+                    capabilities:
+                        plannerApplication.selectedResponseProfile.capabilities,
+                    ...(executionPlan.generation.reasoningEffort !==
+                        undefined && {
+                        reasoningEffort:
+                            executionPlan.generation.reasoningEffort,
+                    }),
+                    ...(executionPlan.generation.verbosity !== undefined && {
+                        verbosity: executionPlan.generation.verbosity,
+                    }),
+                    ...(executionPlan.generation.search !== undefined && {
+                        search: executionPlan.generation.search,
+                    }),
+                },
+                ...(plannerApplication.contextStepRequest !== undefined && {
+                    contextStepRequest: plannerApplication.contextStepRequest,
+                }),
+                plannerSummary: buildPlannerSummary({
+                    plannerStepResult: input.plannerStepResult,
+                    plannerApplication,
+                    executionPlan,
+                }),
+            };
+        };
+        const baseConversationMessages = [
+            { role: 'system' as const, content: promptLayers.systemPrompt },
+            { role: 'system' as const, content: personaPrompt },
+            ...normalizedConversation,
+        ];
+        const baseConversationSnapshot = JSON.stringify({
+            request: normalizedRequest,
+            executionContract: {
+                policyId: resolvedExecutionContract.policyId,
+                policyVersion: resolvedExecutionContract.policyVersion,
+            },
+        });
+        const executionContractScopeTuple =
+            buildExecutionContractScopeTuple(normalizedRequest);
+        const response = await chatService.runChatMessagesWithOutcome({
+            messages: baseConversationMessages,
+            conversationSnapshot: baseConversationSnapshot,
+            orchestrationStartedAtMs: orchestrationStartedAt,
+            safetyTier: evaluatorSafetyTierHint,
+            model: defaultResponseProfile.providerModel,
+            provider: defaultResponseProfile.provider,
+            capabilities: defaultResponseProfile.capabilities,
+            workflowModeId: workflowModeResolution.modeDecision.modeId,
+            plannerStepRequest,
+            plannerStepExecutor,
+            postPlannerWorkflowAdapter,
+            contextStepExecutor: weatherContextStepExecutor,
+            latestUserInput: normalizedRequest.latestUserInput,
+            ExecutionContract: resolvedExecutionContract,
+            ...(executionContractScopeTuple !== undefined && {
+                executionContractTrustGraphContext: {
+                    queryIntent: normalizedRequest.latestUserInput,
+                    scopeTuple: executionContractScopeTuple,
+                },
+            }),
+            executionContext: {
+                evaluator: evaluatorExecutionContext,
+            },
+            steerabilityControls,
+        });
+        const plannerSummary =
+            response.kind === 'message' ? response.plannerSummary : undefined;
+        const plannerStepResult =
+            response.kind === 'message'
+                ? response.plannerStepResult
+                : undefined;
+        const finalToolExecutionTelemetry =
+            response.kind === 'message'
+                ? response.finalToolExecutionTelemetry
+                : undefined;
+        const executionPlan: ChatPlan = plannerSummary?.executionPlan ?? {
+            action: 'message',
+            modality: 'text',
+            profileId: defaultResponseProfile.id,
+            safetyTier: 'Low',
+            reasoning: 'Fallback execution plan before planner summary.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'medium',
+            },
+        };
+        const fallbackRollupSelectionSource =
+            (plannerSummary?.fallbackRollupSelectionSource as
+                | PlannerSelectionSource
+                | undefined) ?? fallbackRollupSelectionSourceRef.value;
+        const weatherRouting = {
+            weatherLikeRequest: isWeatherLikeRequest(
+                normalizedRequest.latestUserInput
+            ),
+            plannerToolIntentPresent:
+                plannerSummary?.plannerDiagnostics
+                    .normalizedToolIntentPresent ?? false,
+            plannerRawToolIntentPresent:
+                plannerSummary?.plannerDiagnostics.rawToolIntentPresent ??
+                false,
+            plannerRawToolIntentName:
+                plannerSummary?.plannerDiagnostics.rawToolIntentName,
+            plannerNormalizedToolIntentName:
+                plannerSummary?.plannerDiagnostics.normalizedToolIntentName,
+            plannerToolIntentRejected:
+                plannerSummary?.plannerDiagnostics.toolIntentRejected ?? false,
+            plannerToolIntentRejectionReasons:
+                plannerSummary?.plannerDiagnostics.toolIntentRejectionReasons ??
+                [],
+            plannerRequestedWeather:
+                plannerSummary?.plannerDiagnostics.normalizedToolIntentName ===
+                'weather_forecast',
+            toolSelectionRequested:
+                plannerSummary?.toolRequestContext.requested ?? false,
+            toolSelectionEligible:
+                plannerSummary?.toolRequestContext.eligible ?? false,
+            toolSelectionToolName: plannerSummary?.toolRequestContext.toolName,
+            toolSelectionReasonCode:
+                plannerSummary?.toolRequestContext.reasonCode,
+            selectedWeather:
+                plannerSummary?.toolRequestContext.toolName ===
+                'weather_forecast',
+        };
+        if (
+            weatherRouting.weatherLikeRequest ||
+            weatherRouting.selectedWeather
+        ) {
+            chatOrchestratorLogger.info('chat.weather.routing', {
+                event: 'chat.weather.routing',
+                stage: 'selection',
+                surface: normalizedRequest.surface,
+                ...weatherRouting,
+            });
+        }
         const weatherExecutionAttempted =
-            toolExecutionContext?.toolName === 'weather_forecast' &&
-            (toolExecutionContext.status === 'executed' ||
-                toolExecutionContext.status === 'failed');
+            finalToolExecutionTelemetry?.toolName === 'weather_forecast' &&
+            (finalToolExecutionTelemetry.status === 'executed' ||
+                finalToolExecutionTelemetry.status === 'failed');
         const weatherOutcome =
-            toolRequestContext.toolName === 'weather_forecast' &&
-            toolRequestContext.requested
+            plannerSummary?.toolRequestContext.toolName ===
+                'weather_forecast' &&
+            plannerSummary.toolRequestContext.requested
                 ? 'not_executed'
                 : 'not_selected';
         if (
@@ -601,91 +747,15 @@ export const createChatOrchestrator = ({
                 surface: normalizedRequest.surface,
                 ...weatherRouting,
                 weatherExecutionAttempted,
-                weatherToolStatus: toolExecutionContext?.status,
-                weatherToolReasonCode: toolExecutionContext?.reasonCode,
+                weatherToolStatus:
+                    finalToolExecutionTelemetry?.status ??
+                    plannerSummary?.toolExecutionContext?.status,
+                weatherToolReasonCode:
+                    finalToolExecutionTelemetry?.reasonCode ??
+                    plannerSummary?.toolExecutionContext?.reasonCode,
                 weatherOutcome,
             });
         }
-
-        if (
-            clarificationContinuation.kind === 'unresolved' &&
-            clarificationContinuation.pending.options.length > 0
-        ) {
-            return buildToolClarificationResponse({
-                toolContext: {
-                    toolName: 'weather_forecast',
-                    status: 'executed',
-                    clarification: {
-                        reasonCode: 'ambiguous_location',
-                        question: clarificationContinuation.pending.question,
-                        options: clarificationContinuation.pending.options.map(
-                            (option) => ({
-                                id: option.id,
-                                label: option.label,
-                                value: {
-                                    toolName: 'weather_forecast',
-                                    input: option.input,
-                                },
-                            })
-                        ),
-                    },
-                },
-                metadataContext: {
-                    modelVersion: selectedResponseProfile.providerModel,
-                    conversationSnapshot: JSON.stringify({
-                        request: normalizedRequest,
-                        planner: {
-                            action: executionPlan.action,
-                            modality: executionPlan.modality,
-                            profileId: executionPlan.profileId,
-                            safetyTier: executionPlan.safetyTier,
-                            generation: executionPlan.generation,
-                            toolIntent,
-                            toolRequest: toolRequestContext,
-                            ...(surfacePolicy && { surfacePolicy }),
-                        },
-                        executionContract: {
-                            policyId: resolvedExecutionContract.policyId,
-                            policyVersion:
-                                resolvedExecutionContract.policyVersion,
-                        },
-                        clarification: {
-                            toolName: 'weather_forecast',
-                            reasonCode: 'ambiguous_location',
-                        },
-                    }),
-                    executionContext: {
-                        planner: {
-                            status: plannerExecution.status,
-                            reasonCode: plannerExecution.reasonCode,
-                            purpose: plannerExecution.purpose,
-                            contractType: plannerExecution.contractType,
-                            applyOutcome: plannerApplyOutcome,
-                            mattered: plannerMattered,
-                            matteredControlIds: plannerMatteredControlIds,
-                            profileId: plannerProfile.id,
-                            originalProfileId: plannerProfile.id,
-                            effectiveProfileId: plannerProfile.id,
-                            provider: plannerProfile.provider,
-                            model: plannerProfile.providerModel,
-                            durationMs: plannerExecution.durationMs,
-                        },
-                        evaluator: evaluatorExecutionContext,
-                        generation: {
-                            status: 'executed',
-                            profileId: selectedResponseProfile.id,
-                            originalProfileId: originalSelectedProfileId,
-                            effectiveProfileId: effectiveSelectedProfileId,
-                            provider: selectedResponseProfile.provider,
-                            model: selectedResponseProfile.providerModel,
-                        },
-                    },
-                },
-                buildResponseMetadata,
-            });
-        }
-
-        const clarificationShortCircuitHit = false;
         if (
             (weatherRouting.weatherLikeRequest ||
                 weatherRouting.selectedWeather) &&
@@ -698,128 +768,84 @@ export const createChatOrchestrator = ({
                     stage: 'normal_generation_without_weather_tool',
                     surface: normalizedRequest.surface,
                     ...weatherRouting,
-                    clarificationShortCircuitHit,
+                    clarificationShortCircuitHit: false,
                     weatherExecutionAttempted,
                     weatherOutcome,
                 }
             );
         }
-
-        const executionPlanForPrompt: PlannerPayloadChatPlan = {
-            ...executionPlan,
-            generation: executionPlan.generation,
-        };
-
-        const safetyTierRank: Record<SafetyTier, number> = {
-            Low: 1,
-            Medium: 2,
-            High: 3,
-        };
-        const orchestrationSafetyTier =
-            evaluatorSafetyTierHint &&
-            safetyTierRank[evaluatorSafetyTierHint] >
-                safetyTierRank[executionPlan.safetyTier]
-                ? evaluatorSafetyTierHint
-                : executionPlan.safetyTier;
-        const executionContractScopeTuple =
-            buildExecutionContractScopeTuple(normalizedRequest);
-
-        if (plannerActionOutcome.kind === 'terminal_action') {
-            if (plannerActionOutcome.fallbackReason !== undefined) {
-                fallbackReasons.push(plannerActionOutcome.fallbackReason);
+        const emitControlObservability = (input: {
+            responseAction: 'message' | 'ignore' | 'react' | 'image';
+            responseModality: ChatPlan['modality'];
+        }): void => {
+            if (
+                plannerSummary === undefined ||
+                plannerStepResult === undefined
+            ) {
+                return;
             }
-            if (plannerActionOutcome.warningMessage !== undefined) {
+            const runtimeSteerabilityControls = buildSteerabilityControls({
+                workflowMode: workflowModeResolution.modeDecision,
+                executionContractResponseMode:
+                    resolvedExecutionContract.response.responseMode,
+                requestedProfileId: normalizedRequest.profileId,
+                plannerSelectedProfileId: executionPlan.profileId,
+                selectedProfile: {
+                    profileId: plannerSummary.selectedResponseProfile.id,
+                    provider: plannerSummary.selectedResponseProfile.provider,
+                    model: plannerSummary.selectedResponseProfile.providerModel,
+                },
+                persona: {
+                    personaId: personaProfile.id,
+                    overlaySource: personaProfile.promptOverlay.source,
+                },
+                toolRequest: plannerSummary.toolRequestContext,
+            });
+            try {
+                const observabilityEnvelope = buildControlObservabilityEnvelope(
+                    {
+                        surface: normalizedRequest.surface,
+                        workflowModeId:
+                            workflowModeResolution.modeDecision.modeId,
+                        executionContractResponseMode:
+                            resolvedExecutionContract.response.responseMode,
+                        requestedProfileId: normalizedRequest.profileId,
+                        plannerSelectedProfileId: executionPlan.profileId,
+                        selectedProfileId:
+                            plannerSummary.selectedResponseProfile.id,
+                        personaOverlaySource:
+                            personaProfile.promptOverlay.source,
+                        toolRequest: plannerSummary.toolRequestContext,
+                        plannerApplyOutcome: plannerSummary.plannerApplyOutcome,
+                        plannerMatteredControlIds:
+                            plannerSummary.plannerMatteredControlIds,
+                        plannerStatus: plannerStepResult.execution.status,
+                        plannerReasonCode:
+                            plannerStepResult.execution.reasonCode,
+                        responseAction: input.responseAction,
+                        responseModality: input.responseModality,
+                        steerabilityControls: runtimeSteerabilityControls,
+                    }
+                );
+                emitControlObservabilityEnvelope(
+                    chatOrchestratorLogger,
+                    observabilityEnvelope
+                );
+            } catch (error) {
                 chatOrchestratorLogger.warn(
-                    plannerActionOutcome.warningMessage
+                    'chat.steerability.control_observability_failed_open',
+                    {
+                        event: 'chat.steerability.control_observability_failed_open',
+                        reason:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                        surface: normalizedRequest.surface,
+                        plannerStatus: plannerStepResult.execution.status,
+                    }
                 );
             }
-            const terminalResponse = plannerTerminalActionToResponse(
-                plannerActionOutcome.terminalAction
-            );
-            return terminalResponse;
-        }
-
-        const postPlanAssembly = assemblePostPlanGenerationInput({
-            systemPrompt: promptLayers.systemPrompt,
-            personaPrompt,
-            normalizedConversation,
-            executionPlanForPrompt,
-            surfacePolicy,
-            normalizedRequest,
-            orchestrationSafetyTier,
-            toolIntent,
-            toolRequestContext,
-            executionContract: {
-                policyId: resolvedExecutionContract.policyId,
-                policyVersion: resolvedExecutionContract.policyVersion,
-            },
-        });
-
-        // By the time we call ChatService, planner output and request overrides
-        // have already been folded into one concrete profile and generation
-        // plan.
-        const response = await chatService.runChatMessagesWithOutcome({
-            messages: postPlanAssembly.conversationMessages,
-            conversationSnapshot: postPlanAssembly.conversationSnapshot,
-            orchestrationStartedAtMs: orchestrationStartedAt,
-            plannerTemperament: executionPlan.generation.temperament,
-            safetyTier: orchestrationSafetyTier,
-            model: selectedResponseProfile.providerModel,
-            provider: selectedResponseProfile.provider,
-            capabilities: selectedResponseProfile.capabilities,
-            generation: executionPlan.generation,
-            workflowModeId: workflowModeResolution.modeDecision.modeId,
-            toolRequest: toolRequestContext,
-            plannerActionOutcome,
-            contextStepRequest: weatherContextStepRequest,
-            contextStepExecutor: weatherContextStepExecutor,
-            latestUserInput: normalizedRequest.latestUserInput,
-            ExecutionContract: resolvedExecutionContract,
-            ...(executionContractScopeTuple !== undefined && {
-                executionContractTrustGraphContext: {
-                    queryIntent: normalizedRequest.latestUserInput,
-                    scopeTuple: executionContractScopeTuple,
-                },
-            }),
-            executionContext: {
-                // Planner execution metadata is sourced from ChatPlannerResult
-                // so traces can distinguish successful planning from fallback.
-                // This metadata reports planner influence; it does not delegate
-                // orchestration ownership or policy authority to planner.
-                planner: {
-                    status: plannerExecution.status,
-                    ...(plannerExecution.reasonCode !== undefined && {
-                        reasonCode: plannerExecution.reasonCode,
-                    }),
-                    purpose: plannerExecution.purpose,
-                    contractType: plannerExecution.contractType,
-                    applyOutcome: plannerApplyOutcome,
-                    mattered: plannerMattered,
-                    matteredControlIds: plannerMatteredControlIds,
-                    profileId: plannerProfile.id,
-                    originalProfileId: plannerProfile.id,
-                    effectiveProfileId: plannerProfile.id,
-                    provider: plannerProfile.provider,
-                    model: plannerProfile.providerModel,
-                    durationMs: plannerExecution.durationMs,
-                },
-                evaluator: evaluatorExecutionContext,
-                generation: {
-                    // Generation starts as "executed" at orchestration level.
-                    // ChatService injects runtime-resolved model + duration.
-                    status: 'executed',
-                    profileId: selectedResponseProfile.id,
-                    originalProfileId: originalSelectedProfileId,
-                    effectiveProfileId: effectiveSelectedProfileId,
-                    provider: selectedResponseProfile.provider,
-                    model: selectedResponseProfile.providerModel,
-                },
-                ...(toolExecutionContext !== undefined && {
-                    tool: toolExecutionContext,
-                }),
-            },
-            steerabilityControls,
-        });
+        };
         if (response.kind === 'terminal_action') {
             const terminalResponse =
                 response.response ??
@@ -877,9 +903,9 @@ export const createChatOrchestrator = ({
         chatOrchestratorLogger.info({
             event: 'chat.orchestration.timing',
             surface: normalizedRequest.surface,
-            plannerStatus: plannerExecution.status,
-            plannerReasonCode: plannerExecution.reasonCode,
-            plannerDurationMs: plannerExecution.durationMs,
+            plannerStatus: plannerStepResult?.execution.status,
+            plannerReasonCode: plannerStepResult?.execution.reasonCode,
+            plannerDurationMs: plannerStepResult?.execution.durationMs,
             evaluatorStatus: evaluatorExecutionContext?.status,
             evaluatorReasonCode: evaluatorExecutionContext?.reasonCode,
             evaluatorSafetyTier:
@@ -897,23 +923,24 @@ export const createChatOrchestrator = ({
             personaDisplayName: personaProfile.displayName,
             personaOverlaySource: personaProfile.promptOverlay.source,
             personaOverlayLength: personaProfile.promptOverlay.length,
-            responseProfileId: selectedResponseProfile.id,
-            originalProfileId: originalSelectedProfileId,
-            effectiveProfileId: effectiveSelectedProfileId,
-            requestedCapabilityProfile: plan.requestedCapabilityProfile,
+            responseProfileId: plannerSummary?.selectedResponseProfile.id,
+            originalProfileId: plannerSummary?.originalSelectedProfileId,
+            effectiveProfileId: plannerSummary?.effectiveSelectedProfileId,
+            requestedCapabilityProfile:
+                plannerSummary?.executionPlan.requestedCapabilityProfile,
             selectedCapabilityProfile:
-                plannerApplication.selectedCapabilityProfile,
-            capabilityReasonCode: plannerApplication.capabilityReasonCode,
-            searchRequested: generationForExecution.search !== undefined,
-            toolName: response.finalToolExecutionTelemetry?.toolName,
-            toolStatus: response.finalToolExecutionTelemetry?.status,
-            toolReasonCode: response.finalToolExecutionTelemetry?.reasonCode,
-            toolEligible: response.finalToolExecutionTelemetry?.eligible,
+                plannerSummary?.selectedCapabilityProfile,
+            capabilityReasonCode: plannerSummary?.capabilityReasonCode,
+            searchRequested: plannerSummary?.searchRequested,
+            toolName: finalToolExecutionTelemetry?.toolName,
+            toolStatus: finalToolExecutionTelemetry?.status,
+            toolReasonCode: finalToolExecutionTelemetry?.reasonCode,
+            toolEligible: finalToolExecutionTelemetry?.eligible,
             toolRequestReasonCode:
-                response.finalToolExecutionTelemetry?.requestReasonCode,
-            rerouteApplied,
+                finalToolExecutionTelemetry?.requestReasonCode,
+            rerouteApplied: undefined,
             fallbackApplied:
-                plannerExecution.status === 'failed' ||
+                plannerStepResult?.execution.status === 'failed' ||
                 fallbackReasons.length > 0,
             fallbackReasons,
             executionContractId: resolvedExecutionContract.policyId,

@@ -128,24 +128,19 @@ The current chat path looks like this:
 1. `chatOrchestrator` receives and normalizes the request.
 2. The Execution Contract sets the allowed behavior and limits.
 3. The backend resolves workflow mode and profile.
-4. Planner runs once in `chatOrchestrator` before workflow execution and generation.
-5. Planner output goes through surface policy, capability policy, and tool
-   policy.
-6. `chatService` runs the workflow engine with the profile selected for the mode:
+4. `chatOrchestrator` injects planner workflow seams:
+    - `PlannerStepExecutor` invokes planner.
+    - `PostPlannerWorkflowAdapter` applies planner output through backend policy.
+5. `chatService` runs the workflow engine with the profile selected for the mode:
+    - workflow runs `plan` first through the injected planner executor
+    - workflow calls post-planner adapter to classify terminal action or continue message path
+    - context-step and generation run only after planner application
     - `fast` uses the `generate-only` profile (one generate step, no assess/revise)
     - `balanced` and `grounded` use the `bounded-review` profile (generate -> assess -> revise loop)
-7. Response metadata records mode, planner influence, workflow lineage, cost,
+6. Response metadata records mode, planner influence, workflow lineage, cost,
    and trace or provenance fields.
 
-Planner affects execution today, but planner timing still runs before the main
-workflow-engine execution path.
-
-Planner lineage can appear in workflow metadata as a `plan` step when that
-metadata exists for the run. That is a lineage bridge, not a change in planner
-authority.
-
-So planner can appear in workflow lineage even though it still runs before the
-main workflow execution path.
+Planner step lineage now comes from workflow execution as the canonical source.
 
 ## Review loop
 
@@ -180,9 +175,8 @@ Those suggestions stay inside backend policy. Planner cannot change the
 Execution Contract, grant tools or steps, bypass policy, own mode or profile
 selection, own safety, own provenance, or own final response behavior.
 
-Planner information can appear in workflow metadata as a `plan` step when
-available. That is lineage, not authority. Planner still runs before workflow
-execution in the main chat path.
+Planner information appears in workflow metadata as a workflow-owned `plan`
+step. That is lineage, not authority.
 
 When metadata supports it, trace copy can say `Planned, then generated` or
 `Planner fallback`. Avoid phrasing that makes planner sound like it owns the
@@ -387,29 +381,24 @@ The adapter `toolRegistryContextStepAdapter.ts` implements this pattern for
 
 ### Planner execution
 
-Planner runs before workflow execution in `chatOrchestrator`. Planner
-output goes through surface policy, capability policy, and tool policy before
-reaching the chat service.
+Planner timing is workflow-owned:
 
-Groundwork now includes an injected planner policy-application seam
-(`PlannerResultApplier`) that keeps planner output advisory while preserving
-backend policy authority. Planner timing is still pre-workflow in current
-runtime behavior.
+- `chatOrchestrator` builds and injects `PlannerStepExecutor` and
+  `PostPlannerWorkflowAdapter`.
+- `workflowEngine` executes `plan` first and records canonical plan lineage.
+- `PostPlannerWorkflowAdapter` applies planner output through
+  `PlannerResultApplier`, `resolvePlannerActionOutcome`, and
+  `assemblePostPlanGenerationInput`.
+- `chatService` renders workflow terminal outcomes and normal message outcomes.
 
-Post-plan planner payload/message assembly now runs through a bounded
-`chatService` seam (`assemblePostPlanGenerationInput`) so message construction
-is no longer embedded directly in orchestration branches.
-
-Planner lineage can appear in workflow metadata as a `plan` step when that
-metadata exists for the run. That is a lineage bridge, not a change in planner
-authority. Planner timing and execution are still not workflow-engine-owned.
+Planner output remains advisory. Mode/profile/contract authority stays in
+deterministic bootstrap and backend policy layers.
 
 In the current split:
 
-- planner timing lives in `chatOrchestrator` before workflow execution
+- planner timing and plan lineage are workflow-owned
 - weather_forecast execution uses the workflow context-step path
 - web_search unchanged (not migrated to context-step)
-- workflow metadata can include bridged planner lineage
 
 ## Step records
 
@@ -528,9 +517,8 @@ These workflow rules should stay true even as profiles expand:
 
 ## Future work
 
-Future workflow work may add planner timing owned by the workflow engine,
-first-class tool steps, replanning, broader workflow diagrams, and user-facing
-workflow controls.
+Future workflow work may add first-class tool steps, replanning, broader
+workflow diagrams, and user-facing workflow controls.
 
 TODO(workflow-search-profile-split): Define and implement explicit split-model
 execution for retrieval vs final generation. Current routing resolves one

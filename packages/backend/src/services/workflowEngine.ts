@@ -1006,15 +1006,20 @@ export const runBoundedReviewWorkflow = async ({
             baseMessagesWithHints: messagesWithHints,
             baseGenerationRequest: generationRequest,
         });
-        effectiveGenerationRequest =
-            postPlannerWorkflowAdapterResult.generationRequest;
-        effectiveMessagesWithHints =
-            postPlannerWorkflowAdapterResult.messagesWithHints;
-        effectiveContextStepRequest =
-            postPlannerWorkflowAdapterResult.contextStepRequest ??
-            effectiveContextStepRequest;
-        workflowTerminalAction =
-            postPlannerWorkflowAdapterResult.terminalAction;
+        if (
+            postPlannerWorkflowAdapterResult.continuation === 'terminal_action'
+        ) {
+            workflowTerminalAction =
+                postPlannerWorkflowAdapterResult.terminalAction;
+        } else {
+            effectiveGenerationRequest =
+                postPlannerWorkflowAdapterResult.generationRequest;
+            effectiveMessagesWithHints =
+                postPlannerWorkflowAdapterResult.messagesWithHints;
+            effectiveContextStepRequest =
+                postPlannerWorkflowAdapterResult.contextStepRequest ??
+                effectiveContextStepRequest;
+        }
     }
 
     if (workflowTerminalAction !== undefined) {
@@ -1087,6 +1092,7 @@ export const runBoundedReviewWorkflow = async ({
     };
 
     if (
+        !shouldStop &&
         effectiveContextStepRequest?.requested === true &&
         effectiveContextStepRequest.eligible &&
         contextStepExecutor !== undefined
@@ -1218,17 +1224,17 @@ export const runBoundedReviewWorkflow = async ({
         }
     }
 
-    if (
-        !isTransitionAllowed(
-            workflowState.currentStepKind,
-            'generate',
-            workflowPolicy
-        )
-    ) {
-        terminationReason = 'transition_blocked_by_policy';
-        shouldStop = true;
-    } else {
-        if (!stopIfOverLimits('generate')) {
+    if (!shouldStop) {
+        if (
+            !isTransitionAllowed(
+                workflowState.currentStepKind,
+                'generate',
+                workflowPolicy
+            )
+        ) {
+            terminationReason = 'transition_blocked_by_policy';
+            shouldStop = true;
+        } else if (!stopIfOverLimits('generate')) {
             const initialDraftStartedAt = generationStartedAtMs;
             messagesWithContext = injectContextMessagesIntoPrompt(
                 effectiveMessagesWithHints,

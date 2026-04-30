@@ -13,10 +13,7 @@ import type {
     GenerationRuntime,
 } from '@footnote/agent-runtime';
 import { createVoltAgentRuntime } from '@footnote/agent-runtime';
-import type {
-    ResponseMetadata,
-    StepRecord,
-} from '@footnote/contracts/ethics-core';
+import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
 import { ResponseMetadataSchema } from '@footnote/contracts/web';
 import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import {
@@ -408,7 +405,7 @@ test('runChatMessages records planner lineage in workflow steps for bounded-revi
                     workflowName: input.workflowConfig.workflowName,
                     status: 'completed',
                     terminationReason: 'goal_satisfied',
-                    stepCount: 1,
+                    stepCount: 2,
                     maxSteps:
                         input.workflowConfig.executionLimits
                             ?.maxWorkflowSteps ?? 1,
@@ -416,6 +413,19 @@ test('runChatMessages records planner lineage in workflow steps for bounded-revi
                     steps: [
                         {
                             stepId: 'step_1',
+                            attempt: 1,
+                            stepKind: 'plan',
+                            startedAt: new Date().toISOString(),
+                            finishedAt: new Date().toISOString(),
+                            durationMs: 1,
+                            outcome: {
+                                status: 'executed',
+                                summary: 'Planner step executed in workflow.',
+                            },
+                        },
+                        {
+                            stepId: 'step_2',
+                            parentStepId: 'step_1',
                             attempt: 1,
                             stepKind: 'generate',
                             startedAt: new Date().toISOString(),
@@ -435,26 +445,6 @@ test('runChatMessages records planner lineage in workflow steps for bounded-revi
     const response = await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'Summarize this.' }],
         conversationSnapshot: 'Summarize this.',
-        executionContext: {
-            planner: {
-                status: 'executed',
-                purpose: 'chat_orchestrator_action_selection',
-                contractType: 'structured',
-                applyOutcome: 'applied',
-                mattered: true,
-                matteredControlIds: ['tool_allowance'],
-                profileId: 'openai-text-fast',
-                provider: 'openai',
-                model: 'gpt-5-nano',
-                durationMs: 11,
-            },
-            generation: {
-                status: 'executed',
-                profileId: 'openai-text-medium',
-                provider: 'openai',
-                model: 'gpt-5-mini',
-            },
-        },
     });
 
     assert.ok(response.metadata.workflow);
@@ -1199,8 +1189,10 @@ test('runChatMessages falls back to reviewed workflow behavior for unknown workf
     assert.equal(capturedWorkflow?.workflowName, 'message_with_review_loop');
 });
 
-test('runChatMessages maps planner execution context into a workflow planner step for bounded-review lineage', async () => {
-    let capturedPlannerStep: StepRecord | undefined;
+test('runChatMessages forwards planner seams into workflow runtime for bounded-review lineage', async () => {
+    let capturedPlannerStepRequestDefined = false;
+    let capturedPlannerStepExecutorDefined = false;
+    let capturedPostPlannerWorkflowAdapterDefined = false;
 
     const chatService = createChatService({
         generationRuntime: createRuntime(),
@@ -1215,7 +1207,12 @@ test('runChatMessages maps planner execution context into a workflow planner ste
             maxDurationMs: 15000,
         },
         runReviewWorkflow: async (input) => {
-            capturedPlannerStep = input.plannerStepRecord;
+            capturedPlannerStepRequestDefined =
+                input.plannerStepRequest !== undefined;
+            capturedPlannerStepExecutorDefined =
+                input.plannerStepExecutor !== undefined;
+            capturedPostPlannerWorkflowAdapterDefined =
+                input.postPlannerWorkflowAdapter !== undefined;
             return {
                 outcome: 'generated',
                 generationResult: {
@@ -1238,7 +1235,7 @@ test('runChatMessages maps planner execution context into a workflow planner ste
                     maxSteps: 3,
                     maxDurationMs: input.workflowConfig.maxDurationMs,
                     steps: [
-                        input.plannerStepRecord ?? {
+                        {
                             stepId: 'step_1',
                             attempt: 1,
                             stepKind: 'plan',
@@ -1246,8 +1243,8 @@ test('runChatMessages maps planner execution context into a workflow planner ste
                             finishedAt: new Date().toISOString(),
                             durationMs: 1,
                             outcome: {
-                                status: 'failed',
-                                summary: 'planner placeholder',
+                                status: 'executed',
+                                summary: 'Planner step from workflow runtime.',
                             },
                         },
                         {
@@ -1272,37 +1269,105 @@ test('runChatMessages maps planner execution context into a workflow planner ste
     const response = await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'Summarize this.' }],
         conversationSnapshot: 'Summarize this.',
-        executionContext: {
-            planner: {
-                status: 'failed',
-                reasonCode: 'planner_runtime_error',
-                purpose: 'chat_orchestrator_action_selection',
-                contractType: 'fallback',
-                applyOutcome: 'not_applied',
-                mattered: false,
-                matteredControlIds: [],
+        plannerStepRequest: {
+            workflowId: 'wf_planner_request',
+            workflowName: 'chat_orchestration',
+            attempt: 1,
+            request: {
+                latestUserInput: 'Summarize this.',
+                conversation: [{ role: 'user', content: 'Summarize this.' }],
+                surface: 'web',
+                trigger: { kind: 'submit' },
                 profileId: 'openai-text-fast',
-                originalProfileId: 'openai-text-fast',
-                effectiveProfileId: 'openai-text-fast',
-                provider: 'openai',
-                model: 'gpt-5-nano',
-                durationMs: 9,
             },
+            invocationContext: {
+                owner: 'workflow',
+                workflowName: 'chat_orchestration',
+                stepKind: 'plan',
+                purpose: 'chat_orchestrator_action_selection',
+            },
+            capabilityProfiles: [],
         },
+        plannerStepExecutor: async () => ({
+            plan: {
+                action: 'message',
+                modality: 'text',
+                profileId: 'openai-text-fast',
+                safetyTier: 'Low',
+                reasoning: 'Planner execution context forwarding test.',
+                generation: {
+                    reasoningEffort: 'low',
+                    verbosity: 'medium',
+                },
+            },
+            execution: {
+                status: 'executed',
+                purpose: 'chat_orchestrator_action_selection',
+                contractType: 'structured',
+                durationMs: 4,
+            },
+            ingestion: {
+                outputApplyOutcome: 'accepted',
+                fallbackTier: 'none',
+                correctionCodes: [],
+                outOfContractFields: [],
+                authorityFieldAttempts: [],
+            },
+            diagnostics: {
+                rawToolIntentPresent: false,
+                normalizedToolIntentPresent: false,
+                toolIntentRejected: false,
+                toolIntentRejectionReasons: [],
+            },
+        }),
+        postPlannerWorkflowAdapter: (input) => ({
+            continuation: 'continue_message',
+            messagesWithHints: input.baseMessagesWithHints,
+            generationRequest: input.baseGenerationRequest,
+            plannerSummary: {
+                executionPlan: input.plannerStepResult.plan,
+                generationForExecution: input.plannerStepResult.plan.generation,
+                selectedResponseProfile: {
+                    id: 'openai-text-fast',
+                    provider: 'openai',
+                    providerModel: 'gpt-5-mini',
+                    capabilities: {
+                        canReact: true,
+                        canGenerateImages: true,
+                        canUseTts: true,
+                        canUseSearch: true,
+                        canUseTools: true,
+                    },
+                },
+                originalSelectedProfileId: 'openai-text-fast',
+                effectiveSelectedProfileId: 'openai-text-fast',
+                toolRequestContext: {
+                    toolName: 'web_search',
+                    requested: false,
+                    eligible: false,
+                },
+                plannerDiagnostics: {
+                    rawToolIntentPresent: false,
+                    normalizedToolIntentPresent: false,
+                    toolIntentRejected: false,
+                    toolIntentRejectionReasons: [],
+                },
+                plannerApplyOutcome: 'applied',
+                plannerMattered: true,
+                plannerMatteredControlIds: [],
+                fallbackReasons: [],
+                fallbackRollupSelectionSource: 'planner',
+                modality: 'text',
+                safetyTier: 'Low',
+                searchRequested: false,
+            },
+        }),
     });
 
     assert.equal(response.message, 'workflow response');
-    assert.equal(capturedPlannerStep?.stepKind, 'plan');
-    assert.equal(capturedPlannerStep?.outcome.status, 'failed');
-    assert.equal(capturedPlannerStep?.reasonCode, 'planner_runtime_error');
-    assert.equal(
-        capturedPlannerStep?.outcome.signals?.applyOutcome,
-        'not_applied'
-    );
-    assert.equal(
-        capturedPlannerStep?.outcome.signals?.contractType,
-        'fallback'
-    );
+    assert.equal(capturedPlannerStepRequestDefined, true);
+    assert.equal(capturedPlannerStepExecutorDefined, true);
+    assert.equal(capturedPostPlannerWorkflowAdapterDefined, true);
 });
 
 test('runChatMessages executes fast workflow mode as minimal workflow with one generate step', async () => {
@@ -2265,6 +2330,12 @@ test('runChatMessages surfaces workflow terminal react outcome as terminal actio
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
         recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'grounded',
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
         runReviewWorkflow: async (input) =>
             ({
                 outcome: 'terminal_action',
@@ -2288,13 +2359,6 @@ test('runChatMessages surfaces workflow terminal react outcome as terminal actio
     const result = await chatService.runChatMessagesWithOutcome({
         messages: [{ role: 'user', content: 'React only' }],
         conversationSnapshot: 'React only',
-        plannerActionOutcome: {
-            kind: 'terminal_action',
-            terminalAction: {
-                responseAction: 'react',
-                reaction: '🔥',
-            },
-        },
     });
 
     assert.equal(result.kind, 'terminal_action');
@@ -2311,6 +2375,12 @@ test('runChatMessages surfaces workflow terminal ignore outcome as terminal acti
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
         recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'grounded',
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
         runReviewWorkflow: async (input) =>
             ({
                 outcome: 'terminal_action',
@@ -2333,12 +2403,6 @@ test('runChatMessages surfaces workflow terminal ignore outcome as terminal acti
     const result = await chatService.runChatMessagesWithOutcome({
         messages: [{ role: 'user', content: 'Ignore this' }],
         conversationSnapshot: 'Ignore this',
-        plannerActionOutcome: {
-            kind: 'terminal_action',
-            terminalAction: {
-                responseAction: 'ignore',
-            },
-        },
     });
 
     assert.equal(result.kind, 'terminal_action');
@@ -2355,6 +2419,12 @@ test('runChatMessages surfaces workflow terminal image outcome as terminal actio
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
         recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'grounded',
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
         runReviewWorkflow: async (input) =>
             ({
                 outcome: 'terminal_action',
@@ -2380,15 +2450,6 @@ test('runChatMessages surfaces workflow terminal image outcome as terminal actio
     const result = await chatService.runChatMessagesWithOutcome({
         messages: [{ role: 'user', content: 'Generate image' }],
         conversationSnapshot: 'Generate image',
-        plannerActionOutcome: {
-            kind: 'terminal_action',
-            terminalAction: {
-                responseAction: 'image',
-                imageRequest: {
-                    prompt: 'Draw a skyline',
-                },
-            },
-        },
     });
 
     assert.equal(result.kind, 'terminal_action');

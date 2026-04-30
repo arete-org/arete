@@ -8,7 +8,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
     applyStepExecutionToState,
@@ -48,8 +49,9 @@ const createLimits = (): ExecutionLimits => ({
 });
 
 test('workflowEngine remains policy/runtime neutral and avoids orchestrator policy imports', () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
     const workflowEngineSource = readFileSync(
-        join(process.cwd(), 'src', 'services', 'workflowEngine.ts'),
+        join(testDir, '..', 'src', 'services', 'workflowEngine.ts'),
         'utf8'
     );
     assert.equal(
@@ -768,10 +770,14 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
 
 test('runBoundedReviewWorkflow attaches planner plan step to lineage and links initial generate step to planner root', async () => {
     let generationCalls = 0;
+    let generatedMessages:
+        | Parameters<GenerationRuntime['generate']>[0]['messages']
+        | undefined;
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
-        async generate() {
+        async generate(input) {
             generationCalls += 1;
+            generatedMessages = input.messages;
             return {
                 text: 'initial draft',
                 model: 'gpt-5-mini',
@@ -786,23 +792,6 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
         },
     };
 
-    const plannerStep = buildPlannerStepRecord({
-        stepId: 'step_1',
-        attempt: 1,
-        finishedAtMs: Date.now(),
-        summary: {
-            status: 'executed',
-            purpose: 'chat_orchestrator_action_selection',
-            contractType: 'structured',
-            applyOutcome: 'applied',
-            profileId: 'openai-text-fast',
-            provider: 'openai',
-            model: 'gpt-5-nano',
-            mattered: true,
-            matteredControlIds: ['provider_preference'],
-        },
-    });
-
     const result = await runBoundedReviewWorkflow({
         generationRuntime,
         generationRequest: {
@@ -815,16 +804,123 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
             workflowName: 'message_with_review_loop',
             maxIterations: 0,
             maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 2,
+                maxToolCalls: 0,
+                maxPlanCycles: 1,
+                maxReviewCycles: 0,
+                maxDeliberationCalls: 1,
+                maxTokensTotal: Number.MAX_SAFE_INTEGER,
+                maxDurationMs: 15000,
+            },
         },
         workflowPolicy: {
-            enablePlanning: false,
+            enablePlanning: true,
             enableToolUse: false,
             enableReplanning: false,
             enableGeneration: true,
             enableAssessment: true,
             enableRevision: true,
         },
-        plannerStepRecord: plannerStep,
+        plannerStepRequest: {
+            workflowId: 'wf_test',
+            workflowName: 'message_with_review_loop',
+            attempt: 1,
+            request: {
+                surface: 'web',
+                trigger: { kind: 'submit' },
+                latestUserInput: 'Summarize this.',
+                conversation: [{ role: 'user', content: 'Summarize this.' }],
+            },
+            invocationContext: {
+                owner: 'workflow',
+                workflowName: 'message_with_review_loop',
+                stepKind: 'plan',
+                purpose: 'chat_orchestrator_action_selection',
+            },
+            capabilityProfiles: [],
+        },
+        plannerStepExecutor: async () => ({
+            plan: {
+                action: 'message',
+                modality: 'text',
+                safetyTier: 'Low',
+                reasoning: 'Use normal message flow.',
+                generation: { reasoningEffort: 'low', verbosity: 'low' },
+            },
+            execution: {
+                status: 'executed',
+                purpose: 'chat_orchestrator_action_selection',
+                contractType: 'structured',
+                durationMs: 1,
+            },
+            ingestion: {
+                outputApplyOutcome: 'accepted',
+                fallbackTier: 'none',
+                correctionCodes: [],
+                outOfContractFields: [],
+                authorityFieldAttempts: [],
+            },
+            diagnostics: {
+                rawToolIntentPresent: false,
+                normalizedToolIntentPresent: false,
+                toolIntentRejected: false,
+                toolIntentRejectionReasons: [],
+            },
+        }),
+        postPlannerWorkflowAdapter: ({
+            plannerStepResult,
+            baseGenerationRequest,
+            baseMessagesWithHints,
+        }) => ({
+            continuation: 'continue_message',
+            messagesWithHints: [
+                ...baseMessagesWithHints,
+                {
+                    role: 'system',
+                    content: '// adapter-added planner payload',
+                },
+            ],
+            generationRequest: {
+                ...baseGenerationRequest,
+                model: 'gpt-5-mini',
+            },
+            plannerSummary: {
+                executionPlan: plannerStepResult.plan,
+                generationForExecution: plannerStepResult.plan.generation,
+                selectedResponseProfile: {
+                    id: 'openai-text-fast',
+                    provider: 'openai',
+                    providerModel: 'gpt-5-mini',
+                    capabilities: {
+                        supportsReasoningEffort: true,
+                        supportsVerbosity: true,
+                        canUseSearch: false,
+                        canGenerateImage: false,
+                        canUseVision: false,
+                        canUseAudio: false,
+                        canUseStreaming: true,
+                    },
+                },
+                originalSelectedProfileId: 'openai-text-fast',
+                effectiveSelectedProfileId: 'openai-text-fast',
+                toolRequestContext: {
+                    toolName: 'web_search',
+                    requested: false,
+                    eligible: false,
+                    reasonCode: 'tool_not_requested',
+                },
+                plannerDiagnostics: plannerStepResult.diagnostics,
+                plannerApplyOutcome: 'applied',
+                plannerMattered: true,
+                plannerMatteredControlIds: ['provider_preference'],
+                fallbackReasons: [],
+                fallbackRollupSelectionSource: 'default',
+                modality: plannerStepResult.plan.modality,
+                safetyTier: plannerStepResult.plan.safetyTier,
+                searchRequested: false,
+            },
+        }),
         captureUsage: (generationResult, requestedModel) => ({
             model: requestedModel ?? generationResult.model ?? 'gpt-5-mini',
             promptTokens: generationResult.usage?.promptTokens ?? 0,
@@ -844,6 +940,13 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
     assert.equal(result.workflowLineage.steps[1].stepKind, 'generate');
     assert.equal(result.workflowLineage.steps[1].parentStepId, 'step_1');
     assert.equal(generationCalls, 1);
+    assert.ok(
+        generatedMessages?.some(
+            (message) =>
+                message.role === 'system' &&
+                message.content === '// adapter-added planner payload'
+        )
+    );
 });
 
 test('runBoundedReviewWorkflow preserves failed planner fallback status on injected plan step', async () => {
@@ -1488,17 +1591,47 @@ test('runBoundedReviewWorkflow returns terminal planner action outcome without g
                 toolIntentRejectionReasons: [],
             },
         }),
-        postPlannerWorkflowAdapter: ({
-            plannerStepResult,
-            baseMessagesWithHints,
-            baseGenerationRequest,
-        }) => ({
+        postPlannerWorkflowAdapter: ({ plannerStepResult }) => ({
+            continuation: 'terminal_action',
             terminalAction:
                 plannerStepResult.plan.action === 'react'
                     ? { responseAction: 'react', reaction: '🔥' }
                     : { responseAction: 'ignore' },
-            messagesWithHints: baseMessagesWithHints,
-            generationRequest: baseGenerationRequest,
+            plannerSummary: {
+                executionPlan: plannerStepResult.plan,
+                generationForExecution: plannerStepResult.plan.generation,
+                selectedResponseProfile: {
+                    id: 'default',
+                    provider: 'openai',
+                    providerModel: 'gpt-5-mini',
+                    capabilities: {
+                        supportsReasoningEffort: true,
+                        supportsVerbosity: true,
+                        canUseSearch: false,
+                        canGenerateImage: false,
+                        canUseVision: false,
+                        canUseAudio: false,
+                        canUseStreaming: true,
+                    },
+                },
+                originalSelectedProfileId: 'default',
+                effectiveSelectedProfileId: 'default',
+                toolRequestContext: {
+                    toolName: 'web_search',
+                    requested: false,
+                    eligible: false,
+                    reasonCode: 'tool_not_requested',
+                },
+                plannerDiagnostics: plannerStepResult.diagnostics,
+                plannerApplyOutcome: 'applied',
+                plannerMattered: true,
+                plannerMatteredControlIds: [],
+                fallbackReasons: [],
+                fallbackRollupSelectionSource: 'default',
+                modality: plannerStepResult.plan.modality,
+                safetyTier: plannerStepResult.plan.safetyTier,
+                searchRequested: false,
+            },
         }),
         captureUsage: () => ({
             model: 'gpt-5-mini',
