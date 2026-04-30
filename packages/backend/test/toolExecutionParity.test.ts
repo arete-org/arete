@@ -1,5 +1,5 @@
 /**
- * @description: Pins current orchestrator-owned weather tool behavior before workflow tool-step migration.
+ * @description: Verifies weather tool behavior through the workflow context-step path.
  * @footnote-scope: test
  * @footnote-module: ToolExecutionParityTests
  * @footnote-risk: low - Focused parity checks with bounded test doubles.
@@ -9,34 +9,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { GenerationRuntime } from '@footnote/agent-runtime';
-import type { PostChatRequest } from '@footnote/contracts/web';
-import { createMetadata } from './fixtures/responseMetadataFixture.js';
-import { runtimeConfig } from '../src/config.js';
-import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
-import {
-    buildResponseMetadata,
-    type ResponseMetadataRuntimeContext,
-} from '../src/services/openaiService.js';
 import type { WeatherForecastTool } from '../src/services/openMeteoForecastTool.js';
+import { runBoundedReviewWorkflow } from '../src/services/workflowEngine.js';
 
-const PLANNER_TOKEN_SENTINEL = 1200;
-
-const createChatRequest = (
-    overrides: Partial<PostChatRequest> = {}
-): PostChatRequest => ({
-    surface: 'discord',
-    trigger: { kind: 'direct' },
-    latestUserInput: 'What is the weather?',
-    conversation: [{ role: 'user', content: 'What is the weather?' }],
-    capabilities: {
-        canReact: true,
-        canGenerateImages: true,
-        canUseTts: true,
-    },
-    ...overrides,
-});
-
-const createGenerationRuntime = (
+const createTestRuntime = (
     implementation: (
         request: import('@footnote/agent-runtime').GenerationRequest
     ) => Promise<import('@footnote/agent-runtime').GenerationResult>
@@ -45,42 +21,7 @@ const createGenerationRuntime = (
     generate: implementation,
 });
 
-const buildWeatherToolIntentPlannerOutput = (input: {
-    location:
-        | { type: 'lat_lon'; latitude: number; longitude: number }
-        | { query: string };
-}): string =>
-    JSON.stringify({
-        action: 'message',
-        modality: 'text',
-        requestedCapabilityProfile: 'expressive-generation',
-        safetyTier: 'Low',
-        reasoning: 'Use weather tool for this forecast question.',
-        generation: {
-            reasoningEffort: 'low',
-            verbosity: 'low',
-            temperament: {
-                tightness: 4,
-                rationale: 3,
-                attribution: 4,
-                caution: 3,
-                extent: 4,
-            },
-            toolIntent: {
-                toolName: 'weather_forecast',
-                requested: true,
-                input: {
-                    location: input.location,
-                },
-            },
-        },
-    });
-
-test('weather success keeps tool status executed and still runs generation', async () => {
-    let generationCalled = false;
-    let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+test('weather success flows through workflow context-step: tool step recorded in lineage', async () => {
     const weatherForecastTool: WeatherForecastTool = {
         fetchForecast: async () => ({
             toolName: 'weather_forecast',
@@ -102,113 +43,266 @@ test('weather success keeps tool status executed and still runs generation', asy
                 provider: 'open-meteo',
                 endpoint: 'mock',
                 requestedAt: '2026-01-01T00:00:00Z',
+                citationUrl: 'https://open-meteo.com/en/docs',
+                citationLabel: 'Open-Meteo Weather Forecast API',
             },
         }),
     };
 
-    const orchestrator = createChatOrchestrator({
-        generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
-                return {
-                    text: buildWeatherToolIntentPlannerOutput({
-                        location: {
-                            type: 'lat_lon',
-                            latitude: 39.7684,
-                            longitude: -86.1581,
-                        },
-                    }),
-                    model: 'gpt-5-mini',
-                };
-            }
-            generationCalled = true;
-            return {
-                text: 'Generated weather reply',
-                model: request.model,
-                provenance: 'Inferred',
-                citations: [],
-            };
-        }),
-        storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
-            capturedExecutionContext = runtimeContext.executionContext;
-            return createMetadata();
+    const generationRuntime = createTestRuntime(async () => ({
+        text: 'Weather forecast for Indianapolis: clear skies',
+        model: 'gpt-5-mini',
+        usage: {
+            promptTokens: 10,
+            completionTokens: 5,
+            totalTokens: 15,
         },
-        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
-        recordUsage: () => undefined,
-        weatherForecastTool,
+        provenance: 'Inferred',
+        citations: [],
+    }));
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'What is the weather?' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'What is the weather?' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        contextStepRequest: {
+            integrationName: 'weather_forecast',
+            requested: true,
+            eligible: true,
+            input: {
+                location: {
+                    type: 'lat_lon',
+                    latitude: 39.7684,
+                    longitude: -86.1581,
+                },
+            },
+        },
+        contextStepExecutor: async ({ request }) => {
+            const execution = await weatherForecastTool.fetchForecast(
+                request.input as {
+                    location: {
+                        type: 'lat_lon';
+                        latitude: number;
+                        longitude: number;
+                    };
+                }
+            );
+            return {
+                executionContext: {
+                    toolName: 'weather_forecast',
+                    status: 'executed',
+                    durationMs: 10,
+                },
+                contextMessages: [
+                    execution.status === 'ok' && execution.location?.name
+                        ? `Weather in ${execution.location.name}: clear skies`
+                        : 'Weather context: clear skies',
+                ],
+            };
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
     });
 
-    const response = await orchestrator.runChat(createChatRequest());
-
-    assert.equal(response.action, 'message');
-    assert.equal(generationCalled, true);
-    assert.equal(capturedExecutionContext?.tool?.toolName, 'weather_forecast');
-    assert.equal(capturedExecutionContext?.tool?.status, 'executed');
+    assert.equal(
+        result.outcome,
+        'generated',
+        'Workflow should generate when context step succeeds'
+    );
+    const toolStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'tool'
+    );
+    assert.ok(toolStep, 'Workflow should have a tool step');
+    assert.equal(
+        toolStep?.outcome.status,
+        'executed',
+        'Tool step should be executed'
+    );
+    assert.ok(
+        (toolStep?.outcome.artifacts?.length ?? 0) > 0,
+        'Tool step should have context artifacts'
+    );
 });
 
-test('weather failure preserves fail-open generation with failed tool status and reason code', async () => {
-    let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+test('weather failure preserves fail-open: generation runs, tool step recorded as failed', async () => {
     const weatherForecastTool: WeatherForecastTool = {
         fetchForecast: async () => {
             throw new Error('weather upstream unavailable');
         },
     };
 
-    const orchestrator = createChatOrchestrator({
-        generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+    const generationRuntime = createTestRuntime(async () => ({
+        text: 'Fallback weather response',
+        model: 'gpt-5-mini',
+        usage: {
+            promptTokens: 10,
+            completionTokens: 5,
+            totalTokens: 15,
+        },
+        provenance: 'Inferred',
+        citations: [],
+    }));
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'What is the weather?' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'What is the weather?' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        contextStepRequest: {
+            integrationName: 'weather_forecast',
+            requested: true,
+            eligible: true,
+            input: { location: 'Indianapolis' },
+        },
+        contextStepExecutor: async () => {
+            try {
+                await weatherForecastTool.fetchForecast({
+                    location: 'Indianapolis',
+                } as never);
                 return {
-                    text: buildWeatherToolIntentPlannerOutput({
-                        location: {
-                            type: 'lat_lon',
-                            latitude: 39.7684,
-                            longitude: -86.1581,
-                        },
-                    }),
-                    model: 'gpt-5-mini',
+                    executionContext: {
+                        toolName: 'weather_forecast',
+                        status: 'executed',
+                    },
+                };
+            } catch {
+                return {
+                    executionContext: {
+                        toolName: 'weather_forecast',
+                        status: 'failed',
+                        reasonCode: 'tool_execution_error',
+                    },
                 };
             }
-            return {
-                text: 'Fallback non-tool weather response',
-                model: request.model,
-                provenance: 'Inferred',
-                citations: [],
-            };
-        }),
-        storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
-            capturedExecutionContext = runtimeContext.executionContext;
-            return createMetadata();
         },
-        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
-        recordUsage: () => undefined,
-        weatherForecastTool,
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
     });
 
-    const response = await orchestrator.runChat(createChatRequest());
-
-    assert.equal(response.action, 'message');
-    assert.equal(capturedExecutionContext?.tool?.toolName, 'weather_forecast');
-    assert.equal(capturedExecutionContext?.tool?.status, 'failed');
     assert.equal(
-        capturedExecutionContext?.tool?.reasonCode,
-        'tool_execution_error'
+        result.outcome,
+        'generated',
+        'Workflow should still generate on context step failure (fail-open)'
+    );
+    const toolStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'tool'
+    );
+    assert.ok(toolStep, 'Workflow should have a tool step');
+    assert.equal(
+        toolStep?.outcome.status,
+        'failed',
+        'Tool step should be marked as failed'
+    );
+    assert.equal(
+        toolStep?.reasonCode,
+        'tool_execution_error',
+        'Tool step should have error reason code'
     );
 });
 
-test('weather clarification short-circuits generation and records skipped generation metadata', async () => {
-    let generationCalled = false;
-    const weatherForecastTool: WeatherForecastTool = {
-        fetchForecast: async () => ({
-            toolName: 'weather_forecast',
-            status: 'needs_clarification',
-            request: {
-                location: {
-                    type: 'place_query',
-                    query: 'New York',
-                },
+test('weather clarification short-circuits: no generation, clarification response returned', async () => {
+    let generationCalls = 0;
+    const generationRuntime = createTestRuntime(async () => {
+        generationCalls += 1;
+        return {
+            text: 'should not be generated',
+            model: 'gpt-5-mini',
+            usage: {
+                promptTokens: 10,
+                completionTokens: 5,
+                totalTokens: 15,
+            },
+            provenance: 'Inferred',
+            citations: [],
+        };
+    });
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [
+                { role: 'user', content: 'What is the weather in New York?' },
+            ],
+        },
+        messagesWithHints: [
+            { role: 'user', content: 'What is the weather in New York?' },
+        ],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop',
+            maxIterations: 0,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        contextStepRequest: {
+            integrationName: 'weather_forecast',
+            requested: true,
+            eligible: true,
+            input: { location: 'New York' },
+        },
+        contextStepExecutor: async () => ({
+            executionContext: {
+                toolName: 'weather_forecast',
+                status: 'executed',
             },
             clarification: {
                 reasonCode: 'ambiguous_location',
@@ -218,56 +312,50 @@ test('weather clarification short-circuits generation and records skipped genera
                         id: 'nyc',
                         label: 'New York City, New York, United States',
                     },
+                    { id: 'albany', label: 'Albany, New York, United States' },
                 ],
             },
-            provenance: {
-                provider: 'open-meteo',
-                endpoint: 'mock',
-                requestedAt: '2026-01-01T00:00:00Z',
+        }),
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
             },
         }),
-    };
-
-    const orchestrator = createChatOrchestrator({
-        generationRuntime: createGenerationRuntime(async (request) => {
-            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
-                return {
-                    text: buildWeatherToolIntentPlannerOutput({
-                        location: {
-                            query: 'New York',
-                        },
-                    }),
-                    model: 'gpt-5-mini',
-                };
-            }
-            generationCalled = true;
-            return {
-                text: 'should not be generated',
-                model: request.model,
-                provenance: 'Inferred',
-                citations: [],
-            };
-        }),
-        storeTrace: async () => undefined,
-        buildResponseMetadata,
-        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
-        recordUsage: () => undefined,
-        weatherForecastTool,
     });
 
-    const response = await orchestrator.runChat(createChatRequest());
-
-    assert.equal(response.action, 'message');
-    assert.equal(generationCalled, false);
-    assert.match(response.message, /Which New York did you mean\?/);
-    const toolEvent = response.metadata.execution?.find(
-        (event) => event.kind === 'tool'
+    assert.equal(
+        result.outcome,
+        'no_generation',
+        'Workflow should not generate when clarification is needed'
     );
-    assert.equal(toolEvent?.toolName, 'weather_forecast');
-    assert.equal(toolEvent?.status, 'executed');
-    assert.equal(toolEvent?.clarification?.reasonCode, 'ambiguous_location');
-    const generationEvent = response.metadata.execution?.find(
-        (event) => event.kind === 'generation'
+    assert.equal(
+        generationCalls,
+        0,
+        'Generation should not be called when clarification is needed'
     );
-    assert.equal(generationEvent?.status, 'skipped');
+    const toolStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'tool'
+    );
+    assert.ok(toolStep, 'Workflow should have a tool step');
+    assert.equal(
+        toolStep?.outcome.status,
+        'executed',
+        'Tool step should be executed'
+    );
+    assert.equal(
+        toolStep?.outcome.signals?.clarificationReasonCode,
+        'ambiguous_location',
+        'Tool step should have clarification reason'
+    );
+    assert.equal(
+        result.contextStepResult?.clarification?.reasonCode,
+        'ambiguous_location',
+        'Context result should have clarification'
+    );
 });

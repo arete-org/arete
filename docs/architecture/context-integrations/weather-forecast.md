@@ -34,13 +34,13 @@ Provider ownership:
 1. Planner emits a bounded tool intent for `weather_forecast`.
 2. Orchestrator resolves tool selection and executes the weather adapter.
 3. The weather tool returns one of three outcomes:
-   - `ok`
-   - `error`
-   - `needs_clarification`
+    - `ok`
+    - `error`
+    - `needs_clarification`
 4. Orchestrator either:
-   - injects normalized weather context and continues generation (`ok`)
-   - short-circuits to a clarification message (`needs_clarification`)
-   - records failure and continues safely where allowed (`error`)
+    - injects normalized weather context and continues generation (`ok`)
+    - short-circuits to a clarification message (`needs_clarification`)
+    - records failure and continues safely where allowed (`error`)
 
 ## Outcome Contract
 
@@ -77,11 +77,17 @@ Provider malformation is treated as `invalid_response`, not ambiguity.
 
 ## Provenance and Metadata
 
-Normalized tool payloads retain provider-facing provenance fields such as:
+Normalized tool payloads retain provider-facing provenance fields:
 
-- `provider`
-- `endpoint`
-- `requestedAt`
+- `provider` - provider identifier (e.g., 'open-meteo')
+- `endpoint` - exact API URL used; intended for trace/audit, not user-facing
+- `requestedAt` - ISO timestamp of API call
+- `resolvedFromEndpoint` - (optional) geocoding endpoint when location was resolved
+- `citationUrl` - human-readable provider source URL for user-facing citations
+- `citationLabel` - human-readable label for the citation source
+
+The `endpoint` field is useful for debugging and audit trails. The `citationUrl`
+and `citationLabel` fields are intended for user-facing attribution.
 
 Tool execution metadata is recorded through backend execution context and
 response metadata assembly.

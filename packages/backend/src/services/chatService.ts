@@ -49,6 +49,9 @@ import {
 import {
     buildPlannerStepRecord,
     runBoundedReviewWorkflow,
+    type ContextStepExecutor,
+    type ContextStepRequest,
+    type ContextStepResult,
     type RunBoundedReviewWorkflowResult,
     type WorkflowPolicy,
 } from './workflowEngine.js';
@@ -63,9 +66,135 @@ import type {
 import type { ScopeValidationPolicy } from './executionContractTrustGraph/scopeValidator.js';
 import { logger } from '../utils/logger.js';
 import { runtimeConfig } from '../config.js';
+import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
+import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureResponse.js';
 
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
+
+const buildContextStepShortCircuit = ({
+    workflowContextStepResult,
+    executionContext,
+    toolRequest,
+    model,
+    defaultModel,
+    conversationSnapshot,
+    latestUserInput,
+    buildResponseMetadata,
+}: {
+    workflowContextStepResult: ContextStepResult | undefined;
+    executionContext: ResponseMetadataRuntimeContext['executionContext'];
+    toolRequest: ToolInvocationRequest | undefined;
+    model: string | undefined;
+    defaultModel: string;
+    conversationSnapshot: string;
+    latestUserInput: string | undefined;
+    buildResponseMetadata: (
+        assistantMetadata: AssistantResponseMetadata,
+        runtimeContext: ResponseMetadataRuntimeContext
+    ) => ResponseMetadata;
+}):
+    | {
+          response: PostChatResponse | undefined;
+          telemetry: FinalToolExecutionTelemetry;
+      }
+    | undefined => {
+    if (workflowContextStepResult === undefined) {
+        return undefined;
+    }
+
+    const { executionContext: contextExecutionContext } =
+        workflowContextStepResult;
+
+    const buildGenerationMetadataContext = () => ({
+        modelVersion: model ?? defaultModel,
+        conversationSnapshot,
+        executionContext: {
+            ...executionContext,
+            generation: {
+                status: 'executed',
+                profileId:
+                    executionContext?.generation?.profileId ??
+                    'workflow_context_step',
+                ...(executionContext?.generation?.originalProfileId !==
+                    undefined && {
+                    originalProfileId:
+                        executionContext.generation.originalProfileId,
+                }),
+                ...(executionContext?.generation?.effectiveProfileId !==
+                    undefined && {
+                    effectiveProfileId:
+                        executionContext.generation.effectiveProfileId,
+                }),
+                provider: executionContext?.generation?.provider ?? 'internal',
+                model:
+                    executionContext?.generation?.model ??
+                    model ??
+                    defaultModel,
+            },
+        },
+    });
+
+    const generationMetadataContext = buildGenerationMetadataContext();
+
+    if (contextExecutionContext.clarification !== undefined) {
+        const clarificationResponse = buildToolClarificationResponse({
+            toolContext: contextExecutionContext,
+            metadataContext: generationMetadataContext as Parameters<
+                typeof buildToolClarificationResponse
+            >[0]['metadataContext'],
+            buildResponseMetadata,
+        });
+        return {
+            response: clarificationResponse,
+            telemetry: {
+                toolName: contextExecutionContext.toolName,
+                status: contextExecutionContext.status,
+                ...(contextExecutionContext.reasonCode !== undefined && {
+                    reasonCode: contextExecutionContext.reasonCode,
+                }),
+                ...(toolRequest !== undefined && {
+                    eligible: toolRequest.eligible,
+                }),
+                ...(toolRequest?.reasonCode !== undefined && {
+                    requestReasonCode: toolRequest.reasonCode,
+                }),
+            },
+        };
+    }
+
+    if (
+        contextExecutionContext.toolName === 'weather_forecast' &&
+        contextExecutionContext.status === 'failed'
+    ) {
+        const failureResponse = buildWeatherToolFailureResponse({
+            toolContext: contextExecutionContext,
+            metadataContext: generationMetadataContext as Parameters<
+                typeof buildWeatherToolFailureResponse
+            >[0]['metadataContext'],
+            latestUserInput: latestUserInput ?? conversationSnapshot,
+            buildResponseMetadata,
+        });
+        return {
+            response: failureResponse,
+            telemetry: {
+                toolName: contextExecutionContext.toolName,
+                status: contextExecutionContext.status,
+                ...(contextExecutionContext.reasonCode !== undefined && {
+                    reasonCode: contextExecutionContext.reasonCode,
+                }),
+                ...(toolRequest !== undefined && {
+                    eligible: toolRequest.eligible,
+                }),
+                ...(toolRequest?.reasonCode !== undefined && {
+                    requestReasonCode: toolRequest.reasonCode,
+                }),
+            },
+        };
+    }
+
+    return undefined;
+};
 
 type ExecutionContractTrustGraphRuntimeOptions = {
     adapter?: TrustGraphEvidenceAdapter;
@@ -448,6 +577,9 @@ export type RunChatMessagesInput = {
     workflowModeId?: string;
     workflowModeEscalationRequest?: WorkflowModeEscalationRequest;
     toolRequest?: ToolInvocationRequest;
+    contextStepRequest?: ContextStepRequest;
+    contextStepExecutor?: ContextStepExecutor;
+    latestUserInput?: string;
     executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
     ExecutionContract?: ExecutionContract;
     steerabilityControls?: ResponseMetadata['steerabilityControls'];
@@ -571,6 +703,9 @@ export const createChatService = ({
         workflowModeId,
         workflowModeEscalationRequest,
         toolRequest,
+        contextStepRequest,
+        contextStepExecutor,
+        latestUserInput,
         executionContractTrustGraphContext,
         ExecutionContract,
         steerabilityControls,
@@ -580,6 +715,31 @@ export const createChatService = ({
         generationDurationMs: number;
         finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
     }> => {
+        const toShortCircuitMessageResult = (
+            response: PostChatResponse,
+            finalToolExecutionTelemetry: FinalToolExecutionTelemetry
+        ): {
+            message: string;
+            metadata: ResponseMetadata;
+            generationDurationMs: number;
+            finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
+        } => {
+            if (response.action !== 'message' || response.metadata === null) {
+                throw new Error(
+                    'Tool short-circuit response must be a message with metadata.'
+                );
+            }
+
+            return {
+                message: response.message,
+                metadata: response.metadata,
+                generationDurationMs: Math.max(
+                    0,
+                    Date.now() - generationStartedAt
+                ),
+                finalToolExecutionTelemetry,
+            };
+        };
         const generationStartedAt = Date.now();
         const normalizedGeneration = normalizeGenerationPlan(generation);
         // Repo-explainer mode appends one helper system hint so responses stay
@@ -641,6 +801,7 @@ export const createChatService = ({
 
         let generationResult: GenerationResult;
         let workflowLineage: WorkflowRecord | undefined;
+        let workflowContextStepResult: ContextStepResult | undefined;
         let fallbackAfterInternalNoGeneration = false;
         const plannerExecutionContext = executionContext?.planner;
         const plannerWorkflowStepRecord: StepRecord | undefined =
@@ -710,14 +871,56 @@ export const createChatService = ({
                 captureUsage: (result, requestedModel) =>
                     recordUsageForStep(result, requestedModel),
                 plannerStepRecord: plannerWorkflowStepRecord,
+                contextStepRequest,
+                contextStepExecutor,
             });
+            workflowContextStepResult = workflowResult.contextStepResult;
             switch (workflowResult.outcome) {
-                case 'generated':
+                case 'generated': {
                     generationResult = workflowResult.generationResult;
                     workflowLineage = workflowResult.workflowLineage;
+                    const generatedShortCircuit = buildContextStepShortCircuit({
+                        workflowContextStepResult,
+                        executionContext,
+                        toolRequest,
+                        model,
+                        defaultModel,
+                        conversationSnapshot,
+                        latestUserInput,
+                        buildResponseMetadata,
+                    });
+                    if (
+                        generatedShortCircuit !== undefined &&
+                        generatedShortCircuit.response !== undefined
+                    ) {
+                        return toShortCircuitMessageResult(
+                            generatedShortCircuit.response,
+                            generatedShortCircuit.telemetry
+                        );
+                    }
                     break;
+                }
                 case 'no_generation': {
                     workflowLineage = workflowResult.workflowLineage;
+                    const noGenShortCircuit = buildContextStepShortCircuit({
+                        workflowContextStepResult,
+                        executionContext,
+                        toolRequest,
+                        model,
+                        defaultModel,
+                        conversationSnapshot,
+                        latestUserInput,
+                        buildResponseMetadata,
+                    });
+                    if (
+                        noGenShortCircuit !== undefined &&
+                        noGenShortCircuit.response !== undefined
+                    ) {
+                        return toShortCircuitMessageResult(
+                            noGenShortCircuit.response,
+                            noGenShortCircuit.telemetry
+                        );
+                    }
                     const noGenerationResolution =
                         resolveNoGenerationHandlingFromTermination({
                             terminationReason:
@@ -918,7 +1121,9 @@ export const createChatService = ({
         // Any mode escalation lineage is resolved by workflowProfileRegistry.
         // Runtime metadata here only carries the resolved decision payload.
         const hasSearchIntent = normalizedGeneration?.search !== undefined;
-        const upstreamToolExecution = executionContext?.tool;
+        const upstreamToolExecution =
+            executionContext?.tool ??
+            workflowContextStepResult?.executionContext;
         const effectiveToolExecutionContext:
             | NonNullable<
                   ResponseMetadataRuntimeContext['executionContext']

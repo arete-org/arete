@@ -47,6 +47,7 @@ const createLimits = (): ExecutionLimits => ({
 
 test('isTransitionAllowed permits only plan/generate from initial state', () => {
     assert.equal(isTransitionAllowed(null, 'plan', permissivePolicy), true);
+    assert.equal(isTransitionAllowed(null, 'tool', permissivePolicy), true);
     assert.equal(isTransitionAllowed(null, 'generate', permissivePolicy), true);
     assert.equal(isTransitionAllowed(null, 'assess', permissivePolicy), false);
 });
@@ -1127,5 +1128,247 @@ test('runBoundedReviewWorkflow does not emit concrete tool steps in current engi
     assert.equal(
         result.workflowLineage.steps.some((step) => step.stepKind === 'tool'),
         false
+    );
+});
+
+test('runBoundedReviewWorkflow executes injected context step and records context artifacts before generation', async () => {
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            return {
+                text: 'draft',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Need weather summary' }],
+        },
+        messagesWithHints: [
+            { role: 'user', content: 'Need weather summary' },
+            { role: 'system', content: 'hint' },
+        ],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        contextStepRequest: {
+            integrationName: 'weather_forecast',
+            requested: true,
+            eligible: true,
+            input: { location: 'Indianapolis' },
+        },
+        contextStepExecutor: async () => ({
+            executionContext: {
+                toolName: 'weather_forecast',
+                status: 'executed',
+                durationMs: 4,
+            },
+            contextMessages: ['weather_context: clear skies'],
+        }),
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    const toolStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'tool'
+    );
+    assert.ok(toolStep);
+    assert.equal(toolStep.outcome.status, 'executed');
+    assert.deepEqual(toolStep.outcome.artifacts, [
+        'weather_context: clear skies',
+    ]);
+});
+
+test('runBoundedReviewWorkflow records failed injected context step with reason and continues fail-open', async () => {
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            return {
+                text: 'draft',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Need weather summary' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Need weather summary' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        contextStepRequest: {
+            integrationName: 'weather_forecast',
+            requested: true,
+            eligible: true,
+            input: { location: 'Indianapolis' },
+        },
+        contextStepExecutor: async () => ({
+            executionContext: {
+                toolName: 'weather_forecast',
+                status: 'failed',
+                reasonCode: 'tool_timeout',
+                durationMs: 10,
+            },
+        }),
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    const toolStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'tool'
+    );
+    assert.ok(toolStep);
+    assert.equal(toolStep.outcome.status, 'failed');
+    assert.equal(toolStep.reasonCode, 'tool_timeout');
+});
+
+test('runBoundedReviewWorkflow stops before generation when injected context step requires clarification', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            return {
+                text: 'draft',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Need weather summary' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Need weather summary' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop',
+            maxIterations: 0,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        contextStepRequest: {
+            integrationName: 'weather_forecast',
+            requested: true,
+            eligible: true,
+            input: { location: 'Springfield' },
+        },
+        contextStepExecutor: async () => ({
+            executionContext: {
+                toolName: 'weather_forecast',
+                status: 'executed',
+            },
+            clarification: {
+                reasonCode: 'ambiguous_location',
+                question: 'Which Springfield did you mean?',
+                options: [
+                    { id: '1', label: 'Springfield, Illinois' },
+                    { id: '2', label: 'Springfield, Missouri' },
+                ],
+            },
+        }),
+        captureUsage: () => ({
+            model: 'gpt-5-mini',
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'no_generation');
+    assert.equal(generationCalls, 0);
+    const toolStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'tool'
+    );
+    assert.ok(toolStep);
+    assert.equal(toolStep.outcome.status, 'executed');
+    assert.equal(
+        toolStep.outcome.signals?.clarificationReasonCode,
+        'ambiguous_location'
     );
 });

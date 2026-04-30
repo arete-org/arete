@@ -10,6 +10,9 @@ import type { WorkflowTerminationReason } from '@footnote/contracts/ethics-core'
 import type {
     BoundedReviewAssessSignals,
     ExecutionStatus,
+    ToolClarification,
+    ToolExecutionContext,
+    ToolInvocationReasonCode,
     PlannerExecutionApplyOutcome,
     PlannerExecutionContractType,
     PlannerExecutionPurpose,
@@ -153,6 +156,8 @@ export type RunBoundedReviewWorkflowInput = {
         requestedModel: string | undefined
     ) => ReviewWorkflowUsageSummary;
     plannerStepRecord?: StepRecord;
+    contextStepRequest?: ContextStepRequest;
+    contextStepExecutor?: ContextStepExecutor;
 };
 
 export type RunBoundedReviewWorkflowResult =
@@ -160,11 +165,38 @@ export type RunBoundedReviewWorkflowResult =
           outcome: 'generated';
           generationResult: GenerationResult;
           workflowLineage: WorkflowRecord;
+          contextStepResult?: ContextStepResult;
       }
     | {
           outcome: 'no_generation';
           workflowLineage: WorkflowRecord;
+          contextStepResult?: ContextStepResult;
       };
+
+export type ContextStepRequest = {
+    integrationName: string;
+    requested: boolean;
+    eligible: boolean;
+    reasonCode?: ToolInvocationReasonCode;
+    input?: Record<string, unknown>;
+};
+
+export type ContextStepResult = {
+    executionContext: ToolExecutionContext;
+    contextMessages?: string[];
+    clarification?: ToolClarification;
+};
+
+export type ContextStepExecutorInput = {
+    request: ContextStepRequest;
+    workflowId: string;
+    workflowName: string;
+    attempt: number;
+};
+
+export type ContextStepExecutor = (
+    input: ContextStepExecutorInput
+) => Promise<ContextStepResult>;
 
 const LEGAL_TRANSITIONS: Record<
     WorkflowStepKind,
@@ -211,7 +243,11 @@ export const isTransitionAllowed = (
     }
 
     if (fromStepKind === null) {
-        return toStepKind === 'plan' || toStepKind === 'generate';
+        return (
+            toStepKind === 'plan' ||
+            toStepKind === 'tool' ||
+            toStepKind === 'generate'
+        );
     }
 
     if (fromStepKind === 'plan' && toStepKind === 'plan') {
@@ -623,6 +659,8 @@ export const runBoundedReviewWorkflow = async ({
     parseReviewDecision,
     captureUsage,
     plannerStepRecord,
+    contextStepRequest,
+    contextStepExecutor,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
     // NOTE: Concrete tool execution is still orchestrator/registry-owned.
     // This engine path currently executes only bounded review generation steps.
@@ -672,6 +710,8 @@ export const runBoundedReviewWorkflow = async ({
     let latestReviewReason: string | undefined;
     let shouldStop = false;
     let exhaustedLimitKey: WorkflowLimitKey | undefined;
+    let executedContextStepResult: ContextStepResult | undefined;
+    let messagesWithContext = messagesWithHints;
     const effectiveReviewDecisionPrompt =
         reviewDecisionPrompt ?? profileStrategy.reviewDecisionPrompt;
     const effectiveRevisionPromptPrefix =
@@ -726,6 +766,7 @@ export const runBoundedReviewWorkflow = async ({
         stepKind: StepRecord['stepKind'];
         status: StepRecord['outcome']['status'];
         summary: string;
+        artifacts?: string[];
         startedAtMs: number;
         finishedAtMs: number;
         model?: string;
@@ -770,6 +811,9 @@ export const runBoundedReviewWorkflow = async ({
             outcome: {
                 status: input.status,
                 summary: input.summary,
+                ...(input.artifacts !== undefined && {
+                    artifacts: input.artifacts,
+                }),
                 ...(input.signals !== undefined && {
                     signals: input.signals,
                 }),
@@ -802,6 +846,175 @@ export const runBoundedReviewWorkflow = async ({
         return true;
     };
 
+    const injectContextMessagesIntoPrompt = (
+        baseMessages: RuntimeMessage[],
+        contextMessages: string[] | undefined
+    ): RuntimeMessage[] => {
+        if (!contextMessages || contextMessages.length === 0) {
+            return baseMessages;
+        }
+
+        const normalizedContextMessages = contextMessages
+            .map((message) => message.trim())
+            .filter((message) => message.length > 0)
+            .map(
+                (message): RuntimeMessage => ({
+                    role: 'system',
+                    content: message,
+                })
+            );
+        if (normalizedContextMessages.length === 0) {
+            return baseMessages;
+        }
+
+        const plannerMessageIndex = baseMessages.findIndex(
+            (message) =>
+                message.role === 'system' &&
+                message.content.includes('// BEGIN Planner Output')
+        );
+        if (plannerMessageIndex < 0) {
+            return [...baseMessages, ...normalizedContextMessages];
+        }
+
+        return [
+            ...baseMessages.slice(0, plannerMessageIndex),
+            ...normalizedContextMessages,
+            ...baseMessages.slice(plannerMessageIndex),
+        ];
+    };
+
+    if (
+        contextStepRequest?.requested === true &&
+        contextStepRequest.eligible &&
+        contextStepExecutor !== undefined
+    ) {
+        if (
+            !isTransitionAllowed(
+                workflowState.currentStepKind,
+                'tool',
+                workflowPolicy
+            )
+        ) {
+            terminationReason = 'transition_blocked_by_policy';
+            shouldStop = true;
+        } else if (!stopIfOverLimits('tool')) {
+            const contextStepStartedAt = Date.now();
+            try {
+                const contextStepResult = await contextStepExecutor({
+                    request: contextStepRequest,
+                    workflowId,
+                    workflowName: workflowConfig.workflowName,
+                    attempt: 1,
+                });
+                const contextStepFinishedAt = Date.now();
+                const normalizedExecutionContext: ToolExecutionContext = {
+                    ...contextStepResult.executionContext,
+                    toolName: contextStepResult.executionContext.toolName,
+                    ...(contextStepResult.executionContext.clarification ===
+                        undefined &&
+                        contextStepResult.clarification !== undefined && {
+                            clarification: contextStepResult.clarification,
+                        }),
+                };
+                executedContextStepResult = {
+                    executionContext: normalizedExecutionContext,
+                    ...(contextStepResult.contextMessages !== undefined && {
+                        contextMessages: contextStepResult.contextMessages,
+                    }),
+                    ...(normalizedExecutionContext.clarification !==
+                        undefined && {
+                        clarification: normalizedExecutionContext.clarification,
+                    }),
+                };
+                const status =
+                    normalizedExecutionContext.status === 'failed'
+                        ? 'failed'
+                        : 'executed';
+                captureStep({
+                    stepKind: 'tool',
+                    status,
+                    summary:
+                        status === 'failed'
+                            ? 'Context step failed; workflow continued fail-open without context.'
+                            : normalizedExecutionContext.clarification !==
+                                undefined
+                              ? 'Context step requires user clarification before generation.'
+                              : 'Context step executed and emitted bounded context messages.',
+                    ...(normalizedExecutionContext.reasonCode !== undefined && {
+                        reasonCode: normalizedExecutionContext.reasonCode,
+                    }),
+                    startedAtMs: contextStepStartedAt,
+                    finishedAtMs: contextStepFinishedAt,
+                    parentStepId: plannerRootStepId,
+                    attempt: 1,
+                    ...(contextStepResult.contextMessages !== undefined && {
+                        artifacts: contextStepResult.contextMessages,
+                    }),
+                    ...(normalizedExecutionContext.clarification !==
+                        undefined && {
+                        signals: {
+                            clarificationReasonCode:
+                                normalizedExecutionContext.clarification
+                                    .reasonCode,
+                            clarificationOptionCount:
+                                normalizedExecutionContext.clarification.options
+                                    .length,
+                        },
+                    }),
+                });
+                workflowState = applyStepExecutionToState(
+                    workflowState,
+                    'tool',
+                    0,
+                    1,
+                    0
+                );
+                if (normalizedExecutionContext.clarification !== undefined) {
+                    terminationReason = 'goal_satisfied';
+                    workflowStatus = 'completed';
+                    shouldStop = true;
+                }
+            } catch (error) {
+                const contextStepFinishedAt = Date.now();
+                logger.error(
+                    'Context step execution failed; workflow continued fail-open without context.',
+                    {
+                        stepKind: 'tool',
+                        reasonCode: 'tool_execution_error',
+                        startedAtMs: contextStepStartedAt,
+                        finishedAtMs: contextStepFinishedAt,
+                        parentStepId: plannerRootStepId,
+                        attempt: 1,
+                        workflowName: workflowConfig.workflowName,
+                        workflowId,
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    }
+                );
+                captureStep({
+                    stepKind: 'tool',
+                    status: 'failed',
+                    summary:
+                        'Context step execution failed; workflow continued fail-open without context.',
+                    reasonCode: 'tool_execution_error',
+                    startedAtMs: contextStepStartedAt,
+                    finishedAtMs: contextStepFinishedAt,
+                    parentStepId: plannerRootStepId,
+                    attempt: 1,
+                });
+                workflowState = applyStepExecutionToState(
+                    workflowState,
+                    'tool',
+                    0,
+                    1,
+                    0
+                );
+            }
+        }
+    }
+
     if (
         !isTransitionAllowed(
             workflowState.currentStepKind,
@@ -814,9 +1027,15 @@ export const runBoundedReviewWorkflow = async ({
     } else {
         if (!stopIfOverLimits('generate')) {
             const initialDraftStartedAt = generationStartedAtMs;
+            messagesWithContext = injectContextMessagesIntoPrompt(
+                messagesWithHints,
+                executedContextStepResult?.contextMessages
+            );
             try {
-                draftResult =
-                    await generationRuntime.generate(generationRequest);
+                draftResult = await generationRuntime.generate({
+                    ...generationRequest,
+                    messages: messagesWithContext,
+                });
                 const initialDraftFinishedAt = Date.now();
                 const initialDraftUsage = captureUsage(
                     draftResult,
@@ -913,7 +1132,7 @@ export const runBoundedReviewWorkflow = async ({
         try {
             const reviewResult = await generationRuntime.generate({
                 messages: [
-                    ...messagesWithHints,
+                    ...messagesWithContext,
                     {
                         role: 'assistant',
                         content: draftResult?.text ?? '',
@@ -1024,7 +1243,7 @@ export const runBoundedReviewWorkflow = async ({
                 const revisionResult = await generationRuntime.generate({
                     ...generationRequest,
                     messages: [
-                        ...messagesWithHints,
+                        ...messagesWithContext,
                         {
                             role: 'assistant',
                             content: draftResult?.text ?? '',
@@ -1141,6 +1360,9 @@ export const runBoundedReviewWorkflow = async ({
         return {
             outcome: 'no_generation',
             workflowLineage,
+            ...(executedContextStepResult !== undefined && {
+                contextStepResult: executedContextStepResult,
+            }),
         };
     }
 
@@ -1148,5 +1370,8 @@ export const runBoundedReviewWorkflow = async ({
         outcome: 'generated',
         generationResult: draftResult,
         workflowLineage,
+        ...(executedContextStepResult !== undefined && {
+            contextStepResult: executedContextStepResult,
+        }),
     };
 };

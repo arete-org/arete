@@ -12,6 +12,8 @@ import type { ChatGenerationWeatherRequest } from './chatGenerationTypes.js';
 const OPEN_METEO_FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const OPEN_METEO_GEOCODING_URL =
     'https://geocoding-api.open-meteo.com/v1/search';
+const OPEN_METEO_DOCS_URL = 'https://open-meteo.com/en/docs';
+const OPEN_METEO_DOCS_LABEL = 'Open-Meteo Weather Forecast API';
 const DEFAULT_REQUEST_TIMEOUT_MS = 6_000;
 const DEFAULT_HORIZON_PERIODS = 5;
 const MIN_HORIZON_PERIODS = 1;
@@ -104,6 +106,8 @@ export type WeatherToolProvenance = {
     endpoint: string;
     requestedAt: string;
     resolvedFromEndpoint?: string;
+    citationUrl: string;
+    citationLabel: string;
 };
 
 export type WeatherForecastToolResult =
@@ -329,6 +333,8 @@ const buildErrorResult = ({
         endpoint,
         requestedAt,
         ...(resolvedFromEndpoint !== undefined && { resolvedFromEndpoint }),
+        citationUrl: OPEN_METEO_DOCS_URL,
+        citationLabel: OPEN_METEO_DOCS_LABEL,
     },
 });
 
@@ -427,6 +433,8 @@ const buildClarificationResult = ({
             endpoint,
             requestedAt,
             ...(resolvedFromEndpoint !== undefined && { resolvedFromEndpoint }),
+            citationUrl: OPEN_METEO_DOCS_URL,
+            citationLabel: OPEN_METEO_DOCS_LABEL,
         },
     };
 };
@@ -822,6 +830,8 @@ export const createOpenMeteoForecastTool = ({
                 ...(resolvedFromEndpoint !== undefined && {
                     resolvedFromEndpoint,
                 }),
+                citationUrl: OPEN_METEO_DOCS_URL,
+                citationLabel: OPEN_METEO_DOCS_LABEL,
             },
         };
     };

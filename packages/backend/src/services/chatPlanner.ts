@@ -1025,8 +1025,9 @@ const normalizePlan = (
         contractAssessment: PlannerContractAssessment;
     }): PlannerNormalizationResult => {
         const rawToolIntentValue =
-            isPlannerCandidate(candidate) && candidate.toolIntent !== undefined
-                ? candidate.toolIntent
+            isPlannerCandidate(candidate) &&
+            candidate.generation?.toolIntent !== undefined
+                ? candidate.generation.toolIntent
                 : undefined;
         const rawToolIntentPresent = rawToolIntentValue !== undefined;
         const rawToolIntentName =
