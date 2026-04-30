@@ -96,7 +96,7 @@ test('weather success flows through workflow context-step: tool step recorded in
             const execution = await weatherForecastTool.fetchForecast(
                 request.input as {
                     location: {
-                        type: string;
+                        type: 'lat_lon';
                         latitude: number;
                         longitude: number;
                     };
@@ -109,7 +109,9 @@ test('weather success flows through workflow context-step: tool step recorded in
                     durationMs: 10,
                 },
                 contextMessages: [
-                    `Weather in ${execution.location.name}: clear skies`,
+                    execution.status === 'ok' && execution.location?.name
+                        ? `Weather in ${execution.location.name}: clear skies`
+                        : 'Weather context: clear skies',
                 ],
             };
         },
