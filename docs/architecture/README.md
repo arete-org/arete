@@ -25,6 +25,8 @@ detail once you have the main runtime shape in mind.
 
 - [TrustGraph](./context-integrations/trustgraph.md): current TrustGraph seam,
   runtime boundaries, scope rules, and activation posture.
+- [Weather Forecast](./context-integrations/weather-forecast.md): backend-owned
+  weather tool seam, clarification behavior, and fail-open integration rules.
 
 ## Active Workflow Note
 

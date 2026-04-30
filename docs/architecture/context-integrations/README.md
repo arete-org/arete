@@ -108,3 +108,4 @@ dropped, or ignored.
 ## Current docs
 
 - [TrustGraph](./trustgraph.md)
+- [Weather Forecast](./weather-forecast.md)
