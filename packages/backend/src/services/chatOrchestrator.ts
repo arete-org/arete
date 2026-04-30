@@ -53,9 +53,9 @@ import {
     runDeterministicEvaluator,
     type EvaluatorExecutionContext,
 } from './chatOrchestrator/evaluatorCoordination.js';
-import { resolveNonMessagePlannerAction } from './chatOrchestrator/actionResolution.js';
 import { type PlannerPayloadChatPlan } from './chatOrchestrator/plannerPayload.js';
 import { assemblePostPlanGenerationInput } from './chatService/postPlanAssembly.js';
+import { resolvePlannerActionOutcome } from './chatService/plannerActionOutcome.js';
 import {
     buildControlObservabilityEnvelope,
     emitControlObservabilityEnvelope,
@@ -556,27 +556,32 @@ export const createChatOrchestrator = ({
             }),
         };
 
-        const nonMessageResponse = resolveNonMessagePlannerAction(
-            {
-                executionPlan,
-                normalizedRequest,
-                fallbackRollupSelectionSource,
-            },
-            {
-                fallbackReasons,
-                emitFallbackRollup,
-                notifyBreakerEvent,
-                warn: (message, meta) => {
-                    chatOrchestratorLogger.warn(message, meta);
-                },
+        const plannerActionOutcome = resolvePlannerActionOutcome({
+            executionPlan,
+            normalizedRequest,
+        });
+        if (plannerActionOutcome.kind === 'terminal_action') {
+            if (plannerActionOutcome.fallbackReason !== undefined) {
+                fallbackReasons.push(plannerActionOutcome.fallbackReason);
             }
-        );
-        if (nonMessageResponse) {
-            emitControlObservability({
-                responseAction: nonMessageResponse.action,
+            if (plannerActionOutcome.warningMessage !== undefined) {
+                chatOrchestratorLogger.warn(
+                    plannerActionOutcome.warningMessage
+                );
+            }
+            notifyBreakerEvent({
+                responseId: null,
+                responseAction:
+                    plannerActionOutcome.terminalAction.responseAction,
                 responseModality: executionPlan.modality,
             });
-            return nonMessageResponse;
+            emitFallbackRollup(fallbackRollupSelectionSource);
+            emitControlObservability({
+                responseAction:
+                    plannerActionOutcome.terminalAction.responseAction,
+                responseModality: executionPlan.modality,
+            });
+            return plannerActionOutcome.terminalAction.response;
         }
         const promptLayers = renderConversationPromptLayers(
             normalizedRequest.surface === 'discord'
