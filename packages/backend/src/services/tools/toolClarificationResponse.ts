@@ -10,12 +10,12 @@ import type { PostChatResponse } from '@footnote/contracts/web';
 import type {
     ResponseMetadata,
     ToolExecutionContext,
-    ToolExecutionEvent,
 } from '@footnote/contracts/ethics-core';
 import type {
     AssistantResponseMetadata,
     ResponseMetadataRuntimeContext,
 } from '../openaiService.js';
+import { buildToolExecutionEvent } from './toolExecutionEvents.js';
 
 type ToolClarificationMetadataContext = Omit<
     ResponseMetadataRuntimeContext,
@@ -74,13 +74,7 @@ export const buildToolClarificationResponse = ({
         },
         metadataWithSkippedGenerationContext
     );
-    const toolExecutionEvent: ToolExecutionEvent = {
-        kind: 'tool',
-        toolName: toolContext.toolName,
-        status: toolContext.status,
-        clarification: toolContext.clarification,
-        durationMs: toolContext.durationMs,
-    };
+    const toolExecutionEvent = buildToolExecutionEvent(toolContext);
 
     return {
         action: 'message',
