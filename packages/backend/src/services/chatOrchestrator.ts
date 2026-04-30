@@ -46,6 +46,8 @@ import {
     resolveToolSelection,
 } from './tools/toolRegistry.js';
 import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
+import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureResponse.js';
+import { resolveWeatherClarificationContinuation } from './tools/weatherClarificationContinuation.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import type { IncidentAlertRouter } from './incidentAlerts.js';
@@ -202,6 +204,8 @@ export const createChatOrchestrator = ({
             request,
             chatOrchestratorLogger
         );
+        const clarificationContinuation =
+            resolveWeatherClarificationContinuation(normalizedRequest);
         let evaluatorExecutionContext: EvaluatorExecutionContext | undefined;
         const notifyBreakerEvent = (input: {
             responseId: string | null;
@@ -350,6 +354,16 @@ export const createChatOrchestrator = ({
                 ? { verbosity: requestGeneration.verbosity }
                 : {}),
         };
+        if (clarificationContinuation.kind === 'resolved') {
+            generationForExecution = {
+                ...generationForExecution,
+                toolIntent: {
+                    toolName: 'weather_forecast',
+                    requested: true,
+                    input: clarificationContinuation.selectedOption.input,
+                },
+            };
+        }
         const toolPolicyDecision = applySingleToolPolicy(
             generationForExecution
         );
@@ -586,6 +600,146 @@ export const createChatOrchestrator = ({
         const toolResultMessage = toolExecution.toolResultMessage;
         toolExecutionContext =
             toolExecution.toolExecutionContext ?? toolExecutionContext;
+
+        if (
+            clarificationContinuation.kind === 'unresolved' &&
+            clarificationContinuation.pending.options.length > 0
+        ) {
+            return buildToolClarificationResponse({
+                toolContext: {
+                    toolName: 'weather_forecast',
+                    status: 'executed',
+                    clarification: {
+                        reasonCode: 'ambiguous_location',
+                        question: clarificationContinuation.pending.question,
+                        options: clarificationContinuation.pending.options.map(
+                            (option) => ({
+                                id: option.id,
+                                label: option.label,
+                                value: {
+                                    toolName: 'weather_forecast',
+                                    input: option.input,
+                                },
+                            })
+                        ),
+                    },
+                },
+                metadataContext: {
+                    modelVersion: selectedResponseProfile.providerModel,
+                    conversationSnapshot: JSON.stringify({
+                        request: normalizedRequest,
+                        planner: {
+                            action: executionPlan.action,
+                            modality: executionPlan.modality,
+                            profileId: executionPlan.profileId,
+                            safetyTier: executionPlan.safetyTier,
+                            generation: executionPlan.generation,
+                            toolIntent,
+                            toolRequest: toolRequestContext,
+                            ...(surfacePolicy && { surfacePolicy }),
+                        },
+                        executionContract: {
+                            policyId: resolvedExecutionContract.policyId,
+                            policyVersion:
+                                resolvedExecutionContract.policyVersion,
+                        },
+                        clarification: {
+                            toolName: 'weather_forecast',
+                            reasonCode: 'ambiguous_location',
+                        },
+                    }),
+                    executionContext: {
+                        planner: {
+                            status: plannerExecution.status,
+                            reasonCode: plannerExecution.reasonCode,
+                            purpose: plannerExecution.purpose,
+                            contractType: plannerExecution.contractType,
+                            applyOutcome: plannerApplyOutcome,
+                            mattered: plannerMattered,
+                            matteredControlIds: plannerMatteredControlIds,
+                            profileId: plannerProfile.id,
+                            originalProfileId: plannerProfile.id,
+                            effectiveProfileId: plannerProfile.id,
+                            provider: plannerProfile.provider,
+                            model: plannerProfile.providerModel,
+                            durationMs: plannerExecution.durationMs,
+                        },
+                        evaluator: evaluatorExecutionContext,
+                        generation: {
+                            status: 'executed',
+                            profileId: selectedResponseProfile.id,
+                            originalProfileId: originalSelectedProfileId,
+                            effectiveProfileId: effectiveSelectedProfileId,
+                            provider: selectedResponseProfile.provider,
+                            model: selectedResponseProfile.providerModel,
+                        },
+                    },
+                },
+                buildResponseMetadata,
+            });
+        }
+
+        if (
+            toolExecutionContext?.toolName === 'weather_forecast' &&
+            toolExecutionContext.status === 'failed'
+        ) {
+            return buildWeatherToolFailureResponse({
+                toolContext: toolExecutionContext,
+                metadataContext: {
+                    modelVersion: selectedResponseProfile.providerModel,
+                    conversationSnapshot: JSON.stringify({
+                        request: normalizedRequest,
+                        planner: {
+                            action: executionPlan.action,
+                            modality: executionPlan.modality,
+                            profileId: executionPlan.profileId,
+                            safetyTier: executionPlan.safetyTier,
+                            generation: executionPlan.generation,
+                            toolIntent,
+                            toolRequest: toolRequestContext,
+                            ...(surfacePolicy && { surfacePolicy }),
+                        },
+                        executionContract: {
+                            policyId: resolvedExecutionContract.policyId,
+                            policyVersion:
+                                resolvedExecutionContract.policyVersion,
+                        },
+                        toolFailure: {
+                            toolName: toolExecutionContext.toolName,
+                            reasonCode: toolExecutionContext.reasonCode,
+                        },
+                    }),
+                    executionContext: {
+                        planner: {
+                            status: plannerExecution.status,
+                            reasonCode: plannerExecution.reasonCode,
+                            purpose: plannerExecution.purpose,
+                            contractType: plannerExecution.contractType,
+                            applyOutcome: plannerApplyOutcome,
+                            mattered: plannerMattered,
+                            matteredControlIds: plannerMatteredControlIds,
+                            profileId: plannerProfile.id,
+                            originalProfileId: plannerProfile.id,
+                            effectiveProfileId: plannerProfile.id,
+                            provider: plannerProfile.provider,
+                            model: plannerProfile.providerModel,
+                            durationMs: plannerExecution.durationMs,
+                        },
+                        evaluator: evaluatorExecutionContext,
+                        generation: {
+                            status: 'executed',
+                            profileId: selectedResponseProfile.id,
+                            originalProfileId: originalSelectedProfileId,
+                            effectiveProfileId: effectiveSelectedProfileId,
+                            provider: selectedResponseProfile.provider,
+                            model: selectedResponseProfile.providerModel,
+                        },
+                    },
+                },
+                latestUserInput: normalizedRequest.latestUserInput,
+                buildResponseMetadata,
+            });
+        }
 
         if (
             toolExecutionContext?.clarification &&

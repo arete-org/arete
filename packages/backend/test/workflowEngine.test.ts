@@ -1050,3 +1050,82 @@ test('buildPlannerStepRecord does not include raw or noisy planner internals', (
         false
     );
 });
+
+test('runBoundedReviewWorkflow does not emit concrete tool steps in current engine-owned review path', async () => {
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate({ messages }) {
+            const lastSystemMessage = [...messages]
+                .reverse()
+                .find((message) => message.role === 'system');
+            const isAssessmentCall =
+                lastSystemMessage?.content.includes(
+                    'Return plain JSON only.'
+                ) === true;
+
+            return isAssessmentCall
+                ? {
+                      text: '{"decision":"finalize","reason":"done"}',
+                      model: 'gpt-5-mini',
+                      usage: {
+                          promptTokens: 8,
+                          completionTokens: 4,
+                          totalTokens: 12,
+                      },
+                      provenance: 'Inferred',
+                      citations: [],
+                  }
+                : {
+                      text: 'draft',
+                      model: 'gpt-5-mini',
+                      usage: {
+                          promptTokens: 10,
+                          completionTokens: 5,
+                          totalTokens: 15,
+                      },
+                      provenance: 'Inferred',
+                      citations: [],
+                  };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Summarize weather' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Summarize weather' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model,
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(
+        result.workflowLineage.steps.some((step) => step.stepKind === 'tool'),
+        false
+    );
+});
