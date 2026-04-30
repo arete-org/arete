@@ -135,10 +135,14 @@ const buildContextStepShortCircuit = ({
         },
     });
 
+    const generationMetadataContext = buildGenerationMetadataContext();
+
     if (contextExecutionContext.clarification !== undefined) {
         const clarificationResponse = buildToolClarificationResponse({
             toolContext: contextExecutionContext,
-            metadataContext: buildGenerationMetadataContext(),
+            metadataContext: generationMetadataContext as Parameters<
+                typeof buildToolClarificationResponse
+            >[0]['metadataContext'],
             buildResponseMetadata,
         });
         return {
@@ -165,10 +169,10 @@ const buildContextStepShortCircuit = ({
     ) {
         const failureResponse = buildWeatherToolFailureResponse({
             toolContext: contextExecutionContext,
-            metadataContext: {
-                ...buildGenerationMetadataContext(),
-                latestUserInput: latestUserInput ?? conversationSnapshot,
-            },
+            metadataContext: generationMetadataContext as Parameters<
+                typeof buildWeatherToolFailureResponse
+            >[0]['metadataContext'],
+            latestUserInput: latestUserInput ?? conversationSnapshot,
             buildResponseMetadata,
         });
         return {
@@ -885,7 +889,10 @@ export const createChatService = ({
                         latestUserInput,
                         buildResponseMetadata,
                     });
-                    if (generatedShortCircuit !== undefined) {
+                    if (
+                        generatedShortCircuit !== undefined &&
+                        generatedShortCircuit.response !== undefined
+                    ) {
                         return toShortCircuitMessageResult(
                             generatedShortCircuit.response,
                             generatedShortCircuit.telemetry
@@ -905,7 +912,10 @@ export const createChatService = ({
                         latestUserInput,
                         buildResponseMetadata,
                     });
-                    if (noGenShortCircuit !== undefined) {
+                    if (
+                        noGenShortCircuit !== undefined &&
+                        noGenShortCircuit.response !== undefined
+                    ) {
                         return toShortCircuitMessageResult(
                             noGenShortCircuit.response,
                             noGenShortCircuit.telemetry
