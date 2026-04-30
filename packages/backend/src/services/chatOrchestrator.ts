@@ -41,13 +41,10 @@ import { resolveWorkflowModeDecision } from './workflowProfileRegistry.js';
 import { buildSteerabilityControls } from './steerabilityControls.js';
 import type { WeatherForecastTool } from './openMeteoForecastTool.js';
 import { applySingleToolPolicy } from './tools/toolPolicy.js';
-import {
-    executeSelectedTool,
-    resolveToolSelection,
-} from './tools/toolRegistry.js';
+import { resolveToolSelection } from './tools/toolRegistry.js';
 import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
-import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureResponse.js';
 import { resolveWeatherClarificationContinuation } from './tools/weatherClarificationContinuation.js';
+import { createToolRegistryContextStepExecutor } from './contextIntegrations/toolRegistryContextStepAdapter.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import type { IncidentAlertRouter } from './incidentAlerts.js';
@@ -446,6 +443,30 @@ export const createChatOrchestrator = ({
         const toolRequestContext = toolSelection.toolRequest;
         toolExecutionContext =
             toolSelection.toolExecution ?? toolExecutionContext;
+        const weatherContextStepRequest =
+            toolRequestContext.toolName === 'weather_forecast' &&
+            toolRequestContext.requested
+                ? {
+                      integrationName: 'weather_forecast',
+                      requested: toolRequestContext.requested,
+                      eligible: toolRequestContext.eligible,
+                      ...(toolRequestContext.reasonCode !== undefined && {
+                          reasonCode: toolRequestContext.reasonCode,
+                      }),
+                      ...(toolIntent.input !== undefined && {
+                          input: toolIntent.input as Record<string, unknown>,
+                      }),
+                  }
+                : undefined;
+        const weatherContextStepExecutor =
+            weatherContextStepRequest !== undefined
+                ? createToolRegistryContextStepExecutor({
+                      weatherForecastTool,
+                      onWarn: (message, meta) => {
+                          chatOrchestratorLogger.warn(message, meta);
+                      },
+                  })
+                : undefined;
         const weatherRouting = {
             weatherLikeRequest: isWeatherLikeRequest(
                 normalizedRequest.latestUserInput
@@ -637,29 +658,14 @@ export const createChatOrchestrator = ({
         // Web keeps default prompt persona layers.
         const personaPrompt =
             backendOwnedProfileOverlay ?? promptLayers.personaPrompt;
-        const toolExecution = await executeSelectedTool({
-            toolSelection,
-            weatherForecastTool,
-            onWarn: (message, meta) => {
-                chatOrchestratorLogger.warn(message, meta);
-            },
-        });
-        const toolResultMessage = toolExecution.toolResultMessage;
-        toolExecutionContext =
-            toolExecution.toolExecutionContext ?? toolExecutionContext;
         const weatherExecutionAttempted =
             toolExecutionContext?.toolName === 'weather_forecast' &&
             (toolExecutionContext.status === 'executed' ||
                 toolExecutionContext.status === 'failed');
         const weatherOutcome =
-            toolExecutionContext?.toolName === 'weather_forecast'
-                ? toolExecutionContext.clarification
-                    ? 'needs_clarification'
-                    : toolExecutionContext.status === 'failed'
-                      ? 'failed'
-                      : toolExecutionContext.status === 'executed'
-                        ? 'ok'
-                        : 'not_executed'
+            toolRequestContext.toolName === 'weather_forecast' &&
+            toolRequestContext.requested
+                ? 'not_executed'
                 : 'not_selected';
         if (
             weatherRouting.weatherLikeRequest ||
@@ -755,147 +761,6 @@ export const createChatOrchestrator = ({
             });
         }
 
-        if (
-            toolExecutionContext?.toolName === 'weather_forecast' &&
-            toolExecutionContext.status === 'failed'
-        ) {
-            return buildWeatherToolFailureResponse({
-                toolContext: toolExecutionContext,
-                metadataContext: {
-                    modelVersion: selectedResponseProfile.providerModel,
-                    conversationSnapshot: JSON.stringify({
-                        request: normalizedRequest,
-                        planner: {
-                            action: executionPlan.action,
-                            modality: executionPlan.modality,
-                            profileId: executionPlan.profileId,
-                            safetyTier: executionPlan.safetyTier,
-                            generation: executionPlan.generation,
-                            toolIntent,
-                            toolRequest: toolRequestContext,
-                            ...(surfacePolicy && { surfacePolicy }),
-                        },
-                        executionContract: {
-                            policyId: resolvedExecutionContract.policyId,
-                            policyVersion:
-                                resolvedExecutionContract.policyVersion,
-                        },
-                        toolFailure: {
-                            toolName: toolExecutionContext.toolName,
-                            reasonCode: toolExecutionContext.reasonCode,
-                        },
-                    }),
-                    executionContext: {
-                        planner: {
-                            status: plannerExecution.status,
-                            reasonCode: plannerExecution.reasonCode,
-                            purpose: plannerExecution.purpose,
-                            contractType: plannerExecution.contractType,
-                            applyOutcome: plannerApplyOutcome,
-                            mattered: plannerMattered,
-                            matteredControlIds: plannerMatteredControlIds,
-                            profileId: plannerProfile.id,
-                            originalProfileId: plannerProfile.id,
-                            effectiveProfileId: plannerProfile.id,
-                            provider: plannerProfile.provider,
-                            model: plannerProfile.providerModel,
-                            durationMs: plannerExecution.durationMs,
-                        },
-                        evaluator: evaluatorExecutionContext,
-                        generation: {
-                            status: 'executed',
-                            profileId: selectedResponseProfile.id,
-                            originalProfileId: originalSelectedProfileId,
-                            effectiveProfileId: effectiveSelectedProfileId,
-                            provider: selectedResponseProfile.provider,
-                            model: selectedResponseProfile.providerModel,
-                        },
-                    },
-                },
-                latestUserInput: normalizedRequest.latestUserInput,
-                buildResponseMetadata,
-            });
-        }
-
-        if (
-            toolExecutionContext?.clarification &&
-            toolExecutionContext.status === 'executed'
-        ) {
-            chatOrchestratorLogger.info('chat.weather.routing', {
-                event: 'chat.weather.routing',
-                stage: 'clarification_short_circuit',
-                surface: normalizedRequest.surface,
-                ...weatherRouting,
-                weatherExecutionAttempted,
-                weatherOutcome: 'needs_clarification',
-                clarificationShortCircuitHit: true,
-            });
-            chatOrchestratorLogger.info(
-                'tool returned clarification, short-circuiting generation',
-                {
-                    toolName: toolExecutionContext.toolName,
-                    reasonCode: toolExecutionContext.clarification.reasonCode,
-                    optionCount:
-                        toolExecutionContext.clarification.options.length,
-                }
-            );
-            return buildToolClarificationResponse({
-                toolContext: toolExecutionContext,
-                metadataContext: {
-                    modelVersion: selectedResponseProfile.providerModel,
-                    conversationSnapshot: JSON.stringify({
-                        request: normalizedRequest,
-                        planner: {
-                            action: executionPlan.action,
-                            modality: executionPlan.modality,
-                            profileId: executionPlan.profileId,
-                            safetyTier: executionPlan.safetyTier,
-                            generation: executionPlan.generation,
-                            toolIntent,
-                            toolRequest: toolRequestContext,
-                            ...(surfacePolicy && { surfacePolicy }),
-                        },
-                        executionContract: {
-                            policyId: resolvedExecutionContract.policyId,
-                            policyVersion:
-                                resolvedExecutionContract.policyVersion,
-                        },
-                        clarification: {
-                            toolName: toolExecutionContext.toolName,
-                            reasonCode:
-                                toolExecutionContext.clarification.reasonCode,
-                        },
-                    }),
-                    executionContext: {
-                        planner: {
-                            status: plannerExecution.status,
-                            reasonCode: plannerExecution.reasonCode,
-                            purpose: plannerExecution.purpose,
-                            contractType: plannerExecution.contractType,
-                            applyOutcome: plannerApplyOutcome,
-                            mattered: plannerMattered,
-                            matteredControlIds: plannerMatteredControlIds,
-                            profileId: plannerProfile.id,
-                            originalProfileId: plannerProfile.id,
-                            effectiveProfileId: plannerProfile.id,
-                            provider: plannerProfile.provider,
-                            model: plannerProfile.providerModel,
-                            durationMs: plannerExecution.durationMs,
-                        },
-                        evaluator: evaluatorExecutionContext,
-                        generation: {
-                            status: 'executed',
-                            profileId: selectedResponseProfile.id,
-                            originalProfileId: originalSelectedProfileId,
-                            effectiveProfileId: effectiveSelectedProfileId,
-                            provider: selectedResponseProfile.provider,
-                            model: selectedResponseProfile.providerModel,
-                        },
-                    },
-                },
-                buildResponseMetadata,
-            });
-        }
         const clarificationShortCircuitHit = false;
         if (
             (weatherRouting.weatherLikeRequest ||
@@ -936,14 +801,6 @@ export const createChatOrchestrator = ({
                 content: personaPrompt,
             },
             ...normalizedConversation,
-            ...(toolResultMessage
-                ? [
-                      {
-                          role: 'system' as const,
-                          content: toolResultMessage,
-                      },
-                  ]
-                : []),
             {
                 role: 'system',
                 content: [
@@ -1004,6 +861,9 @@ export const createChatOrchestrator = ({
             generation: executionPlan.generation,
             workflowModeId: workflowModeResolution.modeDecision.modeId,
             toolRequest: toolRequestContext,
+            contextStepRequest: weatherContextStepRequest,
+            contextStepExecutor: weatherContextStepExecutor,
+            latestUserInput: normalizedRequest.latestUserInput,
             ExecutionContract: resolvedExecutionContract,
             ...(executionContractScopeTuple !== undefined && {
                 executionContractTrustGraphContext: {

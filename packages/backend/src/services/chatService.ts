@@ -49,6 +49,9 @@ import {
 import {
     buildPlannerStepRecord,
     runBoundedReviewWorkflow,
+    type ContextStepExecutor,
+    type ContextStepRequest,
+    type ContextStepResult,
     type RunBoundedReviewWorkflowResult,
     type WorkflowPolicy,
 } from './workflowEngine.js';
@@ -63,6 +66,8 @@ import type {
 import type { ScopeValidationPolicy } from './executionContractTrustGraph/scopeValidator.js';
 import { logger } from '../utils/logger.js';
 import { runtimeConfig } from '../config.js';
+import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
+import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureResponse.js';
 
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
@@ -448,6 +453,9 @@ export type RunChatMessagesInput = {
     workflowModeId?: string;
     workflowModeEscalationRequest?: WorkflowModeEscalationRequest;
     toolRequest?: ToolInvocationRequest;
+    contextStepRequest?: ContextStepRequest;
+    contextStepExecutor?: ContextStepExecutor;
+    latestUserInput?: string;
     executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
     ExecutionContract?: ExecutionContract;
     steerabilityControls?: ResponseMetadata['steerabilityControls'];
@@ -571,6 +579,9 @@ export const createChatService = ({
         workflowModeId,
         workflowModeEscalationRequest,
         toolRequest,
+        contextStepRequest,
+        contextStepExecutor,
+        latestUserInput,
         executionContractTrustGraphContext,
         ExecutionContract,
         steerabilityControls,
@@ -580,6 +591,31 @@ export const createChatService = ({
         generationDurationMs: number;
         finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
     }> => {
+        const toShortCircuitMessageResult = (
+            response: PostChatResponse,
+            finalToolExecutionTelemetry: FinalToolExecutionTelemetry
+        ): {
+            message: string;
+            metadata: ResponseMetadata;
+            generationDurationMs: number;
+            finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
+        } => {
+            if (response.action !== 'message' || response.metadata === null) {
+                throw new Error(
+                    'Tool short-circuit response must be a message with metadata.'
+                );
+            }
+
+            return {
+                message: response.message,
+                metadata: response.metadata,
+                generationDurationMs: Math.max(
+                    0,
+                    Date.now() - generationStartedAt
+                ),
+                finalToolExecutionTelemetry,
+            };
+        };
         const generationStartedAt = Date.now();
         const normalizedGeneration = normalizeGenerationPlan(generation);
         // Repo-explainer mode appends one helper system hint so responses stay
@@ -641,6 +677,7 @@ export const createChatService = ({
 
         let generationResult: GenerationResult;
         let workflowLineage: WorkflowRecord | undefined;
+        let workflowContextStepResult: ContextStepResult | undefined;
         let fallbackAfterInternalNoGeneration = false;
         const plannerExecutionContext = executionContext?.planner;
         const plannerWorkflowStepRecord: StepRecord | undefined =
@@ -710,14 +747,297 @@ export const createChatService = ({
                 captureUsage: (result, requestedModel) =>
                     recordUsageForStep(result, requestedModel),
                 plannerStepRecord: plannerWorkflowStepRecord,
+                contextStepRequest,
+                contextStepExecutor,
             });
+            workflowContextStepResult = workflowResult.contextStepResult;
             switch (workflowResult.outcome) {
                 case 'generated':
                     generationResult = workflowResult.generationResult;
                     workflowLineage = workflowResult.workflowLineage;
+                    if (
+                        workflowContextStepResult?.executionContext
+                            ?.clarification !== undefined
+                    ) {
+                        const clarificationResponse =
+                            buildToolClarificationResponse({
+                                toolContext:
+                                    workflowContextStepResult.executionContext,
+                                metadataContext: {
+                                    modelVersion: model ?? defaultModel,
+                                    conversationSnapshot,
+                                    executionContext: {
+                                        ...executionContext,
+                                        generation: {
+                                            status: 'executed',
+                                            profileId:
+                                                executionContext?.generation
+                                                    ?.profileId ??
+                                                'workflow_context_step',
+                                            ...(executionContext?.generation
+                                                ?.originalProfileId !==
+                                                undefined && {
+                                                originalProfileId:
+                                                    executionContext.generation
+                                                        .originalProfileId,
+                                            }),
+                                            ...(executionContext?.generation
+                                                ?.effectiveProfileId !==
+                                                undefined && {
+                                                effectiveProfileId:
+                                                    executionContext.generation
+                                                        .effectiveProfileId,
+                                            }),
+                                            provider:
+                                                executionContext?.generation
+                                                    ?.provider ?? 'internal',
+                                            model:
+                                                executionContext?.generation
+                                                    ?.model ??
+                                                model ??
+                                                defaultModel,
+                                        },
+                                    },
+                                },
+                                buildResponseMetadata,
+                            });
+                        return toShortCircuitMessageResult(
+                            clarificationResponse,
+                            {
+                                toolName:
+                                    workflowContextStepResult.executionContext
+                                        .toolName,
+                                status: workflowContextStepResult
+                                    .executionContext.status,
+                                ...(workflowContextStepResult.executionContext
+                                    .reasonCode !== undefined && {
+                                    reasonCode:
+                                        workflowContextStepResult
+                                            .executionContext.reasonCode,
+                                }),
+                                ...(toolRequest !== undefined && {
+                                    eligible: toolRequest.eligible,
+                                }),
+                                ...(toolRequest?.reasonCode !== undefined && {
+                                    requestReasonCode: toolRequest.reasonCode,
+                                }),
+                            }
+                        );
+                    }
+                    if (
+                        workflowContextStepResult?.executionContext.toolName ===
+                            'weather_forecast' &&
+                        workflowContextStepResult.executionContext.status ===
+                            'failed'
+                    ) {
+                        const failureResponse = buildWeatherToolFailureResponse(
+                            {
+                                toolContext:
+                                    workflowContextStepResult.executionContext,
+                                metadataContext: {
+                                    modelVersion: model ?? defaultModel,
+                                    conversationSnapshot,
+                                    executionContext: {
+                                        ...executionContext,
+                                        generation: {
+                                            status: 'executed',
+                                            profileId:
+                                                executionContext?.generation
+                                                    ?.profileId ??
+                                                'workflow_context_step',
+                                            ...(executionContext?.generation
+                                                ?.originalProfileId !==
+                                                undefined && {
+                                                originalProfileId:
+                                                    executionContext.generation
+                                                        .originalProfileId,
+                                            }),
+                                            ...(executionContext?.generation
+                                                ?.effectiveProfileId !==
+                                                undefined && {
+                                                effectiveProfileId:
+                                                    executionContext.generation
+                                                        .effectiveProfileId,
+                                            }),
+                                            provider:
+                                                executionContext?.generation
+                                                    ?.provider ?? 'internal',
+                                            model:
+                                                executionContext?.generation
+                                                    ?.model ??
+                                                model ??
+                                                defaultModel,
+                                        },
+                                    },
+                                },
+                                latestUserInput:
+                                    latestUserInput ?? conversationSnapshot,
+                                buildResponseMetadata,
+                            }
+                        );
+                        return toShortCircuitMessageResult(failureResponse, {
+                            toolName:
+                                workflowContextStepResult.executionContext
+                                    .toolName,
+                            status: workflowContextStepResult.executionContext
+                                .status,
+                            ...(workflowContextStepResult.executionContext
+                                .reasonCode !== undefined && {
+                                reasonCode:
+                                    workflowContextStepResult.executionContext
+                                        .reasonCode,
+                            }),
+                            ...(toolRequest !== undefined && {
+                                eligible: toolRequest.eligible,
+                            }),
+                            ...(toolRequest?.reasonCode !== undefined && {
+                                requestReasonCode: toolRequest.reasonCode,
+                            }),
+                        });
+                    }
                     break;
                 case 'no_generation': {
                     workflowLineage = workflowResult.workflowLineage;
+                    if (
+                        workflowContextStepResult?.executionContext
+                            ?.clarification !== undefined
+                    ) {
+                        const clarificationResponse =
+                            buildToolClarificationResponse({
+                                toolContext:
+                                    workflowContextStepResult.executionContext,
+                                metadataContext: {
+                                    modelVersion: model ?? defaultModel,
+                                    conversationSnapshot,
+                                    executionContext: {
+                                        ...executionContext,
+                                        generation: {
+                                            status: 'executed',
+                                            profileId:
+                                                executionContext?.generation
+                                                    ?.profileId ??
+                                                'workflow_context_step',
+                                            ...(executionContext?.generation
+                                                ?.originalProfileId !==
+                                                undefined && {
+                                                originalProfileId:
+                                                    executionContext.generation
+                                                        .originalProfileId,
+                                            }),
+                                            ...(executionContext?.generation
+                                                ?.effectiveProfileId !==
+                                                undefined && {
+                                                effectiveProfileId:
+                                                    executionContext.generation
+                                                        .effectiveProfileId,
+                                            }),
+                                            provider:
+                                                executionContext?.generation
+                                                    ?.provider ?? 'internal',
+                                            model:
+                                                executionContext?.generation
+                                                    ?.model ??
+                                                model ??
+                                                defaultModel,
+                                        },
+                                    },
+                                },
+                                buildResponseMetadata,
+                            });
+                        return toShortCircuitMessageResult(
+                            clarificationResponse,
+                            {
+                                toolName:
+                                    workflowContextStepResult.executionContext
+                                        .toolName,
+                                status: workflowContextStepResult
+                                    .executionContext.status,
+                                ...(workflowContextStepResult.executionContext
+                                    .reasonCode !== undefined && {
+                                    reasonCode:
+                                        workflowContextStepResult
+                                            .executionContext.reasonCode,
+                                }),
+                                ...(toolRequest !== undefined && {
+                                    eligible: toolRequest.eligible,
+                                }),
+                                ...(toolRequest?.reasonCode !== undefined && {
+                                    requestReasonCode: toolRequest.reasonCode,
+                                }),
+                            }
+                        );
+                    }
+                    if (
+                        workflowContextStepResult?.executionContext.toolName ===
+                            'weather_forecast' &&
+                        workflowContextStepResult.executionContext.status ===
+                            'failed'
+                    ) {
+                        const failureResponse = buildWeatherToolFailureResponse(
+                            {
+                                toolContext:
+                                    workflowContextStepResult.executionContext,
+                                metadataContext: {
+                                    modelVersion: model ?? defaultModel,
+                                    conversationSnapshot,
+                                    executionContext: {
+                                        ...executionContext,
+                                        generation: {
+                                            status: 'executed',
+                                            profileId:
+                                                executionContext?.generation
+                                                    ?.profileId ??
+                                                'workflow_context_step',
+                                            ...(executionContext?.generation
+                                                ?.originalProfileId !==
+                                                undefined && {
+                                                originalProfileId:
+                                                    executionContext.generation
+                                                        .originalProfileId,
+                                            }),
+                                            ...(executionContext?.generation
+                                                ?.effectiveProfileId !==
+                                                undefined && {
+                                                effectiveProfileId:
+                                                    executionContext.generation
+                                                        .effectiveProfileId,
+                                            }),
+                                            provider:
+                                                executionContext?.generation
+                                                    ?.provider ?? 'internal',
+                                            model:
+                                                executionContext?.generation
+                                                    ?.model ??
+                                                model ??
+                                                defaultModel,
+                                        },
+                                    },
+                                },
+                                latestUserInput:
+                                    latestUserInput ?? conversationSnapshot,
+                                buildResponseMetadata,
+                            }
+                        );
+                        return toShortCircuitMessageResult(failureResponse, {
+                            toolName:
+                                workflowContextStepResult.executionContext
+                                    .toolName,
+                            status: workflowContextStepResult.executionContext
+                                .status,
+                            ...(workflowContextStepResult.executionContext
+                                .reasonCode !== undefined && {
+                                reasonCode:
+                                    workflowContextStepResult.executionContext
+                                        .reasonCode,
+                            }),
+                            ...(toolRequest !== undefined && {
+                                eligible: toolRequest.eligible,
+                            }),
+                            ...(toolRequest?.reasonCode !== undefined && {
+                                requestReasonCode: toolRequest.reasonCode,
+                            }),
+                        });
+                    }
                     const noGenerationResolution =
                         resolveNoGenerationHandlingFromTermination({
                             terminationReason:
@@ -918,7 +1238,9 @@ export const createChatService = ({
         // Any mode escalation lineage is resolved by workflowProfileRegistry.
         // Runtime metadata here only carries the resolved decision payload.
         const hasSearchIntent = normalizedGeneration?.search !== undefined;
-        const upstreamToolExecution = executionContext?.tool;
+        const upstreamToolExecution =
+            executionContext?.tool ??
+            workflowContextStepResult?.executionContext;
         const effectiveToolExecutionContext:
             | NonNullable<
                   ResponseMetadataRuntimeContext['executionContext']

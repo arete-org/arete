@@ -355,19 +355,22 @@ handling, `WorkflowRecord` output, and `StepRecord` output.
 The shared workflow vocabulary includes `plan`, `tool`, `generate`, `assess`,
 `revise`, and `finalize`.
 
-`plan` and `tool` are part of the vocabulary, but they are not the main
-current chat loop.
-
 Today:
 
 - planner timing still lives in `chatOrchestrator` before workflow execution
-- concrete tool execution still lives in `chatOrchestrator` and `toolRegistry`
-- workflow metadata can still include bridged planner lineage
+- weather_forecast execution timing moved to workflow context-step path
+- web_search unchanged (not migrated)
+- planner unchanged (not migrated)
+- workflow metadata can include bridged planner lineage
 
-Recent helpers like `buildToolClarificationResponse` and
-`buildToolExecutionEvent` are migration seams for future workflow-owned tool
-steps. They are not evidence that tool execution already moved into
-`workflowEngine`.
+The context-step path allows the workflow engine to execute tool work (like
+weather_forecast) before generation, inject context into the generation
+prompt, and handle clarification/failure scenarios while preserving fail-open
+semantics.
+
+The adapter `toolRegistryContextStepAdapter.ts` keeps the workflow engine
+provider-neutral while mapping tool-registry execution into the workflow
+context-step shape.
 
 ## Step records
 
