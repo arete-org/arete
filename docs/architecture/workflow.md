@@ -131,7 +131,9 @@ The current chat path looks like this:
 4. Planner runs once in `chatOrchestrator` before workflow execution and generation.
 5. Planner output goes through surface policy, capability policy, and tool
    policy.
-6. `chatService` runs either direct generation or the bounded review loop.
+6. `chatService` runs the workflow engine with the profile selected for the mode:
+    - `fast` uses the `generate-only` profile (one generate step, no assess/revise)
+    - `balanced` and `grounded` use the `bounded-review` profile (generate -> assess -> revise loop)
 7. Response metadata records mode, planner influence, workflow lineage, cost,
    and trace or provenance fields.
 
