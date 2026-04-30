@@ -197,6 +197,17 @@ export const createChatOrchestrator = ({
     const runChat = async (
         request: PostChatRequest
     ): Promise<PostChatResponse> => {
+        const isWeatherLikeRequest = (input: string): boolean => {
+            const normalized = input.trim().toLowerCase();
+            if (normalized.length === 0) {
+                return false;
+            }
+            return (
+                /\b(weather|forecast|temperature|temp|rain|snow|wind)\b/.test(
+                    normalized
+                ) && /\b(in|at|for|near)\b/.test(normalized)
+            );
+        };
         // Total wall-clock budget for this request from planner entry to
         // final response payload. This is exposed as telemetry only.
         const orchestrationStartedAt = Date.now();
@@ -303,6 +314,7 @@ export const createChatOrchestrator = ({
             plannerInvocationContext
         );
         const plannerExecution = planned.execution;
+        const plannerDiagnostics = planned.diagnostics;
         const fallbackReasons: PlannerFallbackReason[] = [];
         if (plannerExecution.status === 'failed') {
             const plannerFailureReason =
@@ -434,6 +446,41 @@ export const createChatOrchestrator = ({
         const toolRequestContext = toolSelection.toolRequest;
         toolExecutionContext =
             toolSelection.toolExecution ?? toolExecutionContext;
+        const weatherRouting = {
+            weatherLikeRequest: isWeatherLikeRequest(
+                normalizedRequest.latestUserInput
+            ),
+            plannerToolIntentPresent:
+                plannerDiagnostics.normalizedToolIntentPresent,
+            plannerRawToolIntentPresent:
+                plannerDiagnostics.rawToolIntentPresent,
+            plannerRawToolIntentName: plannerDiagnostics.rawToolIntentName,
+            plannerNormalizedToolIntentName:
+                plannerDiagnostics.normalizedToolIntentName,
+            plannerToolIntentRejected: plannerDiagnostics.toolIntentRejected,
+            plannerToolIntentRejectionReasons:
+                plannerDiagnostics.toolIntentRejectionReasons,
+            plannerRequestedWeather:
+                plannerDiagnostics.normalizedToolIntentName ===
+                'weather_forecast',
+            toolSelectionRequested: toolSelection.toolRequest.requested,
+            toolSelectionEligible: toolSelection.toolRequest.eligible,
+            toolSelectionToolName: toolSelection.toolRequest.toolName,
+            toolSelectionReasonCode: toolSelection.toolRequest.reasonCode,
+            selectedWeather:
+                toolSelection.toolRequest.toolName === 'weather_forecast',
+        };
+        if (
+            weatherRouting.weatherLikeRequest ||
+            weatherRouting.selectedWeather
+        ) {
+            chatOrchestratorLogger.info('chat.weather.routing', {
+                event: 'chat.weather.routing',
+                stage: 'selection',
+                surface: normalizedRequest.surface,
+                ...weatherRouting,
+            });
+        }
         const steerabilityControls = buildSteerabilityControls({
             workflowMode: workflowModeResolution.modeDecision,
             executionContractResponseMode:
@@ -600,6 +647,35 @@ export const createChatOrchestrator = ({
         const toolResultMessage = toolExecution.toolResultMessage;
         toolExecutionContext =
             toolExecution.toolExecutionContext ?? toolExecutionContext;
+        const weatherExecutionAttempted =
+            toolExecutionContext?.toolName === 'weather_forecast' &&
+            (toolExecutionContext.status === 'executed' ||
+                toolExecutionContext.status === 'failed');
+        const weatherOutcome =
+            toolExecutionContext?.toolName === 'weather_forecast'
+                ? toolExecutionContext.clarification
+                    ? 'needs_clarification'
+                    : toolExecutionContext.status === 'failed'
+                      ? 'failed'
+                      : toolExecutionContext.status === 'executed'
+                        ? 'ok'
+                        : 'not_executed'
+                : 'not_selected';
+        if (
+            weatherRouting.weatherLikeRequest ||
+            weatherRouting.selectedWeather
+        ) {
+            chatOrchestratorLogger.info('chat.weather.routing', {
+                event: 'chat.weather.routing',
+                stage: 'execution',
+                surface: normalizedRequest.surface,
+                ...weatherRouting,
+                weatherExecutionAttempted,
+                weatherToolStatus: toolExecutionContext?.status,
+                weatherToolReasonCode: toolExecutionContext?.reasonCode,
+                weatherOutcome,
+            });
+        }
 
         if (
             clarificationContinuation.kind === 'unresolved' &&
@@ -745,6 +821,15 @@ export const createChatOrchestrator = ({
             toolExecutionContext?.clarification &&
             toolExecutionContext.status === 'executed'
         ) {
+            chatOrchestratorLogger.info('chat.weather.routing', {
+                event: 'chat.weather.routing',
+                stage: 'clarification_short_circuit',
+                surface: normalizedRequest.surface,
+                ...weatherRouting,
+                weatherExecutionAttempted,
+                weatherOutcome: 'needs_clarification',
+                clarificationShortCircuitHit: true,
+            });
             chatOrchestratorLogger.info(
                 'tool returned clarification, short-circuiting generation',
                 {
@@ -810,6 +895,25 @@ export const createChatOrchestrator = ({
                 },
                 buildResponseMetadata,
             });
+        }
+        const clarificationShortCircuitHit = false;
+        if (
+            (weatherRouting.weatherLikeRequest ||
+                weatherRouting.selectedWeather) &&
+            !weatherExecutionAttempted
+        ) {
+            chatOrchestratorLogger.warn(
+                'chat.weather.routing.normal_generation_without_weather_tool',
+                {
+                    event: 'chat.weather.routing',
+                    stage: 'normal_generation_without_weather_tool',
+                    surface: normalizedRequest.surface,
+                    ...weatherRouting,
+                    clarificationShortCircuitHit,
+                    weatherExecutionAttempted,
+                    weatherOutcome,
+                }
+            );
         }
 
         const executionPlanForPrompt: PlannerPayloadChatPlan = {

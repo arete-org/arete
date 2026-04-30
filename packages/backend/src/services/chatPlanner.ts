@@ -88,6 +88,17 @@ export type ChatPlannerResult = {
     plan: ChatPlan;
     // Execution telemetry used by orchestrator metadata emission.
     execution: ChatPlannerExecution;
+    // Planner tool-intent diagnostics for orchestration observability.
+    diagnostics: PlannerToolIntentDiagnostics;
+};
+
+export type PlannerToolIntentDiagnostics = {
+    rawToolIntentPresent: boolean;
+    rawToolIntentName?: string;
+    normalizedToolIntentPresent: boolean;
+    normalizedToolIntentName?: string;
+    toolIntentRejected: boolean;
+    toolIntentRejectionReasons: string[];
 };
 
 type PlannerFallbackTier = 'none' | 'field_corrections' | 'safe_default_plan';
@@ -116,6 +127,7 @@ export type PlannerNormalizationResult = {
     applyOutcome: PlannerOutputApplyOutcome;
     outOfContractFields: string[];
     authorityFieldAttempts: string[];
+    diagnostics: PlannerToolIntentDiagnostics;
 };
 
 const REPO_HINT_SET = new Set<ChatRepoSearchHint>(chatRepoSearchHints);
@@ -519,7 +531,9 @@ const normalizeToolIntent = (
             input: {
                 query: query.trim(),
                 ...(contextSize !== undefined && { contextSize }),
-                ...(typeof input.intent === 'string' && { intent: input.intent }),
+                ...(typeof input.intent === 'string' && {
+                    intent: input.intent,
+                }),
             },
         };
     }
@@ -1010,6 +1024,35 @@ const normalizePlan = (
         contextTier: PlannerContextTier;
         contractAssessment: PlannerContractAssessment;
     }): PlannerNormalizationResult => {
+        const rawToolIntentValue =
+            isPlannerCandidate(candidate) && candidate.toolIntent !== undefined
+                ? candidate.toolIntent
+                : undefined;
+        const rawToolIntentPresent = rawToolIntentValue !== undefined;
+        const rawToolIntentName =
+            rawToolIntentPresent &&
+            typeof rawToolIntentValue === 'object' &&
+            rawToolIntentValue !== null &&
+            !Array.isArray(rawToolIntentValue) &&
+            typeof (rawToolIntentValue as Record<string, unknown>).toolName ===
+                'string'
+                ? String(
+                      (rawToolIntentValue as Record<string, unknown>).toolName
+                  )
+                : undefined;
+        const normalizedToolIntent = input.plan.generation.toolIntent;
+        const normalizedToolIntentPresent = normalizedToolIntent !== undefined;
+        const normalizedToolIntentName = normalizedToolIntent?.toolName;
+        const toolIntentRejected =
+            rawToolIntentPresent && !normalizedToolIntentPresent;
+        const toolIntentRejectionReasons = toolIntentRejected
+            ? input.correctionCodes.filter(
+                  (code) =>
+                      code === 'tool_intent_invalid' ||
+                      code === 'out_of_contract_fields_ignored' ||
+                      code === 'authority_fields_ignored'
+              )
+            : [];
         const hasPartialSignals =
             input.correctionCodes.length > 0 ||
             input.contractAssessment.outOfContractFields.length > 0 ||
@@ -1029,6 +1072,16 @@ const normalizePlan = (
             outOfContractFields: input.contractAssessment.outOfContractFields,
             authorityFieldAttempts:
                 input.contractAssessment.authorityFieldAttempts,
+            diagnostics: {
+                rawToolIntentPresent,
+                ...(rawToolIntentName !== undefined && { rawToolIntentName }),
+                normalizedToolIntentPresent,
+                ...(normalizedToolIntentName !== undefined && {
+                    normalizedToolIntentName,
+                }),
+                toolIntentRejected,
+                toolIntentRejectionReasons,
+            },
         };
     };
 
@@ -1348,6 +1401,12 @@ export const createChatPlanner = ({
                     purpose: 'chat_orchestrator_action_selection',
                     contractType: 'fallback',
                 },
+                diagnostics: {
+                    rawToolIntentPresent: false,
+                    normalizedToolIntentPresent: false,
+                    toolIntentRejected: false,
+                    toolIntentRejectionReasons: [],
+                },
             };
         }
 
@@ -1473,6 +1532,7 @@ export const createChatPlanner = ({
                 return {
                     plan: initialNormalization.plan,
                     execution: baseExecution,
+                    diagnostics: initialNormalization.diagnostics,
                 };
             }
 
@@ -1487,6 +1547,7 @@ export const createChatPlanner = ({
                         ...baseExecution,
                         contextReasonCode: 'planner_context_budget_exhausted',
                     },
+                    diagnostics: initialNormalization.diagnostics,
                 };
             }
 
@@ -1501,6 +1562,7 @@ export const createChatPlanner = ({
                             contextReasonCode:
                                 'planner_expansion_invalid_fallback_initial',
                         },
+                        diagnostics: initialNormalization.diagnostics,
                     };
                 }
 
@@ -1515,6 +1577,7 @@ export const createChatPlanner = ({
                             contextReasonCode:
                                 'planner_expansion_invalid_fallback_initial',
                         },
+                        diagnostics: initialNormalization.diagnostics,
                     };
                 }
 
@@ -1537,6 +1600,7 @@ export const createChatPlanner = ({
                             purpose: invocationContext.purpose,
                             contractType: 'text_json',
                         },
+                        diagnostics: expandedNormalization.diagnostics,
                     };
                 }
 
@@ -1547,6 +1611,7 @@ export const createChatPlanner = ({
                         plannerAttemptIndex: 2,
                         contextReasonCode: 'planner_expansion_rejected',
                     },
+                    diagnostics: initialNormalization.diagnostics,
                 };
             } catch (error) {
                 const timeoutExpansion =
@@ -1560,6 +1625,7 @@ export const createChatPlanner = ({
                             ? 'planner_context_timeout_fail_open'
                             : 'planner_expansion_invalid_fallback_initial',
                     },
+                    diagnostics: initialNormalization.diagnostics,
                 };
             }
         };
@@ -1831,6 +1897,12 @@ export const createChatPlanner = ({
                     durationMs: Date.now() - plannerStartedAt,
                     purpose: invocationContext.purpose,
                     contractType: 'fallback',
+                },
+                diagnostics: {
+                    rawToolIntentPresent: false,
+                    normalizedToolIntentPresent: false,
+                    toolIntentRejected: false,
+                    toolIntentRejectionReasons: [],
                 },
             };
         }
