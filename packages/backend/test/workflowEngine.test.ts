@@ -1111,7 +1111,7 @@ test('runBoundedReviewWorkflow does not emit concrete tool steps in current engi
             enableRevision: true,
         },
         captureUsage: (generationResult) => ({
-            model: generationResult.model,
+            model: generationResult.model ?? 'gpt-5-mini',
             promptTokens: generationResult.usage?.promptTokens ?? 0,
             completionTokens: generationResult.usage?.completionTokens ?? 0,
             totalTokens: generationResult.usage?.totalTokens ?? 0,
