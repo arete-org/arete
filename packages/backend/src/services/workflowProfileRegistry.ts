@@ -165,7 +165,7 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
         executionContractPresetId: 'fast-direct',
         workflowProfileClass: 'direct',
         workflowProfileId: 'generate-only',
-        workflowExecution: 'disabled',
+        workflowExecution: 'always',
         reviewPass: 'excluded',
         reviseStep: 'disallowed',
         evidencePosture: 'minimal',

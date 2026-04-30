@@ -116,7 +116,7 @@ test('resolveWorkflowRuntimeConfig applies forceWorkflowExecution and review-loo
         maxDurationMs: 9000,
     });
     assert.equal(fastRuntimeConfig.profileId, 'generate-only');
-    assert.equal(fastRuntimeConfig.workflowExecutionEnabled, false);
+    assert.equal(fastRuntimeConfig.workflowExecutionEnabled, true);
     assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps, 1);
     assert.equal(
         fastRuntimeConfig.workflowExecutionLimits.maxDeliberationCalls,

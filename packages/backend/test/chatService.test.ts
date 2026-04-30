@@ -1305,7 +1305,7 @@ test('runChatMessages maps planner execution context into a workflow planner ste
     );
 });
 
-test('runChatMessages executes fast workflow mode as direct generation without workflow lineage', async () => {
+test('runChatMessages executes fast workflow mode as minimal workflow with one generate step', async () => {
     let generationCalls = 0;
     let capturedWorkflow:
         | ResponseMetadataRuntimeContext['workflow']
@@ -1391,8 +1391,13 @@ test('runChatMessages executes fast workflow mode as direct generation without w
 
     assert.equal(response.message, 'generate-only response');
     assert.equal(generationCalls, 1);
-    assert.equal(capturedWorkflowRunConfig, undefined);
-    assert.equal(capturedWorkflow, undefined);
+    assert.ok(capturedWorkflowRunConfig !== undefined);
+    assert.equal(
+        capturedWorkflowRunConfig?.workflowName,
+        'message_generate_only'
+    );
+    assert.ok(capturedWorkflow !== undefined);
+    assert.equal(capturedWorkflow?.workflowName, 'message_generate_only');
 });
 
 test('runChatMessages handles surfaced no-generation reasons without runtime fallback generation', async () => {
@@ -1787,13 +1792,13 @@ test('runChatMessages keeps workflow execution policy gated by the execution con
 
 test('runChatMessages records workflow mode decision in metadata and applies fast behavior', async () => {
     let reviewWorkflowCalls = 0;
-    let directGenerationCalls = 0;
+    let workflowGenerationCalls = 0;
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
         async generate() {
-            directGenerationCalls += 1;
+            workflowGenerationCalls += 1;
             return {
-                text: 'direct mode response',
+                text: 'workflow mode response',
                 model: 'gpt-5-mini',
                 usage: {
                     promptTokens: 10,
@@ -1819,9 +1824,36 @@ test('runChatMessages records workflow mode decision in metadata and applies fas
         },
         runReviewWorkflow: async () => {
             reviewWorkflowCalls += 1;
-            throw new Error(
-                'runReviewWorkflow should not execute in fast mode'
-            );
+            return {
+                outcome: 'generated',
+                generationResult: await generationRuntime.generate({
+                    messages: [],
+                    model: 'gpt-5-mini',
+                }),
+                workflowLineage: {
+                    workflowId: 'wf_fast',
+                    workflowName: 'message_generate_only',
+                    status: 'completed',
+                    terminationReason: 'goal_satisfied',
+                    stepCount: 1,
+                    maxSteps: 1,
+                    maxDurationMs: 15000,
+                    steps: [
+                        {
+                            stepId: 'step_1',
+                            attempt: 1,
+                            stepKind: 'generate',
+                            startedAt: new Date().toISOString(),
+                            finishedAt: new Date().toISOString(),
+                            durationMs: 10,
+                            outcome: {
+                                status: 'executed',
+                                summary: 'Generated response.',
+                            },
+                        },
+                    ],
+                },
+            } satisfies RunBoundedReviewWorkflowResult;
         },
     });
 
@@ -1830,14 +1862,14 @@ test('runChatMessages records workflow mode decision in metadata and applies fas
         conversationSnapshot: 'Summarize this.',
     });
 
-    assert.equal(response.message, 'direct mode response');
-    assert.equal(directGenerationCalls, 1);
-    assert.equal(reviewWorkflowCalls, 0);
+    assert.equal(response.message, 'workflow mode response');
+    assert.equal(workflowGenerationCalls, 1);
+    assert.equal(reviewWorkflowCalls, 1);
     assert.equal(response.metadata.workflowMode?.modeId, 'fast');
     assert.equal(response.metadata.workflowMode?.initial_mode, 'fast');
     assert.equal(
         response.metadata.workflowMode?.behavior.workflowExecution,
-        'disabled'
+        'always'
     );
     assert.equal(
         response.metadata.workflowMode?.behavior.evidencePosture,
