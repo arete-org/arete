@@ -710,6 +710,8 @@ const WorkflowModeBehaviorSchema = z
         reviseStep: z.enum(['allowed', 'disallowed']),
         evidencePosture: z.enum(['minimal', 'balanced', 'strict']),
         maxWorkflowSteps: z.number().int().positive(),
+        maxPlanCycles: z.number().int().nonnegative().optional(),
+        maxReviewCycles: z.number().int().nonnegative().optional(),
         maxDeliberationCalls: z.number().int().nonnegative(),
     })
     .strict();
@@ -842,7 +844,9 @@ const ImageGenerationMetadataSchema = z
     .strict();
 
 type _AssertImageGenerationMetadata =
-    z.infer<typeof ImageGenerationMetadataSchema> extends ImageGenerationMetadata
+    z.infer<
+        typeof ImageGenerationMetadataSchema
+    > extends ImageGenerationMetadata
         ? ImageGenerationMetadata extends z.infer<
               typeof ImageGenerationMetadataSchema
           >

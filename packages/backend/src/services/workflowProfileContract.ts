@@ -57,6 +57,8 @@ export type WorkflowProfilePolicyContract = {
 export type WorkflowProfileExecutionLimitsContract = {
     maxWorkflowSteps: number;
     maxToolCalls: number;
+    maxPlanCycles?: number;
+    maxReviewCycles?: number;
     maxDeliberationCalls: number;
     maxTokensTotal: number;
     maxDurationMs: number;

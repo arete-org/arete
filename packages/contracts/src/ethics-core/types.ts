@@ -519,6 +519,8 @@ export type WorkflowModeBehavior = {
     reviseStep: 'allowed' | 'disallowed';
     evidencePosture: WorkflowModeEvidencePosture;
     maxWorkflowSteps: number;
+    maxPlanCycles?: number;
+    maxReviewCycles?: number;
     maxDeliberationCalls: number;
 };
 

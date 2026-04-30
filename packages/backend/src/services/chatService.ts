@@ -55,6 +55,10 @@ import {
     type RunBoundedReviewWorkflowResult,
     type WorkflowPolicy,
 } from './workflowEngine.js';
+import type {
+    PlannerStepExecutor,
+    PlannerStepRequest,
+} from './plannerWorkflowSeams.js';
 import { runEvidenceIngestion } from './executionContractTrustGraph/trustGraphEvidenceIngestion.js';
 import type {
     ScopeTuple,
@@ -377,74 +381,6 @@ const OWNERSHIP_DENIAL_PREFIXES: readonly string[] = [
     'insufficient_data:',
 ];
 
-const hasPlannerWorkflowStep = (workflow: WorkflowRecord): boolean =>
-    workflow.steps.some((step) => step.stepKind === 'plan');
-
-const attachPlannerWorkflowLineage = (input: {
-    workflowLineage: WorkflowRecord;
-    executionContext: ResponseMetadataRuntimeContext['executionContext'];
-    generationStartedAtMs: number;
-}): WorkflowRecord => {
-    const plannerExecution = input.executionContext?.planner;
-    if (plannerExecution === undefined) {
-        return input.workflowLineage;
-    }
-
-    if (hasPlannerWorkflowStep(input.workflowLineage)) {
-        return input.workflowLineage;
-    }
-
-    const existingStepIds = new Set(
-        input.workflowLineage.steps.map((step) => step.stepId)
-    );
-    let plannerStepId = 'step_plan_1';
-    let plannerStepIndex = 1;
-    while (existingStepIds.has(plannerStepId)) {
-        plannerStepIndex += 1;
-        plannerStepId = `step_plan_${plannerStepIndex}`;
-    }
-
-    const plannerStep = buildPlannerStepRecord({
-        stepId: plannerStepId,
-        attempt: 1,
-        finishedAtMs: input.generationStartedAtMs,
-        summary: {
-            status: plannerExecution.status,
-            reasonCode: plannerExecution.reasonCode,
-            purpose: plannerExecution.purpose,
-            contractType: plannerExecution.contractType,
-            applyOutcome: plannerExecution.applyOutcome,
-            durationMs: plannerExecution.durationMs,
-            profileId: plannerExecution.profileId,
-            originalProfileId: plannerExecution.originalProfileId,
-            effectiveProfileId: plannerExecution.effectiveProfileId,
-            provider: plannerExecution.provider,
-            model: plannerExecution.model,
-            mattered: plannerExecution.mattered,
-            matteredControlIds: plannerExecution.matteredControlIds,
-        },
-    });
-
-    return {
-        ...input.workflowLineage,
-        stepCount: input.workflowLineage.steps.length + 1,
-        maxSteps: input.workflowLineage.maxSteps + 1,
-        ...(input.workflowLineage.effectiveLimits !== undefined && {
-            effectiveLimits: input.workflowLineage.effectiveLimits.map(
-                (limit) =>
-                    limit.key === 'maxWorkflowSteps' &&
-                    typeof limit.value === 'number'
-                        ? {
-                              ...limit,
-                              value: limit.value + 1,
-                          }
-                        : limit
-            ),
-        }),
-        steps: [plannerStep, ...input.workflowLineage.steps],
-    };
-};
-
 const extractOwnershipDenialReason = (
     details: string | undefined
 ):
@@ -579,6 +515,8 @@ export type RunChatMessagesInput = {
     toolRequest?: ToolInvocationRequest;
     contextStepRequest?: ContextStepRequest;
     contextStepExecutor?: ContextStepExecutor;
+    plannerStepRequest?: PlannerStepRequest;
+    plannerStepExecutor?: PlannerStepExecutor;
     latestUserInput?: string;
     executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
     ExecutionContract?: ExecutionContract;
@@ -705,6 +643,8 @@ export const createChatService = ({
         toolRequest,
         contextStepRequest,
         contextStepExecutor,
+        plannerStepRequest,
+        plannerStepExecutor,
         latestUserInput,
         executionContractTrustGraphContext,
         ExecutionContract,
@@ -853,9 +793,11 @@ export const createChatService = ({
                     maxIterations: Math.max(
                         0,
                         Math.min(
-                            Math.ceil(
-                                workflowExecutionLimits.maxDeliberationCalls / 2
-                            ),
+                            workflowExecutionLimits.maxReviewCycles ??
+                                Math.ceil(
+                                    workflowExecutionLimits.maxDeliberationCalls /
+                                        2
+                                ),
                             Math.ceil(
                                 Math.max(
                                     0,
@@ -871,6 +813,8 @@ export const createChatService = ({
                 captureUsage: (result, requestedModel) =>
                     recordUsageForStep(result, requestedModel),
                 plannerStepRecord: plannerWorkflowStepRecord,
+                plannerStepRequest,
+                plannerStepExecutor,
                 contextStepRequest,
                 contextStepExecutor,
             });
@@ -1210,14 +1154,7 @@ export const createChatService = ({
                     durationMs: generationDurationMs,
                 } satisfies GenerationExecutionContext)
               : undefined;
-        const normalizedWorkflowLineage =
-            workflowLineage !== undefined
-                ? attachPlannerWorkflowLineage({
-                      workflowLineage,
-                      executionContext,
-                      generationStartedAtMs: generationStartedAt,
-                  })
-                : undefined;
+        const normalizedWorkflowLineage = workflowLineage;
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,

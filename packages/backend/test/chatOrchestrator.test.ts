@@ -248,6 +248,45 @@ test('message plans pass planner generation options into chatService', async () 
     );
 });
 
+test('planner invocation remains pre-workflow in current groundwork branch', async () => {
+    const callOrder: string[] = [];
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                callOrder.push('planner');
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        safetyTier: 'Low',
+                        reasoning: 'Plan first.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+            callOrder.push('generation');
+            return {
+                text: 'ok',
+                model: 'gpt-5-mini',
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(createChatRequest());
+    assert.equal(response.action, 'message');
+    assert.deepEqual(callOrder, ['planner', 'generation']);
+});
+
 test('orchestrator carries resolved Execution Contract policy payload through service runtime seam', async () => {
     let capturedConversationSnapshot: string | undefined;
     const orchestrator = createChatOrchestrator({

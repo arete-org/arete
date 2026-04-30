@@ -34,6 +34,13 @@ import type {
     RuntimeMessage,
 } from '@footnote/agent-runtime';
 import { logger } from '../utils/logger.js';
+import type {
+    PlannerApplicationInput,
+    PlannerResultApplier,
+    PlannerStepExecutor,
+    PlannerStepRequest,
+    PlannerStepResult,
+} from './plannerWorkflowSeams.js';
 
 /**
  * Canonical Execution Contract workflow-policy surface.
@@ -57,6 +64,8 @@ export type WorkflowState = {
     currentStepKind: WorkflowStepKind | null;
     stepCount: number;
     toolCallCount: number;
+    planCallCount: number;
+    reviewCallCount: number;
     deliberationCallCount: number;
     totalTokens: number;
 };
@@ -156,6 +165,13 @@ export type RunBoundedReviewWorkflowInput = {
         requestedModel: string | undefined
     ) => ReviewWorkflowUsageSummary;
     plannerStepRecord?: StepRecord;
+    plannerStepRequest?: PlannerStepRequest;
+    plannerStepExecutor?: PlannerStepExecutor;
+    plannerResultApplier?: PlannerResultApplier;
+    plannerApplicationInput?: Omit<
+        PlannerApplicationInput,
+        'plannerStepResult'
+    >;
     contextStepRequest?: ContextStepRequest;
     contextStepExecutor?: ContextStepExecutor;
 };
@@ -165,11 +181,13 @@ export type RunBoundedReviewWorkflowResult =
           outcome: 'generated';
           generationResult: GenerationResult;
           workflowLineage: WorkflowRecord;
+          plannerStepResult?: PlannerStepResult;
           contextStepResult?: ContextStepResult;
       }
     | {
           outcome: 'no_generation';
           workflowLineage: WorkflowRecord;
+          plannerStepResult?: PlannerStepResult;
           contextStepResult?: ContextStepResult;
       };
 
@@ -268,6 +286,8 @@ export const createInitialWorkflowState = (input: {
     currentStepKind: null,
     stepCount: 0,
     toolCallCount: 0,
+    planCallCount: 0,
+    reviewCallCount: 0,
     deliberationCallCount: 0,
     totalTokens: 0,
 });
@@ -302,6 +322,10 @@ export const applyStepExecutionToState = (
         currentStepKind: stepKind,
         stepCount: state.stepCount + 1,
         toolCallCount: state.toolCallCount + sanitizedToolCallsExecuted,
+        planCallCount: state.planCallCount + (stepKind === 'plan' ? 1 : 0),
+        reviewCallCount:
+            state.reviewCallCount +
+            (stepKind === 'assess' || stepKind === 'revise' ? 1 : 0),
         deliberationCallCount:
             state.deliberationCallCount + sanitizedDeliberationCallsExecuted,
         totalTokens: state.totalTokens + sanitizedUsageTokens,
@@ -336,6 +360,26 @@ export const isWithinExecutionLimits = (
         nextStepKind === 'plan' ||
         nextStepKind === 'assess' ||
         nextStepKind === 'revise';
+    const maxPlanCycles =
+        limits.maxPlanCycles ?? Math.max(0, limits.maxDeliberationCalls);
+    const maxReviewCycles =
+        limits.maxReviewCycles ??
+        Math.max(0, limits.maxDeliberationCalls - maxPlanCycles);
+    if (nextStepKind === 'plan' && state.planCallCount >= maxPlanCycles) {
+        return {
+            withinLimits: false,
+            exhaustedBy: 'maxDeliberationCalls',
+        };
+    }
+    if (
+        (nextStepKind === 'assess' || nextStepKind === 'revise') &&
+        state.reviewCallCount >= maxReviewCycles
+    ) {
+        return {
+            withinLimits: false,
+            exhaustedBy: 'maxDeliberationCalls',
+        };
+    }
     if (
         isNextStepDeliberative &&
         state.deliberationCallCount >= limits.maxDeliberationCalls
@@ -659,6 +703,8 @@ export const runBoundedReviewWorkflow = async ({
     parseReviewDecision,
     captureUsage,
     plannerStepRecord,
+    plannerStepRequest,
+    plannerStepExecutor,
     contextStepRequest,
     contextStepExecutor,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
@@ -703,6 +749,7 @@ export const runBoundedReviewWorkflow = async ({
         stepCounter = 1;
         plannerRootStepId = plannerStepRecord.stepId;
     }
+    let plannerExecutionResult: PlannerStepResult | undefined;
     let terminationReason: WorkflowTerminationReason = 'budget_exhausted_steps';
     let workflowStatus: WorkflowRecord['status'] = 'degraded';
     let draftResult: GenerationResult | null = null;
@@ -729,6 +776,15 @@ export const runBoundedReviewWorkflow = async ({
             workflowConfig.executionLimits?.maxToolCalls ?? UNBOUNDED_LIMIT,
             UNBOUNDED_LIMIT
         ),
+        maxPlanCycles: sanitizeNonNegativeInteger(
+            workflowConfig.executionLimits?.maxPlanCycles ?? 1,
+            1
+        ),
+        maxReviewCycles: sanitizeNonNegativeInteger(
+            workflowConfig.executionLimits?.maxReviewCycles ??
+                Math.max(0, normalizedMaxIterations * 2 - 1),
+            Math.max(0, normalizedMaxIterations * 2 - 1)
+        ),
         maxDeliberationCalls: sanitizeNonNegativeInteger(
             workflowConfig.executionLimits?.maxDeliberationCalls ??
                 Math.max(1, normalizedMaxIterations * 2),
@@ -744,6 +800,11 @@ export const runBoundedReviewWorkflow = async ({
             normalizedMaxDurationMs
         ),
     };
+    executionLimits.maxDeliberationCalls = Math.max(
+        executionLimits.maxDeliberationCalls,
+        (executionLimits.maxPlanCycles ?? 0) +
+            (executionLimits.maxReviewCycles ?? 0)
+    );
     const effectiveMaxIterations =
         workflowConfig.executionLimits !== undefined
             ? Math.max(
@@ -845,6 +906,66 @@ export const runBoundedReviewWorkflow = async ({
         shouldStop = true;
         return true;
     };
+
+    if (
+        plannerRootStepId === undefined &&
+        plannerStepRequest !== undefined &&
+        plannerStepExecutor !== undefined
+    ) {
+        if (
+            !isTransitionAllowed(
+                workflowState.currentStepKind,
+                'plan',
+                workflowPolicy
+            )
+        ) {
+            terminationReason = 'transition_blocked_by_policy';
+            shouldStop = true;
+        } else if (!stopIfOverLimits('plan')) {
+            const plannerStartedAt = Date.now();
+            plannerExecutionResult = await plannerStepExecutor({
+                ...plannerStepRequest,
+                workflowId,
+                workflowName: workflowConfig.workflowName,
+                attempt: 1,
+            });
+            const plannerFinishedAt = Date.now();
+            const plannerStep = buildPlannerStepRecord({
+                stepId: 'step_1',
+                attempt: 1,
+                startedAtMs: plannerStartedAt,
+                finishedAtMs: plannerFinishedAt,
+                summary: {
+                    status: plannerExecutionResult.execution.status,
+                    ...(plannerExecutionResult.execution.reasonCode !==
+                        undefined && {
+                        reasonCode: plannerExecutionResult.execution.reasonCode,
+                    }),
+                    purpose: plannerExecutionResult.execution.purpose,
+                    contractType: plannerExecutionResult.execution.contractType,
+                    applyOutcome:
+                        plannerExecutionResult.execution.status === 'executed'
+                            ? 'applied'
+                            : 'not_applied',
+                    durationMs: plannerExecutionResult.execution.durationMs,
+                    action: plannerExecutionResult.plan.action,
+                    modality: plannerExecutionResult.plan.modality,
+                    requestedCapabilityProfile:
+                        plannerExecutionResult.plan.requestedCapabilityProfile,
+                },
+            });
+            workflowSteps.push(plannerStep);
+            stepCounter = 1;
+            plannerRootStepId = plannerStep.stepId;
+            workflowState = applyStepExecutionToState(
+                workflowState,
+                'plan',
+                0,
+                0,
+                1
+            );
+        }
+    }
 
     const injectContextMessagesIntoPrompt = (
         baseMessages: RuntimeMessage[],

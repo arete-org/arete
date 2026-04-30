@@ -118,9 +118,11 @@ test('resolveWorkflowRuntimeConfig applies forceWorkflowExecution and review-loo
     assert.equal(fastRuntimeConfig.profileId, 'generate-only');
     assert.equal(fastRuntimeConfig.workflowExecutionEnabled, true);
     assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps, 1);
+    assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxPlanCycles, 1);
+    assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxReviewCycles, 0);
     assert.equal(
         fastRuntimeConfig.workflowExecutionLimits.maxDeliberationCalls,
-        0
+        1
     );
     assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxDurationMs, 9000);
 
@@ -135,6 +137,14 @@ test('resolveWorkflowRuntimeConfig applies forceWorkflowExecution and review-loo
     assert.equal(
         groundedRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps,
         8
+    );
+    assert.equal(
+        groundedRuntimeConfig.workflowExecutionLimits.maxPlanCycles,
+        1
+    );
+    assert.equal(
+        groundedRuntimeConfig.workflowExecutionLimits.maxReviewCycles,
+        3
     );
     assert.equal(
         groundedRuntimeConfig.workflowExecutionLimits.maxDeliberationCalls,
@@ -280,6 +290,8 @@ test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity map
             reviseStep: 'disallowed',
             evidencePosture: 'minimal',
             maxWorkflowSteps: 1,
+            maxPlanCycles: 1,
+            maxReviewCycles: 0,
             maxDeliberationCalls: 0,
         }),
         'none'
@@ -294,6 +306,8 @@ test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity map
             reviseStep: 'allowed',
             evidencePosture: 'balanced',
             maxWorkflowSteps: 4,
+            maxPlanCycles: 1,
+            maxReviewCycles: 1,
             maxDeliberationCalls: 1,
         }),
         'light'
@@ -308,6 +322,8 @@ test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity map
             reviseStep: 'allowed',
             evidencePosture: 'balanced',
             maxWorkflowSteps: 4,
+            maxPlanCycles: 1,
+            maxReviewCycles: 2,
             maxDeliberationCalls: 2,
         }),
         'moderate'
@@ -322,8 +338,36 @@ test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity map
             reviseStep: 'allowed',
             evidencePosture: 'strict',
             maxWorkflowSteps: 8,
+            maxPlanCycles: 1,
+            maxReviewCycles: 4,
             maxDeliberationCalls: 4,
         }),
         'high'
+    );
+});
+
+test('resolveWorkflowRuntimeConfig keeps maxDeliberationCalls compatibility mapped from plan/review cycles', () => {
+    const fast = resolveWorkflowRuntimeConfig({
+        modeId: 'fast',
+        reviewLoopEnabled: true,
+        maxIterations: 5,
+        maxDurationMs: 9000,
+    });
+    assert.equal(
+        fast.workflowExecutionLimits.maxDeliberationCalls,
+        (fast.workflowExecutionLimits.maxPlanCycles ?? 0) +
+            (fast.workflowExecutionLimits.maxReviewCycles ?? 0)
+    );
+
+    const balanced = resolveWorkflowRuntimeConfig({
+        modeId: 'balanced',
+        reviewLoopEnabled: true,
+        maxIterations: 5,
+        maxDurationMs: 9000,
+    });
+    assert.equal(
+        balanced.workflowExecutionLimits.maxDeliberationCalls,
+        (balanced.workflowExecutionLimits.maxPlanCycles ?? 0) +
+            (balanced.workflowExecutionLimits.maxReviewCycles ?? 0)
     );
 });
