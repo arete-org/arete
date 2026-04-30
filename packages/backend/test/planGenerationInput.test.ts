@@ -1,14 +1,14 @@
 /**
  * @description: Verifies post-plan message and snapshot assembly remains stable.
  * @footnote-scope: test
- * @footnote-module: PostPlanAssemblyTests
+ * @footnote-module: PlanGenerationInputTests
  * @footnote-risk: medium - Assembly drift can break planner payload ordering and runtime grounding hints.
  * @footnote-ethics: medium - Stable assembly preserves auditable planner-to-generation boundaries.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { PostChatRequest } from '@footnote/contracts/web';
-import { assemblePostPlanGenerationInput } from '../src/services/chatService/postPlanAssembly.js';
+import { assemblePlanGenerationInput } from '../src/services/chatService/planGenerationInput.js';
 
 const createRequest = (): PostChatRequest => ({
     surface: 'discord',
@@ -22,8 +22,8 @@ const createRequest = (): PostChatRequest => ({
     },
 });
 
-test('assemblePostPlanGenerationInput appends planner payload and preserves message ordering', () => {
-    const result = assemblePostPlanGenerationInput({
+test('assemblePlanGenerationInput appends planner payload and preserves message ordering', () => {
+    const result = assemblePlanGenerationInput({
         systemPrompt: 'system prompt',
         personaPrompt: 'persona prompt',
         normalizedConversation: [{ role: 'user', content: 'hello' }],
@@ -66,8 +66,8 @@ test('assemblePostPlanGenerationInput appends planner payload and preserves mess
     );
 });
 
-test('assemblePostPlanGenerationInput includes planner snapshot payload fields', () => {
-    const result = assemblePostPlanGenerationInput({
+test('assemblePlanGenerationInput includes planner snapshot payload fields', () => {
+    const result = assemblePlanGenerationInput({
         systemPrompt: 'system prompt',
         personaPrompt: 'persona prompt',
         normalizedConversation: [{ role: 'user', content: 'hello' }],

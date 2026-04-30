@@ -2,7 +2,7 @@
  * @description: Assembles post-plan generation messages and conversation
  * snapshot payloads from policy-applied planner output.
  * @footnote-scope: core
- * @footnote-module: ChatServicePostPlanAssembly
+ * @footnote-module: ChatServicePlanGenerationInput
  * @footnote-risk: medium - Incorrect assembly can desync planner payload context from generation.
  * @footnote-ethics: high - Stable assembly preserves auditable boundaries between planner advice and policy authority.
  */
@@ -43,7 +43,7 @@ export type PostPlanAssemblyResult = {
     conversationSnapshot: string;
 };
 
-export const assemblePostPlanGenerationInput = (
+export const assemblePlanGenerationInput = (
     input: PostPlanAssemblyInput
 ): PostPlanAssemblyResult => {
     const conversationMessages: Array<

@@ -1192,7 +1192,7 @@ test('runChatMessages falls back to reviewed workflow behavior for unknown workf
 test('runChatMessages forwards planner seams into workflow runtime for bounded-review lineage', async () => {
     let capturedPlannerStepRequestDefined = false;
     let capturedPlannerStepExecutorDefined = false;
-    let capturedPostPlannerWorkflowAdapterDefined = false;
+    let capturedPlanContinuationBuilderDefined = false;
 
     const chatService = createChatService({
         generationRuntime: createRuntime(),
@@ -1211,8 +1211,8 @@ test('runChatMessages forwards planner seams into workflow runtime for bounded-r
                 input.plannerStepRequest !== undefined;
             capturedPlannerStepExecutorDefined =
                 input.plannerStepExecutor !== undefined;
-            capturedPostPlannerWorkflowAdapterDefined =
-                input.postPlannerWorkflowAdapter !== undefined;
+            capturedPlanContinuationBuilderDefined =
+                input.planContinuationBuilder !== undefined;
             return {
                 outcome: 'generated',
                 generationResult: {
@@ -1320,7 +1320,7 @@ test('runChatMessages forwards planner seams into workflow runtime for bounded-r
                 toolIntentRejectionReasons: [],
             },
         }),
-        postPlannerWorkflowAdapter: (input) => ({
+        planContinuationBuilder: (input) => ({
             continuation: 'continue_message',
             messagesWithHints: input.baseMessagesWithHints,
             generationRequest: input.baseGenerationRequest,
@@ -1367,7 +1367,7 @@ test('runChatMessages forwards planner seams into workflow runtime for bounded-r
     assert.equal(response.message, 'workflow response');
     assert.equal(capturedPlannerStepRequestDefined, true);
     assert.equal(capturedPlannerStepExecutorDefined, true);
-    assert.equal(capturedPostPlannerWorkflowAdapterDefined, true);
+    assert.equal(capturedPlanContinuationBuilderDefined, true);
 });
 
 test('runChatMessages executes fast workflow mode as minimal workflow with one generate step', async () => {

@@ -868,7 +868,7 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
                 toolIntentRejectionReasons: [],
             },
         }),
-        postPlannerWorkflowAdapter: ({
+        planContinuationBuilder: ({
             plannerStepResult,
             baseGenerationRequest,
             baseMessagesWithHints,
@@ -1591,7 +1591,7 @@ test('runBoundedReviewWorkflow returns terminal planner action outcome without g
                 toolIntentRejectionReasons: [],
             },
         }),
-        postPlannerWorkflowAdapter: ({ plannerStepResult }) => ({
+        planContinuationBuilder: ({ plannerStepResult }) => ({
             continuation: 'terminal_action',
             terminalAction:
                 plannerStepResult.plan.action === 'react'

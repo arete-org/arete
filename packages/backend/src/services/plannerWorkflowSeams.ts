@@ -71,7 +71,7 @@ export type PlannerStepExecutor = (
 ) => Promise<PlannerStepResult>;
 
 /** Terminal transport actions from planner; intent-only, policy must render. */
-export type PlannerTerminalAction =
+export type PlanTerminalAction =
     | {
           responseAction: 'ignore';
       }
@@ -115,7 +115,7 @@ export type PlannerResultApplier = (
     input: PlannerApplicationInput
 ) => PlannerApplicationResult;
 
-export type PostPlannerWorkflowAdapterInput = {
+export type PlanContinuationBuilderInput = {
     plannerStepResult: PlannerStepResult;
     workflowId: string;
     workflowName: string;
@@ -134,7 +134,7 @@ export type PostPlannerDiagnosticsSummary = Pick<
     | 'toolIntentRejectionReasons'
 >;
 
-export type PostPlannerWorkflowSummary = {
+export type AppliedPlanState = {
     executionPlan: ChatPlan;
     generationForExecution: ChatGenerationPlan;
     selectedResponseProfile: Pick<
@@ -158,12 +158,12 @@ export type PostPlannerWorkflowSummary = {
     searchRequested: boolean;
 };
 
-export type PostPlannerWorkflowAdapterResult = {
-    plannerSummary: PostPlannerWorkflowSummary;
+export type PlanContinuation = {
+    plannerSummary: AppliedPlanState;
 } & (
     | {
           continuation: 'terminal_action';
-          terminalAction: PlannerTerminalAction;
+          terminalAction: PlanTerminalAction;
       }
     | {
           continuation: 'continue_message';
@@ -173,6 +173,6 @@ export type PostPlannerWorkflowAdapterResult = {
       }
 );
 
-export type PostPlannerWorkflowAdapter = (
-    input: PostPlannerWorkflowAdapterInput
-) => PostPlannerWorkflowAdapterResult;
+export type PlanContinuationBuilder = (
+    input: PlanContinuationBuilderInput
+) => PlanContinuation;

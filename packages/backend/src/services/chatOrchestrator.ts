@@ -52,8 +52,8 @@ import {
     runDeterministicEvaluator,
     type EvaluatorExecutionContext,
 } from './chatOrchestrator/evaluatorCoordination.js';
-import { assemblePostPlanGenerationInput } from './chatService/postPlanAssembly.js';
-import { resolvePlannerActionOutcome } from './chatService/plannerActionOutcome.js';
+import { assemblePlanGenerationInput } from './chatService/planGenerationInput.js';
+import { classifyPlanContinuation } from './chatService/planContinuation.js';
 import {
     buildControlObservabilityEnvelope,
     emitControlObservabilityEnvelope,
@@ -61,8 +61,8 @@ import {
 import type {
     PlannerStepExecutor,
     PlannerStepResult,
-    PostPlannerWorkflowAdapter,
-    PostPlannerWorkflowSummary,
+    PlanContinuationBuilder,
+    AppliedPlanState,
 } from './plannerWorkflowSeams.js';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
@@ -421,7 +421,7 @@ export const createChatOrchestrator = ({
             plannerStepResult: PlannerStepResult;
             plannerApplication: ReturnType<typeof plannerResultApplier>;
             executionPlan: ChatPlan;
-        }): PostPlannerWorkflowSummary => ({
+        }): AppliedPlanState => ({
             executionPlan: input.executionPlan,
             generationForExecution:
                 input.plannerApplication.generationForExecution,
@@ -480,7 +480,7 @@ export const createChatOrchestrator = ({
             plannerApplyOutcome: input.plannerApplication.plannerApplyOutcome,
             plannerMattered: input.plannerApplication.plannerMattered,
             plannerMatteredControlIds: input.plannerApplication
-                .plannerMatteredControlIds as PostPlannerWorkflowSummary['plannerMatteredControlIds'],
+                .plannerMatteredControlIds as AppliedPlanState['plannerMatteredControlIds'],
             fallbackReasons: [...fallbackReasons],
             fallbackRollupSelectionSource:
                 input.plannerApplication.fallbackRollupSelectionSource,
@@ -498,9 +498,7 @@ export const createChatOrchestrator = ({
             invocationContext: plannerInvocationContext,
             capabilityProfiles: plannerCapabilityOptions,
         };
-        const postPlannerWorkflowAdapter: PostPlannerWorkflowAdapter = (
-            input
-        ) => {
+        const planContinuationBuilder: PlanContinuationBuilder = (input) => {
             if (input.plannerStepResult.execution.status === 'failed') {
                 const plannerFailureReason: PlannerFallbackReason =
                     input.plannerStepResult.execution.reasonCode ===
@@ -533,7 +531,7 @@ export const createChatOrchestrator = ({
                         plannerApplication.selectedCapabilityProfile,
                 }),
             };
-            const plannerActionOutcome = resolvePlannerActionOutcome({
+            const plannerActionOutcome = classifyPlanContinuation({
                 executionPlan,
                 normalizedRequest,
             });
@@ -567,7 +565,7 @@ export const createChatOrchestrator = ({
                     safetyTierRank[executionPlan.safetyTier]
                     ? evaluatorSafetyTierHint
                     : executionPlan.safetyTier;
-            const postPlanAssembly = assemblePostPlanGenerationInput({
+            const postPlanAssembly = assemblePlanGenerationInput({
                 systemPrompt: promptLayers.systemPrompt,
                 personaPrompt,
                 normalizedConversation,
@@ -643,7 +641,7 @@ export const createChatOrchestrator = ({
             workflowModeId: workflowModeResolution.modeDecision.modeId,
             plannerStepRequest,
             plannerStepExecutor,
-            postPlannerWorkflowAdapter,
+            planContinuationBuilder,
             contextStepExecutor: weatherContextStepExecutor,
             latestUserInput: normalizedRequest.latestUserInput,
             ExecutionContract: resolvedExecutionContract,

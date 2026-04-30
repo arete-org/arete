@@ -2,7 +2,7 @@
  * @description: Classifies policy-applied planner actions into either a
  * terminal transport response or message-continuation workflow execution.
  * @footnote-scope: core
- * @footnote-module: ChatServicePlannerActionOutcome
+ * @footnote-module: ChatServicePlanContinuation
  * @footnote-risk: medium - Incorrect classification can skip generation or return wrong action types.
  * @footnote-ethics: medium - Action routing affects user-visible behavior and trust.
  */
@@ -12,7 +12,7 @@ import type {
 } from '@footnote/contracts/web';
 import type { ChatPlan } from '../chatPlanner.js';
 import type { PlannerFallbackReason } from '../plannerFallbackTelemetryRollup.js';
-import type { PlannerTerminalAction } from '../plannerWorkflowSeams.js';
+import type { PlanTerminalAction } from '../plannerWorkflowSeams.js';
 
 export type PlannerActionOutcome =
     | {
@@ -20,12 +20,12 @@ export type PlannerActionOutcome =
       }
     | {
           kind: 'terminal_action';
-          terminalAction: PlannerTerminalAction;
+          terminalAction: PlanTerminalAction;
           fallbackReason?: PlannerFallbackReason;
           warningMessage?: string;
       };
 
-export const resolvePlannerActionOutcome = (input: {
+export const classifyPlanContinuation = (input: {
     executionPlan: ChatPlan;
     normalizedRequest: PostChatRequest;
 }): PlannerActionOutcome => {
@@ -80,8 +80,8 @@ export const resolvePlannerActionOutcome = (input: {
     };
 };
 
-export const plannerTerminalActionToResponse = (
-    terminalAction: PlannerTerminalAction
+export const planTerminalActionToResponse = (
+    terminalAction: PlanTerminalAction
 ): Exclude<PostChatResponse, { action: 'message' }> => {
     if (terminalAction.responseAction === 'ignore') {
         return {

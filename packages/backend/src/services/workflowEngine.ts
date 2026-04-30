@@ -35,9 +35,9 @@ import type {
 } from '@footnote/agent-runtime';
 import { logger } from '../utils/logger.js';
 import type {
-    PostPlannerWorkflowAdapter,
-    PostPlannerWorkflowAdapterResult,
-    PlannerTerminalAction,
+    PlanContinuationBuilder,
+    PlanContinuation,
+    PlanTerminalAction,
     PlannerStepExecutor,
     PlannerStepRequest,
     PlannerStepResult,
@@ -168,7 +168,7 @@ export type RunBoundedReviewWorkflowInput = {
     plannerStepRecord?: StepRecord;
     plannerStepRequest?: PlannerStepRequest;
     plannerStepExecutor?: PlannerStepExecutor;
-    postPlannerWorkflowAdapter?: PostPlannerWorkflowAdapter;
+    planContinuationBuilder?: PlanContinuationBuilder;
     contextStepRequest?: ContextStepRequest;
     contextStepExecutor?: ContextStepExecutor;
 };
@@ -179,22 +179,22 @@ export type RunBoundedReviewWorkflowResult =
           generationResult: GenerationResult;
           workflowLineage: WorkflowRecord;
           plannerStepResult?: PlannerStepResult;
-          postPlannerWorkflowAdapterResult?: PostPlannerWorkflowAdapterResult;
+          planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
       }
     | {
           outcome: 'terminal_action';
-          terminalAction: PlannerTerminalAction;
+          terminalAction: PlanTerminalAction;
           workflowLineage: WorkflowRecord;
           plannerStepResult?: PlannerStepResult;
-          postPlannerWorkflowAdapterResult?: PostPlannerWorkflowAdapterResult;
+          planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
       }
     | {
           outcome: 'no_generation';
           workflowLineage: WorkflowRecord;
           plannerStepResult?: PlannerStepResult;
-          postPlannerWorkflowAdapterResult?: PostPlannerWorkflowAdapterResult;
+          planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
       };
 
@@ -712,7 +712,7 @@ export const runBoundedReviewWorkflow = async ({
     plannerStepRecord,
     plannerStepRequest,
     plannerStepExecutor,
-    postPlannerWorkflowAdapter,
+    planContinuationBuilder,
     contextStepRequest,
     contextStepExecutor,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
@@ -770,10 +770,8 @@ export const runBoundedReviewWorkflow = async ({
     let effectiveGenerationRequest = generationRequest;
     let effectiveMessagesWithHints = messagesWithHints;
     let effectiveContextStepRequest = contextStepRequest;
-    let workflowTerminalAction: PlannerTerminalAction | undefined;
-    let postPlannerWorkflowAdapterResult:
-        | PostPlannerWorkflowAdapterResult
-        | undefined;
+    let workflowTerminalAction: PlanTerminalAction | undefined;
+    let planContinuation: PlanContinuation | undefined;
     const effectiveReviewDecisionPrompt =
         reviewDecisionPrompt ?? profileStrategy.reviewDecisionPrompt;
     const effectiveRevisionPromptPrefix =
@@ -996,9 +994,9 @@ export const runBoundedReviewWorkflow = async ({
 
     if (
         plannerExecutionResult !== undefined &&
-        postPlannerWorkflowAdapter !== undefined
+        planContinuationBuilder !== undefined
     ) {
-        postPlannerWorkflowAdapterResult = postPlannerWorkflowAdapter({
+        planContinuation = planContinuationBuilder({
             plannerStepResult: plannerExecutionResult,
             workflowId,
             workflowName: workflowConfig.workflowName,
@@ -1006,18 +1004,13 @@ export const runBoundedReviewWorkflow = async ({
             baseMessagesWithHints: messagesWithHints,
             baseGenerationRequest: generationRequest,
         });
-        if (
-            postPlannerWorkflowAdapterResult.continuation === 'terminal_action'
-        ) {
-            workflowTerminalAction =
-                postPlannerWorkflowAdapterResult.terminalAction;
+        if (planContinuation.continuation === 'terminal_action') {
+            workflowTerminalAction = planContinuation.terminalAction;
         } else {
-            effectiveGenerationRequest =
-                postPlannerWorkflowAdapterResult.generationRequest;
-            effectiveMessagesWithHints =
-                postPlannerWorkflowAdapterResult.messagesWithHints;
+            effectiveGenerationRequest = planContinuation.generationRequest;
+            effectiveMessagesWithHints = planContinuation.messagesWithHints;
             effectiveContextStepRequest =
-                postPlannerWorkflowAdapterResult.contextStepRequest ??
+                planContinuation.contextStepRequest ??
                 effectiveContextStepRequest;
         }
     }
@@ -1573,8 +1566,8 @@ export const runBoundedReviewWorkflow = async ({
             ...(plannerExecutionResult !== undefined && {
                 plannerStepResult: plannerExecutionResult,
             }),
-            ...(postPlannerWorkflowAdapterResult !== undefined && {
-                postPlannerWorkflowAdapterResult,
+            ...(planContinuation !== undefined && {
+                planContinuation,
             }),
             ...(executedContextStepResult !== undefined && {
                 contextStepResult: executedContextStepResult,
@@ -1589,8 +1582,8 @@ export const runBoundedReviewWorkflow = async ({
             ...(plannerExecutionResult !== undefined && {
                 plannerStepResult: plannerExecutionResult,
             }),
-            ...(postPlannerWorkflowAdapterResult !== undefined && {
-                postPlannerWorkflowAdapterResult,
+            ...(planContinuation !== undefined && {
+                planContinuation,
             }),
             ...(executedContextStepResult !== undefined && {
                 contextStepResult: executedContextStepResult,
@@ -1605,8 +1598,8 @@ export const runBoundedReviewWorkflow = async ({
         ...(plannerExecutionResult !== undefined && {
             plannerStepResult: plannerExecutionResult,
         }),
-        ...(postPlannerWorkflowAdapterResult !== undefined && {
-            postPlannerWorkflowAdapterResult,
+        ...(planContinuation !== undefined && {
+            planContinuation,
         }),
         ...(executedContextStepResult !== undefined && {
             contextStepResult: executedContextStepResult,

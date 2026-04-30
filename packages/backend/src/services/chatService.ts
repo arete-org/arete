@@ -54,12 +54,12 @@ import {
     type WorkflowPolicy,
 } from './workflowEngine.js';
 import {
-    plannerTerminalActionToResponse,
+    planTerminalActionToResponse,
     type PlannerActionOutcome,
-} from './chatService/plannerActionOutcome.js';
+} from './chatService/planContinuation.js';
 import type {
-    PostPlannerWorkflowAdapter,
-    PostPlannerWorkflowSummary,
+    PlanContinuationBuilder,
+    AppliedPlanState,
     PlannerStepExecutor,
     PlannerStepRequest,
     PlannerStepResult,
@@ -522,7 +522,7 @@ export type RunChatMessagesInput = {
     contextStepExecutor?: ContextStepExecutor;
     plannerStepRequest?: PlannerStepRequest;
     plannerStepExecutor?: PlannerStepExecutor;
-    postPlannerWorkflowAdapter?: PostPlannerWorkflowAdapter;
+    planContinuationBuilder?: PlanContinuationBuilder;
     plannerActionOutcome?: PlannerActionOutcome;
     latestUserInput?: string;
     executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
@@ -545,7 +545,7 @@ export type RunChatMessagesResult =
           metadata: ResponseMetadata;
           generationDurationMs: number;
           finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
-          plannerSummary?: PostPlannerWorkflowSummary;
+          plannerSummary?: AppliedPlanState;
           plannerStepResult?: PlannerStepResult;
       }
     | {
@@ -675,7 +675,7 @@ export const createChatService = ({
         contextStepExecutor,
         plannerStepRequest,
         plannerStepExecutor,
-        postPlannerWorkflowAdapter,
+        planContinuationBuilder,
         latestUserInput,
         executionContractTrustGraphContext,
         ExecutionContract,
@@ -764,7 +764,7 @@ export const createChatService = ({
         let generationResult: GenerationResult;
         let workflowLineage: WorkflowRecord | undefined;
         let workflowContextStepResult: ContextStepResult | undefined;
-        let workflowPlannerSummary: PostPlannerWorkflowSummary | undefined;
+        let workflowPlannerSummary: AppliedPlanState | undefined;
         let workflowPlannerStepResult: PlannerStepResult | undefined;
         let fallbackAfterInternalNoGeneration = false;
         const effectivePlannerStepRequest = plannerStepRequest;
@@ -802,13 +802,13 @@ export const createChatService = ({
                     recordUsageForStep(result, requestedModel),
                 plannerStepRequest: effectivePlannerStepRequest,
                 plannerStepExecutor: effectivePlannerStepExecutor,
-                postPlannerWorkflowAdapter,
+                planContinuationBuilder,
                 contextStepRequest,
                 contextStepExecutor,
             });
             workflowPlannerStepResult = workflowResult.plannerStepResult;
             workflowPlannerSummary =
-                workflowResult.postPlannerWorkflowAdapterResult?.plannerSummary;
+                workflowResult.planContinuation?.plannerSummary;
             workflowContextStepResult = workflowResult.contextStepResult;
             switch (workflowResult.outcome) {
                 case 'generated': {
@@ -838,7 +838,7 @@ export const createChatService = ({
                 case 'terminal_action': {
                     return {
                         kind: 'terminal_action',
-                        response: plannerTerminalActionToResponse(
+                        response: planTerminalActionToResponse(
                             workflowResult.terminalAction
                         ),
                         generationDurationMs: Math.max(

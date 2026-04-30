@@ -130,7 +130,7 @@ The current chat path looks like this:
 3. The backend resolves workflow mode and profile.
 4. `chatOrchestrator` injects planner workflow seams:
     - `PlannerStepExecutor` invokes planner.
-    - `PostPlannerWorkflowAdapter` applies planner output through backend policy.
+    - `PlanContinuationBuilder` applies planner output through backend policy.
 5. `chatService` runs the workflow engine with the profile selected for the mode:
     - workflow runs `plan` first through the injected planner executor
     - workflow calls post-planner adapter to classify terminal action or continue message path
@@ -384,11 +384,11 @@ The adapter `toolRegistryContextStepAdapter.ts` implements this pattern for
 Planner timing is workflow-owned:
 
 - `chatOrchestrator` builds and injects `PlannerStepExecutor` and
-  `PostPlannerWorkflowAdapter`.
+  `PlanContinuationBuilder`.
 - `workflowEngine` executes `plan` first and records canonical plan lineage.
-- `PostPlannerWorkflowAdapter` applies planner output through
-  `PlannerResultApplier`, `resolvePlannerActionOutcome`, and
-  `assemblePostPlanGenerationInput`.
+- `PlanContinuationBuilder` applies planner output through
+  `PlannerResultApplier`, `classifyPlanContinuation`, and
+  `assemblePlanGenerationInput`.
 - `chatService` renders workflow terminal outcomes and normal message outcomes.
 
 Planner output remains advisory. Mode/profile/contract authority stays in
