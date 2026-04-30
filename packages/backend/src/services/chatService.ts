@@ -55,6 +55,10 @@ import {
     type RunBoundedReviewWorkflowResult,
     type WorkflowPolicy,
 } from './workflowEngine.js';
+import {
+    plannerTerminalActionToResponse,
+    type PlannerActionOutcome,
+} from './chatService/plannerActionOutcome.js';
 import type {
     PlannerStepExecutor,
     PlannerStepRequest,
@@ -517,6 +521,7 @@ export type RunChatMessagesInput = {
     contextStepExecutor?: ContextStepExecutor;
     plannerStepRequest?: PlannerStepRequest;
     plannerStepExecutor?: PlannerStepExecutor;
+    plannerActionOutcome?: PlannerActionOutcome;
     latestUserInput?: string;
     executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
     ExecutionContract?: ExecutionContract;
@@ -529,6 +534,27 @@ export type FinalToolExecutionTelemetry = {
     reasonCode?: ToolExecutionContext['reasonCode'];
     eligible?: boolean;
     requestReasonCode?: ToolInvocationRequest['reasonCode'];
+};
+
+export type RunChatMessagesResult =
+    | {
+          kind: 'message';
+          message: string;
+          metadata: ResponseMetadata;
+          generationDurationMs: number;
+          finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
+      }
+    | {
+          kind: 'terminal_action';
+          response: Exclude<PostChatResponse, { action: 'message' }>;
+          generationDurationMs: number;
+      };
+
+type RunChatMessagesLegacyResult = {
+    message: string;
+    metadata: ResponseMetadata;
+    generationDurationMs: number;
+    finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
 };
 
 /**
@@ -627,7 +653,7 @@ export const createChatService = ({
         };
     };
 
-    const runChatMessages = async ({
+    const runChatMessagesWithOutcome = async ({
         messages,
         conversationSnapshot,
         orchestrationStartedAtMs,
@@ -645,25 +671,16 @@ export const createChatService = ({
         contextStepExecutor,
         plannerStepRequest,
         plannerStepExecutor,
+        plannerActionOutcome: _plannerActionOutcome,
         latestUserInput,
         executionContractTrustGraphContext,
         ExecutionContract,
         steerabilityControls,
-    }: RunChatMessagesInput): Promise<{
-        message: string;
-        metadata: ResponseMetadata;
-        generationDurationMs: number;
-        finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
-    }> => {
+    }: RunChatMessagesInput): Promise<RunChatMessagesResult> => {
         const toShortCircuitMessageResult = (
             response: PostChatResponse,
             finalToolExecutionTelemetry: FinalToolExecutionTelemetry
-        ): {
-            message: string;
-            metadata: ResponseMetadata;
-            generationDurationMs: number;
-            finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
-        } => {
+        ): RunChatMessagesResult => {
             if (response.action !== 'message' || response.metadata === null) {
                 throw new Error(
                     'Tool short-circuit response must be a message with metadata.'
@@ -671,6 +688,7 @@ export const createChatService = ({
             }
 
             return {
+                kind: 'message',
                 message: response.message,
                 metadata: response.metadata,
                 generationDurationMs: Math.max(
@@ -843,6 +861,18 @@ export const createChatService = ({
                         );
                     }
                     break;
+                }
+                case 'terminal_action': {
+                    return {
+                        kind: 'terminal_action',
+                        response: plannerTerminalActionToResponse(
+                            workflowResult.terminalAction
+                        ),
+                        generationDurationMs: Math.max(
+                            0,
+                            Date.now() - generationStartedAt
+                        ),
+                    };
                 }
                 case 'no_generation': {
                     workflowLineage = workflowResult.workflowLineage;
@@ -1249,11 +1279,36 @@ export const createChatService = ({
         });
 
         return {
+            kind: 'message',
             message: generationResult.text,
             metadata: metadataWithTrustGraph,
             generationDurationMs,
             ...(finalToolExecutionTelemetry !== undefined && {
                 finalToolExecutionTelemetry,
+            }),
+        };
+    };
+
+    const runChatMessages = async (
+        input: RunChatMessagesInput
+    ): Promise<RunChatMessagesLegacyResult> => {
+        const result = await runChatMessagesWithOutcome(input);
+        if (
+            result.kind !== 'message' ||
+            result.message === undefined ||
+            result.metadata === undefined
+        ) {
+            throw new Error(
+                'runChatMessages received terminal action outcome; use runChatMessagesWithOutcome for action-aware orchestration.'
+            );
+        }
+
+        return {
+            message: result.message,
+            metadata: result.metadata,
+            generationDurationMs: result.generationDurationMs,
+            ...(result.finalToolExecutionTelemetry !== undefined && {
+                finalToolExecutionTelemetry: result.finalToolExecutionTelemetry,
             }),
         };
     };
@@ -1277,10 +1332,20 @@ export const createChatService = ({
             },
             { role: 'user', content: question.trim() },
         ];
-        const response = await runChatMessages({
+        const response = await runChatMessagesWithOutcome({
             messages,
             conversationSnapshot: question.trim(),
         });
+
+        if (response.kind !== 'message') {
+            if (response.response === undefined) {
+                return {
+                    action: 'ignore',
+                    metadata: null,
+                };
+            }
+            return response.response;
+        }
 
         return {
             action: 'message',
@@ -1293,5 +1358,6 @@ export const createChatService = ({
     return {
         runChat,
         runChatMessages,
+        runChatMessagesWithOutcome,
     };
 };

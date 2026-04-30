@@ -2257,3 +2257,147 @@ test('runChatMessages preserves local response authority when TrustGraph ownersh
     assert.equal(trustGraph?.terminalAuthority, 'backend_execution_contract');
     assert.equal(trustGraph?.failOpenBehavior, 'local_behavior');
 });
+
+test('runChatMessages surfaces workflow terminal react outcome as terminal action response', async () => {
+    const chatService = createChatService({
+        generationRuntime: createRuntime(),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        runReviewWorkflow: async (input) =>
+            ({
+                outcome: 'terminal_action',
+                terminalAction: {
+                    responseAction: 'react',
+                    reaction: '🔥',
+                },
+                workflowLineage: {
+                    workflowId: 'wf_terminal_react',
+                    workflowName: input.workflowConfig.workflowName,
+                    status: 'completed',
+                    terminationReason: 'goal_satisfied',
+                    stepCount: 1,
+                    maxSteps: 2,
+                    maxDurationMs: input.workflowConfig.maxDurationMs,
+                    steps: [],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    const result = await chatService.runChatMessagesWithOutcome({
+        messages: [{ role: 'user', content: 'React only' }],
+        conversationSnapshot: 'React only',
+        plannerActionOutcome: {
+            kind: 'terminal_action',
+            terminalAction: {
+                responseAction: 'react',
+                reaction: '🔥',
+            },
+        },
+    });
+
+    assert.equal(result.kind, 'terminal_action');
+    if (result.kind !== 'terminal_action') {
+        throw new Error('Expected terminal_action result');
+    }
+    assert.equal(result.response.action, 'react');
+});
+
+test('runChatMessages surfaces workflow terminal ignore outcome as terminal action response', async () => {
+    const chatService = createChatService({
+        generationRuntime: createRuntime(),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        runReviewWorkflow: async (input) =>
+            ({
+                outcome: 'terminal_action',
+                terminalAction: {
+                    responseAction: 'ignore',
+                },
+                workflowLineage: {
+                    workflowId: 'wf_terminal_ignore',
+                    workflowName: input.workflowConfig.workflowName,
+                    status: 'completed',
+                    terminationReason: 'goal_satisfied',
+                    stepCount: 1,
+                    maxSteps: 2,
+                    maxDurationMs: input.workflowConfig.maxDurationMs,
+                    steps: [],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    const result = await chatService.runChatMessagesWithOutcome({
+        messages: [{ role: 'user', content: 'Ignore this' }],
+        conversationSnapshot: 'Ignore this',
+        plannerActionOutcome: {
+            kind: 'terminal_action',
+            terminalAction: {
+                responseAction: 'ignore',
+            },
+        },
+    });
+
+    assert.equal(result.kind, 'terminal_action');
+    if (result.kind !== 'terminal_action') {
+        throw new Error('Expected terminal_action result');
+    }
+    assert.equal(result.response.action, 'ignore');
+});
+
+test('runChatMessages surfaces workflow terminal image outcome as terminal action response', async () => {
+    const chatService = createChatService({
+        generationRuntime: createRuntime(),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        runReviewWorkflow: async (input) =>
+            ({
+                outcome: 'terminal_action',
+                terminalAction: {
+                    responseAction: 'image',
+                    imageRequest: {
+                        prompt: 'Draw a skyline',
+                    },
+                },
+                workflowLineage: {
+                    workflowId: 'wf_terminal_image',
+                    workflowName: input.workflowConfig.workflowName,
+                    status: 'completed',
+                    terminationReason: 'goal_satisfied',
+                    stepCount: 1,
+                    maxSteps: 2,
+                    maxDurationMs: input.workflowConfig.maxDurationMs,
+                    steps: [],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    const result = await chatService.runChatMessagesWithOutcome({
+        messages: [{ role: 'user', content: 'Generate image' }],
+        conversationSnapshot: 'Generate image',
+        plannerActionOutcome: {
+            kind: 'terminal_action',
+            terminalAction: {
+                responseAction: 'image',
+                imageRequest: {
+                    prompt: 'Draw a skyline',
+                },
+            },
+        },
+    });
+
+    assert.equal(result.kind, 'terminal_action');
+    if (result.kind !== 'terminal_action') {
+        throw new Error('Expected terminal_action result');
+    }
+    assert.equal(result.response.action, 'image');
+    if (result.response.action !== 'image') {
+        throw new Error('Expected image action');
+    }
+    assert.equal(result.response.imageRequest.prompt, 'Draw a skyline');
+});

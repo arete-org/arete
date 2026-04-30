@@ -53,11 +53,10 @@ test('resolvePlannerActionOutcome returns terminal react action', () => {
         throw new Error('Expected terminal action');
     }
     assert.equal(outcome.terminalAction.responseAction, 'react');
-    assert.equal(outcome.terminalAction.response.action, 'react');
-    if (outcome.terminalAction.response.action !== 'react') {
+    if (outcome.terminalAction.responseAction !== 'react') {
         throw new Error('Expected react response');
     }
-    assert.equal(outcome.terminalAction.response.reaction, '🔥');
+    assert.equal(outcome.terminalAction.reaction, '🔥');
 });
 
 test('resolvePlannerActionOutcome returns terminal ignore action', () => {
@@ -70,7 +69,6 @@ test('resolvePlannerActionOutcome returns terminal ignore action', () => {
         throw new Error('Expected terminal action');
     }
     assert.equal(outcome.terminalAction.responseAction, 'ignore');
-    assert.equal(outcome.terminalAction.response.action, 'ignore');
 });
 
 test('resolvePlannerActionOutcome returns terminal image action', () => {
@@ -88,7 +86,10 @@ test('resolvePlannerActionOutcome returns terminal image action', () => {
         throw new Error('Expected terminal action');
     }
     assert.equal(outcome.terminalAction.responseAction, 'image');
-    assert.equal(outcome.terminalAction.response.action, 'image');
+    if (outcome.terminalAction.responseAction !== 'image') {
+        throw new Error('Expected image response');
+    }
+    assert.equal(outcome.terminalAction.imageRequest.prompt, 'draw a skyline');
 });
 
 test('resolvePlannerActionOutcome fails open to ignore for image action without imageRequest', () => {
@@ -101,6 +102,5 @@ test('resolvePlannerActionOutcome fails open to ignore for image action without 
         throw new Error('Expected terminal action');
     }
     assert.equal(outcome.terminalAction.responseAction, 'ignore');
-    assert.equal(outcome.terminalAction.response.action, 'ignore');
     assert.equal(outcome.fallbackReason, 'image_action_missing_image_request');
 });

@@ -35,8 +35,9 @@ import type {
 } from '@footnote/agent-runtime';
 import { logger } from '../utils/logger.js';
 import type {
-    PlannerApplicationInput,
-    PlannerResultApplier,
+    PostPlannerWorkflowAdapter,
+    PostPlannerWorkflowAdapterResult,
+    PlannerTerminalAction,
     PlannerStepExecutor,
     PlannerStepRequest,
     PlannerStepResult,
@@ -167,11 +168,7 @@ export type RunBoundedReviewWorkflowInput = {
     plannerStepRecord?: StepRecord;
     plannerStepRequest?: PlannerStepRequest;
     plannerStepExecutor?: PlannerStepExecutor;
-    plannerResultApplier?: PlannerResultApplier;
-    plannerApplicationInput?: Omit<
-        PlannerApplicationInput,
-        'plannerStepResult'
-    >;
+    postPlannerWorkflowAdapter?: PostPlannerWorkflowAdapter;
     contextStepRequest?: ContextStepRequest;
     contextStepExecutor?: ContextStepExecutor;
 };
@@ -182,12 +179,22 @@ export type RunBoundedReviewWorkflowResult =
           generationResult: GenerationResult;
           workflowLineage: WorkflowRecord;
           plannerStepResult?: PlannerStepResult;
+          postPlannerWorkflowAdapterResult?: PostPlannerWorkflowAdapterResult;
+          contextStepResult?: ContextStepResult;
+      }
+    | {
+          outcome: 'terminal_action';
+          terminalAction: PlannerTerminalAction;
+          workflowLineage: WorkflowRecord;
+          plannerStepResult?: PlannerStepResult;
+          postPlannerWorkflowAdapterResult?: PostPlannerWorkflowAdapterResult;
           contextStepResult?: ContextStepResult;
       }
     | {
           outcome: 'no_generation';
           workflowLineage: WorkflowRecord;
           plannerStepResult?: PlannerStepResult;
+          postPlannerWorkflowAdapterResult?: PostPlannerWorkflowAdapterResult;
           contextStepResult?: ContextStepResult;
       };
 
@@ -705,6 +712,7 @@ export const runBoundedReviewWorkflow = async ({
     plannerStepRecord,
     plannerStepRequest,
     plannerStepExecutor,
+    postPlannerWorkflowAdapter,
     contextStepRequest,
     contextStepExecutor,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
@@ -759,6 +767,13 @@ export const runBoundedReviewWorkflow = async ({
     let exhaustedLimitKey: WorkflowLimitKey | undefined;
     let executedContextStepResult: ContextStepResult | undefined;
     let messagesWithContext = messagesWithHints;
+    let effectiveGenerationRequest = generationRequest;
+    let effectiveMessagesWithHints = messagesWithHints;
+    let effectiveContextStepRequest = contextStepRequest;
+    let workflowTerminalAction: PlannerTerminalAction | undefined;
+    let postPlannerWorkflowAdapterResult:
+        | PostPlannerWorkflowAdapterResult
+        | undefined;
     const effectiveReviewDecisionPrompt =
         reviewDecisionPrompt ?? profileStrategy.reviewDecisionPrompt;
     const effectiveRevisionPromptPrefix =
@@ -967,6 +982,61 @@ export const runBoundedReviewWorkflow = async ({
         }
     }
 
+    if (
+        plannerExecutionResult !== undefined &&
+        postPlannerWorkflowAdapter !== undefined
+    ) {
+        postPlannerWorkflowAdapterResult = postPlannerWorkflowAdapter({
+            plannerStepResult: plannerExecutionResult,
+            workflowId,
+            workflowName: workflowConfig.workflowName,
+            attempt: 1,
+            baseMessagesWithHints: messagesWithHints,
+            baseGenerationRequest: generationRequest,
+        });
+        effectiveGenerationRequest =
+            postPlannerWorkflowAdapterResult.generationRequest;
+        effectiveMessagesWithHints =
+            postPlannerWorkflowAdapterResult.messagesWithHints;
+        effectiveContextStepRequest =
+            postPlannerWorkflowAdapterResult.contextStepRequest ??
+            effectiveContextStepRequest;
+        workflowTerminalAction =
+            postPlannerWorkflowAdapterResult.terminalAction;
+    }
+
+    if (workflowTerminalAction !== undefined) {
+        const terminalStartedAt = Date.now();
+        const terminalFinishedAt = Date.now();
+        captureStep({
+            stepKind: 'finalize',
+            status: 'executed',
+            summary:
+                workflowTerminalAction.responseAction === 'image'
+                    ? 'Workflow completed with planner terminal image action.'
+                    : workflowTerminalAction.responseAction === 'react'
+                      ? 'Workflow completed with planner terminal reaction action.'
+                      : 'Workflow completed with planner terminal ignore action.',
+            startedAtMs: terminalStartedAt,
+            finishedAtMs: terminalFinishedAt,
+            parentStepId: plannerRootStepId,
+            attempt: 1,
+            signals: {
+                terminalAction: workflowTerminalAction.responseAction,
+            },
+        });
+        workflowState = applyStepExecutionToState(
+            workflowState,
+            'finalize',
+            0,
+            0,
+            0
+        );
+        terminationReason = 'goal_satisfied';
+        workflowStatus = 'completed';
+        shouldStop = true;
+    }
+
     const injectContextMessagesIntoPrompt = (
         baseMessages: RuntimeMessage[],
         contextMessages: string[] | undefined
@@ -1005,8 +1075,8 @@ export const runBoundedReviewWorkflow = async ({
     };
 
     if (
-        contextStepRequest?.requested === true &&
-        contextStepRequest.eligible &&
+        effectiveContextStepRequest?.requested === true &&
+        effectiveContextStepRequest.eligible &&
         contextStepExecutor !== undefined
     ) {
         if (
@@ -1022,7 +1092,7 @@ export const runBoundedReviewWorkflow = async ({
             const contextStepStartedAt = Date.now();
             try {
                 const contextStepResult = await contextStepExecutor({
-                    request: contextStepRequest,
+                    request: effectiveContextStepRequest,
                     workflowId,
                     workflowName: workflowConfig.workflowName,
                     attempt: 1,
@@ -1149,18 +1219,18 @@ export const runBoundedReviewWorkflow = async ({
         if (!stopIfOverLimits('generate')) {
             const initialDraftStartedAt = generationStartedAtMs;
             messagesWithContext = injectContextMessagesIntoPrompt(
-                messagesWithHints,
+                effectiveMessagesWithHints,
                 executedContextStepResult?.contextMessages
             );
             try {
                 draftResult = await generationRuntime.generate({
-                    ...generationRequest,
+                    ...effectiveGenerationRequest,
                     messages: messagesWithContext,
                 });
                 const initialDraftFinishedAt = Date.now();
                 const initialDraftUsage = captureUsage(
                     draftResult,
-                    generationRequest.model
+                    effectiveGenerationRequest.model
                 );
                 const initialDraftStepId = captureStep({
                     stepKind: 'generate',
@@ -1263,12 +1333,12 @@ export const runBoundedReviewWorkflow = async ({
                         content: effectiveReviewDecisionPrompt,
                     },
                 ],
-                model: generationRequest.model,
-                ...(generationRequest.provider !== undefined && {
-                    provider: generationRequest.provider,
+                model: effectiveGenerationRequest.model,
+                ...(effectiveGenerationRequest.provider !== undefined && {
+                    provider: effectiveGenerationRequest.provider,
                 }),
-                ...(generationRequest.capabilities !== undefined && {
-                    capabilities: generationRequest.capabilities,
+                ...(effectiveGenerationRequest.capabilities !== undefined && {
+                    capabilities: effectiveGenerationRequest.capabilities,
                 }),
                 maxOutputTokens: 200,
                 reasoningEffort: 'low',
@@ -1277,7 +1347,7 @@ export const runBoundedReviewWorkflow = async ({
             const reviewFinishedAt = Date.now();
             const reviewUsage = captureUsage(
                 reviewResult,
-                generationRequest.model
+                effectiveGenerationRequest.model
             );
             workflowState = applyStepExecutionToState(
                 workflowState,
@@ -1362,7 +1432,7 @@ export const runBoundedReviewWorkflow = async ({
             const revisionStartedAt = Date.now();
             try {
                 const revisionResult = await generationRuntime.generate({
-                    ...generationRequest,
+                    ...effectiveGenerationRequest,
                     messages: [
                         ...messagesWithContext,
                         {
@@ -1378,7 +1448,7 @@ export const runBoundedReviewWorkflow = async ({
                 const revisionFinishedAt = Date.now();
                 const revisionUsage = captureUsage(
                     revisionResult,
-                    generationRequest.model
+                    effectiveGenerationRequest.model
                 );
                 const revisionStepId = captureStep({
                     stepKind: 'revise',
@@ -1477,10 +1547,33 @@ export const runBoundedReviewWorkflow = async ({
         steps: workflowSteps,
     };
 
+    if (workflowTerminalAction !== undefined) {
+        return {
+            outcome: 'terminal_action',
+            terminalAction: workflowTerminalAction,
+            workflowLineage,
+            ...(plannerExecutionResult !== undefined && {
+                plannerStepResult: plannerExecutionResult,
+            }),
+            ...(postPlannerWorkflowAdapterResult !== undefined && {
+                postPlannerWorkflowAdapterResult,
+            }),
+            ...(executedContextStepResult !== undefined && {
+                contextStepResult: executedContextStepResult,
+            }),
+        };
+    }
+
     if (draftResult === null) {
         return {
             outcome: 'no_generation',
             workflowLineage,
+            ...(plannerExecutionResult !== undefined && {
+                plannerStepResult: plannerExecutionResult,
+            }),
+            ...(postPlannerWorkflowAdapterResult !== undefined && {
+                postPlannerWorkflowAdapterResult,
+            }),
             ...(executedContextStepResult !== undefined && {
                 contextStepResult: executedContextStepResult,
             }),
@@ -1491,6 +1584,12 @@ export const runBoundedReviewWorkflow = async ({
         outcome: 'generated',
         generationResult: draftResult,
         workflowLineage,
+        ...(plannerExecutionResult !== undefined && {
+            plannerStepResult: plannerExecutionResult,
+        }),
+        ...(postPlannerWorkflowAdapterResult !== undefined && {
+            postPlannerWorkflowAdapterResult,
+        }),
         ...(executedContextStepResult !== undefined && {
             contextStepResult: executedContextStepResult,
         }),

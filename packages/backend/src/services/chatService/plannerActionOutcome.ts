@@ -12,20 +12,7 @@ import type {
 } from '@footnote/contracts/web';
 import type { ChatPlan } from '../chatPlanner.js';
 import type { PlannerFallbackReason } from '../plannerFallbackTelemetryRollup.js';
-
-type PlannerTerminalAction =
-    | {
-          responseAction: 'ignore';
-          response: PostChatResponse;
-      }
-    | {
-          responseAction: 'react';
-          response: PostChatResponse;
-      }
-    | {
-          responseAction: 'image';
-          response: PostChatResponse;
-      };
+import type { PlannerTerminalAction } from '../plannerWorkflowSeams.js';
 
 export type PlannerActionOutcome =
     | {
@@ -47,10 +34,6 @@ export const resolvePlannerActionOutcome = (input: {
             kind: 'terminal_action',
             terminalAction: {
                 responseAction: 'ignore',
-                response: {
-                    action: 'ignore',
-                    metadata: null,
-                },
             },
         };
     }
@@ -60,11 +43,7 @@ export const resolvePlannerActionOutcome = (input: {
             kind: 'terminal_action',
             terminalAction: {
                 responseAction: 'react',
-                response: {
-                    action: 'react',
-                    reaction: input.executionPlan.reaction ?? '👍',
-                    metadata: null,
-                },
+                reaction: input.executionPlan.reaction ?? '👍',
             },
         };
     }
@@ -77,11 +56,7 @@ export const resolvePlannerActionOutcome = (input: {
             kind: 'terminal_action',
             terminalAction: {
                 responseAction: 'image',
-                response: {
-                    action: 'image',
-                    imageRequest: input.executionPlan.imageRequest,
-                    metadata: null,
-                },
+                imageRequest: input.executionPlan.imageRequest,
             },
         };
     }
@@ -94,10 +69,6 @@ export const resolvePlannerActionOutcome = (input: {
             kind: 'terminal_action',
             terminalAction: {
                 responseAction: 'ignore',
-                response: {
-                    action: 'ignore',
-                    metadata: null,
-                },
             },
             fallbackReason: 'image_action_missing_image_request',
             warningMessage: `Chat planner returned image without imageRequest; falling back to ignore. surface=${input.normalizedRequest.surface} trigger=${input.normalizedRequest.trigger.kind} latestUserInputLength=${input.normalizedRequest.latestUserInput.length}`,
@@ -106,5 +77,29 @@ export const resolvePlannerActionOutcome = (input: {
 
     return {
         kind: 'continue_message',
+    };
+};
+
+export const plannerTerminalActionToResponse = (
+    terminalAction: PlannerTerminalAction
+): Exclude<PostChatResponse, { action: 'message' }> => {
+    if (terminalAction.responseAction === 'ignore') {
+        return {
+            action: 'ignore',
+            metadata: null,
+        };
+    }
+    if (terminalAction.responseAction === 'react') {
+        return {
+            action: 'react',
+            reaction: terminalAction.reaction,
+            metadata: null,
+        };
+    }
+
+    return {
+        action: 'image',
+        imageRequest: terminalAction.imageRequest,
+        metadata: null,
     };
 };

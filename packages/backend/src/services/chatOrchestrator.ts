@@ -560,29 +560,6 @@ export const createChatOrchestrator = ({
             executionPlan,
             normalizedRequest,
         });
-        if (plannerActionOutcome.kind === 'terminal_action') {
-            if (plannerActionOutcome.fallbackReason !== undefined) {
-                fallbackReasons.push(plannerActionOutcome.fallbackReason);
-            }
-            if (plannerActionOutcome.warningMessage !== undefined) {
-                chatOrchestratorLogger.warn(
-                    plannerActionOutcome.warningMessage
-                );
-            }
-            notifyBreakerEvent({
-                responseId: null,
-                responseAction:
-                    plannerActionOutcome.terminalAction.responseAction,
-                responseModality: executionPlan.modality,
-            });
-            emitFallbackRollup(fallbackRollupSelectionSource);
-            emitControlObservability({
-                responseAction:
-                    plannerActionOutcome.terminalAction.responseAction,
-                responseModality: executionPlan.modality,
-            });
-            return plannerActionOutcome.terminalAction.response;
-        }
         const promptLayers = renderConversationPromptLayers(
             normalizedRequest.surface === 'discord'
                 ? 'discord-chat'
@@ -762,7 +739,7 @@ export const createChatOrchestrator = ({
         // By the time we call ChatService, planner output and request overrides
         // have already been folded into one concrete profile and generation
         // plan.
-        const response = await chatService.runChatMessages({
+        const response = await chatService.runChatMessagesWithOutcome({
             messages: postPlanAssembly.conversationMessages,
             conversationSnapshot: postPlanAssembly.conversationSnapshot,
             orchestrationStartedAtMs: orchestrationStartedAt,
@@ -774,6 +751,7 @@ export const createChatOrchestrator = ({
             generation: executionPlan.generation,
             workflowModeId: workflowModeResolution.modeDecision.modeId,
             toolRequest: toolRequestContext,
+            plannerActionOutcome,
             contextStepRequest: weatherContextStepRequest,
             contextStepExecutor: weatherContextStepExecutor,
             latestUserInput: normalizedRequest.latestUserInput,
@@ -823,6 +801,54 @@ export const createChatOrchestrator = ({
             },
             steerabilityControls,
         });
+        if (plannerActionOutcome.kind === 'terminal_action') {
+            if (plannerActionOutcome.fallbackReason !== undefined) {
+                fallbackReasons.push(plannerActionOutcome.fallbackReason);
+            }
+            if (plannerActionOutcome.warningMessage !== undefined) {
+                chatOrchestratorLogger.warn(
+                    plannerActionOutcome.warningMessage
+                );
+            }
+        }
+        if (response.kind === 'terminal_action') {
+            const terminalResponse =
+                response.response ??
+                ({
+                    action: 'ignore',
+                    metadata: null,
+                } as const);
+            emitFallbackRollup(fallbackRollupSelectionSource);
+            notifyBreakerEvent({
+                responseId: null,
+                responseAction: terminalResponse.action,
+                responseModality: executionPlan.modality,
+            });
+            emitControlObservability({
+                responseAction: terminalResponse.action,
+                responseModality: executionPlan.modality,
+            });
+            return terminalResponse;
+        }
+        if (response.metadata === undefined || response.message === undefined) {
+            chatOrchestratorLogger.warn(
+                'ChatService returned message outcome without message metadata; failing open to ignore.'
+            );
+            emitFallbackRollup(fallbackRollupSelectionSource);
+            notifyBreakerEvent({
+                responseId: null,
+                responseAction: 'ignore',
+                responseModality: executionPlan.modality,
+            });
+            emitControlObservability({
+                responseAction: 'ignore',
+                responseModality: executionPlan.modality,
+            });
+            return {
+                action: 'ignore',
+                metadata: null,
+            };
+        }
         // ChatService computes totalDurationMs before metadata assembly and
         // queued trace writes. Avoid mutating metadata here to keep trace
         // persistence race-free.

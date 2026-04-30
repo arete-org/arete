@@ -16,7 +16,14 @@ import type {
     ToolInvocationRequest,
 } from '@footnote/contracts/ethics-core';
 import type { ModelProfile } from '@footnote/contracts';
-import type { PostChatRequest } from '@footnote/contracts/web';
+import type {
+    ChatImageRequest,
+    PostChatRequest,
+} from '@footnote/contracts/web';
+import type {
+    GenerationRequest,
+    RuntimeMessage,
+} from '@footnote/agent-runtime';
 import type {
     ChatPlan,
     ChatPlannerCapabilityProfileOption,
@@ -60,6 +67,19 @@ export type PlannerStepExecutor = (
     input: PlannerStepRequest
 ) => Promise<PlannerStepResult>;
 
+export type PlannerTerminalAction =
+    | {
+          responseAction: 'ignore';
+      }
+    | {
+          responseAction: 'react';
+          reaction: string;
+      }
+    | {
+          responseAction: 'image';
+          imageRequest: ChatImageRequest;
+      };
+
 export type PlannerApplicationInput = {
     normalizedRequest: PostChatRequest;
     plannerStepResult: PlannerStepResult;
@@ -88,3 +108,24 @@ export type PlannerApplicationResult = {
 export type PlannerResultApplier = (
     input: PlannerApplicationInput
 ) => PlannerApplicationResult;
+
+export type PostPlannerWorkflowAdapterInput = {
+    plannerStepResult: PlannerStepResult;
+    workflowId: string;
+    workflowName: string;
+    attempt: number;
+    baseMessagesWithHints: RuntimeMessage[];
+    baseGenerationRequest: GenerationRequest;
+};
+
+export type PostPlannerWorkflowAdapterResult = {
+    terminalAction?: PlannerTerminalAction;
+    messagesWithHints: RuntimeMessage[];
+    generationRequest: GenerationRequest;
+    contextStepRequest?: ContextStepRequest;
+    plannerApplication?: PlannerApplicationResult;
+};
+
+export type PostPlannerWorkflowAdapter = (
+    input: PostPlannerWorkflowAdapterInput
+) => PostPlannerWorkflowAdapterResult;
