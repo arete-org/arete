@@ -42,6 +42,17 @@ Provider ownership:
     - short-circuits to a clarification message (`needs_clarification`)
     - records failure and continues safely where allowed (`error`)
 
+## Mode Coverage
+
+Weather context-step execution currently applies only to the
+`bounded-review` profile used by `balanced` and `grounded`.
+
+The `generate-only` profile used by `fast` bypasses the workflow engine, so it
+does not use the context-step path. Weather support there would need separate
+handling. That split is intentional: the fast path is direct single-pass
+generation without the workflow infrastructure that injects context before
+generation.
+
 ## Outcome Contract
 
 The tool path is intentionally tri-state:
@@ -56,22 +67,18 @@ location inputs for follow-up selection.
 
 ## Clarification Behavior
 
-When a tool returns `needs_clarification`:
-
-- normal generation is skipped for that turn
-- orchestrator returns a user-facing clarification message
-- metadata execution includes the tool event with clarification payload
-- generation execution is recorded as skipped for that response path
-
-This is a deliberate stop condition for user input, not a failure.
+When a tool returns `needs_clarification`, normal generation is skipped for
+that turn, the orchestrator returns a user-facing clarification message,
+metadata execution includes the tool event with the clarification payload, and
+generation execution is recorded as skipped for that response path. This is a
+deliberate stop condition for user input, not a failure.
 
 ## Fail-Open and Error Semantics
 
-Weather integration is fail-open by default for non-clarification failures:
-
-- timeout/network/http/invalid-response/location-not-resolved paths are
-  classified and recorded
-- backend may continue normal response generation without weather context
+Weather integration is fail-open by default for non-clarification failures.
+Timeout, network, HTTP, invalid-response, and location-not-resolved paths are
+classified and recorded, and the backend may continue normal response
+generation without weather context.
 
 Provider malformation is treated as `invalid_response`, not ambiguity.
 

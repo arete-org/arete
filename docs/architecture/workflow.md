@@ -1,12 +1,12 @@
 # Workflows
 
-A workflow is the step pattern Footnote uses to answer one request.
+A workflow is the step pattern Footnote uses to answer a request.
 
 It decides whether the system generates once, runs a review pass, stops
 because of policy or limits, and records metadata about what happened.
 
 This page explains how mode, profile, planner, limits, and workflow metadata
-fit together in the current chat path.
+fit together in the chat path today.
 
 A chat request has to answer a few questions before the model returns
 anything:
@@ -26,13 +26,12 @@ Footnote answers those questions through a small set of runtime layers:
 5. Workflow metadata records what happened.
 
 Keep those layers separate. Most workflow bugs start when one layer quietly
-starts doing another layer's job.
+takes over another layer's job.
 
 ## Ownership boundaries
 
-Workflow logic is spread across a few backend layers on purpose.
-
-Keep the ownership split clear:
+Workflow logic is spread across a few backend layers on purpose. Keep the
+ownership split clear:
 
 - Engine core owns transition legality, hard limits, workflow state, and
   canonical termination reasons.
@@ -101,9 +100,7 @@ took, not a guarantee that the answer is true.
 
 ## Mode selection
 
-Mode selection happens during initial routing.
-
-The selection order is:
+Mode selection happens during initial routing in this order:
 
 1. Use the requested mode when it is recognized.
 2. Otherwise, if the Execution Contract provides a response mode, map it to
@@ -111,11 +108,11 @@ The selection order is:
    `fast_direct` maps to `fast`.
 3. Otherwise, fall back to `grounded`.
 
-That fallback keeps the system available while preferring the more careful
-default.
+That fallback keeps the system available while still preferring the more
+careful default.
 
-These fallback steps happen only during initial routing. They are not runtime
-mode escalation.
+These fallback steps happen only during initial routing. They are separate from
+runtime mode escalation.
 
 Mode escalation also lives in `resolveWorkflowRuntimeConfig`
 (`packages/backend/src/services/workflowProfileRegistry.ts`). Keep it
@@ -145,8 +142,8 @@ Planner lineage can appear in workflow metadata as a `plan` step when that
 metadata exists for the run. That is a lineage bridge, not a change in planner
 authority.
 
-That means planner can be visible in workflow lineage even though planner
-timing still lives before the main workflow execution path.
+So planner can appear in workflow lineage even though it still runs before the
+main workflow execution path.
 
 ## Review loop
 
@@ -183,7 +180,7 @@ selection, own safety, own provenance, or own final response behavior.
 
 Planner information can appear in workflow metadata as a `plan` step when
 available. That is lineage, not authority. Planner still runs before workflow
-execution in the main chat path today.
+execution in the main chat path.
 
 When metadata supports it, trace copy can say `Planned, then generated` or
 `Planner fallback`. Avoid phrasing that makes planner sound like it owns the
@@ -218,9 +215,8 @@ Footnote is starting to show more workflow information near answers and in
 traces.
 
 The answer surface should stay small. It can say what mode ran, whether review
-ran, whether fallback happened, and whether a trace link is available.
-
-The detailed step list belongs in the trace.
+ran, whether fallback happened, and whether a trace link is available. The
+detailed step list belongs in the trace.
 
 Receipt text should stay short:
 
@@ -274,7 +270,7 @@ Use words like `reviewed`, `revised`, `skipped`, and `fallback`. Do not use
 
 Fallback should be visible in the trace. A fallback is not automatically a bad
 result. Sometimes Footnote should return the best available answer instead of
-hiding everything because one step failed.
+hiding the response because one step failed.
 
 But if review failed open, search was unavailable, or a limit stopped the
 workflow, the trace should say so.
@@ -355,22 +351,53 @@ handling, `WorkflowRecord` output, and `StepRecord` output.
 The shared workflow vocabulary includes `plan`, `tool`, `generate`, `assess`,
 `revise`, and `finalize`.
 
-Today:
+### Current ownership
 
-- planner timing still lives in `chatOrchestrator` before workflow execution
-- weather_forecast execution timing moved to workflow context-step path
-- web_search unchanged (not migrated)
-- planner unchanged (not migrated)
+| Component                        | Owner   | Notes                                                                                               |
+| -------------------------------- | ------- | --------------------------------------------------------------------------------------------------- |
+| `workflowEngine`                 | Core    | Owns bounded-review steps (`generate`, `assess`, `revise`) and injected context-step execution      |
+| `chatOrchestrator`               | Core    | Owns planner execution (pre-workflow), mode/profile/contract resolution, tool intent construction   |
+| `chatService`                    | Core    | Invokes workflowEngine, handles context-step short-circuit responses (clarification, failure)       |
+| `toolRegistryContextStepAdapter` | Adapter | Keeps workflowEngine provider-neutral while mapping tool-registry execution into context-step shape |
+
+### Context-step executor pattern
+
+The workflow engine can execute context integrations such as
+`weather_forecast` before generation through an injected executor. This keeps
+the engine provider-neutral while allowing tools to inject context into the
+generation prompt.
+
+The pattern works like this:
+
+1. `chatOrchestrator` builds a `ContextStepRequest` describing the requested
+   integration and a `ContextStepExecutor` function to execute it
+2. `chatService` passes these to `runBoundedReviewWorkflow`
+3. `workflowEngine` executes the context step before the `generate` step:
+    - On success: context messages are injected into the generation prompt
+    - On clarification needed: workflow terminates with `goal_satisfied` and
+      returns a user-facing clarification response
+    - On failure: workflow continues fail-open without context (no-fabrication
+      guardrail preserved)
+
+The adapter `toolRegistryContextStepAdapter.ts` implements this pattern for
+`weather_forecast`. Additional tools would follow the same structure.
+
+### Planner execution
+
+Planner runs before workflow execution in `chatOrchestrator`. Planner
+output goes through surface policy, capability policy, and tool policy before
+reaching the chat service.
+
+Planner lineage can appear in workflow metadata as a `plan` step when that
+metadata exists for the run. That is a lineage bridge, not a change in planner
+authority. Planner timing and execution are still not workflow-engine-owned.
+
+In the current split:
+
+- planner timing lives in `chatOrchestrator` before workflow execution
+- weather_forecast execution uses the workflow context-step path
+- web_search unchanged (not migrated to context-step)
 - workflow metadata can include bridged planner lineage
-
-The context-step path allows the workflow engine to execute tool work (like
-weather_forecast) before generation, inject context into the generation
-prompt, and handle clarification/failure scenarios while preserving fail-open
-semantics.
-
-The adapter `toolRegistryContextStepAdapter.ts` keeps the workflow engine
-provider-neutral while mapping tool-registry execution into the workflow
-context-step shape.
 
 ## Step records
 
@@ -505,7 +532,7 @@ Recommended design boundary for that work:
 - retrieval evidence joins runtime context and provenance before final generation
 - trace and execution metadata report both retrieval and generation profile lineage
 
-Keep UI copy and docs tied to what exists today.
+Keep UI copy and docs tied to what exists now.
 
 For now, keep workflow-facing UI close to current metadata: mode, review or
 fallback summary, grounding evidence availability, trace links, and

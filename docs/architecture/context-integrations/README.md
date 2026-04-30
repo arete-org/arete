@@ -8,15 +8,12 @@ They can add context, evidence, references, or other useful signals.
 Footnote still decides how to handle the request. The outside system does not
 choose the action, end execution, or change policy and verification rules.
 
-This category exists because it is easy for an outside system to start as
-"extra evidence" and slowly turn into a hidden decision-maker. For example,
-Footnote might first use a web search result only to show a few extra links in
-the trace. Later, it might use the same result to decide which sources look
-strongest, whether enough evidence was found, or whether another search step
-should run. After that, it is a short step to using the same result to change
-routing, skip verification, or otherwise shape execution policy. At that point,
-the outside system is no longer just adding context, but starting to decide
-more than it should.
+This category exists because an outside system can start as "extra evidence"
+and gradually become a hidden decision-maker. A web search result might begin
+as a few trace links, then start influencing source choice, evidence judgment,
+or whether another step runs. If that raw output starts changing routing,
+verification, or execution policy on its own, the backend has given up too
+much control.
 
 ## How outside data can be used
 
@@ -26,8 +23,8 @@ The backend may use approved integration outputs through backend-owned
 mappings, rules, and checks. That can help with things like evidence views,
 trace detail, or other bounded context signals.
 
-That means outside data can affect execution, but only through backend-owned
-interpretations of that data.
+So outside data can affect execution, but only through backend-owned
+interpretations.
 
 For example, a public code-search or web-search API might return links,
 snippets, or coverage-like signals. Footnote may use those results as one
@@ -43,10 +40,10 @@ practice, that means no outside field should act like a switch such as
 search again`.
 
 Footnote is open source, so this boundary needs extra care. Outside systems
-may have a fairly good idea of the kinds of inputs, prompts, and runtime
-behavior the backend expects. If a raw outside result can directly trigger
-execution behavior, then a public-facing integration can start shaping
-decisions in ways the backend no longer fully owns.
+may have a decent idea of the inputs, prompts, and runtime behavior the
+backend expects. If a raw outside result can directly trigger execution
+behavior, a public-facing integration can start shaping decisions the backend
+no longer fully owns.
 
 | Use         | Example                                                           | Why                                                                                                     |
 | ----------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -54,16 +51,13 @@ decisions in ways the backend no longer fully owns.
 | Allowed     | `coverage estimate -> trace note that evidence may be incomplete` | The outside result can help describe the evidence without taking control of execution.                  |
 | Not allowed | `outside confidence score -> skip verification`                   | The outside system would be deciding a backend policy outcome.                                          |
 
-The guardrail is a combination of design, policy, and implementation:
-
-- by design, the integration is advisory
-- by policy, some decisions stay backend-owned
-- by implementation, only reviewed outputs should flow into bounded internal
-  views
+The guardrail has three parts: by design, the integration is advisory; by
+policy, some decisions stay backend-owned; and by implementation, only
+reviewed outputs should flow into bounded internal views.
 
 ## What stays local
 
-Some parts of the request stay backend-owned.
+Some parts of the request stay backend-owned:
 
 | Question                                         | Who stays in charge                        | What that means in practice                                                                       |
 | ------------------------------------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------- |
@@ -75,7 +69,7 @@ Some parts of the request stay backend-owned.
 
 ## Failure handling
 
-These integrations usually need two different kinds of failure handling.
+These integrations usually need two kinds of failure handling.
 
 Sometimes the backend should refuse to use the outside result at all. This
 happens when scope, tenancy, safety boundaries, or contract safety look wrong.
@@ -104,6 +98,40 @@ In practice, that usually means:
 
 A reviewer should be able to tell whether outside context was used, denied,
 dropped, or ignored.
+
+## Integration patterns
+
+Context integrations use different patterns today. They are not fully unified
+under one path.
+
+### Workflow context-step execution
+
+`weather_forecast` uses the workflow context-step execution path for
+bounded-review modes (`balanced` and `grounded`). In this pattern:
+
+- Executes through `workflowEngine` with an injected `ContextStepExecutor`
+- Executes before the `generate` step in bounded-review workflows
+- Handles clarification, failure, and success through the workflow termination
+  flow
+- Preserves fail-open semantics
+
+The adapter `toolRegistryContextStepAdapter.ts` implements this pattern while
+keeping the workflow engine provider-neutral.
+
+### Evidence ingestion seam
+
+`TrustGraph` uses a separate evidence-ingestion seam. It is not implemented as
+a workflow context-step executor. In this pattern:
+
+- Flows through `chatService` evidence ingestion, not workflowEngine
+- Handles scope validation and ownership separately from workflow execution
+- Records provenance separately from workflow step records
+- Is documented in [trustgraph.md](./trustgraph.md)
+
+### Tool-registry path
+
+`web_search` and other tools still use the traditional tool-registry path
+instead of workflow context-step execution.
 
 ## Current docs
 
