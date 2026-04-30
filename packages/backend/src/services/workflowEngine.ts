@@ -624,6 +624,8 @@ export const runBoundedReviewWorkflow = async ({
     captureUsage,
     plannerStepRecord,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
+    // NOTE: Concrete tool execution is still orchestrator/registry-owned.
+    // This engine path currently executes only bounded review generation steps.
     const UNBOUNDED_LIMIT = UNBOUNDED_LIMIT_SENTINEL;
     const sanitizeNonNegativeInteger = (
         value: number,

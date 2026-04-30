@@ -10,11 +10,7 @@ import type {
     PostChatResponse,
     ChatConversationMessage,
 } from '@footnote/contracts/web';
-import type {
-    SafetyTier,
-    ToolExecutionContext,
-    ToolExecutionEvent,
-} from '@footnote/contracts/ethics-core';
+import type { SafetyTier } from '@footnote/contracts/ethics-core';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
     createChatService,
@@ -40,7 +36,6 @@ import {
     type PlannerFallbackReason,
     type PlannerSelectionSource,
 } from './plannerFallbackTelemetryRollup.js';
-import type { ResponseMetadataRuntimeContext } from './openaiService.js';
 import { resolveExecutionContract } from './executionContractResolver.js';
 import { resolveWorkflowModeDecision } from './workflowProfileRegistry.js';
 import { buildSteerabilityControls } from './steerabilityControls.js';
@@ -50,6 +45,9 @@ import {
     executeSelectedTool,
     resolveToolSelection,
 } from './tools/toolRegistry.js';
+import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
+import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureResponse.js';
+import { resolveWeatherClarificationContinuation } from './tools/weatherClarificationContinuation.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import type { IncidentAlertRouter } from './incidentAlerts.js';
@@ -189,90 +187,6 @@ export const createChatOrchestrator = ({
         recordUsage,
     });
 
-    const handleToolClarification = (input: {
-        toolContext: ToolExecutionContext;
-        conversationSnapshot: string;
-        modelVersion: string;
-        generationProfile: {
-            profileId: string;
-            originalProfileId?: string;
-            effectiveProfileId?: string;
-            provider: string;
-            model: string;
-        };
-        plannerExecutionContext: NonNullable<
-            ResponseMetadataRuntimeContext['executionContext']
-        >['planner'];
-        evaluatorExecutionContext?: EvaluatorExecutionContext;
-    }): PostChatResponse => {
-        const {
-            toolContext,
-            conversationSnapshot,
-            modelVersion,
-            generationProfile,
-            plannerExecutionContext,
-            evaluatorExecutionContext,
-        } = input;
-        const { clarification, toolName, status, durationMs } = toolContext;
-        const clarificationMessage = [
-            clarification?.question ?? 'Which location did you mean?',
-            '',
-            ...(clarification?.options ?? []).map(
-                (option, index) => `${index + 1}. ${option.label}`
-            ),
-            '',
-            'Please reply with your choice.',
-        ].join('\n');
-
-        const toolExecutionEvent: ToolExecutionEvent = {
-            kind: 'tool',
-            toolName,
-            status,
-            clarification,
-            durationMs,
-        };
-
-        const metadata = buildResponseMetadata(
-            {
-                model: modelVersion,
-                citations: [],
-            },
-            {
-                modelVersion,
-                conversationSnapshot,
-                executionContext: {
-                    planner: plannerExecutionContext,
-                    evaluator: evaluatorExecutionContext,
-                    generation: {
-                        status: 'skipped',
-                        profileId: generationProfile.profileId,
-                        originalProfileId: generationProfile.originalProfileId,
-                        effectiveProfileId:
-                            generationProfile.effectiveProfileId,
-                        provider: generationProfile.provider,
-                        model: generationProfile.model,
-                    },
-                    tool: toolContext,
-                },
-            }
-        );
-
-        return {
-            action: 'message',
-            message: clarificationMessage,
-            modality: 'text',
-            metadata: {
-                ...metadata,
-                execution: [
-                    ...(metadata.execution ?? []).filter(
-                        (event) => event.kind !== 'tool'
-                    ),
-                    toolExecutionEvent,
-                ],
-            },
-        };
-    };
-
     /**
      * Runs one chat request end-to-end.
      *
@@ -290,6 +204,8 @@ export const createChatOrchestrator = ({
             request,
             chatOrchestratorLogger
         );
+        const clarificationContinuation =
+            resolveWeatherClarificationContinuation(normalizedRequest);
         let evaluatorExecutionContext: EvaluatorExecutionContext | undefined;
         const notifyBreakerEvent = (input: {
             responseId: string | null;
@@ -438,6 +354,16 @@ export const createChatOrchestrator = ({
                 ? { verbosity: requestGeneration.verbosity }
                 : {}),
         };
+        if (clarificationContinuation.kind === 'resolved') {
+            generationForExecution = {
+                ...generationForExecution,
+                toolIntent: {
+                    toolName: 'weather_forecast',
+                    requested: true,
+                    input: clarificationContinuation.selectedOption.input,
+                },
+            };
+        }
         const toolPolicyDecision = applySingleToolPolicy(
             generationForExecution
         );
@@ -676,6 +602,146 @@ export const createChatOrchestrator = ({
             toolExecution.toolExecutionContext ?? toolExecutionContext;
 
         if (
+            clarificationContinuation.kind === 'unresolved' &&
+            clarificationContinuation.pending.options.length > 0
+        ) {
+            return buildToolClarificationResponse({
+                toolContext: {
+                    toolName: 'weather_forecast',
+                    status: 'executed',
+                    clarification: {
+                        reasonCode: 'ambiguous_location',
+                        question: clarificationContinuation.pending.question,
+                        options: clarificationContinuation.pending.options.map(
+                            (option) => ({
+                                id: option.id,
+                                label: option.label,
+                                value: {
+                                    toolName: 'weather_forecast',
+                                    input: option.input,
+                                },
+                            })
+                        ),
+                    },
+                },
+                metadataContext: {
+                    modelVersion: selectedResponseProfile.providerModel,
+                    conversationSnapshot: JSON.stringify({
+                        request: normalizedRequest,
+                        planner: {
+                            action: executionPlan.action,
+                            modality: executionPlan.modality,
+                            profileId: executionPlan.profileId,
+                            safetyTier: executionPlan.safetyTier,
+                            generation: executionPlan.generation,
+                            toolIntent,
+                            toolRequest: toolRequestContext,
+                            ...(surfacePolicy && { surfacePolicy }),
+                        },
+                        executionContract: {
+                            policyId: resolvedExecutionContract.policyId,
+                            policyVersion:
+                                resolvedExecutionContract.policyVersion,
+                        },
+                        clarification: {
+                            toolName: 'weather_forecast',
+                            reasonCode: 'ambiguous_location',
+                        },
+                    }),
+                    executionContext: {
+                        planner: {
+                            status: plannerExecution.status,
+                            reasonCode: plannerExecution.reasonCode,
+                            purpose: plannerExecution.purpose,
+                            contractType: plannerExecution.contractType,
+                            applyOutcome: plannerApplyOutcome,
+                            mattered: plannerMattered,
+                            matteredControlIds: plannerMatteredControlIds,
+                            profileId: plannerProfile.id,
+                            originalProfileId: plannerProfile.id,
+                            effectiveProfileId: plannerProfile.id,
+                            provider: plannerProfile.provider,
+                            model: plannerProfile.providerModel,
+                            durationMs: plannerExecution.durationMs,
+                        },
+                        evaluator: evaluatorExecutionContext,
+                        generation: {
+                            status: 'executed',
+                            profileId: selectedResponseProfile.id,
+                            originalProfileId: originalSelectedProfileId,
+                            effectiveProfileId: effectiveSelectedProfileId,
+                            provider: selectedResponseProfile.provider,
+                            model: selectedResponseProfile.providerModel,
+                        },
+                    },
+                },
+                buildResponseMetadata,
+            });
+        }
+
+        if (
+            toolExecutionContext?.toolName === 'weather_forecast' &&
+            toolExecutionContext.status === 'failed'
+        ) {
+            return buildWeatherToolFailureResponse({
+                toolContext: toolExecutionContext,
+                metadataContext: {
+                    modelVersion: selectedResponseProfile.providerModel,
+                    conversationSnapshot: JSON.stringify({
+                        request: normalizedRequest,
+                        planner: {
+                            action: executionPlan.action,
+                            modality: executionPlan.modality,
+                            profileId: executionPlan.profileId,
+                            safetyTier: executionPlan.safetyTier,
+                            generation: executionPlan.generation,
+                            toolIntent,
+                            toolRequest: toolRequestContext,
+                            ...(surfacePolicy && { surfacePolicy }),
+                        },
+                        executionContract: {
+                            policyId: resolvedExecutionContract.policyId,
+                            policyVersion:
+                                resolvedExecutionContract.policyVersion,
+                        },
+                        toolFailure: {
+                            toolName: toolExecutionContext.toolName,
+                            reasonCode: toolExecutionContext.reasonCode,
+                        },
+                    }),
+                    executionContext: {
+                        planner: {
+                            status: plannerExecution.status,
+                            reasonCode: plannerExecution.reasonCode,
+                            purpose: plannerExecution.purpose,
+                            contractType: plannerExecution.contractType,
+                            applyOutcome: plannerApplyOutcome,
+                            mattered: plannerMattered,
+                            matteredControlIds: plannerMatteredControlIds,
+                            profileId: plannerProfile.id,
+                            originalProfileId: plannerProfile.id,
+                            effectiveProfileId: plannerProfile.id,
+                            provider: plannerProfile.provider,
+                            model: plannerProfile.providerModel,
+                            durationMs: plannerExecution.durationMs,
+                        },
+                        evaluator: evaluatorExecutionContext,
+                        generation: {
+                            status: 'executed',
+                            profileId: selectedResponseProfile.id,
+                            originalProfileId: originalSelectedProfileId,
+                            effectiveProfileId: effectiveSelectedProfileId,
+                            provider: selectedResponseProfile.provider,
+                            model: selectedResponseProfile.providerModel,
+                        },
+                    },
+                },
+                latestUserInput: normalizedRequest.latestUserInput,
+                buildResponseMetadata,
+            });
+        }
+
+        if (
             toolExecutionContext?.clarification &&
             toolExecutionContext.status === 'executed'
         ) {
@@ -688,54 +754,61 @@ export const createChatOrchestrator = ({
                         toolExecutionContext.clarification.options.length,
                 }
             );
-            return handleToolClarification({
+            return buildToolClarificationResponse({
                 toolContext: toolExecutionContext,
-                conversationSnapshot: JSON.stringify({
-                    request: normalizedRequest,
-                    planner: {
-                        action: executionPlan.action,
-                        modality: executionPlan.modality,
-                        profileId: executionPlan.profileId,
-                        safetyTier: executionPlan.safetyTier,
-                        generation: executionPlan.generation,
-                        toolIntent,
-                        toolRequest: toolRequestContext,
-                        ...(surfacePolicy && { surfacePolicy }),
+                metadataContext: {
+                    modelVersion: selectedResponseProfile.providerModel,
+                    conversationSnapshot: JSON.stringify({
+                        request: normalizedRequest,
+                        planner: {
+                            action: executionPlan.action,
+                            modality: executionPlan.modality,
+                            profileId: executionPlan.profileId,
+                            safetyTier: executionPlan.safetyTier,
+                            generation: executionPlan.generation,
+                            toolIntent,
+                            toolRequest: toolRequestContext,
+                            ...(surfacePolicy && { surfacePolicy }),
+                        },
+                        executionContract: {
+                            policyId: resolvedExecutionContract.policyId,
+                            policyVersion:
+                                resolvedExecutionContract.policyVersion,
+                        },
+                        clarification: {
+                            toolName: toolExecutionContext.toolName,
+                            reasonCode:
+                                toolExecutionContext.clarification.reasonCode,
+                        },
+                    }),
+                    executionContext: {
+                        planner: {
+                            status: plannerExecution.status,
+                            reasonCode: plannerExecution.reasonCode,
+                            purpose: plannerExecution.purpose,
+                            contractType: plannerExecution.contractType,
+                            applyOutcome: plannerApplyOutcome,
+                            mattered: plannerMattered,
+                            matteredControlIds: plannerMatteredControlIds,
+                            profileId: plannerProfile.id,
+                            originalProfileId: plannerProfile.id,
+                            effectiveProfileId: plannerProfile.id,
+                            provider: plannerProfile.provider,
+                            model: plannerProfile.providerModel,
+                            durationMs: plannerExecution.durationMs,
+                        },
+                        evaluator: evaluatorExecutionContext,
+                        generation: {
+                            status: 'executed',
+                            profileId: selectedResponseProfile.id,
+                            originalProfileId: originalSelectedProfileId,
+                            effectiveProfileId: effectiveSelectedProfileId,
+                            provider: selectedResponseProfile.provider,
+                            model: selectedResponseProfile.providerModel,
+                        },
                     },
-                    executionContract: {
-                        policyId: resolvedExecutionContract.policyId,
-                        policyVersion: resolvedExecutionContract.policyVersion,
-                    },
-                    clarification: {
-                        toolName: toolExecutionContext.toolName,
-                        reasonCode:
-                            toolExecutionContext.clarification.reasonCode,
-                    },
-                }),
-                modelVersion: selectedResponseProfile.providerModel,
-                generationProfile: {
-                    profileId: selectedResponseProfile.id,
-                    originalProfileId: originalSelectedProfileId,
-                    effectiveProfileId: effectiveSelectedProfileId,
-                    provider: selectedResponseProfile.provider,
-                    model: selectedResponseProfile.providerModel,
                 },
-                plannerExecutionContext: {
-                    status: plannerExecution.status,
-                    reasonCode: plannerExecution.reasonCode,
-                    purpose: plannerExecution.purpose,
-                    contractType: plannerExecution.contractType,
-                    applyOutcome: plannerApplyOutcome,
-                    mattered: plannerMattered,
-                    matteredControlIds: plannerMatteredControlIds,
-                    profileId: plannerProfile.id,
-                    originalProfileId: plannerProfile.id,
-                    effectiveProfileId: plannerProfile.id,
-                    provider: plannerProfile.provider,
-                    model: plannerProfile.providerModel,
-                    durationMs: plannerExecution.durationMs,
-                },
-                evaluatorExecutionContext,
+                buildResponseMetadata,
             });
         }
 
