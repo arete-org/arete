@@ -143,7 +143,7 @@ test('weather success flows through workflow context-step: tool step recorded in
         'Tool step should be executed'
     );
     assert.ok(
-        toolStep?.outcome.artifacts?.length ?? 0 > 0,
+        (toolStep?.outcome.artifacts?.length ?? 0) > 0,
         'Tool step should have context artifacts'
     );
 });

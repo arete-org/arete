@@ -974,8 +974,25 @@ export const runBoundedReviewWorkflow = async ({
                     workflowStatus = 'completed';
                     shouldStop = true;
                 }
-            } catch {
+            } catch (error) {
                 const contextStepFinishedAt = Date.now();
+                logger.error(
+                    'Context step execution failed; workflow continued fail-open without context.',
+                    {
+                        stepKind: 'tool',
+                        reasonCode: 'tool_execution_error',
+                        startedAtMs: contextStepStartedAt,
+                        finishedAtMs: contextStepFinishedAt,
+                        parentStepId: plannerRootStepId,
+                        attempt: 1,
+                        workflowName: workflowConfig.workflowName,
+                        workflowId,
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    }
+                );
                 captureStep({
                     stepKind: 'tool',
                     status: 'failed',
