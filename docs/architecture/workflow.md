@@ -131,15 +131,15 @@ The current chat path looks like this:
 1. `chatOrchestrator` receives and normalizes the request.
 2. The Execution Contract sets the allowed behavior and limits.
 3. The backend resolves workflow mode and profile.
-4. Planner runs once in `chatOrchestrator` before generation.
+4. Planner runs once in `chatOrchestrator` before workflow execution and generation.
 5. Planner output goes through surface policy, capability policy, and tool
    policy.
 6. `chatService` runs either direct generation or the bounded review loop.
 7. Response metadata records mode, planner influence, workflow lineage, cost,
    and trace or provenance fields.
 
-Planner affects execution today, but workflow engine timing does not fully own
-planner execution yet.
+Planner affects execution today, but planner timing still runs before the main
+workflow-engine execution path.
 
 Planner lineage can appear in workflow metadata as a `plan` step when that
 metadata exists for the run. That is a lineage bridge, not a change in planner
@@ -329,14 +329,14 @@ enforces legality and limits. Adapters connect the profile to runtime calls.
 
 Use this split when ownership is unclear:
 
-| Concern             | Engine core                                                          | Workflow profile                                                             | Adapters and callers                                                  |
-| ------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Step legality       | owns the canonical legality check before execution                   | declares intended flow and policy toggles                                    | supplies policy, but must not bypass legality checks                  |
-| Limits              | owns hard-stop checks and stop-reason mapping                        | declares default budgets within the shared limits model                      | passes config and surfaces the final result                           |
-| Workflow state      | owns step count, token totals, current step, and lineage progression | declares expected step shape                                                 | treats engine-produced workflow state as authoritative                |
-| Step execution      | owns the orchestration envelope and step recording rules             | defines step-specific semantics such as review parsing                       | builds requests and calls runtimes or providers                       |
-| Termination reasons | owns canonical termination reasons                                   | can request stop, but cannot invent new canonical reasons                    | persists and returns engine-assigned reasons unchanged                |
-| Fail-open behavior  | owns degraded fail-open workflow behavior                            | can define recoverable profile behavior, but not canonical fail-open meaning | must not block the user response on telemetry or persistence failures |
+| Concern             | Engine core                                                                                         | Workflow profile                                                             | Adapters and callers                                                  |
+| ------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Step legality       | owns the canonical legality check before execution                                                  | declares intended flow and policy toggles                                    | supplies policy, but must not bypass legality checks                  |
+| Limits              | owns hard-stop checks and stop-reason mapping                                                       | declares default budgets within the shared limits model                      | passes config and surfaces the final result                           |
+| Workflow state      | owns step count, token totals, current step, and lineage progression                                | declares expected step shape                                                 | treats engine-produced workflow state as authoritative                |
+| Step execution      | owns bounded-review concrete step execution today (`generate`, `assess`, `revise`) and step records | defines step-specific semantics such as review parsing                       | builds requests and calls runtimes or providers                       |
+| Termination reasons | owns canonical termination reasons                                                                  | can request stop, but cannot invent new canonical reasons                    | persists and returns engine-assigned reasons unchanged                |
+| Fail-open behavior  | owns degraded fail-open workflow behavior                                                           | can define recoverable profile behavior, but not canonical fail-open meaning | must not block the user response on telemetry or persistence failures |
 
 If a workflow bug looks like "who decided that?", start with this table.
 
@@ -356,8 +356,18 @@ The shared workflow vocabulary includes `plan`, `tool`, `generate`, `assess`,
 `revise`, and `finalize`.
 
 `plan` and `tool` are part of the vocabulary, but they are not the main
-current chat loop. Planner lineage may be attached to metadata, while planner
-timing still lives in orchestration today.
+current chat loop.
+
+Today:
+
+- planner timing still lives in `chatOrchestrator` before workflow execution
+- concrete tool execution still lives in `chatOrchestrator` and `toolRegistry`
+- workflow metadata can still include bridged planner lineage
+
+Recent helpers like `buildToolClarificationResponse` and
+`buildToolExecutionEvent` are migration seams for future workflow-owned tool
+steps. They are not evidence that tool execution already moved into
+`workflowEngine`.
 
 ## Step records
 

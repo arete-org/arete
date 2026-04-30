@@ -19,10 +19,21 @@ Status: `pending`
 The workflow engine already knows about `tool` as a step kind and already has
 limit support such as `maxToolCalls`.
 
-What is still missing is first-class tool-step execution in the main chat
-workflow path. The bounded chat workflow still runs `generate`, `assess`, and
-`revise`. It does not yet run concrete workflow `tool` steps with recorded
-call attempts and execution shape.
+What is still missing is workflow-engine-owned tool-step execution in the main
+chat path.
+
+Today concrete `weather_forecast` execution still lives in
+`chatOrchestrator` and `toolRegistry`. The bounded workflow execution in the
+engine still runs concrete `generate`, `assess`, and `revise` steps.
+
+Recent prep work added migration seams such as:
+
+- `buildToolClarificationResponse` for clarification response assembly
+- `buildToolExecutionEvent` for standardized tool execution event mapping
+- parity tests that pin current orchestrator-owned weather behavior
+
+That prep improves migration safety, but it does not mean tool execution has
+moved into `workflowEngine`.
 
 The remaining goal is:
 
@@ -36,9 +47,9 @@ Status: `pending`
 
 Planner still runs before workflow execution in `chatOrchestrator`.
 
-Today the runtime can attach planner lineage into the workflow record so the
-trace can show that planner mattered. That is useful, but it is not the same
-thing as planner being a true workflow-owned executed step.
+Today the runtime can attach planner lineage into the workflow record so traces
+can show that planner mattered. That bridge is useful, but planner timing and
+execution are still not workflow-engine-owned.
 
 The remaining goal is:
 
