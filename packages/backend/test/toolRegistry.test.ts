@@ -212,6 +212,8 @@ test('weather adapter passes through needs_clarification result with status exec
                     provider: 'open-meteo',
                     endpoint: 'mock',
                     requestedAt: '2026-01-01T00:00:00Z',
+                    citationUrl: 'https://open-meteo.com/en/docs',
+                    citationLabel: 'Open-Meteo Weather Forecast API',
                 },
             }),
         },
@@ -236,7 +238,7 @@ test('weather adapter passes through needs_clarification result with status exec
                                   label: 'New York City, New York, United States',
                               },
                               {
-                                  id: 'nys',
+                                  id: 'ny_state',
                                   label: 'New York State, United States',
                               },
                           ],
@@ -245,6 +247,8 @@ test('weather adapter passes through needs_clarification result with status exec
                           provider: 'open-meteo',
                           endpoint: 'mock',
                           requestedAt: '2026-01-01T00:00:00Z',
+                          citationUrl: 'https://open-meteo.com/en/docs',
+                          citationLabel: 'Open-Meteo Weather Forecast API',
                       },
                   }),
               }

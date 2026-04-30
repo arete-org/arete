@@ -36,6 +36,8 @@ test('context-step adapter maps weather success to executed context with tool re
                 provider: 'open-meteo',
                 endpoint: 'mock',
                 requestedAt: '2026-01-01T00:00:00Z',
+                citationUrl: 'https://open-meteo.com/en/docs',
+                citationLabel: 'Open-Meteo Weather Forecast API',
             },
         }),
     };
@@ -136,6 +138,8 @@ test('context-step adapter maps weather clarification to executed context with c
                 provider: 'open-meteo',
                 endpoint: 'mock',
                 requestedAt: '2026-01-01T00:00:00Z',
+                citationUrl: 'https://open-meteo.com/en/docs',
+                citationLabel: 'Open-Meteo Weather Forecast API',
             },
         }),
     };

@@ -1369,6 +1369,8 @@ test('orchestrator injects backend weather tool context and records executed too
                 provider: 'open-meteo',
                 endpoint: 'https://api.open-meteo.com/v1/forecast',
                 requestedAt: '2026-03-27T12:00:00.000Z',
+                citationUrl: 'https://open-meteo.com/en/docs',
+                citationLabel: 'Open-Meteo Weather Forecast API',
             },
         }),
     };
@@ -1506,6 +1508,8 @@ test('planner mixed weather and search requests apply single-tool weather priori
                 provider: 'open-meteo',
                 endpoint: 'https://api.open-meteo.com/v1/forecast',
                 requestedAt: '2026-03-27T12:00:00.000Z',
+                citationUrl: 'https://open-meteo.com/en/docs',
+                citationLabel: 'Open-Meteo Weather Forecast API',
             },
         }),
     };
@@ -2186,6 +2190,8 @@ test('orchestrator returns clarification when tool returns needs_clarification s
                 provider: 'open-meteo',
                 endpoint: 'https://geocoding-api.open-meteo.com/v1/search',
                 requestedAt: '2026-03-27T12:00:00.000Z',
+                citationUrl: 'https://open-meteo.com/en/docs',
+                citationLabel: 'Open-Meteo Weather Forecast API',
             },
         }),
     };
@@ -2319,6 +2325,8 @@ test('orchestrator continues normal weather path when tool returns status ok', a
                 provider: 'open-meteo',
                 endpoint: 'https://api.open-meteo.com/v1/forecast',
                 requestedAt: '2026-03-27T12:00:00.000Z',
+                citationUrl: 'https://open-meteo.com/en/docs',
+                citationLabel: 'Open-Meteo Weather Forecast API',
             },
         }),
     };

@@ -43,6 +43,8 @@ test('weather success flows through workflow context-step: tool step recorded in
                 provider: 'open-meteo',
                 endpoint: 'mock',
                 requestedAt: '2026-01-01T00:00:00Z',
+                citationUrl: 'https://open-meteo.com/en/docs',
+                citationLabel: 'Open-Meteo Weather Forecast API',
             },
         }),
     };
