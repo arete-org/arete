@@ -16,23 +16,26 @@ This file tracks the remaining rollout work. The canonical architecture is in
   context-step request derivation.
 
 - **Planner timing**: Still pending. Planner still runs before workflow
-  execution in `chatOrchestrator`. The next blocker is moving post-plan message
-  assembly into `chatService`, so workflow-owned planner timing can be
-  introduced without moving policy logic into `workflowEngine`.
+  execution in `chatOrchestrator`.
+
+- **Post-plan message assembly seam**: Completed. Planner-applied
+  message/payload assembly now runs through a bounded `chatService` seam so the
+  planner payload and generation snapshot assembly are no longer embedded in
+  the orchestration branch.
 
 ## Pending Work
 
 - **Planner timing cutover**: Move planner invocation into workflow-owned timing
-  through an injected planner executor after post-plan message assembly is moved
-  into `chatService`.
-
-- **Post-plan message assembly**: Move generation message/payload assembly to a
-  bounded `chatService` seam that can consume `PlannerResultApplier` output.
+  through an injected planner executor.
+  Remaining blocker: non-message planner actions (`react`, `ignore`, `image`)
+  and early orchestration exits are still handled before workflow execution, so
+  timing cutover needs a bounded workflow/transport seam for those outcomes
+  without moving policy logic into `workflowEngine`.
 
 - **Planner lineage cleanup**: Planner lineage currently bridges into workflow
-metadata after planner execution. Before moving planner timing, consolidate
-planner step recording so there is one canonical path and no duplicate plan
-events.
+  metadata after planner execution. Before moving planner timing, consolidate
+  planner step recording so there is one canonical path and no duplicate plan
+  events.
 
 - **Tool/context-step expansion**: Only `weather_forecast` uses the workflow
   context-step path. The infrastructure exists for additional tools, but none

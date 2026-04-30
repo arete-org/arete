@@ -8,7 +8,6 @@
 import type {
     PostChatRequest,
     PostChatResponse,
-    ChatConversationMessage,
 } from '@footnote/contracts/web';
 import type { SafetyTier } from '@footnote/contracts/ethics-core';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
@@ -55,10 +54,8 @@ import {
     type EvaluatorExecutionContext,
 } from './chatOrchestrator/evaluatorCoordination.js';
 import { resolveNonMessagePlannerAction } from './chatOrchestrator/actionResolution.js';
-import {
-    buildPlannerPayload,
-    type PlannerPayloadChatPlan,
-} from './chatOrchestrator/plannerPayload.js';
+import { type PlannerPayloadChatPlan } from './chatOrchestrator/plannerPayload.js';
+import { assemblePostPlanGenerationInput } from './chatService/postPlanAssembly.js';
 import {
     buildControlObservabilityEnvelope,
     emitControlObservabilityEnvelope,
@@ -728,36 +725,6 @@ export const createChatOrchestrator = ({
             generation: executionPlan.generation,
         };
 
-        // Planner output is injected as a final system message so generation
-        // follows one bounded payload selected by backend policy.
-        // This payload is execution input only, never policy authority.
-        const conversationMessages: Array<
-            Pick<ChatConversationMessage, 'role' | 'content'>
-        > = [
-            {
-                role: 'system',
-                content: promptLayers.systemPrompt,
-            },
-            {
-                role: 'system',
-                content: personaPrompt,
-            },
-            ...normalizedConversation,
-            {
-                role: 'system',
-                content: [
-                    '// ==========',
-                    '// BEGIN Planner Output',
-                    '// This bounded planner output was selected by backend policy for this response.',
-                    '// It is execution input for this run, not execution-contract authority.',
-                    '// ==========',
-                    buildPlannerPayload(executionPlanForPrompt, surfacePolicy),
-                    '// ==========',
-                    '// END Planner Output',
-                    '// ==========',
-                ].join('\n'),
-            },
-        ];
         const safetyTierRank: Record<SafetyTier, number> = {
             Low: 1,
             Medium: 2,
@@ -771,29 +738,28 @@ export const createChatOrchestrator = ({
                 : executionPlan.safetyTier;
         const executionContractScopeTuple =
             buildExecutionContractScopeTuple(normalizedRequest);
+        const postPlanAssembly = assemblePostPlanGenerationInput({
+            systemPrompt: promptLayers.systemPrompt,
+            personaPrompt,
+            normalizedConversation,
+            executionPlanForPrompt,
+            surfacePolicy,
+            normalizedRequest,
+            orchestrationSafetyTier,
+            toolIntent,
+            toolRequestContext,
+            executionContract: {
+                policyId: resolvedExecutionContract.policyId,
+                policyVersion: resolvedExecutionContract.policyVersion,
+            },
+        });
 
         // By the time we call ChatService, planner output and request overrides
         // have already been folded into one concrete profile and generation
         // plan.
         const response = await chatService.runChatMessages({
-            messages: conversationMessages,
-            conversationSnapshot: JSON.stringify({
-                request: normalizedRequest,
-                planner: {
-                    action: executionPlan.action,
-                    modality: executionPlan.modality,
-                    profileId: executionPlan.profileId,
-                    safetyTier: orchestrationSafetyTier,
-                    generation: executionPlan.generation,
-                    toolIntent,
-                    toolRequest: toolRequestContext,
-                    ...(surfacePolicy && { surfacePolicy }),
-                },
-                executionContract: {
-                    policyId: resolvedExecutionContract.policyId,
-                    policyVersion: resolvedExecutionContract.policyVersion,
-                },
-            }),
+            messages: postPlanAssembly.conversationMessages,
+            conversationSnapshot: postPlanAssembly.conversationSnapshot,
             orchestrationStartedAtMs: orchestrationStartedAt,
             plannerTemperament: executionPlan.generation.temperament,
             safetyTier: orchestrationSafetyTier,

@@ -396,6 +396,10 @@ Groundwork now includes an injected planner policy-application seam
 backend policy authority. Planner timing is still pre-workflow in current
 runtime behavior.
 
+Post-plan planner payload/message assembly now runs through a bounded
+`chatService` seam (`assemblePostPlanGenerationInput`) so message construction
+is no longer embedded directly in orchestration branches.
+
 Planner lineage can appear in workflow metadata as a `plan` step when that
 metadata exists for the run. That is a lineage bridge, not a change in planner
 authority. Planner timing and execution are still not workflow-engine-owned.
