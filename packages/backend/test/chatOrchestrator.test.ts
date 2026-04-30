@@ -2135,3 +2135,268 @@ test('planner workflow lineage reports adjusted_by_policy when request override 
     );
     assert.equal(plannerEvent, undefined);
 });
+
+test('orchestrator returns clarification when tool returns needs_clarification status and skips normal generation', async () => {
+    let generationCalled = false;
+    const weatherForecastTool: WeatherForecastTool = {
+        fetchForecast: async () => ({
+            toolName: 'weather_forecast',
+            status: 'needs_clarification',
+            request: {
+                location: {
+                    type: 'place_query',
+                    query: 'New York',
+                },
+            },
+            clarification: {
+                reasonCode: 'ambiguous_location',
+                question: 'Which New York did you mean?',
+                options: [
+                    {
+                        id: 'nyc',
+                        label: 'New York City, New York, United States',
+                        value: {
+                            toolName: 'weather_forecast',
+                            input: {
+                                location: {
+                                    type: 'lat_lon',
+                                    latitude: 40.7128,
+                                    longitude: -74.006,
+                                },
+                            },
+                        },
+                    },
+                    {
+                        id: 'nys',
+                        label: 'New York State, United States',
+                        value: {
+                            toolName: 'weather_forecast',
+                            input: {
+                                location: {
+                                    type: 'place_query',
+                                    query: 'New York State',
+                                    countryCode: 'US',
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+            provenance: {
+                provider: 'open-meteo',
+                endpoint: 'https://geocoding-api.open-meteo.com/v1/search',
+                requestedAt: '2026-03-27T12:00:00.000Z',
+            },
+        }),
+    };
+
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        requestedCapabilityProfile: 'expressive-generation',
+                        safetyTier: 'Low',
+                        reasoning:
+                            'Clarify location before generating final answer.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                            toolIntent: {
+                                toolName: 'weather_forecast',
+                                requested: true,
+                                input: {
+                                    location: {
+                                        query: 'New York',
+                                    },
+                                },
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+            generationCalled = true;
+            return {
+                text: 'should not reach here',
+                model: 'gpt-5-mini',
+                provenance: 'Retrieved',
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+        weatherForecastTool,
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            profileId: runtimeConfig.modelProfiles.defaultProfileId,
+            latestUserInput: 'What is the weather in New York?',
+            conversation: [
+                { role: 'user', content: 'What is the weather in New York?' },
+            ],
+        })
+    );
+
+    assert.equal(
+        generationCalled,
+        false,
+        'ChatService should not be called for clarification'
+    );
+
+    assert.equal(response.action, 'message');
+    assert.match(response.message, /Which New York did you mean?/);
+    assert.match(response.message, /New York City/);
+    assert.match(response.message, /New York State/);
+    assert.match(response.message, /Please reply with your choice/);
+
+    const toolEvent = response.metadata.execution?.find(
+        (event) => event.kind === 'tool'
+    );
+    assert.ok(
+        toolEvent,
+        'tool execution event should be in metadata.execution'
+    );
+    assert.equal(toolEvent?.toolName, 'weather_forecast');
+    assert.equal(toolEvent?.status, 'executed');
+    assert.ok(toolEvent?.clarification !== undefined);
+    assert.equal(toolEvent?.clarification?.reasonCode, 'ambiguous_location');
+    assert.equal(toolEvent?.clarification?.options.length, 2);
+    const generationEvent = response.metadata.execution?.find(
+        (event) => event.kind === 'generation'
+    );
+    assert.equal(generationEvent?.status, 'skipped');
+});
+
+test('orchestrator continues normal weather path when tool returns status ok', async () => {
+    let generationCalled = false;
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
+    const weatherForecastTool: WeatherForecastTool = {
+        fetchForecast: async () => ({
+            toolName: 'weather_forecast',
+            status: 'ok',
+            request: {
+                location: {
+                    type: 'lat_lon',
+                    latitude: 39.7684,
+                    longitude: -86.1581,
+                },
+                horizonPeriods: 4,
+            },
+            location: {
+                name: 'Indianapolis, IN',
+                latitude: 39.7684,
+                longitude: -86.1581,
+            },
+            forecast: {
+                periods: [
+                    {
+                        name: 'Today',
+                        startsAt: '2026-03-27T08:00:00-04:00',
+                        endsAt: '2026-03-27T20:00:00-04:00',
+                        isDaytime: true,
+                        temperature: { value: 57, unit: 'F' },
+                        wind: { speed: '12 mph', direction: 'NW' },
+                        shortForecast: 'Mostly sunny',
+                        detailedForecast: 'Mostly sunny with light wind.',
+                    },
+                ],
+            },
+            provenance: {
+                provider: 'open-meteo',
+                endpoint: 'https://api.open-meteo.com/v1/forecast',
+                requestedAt: '2026-03-27T12:00:00.000Z',
+            },
+        }),
+    };
+
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        requestedCapabilityProfile: 'expressive-generation',
+                        safetyTier: 'Low',
+                        reasoning:
+                            'Use weather tool for this forecast question.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                            toolIntent: {
+                                toolName: 'weather_forecast',
+                                requested: true,
+                                input: {
+                                    location: {
+                                        latitude: 39.7684,
+                                        longitude: -86.1581,
+                                    },
+                                    horizonPeriods: 4,
+                                },
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+            generationCalled = true;
+            return {
+                text: 'Weather forecast: Mostly sunny with a high of 57F.',
+                model: 'gpt-5-mini',
+                provenance: 'Retrieved',
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (assistantMetadata, runtimeContext) => {
+            capturedExecutionContext = runtimeContext.executionContext;
+            return buildResponseMetadata(assistantMetadata, runtimeContext);
+        },
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+        weatherForecastTool,
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            profileId: runtimeConfig.modelProfiles.defaultProfileId,
+            latestUserInput: 'Forecast for 39.7684,-86.1581',
+            conversation: [
+                { role: 'user', content: 'Forecast for 39.7684,-86.1581' },
+            ],
+        })
+    );
+
+    assert.equal(
+        generationCalled,
+        true,
+        'ChatService should be called for normal path'
+    );
+    assert.equal(response.action, 'message');
+    assert.equal(capturedExecutionContext?.tool?.toolName, 'weather_forecast');
+    assert.equal(capturedExecutionContext?.tool?.status, 'executed');
+    const toolEvent = response.metadata.execution?.find(
+        (event) => event.kind === 'tool'
+    );
+    assert.equal(toolEvent?.clarification, undefined);
+});

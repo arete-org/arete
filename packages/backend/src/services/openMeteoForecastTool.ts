@@ -6,6 +6,7 @@
  * @footnote-risk: medium - Parsing or transport regressions can degrade weather retrieval quality, but blast radius is isolated to one optional tool path.
  * @footnote-ethics: medium - Forecast errors can impact user decisions, so the adapter preserves provenance and explicit uncertainty.
  */
+import type { ToolClarification } from '@footnote/contracts/ethics-core';
 import type { ChatGenerationWeatherRequest } from './chatGenerationTypes.js';
 
 const OPEN_METEO_FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
@@ -45,6 +46,7 @@ type OpenMeteoGeocodingResult = {
     longitude?: number;
     country_code?: string;
     admin1?: string;
+    admin2?: string;
     timezone?: string;
     population?: number;
 };
@@ -134,6 +136,13 @@ export type WeatherForecastToolResult =
               message: string;
               httpStatus?: number;
           };
+          provenance: WeatherToolProvenance;
+      }
+    | {
+          toolName: 'weather_forecast';
+          status: 'needs_clarification';
+          request: WeatherForecastRequest;
+          clarification: ToolClarification;
           provenance: WeatherToolProvenance;
       };
 
@@ -323,6 +332,158 @@ const buildErrorResult = ({
     },
 });
 
+const buildClarificationResult = ({
+    request,
+    requestedAt,
+    endpoint,
+    resolvedFromEndpoint,
+    candidates,
+}: {
+    request: WeatherForecastRequest;
+    requestedAt: string;
+    endpoint: string;
+    resolvedFromEndpoint?: string;
+    candidates: OpenMeteoGeocodingResult[];
+}): WeatherForecastToolResult => {
+    const toStableOptionId = (
+        candidate: OpenMeteoGeocodingResult & {
+            latitude: number;
+            longitude: number;
+        },
+        index: number
+    ): string => {
+        const slugPart = (value: string | undefined): string =>
+            (value ?? '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '');
+        const lat = candidate.latitude.toFixed(4).replace('.', '_');
+        const lon = candidate.longitude.toFixed(4).replace('.', '_');
+        const base = [
+            slugPart(candidate.name),
+            slugPart(candidate.admin1),
+            slugPart(candidate.country_code),
+            `lat${lat}`,
+            `lon${lon}`,
+        ]
+            .filter((part) => part.length > 0)
+            .join('__');
+        return base.length > 0 ? base : `option-${index}`;
+    };
+
+    const validCandidates = candidates.filter(
+        (
+            c
+        ): c is OpenMeteoGeocodingResult & {
+            latitude: number;
+            longitude: number;
+        } =>
+            typeof c.latitude === 'number' &&
+            Number.isFinite(c.latitude) &&
+            typeof c.longitude === 'number' &&
+            Number.isFinite(c.longitude)
+    );
+
+    if (validCandidates.length === 0) {
+        return buildErrorResult({
+            request,
+            requestedAt,
+            endpoint,
+            resolvedFromEndpoint,
+            code: 'invalid_response',
+            message:
+                'open-meteo geocoding returned no locations with valid coordinates.',
+        });
+    }
+
+    const options = validCandidates.map((c, i) => ({
+        id: toStableOptionId(c, i),
+        label: [c.name, c.admin1, c.admin2, c.country_code]
+            .filter(Boolean)
+            .join(', '),
+        value: {
+            toolName: 'weather_forecast',
+            input: {
+                location: {
+                    type: 'lat_lon' as const,
+                    latitude: c.latitude,
+                    longitude: c.longitude,
+                },
+            },
+        },
+    }));
+
+    return {
+        toolName: 'weather_forecast',
+        status: 'needs_clarification',
+        request,
+        clarification: {
+            reasonCode: 'ambiguous_location',
+            question: 'Which location did you mean?',
+            options,
+        },
+        provenance: {
+            provider: 'open-meteo',
+            endpoint,
+            requestedAt,
+            ...(resolvedFromEndpoint !== undefined && { resolvedFromEndpoint }),
+        },
+    };
+};
+
+const isAmbiguousLocation = ({
+    query,
+    countryCode,
+    candidates,
+}: {
+    query: string;
+    countryCode?: string;
+    candidates: OpenMeteoGeocodingResult[];
+}): boolean => {
+    if (candidates.length < 2) {
+        return false;
+    }
+
+    if (countryCode !== undefined) {
+        return false;
+    }
+
+    const queryWords = query.trim().split(/\s+/).length;
+    if (queryWords >= 3) {
+        return false;
+    }
+
+    const top = candidates[0];
+    const second = candidates[1];
+
+    if (top.population !== undefined && second.population !== undefined) {
+        const ratio = second.population / top.population;
+        if (ratio < 0.1) {
+            return false;
+        }
+    }
+
+    const normalize = (value: string | undefined): string =>
+        value?.trim().toLowerCase() ?? '';
+    const topName = normalize(top.name);
+    const secondName = normalize(second.name);
+    const queryName = normalize(query);
+    const sameNameFamily =
+        (topName.length > 0 && topName === secondName) ||
+        (queryName.length > 0 &&
+            (topName === queryName || secondName === queryName));
+    if (!sameNameFamily) {
+        return false;
+    }
+
+    const hasDifferentContext =
+        normalize(top.admin1) !== normalize(second.admin1) ||
+        normalize(top.admin2) !== normalize(second.admin2) ||
+        normalize(top.country_code) !== normalize(second.country_code);
+
+    return hasDifferentContext;
+};
+
 /**
  * Creates the backend weather tool adapter used by orchestration.
  *
@@ -386,8 +547,8 @@ export const createOpenMeteoForecastTool = ({
                 });
             }
 
-            const firstResult = geocodingResponse.data.results?.[0];
-            if (!firstResult) {
+            const geocodingResults = geocodingResponse.data.results ?? [];
+            if (geocodingResults.length === 0) {
                 return buildErrorResult({
                     request,
                     requestedAt,
@@ -398,6 +559,37 @@ export const createOpenMeteoForecastTool = ({
                 });
             }
 
+            const candidateCount = geocodingResults.length;
+            const hasContext =
+                request.location.type === 'place_query'
+                    ? request.location.countryCode !== undefined
+                    : false;
+            const query =
+                request.location.type === 'place_query'
+                    ? request.location.query
+                    : '';
+
+            if (candidateCount >= 2 && !hasContext) {
+                const ambiguous = isAmbiguousLocation({
+                    query,
+                    countryCode:
+                        request.location.type === 'place_query'
+                            ? request.location.countryCode
+                            : undefined,
+                    candidates: geocodingResults,
+                });
+                if (ambiguous) {
+                    return buildClarificationResult({
+                        request,
+                        requestedAt,
+                        endpoint: resolvedFromEndpoint,
+                        resolvedFromEndpoint,
+                        candidates: geocodingResults.slice(0, 5),
+                    });
+                }
+            }
+
+            const firstResult = geocodingResults[0];
             if (
                 typeof firstResult.latitude !== 'number' ||
                 typeof firstResult.longitude !== 'number'

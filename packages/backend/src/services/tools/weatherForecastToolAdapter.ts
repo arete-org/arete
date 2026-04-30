@@ -96,7 +96,13 @@ export const executeWeatherForecastTool = async ({
             toolExecutionContext: {
                 toolName: 'weather_forecast',
                 status:
-                    weatherToolResult.status === 'ok' ? 'executed' : 'failed',
+                    weatherToolResult.status === 'ok' ||
+                    weatherToolResult.status === 'needs_clarification'
+                        ? 'executed'
+                        : 'failed',
+                ...(weatherToolResult.status === 'needs_clarification' && {
+                    clarification: weatherToolResult.clarification,
+                }),
                 ...(weatherToolResult.status === 'error' && {
                     reasonCode: mapWeatherErrorCodeToReasonCode(
                         weatherToolResult.error.code

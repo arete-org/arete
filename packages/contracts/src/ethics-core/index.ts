@@ -34,6 +34,8 @@ export type {
     ToolInvocationIntent,
     ToolInvocationRequest,
     ToolExecutionContext,
+    ToolClarification,
+    ToolClarificationOption,
     CorrelationEnvelope,
     ExecutionEventKind,
     PlannerExecutionEvent,

@@ -294,3 +294,117 @@ test('open-meteo tool resolves place query with countryCode context', async () =
         assert.equal(result.location.admin1, 'Indiana');
     }
 });
+
+test('open-meteo tool returns needs_clarification for same-name locations in different admin regions', async () => {
+    const tool = createOpenMeteoForecastTool({
+        fetchImpl: async (input) => {
+            const url = String(input);
+            if (url.includes('/v1/search')) {
+                return createMockResponse({
+                    ok: true,
+                    status: 200,
+                    body: {
+                        results: [
+                            {
+                                name: 'Springfield',
+                                latitude: 39.7817,
+                                longitude: -89.6501,
+                                country_code: 'US',
+                                admin1: 'Illinois',
+                                population: 114394,
+                            },
+                            {
+                                name: 'Springfield',
+                                latitude: 42.1015,
+                                longitude: -72.5898,
+                                country_code: 'US',
+                                admin1: 'Massachusetts',
+                                population: 155770,
+                            },
+                        ],
+                    },
+                });
+            }
+            throw new Error('should not reach forecast call');
+        },
+    });
+
+    const result = await tool.fetchForecast({
+        location: {
+            type: 'place_query',
+            query: 'Springfield',
+        },
+    });
+
+    assert.equal(result.status, 'needs_clarification');
+    if (result.status === 'needs_clarification') {
+        assert.equal(result.clarification.reasonCode, 'ambiguous_location');
+        assert.equal(result.clarification.options.length, 2);
+        assert.match(result.clarification.question, /Which location/);
+    }
+});
+
+test('open-meteo tool selects top result when countryCode is provided', async () => {
+    const tool = createOpenMeteoForecastTool({
+        fetchImpl: async (input) => {
+            const url = String(input);
+            if (url.includes('/v1/search')) {
+                return createMockResponse({
+                    ok: true,
+                    status: 200,
+                    body: {
+                        results: [
+                            {
+                                name: 'Toronto',
+                                latitude: 43.6532,
+                                longitude: -79.3832,
+                                country_code: 'CA',
+                                admin1: 'Ontario',
+                            },
+                            {
+                                name: 'Toronto',
+                                latitude: 43.6532,
+                                longitude: -79.3832,
+                                country_code: 'US',
+                                admin1: 'Ohio',
+                            },
+                        ],
+                    },
+                });
+            }
+            return createMockResponse({
+                ok: true,
+                status: 200,
+                body: {
+                    daily_units: {
+                        temperature_2m_max: 'C',
+                        wind_speed_10m_max: 'km/h',
+                    },
+                    daily: {
+                        time: ['2026-04-29'],
+                        temperature_2m_max: [15],
+                        temperature_2m_min: [5],
+                        weather_code: [0],
+                        precipitation_probability_max: [10],
+                        wind_speed_10m_max: [10],
+                        wind_direction_10m_dominant: [180],
+                    },
+                },
+            });
+        },
+    });
+
+    const result = await tool.fetchForecast({
+        location: {
+            type: 'place_query',
+            query: 'Toronto',
+            countryCode: 'CA',
+        },
+    });
+
+    assert.equal(result.status, 'ok');
+    if (result.status === 'ok') {
+        assert.equal(result.location.name, 'Toronto');
+        assert.equal(result.location.countryCode, 'CA');
+    }
+});
