@@ -17,9 +17,9 @@ This file tracks the remaining rollout work. The canonical architecture is in
 - **web_search**: Not migrated to context-step execution. Continues through
   separate tool-registry path.
 
-- **Fast/generate-only mode**: Bypasses workflow engine entirely and does not
-  use the context-step path. Weather support would need separate handling if
-  desired.
+- **Fast/generate-only mode**: Uses the `generate-only` profile (single generate
+  step), goes through workflow engine but doesn't use the context-step path.
+  Weather runs through bounded-review modes only.
 
 - **maxIterations=0 semantics**: When `maxIterations=0`, the workflow completes
   after initial generation with `terminationReason: 'goal_satisfied'`. This is
