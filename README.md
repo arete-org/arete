@@ -79,31 +79,7 @@ pnpm dev
 
 - [Deployment guide](deploy/README.md)
 - [Prompt/profile configuration](docs/architecture/prompt-resolution.md)
-- [Documentation map](docs/README.md)
-
-## Learn more
-
-- **Background:** [History](docs/History.md), [Philosophy](docs/Philosophy.md)
-- **Architecture:** [Architecture Reading Guide](docs/architecture/README.md)
-- **Contributor notes:** [AGENTS.md](AGENTS.md), [AI Assistance Guide](docs/ai/README.md)
-- **Self-hosting:** start with [Quickstart](#quickstart), then see [deploy/README.md](deploy/README.md)
-- **Docs map:** [docs/README.md](docs/README.md)
-
-## Docs
-
-Start here: [Documentation Map](docs/README.md)
-
-Docs are still being tightened as Footnote moves toward v1.0. Start with the map; it points to current architecture, decisions, setup, and contributor notes.
-
-## Contributing
-
-Contribution docs are still in progress.
-
-For now, open an Issue or Discussion before large changes so we can align on scope. Focused PRs, careful bug reports, and thoughtful critique are welcome.
-
-## Project Status
-
-Footnote is pre-1.0 and moving quickly. Expect rapid iteration and occasional sharp edges while interfaces and workflows stabilize.
+- [Documentation](docs/README.md)
 
 ## License
 
