@@ -55,7 +55,10 @@ import {
 } from './chatOrchestrator/evaluatorCoordination.js';
 import { type PlannerPayloadChatPlan } from './chatOrchestrator/plannerPayload.js';
 import { assemblePostPlanGenerationInput } from './chatService/postPlanAssembly.js';
-import { resolvePlannerActionOutcome } from './chatService/plannerActionOutcome.js';
+import {
+    resolvePlannerActionOutcome,
+    plannerTerminalActionToResponse,
+} from './chatService/plannerActionOutcome.js';
 import {
     buildControlObservabilityEnvelope,
     emitControlObservabilityEnvelope,
@@ -720,6 +723,22 @@ export const createChatOrchestrator = ({
                 : executionPlan.safetyTier;
         const executionContractScopeTuple =
             buildExecutionContractScopeTuple(normalizedRequest);
+
+        if (plannerActionOutcome.kind === 'terminal_action') {
+            if (plannerActionOutcome.fallbackReason !== undefined) {
+                fallbackReasons.push(plannerActionOutcome.fallbackReason);
+            }
+            if (plannerActionOutcome.warningMessage !== undefined) {
+                chatOrchestratorLogger.warn(
+                    plannerActionOutcome.warningMessage
+                );
+            }
+            const terminalResponse = plannerTerminalActionToResponse(
+                plannerActionOutcome.terminalAction
+            );
+            return terminalResponse;
+        }
+
         const postPlanAssembly = assemblePostPlanGenerationInput({
             systemPrompt: promptLayers.systemPrompt,
             personaPrompt,
@@ -801,16 +820,6 @@ export const createChatOrchestrator = ({
             },
             steerabilityControls,
         });
-        if (plannerActionOutcome.kind === 'terminal_action') {
-            if (plannerActionOutcome.fallbackReason !== undefined) {
-                fallbackReasons.push(plannerActionOutcome.fallbackReason);
-            }
-            if (plannerActionOutcome.warningMessage !== undefined) {
-                chatOrchestratorLogger.warn(
-                    plannerActionOutcome.warningMessage
-                );
-            }
-        }
         if (response.kind === 'terminal_action') {
             const terminalResponse =
                 response.response ??

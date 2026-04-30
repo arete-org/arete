@@ -815,11 +815,15 @@ export const runBoundedReviewWorkflow = async ({
             normalizedMaxDurationMs
         ),
     };
-    executionLimits.maxDeliberationCalls = Math.max(
-        executionLimits.maxDeliberationCalls,
-        (executionLimits.maxPlanCycles ?? 0) +
-            (executionLimits.maxReviewCycles ?? 0)
-    );
+    const hasExplicitMaxDeliberationCalls =
+        workflowConfig.executionLimits?.maxDeliberationCalls !== undefined;
+    if (!hasExplicitMaxDeliberationCalls) {
+        executionLimits.maxDeliberationCalls = Math.max(
+            executionLimits.maxDeliberationCalls,
+            (executionLimits.maxPlanCycles ?? 0) +
+                (executionLimits.maxReviewCycles ?? 0)
+        );
+    }
     const effectiveMaxIterations =
         workflowConfig.executionLimits !== undefined
             ? Math.max(
@@ -837,6 +841,14 @@ export const runBoundedReviewWorkflow = async ({
         workflowName: workflowConfig.workflowName,
         startedAtMs: workflowStartedAt,
     });
+
+    if (plannerStepRecord?.stepKind === 'plan') {
+        workflowState = {
+            ...workflowState,
+            stepCount: workflowState.stepCount + 1,
+            planCallCount: workflowState.planCallCount + 1,
+        };
+    }
 
     const captureStep = (input: {
         stepKind: StepRecord['stepKind'];

@@ -35,6 +35,7 @@ import type { ChatSurfacePolicyCoercion } from './chatSurfacePolicy.js';
 import type { CapabilityProfileId } from './modelCapabilityPolicy.js';
 import type { ContextStepRequest } from './workflowEngine.js';
 
+/** Input to planner executor. Produced by workflow engine; caller provides request and context. */
 export type PlannerStepRequest = {
     workflowId: string;
     workflowName: string;
@@ -44,6 +45,7 @@ export type PlannerStepRequest = {
     capabilityProfiles: ChatPlannerCapabilityProfileOption[];
 };
 
+/** Output from planner executor; fail-open on optional fields, execution.status is authoritative. */
 export type PlannerStepResult = {
     plan: ChatPlan;
     execution: {
@@ -67,6 +69,7 @@ export type PlannerStepExecutor = (
     input: PlannerStepRequest
 ) => Promise<PlannerStepResult>;
 
+/** Terminal transport actions from planner; intent-only, policy must render. */
 export type PlannerTerminalAction =
     | {
           responseAction: 'ignore';
@@ -80,11 +83,13 @@ export type PlannerTerminalAction =
           imageRequest: ChatImageRequest;
       };
 
+/** Input to policy-owned planner result applier. Produced by orchestrator with request. */
 export type PlannerApplicationInput = {
     normalizedRequest: PostChatRequest;
     plannerStepResult: PlannerStepResult;
 };
 
+/** Output from policy-owned result applier; plannerMattered indicates advisory influence. */
 export type PlannerApplicationResult = {
     plan: ChatPlan;
     surfacePolicy?: ChatSurfacePolicyCoercion;

@@ -620,10 +620,16 @@ export const resolveWorkflowRuntimeConfig = (input: {
     const defaultReviewCycles =
         workflowProfile.defaultLimits.maxReviewCycles ??
         Math.max(0, workflowProfile.defaultLimits.maxDeliberationCalls - 1);
+    const contractBudget = sanitizeNonNegativeInteger(
+        executionContract?.limits.maxDeliberationCalls ?? Infinity,
+        Infinity
+    );
     const resolvedMaxPlanCycles = Math.min(
         sanitizeNonNegativeInteger(defaultPlanCycles, defaultPlanCycles),
-        sanitizeNonNegativeInteger(modeMaxPlanCycles, modeMaxPlanCycles)
+        sanitizeNonNegativeInteger(modeMaxPlanCycles, modeMaxPlanCycles),
+        contractBudget
     );
+    const remainingBudget = Math.max(0, contractBudget - resolvedMaxPlanCycles);
     const resolvedMaxReviewCycles = Math.min(
         sanitizeNonNegativeInteger(
             executionContract?.limits.maxDeliberationCalls !== undefined
@@ -633,7 +639,8 @@ export const resolveWorkflowRuntimeConfig = (input: {
                   : input.maxIterations * 2,
             defaultReviewCycles
         ),
-        sanitizeNonNegativeInteger(modeMaxReviewCycles, modeMaxReviewCycles)
+        sanitizeNonNegativeInteger(modeMaxReviewCycles, modeMaxReviewCycles),
+        remainingBudget
     );
     const resolvedMaxDeliberationCalls =
         resolvedMaxPlanCycles + resolvedMaxReviewCycles;
