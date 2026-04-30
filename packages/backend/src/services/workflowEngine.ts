@@ -166,8 +166,10 @@ export type RunBoundedReviewWorkflowInput = {
         requestedModel: string | undefined
     ) => ReviewWorkflowUsageSummary;
     plannerStepRecord?: StepRecord;
+    // Workflow engine owns when the plan step runs.
     plannerStepRequest?: PlannerStepRequest;
     plannerStepExecutor?: PlannerStepExecutor;
+    // Caller-owned policy application. Engine only consumes continuation output.
     planContinuationBuilder?: PlanContinuationBuilder;
     contextStepRequest?: ContextStepRequest;
     contextStepExecutor?: ContextStepExecutor;

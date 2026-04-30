@@ -46,8 +46,8 @@ That means:
 - the profile describes what kind of workflow it is
 - the adapter connects that workflow to the real route and model calls
 
-Adapters should not decide what step comes next or invent their own stop
-reasons. Profiles should not bypass engine legality checks or hard limits.
+Callers should not invent workflow transitions or stop reasons. Profiles
+should not bypass engine legality checks or hard limits.
 
 ## Runtime shape
 
@@ -128,12 +128,12 @@ The current chat path looks like this:
 1. `chatOrchestrator` receives and normalizes the request.
 2. The Execution Contract sets the allowed behavior and limits.
 3. The backend resolves workflow mode and profile.
-4. `chatOrchestrator` injects planner workflow seams:
-    - `PlannerStepExecutor` invokes planner.
-    - `PlanContinuationBuilder` applies planner output through backend policy.
+4. `chatOrchestrator` wires planner dependencies for workflow execution:
+    - `PlannerStepExecutor` calls the planner during the `plan` step.
+    - `PlanContinuationBuilder` applies backend policy and builds the next workflow action.
 5. `chatService` runs the workflow engine with the profile selected for the mode:
     - workflow runs `plan` first through the injected planner executor
-    - workflow calls post-planner adapter to classify terminal action or continue message path
+    - workflow calls `PlanContinuationBuilder` to choose `terminal_action` or `continue_message`
     - context-step and generation run only after planner application
     - `fast` uses the `generate-only` profile (one generate step, no assess/revise)
     - `balanced` and `grounded` use the `bounded-review` profile (generate -> assess -> revise loop)
@@ -315,10 +315,11 @@ Optional profile extensions can support review and revision behavior, but they
 cannot override required no-generation classification, disposition, or
 termination-reason mapping.
 
-Mode chooses the kind of run. Profile chooses the step pattern. The engine
-enforces legality and limits. Adapters connect the profile to runtime calls.
+Mode chooses the kind of run. Profile chooses the step pattern.
+`workflowEngine` enforces legality and limits. `chatOrchestrator` and
+`chatService` connect workflow to runtime calls.
 
-## Engine, profile, and adapter roles
+## Engine, profile, and caller roles
 
 Use this split when ownership is unclear:
 
@@ -512,7 +513,7 @@ These workflow rules should stay true even as profiles expand:
 - profile recommendations are advisory, not authority
 - mode chooses the kind of run first
 - profile chooses the executable step shape second
-- adapters wire the workflow into the real app, but do not own workflow
+- callers wire workflow into the app, but do not own workflow timing or legality
   control-plane decisions
 
 ## Future work

@@ -55,7 +55,7 @@ import {
 } from './workflowEngine.js';
 import {
     planTerminalActionToResponse,
-    type PlannerActionOutcome,
+    type PlanContinuationOutcome,
 } from './chatService/planContinuation.js';
 import type {
     PlanContinuationBuilder,
@@ -523,7 +523,7 @@ export type RunChatMessagesInput = {
     plannerStepRequest?: PlannerStepRequest;
     plannerStepExecutor?: PlannerStepExecutor;
     planContinuationBuilder?: PlanContinuationBuilder;
-    plannerActionOutcome?: PlannerActionOutcome;
+    plannerActionOutcome?: PlanContinuationOutcome;
     latestUserInput?: string;
     executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
     ExecutionContract?: ExecutionContract;

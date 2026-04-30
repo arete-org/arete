@@ -1,6 +1,6 @@
 /**
- * @description: Classifies policy-applied planner actions into either a
- * terminal transport response or message-continuation workflow execution.
+ * @description: Classifies policy-applied plan actions into either a
+ * terminal response path or a message-continuation path.
  * @footnote-scope: core
  * @footnote-module: ChatServicePlanContinuation
  * @footnote-risk: medium - Incorrect classification can skip generation or return wrong action types.
@@ -14,7 +14,7 @@ import type { ChatPlan } from '../chatPlanner.js';
 import type { PlannerFallbackReason } from '../plannerFallbackTelemetryRollup.js';
 import type { PlanTerminalAction } from '../plannerWorkflowSeams.js';
 
-export type PlannerActionOutcome =
+export type PlanContinuationOutcome =
     | {
           kind: 'continue_message';
       }
@@ -28,7 +28,7 @@ export type PlannerActionOutcome =
 export const classifyPlanContinuation = (input: {
     executionPlan: ChatPlan;
     normalizedRequest: PostChatRequest;
-}): PlannerActionOutcome => {
+}): PlanContinuationOutcome => {
     if (input.executionPlan.action === 'ignore') {
         return {
             kind: 'terminal_action',

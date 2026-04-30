@@ -498,6 +498,8 @@ export const createChatOrchestrator = ({
             invocationContext: plannerInvocationContext,
             capabilityProfiles: plannerCapabilityOptions,
         };
+        // Applies backend policy to planner output and returns the next
+        // workflow action (`terminal_action` or `continue_message`).
         const planContinuationBuilder: PlanContinuationBuilder = (input) => {
             if (input.plannerStepResult.execution.status === 'failed') {
                 const plannerFailureReason: PlannerFallbackReason =

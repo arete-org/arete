@@ -17,13 +17,13 @@ This file tracks the remaining rollout work. The canonical architecture is in
 
 - **Planner timing**: Completed. Planner now runs inside workflow timing
   through injected `PlannerStepExecutor` and `PlanContinuationBuilder`.
-  Workflow owns plan-step ordering and plan lineage.
+  `workflowEngine` owns plan-step ordering and plan lineage.
 
 - **Post-plan message assembly seam**: Completed. Planner-applied
   message/payload assembly is now routed through the
   `PlanContinuationBuilder` seam and feeds workflow continuation
   (`terminal_action` or `continue_message`). Assembly wiring is still created
-  in orchestrator-owned dependency setup.
+  in `chatOrchestrator` dependency setup.
 
 - **Planner lineage cleanup**: Completed for normal runtime. Workflow-owned
   `plan` step is now the canonical planner lineage source; duplicate planner
