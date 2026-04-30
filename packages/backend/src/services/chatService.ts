@@ -55,6 +55,14 @@ import {
     type RunBoundedReviewWorkflowResult,
     type WorkflowPolicy,
 } from './workflowEngine.js';
+import {
+    plannerTerminalActionToResponse,
+    type PlannerActionOutcome,
+} from './chatService/plannerActionOutcome.js';
+import type {
+    PlannerStepExecutor,
+    PlannerStepRequest,
+} from './plannerWorkflowSeams.js';
 import { runEvidenceIngestion } from './executionContractTrustGraph/trustGraphEvidenceIngestion.js';
 import type {
     ScopeTuple,
@@ -377,74 +385,6 @@ const OWNERSHIP_DENIAL_PREFIXES: readonly string[] = [
     'insufficient_data:',
 ];
 
-const hasPlannerWorkflowStep = (workflow: WorkflowRecord): boolean =>
-    workflow.steps.some((step) => step.stepKind === 'plan');
-
-const attachPlannerWorkflowLineage = (input: {
-    workflowLineage: WorkflowRecord;
-    executionContext: ResponseMetadataRuntimeContext['executionContext'];
-    generationStartedAtMs: number;
-}): WorkflowRecord => {
-    const plannerExecution = input.executionContext?.planner;
-    if (plannerExecution === undefined) {
-        return input.workflowLineage;
-    }
-
-    if (hasPlannerWorkflowStep(input.workflowLineage)) {
-        return input.workflowLineage;
-    }
-
-    const existingStepIds = new Set(
-        input.workflowLineage.steps.map((step) => step.stepId)
-    );
-    let plannerStepId = 'step_plan_1';
-    let plannerStepIndex = 1;
-    while (existingStepIds.has(plannerStepId)) {
-        plannerStepIndex += 1;
-        plannerStepId = `step_plan_${plannerStepIndex}`;
-    }
-
-    const plannerStep = buildPlannerStepRecord({
-        stepId: plannerStepId,
-        attempt: 1,
-        finishedAtMs: input.generationStartedAtMs,
-        summary: {
-            status: plannerExecution.status,
-            reasonCode: plannerExecution.reasonCode,
-            purpose: plannerExecution.purpose,
-            contractType: plannerExecution.contractType,
-            applyOutcome: plannerExecution.applyOutcome,
-            durationMs: plannerExecution.durationMs,
-            profileId: plannerExecution.profileId,
-            originalProfileId: plannerExecution.originalProfileId,
-            effectiveProfileId: plannerExecution.effectiveProfileId,
-            provider: plannerExecution.provider,
-            model: plannerExecution.model,
-            mattered: plannerExecution.mattered,
-            matteredControlIds: plannerExecution.matteredControlIds,
-        },
-    });
-
-    return {
-        ...input.workflowLineage,
-        stepCount: input.workflowLineage.steps.length + 1,
-        maxSteps: input.workflowLineage.maxSteps + 1,
-        ...(input.workflowLineage.effectiveLimits !== undefined && {
-            effectiveLimits: input.workflowLineage.effectiveLimits.map(
-                (limit) =>
-                    limit.key === 'maxWorkflowSteps' &&
-                    typeof limit.value === 'number'
-                        ? {
-                              ...limit,
-                              value: limit.value + 1,
-                          }
-                        : limit
-            ),
-        }),
-        steps: [plannerStep, ...input.workflowLineage.steps],
-    };
-};
-
 const extractOwnershipDenialReason = (
     details: string | undefined
 ):
@@ -579,6 +519,9 @@ export type RunChatMessagesInput = {
     toolRequest?: ToolInvocationRequest;
     contextStepRequest?: ContextStepRequest;
     contextStepExecutor?: ContextStepExecutor;
+    plannerStepRequest?: PlannerStepRequest;
+    plannerStepExecutor?: PlannerStepExecutor;
+    plannerActionOutcome?: PlannerActionOutcome;
     latestUserInput?: string;
     executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
     ExecutionContract?: ExecutionContract;
@@ -591,6 +534,27 @@ export type FinalToolExecutionTelemetry = {
     reasonCode?: ToolExecutionContext['reasonCode'];
     eligible?: boolean;
     requestReasonCode?: ToolInvocationRequest['reasonCode'];
+};
+
+export type RunChatMessagesResult =
+    | {
+          kind: 'message';
+          message: string;
+          metadata: ResponseMetadata;
+          generationDurationMs: number;
+          finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
+      }
+    | {
+          kind: 'terminal_action';
+          response: Exclude<PostChatResponse, { action: 'message' }>;
+          generationDurationMs: number;
+      };
+
+type RunChatMessagesLegacyResult = {
+    message: string;
+    metadata: ResponseMetadata;
+    generationDurationMs: number;
+    finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
 };
 
 /**
@@ -689,7 +653,7 @@ export const createChatService = ({
         };
     };
 
-    const runChatMessages = async ({
+    const runChatMessagesWithOutcome = async ({
         messages,
         conversationSnapshot,
         orchestrationStartedAtMs,
@@ -705,25 +669,18 @@ export const createChatService = ({
         toolRequest,
         contextStepRequest,
         contextStepExecutor,
+        plannerStepRequest,
+        plannerStepExecutor,
+        plannerActionOutcome: _plannerActionOutcome,
         latestUserInput,
         executionContractTrustGraphContext,
         ExecutionContract,
         steerabilityControls,
-    }: RunChatMessagesInput): Promise<{
-        message: string;
-        metadata: ResponseMetadata;
-        generationDurationMs: number;
-        finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
-    }> => {
+    }: RunChatMessagesInput): Promise<RunChatMessagesResult> => {
         const toShortCircuitMessageResult = (
             response: PostChatResponse,
             finalToolExecutionTelemetry: FinalToolExecutionTelemetry
-        ): {
-            message: string;
-            metadata: ResponseMetadata;
-            generationDurationMs: number;
-            finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
-        } => {
+        ): RunChatMessagesResult => {
             if (response.action !== 'message' || response.metadata === null) {
                 throw new Error(
                     'Tool short-circuit response must be a message with metadata.'
@@ -731,6 +688,7 @@ export const createChatService = ({
             }
 
             return {
+                kind: 'message',
                 message: response.message,
                 metadata: response.metadata,
                 generationDurationMs: Math.max(
@@ -853,9 +811,11 @@ export const createChatService = ({
                     maxIterations: Math.max(
                         0,
                         Math.min(
-                            Math.ceil(
-                                workflowExecutionLimits.maxDeliberationCalls / 2
-                            ),
+                            workflowExecutionLimits.maxReviewCycles ??
+                                Math.ceil(
+                                    workflowExecutionLimits.maxDeliberationCalls /
+                                        2
+                                ),
                             Math.ceil(
                                 Math.max(
                                     0,
@@ -871,6 +831,8 @@ export const createChatService = ({
                 captureUsage: (result, requestedModel) =>
                     recordUsageForStep(result, requestedModel),
                 plannerStepRecord: plannerWorkflowStepRecord,
+                plannerStepRequest,
+                plannerStepExecutor,
                 contextStepRequest,
                 contextStepExecutor,
             });
@@ -899,6 +861,18 @@ export const createChatService = ({
                         );
                     }
                     break;
+                }
+                case 'terminal_action': {
+                    return {
+                        kind: 'terminal_action',
+                        response: plannerTerminalActionToResponse(
+                            workflowResult.terminalAction
+                        ),
+                        generationDurationMs: Math.max(
+                            0,
+                            Date.now() - generationStartedAt
+                        ),
+                    };
                 }
                 case 'no_generation': {
                     workflowLineage = workflowResult.workflowLineage;
@@ -1210,14 +1184,7 @@ export const createChatService = ({
                     durationMs: generationDurationMs,
                 } satisfies GenerationExecutionContext)
               : undefined;
-        const normalizedWorkflowLineage =
-            workflowLineage !== undefined
-                ? attachPlannerWorkflowLineage({
-                      workflowLineage,
-                      executionContext,
-                      generationStartedAtMs: generationStartedAt,
-                  })
-                : undefined;
+        const normalizedWorkflowLineage = workflowLineage;
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
@@ -1312,11 +1279,36 @@ export const createChatService = ({
         });
 
         return {
+            kind: 'message',
             message: generationResult.text,
             metadata: metadataWithTrustGraph,
             generationDurationMs,
             ...(finalToolExecutionTelemetry !== undefined && {
                 finalToolExecutionTelemetry,
+            }),
+        };
+    };
+
+    const runChatMessages = async (
+        input: RunChatMessagesInput
+    ): Promise<RunChatMessagesLegacyResult> => {
+        const result = await runChatMessagesWithOutcome(input);
+        if (
+            result.kind !== 'message' ||
+            result.message === undefined ||
+            result.metadata === undefined
+        ) {
+            throw new Error(
+                'runChatMessages received terminal action outcome; use runChatMessagesWithOutcome for action-aware orchestration.'
+            );
+        }
+
+        return {
+            message: result.message,
+            metadata: result.metadata,
+            generationDurationMs: result.generationDurationMs,
+            ...(result.finalToolExecutionTelemetry !== undefined && {
+                finalToolExecutionTelemetry: result.finalToolExecutionTelemetry,
             }),
         };
     };
@@ -1340,10 +1332,20 @@ export const createChatService = ({
             },
             { role: 'user', content: question.trim() },
         ];
-        const response = await runChatMessages({
+        const response = await runChatMessagesWithOutcome({
             messages,
             conversationSnapshot: question.trim(),
         });
+
+        if (response.kind !== 'message') {
+            if (response.response === undefined) {
+                return {
+                    action: 'ignore',
+                    metadata: null,
+                };
+            }
+            return response.response;
+        }
 
         return {
             action: 'message',
@@ -1356,5 +1358,6 @@ export const createChatService = ({
     return {
         runChat,
         runChatMessages,
+        runChatMessagesWithOutcome,
     };
 };

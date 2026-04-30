@@ -314,7 +314,8 @@ The policy defines capability toggles such as `enablePlanning`,
 and `enableRevision`.
 
 The default limits define hard caps such as `maxWorkflowSteps`, `maxToolCalls`,
-`maxDeliberationCalls`, `maxTokensTotal`, and `maxDurationMs`.
+`maxPlanCycles`, `maxReviewCycles`, `maxDeliberationCalls` (compatibility
+field), `maxTokensTotal`, and `maxDurationMs`.
 
 Optional profile extensions can support review and revision behavior, but they
 cannot override required no-generation classification, disposition, or
@@ -355,12 +356,12 @@ The shared workflow vocabulary includes `plan`, `tool`, `generate`, `assess`,
 
 ### Current ownership
 
-| Component                        | Owner   | Notes                                                                                               |
-| -------------------------------- | ------- | --------------------------------------------------------------------------------------------------- |
-| `workflowEngine`                 | Core    | Owns bounded-review steps (`generate`, `assess`, `revise`) and injected context-step execution      |
-| `chatOrchestrator`               | Core    | Owns planner execution (pre-workflow), mode/profile/contract resolution, tool intent construction   |
-| `chatService`                    | Core    | Invokes workflowEngine, handles context-step short-circuit responses (clarification, failure)       |
-| `toolRegistryContextStepAdapter` | Adapter | Keeps workflowEngine provider-neutral while mapping tool-registry execution into context-step shape |
+| Component                        | Owner   | Notes                                                                                                               |
+| -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------- |
+| `workflowEngine`                 | Core    | Owns bounded-review steps (`generate`, `assess`, `revise`) and injected context-step execution                      |
+| `chatOrchestrator`               | Core    | Owns deterministic bootstrap (mode/profile/contract), planner policy application seam, and tool intent construction |
+| `chatService`                    | Core    | Invokes workflowEngine, handles context-step short-circuit responses (clarification, failure)                       |
+| `toolRegistryContextStepAdapter` | Adapter | Keeps workflowEngine provider-neutral while mapping tool-registry execution into context-step shape                 |
 
 ### Context-step executor pattern
 
@@ -389,6 +390,15 @@ The adapter `toolRegistryContextStepAdapter.ts` implements this pattern for
 Planner runs before workflow execution in `chatOrchestrator`. Planner
 output goes through surface policy, capability policy, and tool policy before
 reaching the chat service.
+
+Groundwork now includes an injected planner policy-application seam
+(`PlannerResultApplier`) that keeps planner output advisory while preserving
+backend policy authority. Planner timing is still pre-workflow in current
+runtime behavior.
+
+Post-plan planner payload/message assembly now runs through a bounded
+`chatService` seam (`assemblePostPlanGenerationInput`) so message construction
+is no longer embedded directly in orchestration branches.
 
 Planner lineage can appear in workflow metadata as a `plan` step when that
 metadata exists for the run. That is a lineage bridge, not a change in planner
@@ -425,7 +435,8 @@ Workflow limits are backend-enforced stops, not model suggestions.
 `WorkflowPolicy` defines legal transitions and capability toggles.
 
 `ExecutionLimits` defines hard caps: `maxWorkflowSteps`, `maxToolCalls`,
-`maxDeliberationCalls`, `maxTokensTotal`, and `maxDurationMs`.
+`maxPlanCycles`, `maxReviewCycles`, `maxDeliberationCalls` (compatibility),
+`maxTokensTotal`, and `maxDurationMs`.
 
 Model output can recommend transitions only where policy allows.
 

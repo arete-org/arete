@@ -4,18 +4,33 @@ This file tracks the remaining rollout work. The canonical architecture is in
 [docs/architecture/workflow.md](../architecture/workflow.md) and
 [docs/architecture/context-integrations/README.md](../architecture/context-integrations/README.md).
 
+## Completed Groundwork
+
+- **Planning/review budgets**: Completed. Workflow limits now separate planning
+  cycles from review cycles through `maxPlanCycles` and `maxReviewCycles`.
+  `maxDeliberationCalls` remains as a compatibility field.
+
+- **Planner policy application seam**: Completed. `PlannerResultApplier`
+  centralizes post-planner policy application such as surface coercion,
+  generation override merge, single-tool policy, profile resolution, and
+  context-step request derivation.
+
+- **Planner timing**: Still pending. Planner still runs before workflow
+  execution in `chatOrchestrator`.
+
+- **Post-plan message assembly seam**: Completed. Planner-applied
+  message/payload assembly now runs through a bounded `chatService` seam so the
+  planner payload and generation snapshot assembly are no longer embedded in
+  the orchestration branch.
+
 ## Pending Work
 
-- **Planning and review budgets**: Split the old broad deliberation budget into
-  separate planning and review limits, such as `maxPlanCycles` and
-  `maxReviewCycles`. Planning and review have different jobs, costs, and
-  failure modes, so they should not share one vague budget.
-
-- **Planner step ownership**: Planner still runs before workflow execution in
-  `chatOrchestrator`. The desired shape is a hybrid workflow step: workflow
-  owns planner timing through an injected planner executor, while mode,
-  Execution Contract, profile, and policy layers remain authoritative. Planner
-  output stays advisory.
+- **Planner timing cutover**: Move planner invocation into workflow-owned timing
+  through an injected planner executor.
+  Remaining blocker: non-message planner actions (`react`, `ignore`, `image`)
+  and early orchestration exits are still handled before workflow execution, so
+  timing cutover needs a bounded workflow/transport seam for those outcomes
+  without moving policy logic into `workflowEngine`.
 
 - **Planner lineage cleanup**: Planner lineage currently bridges into workflow
   metadata after planner execution. Before moving planner timing, consolidate
@@ -30,11 +45,6 @@ This file tracks the remaining rollout work. The canonical architecture is in
   current search/runtime path. The proposal in
   [docs/proposals/web-search-context-integration.md](../proposals/web-search-context-integration.md)
   describes the intended provider-neutral direction.
-
-- **maxIterations=0 semantics**: When `maxIterations=0`, the workflow completes
-  after initial generation with `terminationReason: 'goal_satisfied'`. This is
-  single-pass generation without a review loop. Documentation follow-up is
-  optional.
 
 ## Related Docs
 

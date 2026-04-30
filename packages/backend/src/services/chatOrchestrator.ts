@@ -8,7 +8,6 @@
 import type {
     PostChatRequest,
     PostChatResponse,
-    ChatConversationMessage,
 } from '@footnote/contracts/web';
 import type { SafetyTier } from '@footnote/contracts/ethics-core';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
@@ -22,13 +21,11 @@ import {
     type ChatPlannerInvocationContext,
 } from './chatPlanner.js';
 import { createOpenAiChatPlannerStructuredExecutor } from './chatPlannerStructuredOpenAi.js';
-import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import {
     resolveActiveProfileOverlayPrompt,
     resolveBotProfileDisplayName,
     resolveChatPersonaProfile,
 } from './chatProfileOverlay.js';
-import { coercePlanForSurface } from './chatSurfacePolicy.js';
 import { createModelProfileResolver } from './modelProfileResolver.js';
 import { listCapabilityProfileOptionsForStep } from './modelCapabilityPolicy.js';
 import {
@@ -40,11 +37,10 @@ import { resolveExecutionContract } from './executionContractResolver.js';
 import { resolveWorkflowModeDecision } from './workflowProfileRegistry.js';
 import { buildSteerabilityControls } from './steerabilityControls.js';
 import type { WeatherForecastTool } from './openMeteoForecastTool.js';
-import { applySingleToolPolicy } from './tools/toolPolicy.js';
-import { resolveToolSelection } from './tools/toolRegistry.js';
 import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
 import { resolveWeatherClarificationContinuation } from './tools/weatherClarificationContinuation.js';
 import { createToolRegistryContextStepExecutor } from './contextIntegrations/toolRegistryContextStepAdapter.js';
+import { createPlannerResultApplier } from './chatOrchestrator/plannerResultApplier.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import type { IncidentAlertRouter } from './incidentAlerts.js';
@@ -57,12 +53,12 @@ import {
     runDeterministicEvaluator,
     type EvaluatorExecutionContext,
 } from './chatOrchestrator/evaluatorCoordination.js';
-import { resolveExecutionProfile } from './chatOrchestrator/profileResolution.js';
-import { resolveNonMessagePlannerAction } from './chatOrchestrator/actionResolution.js';
+import { type PlannerPayloadChatPlan } from './chatOrchestrator/plannerPayload.js';
+import { assemblePostPlanGenerationInput } from './chatService/postPlanAssembly.js';
 import {
-    buildPlannerPayload,
-    type PlannerPayloadChatPlan,
-} from './chatOrchestrator/plannerPayload.js';
+    resolvePlannerActionOutcome,
+    plannerTerminalActionToResponse,
+} from './chatService/plannerActionOutcome.js';
 import {
     buildControlObservabilityEnvelope,
     emitControlObservabilityEnvelope,
@@ -333,67 +329,12 @@ export const createChatOrchestrator = ({
                 });
             }
         };
-        const { plan, surfacePolicy } = coercePlanForSurface(
-            normalizedRequest,
-            planned.plan,
-            chatOrchestratorLogger
-        );
-        // Profile selection precedence:
-        // - `/chat` style submit requests may explicitly override via
-        //   request.profileId.
-        // - Non-submit requests defer to planner-selected capability profile.
-        // - Startup default profile remains final fail-open fallback.
-        // Fallback ownership:
-        // - workflow profile fallback: workflowProfileRegistry
-        // - model selector/default fallback: modelProfileResolver
-        // - planner output fallback: chatPlanner
-        // Keep each fallback policy in its owner; do not duplicate here.
-        // Runtime resolution stays authoritative and fail-open:
-        // unknown/disabled selections never hard-fail the request.
-        // Request-level generation overrides are advisory knobs from callers
-        // like `/chat` that want quick side-by-side runs without changing
-        // planner prompt semantics.
-        const requestGeneration = normalizedRequest.generation;
-        let generationForExecution: ChatGenerationPlan = {
-            ...plan.generation,
-            ...(requestGeneration?.reasoningEffort
-                ? { reasoningEffort: requestGeneration.reasoningEffort }
-                : {}),
-            ...(requestGeneration?.verbosity
-                ? { verbosity: requestGeneration.verbosity }
-                : {}),
-        };
-        if (clarificationContinuation.kind === 'resolved') {
-            generationForExecution = {
-                ...generationForExecution,
-                toolIntent: {
-                    toolName: 'weather_forecast',
-                    requested: true,
-                    input: clarificationContinuation.selectedOption.input,
-                },
-            };
-        }
-        const toolPolicyDecision = applySingleToolPolicy(
-            generationForExecution
-        );
-        generationForExecution = toolPolicyDecision.generation;
-        if (toolPolicyDecision.logEvent) {
-            chatOrchestratorLogger.warn(
-                'planner requested both weather and search; applying single-tool policy with weather priority',
-                {
-                    ...toolPolicyDecision.logEvent,
-                    surface: normalizedRequest.surface,
-                }
-            );
-        }
         // Contract-governed routing boundary:
         // 1) resolve initial high-level workflow mode (fixed for this run in v1)
         // 2) derive Execution Contract preset from mode
         // 3) execute orchestration within that contract
         const workflowModeResolution = resolveWorkflowModeDecision({
             modeId: runtimeConfig.chatWorkflow.modeId,
-            executionContractResponseMode:
-                generationForExecution.responseIntentHint?.responseMode,
         });
         // Pick the run mode first, then derive the contract from it. That keeps
         // later branches from inventing their own policy rules.
@@ -406,58 +347,57 @@ export const createChatOrchestrator = ({
                 workflowModeResolution.modeDecision.behavior
                     .executionContractPresetId,
         }).policyContract;
-        const profileResolution = resolveExecutionProfile(
-            {
-                normalizedRequest,
-                plan,
-                enabledProfiles,
-                searchCapableProfiles,
-                enabledProfilesById,
-                defaultResponseProfile,
-                generationForExecution,
-                resolvedExecutionPolicy: resolvedExecutionContract,
-            },
-            chatOrchestratorLogger
-        );
-        generationForExecution = profileResolution.generationForExecution;
-        fallbackReasons.push(...profileResolution.fallbackReasons);
-        const selectedResponseProfile =
-            profileResolution.selectedResponseProfile;
-        const fallbackRollupSelectionSource =
-            profileResolution.fallbackRollupSelectionSource;
-        const originalSelectedProfileId =
-            profileResolution.originalSelectedProfileId;
-        const effectiveSelectedProfileId =
-            profileResolution.effectiveSelectedProfileId;
-        const rerouteApplied = profileResolution.rerouteApplied;
-        const webSearchToolRequestContextOverride =
-            profileResolution.webSearchToolRequestContextOverride;
-        let toolExecutionContext = profileResolution.toolExecutionContext;
-        const toolSelection = resolveToolSelection({
-            generation: generationForExecution,
+        const plannerResultApplier = createPlannerResultApplier({
+            enabledProfiles,
+            searchCapableProfiles,
+            enabledProfilesById,
+            defaultResponseProfile,
             weatherForecastTool,
-            webSearchToolRequestOverride: webSearchToolRequestContextOverride,
-            inheritedToolExecution: toolExecutionContext,
+            logger: chatOrchestratorLogger,
         });
-        const toolIntent = toolSelection.toolIntent;
-        const toolRequestContext = toolSelection.toolRequest;
-        toolExecutionContext =
-            toolSelection.toolExecution ?? toolExecutionContext;
-        const weatherContextStepRequest =
-            toolRequestContext.toolName === 'weather_forecast' &&
-            toolRequestContext.requested
-                ? {
-                      integrationName: 'weather_forecast',
-                      requested: toolRequestContext.requested,
-                      eligible: toolRequestContext.eligible,
-                      ...(toolRequestContext.reasonCode !== undefined && {
-                          reasonCode: toolRequestContext.reasonCode,
-                      }),
-                      ...(toolIntent.input !== undefined && {
-                          input: toolIntent.input as Record<string, unknown>,
-                      }),
-                  }
-                : undefined;
+        const plannerApplication = plannerResultApplier({
+            normalizedRequest,
+            plannerStepResult: {
+                plan: planned.plan,
+                execution: planned.execution,
+                ingestion: {
+                    outputApplyOutcome:
+                        planned.execution.status === 'executed'
+                            ? 'accepted'
+                            : 'rejected',
+                    fallbackTier:
+                        planned.execution.status === 'executed'
+                            ? 'none'
+                            : 'safe_default_plan',
+                    correctionCodes: [],
+                    outOfContractFields: [],
+                    authorityFieldAttempts: [],
+                },
+                diagnostics: planned.diagnostics,
+            },
+            clarificationContinuation,
+            resolvedExecutionPolicy: resolvedExecutionContract,
+        });
+        fallbackReasons.push(
+            ...(plannerApplication.fallbackReasons as PlannerFallbackReason[])
+        );
+        const plan = plannerApplication.plan;
+        const surfacePolicy = plannerApplication.surfacePolicy;
+        const generationForExecution =
+            plannerApplication.generationForExecution;
+        const selectedResponseProfile =
+            plannerApplication.selectedResponseProfile;
+        const fallbackRollupSelectionSource =
+            plannerApplication.fallbackRollupSelectionSource as PlannerSelectionSource;
+        const originalSelectedProfileId =
+            plannerApplication.originalSelectedProfileId;
+        const effectiveSelectedProfileId =
+            plannerApplication.effectiveSelectedProfileId;
+        const rerouteApplied = plannerApplication.rerouteApplied;
+        const toolRequestContext = plannerApplication.toolRequestContext;
+        const toolIntent = generationForExecution.toolIntent;
+        const toolExecutionContext = plannerApplication.toolExecutionContext;
+        const weatherContextStepRequest = plannerApplication.contextStepRequest;
         const weatherContextStepExecutor =
             weatherContextStepRequest !== undefined
                 ? createToolRegistryContextStepExecutor({
@@ -484,12 +424,11 @@ export const createChatOrchestrator = ({
             plannerRequestedWeather:
                 plannerDiagnostics.normalizedToolIntentName ===
                 'weather_forecast',
-            toolSelectionRequested: toolSelection.toolRequest.requested,
-            toolSelectionEligible: toolSelection.toolRequest.eligible,
-            toolSelectionToolName: toolSelection.toolRequest.toolName,
-            toolSelectionReasonCode: toolSelection.toolRequest.reasonCode,
-            selectedWeather:
-                toolSelection.toolRequest.toolName === 'weather_forecast',
+            toolSelectionRequested: toolRequestContext.requested,
+            toolSelectionEligible: toolRequestContext.eligible,
+            toolSelectionToolName: toolRequestContext.toolName,
+            toolSelectionReasonCode: toolRequestContext.reasonCode,
+            selectedWeather: toolRequestContext.toolName === 'weather_forecast',
         };
         if (
             weatherRouting.weatherLikeRequest ||
@@ -555,7 +494,8 @@ export const createChatOrchestrator = ({
                 : surfacePolicy !== undefined ||
                     providerPreferencePolicyAdjusted ||
                     rerouteApplied ||
-                    toolPolicyDecision.logEvent !== undefined
+                    plannerApplication.plannerApplyOutcome ===
+                        'adjusted_by_policy'
                   ? 'adjusted_by_policy'
                   : 'applied';
         const emitControlObservability = (input: {
@@ -613,32 +553,16 @@ export const createChatOrchestrator = ({
             ...plan,
             generation: generationForExecution,
             profileId: selectedResponseProfile.id,
-            selectedCapabilityProfile:
-                profileResolution.selectedCapabilityProfile,
+            ...(plannerApplication.selectedCapabilityProfile !== undefined && {
+                selectedCapabilityProfile:
+                    plannerApplication.selectedCapabilityProfile,
+            }),
         };
 
-        const nonMessageResponse = resolveNonMessagePlannerAction(
-            {
-                executionPlan,
-                normalizedRequest,
-                fallbackRollupSelectionSource,
-            },
-            {
-                fallbackReasons,
-                emitFallbackRollup,
-                notifyBreakerEvent,
-                warn: (message, meta) => {
-                    chatOrchestratorLogger.warn(message, meta);
-                },
-            }
-        );
-        if (nonMessageResponse) {
-            emitControlObservability({
-                responseAction: nonMessageResponse.action,
-                responseModality: executionPlan.modality,
-            });
-            return nonMessageResponse;
-        }
+        const plannerActionOutcome = resolvePlannerActionOutcome({
+            executionPlan,
+            normalizedRequest,
+        });
         const promptLayers = renderConversationPromptLayers(
             normalizedRequest.surface === 'discord'
                 ? 'discord-chat'
@@ -786,36 +710,6 @@ export const createChatOrchestrator = ({
             generation: executionPlan.generation,
         };
 
-        // Planner output is injected as a final system message so generation
-        // follows one bounded payload selected by backend policy.
-        // This payload is execution input only, never policy authority.
-        const conversationMessages: Array<
-            Pick<ChatConversationMessage, 'role' | 'content'>
-        > = [
-            {
-                role: 'system',
-                content: promptLayers.systemPrompt,
-            },
-            {
-                role: 'system',
-                content: personaPrompt,
-            },
-            ...normalizedConversation,
-            {
-                role: 'system',
-                content: [
-                    '// ==========',
-                    '// BEGIN Planner Output',
-                    '// This bounded planner output was selected by backend policy for this response.',
-                    '// It is execution input for this run, not execution-contract authority.',
-                    '// ==========',
-                    buildPlannerPayload(executionPlanForPrompt, surfacePolicy),
-                    '// ==========',
-                    '// END Planner Output',
-                    '// ==========',
-                ].join('\n'),
-            },
-        ];
         const safetyTierRank: Record<SafetyTier, number> = {
             Low: 1,
             Medium: 2,
@@ -830,28 +724,43 @@ export const createChatOrchestrator = ({
         const executionContractScopeTuple =
             buildExecutionContractScopeTuple(normalizedRequest);
 
+        if (plannerActionOutcome.kind === 'terminal_action') {
+            if (plannerActionOutcome.fallbackReason !== undefined) {
+                fallbackReasons.push(plannerActionOutcome.fallbackReason);
+            }
+            if (plannerActionOutcome.warningMessage !== undefined) {
+                chatOrchestratorLogger.warn(
+                    plannerActionOutcome.warningMessage
+                );
+            }
+            const terminalResponse = plannerTerminalActionToResponse(
+                plannerActionOutcome.terminalAction
+            );
+            return terminalResponse;
+        }
+
+        const postPlanAssembly = assemblePostPlanGenerationInput({
+            systemPrompt: promptLayers.systemPrompt,
+            personaPrompt,
+            normalizedConversation,
+            executionPlanForPrompt,
+            surfacePolicy,
+            normalizedRequest,
+            orchestrationSafetyTier,
+            toolIntent,
+            toolRequestContext,
+            executionContract: {
+                policyId: resolvedExecutionContract.policyId,
+                policyVersion: resolvedExecutionContract.policyVersion,
+            },
+        });
+
         // By the time we call ChatService, planner output and request overrides
         // have already been folded into one concrete profile and generation
         // plan.
-        const response = await chatService.runChatMessages({
-            messages: conversationMessages,
-            conversationSnapshot: JSON.stringify({
-                request: normalizedRequest,
-                planner: {
-                    action: executionPlan.action,
-                    modality: executionPlan.modality,
-                    profileId: executionPlan.profileId,
-                    safetyTier: orchestrationSafetyTier,
-                    generation: executionPlan.generation,
-                    toolIntent,
-                    toolRequest: toolRequestContext,
-                    ...(surfacePolicy && { surfacePolicy }),
-                },
-                executionContract: {
-                    policyId: resolvedExecutionContract.policyId,
-                    policyVersion: resolvedExecutionContract.policyVersion,
-                },
-            }),
+        const response = await chatService.runChatMessagesWithOutcome({
+            messages: postPlanAssembly.conversationMessages,
+            conversationSnapshot: postPlanAssembly.conversationSnapshot,
             orchestrationStartedAtMs: orchestrationStartedAt,
             plannerTemperament: executionPlan.generation.temperament,
             safetyTier: orchestrationSafetyTier,
@@ -861,6 +770,7 @@ export const createChatOrchestrator = ({
             generation: executionPlan.generation,
             workflowModeId: workflowModeResolution.modeDecision.modeId,
             toolRequest: toolRequestContext,
+            plannerActionOutcome,
             contextStepRequest: weatherContextStepRequest,
             contextStepExecutor: weatherContextStepExecutor,
             latestUserInput: normalizedRequest.latestUserInput,
@@ -910,6 +820,44 @@ export const createChatOrchestrator = ({
             },
             steerabilityControls,
         });
+        if (response.kind === 'terminal_action') {
+            const terminalResponse =
+                response.response ??
+                ({
+                    action: 'ignore',
+                    metadata: null,
+                } as const);
+            emitFallbackRollup(fallbackRollupSelectionSource);
+            notifyBreakerEvent({
+                responseId: null,
+                responseAction: terminalResponse.action,
+                responseModality: executionPlan.modality,
+            });
+            emitControlObservability({
+                responseAction: terminalResponse.action,
+                responseModality: executionPlan.modality,
+            });
+            return terminalResponse;
+        }
+        if (response.metadata === undefined || response.message === undefined) {
+            chatOrchestratorLogger.warn(
+                'ChatService returned message outcome without message metadata; failing open to ignore.'
+            );
+            emitFallbackRollup(fallbackRollupSelectionSource);
+            notifyBreakerEvent({
+                responseId: null,
+                responseAction: 'ignore',
+                responseModality: executionPlan.modality,
+            });
+            emitControlObservability({
+                responseAction: 'ignore',
+                responseModality: executionPlan.modality,
+            });
+            return {
+                action: 'ignore',
+                metadata: null,
+            };
+        }
         // ChatService computes totalDurationMs before metadata assembly and
         // queued trace writes. Avoid mutating metadata here to keep trace
         // persistence race-free.
@@ -954,8 +902,8 @@ export const createChatOrchestrator = ({
             effectiveProfileId: effectiveSelectedProfileId,
             requestedCapabilityProfile: plan.requestedCapabilityProfile,
             selectedCapabilityProfile:
-                profileResolution.selectedCapabilityProfile,
-            capabilityReasonCode: profileResolution.capabilityReasonCode,
+                plannerApplication.selectedCapabilityProfile,
+            capabilityReasonCode: plannerApplication.capabilityReasonCode,
             searchRequested: generationForExecution.search !== undefined,
             toolName: response.finalToolExecutionTelemetry?.toolName,
             toolStatus: response.finalToolExecutionTelemetry?.status,

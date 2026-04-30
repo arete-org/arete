@@ -7,6 +7,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
     applyStepExecutionToState,
@@ -43,6 +45,26 @@ const createLimits = (): ExecutionLimits => ({
     maxDeliberationCalls: 3,
     maxTokensTotal: 100,
     maxDurationMs: 1000,
+});
+
+test('workflowEngine remains policy/runtime neutral and avoids orchestrator policy imports', () => {
+    const workflowEngineSource = readFileSync(
+        join(process.cwd(), 'src', 'services', 'workflowEngine.ts'),
+        'utf8'
+    );
+    assert.equal(
+        workflowEngineSource.includes(
+            "from './chatOrchestrator/plannerResultApplier"
+        ),
+        false
+    );
+    assert.equal(
+        workflowEngineSource.includes(
+            "from './chatOrchestrator/profileResolution"
+        ),
+        false
+    );
+    assert.equal(workflowEngineSource.includes("from './chatPlanner"), false);
 });
 
 test('isTransitionAllowed permits only plan/generate from initial state', () => {
@@ -177,6 +199,8 @@ test('isWithinExecutionLimits reports each exhausted limit key', () => {
             currentStepKind: 'generate',
             stepCount: 5,
             toolCallCount: 0,
+            planCallCount: 0,
+            reviewCallCount: 0,
             deliberationCallCount: 0,
             totalTokens: 0,
         },
@@ -194,6 +218,8 @@ test('isWithinExecutionLimits reports each exhausted limit key', () => {
             currentStepKind: 'generate',
             stepCount: 0,
             toolCallCount: 2,
+            planCallCount: 0,
+            reviewCallCount: 0,
             deliberationCallCount: 0,
             totalTokens: 0,
         },
@@ -212,6 +238,8 @@ test('isWithinExecutionLimits reports each exhausted limit key', () => {
             currentStepKind: 'assess',
             stepCount: 0,
             toolCallCount: 0,
+            planCallCount: 1,
+            reviewCallCount: 2,
             deliberationCallCount: 3,
             totalTokens: 0,
         },
@@ -230,6 +258,8 @@ test('isWithinExecutionLimits reports each exhausted limit key', () => {
             currentStepKind: 'assess',
             stepCount: 0,
             toolCallCount: 0,
+            planCallCount: 0,
+            reviewCallCount: 0,
             deliberationCallCount: 0,
             totalTokens: 100,
         },
@@ -247,6 +277,8 @@ test('isWithinExecutionLimits reports each exhausted limit key', () => {
             currentStepKind: 'assess',
             stepCount: 0,
             toolCallCount: 0,
+            planCallCount: 0,
+            reviewCallCount: 0,
             deliberationCallCount: 0,
             totalTokens: 0,
         },
@@ -1371,4 +1403,121 @@ test('runBoundedReviewWorkflow stops before generation when injected context ste
         toolStep.outcome.signals?.clarificationReasonCode,
         'ambiguous_location'
     );
+});
+
+test('runBoundedReviewWorkflow returns terminal planner action outcome without generation', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            return {
+                text: 'should not run',
+                model: 'gpt-5-mini',
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Send a reaction' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Send a reaction' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'generate-only',
+            maxIterations: 0,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: true,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: false,
+            enableRevision: false,
+        },
+        plannerStepRequest: {
+            workflowId: 'wf_test',
+            workflowName: 'generate-only',
+            attempt: 1,
+            request: {
+                surface: 'web',
+                trigger: { kind: 'submit' },
+                latestUserInput: 'Send a reaction',
+                conversation: [{ role: 'user', content: 'Send a reaction' }],
+            },
+            invocationContext: {
+                owner: 'workflow',
+                workflowName: 'generate-only',
+                stepKind: 'plan',
+                purpose: 'chat_orchestrator_action_selection',
+            },
+            capabilityProfiles: [],
+        },
+        plannerStepExecutor: async () => ({
+            plan: {
+                action: 'react',
+                modality: 'text',
+                reaction: '🔥',
+                safetyTier: 'Low',
+                reasoning: 'Reaction is sufficient.',
+                generation: { reasoningEffort: 'low', verbosity: 'low' },
+            },
+            execution: {
+                status: 'executed',
+                purpose: 'chat_orchestrator_action_selection',
+                contractType: 'structured',
+                durationMs: 1,
+            },
+            ingestion: {
+                outputApplyOutcome: 'accepted',
+                fallbackTier: 'none',
+                correctionCodes: [],
+                outOfContractFields: [],
+                authorityFieldAttempts: [],
+            },
+            diagnostics: {
+                rawToolIntentPresent: false,
+                normalizedToolIntentPresent: false,
+                toolIntentRejected: false,
+                toolIntentRejectionReasons: [],
+            },
+        }),
+        postPlannerWorkflowAdapter: ({
+            plannerStepResult,
+            baseMessagesWithHints,
+            baseGenerationRequest,
+        }) => ({
+            terminalAction:
+                plannerStepResult.plan.action === 'react'
+                    ? { responseAction: 'react', reaction: '🔥' }
+                    : { responseAction: 'ignore' },
+            messagesWithHints: baseMessagesWithHints,
+            generationRequest: baseGenerationRequest,
+        }),
+        captureUsage: () => ({
+            model: 'gpt-5-mini',
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(generationCalls, 0);
+    assert.equal(result.outcome, 'terminal_action');
+    if (result.outcome !== 'terminal_action') {
+        throw new Error('Expected terminal action outcome');
+    }
+    assert.equal(result.terminalAction.responseAction, 'react');
+    assert.equal(result.workflowLineage.terminationReason, 'goal_satisfied');
 });

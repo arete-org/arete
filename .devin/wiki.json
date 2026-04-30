@@ -110,7 +110,9 @@
                 "packages/api-client/src",
                 "packages/contracts/src",
                 "docs/api/openapi.yaml",
-                "docs/architecture/prompt-resolution.md"
+                "docs/architecture/prompt-resolution.md",
+                "docs/architecture/workflow.md",
+                "docs/architecture/context-integrations/README.md"
             ],
             "page_notes": [
                 {
@@ -123,6 +125,14 @@
                 },
                 {
                     "content": "Include prompt resolution order in the architecture page: start with shared prompts, apply optional `PROMPT_CONFIG_PATH` overrides, then choose one active persona from `BOT_PROFILE_*` settings.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Workflow is the current execution skeleton for chat modes. See the Workflow page for mode/profile details.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Context integrations bring external context (like weather) into workflows without giving integrations policy authority. See the Context Integrations page.",
                     "author": "Maintainer"
                 }
             ]
@@ -143,6 +153,10 @@
                 },
                 {
                     "content": "Include provenance, evidence/freshness scores, risk tier, tradeoff count, citations, chain hash, stale-after behavior, trace retrieval, and trace display.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Also define: workflow mode (fast/balanced/grounded), workflow profile (generate-only/bounded-review), context step (injected pre-generation context), planner result applier (policy-application seam), terminal_action (planner early exit: ignore/react/image).",
                     "author": "Maintainer"
                 }
             ]
@@ -215,6 +229,79 @@
             ]
         },
         {
+            "title": "Workflow",
+            "purpose": "Document workflow modes, profiles, engine behavior, and where planner and context steps fit into the execution path.",
+            "parent": "Foundations",
+            "entrypoints": [
+                "docs/architecture/workflow.md",
+                "docs/status/workflow-engine-rollout-status.md",
+                "packages/backend/src/services/workflowEngine.ts",
+                "packages/backend/src/services/workflowProfileRegistry.ts",
+                "packages/backend/src/services/workflowProfileContract.ts",
+                "packages/backend/test/workflowEngine.test.ts",
+                "packages/backend/test/workflowProfileRegistry.test.ts"
+            ],
+            "page_notes": [
+                {
+                    "content": "Workflow is the step pattern Footnote uses to answer a request. Keep the page flow-first, showing one request moving through the workflow.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "fast mode uses generate-only profile (single-pass generation). balanced and grounded modes use bounded-review profile (generate -> assess -> revise).",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "workflowEngine owns step timing and lineage, not provider policy. The engine decides step legality, enforces limits, and records termination reasons.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Planner still runs before workflow execution in current implementation. Planner output goes through policy application (PlannerResultApplier) before reaching generation.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "weather_forecast is the first concrete context-step integration, executing before the generate step in bounded-review workflows.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Context Integrations",
+            "purpose": "Document how Footnote brings external context into workflows without giving integrations policy authority.",
+            "parent": "Foundations",
+            "entrypoints": [
+                "docs/architecture/context-integrations/README.md",
+                "docs/architecture/context-integrations/weather-forecast.md",
+                "docs/proposals/web-search-context-integration.md",
+                "packages/backend/src/services/contextIntegrations/toolRegistryContextStepAdapter.ts",
+                "packages/backend/src/services/openMeteoForecastTool.ts",
+                "packages/backend/src/services/tools/weatherForecastToolAdapter.ts",
+                "packages/backend/test/toolRegistryContextStepAdapter.test.ts",
+                "packages/backend/test/openMeteoForecastTool.test.ts"
+            ],
+            "page_notes": [
+                {
+                    "content": "Context integrations add evidence and context without owning execution policy. The backend decides routing, limits, and final response behavior.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "weather_forecast is implemented as a workflow context-step integration. It executes before the generate step and can inject context into the generation prompt.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "web_search is proposal/future work, not implemented as context-step execution yet. See the proposal for intended provider-neutral direction.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "TrustGraph uses a separate evidence-ingestion seam, not the workflow context-step path. See context-integrations/trustgraph.md.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Search discovery is distinct from source reading. Discovery provides candidate sources; reading and citing sources is a later, stronger step.",
+                    "author": "Maintainer"
+                }
+            ]
+        },
+        {
             "title": "Packages",
             "purpose": "Group the major code areas by package so contributors can quickly find where features live and which surfaces they affect.",
             "entrypoints": [
@@ -277,6 +364,10 @@
                 {
                     "content": "Call out forward direction: this package is not limited to chat. It is the execution substrate for multiple backend-owned task types as provider capability expands.",
                     "author": "Maintainer"
+                },
+                {
+                    "content": "Model-native search is distinct from explicit context integrations like weather_forecast. Runtime search behavior is not equivalent to provider-neutral search integrations.",
+                    "author": "Maintainer"
                 }
             ]
         },
@@ -336,7 +427,14 @@
             "entrypoints": [
                 "packages/backend/src",
                 "server.js",
-                "docs/api/openapi.yaml"
+                "docs/api/openapi.yaml",
+                "packages/backend/src/handlers/webhook.ts",
+                "packages/backend/src/handlers/blog.ts",
+                "packages/backend/src/storage/blogStore.ts",
+                "packages/backend/src/storage/incidents/sqliteIncidentStore.ts",
+                "packages/backend/src/utils/pseudonymization.ts",
+                "packages/backend/test/incidentStore.test.ts",
+                "packages/backend/test/pseudonymization.test.ts"
             ],
             "page_notes": [
                 {
@@ -345,6 +443,10 @@
                 },
                 {
                     "content": "Describe runtime composition as a backend responsibility. The backend builds and selects the generation runtime, but it still owns the public chat contract and all user-facing provenance semantics.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Webhook and blog ingestion are backend support flows. Incident storage and pseudonymization are also backend support areas. See the handlers and storage modules for these features.",
                     "author": "Maintainer"
                 }
             ]
@@ -358,6 +460,14 @@
                 "packages/backend/src/services/chatOrchestrator.ts",
                 "packages/backend/src/services/chatService.ts",
                 "packages/backend/src/services/chatPlanner.ts",
+                "packages/backend/src/services/workflowEngine.ts",
+                "packages/backend/src/services/workflowProfileRegistry.ts",
+                "packages/backend/src/services/workflowProfileContract.ts",
+                "packages/backend/src/services/chatOrchestrator/plannerResultApplier.ts",
+                "packages/backend/src/services/chatService/postPlanAssembly.ts",
+                "packages/backend/src/services/chatService/plannerActionOutcome.ts",
+                "packages/backend/src/services/plannerWorkflowSeams.ts",
+                "packages/backend/src/services/contextIntegrations/toolRegistryContextStepAdapter.ts",
                 "packages/agent-runtime/src",
                 "packages/backend/src/services/responseMetadataHeuristics.ts",
                 "packages/contracts/src/web/types.ts",
@@ -374,6 +484,18 @@
                 },
                 {
                     "content": "Update this page for the runtime seam: planner decisions stay in backend, generation runs through `@footnote/agent-runtime`, and VoltAgent handles chat text generation.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Chat requests now route through workflowEngine. fast uses generate-only profile; balanced and grounded use bounded-review profile.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Planner timing is still pre-workflow in current implementation. Planner output remains advisory and goes through policy application before execution.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "weather_forecast uses the workflow context-step path to inject context before generation in bounded-review modes.",
                     "author": "Maintainer"
                 }
             ]
@@ -426,45 +548,8 @@
                 }
             ]
         },
-        {
-            "title": "Webhook & Blog Ingestion",
-            "purpose": "Document backend webhook ingestion and blog serving, including GitHub signature validation, storage behavior, and web consumption paths.",
-            "parent": "Backend",
-            "entrypoints": [
-                "packages/backend/src/handlers/webhook.ts",
-                "packages/backend/src/handlers/blog.ts",
-                "packages/backend/src/storage/blogStore.ts",
-                "packages/web/src/utils/blog.ts",
-                "docs/api/openapi.yaml"
-            ],
-            "page_notes": [
-                {
-                    "content": "Keep this page operational. Show trusted input, persisted fields, and how malformed webhook payloads are handled safely.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Link to web blog pages so readers can follow the end-to-end ingestion-to-render flow.",
-                    "author": "Maintainer"
-                }
-            ]
-        },
-        {
-            "title": "Incidents",
-            "purpose": "Explain how incident records, audit events, and pseudonymized identifiers are stored and tested in the backend.",
-            "parent": "Backend",
-            "entrypoints": [
-                "packages/backend/src/storage/incidents/sqliteIncidentStore.ts",
-                "packages/backend/src/utils/pseudonymization.ts",
-                "packages/backend/test/incidentStore.test.ts",
-                "packages/backend/test/pseudonymization.test.ts"
-            ],
-            "page_notes": [
-                {
-                    "content": "Be clear about why Discord-facing identifiers are pseudonymized, where raw IDs must not appear, and how tests enforce those expectations.",
-                    "author": "Maintainer"
-                }
-            ]
-        },
+        
+        
         {
             "title": "Config",
             "purpose": "Document backend configuration loading, environment bootstrap, public config exposure, and failure behavior when config is incomplete.",
@@ -608,11 +693,21 @@
             "entrypoints": [
                 "packages/web/src",
                 "packages/web/src/App.tsx",
-                "packages/web/src/utils/api.ts"
+                "packages/web/src/utils/api.ts",
+                "packages/web/src/pages/BlogListPage.tsx",
+                "packages/web/src/pages/BlogPostPage.tsx",
+                "packages/web/src/components/BlogPostCard.tsx",
+                "packages/web/src/components/BlogProvenance.tsx",
+                "packages/web/src/utils/blog.ts",
+                "packages/web/src/pages/EmbedPage.tsx"
             ],
             "page_notes": [
                 {
                     "content": "Keep this page user-facing. Describe what users can do in the web app before diving into individual pages and components.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Blog and Embed are secondary web surfaces. Blog covers list pages, post rendering, provenance display, and fetch utilities. Embed covers iframe sizing and external integrations.",
                     "author": "Maintainer"
                 }
             ]
@@ -649,39 +744,7 @@
                 }
             ]
         },
-        {
-            "title": "Blog",
-            "purpose": "Document the web blog experience, including list pages, post rendering, provenance display, and supporting fetch utilities.",
-            "parent": "Web",
-            "entrypoints": [
-                "packages/web/src/pages/BlogListPage.tsx",
-                "packages/web/src/pages/BlogPostPage.tsx",
-                "packages/web/src/components/BlogPostCard.tsx",
-                "packages/web/src/components/BlogProvenance.tsx",
-                "packages/web/src/utils/blog.ts"
-            ],
-            "page_notes": [
-                {
-                    "content": "Keep this page lightweight. The blog is a secondary surface, so explain it clearly without letting it overshadow chat, traces, and provenance.",
-                    "author": "Maintainer"
-                }
-            ]
-        },
-        {
-            "title": "Embed",
-            "purpose": "Document the embeddable web surface and how iframe sizing, hosting expectations, and external integrations work.",
-            "parent": "Web",
-            "entrypoints": [
-                "packages/web/src/pages/EmbedPage.tsx",
-                "packages/web/src/utils/api.ts"
-            ],
-            "page_notes": [
-                {
-                    "content": "Explain the user-facing embed experience, then describe the messaging and sizing behavior that make it work across host pages.",
-                    "author": "Maintainer"
-                }
-            ]
-        },
+        
         {
             "title": "OpenAPI",
             "purpose": "Document how the authoritative OpenAPI spec connects to code, runtime schemas, and validation tooling across the repository.",

@@ -162,6 +162,82 @@ test('discord requests preserve non-message planner actions', async () => {
     assert.equal(response.imageRequest.prompt, 'draw a chative skyline');
 });
 
+test('discord requests preserve planner react action without generation call', async () => {
+    let callCount = 0;
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(
+            async ({ maxOutputTokens }) => {
+                callCount += 1;
+                if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'react',
+                            modality: 'text',
+                            reaction: '🔥',
+                            safetyTier: 'Low',
+                            reasoning: 'Reaction is enough.',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+                throw new Error(
+                    'message generation should not run for react actions'
+                );
+            }
+        ),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(createChatRequest());
+    assert.equal(callCount, 1);
+    assert.equal(response.action, 'react');
+    assert.equal(response.reaction, '🔥');
+});
+
+test('discord requests preserve planner ignore action without generation call', async () => {
+    let callCount = 0;
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(
+            async ({ maxOutputTokens }) => {
+                callCount += 1;
+                if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'ignore',
+                            modality: 'text',
+                            safetyTier: 'Low',
+                            reasoning: 'No response needed.',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+                throw new Error(
+                    'message generation should not run for ignore actions'
+                );
+            }
+        ),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(createChatRequest());
+    assert.equal(callCount, 1);
+    assert.equal(response.action, 'ignore');
+});
+
 test('message plans pass planner generation options into chatService', async () => {
     let finalMessages: Array<{ role: string; content: string }> = [];
     const expectedResponseProfile =
@@ -246,6 +322,45 @@ test('message plans pass planner generation options into chatService', async () 
         finalMessages[1]?.content,
         renderConversationPromptLayers('discord-chat').personaPrompt
     );
+});
+
+test('planner invocation remains pre-workflow in current groundwork branch', async () => {
+    const callOrder: string[] = [];
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                callOrder.push('planner');
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        safetyTier: 'Low',
+                        reasoning: 'Plan first.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+            callOrder.push('generation');
+            return {
+                text: 'ok',
+                model: 'gpt-5-mini',
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(createChatRequest());
+    assert.equal(response.action, 'message');
+    assert.deepEqual(callOrder, ['planner', 'generation']);
 });
 
 test('orchestrator carries resolved Execution Contract policy payload through service runtime seam', async () => {

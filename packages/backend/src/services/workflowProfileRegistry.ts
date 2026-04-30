@@ -68,6 +68,8 @@ const QUALITY_GROUNDED_DEFAULT_LIMITS: Readonly<
 > = {
     maxWorkflowSteps: 4,
     maxToolCalls: 0,
+    maxPlanCycles: 1,
+    maxReviewCycles: 3,
     maxDeliberationCalls: 4,
     maxTokensTotal: Number.MAX_SAFE_INTEGER,
     maxDurationMs: 15000,
@@ -78,7 +80,9 @@ const FAST_DIRECT_DEFAULT_LIMITS: Readonly<
 > = {
     maxWorkflowSteps: 1,
     maxToolCalls: 0,
-    maxDeliberationCalls: 0,
+    maxPlanCycles: 1,
+    maxReviewCycles: 0,
+    maxDeliberationCalls: 1,
     maxTokensTotal: Number.MAX_SAFE_INTEGER,
     maxDurationMs: 15000,
 };
@@ -170,7 +174,9 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
         reviseStep: 'disallowed',
         evidencePosture: 'minimal',
         maxWorkflowSteps: 1,
-        maxDeliberationCalls: 0,
+        maxPlanCycles: 1,
+        maxReviewCycles: 0,
+        maxDeliberationCalls: 1,
     },
     balanced: {
         executionContractPresetId: 'balanced',
@@ -181,6 +187,8 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
         reviseStep: 'allowed',
         evidencePosture: 'balanced',
         maxWorkflowSteps: 4,
+        maxPlanCycles: 1,
+        maxReviewCycles: 1,
         maxDeliberationCalls: 2,
     },
     grounded: {
@@ -192,6 +200,8 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
         reviseStep: 'allowed',
         evidencePosture: 'strict',
         maxWorkflowSteps: 8,
+        maxPlanCycles: 1,
+        maxReviewCycles: 3,
         maxDeliberationCalls: 4,
     },
 };
@@ -218,10 +228,13 @@ export const deriveReviewIntensityFromWorkflowBehavior = (
         return 'none';
     }
 
-    if (behavior.maxDeliberationCalls <= 1) {
+    const maxReviewCycles =
+        behavior.maxReviewCycles ??
+        Math.max(0, behavior.maxDeliberationCalls - 1);
+    if (maxReviewCycles <= 1) {
         return 'light';
     }
-    if (behavior.maxDeliberationCalls <= 3) {
+    if (maxReviewCycles <= 3) {
         return 'moderate';
     }
     return 'high';
@@ -595,6 +608,42 @@ export const resolveWorkflowRuntimeConfig = (input: {
         workflowProfile.policy.enableAssessment === false
             ? 1
             : Math.max(1, profileDefaultMaxIterations * 2);
+    const modeMaxPlanCycles =
+        modeDecision.behavior.maxPlanCycles ??
+        (modeDecision.behavior.workflowExecution === 'disabled' ? 0 : 1);
+    const modeMaxReviewCycles =
+        modeDecision.behavior.maxReviewCycles ??
+        Math.max(0, modeDecision.behavior.maxDeliberationCalls - 1);
+    const defaultPlanCycles =
+        workflowProfile.defaultLimits.maxPlanCycles ??
+        (workflowProfile.requiredHooks.forceWorkflowExecution ? 1 : 0);
+    const defaultReviewCycles =
+        workflowProfile.defaultLimits.maxReviewCycles ??
+        Math.max(0, workflowProfile.defaultLimits.maxDeliberationCalls - 1);
+    const contractBudget = sanitizeNonNegativeInteger(
+        executionContract?.limits.maxDeliberationCalls ?? Infinity,
+        Infinity
+    );
+    const resolvedMaxPlanCycles = Math.min(
+        sanitizeNonNegativeInteger(defaultPlanCycles, defaultPlanCycles),
+        sanitizeNonNegativeInteger(modeMaxPlanCycles, modeMaxPlanCycles),
+        contractBudget
+    );
+    const remainingBudget = Math.max(0, contractBudget - resolvedMaxPlanCycles);
+    const resolvedMaxReviewCycles = Math.min(
+        sanitizeNonNegativeInteger(
+            executionContract?.limits.maxDeliberationCalls !== undefined
+                ? Math.max(0, executionContract.limits.maxDeliberationCalls - 1)
+                : workflowProfile.policy.enableAssessment === false
+                  ? 0
+                  : input.maxIterations * 2,
+            defaultReviewCycles
+        ),
+        sanitizeNonNegativeInteger(modeMaxReviewCycles, modeMaxReviewCycles),
+        remainingBudget
+    );
+    const resolvedMaxDeliberationCalls =
+        resolvedMaxPlanCycles + resolvedMaxReviewCycles;
     const workflowExecutionLimits: RuntimeWorkflowProfile['defaultLimits'] = {
         maxWorkflowSteps: Math.min(
             sanitizePositiveInteger(
@@ -611,16 +660,9 @@ export const resolveWorkflowRuntimeConfig = (input: {
                 workflowProfile.defaultLimits.maxToolCalls,
             workflowProfile.defaultLimits.maxToolCalls
         ),
-        maxDeliberationCalls: Math.min(
-            sanitizeNonNegativeInteger(
-                executionContract?.limits.maxDeliberationCalls ??
-                    (workflowProfile.policy.enableAssessment === false
-                        ? 0
-                        : input.maxIterations * 2),
-                workflowProfile.defaultLimits.maxDeliberationCalls
-            ),
-            modeDecision.behavior.maxDeliberationCalls
-        ),
+        maxPlanCycles: resolvedMaxPlanCycles,
+        maxReviewCycles: resolvedMaxReviewCycles,
+        maxDeliberationCalls: resolvedMaxDeliberationCalls,
         maxTokensTotal: sanitizeNonNegativeInteger(
             executionContract?.limits.maxTokensTotal ??
                 workflowProfile.defaultLimits.maxTokensTotal,
