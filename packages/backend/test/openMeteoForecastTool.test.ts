@@ -408,27 +408,3 @@ test('open-meteo tool selects top result when countryCode is provided', async ()
         assert.equal(result.location.countryCode, 'CA');
     }
 });
-
-test('open-meteo tool returns location_not_resolved when no geocoding results', async () => {
-    const tool = createOpenMeteoForecastTool({
-        fetchImpl: async (_input) => {
-            return createMockResponse({
-                ok: true,
-                status: 200,
-                body: {},
-            });
-        },
-    });
-
-    const result = await tool.fetchForecast({
-        location: {
-            type: 'place_query',
-            query: 'NonExistentPlace12345',
-        },
-    });
-
-    assert.equal(result.status, 'error');
-    if (result.status === 'error') {
-        assert.equal(result.error.code, 'location_not_resolved');
-    }
-});

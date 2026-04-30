@@ -398,7 +398,9 @@ const buildClarificationResult = ({
 
     const options = validCandidates.map((c, i) => ({
         id: toStableOptionId(c, i),
-        label: [c.name, c.admin1, c.country_code].filter(Boolean).join(', '),
+        label: [c.name, c.admin1, c.admin2, c.country_code]
+            .filter(Boolean)
+            .join(', '),
         value: {
             toolName: 'weather_forecast',
             input: {

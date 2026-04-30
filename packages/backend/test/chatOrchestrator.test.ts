@@ -2395,5 +2395,8 @@ test('orchestrator continues normal weather path when tool returns status ok', a
     assert.equal(response.action, 'message');
     assert.equal(capturedExecutionContext?.tool?.toolName, 'weather_forecast');
     assert.equal(capturedExecutionContext?.tool?.status, 'executed');
-    assert.equal(capturedExecutionContext?.tool?.clarification, undefined);
+    const toolEvent = response.metadata.execution?.find(
+        (event) => event.kind === 'tool'
+    );
+    assert.equal(toolEvent?.clarification, undefined);
 });
