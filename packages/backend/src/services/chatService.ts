@@ -819,8 +819,6 @@ export const createChatService = ({
             ) {
                 workflowConversationSnapshot =
                     workflowResult.planContinuation.conversationSnapshot;
-                effectiveMessagesWithHints =
-                    workflowResult.planContinuation.messagesWithHints;
                 effectiveGenerationRequest =
                     workflowResult.planContinuation.generationRequest;
                 effectiveNormalizedGeneration =
@@ -928,10 +926,9 @@ export const createChatService = ({
                         backendFailOpenAllowed
                     ) {
                         try {
-                            generationResult =
-                                await generationRuntime.generate(
-                                    effectiveGenerationRequest
-                                );
+                            generationResult = await generationRuntime.generate(
+                                effectiveGenerationRequest
+                            );
                             recordUsageForStep(
                                 generationResult,
                                 effectiveGenerationRequest.model
@@ -997,8 +994,9 @@ export const createChatService = ({
                 }
             }
         } else {
-            generationResult =
-                await generationRuntime.generate(effectiveGenerationRequest);
+            generationResult = await generationRuntime.generate(
+                effectiveGenerationRequest
+            );
             recordUsageForStep(
                 generationResult,
                 effectiveGenerationRequest.model
@@ -1279,8 +1277,7 @@ export const createChatService = ({
                 requested: hasSearchIntent,
                 used: retrievalUsed,
                 intent: effectiveNormalizedGeneration?.search?.intent,
-                contextSize:
-                    effectiveNormalizedGeneration?.search?.contextSize,
+                contextSize: effectiveNormalizedGeneration?.search?.contextSize,
             },
             trustGraphEvidenceAvailable,
             trustGraphEvidenceUsed,
