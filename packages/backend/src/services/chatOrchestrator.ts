@@ -588,17 +588,10 @@ export const createChatOrchestrator = ({
                         plannerApplication.selectedResponseProfile.provider,
                     capabilities:
                         plannerApplication.selectedResponseProfile.capabilities,
-                    ...(executionPlan.generation.reasoningEffort !==
-                        undefined && {
-                        reasoningEffort:
-                            executionPlan.generation.reasoningEffort,
-                    }),
-                    ...(executionPlan.generation.verbosity !== undefined && {
-                        verbosity: executionPlan.generation.verbosity,
-                    }),
-                    ...(executionPlan.generation.search !== undefined && {
-                        search: executionPlan.generation.search,
-                    }),
+                    reasoningEffort:
+                        executionPlan.generation.reasoningEffort,
+                    verbosity: executionPlan.generation.verbosity,
+                    search: executionPlan.generation.search,
                 },
                 conversationSnapshot: postPlanAssembly.conversationSnapshot,
                 ...(plannerApplication.contextStepRequest !== undefined && {

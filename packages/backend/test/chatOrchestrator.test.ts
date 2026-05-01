@@ -1208,8 +1208,8 @@ test('planner capability selection chooses search-capable profile without rerout
         /tool-capable fallback profile/i.test(warning.message)
     );
     assert.equal(mismatchWarning, undefined);
-    assert.equal(capturedExecutionContext?.tool?.toolName, undefined);
-    assert.equal(capturedExecutionContext?.tool?.status, undefined);
+    assert.equal(capturedExecutionContext?.tool?.toolName, 'web_search');
+    assert.equal(capturedExecutionContext?.tool?.status, 'executed');
     assert.equal(capturedExecutionContext?.tool?.reasonCode, undefined);
 });
 

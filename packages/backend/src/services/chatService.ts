@@ -737,6 +737,9 @@ export const createChatService = ({
                 search: normalizedGeneration.search,
             }),
         };
+        let effectiveMessagesWithHints = messagesWithHints;
+        let effectiveGenerationRequest = generationRequest;
+        let effectiveNormalizedGeneration = normalizedGeneration;
         // Execution Contract governs allowed policy shape. Runtime resolution
         // here applies initial mode routing, then profile shape selection,
         // and composes workflow execution settings within that contract.
@@ -774,8 +777,8 @@ export const createChatService = ({
             const workflowPolicy: WorkflowPolicy = workflowProfile.policy;
             const workflowResult = await runReviewWorkflow({
                 generationRuntime,
-                generationRequest,
-                messagesWithHints,
+                generationRequest: effectiveGenerationRequest,
+                messagesWithHints: effectiveMessagesWithHints,
                 generationStartedAtMs: generationStartedAt,
                 workflowConfig: {
                     workflowName: workflowProfile.workflowName,
@@ -810,11 +813,22 @@ export const createChatService = ({
             workflowPlannerStepResult = workflowResult.plannerStepResult;
             workflowPlannerSummary =
                 workflowResult.planContinuation?.plannerSummary;
-            workflowConversationSnapshot =
+            if (
                 workflowResult.planContinuation?.continuation ===
                 'continue_message'
-                    ? workflowResult.planContinuation.conversationSnapshot
-                    : undefined;
+            ) {
+                workflowConversationSnapshot =
+                    workflowResult.planContinuation.conversationSnapshot;
+                effectiveMessagesWithHints =
+                    workflowResult.planContinuation.messagesWithHints;
+                effectiveGenerationRequest =
+                    workflowResult.planContinuation.generationRequest;
+                effectiveNormalizedGeneration =
+                    workflowResult.planContinuation.plannerSummary
+                        .generationForExecution;
+            } else {
+                workflowConversationSnapshot = undefined;
+            }
             workflowContextStepResult = workflowResult.contextStepResult;
             switch (workflowResult.outcome) {
                 case 'generated': {
@@ -897,7 +911,7 @@ export const createChatService = ({
                         );
                         generationResult = {
                             text: SURFACED_NO_GENERATION_MESSAGE,
-                            model: generationRequest.model,
+                            model: effectiveGenerationRequest.model,
                             provenance: 'Inferred',
                             citations: [],
                         };
@@ -916,11 +930,11 @@ export const createChatService = ({
                         try {
                             generationResult =
                                 await generationRuntime.generate(
-                                    generationRequest
+                                    effectiveGenerationRequest
                                 );
                             recordUsageForStep(
                                 generationResult,
-                                generationRequest.model
+                                effectiveGenerationRequest.model
                             );
                         } catch (error) {
                             logger.warn(
@@ -940,7 +954,7 @@ export const createChatService = ({
                             );
                             generationResult = {
                                 text: SURFACED_NO_GENERATION_MESSAGE,
-                                model: generationRequest.model,
+                                model: effectiveGenerationRequest.model,
                                 provenance: 'Inferred',
                                 citations: [],
                             };
@@ -969,7 +983,7 @@ export const createChatService = ({
 
                     generationResult = {
                         text: SURFACED_NO_GENERATION_MESSAGE,
-                        model: generationRequest.model,
+                        model: effectiveGenerationRequest.model,
                         provenance: 'Inferred',
                         citations: [],
                     };
@@ -984,8 +998,11 @@ export const createChatService = ({
             }
         } else {
             generationResult =
-                await generationRuntime.generate(generationRequest);
-            recordUsageForStep(generationResult, generationRequest.model);
+                await generationRuntime.generate(effectiveGenerationRequest);
+            recordUsageForStep(
+                generationResult,
+                effectiveGenerationRequest.model
+            );
         }
 
         let trustGraphResult: TrustGraphEvidenceIngestionResult | undefined;
@@ -1036,8 +1053,8 @@ export const createChatService = ({
 
         const assistantMetadata = buildAssistantMetadata(
             generationResult,
-            normalizedGeneration,
-            generationRequest.model
+            effectiveNormalizedGeneration,
+            effectiveGenerationRequest.model
         );
         if (
             trustGraphResult?.adapterStatus === 'success' &&
@@ -1073,7 +1090,8 @@ export const createChatService = ({
             ) === true;
         // Any mode escalation lineage is resolved by workflowProfileRegistry.
         // Runtime metadata here only carries the resolved decision payload.
-        const hasSearchIntent = normalizedGeneration?.search !== undefined;
+        const hasSearchIntent =
+            effectiveNormalizedGeneration?.search !== undefined;
         const upstreamToolExecution =
             executionContext?.tool ??
             workflowContextStepResult?.executionContext ??
@@ -1181,7 +1199,7 @@ export const createChatService = ({
                       effectiveProfileId: workflowGenerationProfileId,
                       provider:
                           workflowSelectedGenerationProfile?.provider ??
-                          generationRequest.provider ??
+                          effectiveGenerationRequest.provider ??
                           'internal',
                       model:
                           workflowSelectedGenerationProfile?.providerModel ??
@@ -1260,8 +1278,9 @@ export const createChatService = ({
             retrieval: {
                 requested: hasSearchIntent,
                 used: retrievalUsed,
-                intent: normalizedGeneration?.search?.intent,
-                contextSize: normalizedGeneration?.search?.contextSize,
+                intent: effectiveNormalizedGeneration?.search?.intent,
+                contextSize:
+                    effectiveNormalizedGeneration?.search?.contextSize,
             },
             trustGraphEvidenceAvailable,
             trustGraphEvidenceUsed,
