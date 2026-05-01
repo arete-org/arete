@@ -4,7 +4,7 @@
  * @footnote-scope: core
  * @footnote-module: ChatOrchestratorPlannerResultApplier
  * @footnote-risk: high - Incorrect policy application can route execution to wrong profiles/tools.
- * @footnote-ethics: high - This seam preserves planner-advisory behavior and backend policy authority.
+ * @footnote-ethics: high - Keeps planner suggestions advisory and backend policy authoritative.
  */
 import type { ModelProfile } from '@footnote/contracts';
 import type { PostChatRequest } from '@footnote/contracts/web';
@@ -156,7 +156,7 @@ export const createPlannerResultApplier = (
                   ? 'adjusted_by_policy'
                   : 'applied';
         const plannerMattered = plannerApplyOutcome !== 'not_applied';
-        const plannerMatteredControlIds =
+        const plannerMatteredControlIds: PlannerApplicationResult['plannerMatteredControlIds'] =
             plannerApplyOutcome === 'adjusted_by_policy'
                 ? ['provider_preference']
                 : [];

@@ -16,7 +16,6 @@ import type {
     PartialResponseTemperament,
     ResponseMetadata,
     SafetyTier,
-    StepRecord,
     TraceAxisScore,
     ToolExecutionContext,
     ToolInvocationRequest,
@@ -47,7 +46,6 @@ import {
     type WorkflowModeEscalationRequest,
 } from './workflowProfileRegistry.js';
 import {
-    buildPlannerStepRecord,
     runBoundedReviewWorkflow,
     type ContextStepExecutor,
     type ContextStepRequest,
@@ -56,12 +54,15 @@ import {
     type WorkflowPolicy,
 } from './workflowEngine.js';
 import {
-    plannerTerminalActionToResponse,
-    type PlannerActionOutcome,
-} from './chatService/plannerActionOutcome.js';
+    planTerminalActionToResponse,
+    type PlanContinuationOutcome,
+} from './chatService/planContinuation.js';
 import type {
+    PlanContinuationBuilder,
+    AppliedPlanState,
     PlannerStepExecutor,
     PlannerStepRequest,
+    PlannerStepResult,
 } from './plannerWorkflowSeams.js';
 import { runEvidenceIngestion } from './executionContractTrustGraph/trustGraphEvidenceIngestion.js';
 import type {
@@ -521,7 +522,8 @@ export type RunChatMessagesInput = {
     contextStepExecutor?: ContextStepExecutor;
     plannerStepRequest?: PlannerStepRequest;
     plannerStepExecutor?: PlannerStepExecutor;
-    plannerActionOutcome?: PlannerActionOutcome;
+    planContinuationBuilder?: PlanContinuationBuilder;
+    plannerActionOutcome?: PlanContinuationOutcome;
     latestUserInput?: string;
     executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
     ExecutionContract?: ExecutionContract;
@@ -543,6 +545,8 @@ export type RunChatMessagesResult =
           metadata: ResponseMetadata;
           generationDurationMs: number;
           finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
+          plannerSummary?: AppliedPlanState;
+          plannerStepResult?: PlannerStepResult;
       }
     | {
           kind: 'terminal_action';
@@ -671,7 +675,7 @@ export const createChatService = ({
         contextStepExecutor,
         plannerStepRequest,
         plannerStepExecutor,
-        plannerActionOutcome: _plannerActionOutcome,
+        planContinuationBuilder,
         latestUserInput,
         executionContractTrustGraphContext,
         ExecutionContract,
@@ -733,6 +737,9 @@ export const createChatService = ({
                 search: normalizedGeneration.search,
             }),
         };
+        let effectiveMessagesWithHints = messagesWithHints;
+        let effectiveGenerationRequest = generationRequest;
+        let effectiveNormalizedGeneration = normalizedGeneration;
         // Execution Contract governs allowed policy shape. Runtime resolution
         // here applies initial mode routing, then profile shape selection,
         // and composes workflow execution settings within that contract.
@@ -760,51 +767,18 @@ export const createChatService = ({
         let generationResult: GenerationResult;
         let workflowLineage: WorkflowRecord | undefined;
         let workflowContextStepResult: ContextStepResult | undefined;
+        let workflowPlannerSummary: AppliedPlanState | undefined;
+        let workflowPlannerStepResult: PlannerStepResult | undefined;
+        let workflowConversationSnapshot: string | undefined;
         let fallbackAfterInternalNoGeneration = false;
-        const plannerExecutionContext = executionContext?.planner;
-        const plannerWorkflowStepRecord: StepRecord | undefined =
-            plannerExecutionContext !== undefined
-                ? buildPlannerStepRecord({
-                      stepId: 'step_1',
-                      attempt: 1,
-                      startedAtMs:
-                          plannerExecutionContext.durationMs !== undefined
-                              ? Math.max(
-                                    0,
-                                    generationStartedAt -
-                                        plannerExecutionContext.durationMs
-                                )
-                              : undefined,
-                      finishedAtMs: generationStartedAt,
-                      summary: {
-                          status: plannerExecutionContext.status,
-                          ...(plannerExecutionContext.reasonCode !==
-                              undefined && {
-                              reasonCode: plannerExecutionContext.reasonCode,
-                          }),
-                          purpose: plannerExecutionContext.purpose,
-                          contractType: plannerExecutionContext.contractType,
-                          applyOutcome: plannerExecutionContext.applyOutcome,
-                          durationMs: plannerExecutionContext.durationMs,
-                          profileId: plannerExecutionContext.profileId,
-                          originalProfileId:
-                              plannerExecutionContext.originalProfileId,
-                          effectiveProfileId:
-                              plannerExecutionContext.effectiveProfileId,
-                          provider: plannerExecutionContext.provider,
-                          model: plannerExecutionContext.model,
-                          mattered: plannerExecutionContext.mattered,
-                          matteredControlIds:
-                              plannerExecutionContext.matteredControlIds,
-                      },
-                  })
-                : undefined;
+        const effectivePlannerStepRequest = plannerStepRequest;
+        const effectivePlannerStepExecutor = plannerStepExecutor;
         if (workflowExecutionEnabled) {
             const workflowPolicy: WorkflowPolicy = workflowProfile.policy;
             const workflowResult = await runReviewWorkflow({
                 generationRuntime,
-                generationRequest,
-                messagesWithHints,
+                generationRequest: effectiveGenerationRequest,
+                messagesWithHints: effectiveMessagesWithHints,
                 generationStartedAtMs: generationStartedAt,
                 workflowConfig: {
                     workflowName: workflowProfile.workflowName,
@@ -830,12 +804,29 @@ export const createChatService = ({
                 workflowPolicy,
                 captureUsage: (result, requestedModel) =>
                     recordUsageForStep(result, requestedModel),
-                plannerStepRecord: plannerWorkflowStepRecord,
-                plannerStepRequest,
-                plannerStepExecutor,
+                plannerStepRequest: effectivePlannerStepRequest,
+                plannerStepExecutor: effectivePlannerStepExecutor,
+                planContinuationBuilder,
                 contextStepRequest,
                 contextStepExecutor,
             });
+            workflowPlannerStepResult = workflowResult.plannerStepResult;
+            workflowPlannerSummary =
+                workflowResult.planContinuation?.plannerSummary;
+            if (
+                workflowResult.planContinuation?.continuation ===
+                'continue_message'
+            ) {
+                workflowConversationSnapshot =
+                    workflowResult.planContinuation.conversationSnapshot;
+                effectiveGenerationRequest =
+                    workflowResult.planContinuation.generationRequest;
+                effectiveNormalizedGeneration =
+                    workflowResult.planContinuation.plannerSummary
+                        .generationForExecution;
+            } else {
+                workflowConversationSnapshot = undefined;
+            }
             workflowContextStepResult = workflowResult.contextStepResult;
             switch (workflowResult.outcome) {
                 case 'generated': {
@@ -865,7 +856,7 @@ export const createChatService = ({
                 case 'terminal_action': {
                     return {
                         kind: 'terminal_action',
-                        response: plannerTerminalActionToResponse(
+                        response: planTerminalActionToResponse(
                             workflowResult.terminalAction
                         ),
                         generationDurationMs: Math.max(
@@ -918,7 +909,7 @@ export const createChatService = ({
                         );
                         generationResult = {
                             text: SURFACED_NO_GENERATION_MESSAGE,
-                            model: generationRequest.model,
+                            model: effectiveGenerationRequest.model,
                             provenance: 'Inferred',
                             citations: [],
                         };
@@ -935,13 +926,12 @@ export const createChatService = ({
                         backendFailOpenAllowed
                     ) {
                         try {
-                            generationResult =
-                                await generationRuntime.generate(
-                                    generationRequest
-                                );
+                            generationResult = await generationRuntime.generate(
+                                effectiveGenerationRequest
+                            );
                             recordUsageForStep(
                                 generationResult,
-                                generationRequest.model
+                                effectiveGenerationRequest.model
                             );
                         } catch (error) {
                             logger.warn(
@@ -961,7 +951,7 @@ export const createChatService = ({
                             );
                             generationResult = {
                                 text: SURFACED_NO_GENERATION_MESSAGE,
-                                model: generationRequest.model,
+                                model: effectiveGenerationRequest.model,
                                 provenance: 'Inferred',
                                 citations: [],
                             };
@@ -990,7 +980,7 @@ export const createChatService = ({
 
                     generationResult = {
                         text: SURFACED_NO_GENERATION_MESSAGE,
-                        model: generationRequest.model,
+                        model: effectiveGenerationRequest.model,
                         provenance: 'Inferred',
                         citations: [],
                     };
@@ -1004,9 +994,13 @@ export const createChatService = ({
                 }
             }
         } else {
-            generationResult =
-                await generationRuntime.generate(generationRequest);
-            recordUsageForStep(generationResult, generationRequest.model);
+            generationResult = await generationRuntime.generate(
+                effectiveGenerationRequest
+            );
+            recordUsageForStep(
+                generationResult,
+                effectiveGenerationRequest.model
+            );
         }
 
         let trustGraphResult: TrustGraphEvidenceIngestionResult | undefined;
@@ -1057,8 +1051,8 @@ export const createChatService = ({
 
         const assistantMetadata = buildAssistantMetadata(
             generationResult,
-            normalizedGeneration,
-            generationRequest.model
+            effectiveNormalizedGeneration,
+            effectiveGenerationRequest.model
         );
         if (
             trustGraphResult?.adapterStatus === 'success' &&
@@ -1094,10 +1088,12 @@ export const createChatService = ({
             ) === true;
         // Any mode escalation lineage is resolved by workflowProfileRegistry.
         // Runtime metadata here only carries the resolved decision payload.
-        const hasSearchIntent = normalizedGeneration?.search !== undefined;
+        const hasSearchIntent =
+            effectiveNormalizedGeneration?.search !== undefined;
         const upstreamToolExecution =
             executionContext?.tool ??
-            workflowContextStepResult?.executionContext;
+            workflowContextStepResult?.executionContext ??
+            workflowPlannerSummary?.toolExecutionContext;
         const effectiveToolExecutionContext:
             | NonNullable<
                   ResponseMetadataRuntimeContext['executionContext']
@@ -1153,10 +1149,16 @@ export const createChatService = ({
             >['generation']
         >;
         const upstreamGenerationExecutionContext = executionContext?.generation;
+        const workflowSelectedGenerationProfile =
+            workflowPlannerSummary?.selectedResponseProfile;
+        const workflowGenerationProfileId =
+            workflowPlannerSummary?.effectiveSelectedProfileId ??
+            workflowPlannerSummary?.selectedResponseProfile.id;
         const effectiveGenerationProfileId = fallbackAfterInternalNoGeneration
             ? 'workflow_internal_fallback'
             : (upstreamGenerationExecutionContext?.effectiveProfileId ??
-              upstreamGenerationExecutionContext?.profileId);
+              upstreamGenerationExecutionContext?.profileId ??
+              workflowGenerationProfileId);
         const effectiveGenerationExecutionContext:
             | GenerationExecutionContext
             | undefined = upstreamGenerationExecutionContext
@@ -1183,12 +1185,73 @@ export const createChatService = ({
                     model: usageModel,
                     durationMs: generationDurationMs,
                 } satisfies GenerationExecutionContext)
-              : undefined;
+              : workflowGenerationProfileId !== undefined
+                ? ({
+                      status: 'executed',
+                      profileId: workflowGenerationProfileId,
+                      ...(workflowPlannerSummary?.originalSelectedProfileId !==
+                          undefined && {
+                          originalProfileId:
+                              workflowPlannerSummary.originalSelectedProfileId,
+                      }),
+                      effectiveProfileId: workflowGenerationProfileId,
+                      provider:
+                          workflowSelectedGenerationProfile?.provider ??
+                          effectiveGenerationRequest.provider ??
+                          'internal',
+                      model:
+                          workflowSelectedGenerationProfile?.providerModel ??
+                          usageModel,
+                      durationMs: generationDurationMs,
+                  } satisfies GenerationExecutionContext)
+                : undefined;
+        const effectivePlannerExecutionContext =
+            executionContext?.planner ??
+            (workflowPlannerStepResult !== undefined
+                ? {
+                      status: workflowPlannerStepResult.execution.status,
+                      ...(workflowPlannerStepResult.execution.reasonCode !==
+                          undefined && {
+                          reasonCode:
+                              workflowPlannerStepResult.execution.reasonCode,
+                      }),
+                      purpose: workflowPlannerStepResult.execution.purpose,
+                      contractType:
+                          workflowPlannerStepResult.execution.contractType,
+                      applyOutcome:
+                          workflowPlannerSummary?.plannerApplyOutcome ??
+                          'not_applied',
+                      mattered:
+                          workflowPlannerSummary?.plannerMattered ?? false,
+                      matteredControlIds:
+                          workflowPlannerSummary?.plannerMatteredControlIds ??
+                          [],
+                      profileId:
+                          workflowPlannerStepResult.execution.profileId ??
+                          'planner_profile_unreported',
+                      originalProfileId:
+                          workflowPlannerSummary?.originalSelectedProfileId ??
+                          workflowPlannerStepResult.execution.profileId ??
+                          'planner_profile_unreported',
+                      effectiveProfileId:
+                          workflowPlannerSummary?.effectiveSelectedProfileId ??
+                          workflowPlannerStepResult.execution.profileId ??
+                          'planner_profile_unreported',
+                      provider:
+                          workflowPlannerStepResult.execution.provider ??
+                          'planner_provider_unreported',
+                      model:
+                          workflowPlannerStepResult.execution.model ??
+                          'planner_model_unreported',
+                      durationMs:
+                          workflowPlannerStepResult.execution.durationMs,
+                  }
+                : undefined);
         const normalizedWorkflowLineage = workflowLineage;
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
-            conversationSnapshot: `${conversationSnapshot}\n\n${generationResult.text}`,
+            conversationSnapshot: `${workflowConversationSnapshot ?? conversationSnapshot}\n\n${generationResult.text}`,
             ...(totalDurationMs !== undefined && { totalDurationMs }),
             plannerTemperament,
             ...(normalizedWorkflowLineage !== undefined && {
@@ -1198,6 +1261,9 @@ export const createChatService = ({
                 // Preserve upstream execution context and overlay runtime facts
                 // (for example, generation duration + final resolved model).
                 ...executionContext,
+                ...(effectivePlannerExecutionContext !== undefined && {
+                    planner: effectivePlannerExecutionContext,
+                }),
                 ...(effectiveGenerationExecutionContext !== undefined && {
                     generation: effectiveGenerationExecutionContext,
                 }),
@@ -1210,8 +1276,8 @@ export const createChatService = ({
             retrieval: {
                 requested: hasSearchIntent,
                 used: retrievalUsed,
-                intent: normalizedGeneration?.search?.intent,
-                contextSize: normalizedGeneration?.search?.contextSize,
+                intent: effectiveNormalizedGeneration?.search?.intent,
+                contextSize: effectiveNormalizedGeneration?.search?.contextSize,
             },
             trustGraphEvidenceAvailable,
             trustGraphEvidenceUsed,
@@ -1283,6 +1349,12 @@ export const createChatService = ({
             message: generationResult.text,
             metadata: metadataWithTrustGraph,
             generationDurationMs,
+            ...(workflowPlannerSummary !== undefined && {
+                plannerSummary: workflowPlannerSummary,
+            }),
+            ...(workflowPlannerStepResult !== undefined && {
+                plannerStepResult: workflowPlannerStepResult,
+            }),
             ...(finalToolExecutionTelemetry !== undefined && {
                 finalToolExecutionTelemetry,
             }),

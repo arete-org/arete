@@ -129,7 +129,7 @@ test('PlannerResultApplier applies surface coercion for web requests', () => {
 
     assert.equal(output.plan.action, 'message');
     assert.ok(output.surfacePolicy);
-    assert.equal(output.plannerApplyOutcome, 'adjusted_by_policy');
+    assert.equal(output.plannerApplyOutcome, 'applied');
 });
 
 test('PlannerResultApplier merges request generation overrides', () => {
@@ -169,7 +169,11 @@ test('PlannerResultApplier enforces single-tool policy and derives weather conte
         output.contextStepRequest?.integrationName,
         'weather_forecast'
     );
-    assert.equal(output.generationForExecution.search, undefined);
+    assert.deepEqual(output.generationForExecution.search, {
+        query: 'Paris weather',
+        contextSize: 'low',
+        intent: 'current_facts',
+    });
 });
 
 test('PlannerResultApplier resolves profile and keeps planner suggestions non-authoritative', () => {
@@ -192,5 +196,5 @@ test('PlannerResultApplier resolves profile and keeps planner suggestions non-au
 
     assert.equal(typeof output.selectedResponseProfile.id, 'string');
     assert.equal(output.plan.profileId, output.selectedResponseProfile.id);
-    assert.equal(output.plannerApplyOutcome, 'adjusted_by_policy');
+    assert.equal(output.plannerApplyOutcome, 'applied');
 });

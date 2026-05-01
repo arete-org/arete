@@ -325,7 +325,7 @@ test('chatPlanner ingestion marks clean structured outputs as accepted', async (
             },
         });
 
-        await planner.planChat(createChatRequest());
+        await planFromWorkflow(planner, createChatRequest());
 
         const ingestionInfo = infos.find(
             (entry) =>
@@ -376,7 +376,10 @@ test('chatPlanner ignores out-of-contract authority fields and marks ingestion a
             },
         });
 
-        const { plan, execution } = await planner.planChat(createChatRequest());
+        const { plan, execution } = await planFromWorkflow(
+            planner,
+            createChatRequest()
+        );
 
         assert.equal(execution.status, 'executed');
         assert.equal(plan.profileId, undefined);

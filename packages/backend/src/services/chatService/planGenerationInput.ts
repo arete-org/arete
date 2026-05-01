@@ -1,10 +1,10 @@
 /**
- * @description: Assembles post-plan generation messages and conversation
- * snapshot payloads from policy-applied planner output.
+ * @description: Builds generation messages and snapshot data from
+ * policy-applied planner output.
  * @footnote-scope: core
- * @footnote-module: ChatServicePostPlanAssembly
+ * @footnote-module: ChatServicePlanGenerationInput
  * @footnote-risk: medium - Incorrect assembly can desync planner payload context from generation.
- * @footnote-ethics: high - Stable assembly preserves auditable boundaries between planner advice and policy authority.
+ * @footnote-ethics: high - Stable assembly keeps planner advice separate from backend policy authority.
  */
 import type {
     ChatConversationMessage,
@@ -18,7 +18,7 @@ import type { PlannerPayloadChatPlan } from '../chatOrchestrator/plannerPayload.
 import { buildPlannerPayload } from '../chatOrchestrator/plannerPayload.js';
 import type { ChatGenerationToolIntent } from '../chatGenerationTypes.js';
 
-export type PostPlanAssemblyInput = {
+export type PlanGenerationInputParams = {
     systemPrompt: string;
     personaPrompt: string;
     normalizedConversation: Array<
@@ -36,16 +36,16 @@ export type PostPlanAssemblyInput = {
     };
 };
 
-export type PostPlanAssemblyResult = {
+export type PlanGenerationInputResult = {
     conversationMessages: Array<
         Pick<ChatConversationMessage, 'role' | 'content'>
     >;
     conversationSnapshot: string;
 };
 
-export const assemblePostPlanGenerationInput = (
-    input: PostPlanAssemblyInput
-): PostPlanAssemblyResult => {
+export const assemblePlanGenerationInput = (
+    input: PlanGenerationInputParams
+): PlanGenerationInputResult => {
     const conversationMessages: Array<
         Pick<ChatConversationMessage, 'role' | 'content'>
     > = [

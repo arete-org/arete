@@ -156,7 +156,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Also define: workflow mode (fast/balanced/grounded), workflow profile (generate-only/bounded-review), context step (injected pre-generation context), planner result applier (policy-application seam), terminal_action (planner early exit: ignore/react/image).",
+                    "content": "Also define: workflow mode (fast/balanced/grounded), workflow profile (generate-only/bounded-review), workflow plan step (workflow-owned planner timing/lineage), applied plan state (`AppliedPlanState`), plan continuation (`PlanContinuation`), context step (injected pre-generation context), planner advisory boundary (planner suggests, backend policy decides), planner result applier (policy-application seam), terminal_action (workflow terminal outcome for ignore/react/image).",
                     "author": "Maintainer"
                 }
             ]
@@ -236,31 +236,40 @@
                 "docs/architecture/workflow.md",
                 "docs/status/workflow-engine-rollout-status.md",
                 "packages/backend/src/services/workflowEngine.ts",
+                "packages/backend/src/services/plannerWorkflowSeams.ts",
+                "packages/backend/src/services/chatService/planContinuation.ts",
+                "packages/backend/src/services/chatService/planGenerationInput.ts",
                 "packages/backend/src/services/workflowProfileRegistry.ts",
                 "packages/backend/src/services/workflowProfileContract.ts",
                 "packages/backend/test/workflowEngine.test.ts",
-                "packages/backend/test/workflowProfileRegistry.test.ts"
+                "packages/backend/test/workflowProfileRegistry.test.ts",
+                "packages/backend/test/chatService.test.ts",
+                "packages/backend/test/chatOrchestrator.test.ts"
             ],
             "page_notes": [
                 {
-                    "content": "Workflow is the step pattern Footnote uses to answer a request. Keep the page flow-first, showing one request moving through the workflow.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Workflow is the step pattern Footnote uses to answer a request. Keep the page flow-first, showing one request moving through the workflow."
                 },
                 {
-                    "content": "fast mode uses generate-only profile (single-pass generation). balanced and grounded modes use bounded-review profile (generate -> assess -> revise).",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "fast mode uses generate-only profile (single-pass generation). balanced and grounded modes use bounded-review profile (generate -> assess -> revise)."
                 },
                 {
-                    "content": "workflowEngine owns step timing and lineage, not provider policy. The engine decides step legality, enforces limits, and records termination reasons.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "workflowEngine owns step timing and lineage, not provider policy. The engine decides step legality, enforces limits, and records termination reasons."
                 },
                 {
-                    "content": "Planner still runs before workflow execution in current implementation. Planner output goes through policy application (PlannerResultApplier) before reaching generation.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Planner now runs as an early workflow `plan` step through injected `PlannerStepExecutor`, and workflow-owned plan lineage is the canonical source."
                 },
                 {
-                    "content": "weather_forecast is the first concrete context-step integration, executing before the generate step in bounded-review workflows.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Planner output remains advisory. Policy application runs outside workflowEngine through `PlannerResultApplier` + `PlanContinuationBuilder` before continuation (`terminal_action` or `continue_message`)."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "weather_forecast is the first concrete context-step integration, executing before the generate step in bounded-review workflows."
                 }
             ]
         },
@@ -464,8 +473,8 @@
                 "packages/backend/src/services/workflowProfileRegistry.ts",
                 "packages/backend/src/services/workflowProfileContract.ts",
                 "packages/backend/src/services/chatOrchestrator/plannerResultApplier.ts",
-                "packages/backend/src/services/chatService/postPlanAssembly.ts",
-                "packages/backend/src/services/chatService/plannerActionOutcome.ts",
+                "packages/backend/src/services/chatService/planGenerationInput.ts",
+                "packages/backend/src/services/chatService/planContinuation.ts",
                 "packages/backend/src/services/plannerWorkflowSeams.ts",
                 "packages/backend/src/services/contextIntegrations/toolRegistryContextStepAdapter.ts",
                 "packages/agent-runtime/src",
@@ -475,28 +484,32 @@
             ],
             "page_notes": [
                 {
-                    "content": "Use one worked example to show how a chat request becomes an answer plus provenance metadata.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Use one worked example to show how a chat request becomes an answer plus provenance metadata."
                 },
                 {
-                    "content": "Explain how response metadata is built from backend request context and API annotations.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Explain how response metadata is built from backend request context and API annotations."
                 },
                 {
-                    "content": "Update this page for the runtime seam: planner decisions stay in backend, generation runs through `@footnote/agent-runtime`, and VoltAgent handles chat text generation.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Update this page for the runtime seam: planner decisions stay in backend, generation runs through `@footnote/agent-runtime`, and VoltAgent handles chat text generation."
                 },
                 {
-                    "content": "Chat requests now route through workflowEngine. fast uses generate-only profile; balanced and grounded use bounded-review profile.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Chat requests now route through workflowEngine. fast uses generate-only profile; balanced and grounded use bounded-review profile."
                 },
                 {
-                    "content": "Planner timing is still pre-workflow in current implementation. Planner output remains advisory and goes through policy application before execution.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Request normalization/bootstrap happens in chatOrchestrator, planner executes inside workflow timing, and policy application runs through `PlannerResultApplier` plus `PlanContinuationBuilder` (`classifyPlanContinuation` + `assemblePlanGenerationInput`)."
                 },
                 {
-                    "content": "weather_forecast uses the workflow context-step path to inject context before generation in bounded-review modes.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "chatService consumes workflow outcomes: it renders workflow terminal actions (`react`/`ignore`/`image`) and assembles final response metadata for normal message continuations."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "weather_forecast uses the workflow context-step path to inject context before generation in bounded-review modes."
                 }
             ]
         },
@@ -548,8 +561,6 @@
                 }
             ]
         },
-        
-        
         {
             "title": "Config",
             "purpose": "Document backend configuration loading, environment bootstrap, public config exposure, and failure behavior when config is incomplete.",
@@ -744,7 +755,6 @@
                 }
             ]
         },
-        
         {
             "title": "OpenAPI",
             "purpose": "Document how the authoritative OpenAPI spec connects to code, runtime schemas, and validation tooling across the repository.",

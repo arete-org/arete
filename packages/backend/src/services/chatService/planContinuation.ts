@@ -1,8 +1,8 @@
 /**
- * @description: Classifies policy-applied planner actions into either a
- * terminal transport response or message-continuation workflow execution.
+ * @description: Classifies policy-applied plan actions into either a
+ * terminal response path or a message-continuation path.
  * @footnote-scope: core
- * @footnote-module: ChatServicePlannerActionOutcome
+ * @footnote-module: ChatServicePlanContinuation
  * @footnote-risk: medium - Incorrect classification can skip generation or return wrong action types.
  * @footnote-ethics: medium - Action routing affects user-visible behavior and trust.
  */
@@ -12,23 +12,23 @@ import type {
 } from '@footnote/contracts/web';
 import type { ChatPlan } from '../chatPlanner.js';
 import type { PlannerFallbackReason } from '../plannerFallbackTelemetryRollup.js';
-import type { PlannerTerminalAction } from '../plannerWorkflowSeams.js';
+import type { PlanTerminalAction } from '../plannerWorkflowSeams.js';
 
-export type PlannerActionOutcome =
+export type PlanContinuationOutcome =
     | {
           kind: 'continue_message';
       }
     | {
           kind: 'terminal_action';
-          terminalAction: PlannerTerminalAction;
+          terminalAction: PlanTerminalAction;
           fallbackReason?: PlannerFallbackReason;
           warningMessage?: string;
       };
 
-export const resolvePlannerActionOutcome = (input: {
+export const classifyPlanContinuation = (input: {
     executionPlan: ChatPlan;
     normalizedRequest: PostChatRequest;
-}): PlannerActionOutcome => {
+}): PlanContinuationOutcome => {
     if (input.executionPlan.action === 'ignore') {
         return {
             kind: 'terminal_action',
@@ -80,8 +80,8 @@ export const resolvePlannerActionOutcome = (input: {
     };
 };
 
-export const plannerTerminalActionToResponse = (
-    terminalAction: PlannerTerminalAction
+export const planTerminalActionToResponse = (
+    terminalAction: PlanTerminalAction
 ): Exclude<PostChatResponse, { action: 'message' }> => {
     if (terminalAction.responseAction === 'ignore') {
         return {

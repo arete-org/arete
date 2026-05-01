@@ -44,8 +44,8 @@ type BuiltinWorkflowModeId = WorkflowModeId;
 const EXECUTION_CONTRACT_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET: Readonly<
     RuntimeWorkflowProfile['policy']
 > = {
-    enablePlanning: false,
-    enableToolUse: false,
+    enablePlanning: true,
+    enableToolUse: true,
     enableReplanning: false,
     enableGeneration: true,
     enableAssessment: true,
@@ -55,8 +55,8 @@ const EXECUTION_CONTRACT_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET: Readonly<
 const EXECUTION_CONTRACT_FAST_DIRECT_WORKFLOW_POLICY_PRESET: Readonly<
     RuntimeWorkflowProfile['policy']
 > = {
-    enablePlanning: false,
-    enableToolUse: false,
+    enablePlanning: true,
+    enableToolUse: true,
     enableReplanning: false,
     enableGeneration: true,
     enableAssessment: false,
@@ -67,7 +67,7 @@ const QUALITY_GROUNDED_DEFAULT_LIMITS: Readonly<
     RuntimeWorkflowProfile['defaultLimits']
 > = {
     maxWorkflowSteps: 4,
-    maxToolCalls: 0,
+    maxToolCalls: 1,
     maxPlanCycles: 1,
     maxReviewCycles: 3,
     maxDeliberationCalls: 4,
@@ -78,8 +78,8 @@ const QUALITY_GROUNDED_DEFAULT_LIMITS: Readonly<
 const FAST_DIRECT_DEFAULT_LIMITS: Readonly<
     RuntimeWorkflowProfile['defaultLimits']
 > = {
-    maxWorkflowSteps: 1,
-    maxToolCalls: 0,
+    maxWorkflowSteps: 3,
+    maxToolCalls: 1,
     maxPlanCycles: 1,
     maxReviewCycles: 0,
     maxDeliberationCalls: 1,
@@ -173,7 +173,7 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
         reviewPass: 'excluded',
         reviseStep: 'disallowed',
         evidencePosture: 'minimal',
-        maxWorkflowSteps: 1,
+        maxWorkflowSteps: 3,
         maxPlanCycles: 1,
         maxReviewCycles: 0,
         maxDeliberationCalls: 1,
@@ -606,7 +606,7 @@ export const resolveWorkflowRuntimeConfig = (input: {
         );
     const fallbackWorkflowStepLimit =
         workflowProfile.policy.enableAssessment === false
-            ? 1
+            ? workflowProfile.defaultLimits.maxWorkflowSteps
             : Math.max(1, profileDefaultMaxIterations * 2);
     const modeMaxPlanCycles =
         modeDecision.behavior.maxPlanCycles ??
@@ -649,7 +649,7 @@ export const resolveWorkflowRuntimeConfig = (input: {
             sanitizePositiveInteger(
                 executionContract?.limits.maxWorkflowSteps ??
                     (workflowProfile.policy.enableAssessment === false
-                        ? 1
+                        ? workflowProfile.defaultLimits.maxWorkflowSteps
                         : input.maxIterations * 2),
                 fallbackWorkflowStepLimit
             ),

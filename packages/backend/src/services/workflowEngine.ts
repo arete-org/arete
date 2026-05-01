@@ -35,9 +35,9 @@ import type {
 } from '@footnote/agent-runtime';
 import { logger } from '../utils/logger.js';
 import type {
-    PostPlannerWorkflowAdapter,
-    PostPlannerWorkflowAdapterResult,
-    PlannerTerminalAction,
+    PlanContinuationBuilder,
+    PlanContinuation,
+    PlanTerminalAction,
     PlannerStepExecutor,
     PlannerStepRequest,
     PlannerStepResult,
@@ -166,9 +166,11 @@ export type RunBoundedReviewWorkflowInput = {
         requestedModel: string | undefined
     ) => ReviewWorkflowUsageSummary;
     plannerStepRecord?: StepRecord;
+    // Workflow engine owns when the plan step runs.
     plannerStepRequest?: PlannerStepRequest;
     plannerStepExecutor?: PlannerStepExecutor;
-    postPlannerWorkflowAdapter?: PostPlannerWorkflowAdapter;
+    // Caller-owned policy application. Engine only consumes continuation output.
+    planContinuationBuilder?: PlanContinuationBuilder;
     contextStepRequest?: ContextStepRequest;
     contextStepExecutor?: ContextStepExecutor;
 };
@@ -179,22 +181,22 @@ export type RunBoundedReviewWorkflowResult =
           generationResult: GenerationResult;
           workflowLineage: WorkflowRecord;
           plannerStepResult?: PlannerStepResult;
-          postPlannerWorkflowAdapterResult?: PostPlannerWorkflowAdapterResult;
+          planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
       }
     | {
           outcome: 'terminal_action';
-          terminalAction: PlannerTerminalAction;
+          terminalAction: PlanTerminalAction;
           workflowLineage: WorkflowRecord;
           plannerStepResult?: PlannerStepResult;
-          postPlannerWorkflowAdapterResult?: PostPlannerWorkflowAdapterResult;
+          planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
       }
     | {
           outcome: 'no_generation';
           workflowLineage: WorkflowRecord;
           plannerStepResult?: PlannerStepResult;
-          postPlannerWorkflowAdapterResult?: PostPlannerWorkflowAdapterResult;
+          planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
       };
 
@@ -712,7 +714,7 @@ export const runBoundedReviewWorkflow = async ({
     plannerStepRecord,
     plannerStepRequest,
     plannerStepExecutor,
-    postPlannerWorkflowAdapter,
+    planContinuationBuilder,
     contextStepRequest,
     contextStepExecutor,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
@@ -770,10 +772,8 @@ export const runBoundedReviewWorkflow = async ({
     let effectiveGenerationRequest = generationRequest;
     let effectiveMessagesWithHints = messagesWithHints;
     let effectiveContextStepRequest = contextStepRequest;
-    let workflowTerminalAction: PlannerTerminalAction | undefined;
-    let postPlannerWorkflowAdapterResult:
-        | PostPlannerWorkflowAdapterResult
-        | undefined;
+    let workflowTerminalAction: PlanTerminalAction | undefined;
+    let planContinuation: PlanContinuation | undefined;
     const effectiveReviewDecisionPrompt =
         reviewDecisionPrompt ?? profileStrategy.reviewDecisionPrompt;
     const effectiveRevisionPromptPrefix =
@@ -996,25 +996,38 @@ export const runBoundedReviewWorkflow = async ({
 
     if (
         plannerExecutionResult !== undefined &&
-        postPlannerWorkflowAdapter !== undefined
+        planContinuationBuilder !== undefined
     ) {
-        postPlannerWorkflowAdapterResult = postPlannerWorkflowAdapter({
-            plannerStepResult: plannerExecutionResult,
-            workflowId,
-            workflowName: workflowConfig.workflowName,
-            attempt: 1,
-            baseMessagesWithHints: messagesWithHints,
-            baseGenerationRequest: generationRequest,
-        });
-        effectiveGenerationRequest =
-            postPlannerWorkflowAdapterResult.generationRequest;
-        effectiveMessagesWithHints =
-            postPlannerWorkflowAdapterResult.messagesWithHints;
-        effectiveContextStepRequest =
-            postPlannerWorkflowAdapterResult.contextStepRequest ??
-            effectiveContextStepRequest;
-        workflowTerminalAction =
-            postPlannerWorkflowAdapterResult.terminalAction;
+        try {
+            planContinuation = planContinuationBuilder({
+                plannerStepResult: plannerExecutionResult,
+                workflowId,
+                workflowName: workflowConfig.workflowName,
+                attempt: 1,
+                baseMessagesWithHints: messagesWithHints,
+                baseGenerationRequest: generationRequest,
+            });
+            if (planContinuation.continuation === 'terminal_action') {
+                workflowTerminalAction = planContinuation.terminalAction;
+            } else {
+                effectiveGenerationRequest = planContinuation.generationRequest;
+                effectiveMessagesWithHints = planContinuation.messagesWithHints;
+                effectiveContextStepRequest =
+                    planContinuation.contextStepRequest ??
+                    effectiveContextStepRequest;
+            }
+        } catch (error) {
+            logger.warn(
+                'Plan continuation builder failed; continuing with pre-plan generation request.',
+                {
+                    workflowId,
+                    workflowName: workflowConfig.workflowName,
+                    attempt: 1,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                }
+            );
+        }
     }
 
     if (workflowTerminalAction !== undefined) {
@@ -1087,6 +1100,7 @@ export const runBoundedReviewWorkflow = async ({
     };
 
     if (
+        !shouldStop &&
         effectiveContextStepRequest?.requested === true &&
         effectiveContextStepRequest.eligible &&
         contextStepExecutor !== undefined
@@ -1218,17 +1232,17 @@ export const runBoundedReviewWorkflow = async ({
         }
     }
 
-    if (
-        !isTransitionAllowed(
-            workflowState.currentStepKind,
-            'generate',
-            workflowPolicy
-        )
-    ) {
-        terminationReason = 'transition_blocked_by_policy';
-        shouldStop = true;
-    } else {
-        if (!stopIfOverLimits('generate')) {
+    if (!shouldStop) {
+        if (
+            !isTransitionAllowed(
+                workflowState.currentStepKind,
+                'generate',
+                workflowPolicy
+            )
+        ) {
+            terminationReason = 'transition_blocked_by_policy';
+            shouldStop = true;
+        } else if (!stopIfOverLimits('generate')) {
             const initialDraftStartedAt = generationStartedAtMs;
             messagesWithContext = injectContextMessagesIntoPrompt(
                 effectiveMessagesWithHints,
@@ -1567,8 +1581,8 @@ export const runBoundedReviewWorkflow = async ({
             ...(plannerExecutionResult !== undefined && {
                 plannerStepResult: plannerExecutionResult,
             }),
-            ...(postPlannerWorkflowAdapterResult !== undefined && {
-                postPlannerWorkflowAdapterResult,
+            ...(planContinuation !== undefined && {
+                planContinuation,
             }),
             ...(executedContextStepResult !== undefined && {
                 contextStepResult: executedContextStepResult,
@@ -1583,8 +1597,8 @@ export const runBoundedReviewWorkflow = async ({
             ...(plannerExecutionResult !== undefined && {
                 plannerStepResult: plannerExecutionResult,
             }),
-            ...(postPlannerWorkflowAdapterResult !== undefined && {
-                postPlannerWorkflowAdapterResult,
+            ...(planContinuation !== undefined && {
+                planContinuation,
             }),
             ...(executedContextStepResult !== undefined && {
                 contextStepResult: executedContextStepResult,
@@ -1599,8 +1613,8 @@ export const runBoundedReviewWorkflow = async ({
         ...(plannerExecutionResult !== undefined && {
             plannerStepResult: plannerExecutionResult,
         }),
-        ...(postPlannerWorkflowAdapterResult !== undefined && {
-            postPlannerWorkflowAdapterResult,
+        ...(planContinuation !== undefined && {
+            planContinuation,
         }),
         ...(executedContextStepResult !== undefined && {
             contextStepResult: executedContextStepResult,
