@@ -25,6 +25,7 @@ import type {
     GenerationRequest,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
+import type { PartialResponseTemperament } from '@footnote/contracts/ethics-core';
 import type {
     ChatPlan,
     ChatPlannerCapabilityProfileOption,
@@ -179,6 +180,7 @@ export type PlanContinuation = {
           continuation: 'continue_message';
           messagesWithHints: RuntimeMessage[];
           generationRequest: GenerationRequest;
+          plannerTemperament?: PartialResponseTemperament;
           conversationSnapshot: string;
           contextStepRequest?: ContextStepRequest;
       }

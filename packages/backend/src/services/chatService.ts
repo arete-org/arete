@@ -740,6 +740,7 @@ export const createChatService = ({
         let effectiveMessagesWithHints = messagesWithHints;
         let effectiveGenerationRequest = generationRequest;
         let effectiveNormalizedGeneration = normalizedGeneration;
+        let effectivePlannerTemperament = plannerTemperament;
         // Execution Contract governs allowed policy shape. Runtime resolution
         // here applies initial mode routing, then profile shape selection,
         // and composes workflow execution settings within that contract.
@@ -821,6 +822,11 @@ export const createChatService = ({
                     workflowResult.planContinuation.conversationSnapshot;
                 effectiveGenerationRequest =
                     workflowResult.planContinuation.generationRequest;
+                effectivePlannerTemperament =
+                    workflowResult.planContinuation.plannerTemperament ??
+                    workflowResult.planContinuation.plannerSummary.executionPlan
+                        .generation.temperament ??
+                    effectivePlannerTemperament;
                 effectiveNormalizedGeneration =
                     workflowResult.planContinuation.plannerSummary
                         .generationForExecution;
@@ -1253,7 +1259,7 @@ export const createChatService = ({
             modelVersion: usageModel,
             conversationSnapshot: `${workflowConversationSnapshot ?? conversationSnapshot}\n\n${generationResult.text}`,
             ...(totalDurationMs !== undefined && { totalDurationMs }),
-            plannerTemperament,
+            plannerTemperament: effectivePlannerTemperament,
             ...(normalizedWorkflowLineage !== undefined && {
                 workflow: normalizedWorkflowLineage,
             }),
