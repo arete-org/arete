@@ -606,7 +606,7 @@ export const resolveWorkflowRuntimeConfig = (input: {
         );
     const fallbackWorkflowStepLimit =
         workflowProfile.policy.enableAssessment === false
-            ? 1
+            ? workflowProfile.defaultLimits.maxWorkflowSteps
             : Math.max(1, profileDefaultMaxIterations * 2);
     const modeMaxPlanCycles =
         modeDecision.behavior.maxPlanCycles ??
@@ -649,7 +649,7 @@ export const resolveWorkflowRuntimeConfig = (input: {
             sanitizePositiveInteger(
                 executionContract?.limits.maxWorkflowSteps ??
                     (workflowProfile.policy.enableAssessment === false
-                        ? 1
+                        ? workflowProfile.defaultLimits.maxWorkflowSteps
                         : input.maxIterations * 2),
                 fallbackWorkflowStepLimit
             ),

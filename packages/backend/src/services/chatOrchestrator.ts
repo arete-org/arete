@@ -306,7 +306,12 @@ export const createChatOrchestrator = ({
             plannerResult: Awaited<ReturnType<typeof chatPlanner.planChat>>
         ): PlannerStepResult => ({
             plan: plannerResult.plan,
-            execution: plannerResult.execution,
+            execution: {
+                ...plannerResult.execution,
+                profileId: plannerProfile.id,
+                provider: plannerProfile.provider,
+                model: plannerProfile.providerModel,
+            },
             ingestion: {
                 outputApplyOutcome:
                     plannerResult.execution.status === 'executed'
@@ -369,27 +374,6 @@ export const createChatOrchestrator = ({
             defaultResponseProfile,
             weatherForecastTool,
             logger: chatOrchestratorLogger,
-        });
-        const steerabilityControls = buildSteerabilityControls({
-            workflowMode: workflowModeResolution.modeDecision,
-            executionContractResponseMode:
-                resolvedExecutionContract.response.responseMode,
-            requestedProfileId: normalizedRequest.profileId,
-            plannerSelectedProfileId: defaultResponseProfile.id,
-            selectedProfile: {
-                profileId: defaultResponseProfile.id,
-                provider: defaultResponseProfile.provider,
-                model: defaultResponseProfile.providerModel,
-            },
-            persona: {
-                personaId: personaProfile.id,
-                overlaySource: personaProfile.promptOverlay.source,
-            },
-            toolRequest: {
-                toolName: 'web_search',
-                requested: false,
-                eligible: false,
-            },
         });
         const promptLayers = renderConversationPromptLayers(
             normalizedRequest.surface === 'discord'
@@ -479,8 +463,8 @@ export const createChatOrchestrator = ({
             },
             plannerApplyOutcome: input.plannerApplication.plannerApplyOutcome,
             plannerMattered: input.plannerApplication.plannerMattered,
-            plannerMatteredControlIds: input.plannerApplication
-                .plannerMatteredControlIds as AppliedPlanState['plannerMatteredControlIds'],
+            plannerMatteredControlIds:
+                input.plannerApplication.plannerMatteredControlIds,
             fallbackReasons: [...fallbackReasons],
             fallbackRollupSelectionSource:
                 input.plannerApplication.fallbackRollupSelectionSource,
@@ -585,11 +569,19 @@ export const createChatOrchestrator = ({
                     policyVersion: resolvedExecutionContract.policyVersion,
                 },
             });
+            const plannerPayloadMessage =
+                postPlanAssembly.conversationMessages.at(-1);
+            const mergedMessagesWithHints =
+                plannerPayloadMessage !== undefined &&
+                input.baseMessagesWithHints.length > 0
+                    ? [...input.baseMessagesWithHints, plannerPayloadMessage]
+                    : postPlanAssembly.conversationMessages;
             return {
                 continuation: 'continue_message' as const,
-                messagesWithHints: postPlanAssembly.conversationMessages,
+                messagesWithHints: mergedMessagesWithHints,
                 generationRequest: {
-                    messages: postPlanAssembly.conversationMessages,
+                    ...input.baseGenerationRequest,
+                    messages: mergedMessagesWithHints,
                     model: plannerApplication.selectedResponseProfile
                         .providerModel,
                     provider:
@@ -608,6 +600,7 @@ export const createChatOrchestrator = ({
                         search: executionPlan.generation.search,
                     }),
                 },
+                conversationSnapshot: postPlanAssembly.conversationSnapshot,
                 ...(plannerApplication.contextStepRequest !== undefined && {
                     contextStepRequest: plannerApplication.contextStepRequest,
                 }),
@@ -656,7 +649,6 @@ export const createChatOrchestrator = ({
             executionContext: {
                 evaluator: evaluatorExecutionContext,
             },
-            steerabilityControls,
         });
         const plannerSummary =
             response.kind === 'message' ? response.plannerSummary : undefined;
@@ -846,6 +838,28 @@ export const createChatOrchestrator = ({
                 );
             }
         };
+        const finalizedSteerabilityControls =
+            plannerSummary !== undefined && plannerStepResult !== undefined
+                ? buildSteerabilityControls({
+                      workflowMode: workflowModeResolution.modeDecision,
+                      executionContractResponseMode:
+                          resolvedExecutionContract.response.responseMode,
+                      requestedProfileId: normalizedRequest.profileId,
+                      plannerSelectedProfileId: executionPlan.profileId,
+                      selectedProfile: {
+                          profileId: plannerSummary.selectedResponseProfile.id,
+                          provider:
+                              plannerSummary.selectedResponseProfile.provider,
+                          model: plannerSummary.selectedResponseProfile
+                              .providerModel,
+                      },
+                      persona: {
+                          personaId: personaProfile.id,
+                          overlaySource: personaProfile.promptOverlay.source,
+                      },
+                      toolRequest: plannerSummary.toolRequestContext,
+                  })
+                : undefined;
         if (response.kind === 'terminal_action') {
             const terminalResponse =
                 response.response ??
@@ -890,6 +904,10 @@ export const createChatOrchestrator = ({
         const totalDurationMs =
             response.metadata.totalDurationMs ??
             Math.max(0, Date.now() - orchestrationStartedAt);
+        if (finalizedSteerabilityControls !== undefined) {
+            response.metadata.steerabilityControls =
+                finalizedSteerabilityControls;
+        }
         emitFallbackRollup(fallbackRollupSelectionSource);
         notifyBreakerEvent({
             responseId: response.metadata.responseId,

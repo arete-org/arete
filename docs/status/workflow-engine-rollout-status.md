@@ -16,7 +16,7 @@ This file tracks the remaining rollout work. The canonical architecture is in
   context-step request derivation.
 
 - **Planner timing**: Completed. Planner now runs inside workflow timing
-  through injected `PlannerStepExecutor` and `PlanContinuationBuilder`.
+  through injected `PlannerStepExecutor`.
   `workflowEngine` owns plan-step ordering and plan lineage.
 
 - **Post-plan message assembly seam**: Completed. Planner-applied

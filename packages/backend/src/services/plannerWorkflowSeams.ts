@@ -58,6 +58,9 @@ export type PlannerStepResult = {
         purpose: PlannerExecutionPurpose;
         contractType: PlannerExecutionContractType;
         durationMs: number;
+        profileId?: string;
+        provider?: string;
+        model?: string;
     };
     ingestion: {
         outputApplyOutcome: 'accepted' | 'partially_applied' | 'rejected';
@@ -112,7 +115,7 @@ export type PlannerApplicationResult = {
     contextStepRequest?: ContextStepRequest;
     plannerApplyOutcome: PlannerExecutionApplyOutcome;
     plannerMattered: boolean;
-    plannerMatteredControlIds: string[];
+    plannerMatteredControlIds: SteerabilityControlId[];
     fallbackReasons: string[];
     fallbackRollupSelectionSource: 'default' | 'planner' | 'request_override';
 };
@@ -176,6 +179,7 @@ export type PlanContinuation = {
           continuation: 'continue_message';
           messagesWithHints: RuntimeMessage[];
           generationRequest: GenerationRequest;
+          conversationSnapshot: string;
           contextStepRequest?: ContextStepRequest;
       }
 );

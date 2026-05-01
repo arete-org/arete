@@ -156,7 +156,7 @@ export const createPlannerResultApplier = (
                   ? 'adjusted_by_policy'
                   : 'applied';
         const plannerMattered = plannerApplyOutcome !== 'not_applied';
-        const plannerMatteredControlIds =
+        const plannerMatteredControlIds: PlannerApplicationResult['plannerMatteredControlIds'] =
             plannerApplyOutcome === 'adjusted_by_policy'
                 ? ['provider_preference']
                 : [];

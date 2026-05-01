@@ -117,7 +117,7 @@ test('resolveWorkflowRuntimeConfig applies forceWorkflowExecution and review-loo
     });
     assert.equal(fastRuntimeConfig.profileId, 'generate-only');
     assert.equal(fastRuntimeConfig.workflowExecutionEnabled, true);
-    assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps, 1);
+    assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps, 3);
     assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxPlanCycles, 1);
     assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxReviewCycles, 0);
     assert.equal(

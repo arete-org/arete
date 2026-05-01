@@ -766,6 +766,7 @@ export const createChatService = ({
         let workflowContextStepResult: ContextStepResult | undefined;
         let workflowPlannerSummary: AppliedPlanState | undefined;
         let workflowPlannerStepResult: PlannerStepResult | undefined;
+        let workflowConversationSnapshot: string | undefined;
         let fallbackAfterInternalNoGeneration = false;
         const effectivePlannerStepRequest = plannerStepRequest;
         const effectivePlannerStepExecutor = plannerStepExecutor;
@@ -809,6 +810,11 @@ export const createChatService = ({
             workflowPlannerStepResult = workflowResult.plannerStepResult;
             workflowPlannerSummary =
                 workflowResult.planContinuation?.plannerSummary;
+            workflowConversationSnapshot =
+                workflowResult.planContinuation?.continuation ===
+                'continue_message'
+                    ? workflowResult.planContinuation.conversationSnapshot
+                    : undefined;
             workflowContextStepResult = workflowResult.contextStepResult;
             switch (workflowResult.outcome) {
                 case 'generated': {
@@ -1183,8 +1189,6 @@ export const createChatService = ({
                       durationMs: generationDurationMs,
                   } satisfies GenerationExecutionContext)
                 : undefined;
-        const plannerProfileFallbackId =
-            generationRequest.model ?? defaultModel;
         const effectivePlannerExecutionContext =
             executionContext?.planner ??
             (workflowPlannerStepResult !== undefined
@@ -1207,20 +1211,22 @@ export const createChatService = ({
                           workflowPlannerSummary?.plannerMatteredControlIds ??
                           [],
                       profileId:
-                          workflowPlannerSummary?.selectedResponseProfile.id ??
-                          plannerProfileFallbackId,
+                          workflowPlannerStepResult.execution.profileId ??
+                          'planner_profile_unreported',
                       originalProfileId:
                           workflowPlannerSummary?.originalSelectedProfileId ??
-                          plannerProfileFallbackId,
+                          workflowPlannerStepResult.execution.profileId ??
+                          'planner_profile_unreported',
                       effectiveProfileId:
                           workflowPlannerSummary?.effectiveSelectedProfileId ??
-                          plannerProfileFallbackId,
+                          workflowPlannerStepResult.execution.profileId ??
+                          'planner_profile_unreported',
                       provider:
-                          workflowPlannerSummary?.selectedResponseProfile
-                              .provider ?? 'internal',
+                          workflowPlannerStepResult.execution.provider ??
+                          'planner_provider_unreported',
                       model:
-                          workflowPlannerSummary?.selectedResponseProfile
-                              .providerModel ?? plannerProfileFallbackId,
+                          workflowPlannerStepResult.execution.model ??
+                          'planner_model_unreported',
                       durationMs:
                           workflowPlannerStepResult.execution.durationMs,
                   }
@@ -1229,7 +1235,7 @@ export const createChatService = ({
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
-            conversationSnapshot: `${conversationSnapshot}\n\n${generationResult.text}`,
+            conversationSnapshot: `${workflowConversationSnapshot ?? conversationSnapshot}\n\n${generationResult.text}`,
             ...(totalDurationMs !== undefined && { totalDurationMs }),
             plannerTemperament,
             ...(normalizedWorkflowLineage !== undefined && {

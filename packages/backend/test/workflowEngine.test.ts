@@ -885,6 +885,7 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
                 ...baseGenerationRequest,
                 model: 'gpt-5-mini',
             },
+            conversationSnapshot: 'planner continuation snapshot',
             plannerSummary: {
                 executionPlan: plannerStepResult.plan,
                 generationForExecution: plannerStepResult.plan.generation,

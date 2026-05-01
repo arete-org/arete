@@ -998,22 +998,35 @@ export const runBoundedReviewWorkflow = async ({
         plannerExecutionResult !== undefined &&
         planContinuationBuilder !== undefined
     ) {
-        planContinuation = planContinuationBuilder({
-            plannerStepResult: plannerExecutionResult,
-            workflowId,
-            workflowName: workflowConfig.workflowName,
-            attempt: 1,
-            baseMessagesWithHints: messagesWithHints,
-            baseGenerationRequest: generationRequest,
-        });
-        if (planContinuation.continuation === 'terminal_action') {
-            workflowTerminalAction = planContinuation.terminalAction;
-        } else {
-            effectiveGenerationRequest = planContinuation.generationRequest;
-            effectiveMessagesWithHints = planContinuation.messagesWithHints;
-            effectiveContextStepRequest =
-                planContinuation.contextStepRequest ??
-                effectiveContextStepRequest;
+        try {
+            planContinuation = planContinuationBuilder({
+                plannerStepResult: plannerExecutionResult,
+                workflowId,
+                workflowName: workflowConfig.workflowName,
+                attempt: 1,
+                baseMessagesWithHints: messagesWithHints,
+                baseGenerationRequest: generationRequest,
+            });
+            if (planContinuation.continuation === 'terminal_action') {
+                workflowTerminalAction = planContinuation.terminalAction;
+            } else {
+                effectiveGenerationRequest = planContinuation.generationRequest;
+                effectiveMessagesWithHints = planContinuation.messagesWithHints;
+                effectiveContextStepRequest =
+                    planContinuation.contextStepRequest ??
+                    effectiveContextStepRequest;
+            }
+        } catch (error) {
+            logger.warn(
+                'Plan continuation builder failed; continuing with pre-plan generation request.',
+                {
+                    workflowId,
+                    workflowName: workflowConfig.workflowName,
+                    attempt: 1,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                }
+            );
         }
     }
 

@@ -1324,6 +1324,7 @@ test('runChatMessages forwards planner seams into workflow runtime for bounded-r
             continuation: 'continue_message',
             messagesWithHints: input.baseMessagesWithHints,
             generationRequest: input.baseGenerationRequest,
+            conversationSnapshot: 'planner continuation snapshot',
             plannerSummary: {
                 executionPlan: input.plannerStepResult.plan,
                 generationForExecution: input.plannerStepResult.plan.generation,

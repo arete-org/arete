@@ -384,9 +384,10 @@ The adapter `toolRegistryContextStepAdapter.ts` implements this pattern for
 
 Planner timing is workflow-owned:
 
-- `chatOrchestrator` builds and injects `PlannerStepExecutor` and
-  `PlanContinuationBuilder`.
 - `workflowEngine` executes `plan` first and records canonical plan lineage.
+- `chatOrchestrator` injects two seams:
+    - `PlannerStepExecutor` for planner execution during the `plan` step.
+    - `PlanContinuationBuilder` for post-plan continuation building.
 - `PlanContinuationBuilder` applies planner output through
   `PlannerResultApplier`, `classifyPlanContinuation`, and
   `assemblePlanGenerationInput`.
