@@ -6,7 +6,6 @@
  * @footnote-ethics: medium - The hero sets user expectations about privacy, honesty, and transparency.
  */
 
-import { useState, type KeyboardEvent } from 'react';
 import Header from './Header';
 import AskMeAnything from './AskMeAnything';
 
@@ -14,124 +13,27 @@ import AskMeAnything from './AskMeAnything';
 const Hero = (): JSX.Element => {
     // No breadcrumbs on home page
     const breadcrumbItems: never[] = [];
-    const [activeTab, setActiveTab] = useState<'try' | 'setup'>('try');
-    const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
-            return;
-        }
-
-        event.preventDefault();
-        const currentTab =
-            event.currentTarget.id === 'hero-tab-setup' ? 'setup' : 'try';
-        const nextTab =
-            event.key === 'ArrowRight'
-                ? currentTab === 'try'
-                    ? 'setup'
-                    : 'try'
-                : currentTab === 'setup'
-                  ? 'try'
-                  : 'setup';
-
-        setActiveTab(nextTab);
-
-        const nextTabElement = document.getElementById(
-            nextTab === 'try' ? 'hero-tab-try' : 'hero-tab-setup'
-        );
-        if (nextTabElement instanceof HTMLButtonElement) {
-            nextTabElement.focus();
-        }
-    };
 
     return (
         <section className="hero" aria-labelledby="hero-title">
             <Header breadcrumbItems={breadcrumbItems} />
 
             <div className="hero-copy">
-                <h1 id="hero-title">
-                    Ask a question. See what shaped the answer.
+                <h1 id="hero-title" className="hero-title">
+                    <span className="hero-title__line">Ask a question,</span>{' '}
+                    <span className="hero-title__line">
+                        see how the answer is made.
+                    </span>
                 </h1>
                 <p className="hero-copy__subtitle">
-                    Footnote answers your question, then shows the sources,
-                    signals, and trace behind the response.
+                    <span className="hero-subtitle__line">
+                        Footnote shows the sources, signals, and
+                    </span>{' '}
+                    <span className="hero-subtitle__line">
+                        step-by-step decisions behind each response.
+                    </span>
                 </p>
-                <div className="hero-action-hub">
-                    <div className="hero-action-tabs" role="tablist">
-                        <button
-                            id="hero-tab-try"
-                            type="button"
-                            role="tab"
-                            aria-controls="hero-panel-try"
-                            aria-selected={activeTab === 'try'}
-                            tabIndex={activeTab === 'try' ? 0 : -1}
-                            className={`hero-action-tab${activeTab === 'try' ? ' is-active' : ''}`}
-                            onClick={() => setActiveTab('try')}
-                            onKeyDown={handleKeyDown}
-                        >
-                            <span className="hero-action-tab__title">
-                                Try it out
-                            </span>
-                            <span className="hero-action-tab__hint">
-                                Ask a question right here
-                            </span>
-                        </button>
-                        <button
-                            id="hero-tab-setup"
-                            type="button"
-                            role="tab"
-                            aria-controls="hero-panel-setup"
-                            aria-selected={activeTab === 'setup'}
-                            tabIndex={activeTab === 'setup' ? 0 : -1}
-                            className={`hero-action-tab${activeTab === 'setup' ? ' is-active' : ''}`}
-                            onClick={() => setActiveTab('setup')}
-                            onKeyDown={handleKeyDown}
-                        >
-                            <span className="hero-action-tab__title">
-                                Set it up
-                            </span>
-                            <span className="hero-action-tab__hint">
-                                Minimal self-host quickstart
-                            </span>
-                        </button>
-                    </div>
-                    <div className="hero-action-panel">
-                        <div
-                            id="hero-panel-try"
-                            role="tabpanel"
-                            aria-labelledby="hero-tab-try"
-                            hidden={activeTab !== 'try'}
-                        >
-                            <AskMeAnything />
-                        </div>
-                        <div
-                            id="hero-panel-setup"
-                            role="tabpanel"
-                            aria-labelledby="hero-tab-setup"
-                            hidden={activeTab !== 'setup'}
-                        >
-                            <section
-                                className="setup-quickstart"
-                                aria-labelledby="setup-quickstart-title"
-                            >
-                                <h3 id="setup-quickstart-title">Quick setup</h3>
-                                <ol>
-                                    <li>
-                                        <code>pnpm install</code>
-                                    </li>
-                                    <li>
-                                        <code>cp .env.example .env</code>
-                                    </li>
-                                    <li>
-                                        <code>pnpm dev</code>
-                                    </li>
-                                </ol>
-                                <a href="/setup/" className="inline-cta">
-                                    Full setup guide
-                                    <span aria-hidden="true">↗</span>
-                                </a>
-                            </section>
-                        </div>
-                    </div>
-                </div>
+                <AskMeAnything />
 
                 <div className="intro-card" aria-labelledby="intro-card-title">
                     <div className="intro-card-background" aria-hidden="true">
@@ -176,8 +78,9 @@ const Hero = (): JSX.Element => {
                                 </li>
                             </ul>
                             <p>
-                                If you want full control, use the setup tab and
-                                run Footnote in your own environment.
+                                If you want full control, open Source and use
+                                the GitHub setup docs to run Footnote in your
+                                own environment.
                             </p>
                         </div>
                     </div>

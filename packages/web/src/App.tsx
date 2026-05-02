@@ -16,10 +16,12 @@ import Footer from '@components/Footer';
 
 const TracePage = lazy(() => import('@pages/TracePage'));
 const SetupPage = lazy(() => import('@pages/SetupPage'));
+const DownloadPage = lazy(() => import('@pages/DownloadPage'));
 const BlogListPage = lazy(() => import('@pages/BlogListPage'));
 const BlogPostPage = lazy(() => import('@pages/BlogPostPage'));
 const EmbedPage = lazy(() => import('@pages/EmbedPage'));
 const AboutPage = lazy(() => import('@pages/AboutPage'));
+const OnboardingPage = lazy(() => import('@pages/OnboardingPage'));
 
 const routeFallback = (
     <main id="main-content" className="route-loading-shell">
@@ -66,6 +68,22 @@ const App = (): JSX.Element => (
                 }
             />
             <Route
+                path="/download"
+                element={
+                    <Suspense fallback={routeFallback}>
+                        <DownloadPage />
+                    </Suspense>
+                }
+            />
+            <Route
+                path="/download/"
+                element={
+                    <Suspense fallback={routeFallback}>
+                        <DownloadPage />
+                    </Suspense>
+                }
+            />
+            <Route
                 path="/setup"
                 element={
                     <Suspense fallback={routeFallback}>
@@ -94,6 +112,22 @@ const App = (): JSX.Element => (
                 element={
                     <Suspense fallback={routeFallback}>
                         <AboutPage />
+                    </Suspense>
+                }
+            />
+            <Route
+                path="/onboarding"
+                element={
+                    <Suspense fallback={routeFallback}>
+                        <OnboardingPage />
+                    </Suspense>
+                }
+            />
+            <Route
+                path="/onboarding/"
+                element={
+                    <Suspense fallback={routeFallback}>
+                        <OnboardingPage />
                     </Suspense>
                 }
             />

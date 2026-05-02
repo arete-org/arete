@@ -227,6 +227,11 @@ const AboutPage = (): JSX.Element => (
                     If you want the architecture details or want to work in the
                     repo, start with these.
                 </p>
+                <p>
+                    For current workflow and trace rendering architecture, start
+                    with the{' '}
+                    <a href="/onboarding">contributor onboarding page</a>.
+                </p>
                 <ul className="about-links">
                     {developerLinks.map((link) => (
                         <li key={link.href}>

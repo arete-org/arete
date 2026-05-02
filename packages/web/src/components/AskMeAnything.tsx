@@ -616,7 +616,7 @@ const AskMeAnything = (): JSX.Element => {
 
     return (
         <div className="interaction">
-            <div className="interaction-heading-row">
+            <div className="interaction-heading-row" hidden>
                 <h2 className="interaction-heading">Ask a question</h2>
                 <div className="interaction-prompt-buttons-row">
                     <div className="interaction-prompt-text-button-wrapper">

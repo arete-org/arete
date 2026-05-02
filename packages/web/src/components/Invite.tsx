@@ -14,25 +14,26 @@ interface InviteStep {
 
 const STEPS: InviteStep[] = [
     {
-        title: '1. Prepare',
-        description: 'Install dependencies and copy `.env.example` to `.env`.',
+        title: '1. Read the source',
+        description:
+            'Start from the GitHub README for the current install path and required tools.',
     },
     {
-        title: '2. Deploy',
+        title: '2. Configure',
         description:
-            'Set required secrets, including `OPENAI_API_KEY` and `INCIDENT_PSEUDONYMIZATION_SECRET`.',
+            'Set required environment values for your provider and runtime.',
     },
     {
-        title: '3. Invite',
+        title: '3. Run locally',
         description:
-            'Run `pnpm dev` for web + backend, or `pnpm start:all` to include Discord.',
+            'Use the documented `pnpm` commands for web, backend, and optional Discord.',
     },
 ];
 
 // Section inviting operators to walk through the deployment steps at a human pace.
 const Invite = (): JSX.Element => (
     <section className="invite" aria-labelledby="invite-title">
-        <h2 id="invite-title">Run Footnote in your environment</h2>
+        <h2 id="invite-title">Get started today</h2>
         <div className="card-grid" role="list">
             {STEPS.map((step) => (
                 <article key={step.title} className="card" role="listitem">
@@ -43,10 +44,12 @@ const Invite = (): JSX.Element => (
         </div>
         <a
             className="inline-cta"
-            href="/setup/"
-            aria-label="View setup instructions"
+            href="https://github.com/footnote-ai/footnote/blob/main/README.md"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Open setup instructions on GitHub (opens in new tab)"
         >
-            <span aria-hidden="true">🛠</span> Open Setup Guide
+            <span aria-hidden="true">↗</span> Open Setup Guide on GitHub
         </a>
     </section>
 );

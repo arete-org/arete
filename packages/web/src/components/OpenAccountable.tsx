@@ -33,8 +33,9 @@ const PRINCIPLES: Principle[] = [
         description:
             'Run Footnote in your own environment, with your own credentials and provider choices.',
         link: {
-            href: '/setup/',
-            label: 'Quickstart setup',
+            href: 'https://github.com/footnote-ai/footnote/blob/main/README.md',
+            label: 'Setup on GitHub',
+            external: true,
         },
     },
     {
