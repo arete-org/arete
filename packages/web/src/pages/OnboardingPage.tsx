@@ -36,10 +36,17 @@ type SymbolReferenceEntry = {
     explanation: string;
 };
 
+type WhereToReadNextEntry = {
+    filePath: string;
+};
+
 const REPOSITORY_BASE_URL = 'https://github.com/footnote-ai/footnote/blob/main';
 
 const getRepositoryFileUrl = (filePath: string, symbolLine: number): string =>
     `${REPOSITORY_BASE_URL}/${filePath}#L${symbolLine}`;
+
+const getRepositoryPathUrl = (filePath: string): string =>
+    `${REPOSITORY_BASE_URL}/${filePath}`;
 
 const breadcrumbItems = [{ label: 'Contributor Onboarding' }];
 
@@ -186,6 +193,15 @@ const symbolReferences: SymbolReferenceEntry[] = [
         explanation:
             'TRACE final posture delivered in metadata for rendering and trace review.',
     },
+];
+
+const whereToReadNextEntries: WhereToReadNextEntry[] = [
+    { filePath: 'docs/architecture/context-integrations/weather-forecast.md' },
+    { filePath: 'packages/backend/src/services/workflowEngine.ts' },
+    { filePath: 'packages/backend/src/services/chatOrchestrator.ts' },
+    { filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts' },
+    { filePath: 'packages/contracts/src/ethics-core/types.ts' },
+    { filePath: 'packages/web/src/pages/TracePage.tsx' },
 ];
 
 const SymbolBadge = ({ kind }: { kind: SymbolKind }): JSX.Element => (
@@ -516,36 +532,19 @@ const OnboardingPage = (): JSX.Element => {
                         >
                             <h2 id="where-next-title">Where to read next</h2>
                             <ul>
-                                <li>
-                                    <code>
-                                        docs/architecture/context-integrations/weather-forecast.md
-                                    </code>
-                                </li>
-                                <li>
-                                    <code>
-                                        packages/backend/src/services/workflowEngine.ts
-                                    </code>
-                                </li>
-                                <li>
-                                    <code>
-                                        packages/backend/src/services/chatOrchestrator.ts
-                                    </code>
-                                </li>
-                                <li>
-                                    <code>
-                                        packages/backend/src/services/plannerWorkflowSeams.ts
-                                    </code>
-                                </li>
-                                <li>
-                                    <code>
-                                        packages/contracts/src/ethics-core/types.ts
-                                    </code>
-                                </li>
-                                <li>
-                                    <code>
-                                        packages/web/src/pages/TracePage.tsx
-                                    </code>
-                                </li>
+                                {whereToReadNextEntries.map((entry) => (
+                                    <li key={entry.filePath}>
+                                        <a
+                                            href={getRepositoryPathUrl(
+                                                entry.filePath
+                                            )}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                        >
+                                            <code>{entry.filePath}</code>
+                                        </a>
+                                    </li>
+                                ))}
                             </ul>
                         </section>
                     </article>
