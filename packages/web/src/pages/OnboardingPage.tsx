@@ -9,13 +9,7 @@
 
 import Header from '@components/Header';
 import Footer from '@components/Footer';
-import {
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    type CSSProperties,
-} from 'react';
+import StickySectionToc from '@components/StickySectionToc';
 
 type OnboardingSectionId =
     | 'repo-shape'
@@ -194,55 +188,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
     },
 ];
 
-type OnboardingTocProps = {
-    activeSectionId: OnboardingSectionId | null;
-    isPinned: boolean;
-    pinnedStyle: CSSProperties | undefined;
-    onInnerRef: (element: HTMLDivElement | null) => void;
-};
-
-const OnboardingToc = ({
-    activeSectionId,
-    isPinned,
-    pinnedStyle,
-    onInnerRef,
-}: OnboardingTocProps): JSX.Element => (
-    <nav className="onboarding-toc" aria-label="Onboarding sections">
-        <div
-            ref={onInnerRef}
-            className={
-                isPinned
-                    ? 'onboarding-toc__inner onboarding-toc__inner--pinned'
-                    : 'onboarding-toc__inner'
-            }
-            style={pinnedStyle}
-        >
-            <p className="onboarding-toc__title">Index</p>
-            <ul className="onboarding-toc__list">
-                {sectionLinks.map((link) => (
-                    <li key={link.id}>
-                        <a
-                            href={`#${link.id}`}
-                            className={
-                                activeSectionId === link.id
-                                    ? 'onboarding-toc__link onboarding-toc__link--active'
-                                    : 'onboarding-toc__link'
-                            }
-                            aria-current={
-                                activeSectionId === link.id
-                                    ? 'location'
-                                    : undefined
-                            }
-                        >
-                            {link.label}
-                        </a>
-                    </li>
-                ))}
-            </ul>
-        </div>
-    </nav>
-);
-
 const SymbolBadge = ({ kind }: { kind: SymbolKind }): JSX.Element => (
     <span
         className={`onboarding-symbol-badge onboarding-symbol-badge--${kind}`}
@@ -252,160 +197,6 @@ const SymbolBadge = ({ kind }: { kind: SymbolKind }): JSX.Element => (
 );
 
 const OnboardingPage = (): JSX.Element => {
-    const [activeSectionId, setActiveSectionId] =
-        useState<OnboardingSectionId | null>(null);
-    const [isTocPinned, setIsTocPinned] = useState(false);
-    const [tocPinnedStyle, setTocPinnedStyle] = useState<
-        CSSProperties | undefined
-    >(undefined);
-    const [tocPlaceholderHeight, setTocPlaceholderHeight] = useState<
-        number | undefined
-    >(undefined);
-    const isTocPinnedRef = useRef(false);
-    const tocContainerRef = useRef<HTMLElement | null>(null);
-    const tocInnerRef = useRef<HTMLDivElement | null>(null);
-    const sectionIds = useMemo(() => sectionLinks.map((link) => link.id), []);
-
-    useEffect(() => {
-        const desktopQuery = window.matchMedia('(min-width: 641px)');
-
-        const updateActiveSection = (): void => {
-            if (!desktopQuery.matches) {
-                setActiveSectionId(null);
-                return;
-            }
-
-            const thresholdPx = 160;
-            let nextActiveId: OnboardingSectionId | null =
-                sectionIds[0] ?? null;
-
-            for (const sectionId of sectionIds) {
-                const sectionElement = document.getElementById(sectionId);
-                if (sectionElement === null) {
-                    continue;
-                }
-
-                const sectionTop = sectionElement.getBoundingClientRect().top;
-                if (sectionTop <= thresholdPx) {
-                    nextActiveId = sectionId;
-                    continue;
-                }
-
-                break;
-            }
-
-            if (
-                window.innerHeight + window.scrollY >=
-                document.body.scrollHeight - 2
-            ) {
-                nextActiveId =
-                    sectionIds[sectionIds.length - 1] ?? nextActiveId;
-            }
-
-            setActiveSectionId(nextActiveId);
-        };
-
-        const handleDesktopModeChange = (): void => {
-            updateActiveSection();
-        };
-
-        updateActiveSection();
-        window.addEventListener('scroll', updateActiveSection, {
-            passive: true,
-        });
-        window.addEventListener('resize', updateActiveSection);
-        desktopQuery.addEventListener('change', handleDesktopModeChange);
-
-        return () => {
-            window.removeEventListener('scroll', updateActiveSection);
-            window.removeEventListener('resize', updateActiveSection);
-            desktopQuery.removeEventListener('change', handleDesktopModeChange);
-        };
-    }, [sectionIds]);
-
-    useEffect(() => {
-        const desktopQuery = window.matchMedia('(min-width: 641px)');
-        let animationFrameId: number | null = null;
-
-        const updatePinnedToc = (): void => {
-            const tocContainer = tocContainerRef.current;
-            const tocInner = tocInnerRef.current;
-
-            if (
-                tocContainer === null ||
-                tocInner === null ||
-                !desktopQuery.matches
-            ) {
-                isTocPinnedRef.current = false;
-                setIsTocPinned(false);
-                setTocPinnedStyle(undefined);
-                setTocPlaceholderHeight(undefined);
-                return;
-            }
-
-            const headerElement = document.querySelector(
-                '.site-header-sticky'
-            ) as HTMLElement | null;
-            const headerBottom =
-                headerElement?.getBoundingClientRect().bottom ?? 0;
-            const topOffset = headerBottom + 12;
-            const containerRect = tocContainer.getBoundingClientRect();
-
-            const pinThreshold = topOffset - 2;
-            const unpinThreshold = topOffset + 12;
-            const shouldPin = isTocPinnedRef.current
-                ? containerRect.top <= unpinThreshold
-                : containerRect.top <= pinThreshold;
-
-            if (shouldPin) {
-                isTocPinnedRef.current = true;
-                setIsTocPinned(true);
-                setTocPinnedStyle({
-                    top: `${topOffset}px`,
-                    left: `${containerRect.left}px`,
-                    width: `${containerRect.width}px`,
-                });
-                setTocPlaceholderHeight(
-                    tocInner.getBoundingClientRect().height
-                );
-                return;
-            }
-
-            isTocPinnedRef.current = false;
-            setIsTocPinned(false);
-            setTocPinnedStyle(undefined);
-            setTocPlaceholderHeight(undefined);
-        };
-
-        const schedulePinnedTocUpdate = (): void => {
-            if (animationFrameId !== null) {
-                return;
-            }
-
-            animationFrameId = window.requestAnimationFrame(() => {
-                animationFrameId = null;
-                updatePinnedToc();
-            });
-        };
-
-        updatePinnedToc();
-        window.addEventListener('scroll', schedulePinnedTocUpdate, {
-            passive: true,
-        });
-        window.addEventListener('resize', schedulePinnedTocUpdate);
-        desktopQuery.addEventListener('change', schedulePinnedTocUpdate);
-
-        return () => {
-            if (animationFrameId !== null) {
-                window.cancelAnimationFrame(animationFrameId);
-            }
-
-            window.removeEventListener('scroll', schedulePinnedTocUpdate);
-            window.removeEventListener('resize', schedulePinnedTocUpdate);
-            desktopQuery.removeEventListener('change', schedulePinnedTocUpdate);
-        };
-    }, []);
-
     return (
         <>
             <Header breadcrumbItems={breadcrumbItems} />
@@ -423,24 +214,10 @@ const OnboardingPage = (): JSX.Element => {
                 </header>
 
                 <div className="page-layout">
-                    <aside
-                        className="page-toc"
-                        ref={tocContainerRef}
-                        style={
-                            tocPlaceholderHeight === undefined
-                                ? undefined
-                                : { minHeight: `${tocPlaceholderHeight}px` }
-                        }
-                    >
-                        <OnboardingToc
-                            activeSectionId={activeSectionId}
-                            isPinned={isTocPinned}
-                            pinnedStyle={tocPinnedStyle}
-                            onInnerRef={(element) => {
-                                tocInnerRef.current = element;
-                            }}
-                        />
-                    </aside>
+                    <StickySectionToc
+                        ariaLabel="Onboarding sections"
+                        sections={sectionLinks}
+                    />
 
                     <article className="page-content__main">
                         <section

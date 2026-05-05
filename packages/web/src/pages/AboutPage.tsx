@@ -9,22 +9,17 @@
 
 import Header from '@components/Header';
 import Footer from '@components/Footer';
+import StickySectionToc from '@components/StickySectionToc';
 
 type AboutSectionId =
     | 'why-footnote-exists'
     | 'reading-a-response'
     | 'what-a-trace-is'
     | 'open-source-and-self-hosting'
-    | 'what-we-are-careful-about'
     | 'developers';
 
 type SectionLink = {
     id: AboutSectionId;
-    label: string;
-};
-
-type DeveloperLink = {
-    href: string;
     label: string;
 };
 
@@ -36,42 +31,9 @@ const sectionLinks: SectionLink[] = [
     { id: 'what-a-trace-is', label: 'The record' },
     {
         id: 'open-source-and-self-hosting',
-        label: 'Open source and self-hosting',
+        label: 'Open source',
     },
-    {
-        id: 'what-we-are-careful-about',
-        label: 'What we are careful about',
-    },
-    { id: 'developers', label: 'Developers and contributors' },
-];
-
-const repoBaseUrl = 'https://github.com/footnote-ai/footnote/blob/main';
-
-const developerLinks: DeveloperLink[] = [
-    {
-        href: `${repoBaseUrl}/README.md`,
-        label: 'README',
-    },
-    {
-        href: `${repoBaseUrl}/docs/README.md`,
-        label: 'Docs',
-    },
-    {
-        href: `${repoBaseUrl}/docs/architecture/README.md`,
-        label: 'Architecture docs',
-    },
-    {
-        href: `${repoBaseUrl}/AGENTS.md`,
-        label: 'AGENTS.md',
-    },
-    {
-        href: `${repoBaseUrl}/docs/ai/README.md`,
-        label: 'AI assistance guide',
-    },
-    {
-        href: `${repoBaseUrl}/deploy/README.md`,
-        label: 'Deploy docs',
-    },
+    { id: 'developers', label: 'Get involved' },
 ];
 
 const AboutPage = (): JSX.Element => (
@@ -91,20 +53,12 @@ const AboutPage = (): JSX.Element => (
             </header>
 
             <div className="page-layout">
-                <aside className="page-toc">
-                    <nav className="onboarding-toc" aria-label="About sections">
-                        <p className="onboarding-toc__title">Index</p>
-                        <ul className="onboarding-toc__list">
-                            {sectionLinks.map((link) => (
-                                <li key={link.id}>
-                                    <a href={`#${link.id}`}>{link.label}</a>
-                                </li>
-                            ))}
-                        </ul>
-                    </nav>
-                </aside>
+                <StickySectionToc
+                    ariaLabel="About sections"
+                    sections={sectionLinks}
+                />
 
-                <article className="page-content">
+                <article className="page-content__main">
                     <section
                         className="page-section"
                         id="why-footnote-exists"
@@ -170,7 +124,7 @@ const AboutPage = (): JSX.Element => (
                         aria-labelledby="open-source-and-self-hosting-title"
                     >
                         <h2 id="open-source-and-self-hosting-title">
-                            Open source and self-hosting
+                            Open source
                         </h2>
                         <p>
                             Footnote is open source and built to run outside the
@@ -179,38 +133,10 @@ const AboutPage = (): JSX.Element => (
                             own setup.
                         </p>
                         <p>
-                            That does not remove every external dependency by
-                            itself. If you use hosted model providers, their
-                            privacy and retention rules still matter.
+                            If you use hosted model providers (e.g. Ollama
+                            cloud, OpenAI), ensure you understand their privacy
+                            and retention rules.
                         </p>
-                    </section>
-
-                    <section
-                        className="page-section"
-                        id="what-we-are-careful-about"
-                        aria-labelledby="what-we-are-careful-about-title"
-                    >
-                        <h2 id="what-we-are-careful-about-title">
-                            What we are careful about
-                        </h2>
-                        <ul className="page-list">
-                            <li>Inspectable does not mean always correct.</li>
-                            <li>
-                                Review signals do not guarantee answer quality.
-                            </li>
-                            <li>
-                                Self-hosting does not automatically put external
-                                model providers under your control.
-                            </li>
-                            <li>
-                                TrustGraph stays advisory unless visible product
-                                output says otherwise.
-                            </li>
-                            <li>
-                                Steerability should not be overclaimed before
-                                there are clearer user-facing controls.
-                            </li>
-                        </ul>
                     </section>
 
                     <section
@@ -218,35 +144,11 @@ const AboutPage = (): JSX.Element => (
                         id="developers"
                         aria-labelledby="developers-title"
                     >
-                        <h2 id="developers-title">
-                            Developers and contributors
-                        </h2>
+                        <h2 id="developers-title">Get involved</h2>
+                        <p>Want to help us work on Footnote?</p>
                         <p>
-                            If you want the architecture details or want to work
-                            in the repo, start with these.
+                            <a href="/onboarding">Start here</a>!
                         </p>
-                        <p>
-                            For current workflow and trace rendering
-                            architecture, start with the{' '}
-                            <a href="/onboarding">
-                                contributor onboarding page
-                            </a>
-                            .
-                        </p>
-                        <ul className="page-list">
-                            {developerLinks.map((link) => (
-                                <li key={link.href}>
-                                    <a
-                                        href={link.href}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                    >
-                                        {link.label}{' '}
-                                        <span aria-hidden="true">↗</span>
-                                    </a>
-                                </li>
-                            ))}
-                        </ul>
                     </section>
                 </article>
             </div>
