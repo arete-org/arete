@@ -46,7 +46,7 @@ const routeFallback = (
 // The App component stitches together the landing page sections in their intended scroll order.
 const App = (): JSX.Element => {
     useEffect(() => {
-        const windowWithIdleCallbacks = window as Window & {
+        const windowWithIdleCallbacks = window as typeof globalThis & {
             requestIdleCallback?: (callback: () => void) => number;
             cancelIdleCallback?: (handle: number) => void;
         };
