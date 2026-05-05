@@ -258,55 +258,32 @@ body::before {
 }
 
 .route-loading-card {
-    width: min(100%, 40rem);
+    width: 15.5rem;
+    max-width: calc(100vw - 2.5rem);
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: clamp(1.15rem, 3vw, 1.6rem) clamp(1.2rem, 3.2vw, 1.85rem);
-    border-radius: 24px;
-    border: 1px solid color-mix(in srgb, var(--border) 72%, var(--accent) 28%);
-    background-color: color-mix(in srgb, var(--bg-soft) 84%, #f3eee4 16%);
-    box-shadow: 0 18px 36px var(--shadow);
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 0.62rem 0.95rem;
+    border-radius: 999px;
+    border: 1px solid #e3ddd2;
+    background-color: #f7f2e9;
+    box-shadow: 0 8px 18px rgba(52, 52, 52, 0.08);
 }
 
 .route-loading-spinner {
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 0.95rem;
+    height: 0.95rem;
     color: var(--accent);
-}
-
-.route-loading-copy {
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
 }
 
 .route-loading-title {
     margin: 0;
     font-family: var(--mono-font);
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: 600;
-    color: var(--text);
-}
-
-.route-loading-detail {
-    margin: 0;
-    font-family: var(--body-font);
-    font-size: 0.92rem;
-    color: var(--subtle-text);
-}
-
-[data-theme='dark'] .route-loading-card {
-    background-color: color-mix(
-        in srgb,
-        var(--bg-alt) 80%,
-        rgba(255, 255, 255, 0.12) 20%
-    );
-    border-color: color-mix(
-        in srgb,
-        var(--border) 56%,
-        rgba(255, 255, 255, 0.24) 44%
-    );
+    color: #2b2a27;
+    white-space: nowrap;
 }
 
 @media (max-width: 560px) {
@@ -315,9 +292,6 @@ body::before {
             clamp(1.15rem, 4vw, 1.85rem) clamp(1.35rem, 4vw, 2rem);
     }
 
-    .route-loading-card {
-        align-items: flex-start;
-    }
 }
 
 @media (max-width: 480px) {
@@ -789,6 +763,8 @@ a:focus {
     padding-bottom: clamp(2rem, 4vw, 3rem);
     width: 100%;
     max-width: var(--max-width);
+    margin-top: clamp(0.5rem, 1.5vw, 1rem);
+    margin-bottom: clamp(0.75rem, 2vw, 1.5rem);
     margin-left: auto;
     margin-right: auto;
     box-sizing: border-box;
