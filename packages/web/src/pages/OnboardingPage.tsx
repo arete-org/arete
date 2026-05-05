@@ -229,6 +229,19 @@ const OnboardingPage = (): JSX.Element => {
                     </p>
                 </header>
 
+                <section
+                    className="page-notice-banner"
+                    aria-label="Contribute page status"
+                >
+                    <p className="page-notice-banner__eyebrow">
+                        Under construction
+                    </p>
+                    <p className="page-notice-banner__copy">
+                        We are actively refining this page - Content subject to
+                        change.
+                    </p>
+                </section>
+
                 <div className="page-layout">
                     <StickySectionToc
                         ariaLabel="Onboarding sections"

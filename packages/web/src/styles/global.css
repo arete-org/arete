@@ -2528,6 +2528,39 @@ kbd {
     margin: 0;
 }
 
+.page-notice-banner {
+    width: 100%;
+    margin: 0 0 clamp(1.2rem, 2.6vw, 1.8rem);
+    padding: clamp(0.85rem, 1.8vw, 1.1rem) clamp(0.95rem, 2vw, 1.25rem);
+    border: 1px solid color-mix(in srgb, var(--highlight) 48%, var(--border) 52%);
+    border-left: 4px solid var(--highlight);
+    border-radius: 8px;
+    background: linear-gradient(
+        100deg,
+        color-mix(in srgb, var(--bg-soft) 84%, var(--bg) 16%) 0%,
+        color-mix(in srgb, var(--bg-accent) 86%, var(--bg) 14%) 100%
+    );
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--shadow) 56%, transparent 44%);
+}
+
+.page-notice-banner__eyebrow {
+    margin: 0;
+    font-family: var(--mono-font);
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--highlight) 72%, var(--text) 28%);
+}
+
+.page-notice-banner__copy {
+    margin: 0.4rem 0 0;
+    font-size: 0.98rem;
+    line-height: 1.55;
+    color: var(--subtle-text);
+    max-width: 72ch;
+}
+
 /* ===== PAGE LAYOUT (shared by onboarding and about pages) ===== */
 .page-layout {
     display: grid;
@@ -2812,6 +2845,21 @@ kbd {
         in srgb,
         var(--bg-alt) 84%,
         rgba(255, 255, 255, 0.06) 16%
+    );
+}
+
+[data-theme='dark'] .page-notice-banner {
+    border-color: color-mix(
+        in srgb,
+        var(--highlight) 44%,
+        rgba(255, 255, 255, 0.16) 56%
+    );
+    background: linear-gradient(
+        100deg,
+        color-mix(in srgb, var(--bg-alt) 82%, rgba(255, 255, 255, 0.07) 18%)
+            0%,
+        color-mix(in srgb, var(--bg-soft) 84%, rgba(255, 255, 255, 0.04) 16%)
+            100%
     );
 }
 
