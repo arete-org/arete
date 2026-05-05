@@ -94,7 +94,7 @@ const ThemeToggle = (): JSX.Element => {
             audioFiles[Math.floor(Math.random() * audioFiles.length)];
 
         const audio = new Audio(randomFile);
-        audio.volume = 0.7;
+        audio.volume = 0.5;
 
         audio.addEventListener('loadstart', () =>
             console.log('Audio loading started')

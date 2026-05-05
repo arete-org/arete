@@ -38,48 +38,75 @@ The trace helps you review the answer; it does not prove the answer is right. Fo
 
 This starts the local backend and web app.
 
-1. Run local setup:
+### Prerequisites
+
+- Node.js installed
+- `pnpm` available (or `corepack` enabled)
+- At least one generation provider (e.g. Ollama, OpenAI)
+
+### 1) Clone and bootstrap
 
 ```bash
+git clone https://github.com/footnote-ai/footnote.git
+cd footnote
 pnpm setup
 ```
-
-> If `pnpm` is not available yet, run `corepack enable` once, then run `pnpm setup`.
 
 `pnpm setup` will:
 
 - create `.env` from `.env.example` when missing
-- generate local development secrets when missing
+- generate local development secrets when missing (`INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`)
 - install dependencies
 
-The generated local secrets include `INCIDENT_PSEUDONYMIZATION_SECRET` and `TRACE_API_TOKEN`.
+### 2) Configure environment
 
-To enable generation features, configure at least one provider:
+Configure at least one LLM provider:
 
-```env
-# Option A: OpenAI-backed providers
-OPENAI_API_KEY=...
-
-# Option B: Ollama-backed text runtime
+```yaml
+# Ollama (local)
 OLLAMA_LOCAL_INFERENCE_ENABLED=true
 OLLAMA_BASE_URL=http://localhost:11434
+
+# Ollama (cloud)
+# Cannot enable alongside local inference
+OLLAMA_BASE_URL=https://api.ollama.com
+OLLAMA_API_KEY=...
+
+# OpenAI (cloud)
+OPENAI_API_KEY=...
 ```
 
-2. Start backend and web:
+Required credentials for Discord bot:
+
+```yaml
+DISCORD_TOKEN=...
+DISCORD_CLIENT_ID=...
+DISCORD_GUILD_ID=...
+```
+
+For the full set of options, see `.env.example`.
+
+### 3) Launch
+
+Start all services:
+
+```bash
+pnpm start:all
+```
+
+Backend and web UI only:
 
 ```bash
 pnpm dev
 ```
 
-3. Open the web app:
+Open the web app at `http://localhost:8080`.
 
-`http://localhost:8080`
-
-### More setup options
+### Advanced configuration
 
 - [Deployment guide](deploy/README.md)
 - [Prompt/profile configuration](docs/architecture/prompt-resolution.md)
-- [Documentation](docs/README.md)
+- [Documentation map](docs/README.md)
 
 ## License
 

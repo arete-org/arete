@@ -8,14 +8,11 @@
 
 import { Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
+import Header from '@components/Header';
 import Hero from '@components/Hero';
-import Invite from '@components/Invite';
-import Services from '@components/Services';
-import OpenAccountable from '@components/OpenAccountable';
 import Footer from '@components/Footer';
 
 const TracePage = lazy(() => import('@pages/TracePage'));
-const SetupPage = lazy(() => import('@pages/SetupPage'));
 const DownloadPage = lazy(() => import('@pages/DownloadPage'));
 const BlogListPage = lazy(() => import('@pages/BlogListPage'));
 const BlogPostPage = lazy(() => import('@pages/BlogPostPage'));
@@ -52,19 +49,13 @@ const App = (): JSX.Element => (
             <Route
                 path="/"
                 element={
-                    <main id="main-content">
-                        <Hero />
-                        <div className="section-container section-container--showcase">
-                            <Services />
-                        </div>
-                        <div className="section-container section-container--principles">
-                            <OpenAccountable />
-                        </div>
-                        <div className="section-container section-container--setup">
-                            <Invite />
-                        </div>
-                        <Footer />
-                    </main>
+                    <>
+                        <Header breadcrumbItems={[]} />
+                        <main id="main-content">
+                            <Hero />
+                            <Footer />
+                        </main>
+                    </>
                 }
             />
             <Route
@@ -80,22 +71,6 @@ const App = (): JSX.Element => (
                 element={
                     <Suspense fallback={routeFallback}>
                         <DownloadPage />
-                    </Suspense>
-                }
-            />
-            <Route
-                path="/setup"
-                element={
-                    <Suspense fallback={routeFallback}>
-                        <SetupPage />
-                    </Suspense>
-                }
-            />
-            <Route
-                path="/setup/"
-                element={
-                    <Suspense fallback={routeFallback}>
-                        <SetupPage />
                     </Suspense>
                 }
             />

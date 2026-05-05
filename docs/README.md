@@ -4,6 +4,8 @@ This folder holds the main project docs. The subfolders cover the working
 system. The top-level files cover project background, licensing posture, and
 philosophy.
 
+For first-time local setup, start at the root [Quickstart](../README.md#quickstart).
+
 ## Sections
 
 - [Architecture](./architecture/README.md): current system shape, boundaries,

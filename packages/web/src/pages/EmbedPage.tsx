@@ -112,6 +112,8 @@ const EmbedPage = (): JSX.Element => {
                     a black-box answer.
                 </p>
 
+                <AskMeAnything />
+
                 <div className="intro-card" aria-labelledby="intro-card-title">
                     <div className="intro-card-background" aria-hidden="true">
                         {/* Symbolic constellation representing Footnote's ethical framework. */}
@@ -149,8 +151,6 @@ const EmbedPage = (): JSX.Element => {
                         </div>
                     </div>
                 </div>
-
-                <AskMeAnything />
             </div>
         </section>
     );

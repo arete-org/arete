@@ -6,88 +6,27 @@
  * @footnote-ethics: medium - The hero sets user expectations about privacy, honesty, and transparency.
  */
 
-import Header from './Header';
 import AskMeAnything from './AskMeAnything';
 
 // Hero banner introduces Footnote's tone and provides the primary calls to action.
-const Hero = (): JSX.Element => {
-    // No breadcrumbs on home page
-    const breadcrumbItems: never[] = [];
-
-    return (
-        <section className="hero" aria-labelledby="hero-title">
-            <Header breadcrumbItems={breadcrumbItems} />
-
-            <div className="hero-copy">
-                <h1 id="hero-title" className="hero-title">
-                    <span className="hero-title__line">Ask a question,</span>{' '}
-                    <span className="hero-title__line">
-                        see how the answer is made.
-                    </span>
-                </h1>
-                <p className="hero-copy__subtitle">
-                    <span className="hero-subtitle__line">
-                        Footnote shows the sources, signals, and
-                    </span>{' '}
-                    <span className="hero-subtitle__line">
-                        step-by-step decisions behind each response.
-                    </span>
-                </p>
-                <AskMeAnything />
-
-                <div className="intro-card" aria-labelledby="intro-card-title">
-                    <div className="intro-card-background" aria-hidden="true">
-                        {/* Symbolic constellation representing Footnote's ethical framework. */}
-                        <svg
-                            viewBox="0 0 320 120"
-                            role="presentation"
-                            focusable="false"
-                        >
-                            <g className="intro-card-constellation">
-                                <circle cx="30" cy="60" r="4" />
-                                <circle cx="110" cy="30" r="3" />
-                                <circle cx="200" cy="65" r="4" />
-                                <circle cx="280" cy="40" r="3" />
-                                <path d="M30 60 L110 30 L200 65 L280 40" />
-                            </g>
-                        </svg>
-                    </div>
-                    <div className="intro-card-content">
-                        <div className="intro-card-logo">
-                            <img
-                                src="/assets/logo.jpg"
-                                alt="Footnote logo - A circle with 5 even-spaced solid color wedges. From top-left, clockwise: Teal, rose, amber, copper, emerald."
-                                className="intro-card-logo-image"
-                            />
-                        </div>
-                        <div className="intro-card-text">
-                            <h2 id="intro-card-title">
-                                What you get after asking
-                            </h2>
-                            <p>
-                                Footnote does not stop at the answer. It also
-                                gives you a few ways to check how the response
-                                was produced.
-                            </p>
-                            <ul className="intro-card-list">
-                                <li>The answer itself.</li>
-                                <li>Source links, when sources were used.</li>
-                                <li>Safety and confidence signals.</li>
-                                <li>
-                                    A trace you can open to see what happened.
-                                </li>
-                            </ul>
-                            <p>
-                                If you want full control, open Source and use
-                                the GitHub setup docs to run Footnote in your
-                                own environment.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-    );
-};
+const Hero = (): JSX.Element => (
+    <section className="hero" aria-labelledby="hero-title">
+        <div className="hero-copy">
+            <h1 id="hero-title" className="hero-title">
+                <span className="hero-title__line">Answers you can check.</span>
+            </h1>
+            <p className="hero-subheader">
+                Footnote is an AI framework that tries to show its work.
+            </p>
+            <p className="hero-subheader">
+                <span className="hero-subheader__line">Ask a question.</span>{' '}
+                <span className="hero-subheader__line">
+                    See the sources, choices, and limits behind the answer.
+                </span>
+            </p>
+            <AskMeAnything />
+        </div>
+    </section>
+);
 
 export default Hero;
