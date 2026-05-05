@@ -9,11 +9,9 @@
 import Header from '@components/Header';
 import Footer from '@components/Footer';
 
-const breadcrumbItems = [{ label: 'Download' }];
-
 const DownloadPage = (): JSX.Element => (
     <>
-        <Header breadcrumbItems={breadcrumbItems} />
+        <Header />
         <main className="page-content" id="main-content">
             <section className="page-hero">
                 <h1>Download</h1>

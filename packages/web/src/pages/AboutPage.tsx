@@ -10,6 +10,7 @@
 import Header from '@components/Header';
 import Footer from '@components/Footer';
 import StickySectionToc from '@components/StickySectionToc';
+import { Link } from 'react-router-dom';
 
 type AboutSectionId =
     | 'why-footnote-exists'
@@ -22,8 +23,6 @@ type SectionLink = {
     id: AboutSectionId;
     label: string;
 };
-
-const breadcrumbItems = [{ label: 'About' }];
 
 const sectionLinks: SectionLink[] = [
     { id: 'why-footnote-exists', label: 'A better way to read AI' },
@@ -38,7 +37,7 @@ const sectionLinks: SectionLink[] = [
 
 const AboutPage = (): JSX.Element => (
     <>
-        <Header breadcrumbItems={breadcrumbItems} />
+        <Header />
         <main className="page-content" id="main-content">
             <header className="page-hero" aria-labelledby="about-title">
                 <h1 id="about-title">AI that carries receipts.</h1>
@@ -147,7 +146,7 @@ const AboutPage = (): JSX.Element => (
                         <h2 id="developers-title">Get involved</h2>
                         <p>Want to help us work on Footnote?</p>
                         <p>
-                            <a href="/onboarding">Start here</a>!
+                            <Link to="/onboarding">Start here</Link>!
                         </p>
                     </section>
                 </article>

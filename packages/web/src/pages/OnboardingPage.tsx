@@ -32,7 +32,6 @@ type SymbolReferenceEntry = {
     name: string;
     kind: SymbolKind;
     filePath: string;
-    symbolLine: number;
     explanation: string;
 };
 
@@ -42,13 +41,11 @@ type WhereToReadNextEntry = {
 
 const REPOSITORY_BASE_URL = 'https://github.com/footnote-ai/footnote/blob/main';
 
-const getRepositoryFileUrl = (filePath: string, symbolLine: number): string =>
-    `${REPOSITORY_BASE_URL}/${filePath}#L${symbolLine}`;
+const getRepositoryFileUrl = (filePath: string): string =>
+    `${REPOSITORY_BASE_URL}/${filePath}`;
 
 const getRepositoryPathUrl = (filePath: string): string =>
     `${REPOSITORY_BASE_URL}/${filePath}`;
-
-const breadcrumbItems = [{ label: 'Contributor Onboarding' }];
 
 const sectionLinks: SectionLink[] = [
     { id: 'repo-shape', label: 'Repo and package shape' },
@@ -66,7 +63,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         name: 'workflowEngine',
         kind: 'module',
         filePath: 'packages/backend/src/services/workflowEngine.ts',
-        symbolLine: 1,
         explanation:
             'Runs step ordering, timing, limits, termination, and workflow lineage.',
     },
@@ -74,7 +70,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         name: 'chatOrchestrator',
         kind: 'module',
         filePath: 'packages/backend/src/services/chatOrchestrator.ts',
-        symbolLine: 84,
         explanation:
             'Assembles request context, planner seams, and runtime dependencies before chat execution.',
     },
@@ -82,7 +77,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         name: 'chatService',
         kind: 'module',
         filePath: 'packages/backend/src/services/chatService.ts',
-        symbolLine: 569,
         explanation:
             'Runs chat generation flow, workflow execution handoff, metadata assembly, and trace persistence.',
     },
@@ -90,7 +84,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         name: 'PlannerStepExecutor',
         kind: 'type',
         filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts',
-        symbolLine: 76,
         explanation:
             'Injected executor interface that lets workflow run the planner as a timed plan step.',
     },
@@ -99,7 +92,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         kind: 'seam',
         filePath:
             'packages/backend/src/services/chatOrchestrator/plannerResultApplier.ts',
-        symbolLine: 50,
         explanation:
             'Policy seam that applies backend rules to planner output before execution continues.',
     },
@@ -107,7 +99,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         name: 'AppliedPlanState',
         kind: 'type',
         filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts',
-        symbolLine: 147,
         explanation:
             'Canonical post-policy plan snapshot carried into generation and metadata.',
     },
@@ -115,7 +106,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         name: 'PlanContinuationBuilder',
         kind: 'seam',
         filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts',
-        symbolLine: 190,
         explanation:
             'Builds the post-plan continuation result: continue message flow or end with terminal action.',
     },
@@ -123,7 +113,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         name: 'PlanContinuation',
         kind: 'type',
         filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts',
-        symbolLine: 171,
         explanation:
             'Union representing either continue_message or terminal_action after plan application.',
     },
@@ -131,7 +120,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         name: 'PlanTerminalAction',
         kind: 'type',
         filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts',
-        symbolLine: 81,
         explanation:
             'Typed terminal outcomes: ignore, react, or image request without text generation.',
     },
@@ -140,7 +128,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         kind: 'function',
         filePath:
             'packages/backend/src/services/chatService/planGenerationInput.ts',
-        symbolLine: 46,
         explanation:
             'Builds generation-ready conversation payload after planner policy and prompt assembly.',
     },
@@ -149,7 +136,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         kind: 'function',
         filePath:
             'packages/backend/src/services/chatService/planContinuation.ts',
-        symbolLine: 28,
         explanation:
             'Classifies an applied execution plan into continue_message or terminal_action.',
     },
@@ -157,7 +143,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         name: 'ContextStepExecutor',
         kind: 'type',
         filePath: 'packages/backend/src/services/workflowEngine.ts',
-        symbolLine: 224,
         explanation:
             'Executor contract for pre-generation context integrations inside workflow.',
     },
@@ -165,7 +150,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         name: 'ContextStepRequest',
         kind: 'type',
         filePath: 'packages/backend/src/services/workflowEngine.ts',
-        symbolLine: 203,
         explanation:
             'Structured request describing whether an integration was requested and eligible.',
     },
@@ -173,7 +157,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         name: 'ContextStepResult',
         kind: 'type',
         filePath: 'packages/backend/src/services/workflowEngine.ts',
-        symbolLine: 211,
         explanation:
             'Structured context-step outcome with execution context, optional messages, and clarification.',
     },
@@ -181,7 +164,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         name: 'trace_target',
         kind: 'concept',
         filePath: 'packages/contracts/src/ethics-core/types.ts',
-        symbolLine: 832,
         explanation:
             'TRACE target posture recorded from planner/runtime temperament at response time.',
     },
@@ -189,7 +171,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         name: 'trace_final',
         kind: 'concept',
         filePath: 'packages/contracts/src/ethics-core/types.ts',
-        symbolLine: 833,
         explanation:
             'TRACE final posture delivered in metadata for rendering and trace review.',
     },
@@ -215,7 +196,7 @@ const SymbolBadge = ({ kind }: { kind: SymbolKind }): JSX.Element => (
 const OnboardingPage = (): JSX.Element => {
     return (
         <>
-            <Header breadcrumbItems={breadcrumbItems} />
+            <Header />
             <main className="page-content" id="main-content">
                 <header
                     className="page-hero"
@@ -429,8 +410,7 @@ const OnboardingPage = (): JSX.Element => {
                                                     <a
                                                         className="onboarding-symbol-table__symbol-link"
                                                         href={getRepositoryFileUrl(
-                                                            entry.filePath,
-                                                            entry.symbolLine
+                                                            entry.filePath
                                                         )}
                                                         target="_blank"
                                                         rel="noreferrer"

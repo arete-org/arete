@@ -636,7 +636,22 @@ const AskMeAnything = (): JSX.Element => {
                                 setQuestion(event.target.value)
                             }
                             onKeyDown={(event) => {
-                                if (event.key === 'Enter' && event.ctrlKey) {
+                                const nativeEvent = event.nativeEvent as {
+                                    isComposing?: boolean;
+                                };
+                                if (
+                                    nativeEvent.isComposing === true ||
+                                    event.keyCode === 229
+                                ) {
+                                    return;
+                                }
+
+                                const isModifierPressed =
+                                    event.ctrlKey || event.metaKey;
+                                if (
+                                    event.key === 'Enter' &&
+                                    isModifierPressed
+                                ) {
                                     event.preventDefault();
                                     formRef.current?.requestSubmit();
                                 }

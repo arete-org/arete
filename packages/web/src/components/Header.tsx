@@ -14,15 +14,6 @@ import { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import ThemeToggle from './ThemeToggle';
 
-interface BreadcrumbItem {
-    label: string;
-    path?: string;
-}
-
-interface HeaderProps {
-    breadcrumbItems?: BreadcrumbItem[];
-}
-
 interface NavItem {
     label: string;
     to: string;
@@ -52,9 +43,7 @@ const NAV_ITEMS: NavItem[] = [
     },
 ];
 
-const Header = ({
-    breadcrumbItems: _breadcrumbItems,
-}: HeaderProps): JSX.Element => {
+const Header = (): JSX.Element => {
     const location = useLocation();
     const pathname = location.pathname;
     const headerRef = useRef<HTMLElement | null>(null);
@@ -71,12 +60,18 @@ const Header = ({
             return;
         }
 
-        const rootElement = document.documentElement;
+        const bodyElement = document.body;
+        const mobileViewport = window.matchMedia('(max-width: 640px)');
 
         const updateHeaderHeight = (): void => {
+            if (mobileViewport.matches) {
+                bodyElement.style.removeProperty('--site-header-height');
+                return;
+            }
+
             const { height } = headerElement.getBoundingClientRect();
             const safeHeight = Math.ceil(height);
-            rootElement.style.setProperty(
+            bodyElement.style.setProperty(
                 '--site-header-height',
                 `${safeHeight}px`
             );
@@ -94,6 +89,7 @@ const Header = ({
         return () => {
             observer.disconnect();
             window.removeEventListener('resize', updateHeaderHeight);
+            bodyElement.style.removeProperty('--site-header-height');
         };
     }, []);
 

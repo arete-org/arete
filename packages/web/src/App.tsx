@@ -12,6 +12,19 @@ import Header from '@components/Header';
 import Hero from '@components/Hero';
 import Footer from '@components/Footer';
 
+const NotFound = (): JSX.Element => (
+    <>
+        <Header />
+        <main id="main-content" className="page-content">
+            <section className="page-hero" aria-labelledby="not-found-title">
+                <h1 id="not-found-title">Page not found</h1>
+                <p>The page you requested does not exist.</p>
+            </section>
+        </main>
+        <Footer />
+    </>
+);
+
 const loadTracePage = (): Promise<typeof import('@pages/TracePage')> =>
     import('@pages/TracePage');
 const loadDownloadPage = (): Promise<typeof import('@pages/DownloadPage')> =>
@@ -20,8 +33,9 @@ const loadEmbedPage = (): Promise<typeof import('@pages/EmbedPage')> =>
     import('@pages/EmbedPage');
 const loadAboutPage = (): Promise<typeof import('@pages/AboutPage')> =>
     import('@pages/AboutPage');
-const loadOnboardingPage = (): Promise<typeof import('@pages/OnboardingPage')> =>
-    import('@pages/OnboardingPage');
+const loadOnboardingPage = (): Promise<
+    typeof import('@pages/OnboardingPage')
+> => import('@pages/OnboardingPage');
 
 const TracePage = lazy(loadTracePage);
 const DownloadPage = lazy(loadDownloadPage);
@@ -62,9 +76,11 @@ const App = (): JSX.Element => {
         };
 
         if (typeof windowWithIdleCallbacks.requestIdleCallback === 'function') {
-            const idleCallbackId = windowWithIdleCallbacks.requestIdleCallback(() => {
-                preloadRoutes();
-            });
+            const idleCallbackId = windowWithIdleCallbacks.requestIdleCallback(
+                () => {
+                    preloadRoutes();
+                }
+            );
 
             return (): void => {
                 windowWithIdleCallbacks.cancelIdleCallback?.(idleCallbackId);
@@ -84,90 +100,67 @@ const App = (): JSX.Element => {
                 Skip to main content
             </a>
             <Routes>
-            <Route
-                path="/"
-                element={
-                    <>
-                        <Header breadcrumbItems={[]} />
-                        <main id="main-content">
-                            <Hero />
+                <Route
+                    path="/"
+                    element={
+                        <>
+                            <Header />
+                            <main id="main-content">
+                                <Hero />
+                            </main>
                             <Footer />
-                        </main>
-                    </>
-                }
-            />
-            <Route
-                path="/download"
-                element={
-                    <Suspense fallback={routeFallback}>
-                        <DownloadPage />
-                    </Suspense>
-                }
-            />
-            <Route
-                path="/download/"
-                element={
-                    <Suspense fallback={routeFallback}>
-                        <DownloadPage />
-                    </Suspense>
-                }
-            />
-            <Route
-                path="/about"
-                element={
-                    <Suspense fallback={routeFallback}>
-                        <AboutPage />
-                    </Suspense>
-                }
-            />
-            <Route
-                path="/about/"
-                element={
-                    <Suspense fallback={routeFallback}>
-                        <AboutPage />
-                    </Suspense>
-                }
-            />
-            <Route
-                path="/onboarding"
-                element={
-                    <Suspense fallback={routeFallback}>
-                        <OnboardingPage />
-                    </Suspense>
-                }
-            />
-            <Route
-                path="/onboarding/"
-                element={
-                    <Suspense fallback={routeFallback}>
-                        <OnboardingPage />
-                    </Suspense>
-                }
-            />
-            <Route
-                path="/embed"
-                element={
-                    <Suspense fallback={routeFallback}>
-                        <EmbedPage />
-                    </Suspense>
-                }
-            />
-            <Route
-                path="/traces/:responseId"
-                element={
-                    <Suspense fallback={routeFallback}>
-                        <TracePage />
-                    </Suspense>
-                }
-            />
-            <Route
-                path="/api/traces/:responseId"
-                element={
-                    <Suspense fallback={routeFallback}>
-                        <TracePage />
-                    </Suspense>
-                }
-            />
+                        </>
+                    }
+                />
+                <Route
+                    path="/download/*"
+                    element={
+                        <Suspense fallback={routeFallback}>
+                            <DownloadPage />
+                        </Suspense>
+                    }
+                />
+                <Route
+                    path="/about/*"
+                    element={
+                        <Suspense fallback={routeFallback}>
+                            <AboutPage />
+                        </Suspense>
+                    }
+                />
+                <Route
+                    path="/onboarding/*"
+                    element={
+                        <Suspense fallback={routeFallback}>
+                            <OnboardingPage />
+                        </Suspense>
+                    }
+                />
+                <Route
+                    path="/embed"
+                    element={
+                        <Suspense fallback={routeFallback}>
+                            <EmbedPage />
+                        </Suspense>
+                    }
+                />
+                <Route
+                    path="/traces/:responseId"
+                    element={
+                        <Suspense fallback={routeFallback}>
+                            <TracePage />
+                        </Suspense>
+                    }
+                />
+                <Route
+                    path="/api/traces/:responseId"
+                    element={
+                        <Suspense fallback={routeFallback}>
+                            <TracePage />
+                        </Suspense>
+                    }
+                />
+                <Route path="*" element={<NotFound />} />
             </Routes>
         </div>
     );

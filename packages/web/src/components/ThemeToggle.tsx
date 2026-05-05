@@ -17,6 +17,8 @@ const ThemeToggle = (): JSX.Element => {
     const icon =
         theme === 'light' ? (
             <svg
+                aria-hidden="true"
+                focusable="false"
                 width="16"
                 height="16"
                 viewBox="0 0 24 24"
@@ -28,6 +30,8 @@ const ThemeToggle = (): JSX.Element => {
             </svg>
         ) : (
             <svg
+                aria-hidden="true"
+                focusable="false"
                 width="16"
                 height="16"
                 viewBox="0 0 24 24"
