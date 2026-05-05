@@ -820,7 +820,7 @@ paths:
             operationId: listBlogPosts
             x-codeRefs:
                 - packages/backend/src/handlers/blog.ts#handleBlogIndexRequest
-                - packages/web/src/utils/api.ts#getBlogIndex
+                - packages/api-client/src/web.ts#getBlogIndex
                 - packages/contracts/src/web/types.ts#ListBlogPostsResponse
             summary: List blog posts
             description: |
@@ -841,7 +841,7 @@ paths:
             operationId: getBlogPost
             x-codeRefs:
                 - packages/backend/src/handlers/blog.ts#handleBlogPostRequest
-                - packages/web/src/utils/api.ts#getBlogPost
+                - packages/api-client/src/web.ts#getBlogPost
                 - packages/contracts/src/web/types.ts#GetBlogPostResponse
             summary: Fetch a blog post
             description: |

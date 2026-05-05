@@ -72,6 +72,8 @@
         <style>
             body {
                 margin: 0;
+                background: #fdfcf9;
+                color: #2b2a27;
             }
 
             #root {
@@ -82,82 +84,71 @@
                 box-sizing: border-box;
                 min-height: 100dvh;
                 margin: 0;
-                padding: clamp(2.5rem, 10vw, 6rem) 1.25rem 2rem;
+                padding: clamp(2rem, 8vw, 5rem) 1.25rem;
+                display: grid;
+                place-content: center;
+                background: transparent;
+                color: inherit;
+                font-family: 'Iowan Old Style', 'Palatino Linotype', serif;
+            }
+
+            .preload-shell__card {
+                width: 15.5rem;
+                max-width: calc(100vw - 2.5rem);
+                padding: 0.62rem 0.95rem;
                 display: flex;
-                flex-direction: column;
+                align-items: center;
                 justify-content: center;
-                gap: 0.65rem;
-                background: #f7f7fc;
-                color: #10111a;
-                font-family:
-                    ui-sans-serif,
-                    system-ui,
-                    -apple-system,
-                    'Segoe UI',
-                    sans-serif;
-            }
-
-            .preload-shell__mark {
-                margin: 0;
-                font-weight: 700;
-                font-size: clamp(1.5rem, 4vw, 2rem);
-                letter-spacing: 0.02em;
-            }
-
-            .preload-shell__line,
-            .preload-shell__state {
-                margin: 0;
-                font-size: 1rem;
-                line-height: 1.5;
+                gap: 0.55rem;
+                border: 1px solid #e3ddd2;
+                border-radius: 999px;
+                background: #f7f2e9;
+                box-shadow: 0 8px 18px rgba(52, 52, 52, 0.08);
             }
 
             .preload-shell__line {
-                max-width: 28rem;
+                margin: 0;
+                font-family: 'SFMono-Regular', 'JetBrains Mono', 'Courier New', monospace;
+                font-size: 0.9rem;
+                font-weight: 600;
+                line-height: 1.4;
+                color: #2b2a27;
+                white-space: nowrap;
             }
 
             .preload-shell__state {
-                display: inline-flex;
-                align-items: center;
-                gap: 0.45rem;
-                color: #4a4d63;
+                width: 0.95rem;
+                height: 0.95rem;
+                color: #4a7c59;
             }
 
-            .preload-shell__state::before {
+            .preload-shell__state .spinner {
+                width: 100%;
+                height: 100%;
+                display: block;
+            }
+
+            .preload-shell__state .spinner::before {
                 content: '';
-                width: 0.55rem;
-                height: 0.55rem;
-                border-radius: 999px;
-                background: currentColor;
-                animation: preload-pulse 1.2s ease-in-out infinite;
+                display: block;
+                width: 100%;
+                height: 100%;
+                border-radius: 50%;
+                border: 0.125em solid currentColor;
+                border-right-color: transparent;
+                box-sizing: border-box;
+                animation: spin 0.75s linear infinite;
             }
 
-            @keyframes preload-pulse {
-                0%,
-                100% {
-                    opacity: 0.35;
-                    transform: scale(0.88);
-                }
-                50% {
-                    opacity: 1;
-                    transform: scale(1);
-                }
-            }
-
-            @media (prefers-color-scheme: dark) {
-                .preload-shell {
-                    background: #0b0c12;
-                    color: #f2f3f8;
-                }
-
-                .preload-shell__state {
-                    color: #adb1c7;
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
                 }
             }
 
             @media (prefers-reduced-motion: reduce) {
-                .preload-shell__state::before {
+                .preload-shell__state .spinner::before {
                     animation: none;
-                    opacity: 0.8;
                 }
             }
         </style>
@@ -165,9 +156,12 @@
     <body>
         <div id="root">
             <div class="preload-shell" aria-live="polite">
-                <p class="preload-shell__mark">Footnote</p>
-                <p class="preload-shell__line">AI answers with receipts.</p>
-                <p class="preload-shell__state">Loading Footnote…</p>
+                <div class="preload-shell__card">
+                    <span class="preload-shell__state" aria-hidden="true"
+                        ><span class="spinner"></span
+                    ></span>
+                    <p class="preload-shell__line">Loading page...</p>
+                </div>
             </div>
         </div>
         <script type="module" src="/src/main.tsx"></script>

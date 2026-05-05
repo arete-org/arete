@@ -50,6 +50,7 @@ const AskMeAnything = (): JSX.Element => {
     const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
     const abortRef = useRef<AbortController | null>(null);
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
+    const formRef = useRef<HTMLFormElement | null>(null);
     const turnstileRef = useRef<TurnstileInstance | null>(null);
     const isTurnstileExecutingRef = useRef(false);
     const hasInteractedRef = useRef(false); // Track if user has interacted to prevent initial status flash
@@ -512,7 +513,7 @@ const AskMeAnything = (): JSX.Element => {
                 | null
                 | undefined;
 
-            setStatus('A brief chat:');
+            setStatus('');
             setAnswer(
                 chat?.trim() ||
                     'I would begin by examining the ethical principles involved, then consider what transparency and care require.'
@@ -601,7 +602,7 @@ const AskMeAnything = (): JSX.Element => {
                 }
             }
 
-            setStatus('My thoughts:');
+            setStatus('');
             setAnswer(FALLBACK_REFLECTION);
             setMetadata(null);
             setIsTypingComplete(false);
@@ -616,51 +617,11 @@ const AskMeAnything = (): JSX.Element => {
 
     return (
         <div className="interaction">
-            <div className="interaction-heading-row">
-                <h2 className="interaction-heading">Ask a question</h2>
-                <div className="interaction-prompt-buttons-row">
-                    <div className="interaction-prompt-text-button-wrapper">
-                        <button
-                            type="button"
-                            className="interaction-prompt-text-button"
-                            onClick={usePrompt}
-                            onMouseDown={(e) => e.currentTarget.blur()}
-                            aria-label={`Use prompt suggestion: ${currentPrompt}`}
-                        >
-                            <span className="interaction-prompt-text">
-                                {currentPrompt}
-                            </span>
-                        </button>
-                    </div>
-                    <button
-                        type="button"
-                        className="interaction-prompt-shuffle-button"
-                        onClick={shufflePrompt}
-                        onMouseDown={(e) => e.currentTarget.blur()}
-                        aria-label="Shuffle prompt suggestions"
-                    >
-                        <span className="interaction-prompt-shuffle-icon">
-                            <svg
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            >
-                                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
-                            </svg>
-                        </span>
-                    </button>
-                </div>
-            </div>
-            <p className="interaction-helper">
-                After each reply, you can check sources when they were used,
-                safety signals, and the full trace.
-            </p>
-            <form className="interaction-form" onSubmit={onSubmit}>
+            <form
+                className="interaction-form"
+                onSubmit={onSubmit}
+                ref={formRef}
+            >
                 <div className="interaction-input-group">
                     <label htmlFor="question-input" className="sr-only">
                         Ask a question
@@ -674,7 +635,28 @@ const AskMeAnything = (): JSX.Element => {
                             onChange={(event) =>
                                 setQuestion(event.target.value)
                             }
-                            placeholder="What should we talk about?"
+                            onKeyDown={(event) => {
+                                const nativeEvent = event.nativeEvent as {
+                                    isComposing?: boolean;
+                                };
+                                if (
+                                    nativeEvent.isComposing === true ||
+                                    event.keyCode === 229
+                                ) {
+                                    return;
+                                }
+
+                                const isModifierPressed =
+                                    event.ctrlKey || event.metaKey;
+                                if (
+                                    event.key === 'Enter' &&
+                                    isModifierPressed
+                                ) {
+                                    event.preventDefault();
+                                    formRef.current?.requestSubmit();
+                                }
+                            }}
+                            placeholder="What's on your mind?"
                             autoComplete="off"
                             ref={inputRef}
                             rows={1}
@@ -739,6 +721,44 @@ const AskMeAnything = (): JSX.Element => {
                     </button>
                 </div>
             </form>
+            <div className="interaction-prompt-buttons-row">
+                <div className="interaction-prompt-text-button-wrapper">
+                    <button
+                        type="button"
+                        className="interaction-prompt-text-button"
+                        onClick={usePrompt}
+                        onMouseDown={(e) => e.currentTarget.blur()}
+                        aria-label={`Use prompt suggestion: ${currentPrompt}`}
+                    >
+                        <span className="interaction-prompt-text">
+                            {currentPrompt}
+                        </span>
+                    </button>
+                </div>
+                <button
+                    type="button"
+                    className="interaction-prompt-shuffle-button"
+                    onClick={shufflePrompt}
+                    onMouseDown={(e) => e.currentTarget.blur()}
+                    aria-label="Shuffle prompt suggestions"
+                >
+                    <span className="interaction-prompt-shuffle-icon">
+                        <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        >
+                            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+                        </svg>
+                    </span>
+                </button>
+            </div>
+
             {/* Only show status when there's actual content (error messages, etc.) - spinner is in button during loading */}
             {/* Conditionally render only when we have actual content to avoid empty div taking space */}
             {/* IMPORTANT: Do not render at all if there's no content to avoid layout spacing */}

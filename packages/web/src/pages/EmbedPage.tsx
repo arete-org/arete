@@ -21,8 +21,6 @@ import {
  * Automatically communicates height to parent window to eliminate scrollbars.
  */
 const EmbedPage = (): JSX.Element => {
-    // No breadcrumbs for embed page
-    const breadcrumbItems: never[] = [];
     const containerRef = useRef<HTMLElement | null>(null);
 
     // Disable scrolling on the embed page itself and keep the host iframe sized to the content.
@@ -103,7 +101,7 @@ const EmbedPage = (): JSX.Element => {
             className="hero"
             aria-labelledby="hero-title"
         >
-            <Header breadcrumbItems={breadcrumbItems} />
+            <Header />
 
             <div className="hero-copy">
                 <h1 id="hero-title">AI you can inspect and steer.</h1>
@@ -111,6 +109,8 @@ const EmbedPage = (): JSX.Element => {
                     A transparency-first framework for people who want more than
                     a black-box answer.
                 </p>
+
+                <AskMeAnything />
 
                 <div className="intro-card" aria-labelledby="intro-card-title">
                     <div className="intro-card-background" aria-hidden="true">
@@ -149,8 +149,6 @@ const EmbedPage = (): JSX.Element => {
                         </div>
                     </div>
                 </div>
-
-                <AskMeAnything />
             </div>
         </section>
     );
