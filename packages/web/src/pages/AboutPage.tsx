@@ -31,9 +31,9 @@ type DeveloperLink = {
 const breadcrumbItems = [{ label: 'About' }];
 
 const sectionLinks: SectionLink[] = [
-    { id: 'why-footnote-exists', label: 'Why Footnote exists' },
-    { id: 'reading-a-response', label: 'Reading a response' },
-    { id: 'what-a-trace-is', label: 'What a trace is' },
+    { id: 'why-footnote-exists', label: 'A better way to read AI' },
+    { id: 'reading-a-response', label: 'Inside a response' },
+    { id: 'what-a-trace-is', label: 'The record' },
     {
         id: 'open-source-and-self-hosting',
         label: 'Open source and self-hosting',
@@ -74,14 +74,6 @@ const developerLinks: DeveloperLink[] = [
     },
 ];
 
-const responseDetails = [
-    'the answer itself',
-    'source links',
-    'confidence and safety notes',
-    'tradeoffs or constraints when they matter',
-    'a trace page with more detail about the run',
-] as const;
-
 const AboutPage = (): JSX.Element => (
     <>
         <Header breadcrumbItems={breadcrumbItems} />
@@ -119,17 +111,23 @@ const AboutPage = (): JSX.Element => (
                         aria-labelledby="why-footnote-exists-title"
                     >
                         <h2 id="why-footnote-exists-title">
-                            Why Footnote exists
+                            A better way to read AI
                         </h2>
                         <p>
-                            AI answers can sound more certain than they are.
-                            Footnote is built around a different habit: keep the
-                            answer connected to the context around it.
+                            AI can be impressively fluent and still leave you
+                            guessing about where an answer came from. Footnote
+                            is built to make that gap visible. It keeps answers
+                            tied to the context behind them, so people can see
+                            what an answer is standing on.
                         </p>
                         <p>
-                            The goal is not to make every answer automatically
-                            correct. The goal is to give people more to inspect
-                            before they decide what to do with the answer.
+                            Footnote does not try to pretend every answer is
+                            perfect. It helps people slow down, look at what the
+                            answer is based on, and decide for themselves
+                            whether it feels solid enough to trust. It is part
+                            of a bigger question about steerability: how to give
+                            people more control over the direction of an answer,
+                            with more visibility into how it was produced.
                         </p>
                     </section>
 
@@ -138,22 +136,13 @@ const AboutPage = (): JSX.Element => (
                         id="reading-a-response"
                         aria-labelledby="reading-a-response-title"
                     >
-                        <h2 id="reading-a-response-title">
-                            Reading a response
-                        </h2>
+                        <h2 id="reading-a-response-title">Inside a response</h2>
                         <p>
-                            A Footnote response can include a few layers of
-                            context alongside the answer.
-                        </p>
-                        <ul className="page-list">
-                            {responseDetails.map((detail) => (
-                                <li key={detail}>{detail}</li>
-                            ))}
-                        </ul>
-                        <p>
-                            The point is simple: if something feels uncertain,
-                            you should have more than a polished paragraph to
-                            work from.
+                            Footnote tries to give you more than the answer on
+                            its own. Alongside a response, you may see source
+                            links, notes about confidence or safety, tradeoffs
+                            or constraints when they matter, and a trace page
+                            with more detail about how it came together.
                         </p>
                     </section>
 
@@ -162,16 +151,16 @@ const AboutPage = (): JSX.Element => (
                         id="what-a-trace-is"
                         aria-labelledby="what-a-trace-is-title"
                     >
-                        <h2 id="what-a-trace-is-title">What a trace is</h2>
+                        <h2 id="what-a-trace-is-title">The record</h2>
                         <p>
-                            A trace is the receipt for a response. It collects
-                            the details Footnote recorded while answering:
-                            sources, model/runtime information, safety notes,
-                            and workflow details when they apply.
+                            A trace keeps the trail Footnote followed while
+                            answering: sources, model and runtime details,
+                            safety notes, and workflow steps when they matter.
                         </p>
                         <p>
-                            A trace does not prove the answer is correct. It
-                            gives you something to inspect.
+                            It does not prove the answer is right. It gives you
+                            a record you can open, follow, and question when you
+                            want to understand how the response came together.
                         </p>
                     </section>
 

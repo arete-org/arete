@@ -14,8 +14,6 @@ import Footer from '@components/Footer';
 
 const TracePage = lazy(() => import('@pages/TracePage'));
 const DownloadPage = lazy(() => import('@pages/DownloadPage'));
-const BlogListPage = lazy(() => import('@pages/BlogListPage'));
-const BlogPostPage = lazy(() => import('@pages/BlogPostPage'));
 const EmbedPage = lazy(() => import('@pages/EmbedPage'));
 const AboutPage = lazy(() => import('@pages/AboutPage'));
 const OnboardingPage = lazy(() => import('@pages/OnboardingPage'));
@@ -111,30 +109,6 @@ const App = (): JSX.Element => (
                 element={
                     <Suspense fallback={routeFallback}>
                         <EmbedPage />
-                    </Suspense>
-                }
-            />
-            <Route
-                path="/blog"
-                element={
-                    <Suspense fallback={routeFallback}>
-                        <BlogListPage />
-                    </Suspense>
-                }
-            />
-            <Route
-                path="/blog/"
-                element={
-                    <Suspense fallback={routeFallback}>
-                        <BlogListPage />
-                    </Suspense>
-                }
-            />
-            <Route
-                path="/blog/:number"
-                element={
-                    <Suspense fallback={routeFallback}>
-                        <BlogPostPage />
                     </Suspense>
                 }
             />
