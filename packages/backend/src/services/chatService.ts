@@ -85,9 +85,16 @@ const SURFACED_NO_GENERATION_MESSAGE =
 /**
  * Builds the fail-open short-circuit response surface for context-step outcomes.
  *
- * For compatibility, short-circuit branching uses one effective context-step
- * execution context (clarification/failure handling). Multi-step citation merge
- * still happens in assistant metadata after generation.
+ * The short-circuit branch can return early when a context step asks for user
+ * clarification or reports a known tool failure pattern.
+ *
+ * Compatibility rule: this branch reads one effective context-step execution
+ * context (the existing single-result shape) for clarification/failure routing.
+ * This keeps older callers stable while multi-context execution is available.
+ *
+ * Citation rule: when generation continues, citations from all executed context
+ * integrations are merged later into assistant metadata. This helper does not
+ * own that merge.
  */
 const buildContextStepShortCircuit = ({
     workflowContextStepResult,
