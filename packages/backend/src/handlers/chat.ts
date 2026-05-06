@@ -18,7 +18,7 @@ import type { CreateChatServiceOptions } from '../services/chatService.js';
 import { runtimeConfig } from '../config.js';
 import { createChatOrchestrator } from '../services/chatOrchestrator.js';
 import type { IncidentAlertRouter } from '../services/incidentAlerts.js';
-import type { WeatherForecastTool } from '../services/openMeteoForecastTool.js';
+import type { WeatherForecastTool } from '../services/contextIntegrations/weather/index.js';
 import { logger } from '../utils/logger.js';
 import {
     type ChatAuthContext,

@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { GenerationRuntime } from '@footnote/agent-runtime';
-import type { WeatherForecastTool } from '../src/services/openMeteoForecastTool.js';
+import type { WeatherForecastTool } from '../src/services/contextIntegrations/weather/index.js';
 import { runBoundedReviewWorkflow } from '../src/services/workflowEngine.js';
 
 const createTestRuntime = (

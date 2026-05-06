@@ -7,7 +7,7 @@
  * @footnote-ethics: medium - Forecast errors can impact user decisions, so the adapter preserves provenance and explicit uncertainty.
  */
 import type { ToolClarification } from '@footnote/contracts/ethics-core';
-import type { ChatGenerationWeatherRequest } from './chatGenerationTypes.js';
+import type { ChatGenerationWeatherRequest } from '../../chatGenerationTypes.js';
 
 const OPEN_METEO_FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const OPEN_METEO_GEOCODING_URL =
@@ -18,6 +18,78 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 6_000;
 const DEFAULT_HORIZON_PERIODS = 5;
 const MIN_HORIZON_PERIODS = 1;
 const MAX_HORIZON_PERIODS = 12;
+
+import { wrapToolResultPayload } from '../toolResultFormatter.js';
+
+/**
+ * Formats a WeatherForecastToolResult into a string payload for orchestration.
+ *
+ * When result.status === 'ok', the returned JSON is compacted: forecast.periods
+ * are trimmed to selected properties (name, startsAt, endsAt, temperature, wind,
+ * shortForecast, precipitationProbability) to reduce token overhead while preserving
+ * sufficient detail for the LLM to generate a response.
+ *
+ * When result.status !== 'ok', the full result (including error details or
+ * clarification) is included unchanged.
+ *
+ * === OMISSION NOTES ===
+ * - request: Omitted; the user's original input is already in conversation
+ *   context. The resolved location is what matters for generation.
+ * - provenance (full): Omitted in JSON output; only citationUrl and citationLabel
+ *   are needed for source attribution. Other fields (provider, endpoint,
+ *   requestedAt, resolvedFromEndpoint) are only useful for debugging/audit.
+ * - Raw weather code: Omitted; only the string label (shortForecast) is included.
+ * - API timing (generationtime_ms): Omitted; not relevant for LLM context.
+ * - location.population: Omitted; not relevant for weather response.
+ * - forecast.generatedAt/updatedAt: Omitted; timing metadata not needed for
+ *   generation, adds noise to structured payload.
+ *
+ * The output is wrapped in marker comment lines ('// ==========', '// BEGIN/END
+ * Backend Tool Result') which serve as parseable boundaries for downstream
+ * consumers (e.g., workflow orchestrator) to locate and extract the JSON payload.
+ *
+ * Provenance (citationUrl, citationLabel) is always included in the output to
+ * ensure traceability even when the weather call fails or requires clarification.
+ *
+ * This function has no fail-open behavior - it simply formats whatever result
+ * it receives. Fail-open semantics are handled by the executor that calls the
+ * weather API.
+ *
+ * @param result - The WeatherForecastToolResult from fetchForecast
+ * @returns A string containing marker comments and compacted JSON payload
+ */
+export const formatWeatherToolResultMessage = (
+    result: WeatherForecastToolResult
+): string => {
+    const compactResult =
+        result.status === 'ok'
+            ? {
+                  toolName: result.toolName,
+                  status: result.status,
+                  location: result.location,
+                  forecast: {
+                      periods: result.forecast.periods.map((period) => ({
+                          name: period.name,
+                          startsAt: period.startsAt,
+                          endsAt: period.endsAt,
+                          temperature: period.temperature,
+                          wind: period.wind,
+                          shortForecast: period.shortForecast,
+                          ...(period.precipitationProbability !== undefined && {
+                              precipitationProbability:
+                                  period.precipitationProbability,
+                          }),
+                      })),
+                  },
+                  provenance: {
+                      citationUrl: result.provenance.citationUrl,
+                      citationLabel: result.provenance.citationLabel,
+                  },
+              }
+            : result;
+
+    return wrapToolResultPayload(result.toolName, compactResult);
+};
 
 type FetchLike = typeof fetch;
 
@@ -87,7 +159,6 @@ export type WeatherForecastPeriod = {
     name: string;
     startsAt: string;
     endsAt: string;
-    isDaytime: boolean;
     temperature: {
         value: number;
         unit: string;
@@ -97,7 +168,6 @@ export type WeatherForecastPeriod = {
         direction: string;
     };
     shortForecast: string;
-    detailedForecast: string;
     precipitationProbability?: number;
 };
 
@@ -162,6 +232,11 @@ export type CreateOpenMeteoForecastToolOptions = {
     now?: () => Date;
 };
 
+/**
+ * Validates and clamps horizon periods to allowed range.
+ * Invalid inputs (non-integer, NaN, Infinity) default to 5.
+ * Values outside 1-12 are clamped to nearest bound.
+ */
 const clampHorizonPeriods = (horizonPeriods: number | undefined): number => {
     if (
         typeof horizonPeriods !== 'number' ||
@@ -262,6 +337,14 @@ const fetchJson = async <TValue>(
     }
 };
 
+/**
+ * Maps Open-Meteo WMO weather code (0-99) to simplified human-readable label.
+ * Applies semantic grouping: related codes are collapsed into single category
+ * (e.g., codes 61-67 all become "Rain") for LLM readability vs raw numeric codes.
+ * Unknown codes default to "Variable conditions".
+ *
+ * @see https://open-meteo.com/en/docs - WMO Weather interpretation codes
+ */
 const weatherCodeToLabel = (weatherCode: number): string => {
     if (weatherCode === 0) {
         return 'Clear sky';
@@ -296,11 +379,48 @@ const weatherCodeToLabel = (weatherCode: number): string => {
     return 'Variable conditions';
 };
 
+/**
+ * Converts wind direction degrees (0-359) to 8-point compass direction.
+ * Uses 45-degree buckets centered on cardinal/intercardinal directions.
+ * Degrees are normalized to handle wraparound (e.g., 360→0, -45→315).
+ */
 const toWindDirectionLabel = (degrees: number): string => {
     const normalized = ((degrees % 360) + 360) % 360;
     const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
     const index = Math.round(normalized / 45) % 8;
     return directions[index] ?? 'N';
+};
+
+/**
+ * Formats ISO date string as "Monday (5th)" style period name.
+ */
+const toPeriodName = (isoDate: string): string => {
+    const DAY_NAMES = [
+        'Sunday',
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday',
+    ] as const;
+    const parsed = new Date(isoDate + 'T12:00:00');
+    if (Number.isNaN(parsed.getTime())) {
+        return isoDate;
+    }
+    const dayName = DAY_NAMES[parsed.getUTCDay()];
+    const dayNum = parsed.getUTCDate();
+    const suffix =
+        dayNum >= 11 && dayNum <= 13
+            ? 'th'
+            : dayNum % 10 === 1
+              ? 'st'
+              : dayNum % 10 === 2
+                ? 'nd'
+                : dayNum % 10 === 3
+                  ? 'rd'
+                  : 'th';
+    return `${dayName} (${dayNum}${suffix})`;
 };
 
 const buildErrorResult = ({
@@ -754,13 +874,15 @@ export const createOpenMeteoForecastTool = ({
             }
 
             const label = weatherCodeToLabel(dayCode);
-            // Open-Meteo daily payload does not include day/night split text,
-            // so we synthesize a compact daily period summary.
+            // Spec conversions from Open-Meteo daily payload:
+            // - name: formatted as "Monday (5th)" style
+            // - temperature: averaged from (max + min) / 2 for single-value display
+            // - wind speed: rounded to integer; unit appended (e.g., "12 km/h")
+            // - precipitation: clamped to 0-100 range per contract
             periods.push({
-                name: index === 0 ? 'Today' : `Day ${index + 1}`,
+                name: toPeriodName(day),
                 startsAt: `${day}T00:00:00`,
                 endsAt: `${day}T23:59:59`,
-                isDaytime: true,
                 temperature: {
                     value: Number(((dayMax + dayMin) / 2).toFixed(1)),
                     unit: tempUnit,
@@ -770,7 +892,6 @@ export const createOpenMeteoForecastTool = ({
                     direction: toWindDirectionLabel(dayWindDirection),
                 },
                 shortForecast: label,
-                detailedForecast: `${label}. High ${Math.round(dayMax)}${tempUnit}, low ${Math.round(dayMin)}${tempUnit}.`,
                 ...(typeof precipMax?.[index] === 'number' &&
                     Number.isFinite(precipMax[index]) && {
                         precipitationProbability: Math.max(

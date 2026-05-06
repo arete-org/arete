@@ -7,7 +7,7 @@
  * @footnote-ethics: medium - Follow-up resolution affects user trust, so ambiguous matches fail open to re-ask.
  */
 import type { PostChatRequest } from '@footnote/contracts/web';
-import type { WeatherForecastRequest } from '../openMeteoForecastTool.js';
+import type { WeatherForecastRequest } from '../contextIntegrations/weather/index.js';
 
 type ParsedClarificationOption = {
     id: string;

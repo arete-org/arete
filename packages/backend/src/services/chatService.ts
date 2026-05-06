@@ -13,6 +13,7 @@ import type {
     RuntimeMessage,
 } from '@footnote/agent-runtime';
 import type {
+    Citation,
     PartialResponseTemperament,
     ResponseMetadata,
     SafetyTier,
@@ -585,7 +586,8 @@ export const createChatService = ({
     const buildAssistantMetadata = (
         generationResult: GenerationResult,
         generation: ChatGenerationPlan | undefined,
-        requestedModel: string | undefined
+        requestedModel: string | undefined,
+        contextStepSources?: Citation[]
     ): AssistantResponseMetadata => {
         const usage: AssistantUsage | undefined = generationResult.usage
             ? {
@@ -594,6 +596,12 @@ export const createChatService = ({
                   totalTokens: generationResult.usage.totalTokens,
               }
             : undefined;
+
+        const generationCitations = generationResult.citations ?? [];
+        const mergedCitations =
+            contextStepSources !== undefined && contextStepSources.length > 0
+                ? [...generationCitations, ...contextStepSources]
+                : generationCitations;
 
         return {
             // Prefer runtime-reported model first (actual execution target),
@@ -604,7 +612,7 @@ export const createChatService = ({
             reasoningEffort: generation?.reasoningEffort,
             verbosity: generation?.verbosity,
             provenance: generationResult.provenance,
-            citations: generationResult.citations ?? [],
+            citations: mergedCitations,
         };
     };
 
@@ -1055,10 +1063,12 @@ export const createChatService = ({
             });
         }
 
+        const contextStepSources = workflowContextStepResult?.sources;
         const assistantMetadata = buildAssistantMetadata(
             generationResult,
             effectiveNormalizedGeneration,
-            effectiveGenerationRequest.model
+            effectiveGenerationRequest.model,
+            contextStepSources
         );
         if (
             trustGraphResult?.adapterStatus === 'success' &&

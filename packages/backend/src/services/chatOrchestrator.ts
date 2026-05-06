@@ -36,9 +36,9 @@ import {
 import { resolveExecutionContract } from './executionContractResolver.js';
 import { resolveWorkflowModeDecision } from './workflowProfileRegistry.js';
 import { buildSteerabilityControls } from './steerabilityControls.js';
-import type { WeatherForecastTool } from './openMeteoForecastTool.js';
+import type { WeatherForecastTool } from './contextIntegrations/weather/index.js';
 import { resolveWeatherClarificationContinuation } from './tools/weatherClarificationContinuation.js';
-import { createToolRegistryContextStepExecutor } from './contextIntegrations/toolRegistryContextStepAdapter.js';
+import { createWeatherForecastContextStepExecutor } from './contextIntegrations/weather/index.js';
 import { createPlannerResultApplier } from './chatOrchestrator/plannerResultApplier.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -395,7 +395,7 @@ export const createChatOrchestrator = ({
         const personaPrompt =
             backendOwnedProfileOverlay ?? promptLayers.personaPrompt;
         const weatherContextStepExecutor =
-            createToolRegistryContextStepExecutor({
+            createWeatherForecastContextStepExecutor({
                 weatherForecastTool,
                 onWarn: (message, meta) => {
                     chatOrchestratorLogger.warn(message, meta);

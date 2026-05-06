@@ -21,7 +21,7 @@ import {
     type ResponseMetadataRuntimeContext,
 } from '../src/services/openaiService.js';
 import { renderConversationPromptLayers } from '../src/services/prompts/conversationPromptLayers.js';
-import type { WeatherForecastTool } from '../src/services/openMeteoForecastTool.js';
+import type { WeatherForecastTool } from '../src/services/contextIntegrations/weather/index.js';
 import { logger } from '../src/utils/logger.js';
 
 const PLANNER_TOKEN_SENTINEL = 1200;
