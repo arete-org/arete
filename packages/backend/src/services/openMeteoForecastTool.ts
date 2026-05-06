@@ -31,9 +31,6 @@ const MAX_HORIZON_PERIODS = 12;
  * clarification) is included unchanged.
  *
  * === OMISSION NOTES ===
- * - detailedForecast: Omitted from JSON output; the field is generated for LLM
- *   context but adds noise to the structured payload - the LLM can derive this
- *   from temperature, shortForecast, and precipitationProbability.
  * - Raw weather code: Omitted; only the string label (shortForecast) is included.
  * - API timing (generationtime_ms): Omitted; not relevant for LLM context.
  * - location.population: Omitted; not relevant for weather response.
@@ -171,7 +168,6 @@ export type WeatherForecastPeriod = {
         direction: string;
     };
     shortForecast: string;
-    detailedForecast: string;
     precipitationProbability?: number;
 };
 
@@ -844,7 +840,6 @@ export const createOpenMeteoForecastTool = ({
                     direction: toWindDirectionLabel(dayWindDirection),
                 },
                 shortForecast: label,
-                detailedForecast: `${label}. High ${Math.round(dayMax)}${tempUnit}, low ${Math.round(dayMin)}${tempUnit}.`,
                 ...(typeof precipMax?.[index] === 'number' &&
                     Number.isFinite(precipMax[index]) && {
                         precipitationProbability: Math.max(
