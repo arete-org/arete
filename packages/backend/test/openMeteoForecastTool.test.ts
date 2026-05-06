@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createOpenMeteoForecastTool } from '../src/services/openMeteoForecastTool.js';
+import { createOpenMeteoForecastTool } from '../src/services/contextIntegrations/weather/index.js';
 
 type MockResponseInit = {
     ok: boolean;
