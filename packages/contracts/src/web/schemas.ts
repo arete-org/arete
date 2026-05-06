@@ -687,7 +687,7 @@ type _AssertProvenanceAssessment =
 const _assertProvenanceAssessment: _AssertProvenanceAssessment = true;
 void _assertProvenanceAssessment;
 
-const WorkflowModeIdSchema = z.enum(['fast', 'balanced', 'grounded']);
+const WorkflowModeIdSchema = z.enum(['balanced', 'grounded']);
 
 const WorkflowModeSelectionSourceSchema = z.enum([
     'requested_mode',

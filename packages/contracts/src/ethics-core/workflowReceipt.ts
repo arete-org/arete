@@ -15,7 +15,6 @@ import type {
 import { deriveReviewRuntimeSummary } from './reviewRuntime.js';
 
 const WORKFLOW_MODE_LABELS: Record<WorkflowModeId, string> = {
-    fast: 'Fast mode',
     balanced: 'Balanced mode',
     grounded: 'Grounded mode',
 };
@@ -57,9 +56,6 @@ export const resolveWorkflowModeLabel = (
     }
 
     const presetId = metadata.workflowMode?.behavior?.executionContractPresetId;
-    if (presetId === 'fast-direct') {
-        return WORKFLOW_MODE_LABELS.fast;
-    }
     if (presetId === 'balanced') {
         return WORKFLOW_MODE_LABELS.balanced;
     }

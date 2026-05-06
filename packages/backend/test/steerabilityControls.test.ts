@@ -167,18 +167,18 @@ test('mattered reflects observable causal impact instead of record presence', ()
     const controls = buildSteerabilityControls(
         createBaseControlsInput({
             workflowMode: {
-                modeId: 'fast',
+                modeId: 'balanced',
                 selectedBy: 'requested_mode',
-                selectionReason: 'Configured fast mode selected.',
-                initial_mode: 'fast',
+                selectionReason: 'Configured balanced mode selected.',
+                initial_mode: 'balanced',
                 behavior: {
-                    executionContractPresetId: 'fast-direct',
-                    workflowProfileClass: 'direct',
-                    workflowProfileId: 'generate-only',
-                    workflowExecution: 'disabled',
-                    reviewPass: 'excluded',
-                    reviseStep: 'disallowed',
-                    evidencePosture: 'minimal',
+                    executionContractPresetId: 'balanced',
+                    workflowProfileClass: 'reviewed',
+                    workflowProfileId: 'bounded-review',
+                    workflowExecution: 'always',
+                    reviewPass: 'included',
+                    reviseStep: 'allowed',
+                    evidencePosture: 'balanced',
                     maxWorkflowSteps: 1,
                     maxDeliberationCalls: 0,
                 },

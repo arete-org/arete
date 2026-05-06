@@ -55,7 +55,7 @@ test('buildWorkflowReceiptItems renders mode, review, and planner fallback signa
                 workflowProfileClass: 'reviewed',
                 workflowProfileId: 'bounded-review',
                 workflowExecution: 'policy_gated',
-                reviewPass: 'excluded',
+                reviewPass: 'included',
                 reviseStep: 'allowed',
                 evidencePosture: 'balanced',
                 maxWorkflowSteps: 6,
@@ -248,14 +248,14 @@ test('buildWorkflowReceiptSummary stays fail-open for legacy partial metadata', 
     const partialMetadata = {
         ...createBaseMetadata(),
         workflowMode: {
-            modeId: 'fast',
+            modeId: 'balanced',
         },
         workflow: {},
     } as unknown as ResponseMetadata;
 
     assert.equal(
         buildWorkflowReceiptSummary(partialMetadata),
-        'Answered in Fast mode'
+        'Answered in Balanced mode'
     );
 });
 
