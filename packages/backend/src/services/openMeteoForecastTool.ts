@@ -31,9 +31,16 @@ const MAX_HORIZON_PERIODS = 12;
  * clarification) is included unchanged.
  *
  * === OMISSION NOTES ===
+ * - request: Omitted; the user's original input is already in conversation
+ *   context. The resolved location is what matters for generation.
+ * - provenance (full): Omitted in JSON output; only citationUrl and citationLabel
+ *   are needed for source attribution. Other fields (provider, endpoint,
+ *   requestedAt, resolvedFromEndpoint) are only useful for debugging/audit.
  * - Raw weather code: Omitted; only the string label (shortForecast) is included.
  * - API timing (generationtime_ms): Omitted; not relevant for LLM context.
  * - location.population: Omitted; not relevant for weather response.
+ * - forecast.generatedAt/updatedAt: Omitted; timing metadata not needed for
+ *   generation, adds noise to structured payload.
  *
  * The output is wrapped in marker comment lines ('// ==========', '// BEGIN/END
  * Backend Tool Result') which serve as parseable boundaries for downstream
@@ -57,11 +64,8 @@ export const formatWeatherToolResultMessage = (
             ? {
                   toolName: result.toolName,
                   status: result.status,
-                  request: result.request,
                   location: result.location,
                   forecast: {
-                      generatedAt: result.forecast.generatedAt,
-                      updatedAt: result.forecast.updatedAt,
                       periods: result.forecast.periods.map((period) => ({
                           name: period.name,
                           startsAt: period.startsAt,
@@ -75,7 +79,10 @@ export const formatWeatherToolResultMessage = (
                           }),
                       })),
                   },
-                  provenance: result.provenance,
+                  provenance: {
+                      citationUrl: result.provenance.citationUrl,
+                      citationLabel: result.provenance.citationLabel,
+                  },
               }
             : result;
 

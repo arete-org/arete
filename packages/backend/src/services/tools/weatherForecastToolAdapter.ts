@@ -24,11 +24,8 @@ const formatWeatherToolResultMessage = (
             ? {
                   toolName: result.toolName,
                   status: result.status,
-                  request: result.request,
                   location: result.location,
                   forecast: {
-                      generatedAt: result.forecast.generatedAt,
-                      updatedAt: result.forecast.updatedAt,
                       periods: result.forecast.periods.map((period) => ({
                           name: period.name,
                           startsAt: period.startsAt,
@@ -40,7 +37,10 @@ const formatWeatherToolResultMessage = (
                               period.precipitationProbability,
                       })),
                   },
-                  provenance: result.provenance,
+                  provenance: {
+                      citationUrl: result.provenance.citationUrl,
+                      citationLabel: result.provenance.citationLabel,
+                  },
               }
             : result;
 
