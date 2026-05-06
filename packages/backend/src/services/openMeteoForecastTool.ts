@@ -391,20 +391,19 @@ const toWindDirectionLabel = (degrees: number): string => {
     return directions[index] ?? 'N';
 };
 
-const DAY_NAMES = [
-    'Sunday',
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-] as const;
-
 /**
  * Formats ISO date string as "Monday (5th)" style period name.
  */
 const toPeriodName = (isoDate: string): string => {
+    const DAY_NAMES = [
+        'Sunday',
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday',
+    ] as const;
     const parsed = new Date(isoDate + 'T12:00:00');
     if (Number.isNaN(parsed.getTime())) {
         return isoDate;
