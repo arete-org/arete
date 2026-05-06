@@ -842,11 +842,7 @@ export const createOpenMeteoForecastTool = ({
             }
 
             const label = weatherCodeToLabel(dayCode);
-            // Open-Meteo daily payload does not include day/night split text,
-            // so we synthesize a compact daily period summary. isDaytime is omitted
-            // because daily summaries don't have meaningful day/night distinction.
-            //
-            // Spec conversions:
+            // Spec conversions from Open-Meteo daily payload:
             // - name: synthesized as "Today" / "Day N" since API provides none
             // - temperature: averaged from (max + min) / 2 for single-value display
             // - wind speed: rounded to integer; unit appended (e.g., "12 km/h")
