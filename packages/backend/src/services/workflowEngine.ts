@@ -1220,9 +1220,9 @@ export const runBoundedReviewWorkflow = async ({
             );
             for (const contextStepOutcome of contextStepOutcomes) {
                 if (contextStepOutcome.blockedByLimit === true) {
-                    exhaustedLimitKey = 'max_tool_calls';
+                    exhaustedLimitKey = 'maxToolCalls';
                     terminationReason =
-                        mapExhaustedLimitToTerminationReason(exhaustedLimitKey);
+                        mapExhaustedLimitToTerminationReason('maxToolCalls');
                     workflowStatus = 'degraded';
                     shouldStop = true;
                     continue;
