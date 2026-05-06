@@ -79,7 +79,7 @@ const ChatConversationMessageSchema = z
     .strict();
 const ChatAttachmentSchema = z
     .object({
-        kind: z.literal('image'),
+        kind: z.enum(['image', 'file']),
         url: z.string().url(),
         contentType: z.string().min(1).optional(),
     })

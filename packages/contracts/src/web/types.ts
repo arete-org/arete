@@ -278,7 +278,7 @@ export type ChatConversationMessage = {
  * to one surface's event model.
  */
 export type ChatAttachment = {
-    kind: 'image';
+    kind: 'image' | 'file';
     url: string;
     contentType?: string;
 };

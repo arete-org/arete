@@ -318,10 +318,8 @@ const isChatImageAction = (
     );
 };
 
-const hasImageAttachments = (message: Message): boolean =>
-    message.attachments.some((attachment) =>
-        attachment.contentType?.startsWith('image/')
-    );
+const hasAnyAttachments = (message: Message): boolean =>
+    message.attachments.size > 0;
 
 const hasImageEmbeds = (message: Message): boolean =>
     message.embeds.some(
@@ -468,7 +466,7 @@ export class MessageProcessor {
 
         if (
             !message.content.trim() &&
-            !hasImageAttachments(message) &&
+            !hasAnyAttachments(message) &&
             !hasImageEmbeds(message)
         ) {
             return;
@@ -558,78 +556,6 @@ export class MessageProcessor {
             message,
             RESPONSE_CONTEXT_SIZE
         );
-        const imageAttachments = message.attachments.filter((attachment) =>
-            attachment.contentType?.startsWith('image/')
-        );
-
-        if (imageAttachments.size > 0) {
-            logger.debug(
-                `Processing image attachment(s) for chat request on message ${message.id}.`,
-                {
-                    attachmentCount: imageAttachments.size,
-                    contentLength: message.content.length,
-                }
-            );
-            const trimmedAttachmentContext = message.content.trim();
-
-            const imageDescriptions = await Promise.all(
-                imageAttachments.map(async (attachment) => {
-                    try {
-                        const response =
-                            await botApi.runImageDescriptionTaskViaApi({
-                                task: 'image_description',
-                                imageUrl: attachment.url,
-                                ...(trimmedAttachmentContext.length > 0
-                                    ? {
-                                          context: trimmedAttachmentContext,
-                                      }
-                                    : {}),
-                                channelContext: {
-                                    channelId: message.channelId,
-                                    guildId: message.guildId ?? undefined,
-                                },
-                            });
-
-                        return (
-                            response.result.description ??
-                            `Error generating image description for message ${message.id} attachment ${attachment.id}`
-                        );
-                    } catch (error) {
-                        logger.error(
-                            `Error generating image description for chat attachment on message ${message.id}: ${
-                                error instanceof Error
-                                    ? error.message
-                                    : String(error)
-                            }`,
-                            {
-                                attachmentId: attachment.id,
-                                attachmentCount: imageAttachments.size,
-                            }
-                        );
-                        return `Error generating image description for message ${message.id} attachment ${attachment.id}`;
-                    }
-                })
-            );
-
-            conversation.push({
-                role: 'system',
-                content: [
-                    '// ==========',
-                    '// BEGIN Image Descriptions',
-                    '// The user uploaded images; use these auto-generated descriptions for grounding.',
-                    '// ==========',
-                    imageDescriptions
-                        .map(
-                            (description, index) =>
-                                `[Image ${index + 1}]: ${description}`
-                        )
-                        .join('\n'),
-                    '// ==========',
-                    '// END Image Descriptions',
-                    '// ==========',
-                ].join('\n'),
-            });
-        }
 
         let recoveredImageContext: RecoveredImageContext | null = null;
         try {
@@ -680,8 +606,10 @@ export class MessageProcessor {
                 },
                 latestUserInput: message.content.trim(),
                 conversation,
-                attachments: imageAttachments.map((attachment) => ({
-                    kind: 'image' as const,
+                attachments: message.attachments.map((attachment) => ({
+                    kind: attachment.contentType?.startsWith('image/')
+                        ? ('image' as const)
+                        : ('file' as const),
                     url: attachment.url,
                     contentType: attachment.contentType ?? undefined,
                 })),
@@ -776,8 +704,8 @@ export class MessageProcessor {
         const currentMessageContent =
             message.content.trim() ||
             buildEmbedSummary(message) ||
-            (hasImageAttachments(message)
-                ? '[User uploaded one or more images.]'
+            (hasAnyAttachments(message)
+                ? '[User uploaded one or more attachments.]'
                 : 'User sent a non-text message.');
         historyConversation.push({
             role: 'user',

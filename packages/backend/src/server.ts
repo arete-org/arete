@@ -565,6 +565,7 @@ const handleChatRequest = createChatHandler({
     generationRuntime,
     alertRouter: incidentAlertRouter,
     weatherForecastTool: weatherForecastTool ?? undefined,
+    internalImageDescriptionTaskService,
     ipRateLimiter,
     sessionRateLimiter,
     serviceRateLimiter,

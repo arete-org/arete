@@ -149,6 +149,27 @@ export const createPlannerResultApplier = (
                       }),
                   }
                 : undefined;
+        const fileScanContextStepRequest =
+            plannerInput.normalizedRequest.attachments !== undefined &&
+            plannerInput.normalizedRequest.attachments.length > 0
+                ? {
+                      integrationName: 'file_scan',
+                      requested: true,
+                      eligible: true,
+                      input: {
+                          attachments: plannerInput.normalizedRequest
+                              .attachments as Record<string, unknown>[],
+                          latestUserInput:
+                              plannerInput.normalizedRequest.latestUserInput,
+                      },
+                  }
+                : undefined;
+        const contextStepRequests = [
+            ...(contextStepRequest !== undefined ? [contextStepRequest] : []),
+            ...(fileScanContextStepRequest !== undefined
+                ? [fileScanContextStepRequest]
+                : []),
+        ];
         const plannerApplyOutcome =
             plannerInput.plannerStepResult.execution.status !== 'executed'
                 ? 'not_applied'
@@ -187,6 +208,7 @@ export const createPlannerResultApplier = (
             toolRequestContext: toolSelection.toolRequest,
             toolExecutionContext: toolSelection.toolExecution,
             contextStepRequest,
+            ...(contextStepRequests.length > 0 && { contextStepRequests }),
             plannerApplyOutcome,
             plannerMattered,
             plannerMatteredControlIds,

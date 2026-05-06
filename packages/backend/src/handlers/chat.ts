@@ -19,6 +19,7 @@ import { runtimeConfig } from '../config.js';
 import { createChatOrchestrator } from '../services/chatOrchestrator.js';
 import type { IncidentAlertRouter } from '../services/incidentAlerts.js';
 import type { WeatherForecastTool } from '../services/contextIntegrations/weather/index.js';
+import type { InternalImageDescriptionTaskService } from '../services/internalText.js';
 import { logger } from '../utils/logger.js';
 import {
     type ChatAuthContext,
@@ -44,6 +45,7 @@ type ChatHandlerDeps = {
     generationRuntime: GenerationRuntime | null;
     alertRouter?: IncidentAlertRouter;
     weatherForecastTool?: WeatherForecastTool;
+    internalImageDescriptionTaskService?: InternalImageDescriptionTaskService | null;
     ipRateLimiter: SimpleRateLimiter | null;
     sessionRateLimiter: SimpleRateLimiter | null;
     serviceRateLimiter: SimpleRateLimiter | null;
@@ -138,6 +140,7 @@ const createChatHandler = ({
     generationRuntime,
     alertRouter,
     weatherForecastTool,
+    internalImageDescriptionTaskService,
     ipRateLimiter,
     sessionRateLimiter,
     serviceRateLimiter,
@@ -151,6 +154,8 @@ const createChatHandler = ({
         ? createChatOrchestrator({
               generationRuntime,
               weatherForecastTool,
+              internalImageDescriptionTaskService:
+                  internalImageDescriptionTaskService ?? undefined,
               alertRouter,
               storeTrace,
               buildResponseMetadata,
