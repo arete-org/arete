@@ -391,6 +391,39 @@ const toWindDirectionLabel = (degrees: number): string => {
     return directions[index] ?? 'N';
 };
 
+const DAY_NAMES = [
+    'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+] as const;
+
+/**
+ * Formats ISO date string as "Monday (5th)" style period name.
+ */
+const toPeriodName = (isoDate: string): string => {
+    const parsed = new Date(isoDate + 'T12:00:00');
+    if (Number.isNaN(parsed.getTime())) {
+        return isoDate;
+    }
+    const dayName = DAY_NAMES[parsed.getUTCDay()];
+    const dayNum = parsed.getUTCDate();
+    const suffix =
+        dayNum >= 11 && dayNum <= 13
+            ? 'th'
+            : dayNum % 10 === 1
+              ? 'st'
+              : dayNum % 10 === 2
+                ? 'nd'
+                : dayNum % 10 === 3
+                  ? 'rd'
+                  : 'th';
+    return `${dayName} (${dayNum}${suffix})`;
+};
+
 const buildErrorResult = ({
     request,
     requestedAt,
@@ -843,12 +876,12 @@ export const createOpenMeteoForecastTool = ({
 
             const label = weatherCodeToLabel(dayCode);
             // Spec conversions from Open-Meteo daily payload:
-            // - name: synthesized as "Today" / "Day N" since API provides none
+            // - name: formatted as "Monday (5th)" style
             // - temperature: averaged from (max + min) / 2 for single-value display
             // - wind speed: rounded to integer; unit appended (e.g., "12 km/h")
             // - precipitation: clamped to 0-100 range per contract
             periods.push({
-                name: index === 0 ? 'Today' : `Day ${index + 1}`,
+                name: toPeriodName(day),
                 startsAt: `${day}T00:00:00`,
                 endsAt: `${day}T23:59:59`,
                 temperature: {
