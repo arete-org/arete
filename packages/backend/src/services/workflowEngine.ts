@@ -1144,6 +1144,9 @@ export const runBoundedReviewWorkflow = async ({
                         undefined && {
                         clarification: normalizedExecutionContext.clarification,
                     }),
+                    ...(contextStepResult.sources !== undefined && {
+                        sources: contextStepResult.sources,
+                    }),
                 };
                 const status =
                     normalizedExecutionContext.status === 'failed'

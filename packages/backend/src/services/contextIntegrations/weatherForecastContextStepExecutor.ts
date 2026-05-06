@@ -32,7 +32,9 @@ const mapWeatherErrorCodeToReasonCode = (
             ? 'tool_network_error'
             : code === 'invalid_response'
               ? 'tool_invalid_response'
-              : 'tool_execution_error';
+              : code === 'location_not_resolved'
+                ? 'unspecified_tool_outcome'
+                : 'tool_execution_error';
 
 type WeatherInput = {
     location: unknown;
@@ -79,16 +81,32 @@ const normalizeWeatherLocation = (
         typeof loc.latitude === 'number' &&
         typeof loc.longitude === 'number'
     ) {
+        const latitude = loc.latitude;
+        const longitude = loc.longitude;
+        if (
+            !Number.isFinite(latitude) ||
+            !Number.isFinite(longitude) ||
+            latitude < -90 ||
+            latitude > 90 ||
+            longitude < -180 ||
+            longitude > 180
+        ) {
+            return undefined;
+        }
         return {
             type: 'lat_lon',
-            latitude: loc.latitude,
-            longitude: loc.longitude,
+            latitude,
+            longitude,
         };
     }
     if (loc.type === 'place_query' && typeof loc.query === 'string') {
+        const query = loc.query.trim();
+        if (query.length === 0) {
+            return undefined;
+        }
         return {
             type: 'place_query',
-            query: loc.query,
+            query,
             countryCode:
                 typeof loc.countryCode === 'string'
                     ? loc.countryCode
@@ -98,6 +116,28 @@ const normalizeWeatherLocation = (
     return undefined;
 };
 
+/**
+ * Creates a fail-open context-step executor for weather forecast integration.
+ * This is the provenance boundary for weather context execution in the workflow engine.
+ *
+ * @param weatherForecastTool - The weather API client; if undefined, execution is skipped.
+ * @param onWarn - Callback for logging recoverable issues (e.g., API failures).
+ *
+ * @returns A ContextStepExecutor that:
+ *   - Returns status:'skipped' with reasonCode:'tool_unavailable' if weatherForecastTool is missing
+ *   - Returns status:'skipped' with reasonCode:'not_requested' if request.requested is false
+ *   - Returns status:'skipped' with reasonCode:'not_eligible' if request.eligible is false
+ *   - Returns status:'failed' with reasonCode:'unspecified_tool_outcome' for invalid input
+ *   - Returns status:'executed' with contextMessages for successful weather retrieval
+ *   - Returns status:'executed' with clarification for ambiguous location queries
+ *   - Returns status:'failed' with appropriate reasonCode for API errors
+ *
+ * Fail-open behavior: Weather API failures do not block workflow execution; instead,
+ * a warning is logged via onWarn and generation proceeds without weather context.
+ * Sources (citationUrl/citationLabel) are surfaced as structured Citation[] when available.
+ *
+ * @param onWarn - Invoked when the weather API throws or returns an error, with the error message.
+ */
 export const createWeatherForecastContextStepExecutor = ({
     weatherForecastTool,
     onWarn,
@@ -108,16 +148,33 @@ export const createWeatherForecastContextStepExecutor = ({
     const warn = onWarn ?? (() => undefined);
 
     return async ({ request }): Promise<ContextStepResult> => {
-        if (!weatherForecastTool || !request.requested || !request.eligible) {
+        if (!weatherForecastTool) {
             return {
                 executionContext: {
                     toolName: request.integrationName,
-                    status: request.eligible ? 'failed' : 'skipped',
+                    status: 'skipped',
+                    reasonCode: request.reasonCode ?? 'tool_unavailable',
+                },
+            };
+        }
+
+        if (!request.requested) {
+            return {
+                executionContext: {
+                    toolName: request.integrationName,
+                    status: 'skipped',
+                    reasonCode: request.reasonCode ?? 'tool_not_requested',
+                },
+            };
+        }
+
+        if (!request.eligible) {
+            return {
+                executionContext: {
+                    toolName: request.integrationName,
+                    status: 'skipped',
                     reasonCode:
-                        request.reasonCode ??
-                        (request.eligible
-                            ? 'unspecified_tool_outcome'
-                            : 'tool_unavailable'),
+                        request.reasonCode ?? 'unspecified_tool_outcome',
                 },
             };
         }

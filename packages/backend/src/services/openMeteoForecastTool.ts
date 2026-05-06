@@ -19,6 +19,31 @@ const DEFAULT_HORIZON_PERIODS = 5;
 const MIN_HORIZON_PERIODS = 1;
 const MAX_HORIZON_PERIODS = 12;
 
+/**
+ * Formats a WeatherForecastToolResult into a string payload for orchestration.
+ *
+ * When result.status === 'ok', the returned JSON is compacted: forecast.periods
+ * are trimmed to selected properties (name, startsAt, endsAt, isDaytime,
+ * temperature, wind, shortForecast, precipitationProbability) to reduce token
+ * overhead while preserving sufficient detail for the LLM to generate a response.
+ *
+ * When result.status !== 'ok', the full result (including error details or
+ * clarification) is included unchanged.
+ *
+ * The output is wrapped in marker comment lines ('// ==========', '// BEGIN/END
+ * Backend Tool Result') which serve as parseable boundaries for downstream
+ * consumers (e.g., workflow orchestrator) to locate and extract the JSON payload.
+ *
+ * Provenance (citationUrl, citationLabel) is always included in the output to
+ * ensure traceability even when the weather call fails or requires clarification.
+ *
+ * This function has no fail-open behavior - it simply formats whatever result
+ * it receives. Fail-open semantics are handled by the executor that calls the
+ * weather API.
+ *
+ * @param result - The WeatherForecastToolResult from fetchForecast
+ * @returns A string containing marker comments and compacted JSON payload
+ */
 export const formatWeatherToolResultMessage = (
     result: WeatherForecastToolResult
 ): string => {
