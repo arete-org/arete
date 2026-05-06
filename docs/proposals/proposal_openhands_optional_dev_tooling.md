@@ -8,18 +8,16 @@
 
 Footnote may be worth trying with OpenHands as an optional development tool.
 
-This is a repo workflow question, not a runtime question.
-
 The product already has its main boundaries:
 
 - `packages/backend` is the public control-plane boundary
 - `@footnote/agent-runtime` is the replaceable runtime seam
 - provenance, trace, review, auth, and cost semantics stay Footnote-owned
 
-OpenHands does not compete with that. It would sit in the same general space as
-other coding assistants people might use while working on the repo.
+OpenHands would sit with the other coding assistants people might use while
+working on the repo.
 
-The proposal is simple:
+This proposal asks for a small trial:
 
 - support OpenHands in a small, explicit way
 - try it on real Footnote tasks
@@ -29,27 +27,21 @@ The proposal is simple:
 
 ## Why Try It
 
-The main reason is not architecture. The architecture is already fine without
-it.
-
 The reason to try OpenHands is that it gives us another way to work on real
 repo tasks and compare the result against the standards we already have.
 
-That comparison is useful for a few reasons.
-
-First, it tells us whether the current repo guidance actually travels well
+It tells us whether the current repo guidance actually travels well
 across tools. `AGENTS.md` is supposed to be the source of truth. A second tool
-is a good way to find out whether that claim holds up in practice or whether
+lets us find out whether that claim holds up in practice or whether
 the current setup quietly depends on one tool's habits.
 
-Second, it gives maintainers a better feel for review cost. A tool can look
+It also gives maintainers a better feel for review cost. A tool can look
 impressive in a demo and still produce changes that are annoying to merge. The
 real question is not "can it edit files?" The real question is whether its
 changes survive review without dragging reviewers through cleanup.
 
-Third, a failed trial is still useful. If OpenHands produces noisy diffs,
-misses project boundaries, or encourages sloppy repo habits, that is worth
-learning early and cheaply.
+If OpenHands produces noisy diffs, misses project boundaries, or encourages
+sloppy repo habits, that is worth learning early and cheaply.
 
 ---
 
@@ -60,8 +52,6 @@ Footnote already has a clean rule structure for AI-assisted work.
 `AGENTS.md` is the canonical contract. The other tool-facing files are thin
 adapters. That is one of the better parts of the current setup. It keeps repo
 policy in one place and makes it easier to change later.
-
-OpenHands fits that structure well enough to test.
 
 Its current docs support a root `AGENTS.md` file for persistent repo guidance
 and also support repo-level skills. That means we would not need to invent a
@@ -75,8 +65,6 @@ different things.
 
 ## Where It Fits
 
-The clean fit is at the repo edge.
-
 OpenHands should help people work on Footnote. It should not become part of how
 Footnote itself runs.
 
@@ -87,8 +75,6 @@ It also means we should be careful about the social framing. This should not be
 presented as an open invitation for low-review generated patches. If we support
 OpenHands at all, it should be in the same spirit as the rest of the repo's AI
 guidance: useful when used carefully, not an excuse to lower standards.
-
-This is also why OpenHands is different from VoltAgent.
 
 VoltAgent is part of the product's internal execution layer. OpenHands would be
 part of contributor workflow. They use similar language, but they do different
@@ -103,14 +89,10 @@ OpenHands looks mature enough to evaluate.
 It supports local use, a local GUI server, cloud-hosted use, repo-level
 guidance, and repo-level skills. That is enough for a real trial.
 
-Its limits matter too.
-
 The current docs still treat ordinary local or self-hosted use as basically
 single-user oriented. That is fine here because Footnote does not need a shared
 OpenHands service. We would be trying it as a developer tool, not as project
 infrastructure.
-
-There are also a couple of practical caveats worth stating plainly.
 
 The CLI docs currently tell Windows users to run through WSL. If we document
 OpenHands support, that detail should be near the top rather than hidden in a
@@ -124,8 +106,6 @@ if it exists, not a reason to adopt the tool.
 ---
 
 ## Small First Step
-
-The first version should stay boring.
 
 If we try this, the initial repo support should probably be:
 
@@ -153,9 +133,6 @@ If OpenHands is useful, maintainers should feel it in a few concrete places:
 - fewer "looks fine until you read closely" diffs
 - enough repeat use that maintainers choose it again
 
-If none of that shows up, the trial did its job anyway. It told us the tool is
-not earning its place.
-
 That is the standard this should be held to. Not novelty. Not model branding.
 Not whether it can produce a nice-looking demo diff.
 
@@ -163,16 +140,12 @@ Not whether it can produce a nice-looking demo diff.
 
 ## Risks
 
-The main risks are predictable.
-
 The repo could pick up another instruction surface that drifts from
 `AGENTS.md`. People could read "supported" as "blessed for broad use." Reviewers
 could end up spending time cleaning up plausible but shallow changes. Cloud use
 could blur lines around secrets, repo access, or cost.
 
-Those are manageable if the trial stays narrow.
-
-The guardrails are straightforward:
+Keep the trial narrow:
 
 - keep `AGENTS.md` canonical
 - keep support optional
@@ -187,9 +160,6 @@ Try OpenHands as a small maintainer-focused experiment.
 
 Keep the support light. Keep the scope at the repo edge. Judge it by review
 cost and merge quality. Remove it if it creates more cleanup than value.
-
-That is enough reason to write the experiment down and run it. It does not need
-to be more ambitious than that.
 
 ---
 
