@@ -232,6 +232,11 @@ export type CreateOpenMeteoForecastToolOptions = {
     now?: () => Date;
 };
 
+/**
+ * Validates and clamps horizon periods to allowed range.
+ * Invalid inputs (non-integer, NaN, Infinity) default to 5.
+ * Values outside 1-12 are clamped to nearest bound.
+ */
 const clampHorizonPeriods = (horizonPeriods: number | undefined): number => {
     if (
         typeof horizonPeriods !== 'number' ||
@@ -332,6 +337,14 @@ const fetchJson = async <TValue>(
     }
 };
 
+/**
+ * Maps Open-Meteo WMO weather code (0-99) to simplified human-readable label.
+ * Applies semantic grouping: related codes are collapsed into single category
+ * (e.g., codes 61-67 all become "Rain") for LLM readability vs raw numeric codes.
+ * Unknown codes default to "Variable conditions".
+ *
+ * @see https://open-meteo.com/en/docs - WMO Weather interpretation codes
+ */
 const weatherCodeToLabel = (weatherCode: number): string => {
     if (weatherCode === 0) {
         return 'Clear sky';
@@ -366,6 +379,11 @@ const weatherCodeToLabel = (weatherCode: number): string => {
     return 'Variable conditions';
 };
 
+/**
+ * Converts wind direction degrees (0-359) to 8-point compass direction.
+ * Uses 45-degree buckets centered on cardinal/intercardinal directions.
+ * Degrees are normalized to handle wraparound (e.g., 360→0, -45→315).
+ */
 const toWindDirectionLabel = (degrees: number): string => {
     const normalized = ((degrees % 360) + 360) % 360;
     const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -827,6 +845,12 @@ export const createOpenMeteoForecastTool = ({
             // Open-Meteo daily payload does not include day/night split text,
             // so we synthesize a compact daily period summary. isDaytime is omitted
             // because daily summaries don't have meaningful day/night distinction.
+            //
+            // Spec conversions:
+            // - name: synthesized as "Today" / "Day N" since API provides none
+            // - temperature: averaged from (max + min) / 2 for single-value display
+            // - wind speed: rounded to integer; unit appended (e.g., "12 km/h")
+            // - precipitation: clamped to 0-100 range per contract
             periods.push({
                 name: index === 0 ? 'Today' : `Day ${index + 1}`,
                 startsAt: `${day}T00:00:00`,

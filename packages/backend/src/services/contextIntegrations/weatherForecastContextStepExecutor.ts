@@ -21,6 +21,10 @@ import type {
 } from '../openMeteoForecastTool.js';
 import { formatWeatherToolResultMessage } from '../openMeteoForecastTool.js';
 
+/**
+ * Maps Open-Meteo tool error codes to generic ToolInvocationReasonCode.
+ * Unknown codes fall through to 'tool_execution_error' as fail-safe default.
+ */
 const mapWeatherErrorCodeToReasonCode = (
     code: string | undefined
 ): ToolInvocationReasonCode =>
@@ -58,6 +62,11 @@ const parseWeatherInput = (input: unknown): WeatherInput | undefined => {
     };
 };
 
+/**
+ * Validates and normalizes weather location input.
+ * Accepts lat/lon with range validation (-90 to 90, -180 to 180) or place query.
+ * Returns undefined for invalid inputs (fail-open).
+ */
 const normalizeWeatherLocation = (
     location: unknown
 ):
