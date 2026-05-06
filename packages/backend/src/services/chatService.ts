@@ -95,6 +95,12 @@ const SURFACED_NO_GENERATION_MESSAGE =
  * Citation rule: when generation continues, citations from all executed context
  * integrations are merged later into assistant metadata. This helper does not
  * own that merge.
+ *
+ * TODO: This helper currently checks only one context-step result when deciding
+ * whether to short-circuit for clarification or known tool failure. Update it
+ * to evaluate the full list of context-step results so short-circuit decisions
+ * reflect every executed integration, then remove this single-result
+ * compatibility behavior.
  */
 const buildContextStepShortCircuit = ({
     workflowContextStepResult,
