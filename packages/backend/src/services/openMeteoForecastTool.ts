@@ -23,12 +23,23 @@ const MAX_HORIZON_PERIODS = 12;
  * Formats a WeatherForecastToolResult into a string payload for orchestration.
  *
  * When result.status === 'ok', the returned JSON is compacted: forecast.periods
- * are trimmed to selected properties (name, startsAt, endsAt, isDaytime,
- * temperature, wind, shortForecast, precipitationProbability) to reduce token
- * overhead while preserving sufficient detail for the LLM to generate a response.
+ * are trimmed to selected properties (name, startsAt, endsAt, temperature, wind,
+ * shortForecast, precipitationProbability) to reduce token overhead while preserving
+ * sufficient detail for the LLM to generate a response.
  *
  * When result.status !== 'ok', the full result (including error details or
  * clarification) is included unchanged.
+ *
+ * === OMISSION NOTES ===
+ * - isDaytime: Omitted from periods because Open-Meteo daily endpoint does not
+ *   provide sunrise/sunset data; daily summaries don't have meaningful day/night
+ *   distinction. Included in type as optional for future hourly implementation.
+ * - detailedForecast: Omitted from JSON output; the field is generated for LLM
+ *   context but adds noise to the structured payload - the LLM can derive this
+ *   from temperature, shortForecast, and precipitationProbability.
+ * - Raw weather code: Omitted; only the string label (shortForecast) is included.
+ * - API timing (generationtime_ms): Omitted; not relevant for LLM context.
+ * - location.population: Omitted; not relevant for weather response.
  *
  * The output is wrapped in marker comment lines ('// ==========', '// BEGIN/END
  * Backend Tool Result') which serve as parseable boundaries for downstream
@@ -61,12 +72,16 @@ export const formatWeatherToolResultMessage = (
                           name: period.name,
                           startsAt: period.startsAt,
                           endsAt: period.endsAt,
-                          isDaytime: period.isDaytime,
+                          ...(period.isDaytime !== undefined && {
+                              isDaytime: period.isDaytime,
+                          }),
                           temperature: period.temperature,
                           wind: period.wind,
                           shortForecast: period.shortForecast,
-                          precipitationProbability:
-                              period.precipitationProbability,
+                          ...(period.precipitationProbability !== undefined && {
+                              precipitationProbability:
+                                  period.precipitationProbability,
+                          }),
                       })),
                   },
                   provenance: result.provenance,
@@ -153,7 +168,8 @@ export type WeatherForecastPeriod = {
     name: string;
     startsAt: string;
     endsAt: string;
-    isDaytime: boolean;
+    /** Omitted: Open-Meteo daily endpoint does not include sunrise/sunset, so isDaytime cannot be derived. */
+    isDaytime?: boolean;
     temperature: {
         value: number;
         unit: string;
@@ -821,12 +837,12 @@ export const createOpenMeteoForecastTool = ({
 
             const label = weatherCodeToLabel(dayCode);
             // Open-Meteo daily payload does not include day/night split text,
-            // so we synthesize a compact daily period summary.
+            // so we synthesize a compact daily period summary. isDaytime is omitted
+            // because daily summaries don't have meaningful day/night distinction.
             periods.push({
                 name: index === 0 ? 'Today' : `Day ${index + 1}`,
                 startsAt: `${day}T00:00:00`,
                 endsAt: `${day}T23:59:59`,
-                isDaytime: true,
                 temperature: {
                     value: Number(((dayMax + dayMin) / 2).toFixed(1)),
                     unit: tempUnit,
