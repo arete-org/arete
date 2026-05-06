@@ -70,7 +70,7 @@ test('weather success flows through workflow context-step: tool step recorded in
         messagesWithHints: [{ role: 'user', content: 'What is the weather?' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: 1,
             maxDurationMs: 15000,
         },
@@ -178,7 +178,7 @@ test('weather failure preserves fail-open: generation runs, tool step recorded a
         messagesWithHints: [{ role: 'user', content: 'What is the weather?' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: 1,
             maxDurationMs: 15000,
         },
@@ -281,7 +281,7 @@ test('weather clarification short-circuits: no generation, clarification respons
         ],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: 0,
             maxDurationMs: 15000,
         },

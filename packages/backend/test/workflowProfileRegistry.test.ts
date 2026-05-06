@@ -16,18 +16,12 @@ import {
 } from '../src/services/workflowProfileRegistry.js';
 
 test('resolveWorkflowProfileRegistry resolves known profile ids and fail-open fallback for unknown ids', () => {
-    const reviewed = resolveWorkflowProfileRegistry('bounded-review');
+    const reviewed = resolveWorkflowProfileRegistry('reviewed');
     assert.equal(reviewed.isKnownProfileId, true);
-    assert.equal(reviewed.runtimeProfile.profileId, 'bounded-review');
-    assert.equal(reviewed.profileContract.profileId, 'bounded-review');
-    assert.equal(
-        reviewed.runtimeProfile.workflowName,
-        'message_with_review_loop'
-    );
-    assert.equal(
-        reviewed.profileContract.workflowName,
-        'message_with_review_loop'
-    );
+    assert.equal(reviewed.runtimeProfile.profileId, 'reviewed');
+    assert.equal(reviewed.profileContract.profileId, 'reviewed');
+    assert.equal(reviewed.runtimeProfile.workflowName, 'message_reviewed');
+    assert.equal(reviewed.profileContract.workflowName, 'message_reviewed');
 
     const unknownFallback = resolveWorkflowProfileRegistry(
         'unrecognized-workflow-profile'
@@ -37,28 +31,28 @@ test('resolveWorkflowProfileRegistry resolves known profile ids and fail-open fa
         unknownFallback.requestedProfileId,
         'unrecognized-workflow-profile'
     );
-    assert.equal(unknownFallback.runtimeProfile.profileId, 'bounded-review');
-    assert.equal(unknownFallback.profileContract.profileId, 'bounded-review');
+    assert.equal(unknownFallback.runtimeProfile.profileId, 'reviewed');
+    assert.equal(unknownFallback.profileContract.profileId, 'reviewed');
     assert.equal(
         unknownFallback.runtimeProfile.workflowName,
-        'message_with_review_loop'
+        'message_reviewed'
     );
     assert.equal(
         unknownFallback.profileContract.workflowName,
-        'message_with_review_loop'
+        'message_reviewed'
     );
 });
 
 test('resolveWorkflowProfileRegistry trims profile ids before lookup', () => {
-    const trimmedProfile = resolveWorkflowProfileRegistry('  bounded-review  ');
+    const trimmedProfile = resolveWorkflowProfileRegistry('  reviewed  ');
     assert.equal(trimmedProfile.isKnownProfileId, true);
-    assert.equal(trimmedProfile.requestedProfileId, 'bounded-review');
-    assert.equal(trimmedProfile.runtimeProfile.profileId, 'bounded-review');
-    assert.equal(trimmedProfile.profileContract.profileId, 'bounded-review');
+    assert.equal(trimmedProfile.requestedProfileId, 'reviewed');
+    assert.equal(trimmedProfile.runtimeProfile.profileId, 'reviewed');
+    assert.equal(trimmedProfile.profileContract.profileId, 'reviewed');
 });
 
 test('resolveWorkflowProfileRegistry keeps public contract serializable while runtime profile includes hooks', () => {
-    const resolution = resolveWorkflowProfileRegistry('bounded-review');
+    const resolution = resolveWorkflowProfileRegistry('reviewed');
 
     assert.equal(
         typeof resolution.runtimeProfile.requiredHooks.forceWorkflowExecution,
@@ -91,7 +85,7 @@ test('resolveWorkflowProfileRegistry keeps public contract serializable while ru
     const serializedContract = JSON.parse(
         JSON.stringify(resolution.profileContract)
     ) as Record<string, unknown>;
-    assert.equal(serializedContract.profileId, 'bounded-review');
+    assert.equal(serializedContract.profileId, 'reviewed');
     assert.equal(
         Object.prototype.hasOwnProperty.call(
             serializedContract,
@@ -115,7 +109,7 @@ test('resolveWorkflowRuntimeConfig applies reviewed workflow defaults and review
         maxIterations: 5,
         maxDurationMs: 9000,
     });
-    assert.equal(balancedRuntimeConfig.profileId, 'bounded-review');
+    assert.equal(balancedRuntimeConfig.profileId, 'reviewed');
     assert.equal(balancedRuntimeConfig.workflowExecutionEnabled, true);
     assert.equal(
         balancedRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps,
@@ -144,7 +138,7 @@ test('resolveWorkflowRuntimeConfig applies reviewed workflow defaults and review
         maxIterations: 5,
         maxDurationMs: 9000,
     });
-    assert.equal(groundedRuntimeConfig.profileId, 'bounded-review');
+    assert.equal(groundedRuntimeConfig.profileId, 'reviewed');
     assert.equal(groundedRuntimeConfig.workflowExecutionEnabled, false);
     assert.equal(
         groundedRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps,
@@ -180,10 +174,7 @@ test('resolveWorkflowModeDecision maps requested mode ids and emits inspectable 
         requested.modeDecision.behavior.executionContractPresetId,
         'balanced'
     );
-    assert.equal(
-        requested.modeDecision.behavior.workflowProfileId,
-        'bounded-review'
-    );
+    assert.equal(requested.modeDecision.behavior.workflowProfileId, 'reviewed');
     assert.equal(requested.modeDecision.behavior.reviewPass, 'included');
     assert.equal(requested.modeDecision.behavior.reviseStep, 'allowed');
     assert.equal(requested.modeDecision.behavior.evidencePosture, 'balanced');
@@ -295,7 +286,7 @@ test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity map
         deriveReviewIntensityFromWorkflowBehavior({
             executionContractPresetId: 'balanced',
             workflowProfileClass: 'reviewed',
-            workflowProfileId: 'bounded-review',
+            workflowProfileId: 'reviewed',
             workflowExecution: 'always',
             reviewPass: 'included',
             reviseStep: 'allowed',
@@ -311,7 +302,7 @@ test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity map
         deriveReviewIntensityFromWorkflowBehavior({
             executionContractPresetId: 'balanced',
             workflowProfileClass: 'reviewed',
-            workflowProfileId: 'bounded-review',
+            workflowProfileId: 'reviewed',
             workflowExecution: 'always',
             reviewPass: 'included',
             reviseStep: 'allowed',
@@ -327,7 +318,7 @@ test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity map
         deriveReviewIntensityFromWorkflowBehavior({
             executionContractPresetId: 'balanced',
             workflowProfileClass: 'reviewed',
-            workflowProfileId: 'bounded-review',
+            workflowProfileId: 'reviewed',
             workflowExecution: 'always',
             reviewPass: 'included',
             reviseStep: 'allowed',
@@ -343,7 +334,7 @@ test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity map
         deriveReviewIntensityFromWorkflowBehavior({
             executionContractPresetId: 'quality-grounded',
             workflowProfileClass: 'reviewed',
-            workflowProfileId: 'bounded-review',
+            workflowProfileId: 'reviewed',
             workflowExecution: 'policy_gated',
             reviewPass: 'included',
             reviseStep: 'allowed',

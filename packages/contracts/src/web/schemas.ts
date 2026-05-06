@@ -704,7 +704,7 @@ const WorkflowModeBehaviorSchema = z
             'quality-grounded',
         ]),
         workflowProfileClass: z.enum(['direct', 'reviewed']),
-        workflowProfileId: z.enum(['bounded-review', 'generate-only']),
+        workflowProfileId: z.enum(['reviewed', 'generate-only']),
         workflowExecution: z.enum(['disabled', 'policy_gated', 'always']),
         reviewPass: z.enum(['included', 'excluded']),
         reviseStep: z.enum(['allowed', 'disallowed']),

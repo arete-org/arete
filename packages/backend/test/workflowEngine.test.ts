@@ -347,7 +347,7 @@ test('runBoundedReviewWorkflow enforces legality before initial generate executi
         messagesWithHints: [{ role: 'user', content: 'hi' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: 2,
             maxDurationMs: 15000,
         },
@@ -419,7 +419,7 @@ test('runBoundedReviewWorkflow normalizes invalid config bounds and keeps lineag
         messagesWithHints: [{ role: 'user', content: 'hi' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: Number.NaN,
             maxDurationMs: Number.NaN,
         },
@@ -489,7 +489,7 @@ test('runBoundedReviewWorkflow marks configured-inactive limits when their workf
         messagesWithHints: [{ role: 'user', content: 'hi' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: 0,
             maxDurationMs: 15000,
             executionLimits: {
@@ -564,7 +564,7 @@ test('runBoundedReviewWorkflow records explicit limit stop attribution for exhau
         messagesWithHints: [{ role: 'user', content: 'hi' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: 2,
             maxDurationMs: 15000,
             executionLimits: {
@@ -638,7 +638,7 @@ test('runBoundedReviewWorkflow classifies initial generate runtime failure as no
         messagesWithHints: [{ role: 'user', content: 'hi' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: 2,
             maxDurationMs: 15000,
         },
@@ -731,7 +731,7 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
         messagesWithHints: [{ role: 'user', content: 'Summarize this.' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: 2,
             maxDurationMs: 15000,
         },
@@ -804,7 +804,7 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
         messagesWithHints: [{ role: 'user', content: 'Summarize this.' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: 0,
             maxDurationMs: 15000,
             executionLimits: {
@@ -827,7 +827,7 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
         },
         plannerStepRequest: {
             workflowId: 'wf_test',
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             attempt: 1,
             request: {
                 surface: 'web',
@@ -837,7 +837,7 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
             },
             invocationContext: {
                 owner: 'workflow',
-                workflowName: 'message_with_review_loop',
+                workflowName: 'message_reviewed',
                 stepKind: 'plan',
                 purpose: 'chat_orchestrator_action_selection',
             },
@@ -1000,7 +1000,7 @@ test('runBoundedReviewWorkflow preserves failed planner fallback status on injec
         messagesWithHints: [{ role: 'user', content: 'Summarize this.' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: 1,
             maxDurationMs: 15000,
         },
@@ -1238,7 +1238,7 @@ test('runBoundedReviewWorkflow does not emit concrete tool steps in current engi
         messagesWithHints: [{ role: 'user', content: 'Summarize weather' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: 1,
             maxDurationMs: 15000,
         },
@@ -1300,7 +1300,7 @@ test('runBoundedReviewWorkflow executes injected context step and records contex
         ],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: 1,
             maxDurationMs: 15000,
         },
@@ -1488,7 +1488,7 @@ test('runBoundedReviewWorkflow records failed injected context step with reason 
         messagesWithHints: [{ role: 'user', content: 'Need weather summary' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: 1,
             maxDurationMs: 15000,
         },
@@ -1565,7 +1565,7 @@ test('runBoundedReviewWorkflow stops before generation when injected context ste
         messagesWithHints: [{ role: 'user', content: 'Need weather summary' }],
         generationStartedAtMs: Date.now(),
         workflowConfig: {
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             maxIterations: 0,
             maxDurationMs: 15000,
         },

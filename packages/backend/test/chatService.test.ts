@@ -369,7 +369,7 @@ test('runChatMessages forwards execution context into metadata runtime context (
     assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
 });
 
-test('runChatMessages records planner lineage in workflow steps for bounded-review runs and avoids duplicate planner execution events', async () => {
+test('runChatMessages records planner lineage in workflow steps for reviewed runs and avoids duplicate planner execution events', async () => {
     const chatService = createChatService({
         generationRuntime: createRuntime({
             model: 'gpt-5-mini',
@@ -920,7 +920,7 @@ test('runChatMessages stores evidence and freshness chips for retrieved search r
     assert.equal(storedMetadata?.freshnessScore, 4);
 });
 
-test('runChatMessages executes bounded review loop and forwards workflow lineage', async () => {
+test('runChatMessages executes Reviewed loop and forwards workflow lineage', async () => {
     let callCount = 0;
     let capturedWorkflow:
         | ResponseMetadataRuntimeContext['workflow']
@@ -988,7 +988,7 @@ test('runChatMessages executes bounded review loop and forwards workflow lineage
 
     assert.equal(response.message, 'initial draft');
     assert.equal(callCount, 2);
-    assert.equal(capturedWorkflow?.workflowName, 'message_with_review_loop');
+    assert.equal(capturedWorkflow?.workflowName, 'message_reviewed');
     assert.equal(capturedWorkflow?.terminationReason, 'goal_satisfied');
     assert.equal(capturedWorkflow?.status, 'completed');
     assert.ok((capturedWorkflow?.steps.length ?? 0) >= 2);
@@ -1151,7 +1151,7 @@ test('runChatMessages falls back to reviewed workflow behavior for unknown workf
             return {
                 outcome: 'generated',
                 generationResult: {
-                    text: 'bounded-review fallback response',
+                    text: 'reviewed fallback response',
                     model: 'gpt-5-mini',
                     usage: {
                         promptTokens: 10,
@@ -1180,16 +1180,13 @@ test('runChatMessages falls back to reviewed workflow behavior for unknown workf
         conversationSnapshot: 'Summarize this.',
     });
 
-    assert.equal(response.message, 'bounded-review fallback response');
-    assert.equal(
-        capturedWorkflowRunConfig?.workflowName,
-        'message_with_review_loop'
-    );
+    assert.equal(response.message, 'reviewed fallback response');
+    assert.equal(capturedWorkflowRunConfig?.workflowName, 'message_reviewed');
     assert.equal(capturedWorkflowRunConfig?.maxIterations, 2);
-    assert.equal(capturedWorkflow?.workflowName, 'message_with_review_loop');
+    assert.equal(capturedWorkflow?.workflowName, 'message_reviewed');
 });
 
-test('runChatMessages forwards planner seams into workflow runtime for bounded-review lineage', async () => {
+test('runChatMessages forwards planner seams into workflow runtime for reviewed lineage', async () => {
     let capturedPlannerStepRequestDefined = false;
     let capturedPlannerStepExecutorDefined = false;
     let capturedPlanContinuationBuilderDefined = false;
@@ -1516,7 +1513,7 @@ test('runChatMessages handles surfaced no-generation reasons without runtime fal
                     outcome: 'no_generation',
                     workflowLineage: {
                         workflowId: `wf_surface_${terminationReason}`,
-                        workflowName: 'message_with_review_loop',
+                        workflowName: 'message_reviewed',
                         status: 'degraded',
                         terminationReason,
                         stepCount: 0,
@@ -1611,7 +1608,7 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
                     outcome: 'no_generation',
                     workflowLineage: {
                         workflowId: `wf_internal_${terminationReason}`,
-                        workflowName: 'message_with_review_loop',
+                        workflowName: 'message_reviewed',
                         status: 'degraded',
                         terminationReason,
                         stepCount: 0,
@@ -1701,7 +1698,7 @@ test('runChatMessages keeps no-generation surfaced when execution policy disable
                 outcome: 'no_generation',
                 workflowLineage: {
                     workflowId: 'wf_internal_budget_exhausted_steps',
-                    workflowName: 'message_with_review_loop',
+                    workflowName: 'message_reviewed',
                     status: 'degraded',
                     terminationReason: 'budget_exhausted_steps',
                     stepCount: 0,

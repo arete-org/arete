@@ -22,7 +22,7 @@ import type {
  * Built-in ids stay literal for autocomplete. The string extension leaves room
  * for new profile ids before a registry exists.
  */
-export type WorkflowProfileId = 'bounded-review' | (string & {});
+export type WorkflowProfileId = 'reviewed' | (string & {});
 
 /**
  * Execution Contract-aligned workflow policy preset checked before each

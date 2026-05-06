@@ -20,7 +20,7 @@ const createBaseControlsInput = (
         behavior: {
             executionContractPresetId: 'quality-grounded',
             workflowProfileClass: 'reviewed',
-            workflowProfileId: 'bounded-review',
+            workflowProfileId: 'reviewed',
             workflowExecution: 'policy_gated',
             reviewPass: 'included',
             reviseStep: 'allowed',
@@ -174,7 +174,7 @@ test('mattered reflects observable causal impact instead of record presence', ()
                 behavior: {
                     executionContractPresetId: 'balanced',
                     workflowProfileClass: 'reviewed',
-                    workflowProfileId: 'bounded-review',
+                    workflowProfileId: 'reviewed',
                     workflowExecution: 'always',
                     reviewPass: 'included',
                     reviseStep: 'allowed',
@@ -249,7 +249,7 @@ test('review_intensity derives as light for low-deliberation reviewed behavior',
                 behavior: {
                     executionContractPresetId: 'balanced',
                     workflowProfileClass: 'reviewed',
-                    workflowProfileId: 'bounded-review',
+                    workflowProfileId: 'reviewed',
                     workflowExecution: 'always',
                     reviewPass: 'included',
                     reviseStep: 'allowed',

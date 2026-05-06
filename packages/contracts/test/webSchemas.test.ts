@@ -325,7 +325,7 @@ test('ResponseMetadataSchema accepts one payload with distinct mode, TRACE, plan
             behavior: {
                 executionContractPresetId: 'quality-grounded',
                 workflowProfileClass: 'reviewed',
-                workflowProfileId: 'bounded-review',
+                workflowProfileId: 'reviewed',
                 workflowExecution: 'policy_gated',
                 reviewPass: 'included',
                 reviseStep: 'allowed',
@@ -368,7 +368,7 @@ const createValidWorkflowMetadataPayload = (now: string) => ({
     ...baseMetadata,
     workflow: {
         workflowId: 'wf_123',
-        workflowName: 'message_with_review_loop',
+        workflowName: 'message_reviewed',
         status: 'completed',
         stepCount: 2,
         maxSteps: 5,
@@ -533,7 +533,7 @@ test('ResponseMetadataSchema accepts workflow mode escalation attachment metadat
             behavior: {
                 executionContractPresetId: 'quality-grounded',
                 workflowProfileClass: 'reviewed',
-                workflowProfileId: 'bounded-review',
+                workflowProfileId: 'reviewed',
                 workflowExecution: 'policy_gated',
                 reviewPass: 'included',
                 reviseStep: 'allowed',
@@ -610,7 +610,7 @@ test('ResponseMetadataSchema rejects workflow lineage with invalid termination r
         ...baseMetadata,
         workflow: {
             workflowId: 'wf_123',
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             status: 'completed',
             stepCount: 1,
             maxSteps: 2,

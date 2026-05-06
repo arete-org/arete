@@ -27,12 +27,12 @@ import type {
     WorkflowProfileId,
 } from './workflowProfileContract.js';
 
-type BuiltinWorkflowProfileId = 'bounded-review';
+type BuiltinWorkflowProfileId = 'reviewed';
 type BuiltinWorkflowModeId = WorkflowModeId;
 
 /**
  * Workflow profiles are concrete executable shapes:
- * - reviewed (`bounded-review`): generate + assess + revise
+ * - reviewed (`reviewed`): generate + assess + revise
  *
  * Registry ownership here is assembly glue only:
  * - Mode resolution decides run kind and default posture.
@@ -64,10 +64,10 @@ const QUALITY_GROUNDED_DEFAULT_LIMITS: Readonly<
 };
 
 const BOUNDED_REVIEW_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
-    profileId: 'bounded-review',
+    profileId: 'reviewed',
     profileVersion: 'v1',
-    displayName: 'Bounded Review',
-    workflowName: 'message_with_review_loop',
+    displayName: 'Reviewed',
+    workflowName: 'message_reviewed',
     policy: EXECUTION_CONTRACT_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET,
     defaultLimits: QUALITY_GROUNDED_DEFAULT_LIMITS,
     optionalExtensions: {
@@ -90,11 +90,11 @@ const BOUNDED_REVIEW_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
 const BUILTIN_RUNTIME_WORKFLOW_PROFILES: Readonly<
     Record<BuiltinWorkflowProfileId, RuntimeWorkflowProfile>
 > = {
-    'bounded-review': BOUNDED_REVIEW_WORKFLOW_PROFILE,
+    reviewed: BOUNDED_REVIEW_WORKFLOW_PROFILE,
 };
 
 export const DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID: BuiltinWorkflowProfileId =
-    'bounded-review';
+    'reviewed';
 const DEFAULT_WORKFLOW_MODE_ID: BuiltinWorkflowModeId = 'grounded';
 
 const isBuiltinWorkflowProfileId = (
@@ -128,7 +128,7 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
     balanced: {
         executionContractPresetId: 'balanced',
         workflowProfileClass: 'reviewed',
-        workflowProfileId: 'bounded-review',
+        workflowProfileId: 'reviewed',
         workflowExecution: 'always',
         reviewPass: 'included',
         reviseStep: 'allowed',
@@ -141,7 +141,7 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
     grounded: {
         executionContractPresetId: 'quality-grounded',
         workflowProfileClass: 'reviewed',
-        workflowProfileId: 'bounded-review',
+        workflowProfileId: 'reviewed',
         workflowExecution: 'policy_gated',
         reviewPass: 'included',
         reviseStep: 'allowed',

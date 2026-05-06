@@ -428,7 +428,7 @@ export type WorkflowLimitStop = {
 };
 
 /**
- * Canonical assess-step decisions emitted by bounded review profiles.
+ * Canonical assess-step decisions emitted by Reviewed profiles.
  * These are advisory outputs used by workflow transitions, not policy authority.
  */
 export const BOUNDED_REVIEW_ASSESS_DECISIONS = ['finalize', 'revise'] as const;
@@ -437,7 +437,7 @@ export type BoundedReviewAssessDecision =
     (typeof BOUNDED_REVIEW_ASSESS_DECISIONS)[number];
 
 /**
- * Canonical machine-readable assess output for bounded review profiles.
+ * Canonical machine-readable assess output for Reviewed profiles.
  *
  * Keep this intentionally narrow so review output remains inspectable and does
  * not become a generic policy bag.
@@ -454,7 +454,7 @@ export type StepOutcome = {
     /**
      * Machine-readable per-step outputs.
      *
-     * For `stepKind === "assess"` in the bounded-review profile, emit
+     * For `stepKind === "assess"` in the reviewed profile, emit
      * `reviewDecision` + `reviewReason` as the canonical decision seam.
      */
     signals?: Record<string, string | number | boolean | null>;
@@ -513,7 +513,7 @@ export type WorkflowModeEvidencePosture = 'minimal' | 'balanced' | 'strict';
 export type WorkflowModeBehavior = {
     executionContractPresetId: 'fast-direct' | 'balanced' | 'quality-grounded';
     workflowProfileClass: 'direct' | 'reviewed';
-    workflowProfileId: 'bounded-review' | 'generate-only';
+    workflowProfileId: 'reviewed' | 'generate-only';
     workflowExecution: 'disabled' | 'policy_gated' | 'always';
     reviewPass: 'included' | 'excluded';
     reviseStep: 'allowed' | 'disallowed';

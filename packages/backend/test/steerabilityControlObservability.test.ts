@@ -26,7 +26,7 @@ const createEnvelopeInput = (): Parameters<
             behavior: {
                 executionContractPresetId: 'quality-grounded',
                 workflowProfileClass: 'reviewed',
-                workflowProfileId: 'bounded-review',
+                workflowProfileId: 'reviewed',
                 workflowExecution: 'policy_gated',
                 reviewPass: 'included',
                 reviseStep: 'allowed',

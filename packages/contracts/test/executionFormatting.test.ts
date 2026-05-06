@@ -33,7 +33,7 @@ test('formatExecutionTimelineSummary includes reasonCode for skipped and failed 
         ],
         {
             workflowId: 'wf_1',
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             status: 'degraded',
             terminationReason: 'goal_satisfied',
             stepCount: 1,
@@ -94,7 +94,7 @@ test('formatExecutionTimelineSummary handles missing optional fields', () => {
     assert.equal(
         formatExecutionTimelineSummary(events, {
             workflowId: 'wf_2',
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             status: 'completed',
             terminationReason: 'goal_satisfied',
             stepCount: 1,
@@ -225,7 +225,7 @@ test('formatExecutionTimelineSummary surfaces planner lineage from workflow plan
         ],
         {
             workflowId: 'wf_1',
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             status: 'completed',
             terminationReason: 'goal_satisfied',
             stepCount: 2,

@@ -459,7 +459,7 @@ test('buildResponseMetadata ignores planner execution bridge fields and keeps ex
         baseRuntimeContext({
             workflow: {
                 workflowId: 'wf_123',
-                workflowName: 'message_with_review_loop',
+                workflowName: 'message_reviewed',
                 status: 'completed',
                 terminationReason: 'goal_satisfied',
                 stepCount: 2,
@@ -863,7 +863,7 @@ test('buildResponseMetadata sets reviewRuntime to reviewed_no_revision when asse
         baseRuntimeContext({
             workflow: {
                 workflowId: 'wf_1',
-                workflowName: 'message_with_review_loop',
+                workflowName: 'message_reviewed',
                 status: 'completed',
                 terminationReason: 'goal_satisfied',
                 stepCount: 2,
@@ -915,7 +915,7 @@ test('buildResponseMetadata sets reviewRuntime to revised when revise step execu
         baseRuntimeContext({
             workflow: {
                 workflowId: 'wf_2',
-                workflowName: 'message_with_review_loop',
+                workflowName: 'message_reviewed',
                 status: 'completed',
                 terminationReason: 'goal_satisfied',
                 stepCount: 3,
@@ -985,7 +985,7 @@ test('buildResponseMetadata sets reviewRuntime to skipped when review pass was e
                 behavior: {
                     executionContractPresetId: 'quality-grounded',
                     workflowProfileClass: 'reviewed',
-                    workflowProfileId: 'bounded-review',
+                    workflowProfileId: 'reviewed',
                     workflowExecution: 'always',
                     reviewPass: 'included',
                     reviseStep: 'allowed',
@@ -996,7 +996,7 @@ test('buildResponseMetadata sets reviewRuntime to skipped when review pass was e
             },
             workflow: {
                 workflowId: 'wf_3',
-                workflowName: 'message_with_review_loop',
+                workflowName: 'message_reviewed',
                 status: 'degraded',
                 terminationReason: 'budget_exhausted_steps',
                 stepCount: 1,
@@ -1031,7 +1031,7 @@ test('buildResponseMetadata sets reviewRuntime to fallback when fail-open fallba
         baseRuntimeContext({
             workflow: {
                 workflowId: 'wf_4',
-                workflowName: 'message_with_review_loop',
+                workflowName: 'message_reviewed',
                 status: 'degraded',
                 terminationReason: 'executor_error_fail_open',
                 stepCount: 2,

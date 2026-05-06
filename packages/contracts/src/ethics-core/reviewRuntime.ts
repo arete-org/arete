@@ -64,7 +64,7 @@ const hasInternalGenerationFallbackSignal = (
  * Derives a conservative, path-semantics-only review runtime summary for UI.
  *
  * Label semantics:
- * - not_reviewed: no bounded review pass was observed.
+ * - not_reviewed: no Reviewed pass was observed.
  * - reviewed_no_revision: assess step executed and no revise step executed.
  * - revised: review pass executed and at least one revise step executed.
  * - skipped: review pass was expected but did not execute.

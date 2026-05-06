@@ -53,7 +53,7 @@ test('buildWorkflowReceiptItems renders mode, review, and planner fallback signa
             behavior: {
                 executionContractPresetId: 'balanced',
                 workflowProfileClass: 'reviewed',
-                workflowProfileId: 'bounded-review',
+                workflowProfileId: 'reviewed',
                 workflowExecution: 'policy_gated',
                 reviewPass: 'included',
                 reviseStep: 'allowed',
@@ -101,7 +101,7 @@ test('buildWorkflowReceiptItems marks reviewed only when assess step ran', () =>
             behavior: {
                 executionContractPresetId: 'quality-grounded',
                 workflowProfileClass: 'reviewed',
-                workflowProfileId: 'bounded-review',
+                workflowProfileId: 'reviewed',
                 workflowExecution: 'always',
                 reviewPass: 'included',
                 reviseStep: 'allowed',
@@ -112,7 +112,7 @@ test('buildWorkflowReceiptItems marks reviewed only when assess step ran', () =>
         },
         workflow: {
             workflowId: 'wf_1',
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             status: 'completed',
             terminationReason: 'goal_satisfied',
             stepCount: 1,
@@ -152,7 +152,7 @@ test('buildWorkflowReceiptItems surfaces explicit missing grounding evidence sta
             behavior: {
                 executionContractPresetId: 'quality-grounded',
                 workflowProfileClass: 'reviewed',
-                workflowProfileId: 'bounded-review',
+                workflowProfileId: 'reviewed',
                 workflowExecution: 'always',
                 reviewPass: 'included',
                 reviseStep: 'allowed',
@@ -270,7 +270,7 @@ test('buildWorkflowReceiptItems falls back to deterministic review derivation fo
             behavior: {
                 executionContractPresetId: 'quality-grounded',
                 workflowProfileClass: 'reviewed',
-                workflowProfileId: 'bounded-review',
+                workflowProfileId: 'reviewed',
                 workflowExecution: 'always',
                 reviewPass: 'included',
                 reviseStep: 'allowed',
@@ -281,7 +281,7 @@ test('buildWorkflowReceiptItems falls back to deterministic review derivation fo
         },
         workflow: {
             workflowId: 'wf_legacy_1',
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             status: 'degraded',
             terminationReason: 'budget_exhausted_steps',
             stepCount: 1,
