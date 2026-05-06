@@ -42,16 +42,14 @@ Provider ownership:
     - short-circuits to a clarification message (`needs_clarification`)
     - records failure and continues safely where allowed (`error`)
 
-## Mode Coverage
+## Behavior Preset Coverage
 
-Weather context-step execution currently applies only to the
-`bounded-review` profile used by `balanced` and `grounded`.
+Weather context-step execution applies to the reviewed workflow path used by
+both `balanced` and `grounded`.
 
-The `generate-only` profile used by `fast` runs through the workflow engine
-with a minimal path (one generate step, no assess/revise), but it does not use
-the context-step path. Weather support in fast mode would need separate handling.
-The fast path uses the workflow infrastructure but with a stripped-down profile
-that does not include context injection before generation.
+Those presets share the same workflow step shape, including context injection
+before generation. Differences between presets come from limits and evidence
+posture, not from a separate workflow profile.
 
 ## Outcome Contract
 

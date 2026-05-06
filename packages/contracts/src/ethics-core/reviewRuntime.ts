@@ -64,14 +64,14 @@ const hasInternalGenerationFallbackSignal = (
  * Derives a conservative, path-semantics-only review runtime summary for UI.
  *
  * Label semantics:
- * - not_reviewed: no bounded review pass was observed.
+ * - not_reviewed: no Reviewed pass was observed.
  * - reviewed_no_revision: assess step executed and no revise step executed.
  * - revised: review pass executed and at least one revise step executed.
  * - skipped: review pass was expected but did not execute.
  * - fallback: fail-open/fallback path was explicitly recorded.
  */
 export const deriveReviewRuntimeSummary = (
-    metadata: Pick<ResponseMetadata, 'workflow' | 'workflowMode' | 'execution'>
+    metadata: Pick<ResponseMetadata, 'workflow' | 'execution'>
 ): ReviewRuntimeSummary => {
     const assessExecuted =
         metadata.workflow?.steps?.some(
@@ -88,8 +88,6 @@ export const deriveReviewRuntimeSummary = (
             (step) =>
                 step.stepKind === 'revise' && step.outcome.status === 'executed'
         ) ?? false;
-    const reviewPass = metadata.workflowMode?.behavior?.reviewPass;
-    const workflowHasAnyStep = (metadata.workflow?.steps?.length ?? 0) > 0;
     const fallbackObserved =
         metadata.workflow?.terminationReason === 'executor_error_fail_open' ||
         hasPlannerFallbackSignal(metadata) ||
@@ -107,7 +105,7 @@ export const deriveReviewRuntimeSummary = (
         return { label: 'reviewed_no_revision' };
     }
 
-    if (assessSkipped || (reviewPass === 'included' && workflowHasAnyStep)) {
+    if (assessSkipped) {
         return { label: 'skipped' };
     }
 

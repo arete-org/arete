@@ -428,7 +428,7 @@ export type WorkflowLimitStop = {
 };
 
 /**
- * Canonical assess-step decisions emitted by bounded review profiles.
+ * Canonical assess-step decisions emitted by Reviewed profiles.
  * These are advisory outputs used by workflow transitions, not policy authority.
  */
 export const BOUNDED_REVIEW_ASSESS_DECISIONS = ['finalize', 'revise'] as const;
@@ -437,7 +437,7 @@ export type BoundedReviewAssessDecision =
     (typeof BOUNDED_REVIEW_ASSESS_DECISIONS)[number];
 
 /**
- * Canonical machine-readable assess output for bounded review profiles.
+ * Canonical machine-readable assess output for Reviewed profiles.
  *
  * Keep this intentionally narrow so review output remains inspectable and does
  * not become a generic policy bag.
@@ -454,7 +454,7 @@ export type StepOutcome = {
     /**
      * Machine-readable per-step outputs.
      *
-     * For `stepKind === "assess"` in the bounded-review profile, emit
+     * For `stepKind === "assess"` in the reviewed profile, emit
      * `reviewDecision` + `reviewReason` as the canonical decision seam.
      */
     signals?: Record<string, string | number | boolean | null>;
@@ -500,7 +500,7 @@ export type WorkflowRecord = {
 /**
  * Canonical high-level workflow mode ids.
  */
-export type WorkflowModeId = 'fast' | 'balanced' | 'grounded';
+export type WorkflowModeId = 'balanced' | 'grounded';
 
 export type WorkflowModeSelectionSource =
     | 'requested_mode'
@@ -510,13 +510,50 @@ export type WorkflowModeSelectionSource =
 
 export type WorkflowModeEvidencePosture = 'minimal' | 'balanced' | 'strict';
 
+export const WORKFLOW_MODE_EXECUTION_PRESET_IDS = [
+    'fast-direct',
+    'balanced',
+    'quality-grounded',
+] as const;
+
+export type WorkflowModeExecutionPresetId =
+    (typeof WORKFLOW_MODE_EXECUTION_PRESET_IDS)[number];
+
+export const WORKFLOW_PROFILE_CLASSES = ['direct', 'reviewed'] as const;
+export type WorkflowProfileClass = (typeof WORKFLOW_PROFILE_CLASSES)[number];
+
+export const WORKFLOW_PROFILE_IDS = ['reviewed', 'generate-only'] as const;
+export type WorkflowProfileId = (typeof WORKFLOW_PROFILE_IDS)[number];
+
+export const WORKFLOW_EXECUTION_POLICIES = [
+    'disabled',
+    'policy_gated',
+    'always',
+] as const;
+export type WorkflowExecutionPolicy =
+    (typeof WORKFLOW_EXECUTION_POLICIES)[number];
+
+export const WORKFLOW_REVIEW_PASS_MODES = ['included', 'excluded'] as const;
+export type WorkflowReviewPassMode =
+    (typeof WORKFLOW_REVIEW_PASS_MODES)[number];
+
+export const WORKFLOW_REVISE_STEP_MODES = ['allowed', 'disallowed'] as const;
+export type WorkflowReviseStepMode =
+    (typeof WORKFLOW_REVISE_STEP_MODES)[number];
+
+export const WORKFLOW_EVIDENCE_POSTURES = [
+    'minimal',
+    'balanced',
+    'strict',
+] as const;
+
 export type WorkflowModeBehavior = {
-    executionContractPresetId: 'fast-direct' | 'balanced' | 'quality-grounded';
-    workflowProfileClass: 'direct' | 'reviewed';
-    workflowProfileId: 'bounded-review' | 'generate-only';
-    workflowExecution: 'disabled' | 'policy_gated' | 'always';
-    reviewPass: 'included' | 'excluded';
-    reviseStep: 'allowed' | 'disallowed';
+    executionContractPresetId: WorkflowModeExecutionPresetId;
+    workflowProfileClass: WorkflowProfileClass;
+    workflowProfileId: WorkflowProfileId;
+    workflowExecution: WorkflowExecutionPolicy;
+    reviewPass: WorkflowReviewPassMode;
+    reviseStep: WorkflowReviseStepMode;
     evidencePosture: WorkflowModeEvidencePosture;
     maxWorkflowSteps: number;
     maxPlanCycles?: number;
@@ -558,6 +595,15 @@ export type ReviewRuntimeSummary = {
     label: ReviewRuntimeLabel;
 };
 
+export const REVIEW_INTENSITY_LEVELS = [
+    'none',
+    'light',
+    'moderate',
+    'high',
+] as const;
+
+export type ReviewIntensity = (typeof REVIEW_INTENSITY_LEVELS)[number];
+
 /**
  * Canonical steerability control ids tracked in response metadata.
  * These remain backend-owned/operator-facing until user controls are exposed.
@@ -596,6 +642,36 @@ export type SteerabilityControlRecord = {
     mattered: boolean;
     impactedTargets: SteerabilityImpactTarget[];
 };
+
+export const PROVIDER_PREFERENCE_OUTCOME_STATES = [
+    'requested_honored',
+    'requested_overridden',
+    'advisory_honored',
+    'advisory_overridden',
+    'fallback_resolved',
+] as const;
+
+export type ProviderPreferenceOutcomeState =
+    (typeof PROVIDER_PREFERENCE_OUTCOME_STATES)[number];
+
+export const TOOL_ALLOWANCE_STATES = [
+    'none_requested',
+    'allowed',
+    'blocked',
+] as const;
+
+export type ToolAllowanceState = (typeof TOOL_ALLOWANCE_STATES)[number];
+
+export const GROUNDING_EVIDENCE_STATUSES = [
+    'sources_available',
+    'sources_missing_after_retrieval',
+    'search_unavailable',
+    'retrieval_not_used',
+    'not_recorded',
+] as const;
+
+export type GroundingEvidenceStatus =
+    (typeof GROUNDING_EVIDENCE_STATUSES)[number];
 
 export type SteerabilityControls = {
     version: 'v1';
@@ -817,15 +893,14 @@ export type ResponseMetadata = {
     execution?: ExecutionEvent[]; // Structural execution record (evaluator/tool/generation events).
     workflow?: WorkflowRecord; // Optional workflow record of bounded multi-step execution; includes planner lineage via plan steps.
     reviewRuntime?: ReviewRuntimeSummary; // Normalized review-runtime summary for UI labels (path semantics only).
-    workflowMode?: WorkflowModeDecision; // Execution-policy routing decision and behavior mapping.
     steerabilityControls?: SteerabilityControls; // Control-influence records explaining which controls shaped execution/output.
     evaluator?: EvaluatorOutcome; // Deterministic evaluator decision captured before breaker enforcement.
     imageDescriptions?: string[]; // Optional captions for any images used.
     evidenceScore?: TraceAxisScore; // Optional TRACE chip; may be derived when Retrieved and explicit chip values are absent.
     freshnessScore?: TraceAxisScore; // Optional TRACE chip; may be derived when Retrieved and explicit chip values are absent.
     // TRACE posture is answer-shape metadata only.
-    // Keep this separate from workflowMode (execution policy) and provenance
-    // classification/record fields.
+    // Keep this separate from workflow execution/provenance classification
+    // record fields.
     // TODO(trace-lifecycle-summary): Current TRACE contract is summary-state.
     // If TRACE later evolves across multiple runtime steps, model canonical
     // lifecycle/history first and derive summary fields from it.

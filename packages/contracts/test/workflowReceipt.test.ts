@@ -43,7 +43,7 @@ const createBaseMetadata = (): ResponseMetadata => ({
 });
 
 test('buildWorkflowReceiptItems renders mode, review, and planner fallback signals', () => {
-    const metadata: ResponseMetadata = {
+    const metadata = {
         ...createBaseMetadata(),
         workflowMode: {
             modeId: 'balanced',
@@ -53,9 +53,9 @@ test('buildWorkflowReceiptItems renders mode, review, and planner fallback signa
             behavior: {
                 executionContractPresetId: 'balanced',
                 workflowProfileClass: 'reviewed',
-                workflowProfileId: 'bounded-review',
+                workflowProfileId: 'reviewed',
                 workflowExecution: 'policy_gated',
-                reviewPass: 'excluded',
+                reviewPass: 'included',
                 reviseStep: 'allowed',
                 evidencePosture: 'balanced',
                 maxWorkflowSteps: 6,
@@ -79,19 +79,18 @@ test('buildWorkflowReceiptItems renders mode, review, and planner fallback signa
         },
     };
 
-    assert.deepEqual(buildWorkflowReceiptItems(metadata), [
-        'Answered in Balanced mode',
+    assert.deepEqual(buildWorkflowReceiptItems(metadata as ResponseMetadata), [
         'Review fallback',
         'Planner fallback',
     ]);
     assert.equal(
-        buildWorkflowReceiptSummary(metadata),
-        'Answered in Balanced mode • Review fallback • Planner fallback'
+        buildWorkflowReceiptSummary(metadata as ResponseMetadata),
+        'Review fallback • Planner fallback'
     );
 });
 
 test('buildWorkflowReceiptItems marks reviewed only when assess step ran', () => {
-    const metadata: ResponseMetadata = {
+    const metadata = {
         ...createBaseMetadata(),
         workflowMode: {
             modeId: 'grounded',
@@ -101,7 +100,7 @@ test('buildWorkflowReceiptItems marks reviewed only when assess step ran', () =>
             behavior: {
                 executionContractPresetId: 'quality-grounded',
                 workflowProfileClass: 'reviewed',
-                workflowProfileId: 'bounded-review',
+                workflowProfileId: 'reviewed',
                 workflowExecution: 'always',
                 reviewPass: 'included',
                 reviseStep: 'allowed',
@@ -112,7 +111,7 @@ test('buildWorkflowReceiptItems marks reviewed only when assess step ran', () =>
         },
         workflow: {
             workflowId: 'wf_1',
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             status: 'completed',
             terminationReason: 'goal_satisfied',
             stepCount: 1,
@@ -135,14 +134,13 @@ test('buildWorkflowReceiptItems marks reviewed only when assess step ran', () =>
         },
     };
 
-    assert.deepEqual(buildWorkflowReceiptItems(metadata), [
-        'Answered in Grounded mode',
+    assert.deepEqual(buildWorkflowReceiptItems(metadata as ResponseMetadata), [
         'Reviewed before final answer',
     ]);
 });
 
 test('buildWorkflowReceiptItems surfaces explicit missing grounding evidence states', () => {
-    const metadata: ResponseMetadata = {
+    const metadata = {
         ...createBaseMetadata(),
         workflowMode: {
             modeId: 'grounded',
@@ -152,7 +150,7 @@ test('buildWorkflowReceiptItems surfaces explicit missing grounding evidence sta
             behavior: {
                 executionContractPresetId: 'quality-grounded',
                 workflowProfileClass: 'reviewed',
-                workflowProfileId: 'bounded-review',
+                workflowProfileId: 'reviewed',
                 workflowExecution: 'always',
                 reviewPass: 'included',
                 reviseStep: 'allowed',
@@ -182,25 +180,24 @@ test('buildWorkflowReceiptItems surfaces explicit missing grounding evidence sta
         },
     };
 
-    assert.deepEqual(buildWorkflowReceiptItems(metadata), [
-        'Answered in Grounded mode',
+    assert.deepEqual(buildWorkflowReceiptItems(metadata as ResponseMetadata), [
         'No sources available',
     ]);
 });
 
 test('buildWorkflowReceiptItems surfaces attached sources when citations are present', () => {
-    const metadata: ResponseMetadata = {
+    const metadata = {
         ...createBaseMetadata(),
         citations: [{ title: 'Source', url: 'https://example.com' }],
     };
 
-    assert.deepEqual(buildWorkflowReceiptItems(metadata), [
+    assert.deepEqual(buildWorkflowReceiptItems(metadata as ResponseMetadata), [
         'Sources available',
     ]);
 });
 
 test('summarizeGroundingEvidence reports search-unavailable copy from execution metadata', () => {
-    const metadata: ResponseMetadata = {
+    const metadata = {
         ...createBaseMetadata(),
         execution: [
             {
@@ -212,7 +209,7 @@ test('summarizeGroundingEvidence reports search-unavailable copy from execution 
         ],
     };
 
-    assert.deepEqual(summarizeGroundingEvidence(metadata), {
+    assert.deepEqual(summarizeGroundingEvidence(metadata as ResponseMetadata), {
         status: 'search_unavailable',
         label: 'Search unavailable',
         explanation:
@@ -223,7 +220,7 @@ test('summarizeGroundingEvidence reports search-unavailable copy from execution 
 test('summarizeGroundingEvidence stays conservative when no evidence reason was recorded', () => {
     const metadata: ResponseMetadata = createBaseMetadata();
 
-    assert.deepEqual(summarizeGroundingEvidence(metadata), {
+    assert.deepEqual(summarizeGroundingEvidence(metadata as ResponseMetadata), {
         status: 'not_recorded',
         label: 'No grounding evidence recorded',
         explanation:
@@ -232,14 +229,14 @@ test('summarizeGroundingEvidence stays conservative when no evidence reason was 
 });
 
 test('buildWorkflowReceiptItems reports revised label from normalized review runtime summary', () => {
-    const metadata: ResponseMetadata = {
+    const metadata = {
         ...createBaseMetadata(),
         reviewRuntime: {
             label: 'revised',
         },
     };
 
-    assert.deepEqual(buildWorkflowReceiptItems(metadata), [
+    assert.deepEqual(buildWorkflowReceiptItems(metadata as ResponseMetadata), [
         'Reviewed and revised before final answer',
     ]);
 });
@@ -248,19 +245,16 @@ test('buildWorkflowReceiptSummary stays fail-open for legacy partial metadata', 
     const partialMetadata = {
         ...createBaseMetadata(),
         workflowMode: {
-            modeId: 'fast',
+            modeId: 'balanced',
         },
         workflow: {},
     } as unknown as ResponseMetadata;
 
-    assert.equal(
-        buildWorkflowReceiptSummary(partialMetadata),
-        'Answered in Fast mode'
-    );
+    assert.equal(buildWorkflowReceiptSummary(partialMetadata), null);
 });
 
 test('buildWorkflowReceiptItems falls back to deterministic review derivation for legacy traces without reviewRuntime', () => {
-    const metadata: ResponseMetadata = {
+    const metadata = {
         ...createBaseMetadata(),
         workflowMode: {
             modeId: 'grounded',
@@ -270,7 +264,7 @@ test('buildWorkflowReceiptItems falls back to deterministic review derivation fo
             behavior: {
                 executionContractPresetId: 'quality-grounded',
                 workflowProfileClass: 'reviewed',
-                workflowProfileId: 'bounded-review',
+                workflowProfileId: 'reviewed',
                 workflowExecution: 'always',
                 reviewPass: 'included',
                 reviseStep: 'allowed',
@@ -281,7 +275,7 @@ test('buildWorkflowReceiptItems falls back to deterministic review derivation fo
         },
         workflow: {
             workflowId: 'wf_legacy_1',
-            workflowName: 'message_with_review_loop',
+            workflowName: 'message_reviewed',
             status: 'degraded',
             terminationReason: 'budget_exhausted_steps',
             stepCount: 1,
@@ -304,8 +298,7 @@ test('buildWorkflowReceiptItems falls back to deterministic review derivation fo
         },
     };
 
-    assert.deepEqual(buildWorkflowReceiptItems(metadata), [
-        'Answered in Grounded mode',
+    assert.deepEqual(buildWorkflowReceiptItems(metadata as ResponseMetadata), [
         'Review skipped',
     ]);
 });

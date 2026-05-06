@@ -8,28 +8,29 @@
 
 import type {
     ExecutionEvent,
+    GroundingEvidenceStatus,
     ResponseMetadata,
     ToolExecutionEvent,
-    WorkflowModeId,
 } from './types.js';
 import { deriveReviewRuntimeSummary } from './reviewRuntime.js';
 
-const WORKFLOW_MODE_LABELS: Record<WorkflowModeId, string> = {
-    fast: 'Fast mode',
-    balanced: 'Balanced mode',
-    grounded: 'Grounded mode',
-};
-
 export type GroundingEvidenceSummary = {
-    status:
-        | 'sources_available'
-        | 'sources_missing_after_retrieval'
-        | 'search_unavailable'
-        | 'retrieval_not_used'
-        | 'not_recorded';
+    status: GroundingEvidenceStatus;
     label: string;
     explanation: string;
 };
+
+export const WORKFLOW_RECEIPT_LABELS = {
+    reviewedBeforeFinal: 'Reviewed before final answer',
+    reviewedAndRevisedBeforeFinal: 'Reviewed and revised before final answer',
+    reviewSkipped: 'Review skipped',
+    reviewFallback: 'Review fallback',
+    plannerFallback: 'Planner fallback',
+    sourcesAvailable: 'Sources available',
+    noSourcesAvailable: 'No sources available',
+    searchUnavailable: 'Search unavailable',
+    noGroundingEvidenceRecorded: 'No grounding evidence recorded',
+} as const;
 
 const SEARCH_UNSUPPORTED_REASON_CODE =
     'search_not_supported_by_selected_profile';
@@ -41,34 +42,6 @@ const isSearchUnsupportedToolEvent = (
     event.toolName === 'web_search' &&
     event.status === 'skipped' &&
     event.reasonCode === SEARCH_UNSUPPORTED_REASON_CODE;
-
-/**
- * Returns the user-facing mode label for the receipt.
- *
- * We only read explicit metadata fields. We do not infer from model names or
- * workflow profile IDs. If fields are missing or unknown, we return `null`.
- */
-export const resolveWorkflowModeLabel = (
-    metadata: ResponseMetadata
-): string | null => {
-    const modeId = metadata.workflowMode?.modeId;
-    if (modeId) {
-        return WORKFLOW_MODE_LABELS[modeId];
-    }
-
-    const presetId = metadata.workflowMode?.behavior?.executionContractPresetId;
-    if (presetId === 'fast-direct') {
-        return WORKFLOW_MODE_LABELS.fast;
-    }
-    if (presetId === 'balanced') {
-        return WORKFLOW_MODE_LABELS.balanced;
-    }
-    if (presetId === 'quality-grounded') {
-        return WORKFLOW_MODE_LABELS.grounded;
-    }
-
-    return null;
-};
 
 /**
  * Returns the review state line for the receipt.
@@ -84,16 +57,16 @@ export const resolveReviewReceipt = (
     const reviewRuntime =
         metadata.reviewRuntime ?? deriveReviewRuntimeSummary(metadata);
     if (reviewRuntime.label === 'reviewed_no_revision') {
-        return 'Reviewed before final answer';
+        return WORKFLOW_RECEIPT_LABELS.reviewedBeforeFinal;
     }
     if (reviewRuntime.label === 'revised') {
-        return 'Reviewed and revised before final answer';
+        return WORKFLOW_RECEIPT_LABELS.reviewedAndRevisedBeforeFinal;
     }
     if (reviewRuntime.label === 'skipped') {
-        return 'Review skipped';
+        return WORKFLOW_RECEIPT_LABELS.reviewSkipped;
     }
     if (reviewRuntime.label === 'fallback') {
-        return 'Review fallback';
+        return WORKFLOW_RECEIPT_LABELS.reviewFallback;
     }
 
     return null;
@@ -138,7 +111,7 @@ export const resolvePlannerFallbackReceipt = (
         }) ?? false;
 
     return plannerFallbackInWorkflow || plannerFallbackInExecution
-        ? 'Planner fallback'
+        ? WORKFLOW_RECEIPT_LABELS.plannerFallback
         : null;
 };
 
@@ -161,7 +134,7 @@ export const summarizeGroundingEvidence = (
         const sourceCount = metadata.citations.length;
         return {
             status: 'sources_available',
-            label: 'Sources available',
+            label: WORKFLOW_RECEIPT_LABELS.sourcesAvailable,
             explanation:
                 sourceCount === 1
                     ? 'This trace includes 1 source you can inspect.'
@@ -177,7 +150,7 @@ export const summarizeGroundingEvidence = (
     if (retrievalWithoutCitations) {
         return {
             status: 'sources_missing_after_retrieval',
-            label: 'No sources available',
+            label: WORKFLOW_RECEIPT_LABELS.noSourcesAvailable,
             explanation:
                 'Footnote tried to use retrieval, but no citations were kept for this response. Treat important claims as unverified.',
         };
@@ -188,7 +161,7 @@ export const summarizeGroundingEvidence = (
     if (searchUnsupported) {
         return {
             status: 'search_unavailable',
-            label: 'Search unavailable',
+            label: WORKFLOW_RECEIPT_LABELS.searchUnavailable,
             explanation:
                 'Search was unavailable for this mode, so this response has no source links. Treat important claims as unverified.',
         };
@@ -200,7 +173,7 @@ export const summarizeGroundingEvidence = (
     if (retrievalRequestedButUnused) {
         return {
             status: 'retrieval_not_used',
-            label: 'No sources available',
+            label: WORKFLOW_RECEIPT_LABELS.noSourcesAvailable,
             explanation:
                 'Footnote requested retrieval for this response, but it was not used. Treat important claims as unverified.',
         };
@@ -208,7 +181,7 @@ export const summarizeGroundingEvidence = (
 
     return {
         status: 'not_recorded',
-        label: 'No grounding evidence recorded',
+        label: WORKFLOW_RECEIPT_LABELS.noGroundingEvidenceRecorded,
         explanation:
             'This trace does not include sources or a recorded reason for missing evidence. Treat important claims as unverified.',
     };
@@ -224,10 +197,6 @@ export const buildWorkflowReceiptItems = (
     metadata: ResponseMetadata
 ): string[] =>
     [
-        (() => {
-            const modeLabel = resolveWorkflowModeLabel(metadata);
-            return modeLabel ? `Answered in ${modeLabel}` : null;
-        })(),
         resolveReviewReceipt(metadata),
         resolvePlannerFallbackReceipt(metadata),
         (() => {

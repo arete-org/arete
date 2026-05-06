@@ -156,7 +156,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Also define: workflow mode (fast/balanced/grounded), workflow profile (generate-only/bounded-review), workflow plan step (workflow-owned planner timing/lineage), applied plan state (`AppliedPlanState`), plan continuation (`PlanContinuation`), context step (injected pre-generation context), planner advisory boundary (planner suggests, backend policy decides), planner result applier (policy-application seam), terminal_action (workflow terminal outcome for ignore/react/image).",
+                    "content": "Also define: workflow behavior presets (balanced/grounded), shared reviewed workflow shape (generate -> assess -> revise), workflow plan step (workflow-owned planner timing/lineage), applied plan state (`AppliedPlanState`), plan continuation (`PlanContinuation`), context step (injected pre-generation context), planner advisory boundary (planner suggests, backend policy decides), planner result applier (policy-application seam), terminal_action (workflow terminal outcome for ignore/react/image).",
                     "author": "Maintainer"
                 }
             ]
@@ -230,7 +230,7 @@
         },
         {
             "title": "Workflow",
-            "purpose": "Document workflow modes, profiles, engine behavior, and where planner and context steps fit into the execution path.",
+            "purpose": "Document workflow behavior presets, shared workflow shape, engine behavior, and where planner and context steps fit into the execution path.",
             "parent": "Foundations",
             "entrypoints": [
                 "docs/architecture/workflow.md",
@@ -253,7 +253,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "fast mode uses generate-only profile (single-pass generation). balanced and grounded modes use bounded-review profile (generate -> assess -> revise)."
+                    "content": "balanced and grounded presets use the shared reviewed workflow shape (generate -> assess -> revise)."
                 },
                 {
                     "author": "Maintainer",
@@ -269,7 +269,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "weather_forecast is the first concrete context-step integration, executing before the generate step in bounded-review workflows."
+                    "content": "weather_forecast is the first concrete context-step integration, executing before the generate step in reviewed workflows."
                 }
             ]
         },
@@ -497,7 +497,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "Chat requests now route through workflowEngine. fast uses generate-only profile; balanced and grounded use bounded-review profile."
+                    "content": "Chat requests now route through workflowEngine. balanced and grounded both use the shared reviewed workflow shape."
                 },
                 {
                     "author": "Maintainer",
@@ -509,7 +509,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "weather_forecast uses the workflow context-step path to inject context before generation in bounded-review modes."
+                    "content": "weather_forecast uses the workflow context-step path to inject context before generation in reviewed workflow runs."
                 }
             ]
         },

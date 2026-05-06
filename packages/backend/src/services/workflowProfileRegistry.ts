@@ -18,6 +18,7 @@ import type {
     ExecutionResponseMode,
 } from './executionContract.js';
 import type {
+    ReviewIntensity,
     WorkflowModeDecision,
     WorkflowModeId,
 } from '@footnote/contracts/ethics-core';
@@ -27,13 +28,12 @@ import type {
     WorkflowProfileId,
 } from './workflowProfileContract.js';
 
-type BuiltinWorkflowProfileId = 'bounded-review' | 'generate-only';
+type BuiltinWorkflowProfileId = 'reviewed';
 type BuiltinWorkflowModeId = WorkflowModeId;
 
 /**
  * Workflow profiles are concrete executable shapes:
- * - reviewed (`bounded-review`): generate + assess + revise
- * - direct (`generate-only`): generate only
+ * - reviewed (`reviewed`): generate + assess + revise
  *
  * Registry ownership here is assembly glue only:
  * - Mode resolution decides run kind and default posture.
@@ -52,17 +52,6 @@ const EXECUTION_CONTRACT_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET: Readonly<
     enableRevision: true,
 };
 
-const EXECUTION_CONTRACT_FAST_DIRECT_WORKFLOW_POLICY_PRESET: Readonly<
-    RuntimeWorkflowProfile['policy']
-> = {
-    enablePlanning: true,
-    enableToolUse: true,
-    enableReplanning: false,
-    enableGeneration: true,
-    enableAssessment: false,
-    enableRevision: false,
-};
-
 const QUALITY_GROUNDED_DEFAULT_LIMITS: Readonly<
     RuntimeWorkflowProfile['defaultLimits']
 > = {
@@ -75,23 +64,11 @@ const QUALITY_GROUNDED_DEFAULT_LIMITS: Readonly<
     maxDurationMs: 15000,
 };
 
-const FAST_DIRECT_DEFAULT_LIMITS: Readonly<
-    RuntimeWorkflowProfile['defaultLimits']
-> = {
-    maxWorkflowSteps: 3,
-    maxToolCalls: 1,
-    maxPlanCycles: 1,
-    maxReviewCycles: 0,
-    maxDeliberationCalls: 1,
-    maxTokensTotal: Number.MAX_SAFE_INTEGER,
-    maxDurationMs: 15000,
-};
-
-const BOUNDED_REVIEW_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
-    profileId: 'bounded-review',
+const REVIEWED_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
+    profileId: 'reviewed',
     profileVersion: 'v1',
-    displayName: 'Bounded Review',
-    workflowName: 'message_with_review_loop',
+    displayName: 'Reviewed',
+    workflowName: 'message_reviewed',
     policy: EXECUTION_CONTRACT_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET,
     defaultLimits: QUALITY_GROUNDED_DEFAULT_LIMITS,
     optionalExtensions: {
@@ -107,21 +84,6 @@ const BOUNDED_REVIEW_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
     parseReviewDecision: parseReviewDecisionText,
 };
 
-const GENERATE_ONLY_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
-    profileId: 'generate-only',
-    profileVersion: 'v1',
-    displayName: 'Generate Only',
-    workflowName: 'message_generate_only',
-    policy: EXECUTION_CONTRACT_FAST_DIRECT_WORKFLOW_POLICY_PRESET,
-    defaultLimits: FAST_DIRECT_DEFAULT_LIMITS,
-    requiredHooks: {
-        initialStep: 'generate',
-        forceWorkflowExecution: true,
-        canEmitGeneration: () => true,
-        classifyNoGeneration: (reasonCode) => reasonCode,
-    },
-};
-
 // Extension checklist (workflow profiles):
 // 1) Add runtime profile entry here (contract + requiredHooks).
 // 2) Keep unknown-id fail-open behavior in this module.
@@ -129,12 +91,11 @@ const GENERATE_ONLY_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
 const BUILTIN_RUNTIME_WORKFLOW_PROFILES: Readonly<
     Record<BuiltinWorkflowProfileId, RuntimeWorkflowProfile>
 > = {
-    'bounded-review': BOUNDED_REVIEW_WORKFLOW_PROFILE,
-    'generate-only': GENERATE_ONLY_WORKFLOW_PROFILE,
+    reviewed: REVIEWED_WORKFLOW_PROFILE,
 };
 
 export const DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID: BuiltinWorkflowProfileId =
-    'bounded-review';
+    'reviewed';
 const DEFAULT_WORKFLOW_MODE_ID: BuiltinWorkflowModeId = 'grounded';
 
 const isBuiltinWorkflowProfileId = (
@@ -165,23 +126,10 @@ type WorkflowModeBehavior = WorkflowModeDecision['behavior'];
 const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
     Record<BuiltinWorkflowModeId, WorkflowModeBehavior>
 > = {
-    fast: {
-        executionContractPresetId: 'fast-direct',
-        workflowProfileClass: 'direct',
-        workflowProfileId: 'generate-only',
-        workflowExecution: 'always',
-        reviewPass: 'excluded',
-        reviseStep: 'disallowed',
-        evidencePosture: 'minimal',
-        maxWorkflowSteps: 3,
-        maxPlanCycles: 1,
-        maxReviewCycles: 0,
-        maxDeliberationCalls: 1,
-    },
     balanced: {
         executionContractPresetId: 'balanced',
         workflowProfileClass: 'reviewed',
-        workflowProfileId: 'bounded-review',
+        workflowProfileId: 'reviewed',
         workflowExecution: 'always',
         reviewPass: 'included',
         reviseStep: 'allowed',
@@ -194,7 +142,7 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
     grounded: {
         executionContractPresetId: 'quality-grounded',
         workflowProfileClass: 'reviewed',
-        workflowProfileId: 'bounded-review',
+        workflowProfileId: 'reviewed',
         workflowExecution: 'policy_gated',
         reviewPass: 'included',
         reviseStep: 'allowed',
@@ -205,8 +153,6 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
         maxDeliberationCalls: 4,
     },
 };
-
-export type ReviewIntensity = 'none' | 'light' | 'moderate' | 'high';
 
 /**
  * Canonical review-intensity derivation from workflow-mode behavior.
@@ -221,16 +167,12 @@ export type ReviewIntensity = 'none' | 'light' | 'moderate' | 'high';
 export const deriveReviewIntensityFromWorkflowBehavior = (
     behavior: WorkflowModeBehavior
 ): ReviewIntensity => {
-    if (
-        behavior.reviewPass === 'excluded' ||
-        behavior.workflowExecution === 'disabled'
-    ) {
-        return 'none';
-    }
-
     const maxReviewCycles =
         behavior.maxReviewCycles ??
         Math.max(0, behavior.maxDeliberationCalls - 1);
+    if (maxReviewCycles <= 0) {
+        return 'none';
+    }
     if (maxReviewCycles <= 1) {
         return 'light';
     }
@@ -245,7 +187,7 @@ const normalizeWorkflowModeId = (
 ): {
     modeId: WorkflowModeId;
 } | null => {
-    if (modeId === 'fast' || modeId === 'balanced' || modeId === 'grounded') {
+    if (modeId === 'balanced' || modeId === 'grounded') {
         return {
             modeId: modeId as WorkflowModeId,
         };
@@ -257,13 +199,14 @@ const normalizeWorkflowModeId = (
 const inferWorkflowModeIdFromExecutionContract = (
     responseMode: ExecutionResponseMode | undefined
 ): BuiltinWorkflowModeId | undefined => {
-    // TODO(workflow-mode-response-mode-extension): If ExecutionResponseMode adds
-    // `balanced`, map it here so inference stays aligned with canonical mode ids.
+    // ExecutionContract currently exposes `fast_direct|quality_grounded`.
+    // Workflow mode no longer includes `fast`, so map `fast_direct` to
+    // `balanced` as the nearest reviewed execution posture.
     if (responseMode === 'quality_grounded') {
         return 'grounded';
     }
     if (responseMode === 'fast_direct') {
-        return 'fast';
+        return 'balanced';
     }
     return undefined;
 };
@@ -287,7 +230,7 @@ export type WorkflowModeEscalationRequest = {
  * metadata explanation.
  *
  * `modeDecision.modeId` is always the canonical high-level id
- * (`fast|balanced|grounded`).
+ * (`balanced|grounded`).
  *
  * In v1, this initial mode decision is not revised later in runtime.
  */
@@ -380,13 +323,10 @@ const normalizeEscalationTargetModeId = (
 const deriveWorkflowBehaviorRestrictivenessRank = (
     behavior: WorkflowModeBehavior
 ): 0 | 1 | 2 => {
-    if (behavior.executionContractPresetId === 'fast-direct') {
+    if (behavior.executionContractPresetId === 'balanced') {
         return 0;
     }
-    if (behavior.executionContractPresetId === 'balanced') {
-        return 1;
-    }
-    return 2;
+    return 1;
 };
 
 const resolveEscalatedWorkflowModeDecision = (input: {
@@ -594,12 +534,10 @@ export const resolveWorkflowRuntimeConfig = (input: {
             ? executionContract.response.responseMode === 'quality_grounded'
             : input.reviewLoopEnabled === true;
     const workflowExecutionEnabled =
-        modeDecision.behavior.workflowExecution === 'disabled'
-            ? false
-            : modeDecision.behavior.workflowExecution === 'always'
-              ? true
-              : workflowProfile.requiredHooks.forceWorkflowExecution ||
-                executionEnabledByPolicy;
+        modeDecision.behavior.workflowExecution === 'always'
+            ? true
+            : workflowProfile.requiredHooks.forceWorkflowExecution ||
+              executionEnabledByPolicy;
     const profileDefaultMaxIterations =
         deriveDefaultMaxIterationsFromWorkflowSteps(
             workflowProfile.defaultLimits.maxWorkflowSteps
@@ -608,9 +546,7 @@ export const resolveWorkflowRuntimeConfig = (input: {
         workflowProfile.policy.enableAssessment === false
             ? workflowProfile.defaultLimits.maxWorkflowSteps
             : Math.max(1, profileDefaultMaxIterations * 2);
-    const modeMaxPlanCycles =
-        modeDecision.behavior.maxPlanCycles ??
-        (modeDecision.behavior.workflowExecution === 'disabled' ? 0 : 1);
+    const modeMaxPlanCycles = modeDecision.behavior.maxPlanCycles ?? 1;
     const modeMaxReviewCycles =
         modeDecision.behavior.maxReviewCycles ??
         Math.max(0, modeDecision.behavior.maxDeliberationCalls - 1);

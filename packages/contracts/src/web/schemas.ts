@@ -687,51 +687,6 @@ type _AssertProvenanceAssessment =
 const _assertProvenanceAssessment: _AssertProvenanceAssessment = true;
 void _assertProvenanceAssessment;
 
-const WorkflowModeIdSchema = z.enum(['fast', 'balanced', 'grounded']);
-
-const WorkflowModeSelectionSourceSchema = z.enum([
-    'requested_mode',
-    'inferred_from_execution_contract',
-    'fail_open_default',
-    'workflow_mode_escalation',
-]);
-
-const WorkflowModeBehaviorSchema = z
-    .object({
-        executionContractPresetId: z.enum([
-            'fast-direct',
-            'balanced',
-            'quality-grounded',
-        ]),
-        workflowProfileClass: z.enum(['direct', 'reviewed']),
-        workflowProfileId: z.enum(['bounded-review', 'generate-only']),
-        workflowExecution: z.enum(['disabled', 'policy_gated', 'always']),
-        reviewPass: z.enum(['included', 'excluded']),
-        reviseStep: z.enum(['allowed', 'disallowed']),
-        evidencePosture: z.enum(['minimal', 'balanced', 'strict']),
-        maxWorkflowSteps: z.number().int().positive(),
-        maxPlanCycles: z.number().int().nonnegative().optional(),
-        maxReviewCycles: z.number().int().nonnegative().optional(),
-        maxDeliberationCalls: z.number().int().nonnegative(),
-    })
-    .strict();
-
-const WorkflowModeDecisionSchema = z
-    .object({
-        modeId: WorkflowModeIdSchema,
-        selectedBy: WorkflowModeSelectionSourceSchema,
-        selectionReason: z.string().min(1),
-        initial_mode: WorkflowModeIdSchema,
-        escalated_mode: WorkflowModeIdSchema.optional(),
-        escalation_reason: z.string().min(1).optional(),
-        requestedModeId: z.string().min(1).optional(),
-        executionContractResponseMode: z
-            .enum(['fast_direct', 'quality_grounded'])
-            .optional(),
-        behavior: WorkflowModeBehaviorSchema,
-    })
-    .strict();
-
 const SteerabilityControlSourceSchema = z.enum([
     'runtime_config',
     'execution_contract',
@@ -872,7 +827,6 @@ const responseMetadataShape = {
     execution: z.array(ExecutionEventSchema).optional(),
     workflow: WorkflowRecordSchema.optional(),
     reviewRuntime: ReviewRuntimeSummarySchema.optional(),
-    workflowMode: WorkflowModeDecisionSchema.optional(),
     steerabilityControls: SteerabilityControlsSchema.optional(),
     evaluator: EvaluatorOutcomeSchema.optional(),
     imageDescriptions: z.array(z.string()).optional(),
@@ -962,7 +916,6 @@ const TraceCardChipDataSchema = z
  *
  * Stability guidance for consumers:
  * - Prefer execution/workflow/trustGraph for structural record surfaces.
- * - Treat workflowMode as execution-policy metadata.
  * - Treat TRACE fields (`trace_target`, `trace_final`, optional chips) as
  *   answer-posture metadata.
  * - Treat planner influence as workflow `steps[]` with `stepKind=plan`.

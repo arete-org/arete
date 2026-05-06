@@ -142,7 +142,6 @@ const normalizeToolReasonCode = (
  *
  * Semantics guardrail:
  * - execution/workflow are structural record surfaces for what happened.
- * - workflowMode is execution-policy metadata.
  * - TRACE (trace_target/trace_final + optional chips) is answer-posture metadata.
  * - planner influence is represented in workflow.steps[] (stepKind=plan).
  * - steerability control influence is represented in steerabilityControls.
@@ -333,7 +332,6 @@ const buildResponseMetadata = (
         .at(-1)?.model;
     const reviewRuntime = deriveReviewRuntimeSummary({
         workflow: runtimeContext.workflow,
-        workflowMode: runtimeContext.workflowMode,
         execution,
     });
 
@@ -363,9 +361,6 @@ const buildResponseMetadata = (
             workflow: runtimeContext.workflow,
         }),
         reviewRuntime,
-        ...(runtimeContext.workflowMode !== undefined && {
-            workflowMode: runtimeContext.workflowMode,
-        }),
         ...(runtimeContext.steerabilityControls !== undefined && {
             steerabilityControls: runtimeContext.steerabilityControls,
         }),

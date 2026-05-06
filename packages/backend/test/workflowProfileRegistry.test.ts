@@ -16,18 +16,12 @@ import {
 } from '../src/services/workflowProfileRegistry.js';
 
 test('resolveWorkflowProfileRegistry resolves known profile ids and fail-open fallback for unknown ids', () => {
-    const generateOnly = resolveWorkflowProfileRegistry('generate-only');
-    assert.equal(generateOnly.isKnownProfileId, true);
-    assert.equal(generateOnly.runtimeProfile.profileId, 'generate-only');
-    assert.equal(generateOnly.profileContract.profileId, 'generate-only');
-    assert.equal(
-        generateOnly.runtimeProfile.workflowName,
-        'message_generate_only'
-    );
-    assert.equal(
-        generateOnly.profileContract.workflowName,
-        'message_generate_only'
-    );
+    const reviewed = resolveWorkflowProfileRegistry('reviewed');
+    assert.equal(reviewed.isKnownProfileId, true);
+    assert.equal(reviewed.runtimeProfile.profileId, 'reviewed');
+    assert.equal(reviewed.profileContract.profileId, 'reviewed');
+    assert.equal(reviewed.runtimeProfile.workflowName, 'message_reviewed');
+    assert.equal(reviewed.profileContract.workflowName, 'message_reviewed');
 
     const unknownFallback = resolveWorkflowProfileRegistry(
         'unrecognized-workflow-profile'
@@ -37,28 +31,28 @@ test('resolveWorkflowProfileRegistry resolves known profile ids and fail-open fa
         unknownFallback.requestedProfileId,
         'unrecognized-workflow-profile'
     );
-    assert.equal(unknownFallback.runtimeProfile.profileId, 'bounded-review');
-    assert.equal(unknownFallback.profileContract.profileId, 'bounded-review');
+    assert.equal(unknownFallback.runtimeProfile.profileId, 'reviewed');
+    assert.equal(unknownFallback.profileContract.profileId, 'reviewed');
     assert.equal(
         unknownFallback.runtimeProfile.workflowName,
-        'message_with_review_loop'
+        'message_reviewed'
     );
     assert.equal(
         unknownFallback.profileContract.workflowName,
-        'message_with_review_loop'
+        'message_reviewed'
     );
 });
 
 test('resolveWorkflowProfileRegistry trims profile ids before lookup', () => {
-    const trimmedProfile = resolveWorkflowProfileRegistry('  generate-only  ');
+    const trimmedProfile = resolveWorkflowProfileRegistry('  reviewed  ');
     assert.equal(trimmedProfile.isKnownProfileId, true);
-    assert.equal(trimmedProfile.requestedProfileId, 'generate-only');
-    assert.equal(trimmedProfile.runtimeProfile.profileId, 'generate-only');
-    assert.equal(trimmedProfile.profileContract.profileId, 'generate-only');
+    assert.equal(trimmedProfile.requestedProfileId, 'reviewed');
+    assert.equal(trimmedProfile.runtimeProfile.profileId, 'reviewed');
+    assert.equal(trimmedProfile.profileContract.profileId, 'reviewed');
 });
 
 test('resolveWorkflowProfileRegistry keeps public contract serializable while runtime profile includes hooks', () => {
-    const resolution = resolveWorkflowProfileRegistry('bounded-review');
+    const resolution = resolveWorkflowProfileRegistry('reviewed');
 
     assert.equal(
         typeof resolution.runtimeProfile.requiredHooks.forceWorkflowExecution,
@@ -91,7 +85,7 @@ test('resolveWorkflowProfileRegistry keeps public contract serializable while ru
     const serializedContract = JSON.parse(
         JSON.stringify(resolution.profileContract)
     ) as Record<string, unknown>;
-    assert.equal(serializedContract.profileId, 'bounded-review');
+    assert.equal(serializedContract.profileId, 'reviewed');
     assert.equal(
         Object.prototype.hasOwnProperty.call(
             serializedContract,
@@ -108,23 +102,35 @@ test('resolveWorkflowProfileRegistry keeps public contract serializable while ru
     );
 });
 
-test('resolveWorkflowRuntimeConfig applies forceWorkflowExecution and review-loop gating', () => {
-    const fastRuntimeConfig = resolveWorkflowRuntimeConfig({
-        modeId: 'fast',
+test('resolveWorkflowRuntimeConfig applies reviewed workflow defaults and review-loop gating', () => {
+    const balancedRuntimeConfig = resolveWorkflowRuntimeConfig({
+        modeId: 'balanced',
         reviewLoopEnabled: true,
         maxIterations: 5,
         maxDurationMs: 9000,
     });
-    assert.equal(fastRuntimeConfig.profileId, 'generate-only');
-    assert.equal(fastRuntimeConfig.workflowExecutionEnabled, true);
-    assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps, 3);
-    assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxPlanCycles, 1);
-    assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxReviewCycles, 0);
+    assert.equal(balancedRuntimeConfig.profileId, 'reviewed');
+    assert.equal(balancedRuntimeConfig.workflowExecutionEnabled, true);
     assert.equal(
-        fastRuntimeConfig.workflowExecutionLimits.maxDeliberationCalls,
+        balancedRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps,
+        4
+    );
+    assert.equal(
+        balancedRuntimeConfig.workflowExecutionLimits.maxPlanCycles,
         1
     );
-    assert.equal(fastRuntimeConfig.workflowExecutionLimits.maxDurationMs, 9000);
+    assert.equal(
+        balancedRuntimeConfig.workflowExecutionLimits.maxReviewCycles,
+        1
+    );
+    assert.equal(
+        balancedRuntimeConfig.workflowExecutionLimits.maxDeliberationCalls,
+        2
+    );
+    assert.equal(
+        balancedRuntimeConfig.workflowExecutionLimits.maxDurationMs,
+        9000
+    );
 
     const groundedRuntimeConfig = resolveWorkflowRuntimeConfig({
         modeId: 'grounded',
@@ -132,7 +138,7 @@ test('resolveWorkflowRuntimeConfig applies forceWorkflowExecution and review-loo
         maxIterations: 5,
         maxDurationMs: 9000,
     });
-    assert.equal(groundedRuntimeConfig.profileId, 'bounded-review');
+    assert.equal(groundedRuntimeConfig.profileId, 'reviewed');
     assert.equal(groundedRuntimeConfig.workflowExecutionEnabled, false);
     assert.equal(
         groundedRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps,
@@ -159,7 +165,6 @@ test('resolveWorkflowRuntimeConfig applies forceWorkflowExecution and review-loo
 test('resolveWorkflowModeDecision maps requested mode ids and emits inspectable routing behavior', () => {
     const requested = resolveWorkflowModeDecision({
         modeId: 'balanced',
-        executionContractResponseMode: 'fast_direct',
     });
     assert.equal(requested.isKnownRequestedModeId, true);
     assert.equal(requested.modeDecision.modeId, 'balanced');
@@ -169,16 +174,29 @@ test('resolveWorkflowModeDecision maps requested mode ids and emits inspectable 
         requested.modeDecision.behavior.executionContractPresetId,
         'balanced'
     );
-    assert.equal(
-        requested.modeDecision.behavior.workflowProfileId,
-        'bounded-review'
-    );
+    assert.equal(requested.modeDecision.behavior.workflowProfileId, 'reviewed');
     assert.equal(requested.modeDecision.behavior.reviewPass, 'included');
     assert.equal(requested.modeDecision.behavior.reviseStep, 'allowed');
     assert.equal(requested.modeDecision.behavior.evidencePosture, 'balanced');
 });
 
 test('resolveWorkflowModeDecision fails open by inferring from execution contract and then defaulting', () => {
+    const inferredBalanced = resolveWorkflowModeDecision({
+        modeId: 'unknown-mode',
+        executionContractResponseMode: 'fast_direct',
+    });
+    assert.equal(inferredBalanced.isKnownRequestedModeId, false);
+    assert.equal(inferredBalanced.modeDecision.modeId, 'balanced');
+    assert.equal(inferredBalanced.modeDecision.initial_mode, 'balanced');
+    assert.equal(
+        inferredBalanced.modeDecision.selectedBy,
+        'inferred_from_execution_contract'
+    );
+    assert.equal(
+        inferredBalanced.modeDecision.behavior.executionContractPresetId,
+        'balanced'
+    );
+
     const inferred = resolveWorkflowModeDecision({
         modeId: 'unknown-mode',
         executionContractResponseMode: 'quality_grounded',
@@ -216,7 +234,7 @@ test('resolveWorkflowModeDecision treats non-canonical mode ids as unknown and f
 
 test('resolveWorkflowRuntimeConfig exposes bounded workflow-owned escalation metadata', () => {
     const config = resolveWorkflowRuntimeConfig({
-        modeId: 'fast',
+        modeId: 'balanced',
         reviewLoopEnabled: true,
         maxIterations: 3,
         maxDurationMs: 9000,
@@ -226,7 +244,7 @@ test('resolveWorkflowRuntimeConfig exposes bounded workflow-owned escalation met
         },
     });
 
-    assert.equal(config.modeDecision.initial_mode, 'fast');
+    assert.equal(config.modeDecision.initial_mode, 'balanced');
     assert.equal(config.modeDecision.escalated_mode, 'grounded');
     assert.equal(
         config.modeDecision.escalation_reason,
@@ -243,7 +261,7 @@ test('resolveWorkflowRuntimeConfig rejects downward mode changes and keeps initi
         maxIterations: 3,
         maxDurationMs: 9000,
         modeEscalationRequest: {
-            targetModeId: 'fast',
+            targetModeId: 'balanced',
             reason: 'attempt downgrade',
         },
     });
@@ -268,7 +286,7 @@ test('resolveWorkflowRuntimeConfig fails open when escalation target mode id is 
             targetModeId: 'not-a-mode',
             reason: 'unsafe runtime input',
         } as unknown as {
-            targetModeId: 'fast' | 'balanced' | 'grounded';
+            targetModeId: 'balanced' | 'grounded';
             reason: string;
         },
     });
@@ -282,13 +300,13 @@ test('resolveWorkflowRuntimeConfig fails open when escalation target mode id is 
 test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity mapping', () => {
     assert.equal(
         deriveReviewIntensityFromWorkflowBehavior({
-            executionContractPresetId: 'fast-direct',
-            workflowProfileClass: 'direct',
-            workflowProfileId: 'generate-only',
-            workflowExecution: 'disabled',
-            reviewPass: 'excluded',
-            reviseStep: 'disallowed',
-            evidencePosture: 'minimal',
+            executionContractPresetId: 'balanced',
+            workflowProfileClass: 'reviewed',
+            workflowProfileId: 'reviewed',
+            workflowExecution: 'always',
+            reviewPass: 'included',
+            reviseStep: 'allowed',
+            evidencePosture: 'balanced',
             maxWorkflowSteps: 1,
             maxPlanCycles: 1,
             maxReviewCycles: 0,
@@ -300,7 +318,7 @@ test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity map
         deriveReviewIntensityFromWorkflowBehavior({
             executionContractPresetId: 'balanced',
             workflowProfileClass: 'reviewed',
-            workflowProfileId: 'bounded-review',
+            workflowProfileId: 'reviewed',
             workflowExecution: 'always',
             reviewPass: 'included',
             reviseStep: 'allowed',
@@ -316,7 +334,7 @@ test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity map
         deriveReviewIntensityFromWorkflowBehavior({
             executionContractPresetId: 'balanced',
             workflowProfileClass: 'reviewed',
-            workflowProfileId: 'bounded-review',
+            workflowProfileId: 'reviewed',
             workflowExecution: 'always',
             reviewPass: 'included',
             reviseStep: 'allowed',
@@ -332,7 +350,7 @@ test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity map
         deriveReviewIntensityFromWorkflowBehavior({
             executionContractPresetId: 'quality-grounded',
             workflowProfileClass: 'reviewed',
-            workflowProfileId: 'bounded-review',
+            workflowProfileId: 'reviewed',
             workflowExecution: 'policy_gated',
             reviewPass: 'included',
             reviseStep: 'allowed',
@@ -347,18 +365,6 @@ test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity map
 });
 
 test('resolveWorkflowRuntimeConfig keeps maxDeliberationCalls compatibility mapped from plan/review cycles', () => {
-    const fast = resolveWorkflowRuntimeConfig({
-        modeId: 'fast',
-        reviewLoopEnabled: true,
-        maxIterations: 5,
-        maxDurationMs: 9000,
-    });
-    assert.equal(
-        fast.workflowExecutionLimits.maxDeliberationCalls,
-        (fast.workflowExecutionLimits.maxPlanCycles ?? 0) +
-            (fast.workflowExecutionLimits.maxReviewCycles ?? 0)
-    );
-
     const balanced = resolveWorkflowRuntimeConfig({
         modeId: 'balanced',
         reviewLoopEnabled: true,

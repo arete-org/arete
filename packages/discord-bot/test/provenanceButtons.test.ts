@@ -83,7 +83,7 @@ test('details action renders markdown sections with execution table and trace vi
                 behavior: {
                     executionContractPresetId: 'balanced',
                     workflowProfileClass: 'reviewed',
-                    workflowProfileId: 'bounded-review',
+                    workflowProfileId: 'reviewed',
                     workflowExecution: 'policy_gated',
                     reviewPass: 'excluded',
                     reviseStep: 'allowed',

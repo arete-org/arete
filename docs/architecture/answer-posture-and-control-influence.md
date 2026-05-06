@@ -20,7 +20,7 @@ The main fields are:
 
 | Question                                                             | Concept           | Main fields                                                                                                                                                            |
 | -------------------------------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| How did the backend choose to run this request?                      | Mode              | `metadata.workflowMode.*`                                                                                                                                              |
+| How did the backend choose to run this request?                      | Workflow routing  | `metadata.workflow`, with supporting execution/control records                                                                                                         |
 | What posture did the answer aim for, and what posture was delivered? | TRACE             | `metadata.trace_target`, `metadata.trace_final`, `metadata.trace_final_reason_code`, plus summary chips such as `metadata.evidenceScore` and `metadata.freshnessScore` |
 | Did planner output affect the run?                                   | Planner metadata  | planner entries in `metadata.execution[]`                                                                                                                              |
 | Which internal controls materially affected execution or output?     | Control influence | `metadata.steerabilityControls.controls[]`                                                                                                                             |
@@ -38,7 +38,7 @@ where that choice came from, and whether workflow-owned escalation happened.
 TRACE is answer-posture metadata.
 
 It explains how the answer was shaped, not how the request was routed. If
-`workflowMode.modeId = grounded`, that does not automatically mean the answer
+`metadata.workflow` indicating a grounded-oriented run does not automatically mean the answer
 had supporting evidence. Check citations, provenance assessment, and execution
 records for that.
 
@@ -273,7 +273,7 @@ versioned as `v1`, and used in both message and non-message paths.
 Required `input` fields:
 
 - `surface`
-- `workflowModeId`
+- `workflowModeId` (internal observability field)
 - `executionContractResponseMode`
 - `selectedProfileId`
 - `personaOverlaySource`
@@ -310,7 +310,7 @@ workflow, and TrustGraph records provide the structural detail around it.
 
 If you have a trace payload open, a common reading pattern is:
 
-- `workflowMode` tells you how the request was routed
+- `metadata.workflow` tells you how the request was routed
 - `trace_target` and `trace_final` tell you the answer posture
 - the planner event shows whether planner output was applied or adjusted
 - `steerabilityControls` shows which controls materially affected the run
@@ -323,7 +323,7 @@ Some metadata is structural and some is summary-oriented.
 Structural metadata is the durable record of what the runtime did. That mainly
 includes:
 
-- `metadata.workflowMode.*`
+- `metadata.workflow`
 - `metadata.workflow`
 - `metadata.execution`
 - `metadata.trustGraph`
@@ -350,7 +350,7 @@ longer-term shape. Today that mainly means:
 These rules should stay true:
 
 - TRACE remains answer-posture metadata
-- `workflowMode` remains routing metadata
+- workflow routing remains separate from TRACE posture metadata
 - control-influence records observed material influence, not total causal
   proof
 - planner influence does not become workflow or policy authority

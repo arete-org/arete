@@ -18,7 +18,6 @@ import {
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
 const CHAT_WORKFLOW_MODE_IDS: ReadonlySet<WorkflowModeId> = new Set([
-    'fast',
     'balanced',
     'grounded',
 ]);

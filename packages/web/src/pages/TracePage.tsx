@@ -101,12 +101,6 @@ const PROVENANCE_EXPLANATIONS: Record<string, string> = {
         'This answer may include uncertain reasoning; treat it as a starting point and verify before relying on it.',
 };
 
-const WORKFLOW_MODE_LABELS: Record<string, string> = {
-    fast: 'Fast mode',
-    balanced: 'Balanced mode',
-    grounded: 'Grounded mode',
-};
-
 const getProvenanceExplanation = (provenance: string): string =>
     PROVENANCE_EXPLANATIONS[provenance] ??
     'This is the runtime provenance label recorded for this response.';
@@ -114,37 +108,18 @@ const getProvenanceExplanation = (provenance: string): string =>
 const getModeSummary = (
     traceData: ServerMetadata
 ): Pick<SummarySignal, 'value' | 'explanation'> => {
-    const modeId = traceData.workflowMode?.modeId;
-    if (modeId) {
-        const modeValue = WORKFLOW_MODE_LABELS[modeId] ?? modeId;
-        const reviewPass = traceData.workflowMode?.behavior.reviewPass;
-        const evidencePosture =
-            traceData.workflowMode?.behavior.evidencePosture;
-        const reviewText =
-            reviewPass === 'included'
-                ? 'is configured to include a review pass'
-                : 'is configured without a review pass';
-        const evidenceText = evidencePosture
-            ? `and uses a ${evidencePosture} evidence posture`
-            : '';
-        return {
-            value: modeValue,
-            explanation: `${modeValue} ran for this response, ${reviewText}${evidenceText}.`,
-        };
-    }
-
     if (traceData.workflow?.workflowName) {
         return {
             value: traceData.workflow.workflowName,
             explanation:
-                'A workflow record exists, but no explicit mode decision was attached.',
+                'A workflow record exists for this response execution path.',
         };
     }
 
     return {
         value: 'Not recorded',
         explanation:
-            'This trace does not include workflow mode metadata, which is common in older records.',
+            'This trace does not include workflow execution summary metadata.',
     };
 };
 
