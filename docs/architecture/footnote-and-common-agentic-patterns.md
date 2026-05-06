@@ -13,7 +13,7 @@ Use it like this:
 
 ## Quick Crosswalk
 
-- Routing -> `workflow mode` selection and `workflow profile` resolution
+- Routing -> workflow behavior preset selection and workflow resolution
 - Planning -> bounded planner step
 - Reflection -> review / revise path, plus future bounded TRACE refinement
 - Tool use -> Execution Contract-limited tool execution
@@ -25,22 +25,22 @@ Use it like this:
 **What common pattern it resembles**
 
 Routing in other systems usually means deciding which execution path to take.
-That may mean a fast path, a tool path, or a reviewed path.
+That may mean a balanced path, a grounded path, or a tool-assisted path.
 
 **What Footnote calls it**
 
-Footnote uses `workflow mode` for the high-level run choice and `workflow profile`
-for the concrete executable shape.
+Footnote uses a workflow behavior preset for the high-level run choice and a
+shared reviewed workflow shape for concrete execution.
 
 Current examples:
 
-- `workflow mode`: `fast`, `balanced`, `grounded`
-- `workflow profile`: `generate-only`, `bounded-review`
+- behavior preset: `balanced`, `grounded`
+- workflow shape: reviewed (`generate -> assess -> revise`)
 
 **What constraints Footnote adds**
 
 - Routing stays inside Execution Contract guardrails.
-- Mode and profile are related, but they are not the same thing.
+- Preset and workflow shape are related, but not the same thing.
 - Backend owns the final routing decision.
 - Missing or unknown routing input falls back fail-open.
 
@@ -84,7 +84,7 @@ systems.
 
 **What Footnote calls it**
 
-Today Footnote has a review / revise path in bounded-review workflows.
+Today Footnote has a review / revise path in the shared reviewed workflow.
 Future TRACE refinement may add another bounded refinement seam, but still under
 Footnote control.
 
@@ -194,6 +194,6 @@ and constraints.
 The semantic center stays the same:
 
 - Execution Contract governs authority
-- `workflow mode` and `workflow profile` govern run shape
+- workflow behavior presets and workflow shape govern run shape
 - TRACE, provenance, and steerability stay Footnote-native
 - backend remains the control-plane boundary

@@ -35,14 +35,14 @@ Before integrations can run in parallel with assess-driven cycling:
 
 ## Integration Status
 
-| Integration | Pattern | Status |
-| ------------ | ------- | ------ |
-| `weather_forecast` | context-step | Implemented |
-| `trustgraph` | evidence ingestion seam | Not migrated to context-step |
-| `web_search` | tool-registry path | Not migrated to context-step |
-| `image_scan` | Discord bot layer | Not migrated to context-step |
-| `file_scan` | not implemented | Not implemented |
-| `reverse_image_search` | not implemented | Not implemented |
+| Integration            | Pattern                 | Status                       |
+| ---------------------- | ----------------------- | ---------------------------- |
+| `weather_forecast`     | context-step            | Implemented                  |
+| `trustgraph`           | evidence ingestion seam | Not migrated to context-step |
+| `web_search`           | tool-registry path      | Not migrated to context-step |
+| `image_scan`           | Discord bot layer       | Not migrated to context-step |
+| `file_scan`            | not implemented         | Not implemented              |
+| `reverse_image_search` | not implemented         | Not implemented              |
 
 ## Implementation Sequence
 
@@ -88,7 +88,7 @@ Before integrations can run in parallel with assess-driven cycling:
 
 ## Related Work
 
-**Issue #338** - Remove `fast` mode, collapse to two reviewed modes (`balanced`, `grounded`). Both modes use `bounded-review` profile, which enables the assess-driven cycling model.
+**Issue #338** - Remove fast mode and keep reviewed execution as the default path. `balanced` and `grounded` now run the same reviewed workflow shape, with differences coming from behavior preset and limits.
 
 ## Notes
 

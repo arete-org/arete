@@ -5,7 +5,7 @@ A workflow is the step pattern Footnote uses to answer a request.
 It decides whether the system generates once, runs a review pass, stops
 because of policy or limits, and records metadata about what happened.
 
-This page explains how mode, profile, planner, limits, and workflow metadata
+This page explains how behavior preset, workflow shape, planner, limits, and workflow metadata
 fit together in the chat path today.
 
 A chat request has to answer a few questions before the model returns
@@ -20,8 +20,8 @@ anything:
 Footnote answers those questions through a small set of runtime layers:
 
 1. The Execution Contract sets the run rules and limits.
-2. The workflow mode chooses the kind of run.
-3. The workflow profile chooses the step pattern.
+2. The behavior preset chooses run posture.
+3. The workflow shape applies the step pattern.
 4. The planner can suggest action details inside those limits.
 5. Workflow metadata records what happened.
 
@@ -54,67 +54,55 @@ should not bypass engine legality checks or hard limits.
 The normal chat path starts with the Execution Contract. That contract decides
 what behavior is allowed for the request.
 
-After that, the backend resolves a workflow mode:
+After that, the backend resolves a behavior preset:
 
-- `fast`
 - `balanced`
 - `grounded`
 
-The mode maps to a workflow profile. The profile is the step pattern the
-runtime uses.
+Both presets use the same reviewed workflow step pattern:
 
-Today there are two built-in profiles:
-
-| Profile id       | Purpose                       | Main steps                     |
-| ---------------- | ----------------------------- | ------------------------------ |
-| `generate-only`  | direct single-pass generation | `generate`                     |
-| `bounded-review` | reviewed message generation   | `generate -> assess -> revise` |
-
-`fast` uses `generate-only`.
-
-`balanced` and `grounded` both use `bounded-review`.
+| Workflow shape | Purpose                     | Main steps                     |
+| -------------- | --------------------------- | ------------------------------ |
+| `reviewed`     | reviewed message generation | `generate -> assess -> revise` |
 
 The difference between `balanced` and `grounded` is not the step pattern. The
 difference is the contract preset, limits, and evidence posture selected for
 the run.
 
-## Modes
+## Presets
 
-The mode ids are user-facing enough to appear in product copy, with normal
-casing: `Fast mode`, `Balanced mode`, and `Grounded mode`.
-
-The profile ids are internal: `generate-only` and `bounded-review`.
+Preset ids are user-facing enough to appear in product copy, with normal
+casing: `Balanced` and `Grounded`.
 
 Do not use profile ids as the main labels under an answer. A user does not
-need to know that `balanced` maps to `bounded-review` to understand that the
+need to know internal workflow ids to understand that the
 answer was reviewed.
 
-| Mode       | Contract preset    | Workflow profile | Flow                   | Review | Evidence posture |
-| ---------- | ------------------ | ---------------- | ---------------------- | ------ | ---------------- |
-| `fast`     | `fast-direct`      | `generate-only`  | single-pass generation | no     | minimal          |
-| `balanced` | `balanced`         | `bounded-review` | reviewed generation    | yes    | balanced         |
-| `grounded` | `quality-grounded` | `bounded-review` | reviewed generation    | yes    | stricter         |
+| Preset     | Contract preset    | Workflow shape | Flow                | Review | Evidence posture |
+| ---------- | ------------------ | -------------- | ------------------- | ------ | ---------------- |
+| `balanced` | `balanced`         | `reviewed`     | reviewed generation | yes    | balanced         |
+| `grounded` | `quality-grounded` | `reviewed`     | reviewed generation | yes    | stricter         |
 
 Grounded and reviewed are runtime labels. They describe the path Footnote
 took, not a guarantee that the answer is true.
 
-## Mode selection
+## Preset selection
 
-Mode selection happens during initial routing in this order:
+Preset selection happens during initial routing in this order:
 
 1. Use the requested mode when it is recognized.
 2. Otherwise, if the Execution Contract provides a response mode, map it to
-   the canonical workflow mode: `quality_grounded` maps to `grounded`, and
-   `fast_direct` maps to `fast`.
+   the canonical preset: `quality_grounded` maps to `grounded`, and
+   `fast_direct` maps to `balanced`.
 3. Otherwise, fall back to `grounded`.
 
 That fallback keeps the system available while still preferring the more
 careful default.
 
 These fallback steps happen only during initial routing. They are separate from
-runtime mode escalation.
+runtime preset escalation.
 
-Mode escalation also lives in `resolveWorkflowRuntimeConfig`
+Preset escalation also lives in `resolveWorkflowRuntimeConfig`
 (`packages/backend/src/services/workflowProfileRegistry.ts`). Keep it
 centralized there: resolve the initial mode once, apply at most one
 workflow-owned escalation request, and do not run recursive mode
@@ -127,26 +115,23 @@ The current chat path looks like this:
 
 1. `chatOrchestrator` receives and normalizes the request.
 2. The Execution Contract sets the allowed behavior and limits.
-3. The backend resolves workflow mode and profile.
+3. The backend resolves workflow preset and workflow runtime config.
 4. `chatOrchestrator` wires planner dependencies for workflow execution:
     - `PlannerStepExecutor` calls the planner during the `plan` step.
     - `PlanContinuationBuilder` applies backend policy and builds the next workflow action.
-5. `chatService` runs the workflow engine with the profile selected for the mode:
+5. `chatService` runs the workflow engine using the reviewed workflow shape for both presets:
     - workflow runs `plan` first through the injected planner executor
     - workflow calls `PlanContinuationBuilder` to choose `terminal_action` or `continue_message`
     - context-step and generation run only after planner application
-    - `fast` uses the `generate-only` profile (one generate step, no assess/revise)
-    - `balanced` and `grounded` use the `bounded-review` profile (generate -> assess -> revise loop)
-6. Response metadata records mode, planner influence, workflow lineage, cost,
+    - `balanced` and `grounded` both use `generate -> assess -> revise`
+6. Response metadata records preset outcome, planner influence, workflow lineage, cost,
    and trace or provenance fields.
 
 Planner step lineage now comes from workflow execution as the canonical source.
 
 ## Review loop
 
-`generate-only` runs one `generate` step and stops.
-
-`bounded-review` runs a bounded review path:
+The reviewed workflow runs a bounded review path:
 
 ```text
 generate -> assess -> revise
@@ -190,14 +175,9 @@ story, such as planner fallback. Normal planner lineage belongs in the trace.
 
 Response metadata has a few related surfaces:
 
-- `metadata.workflowMode.*` explains the routing choice
 - `metadata.workflow` records workflow lineage
 - `metadata.execution[]` records execution events, including planner influence
 - TRACE or provenance fields describe answer behavior and trace presentation
-
-`metadata.workflowMode` includes fields such as `modeId`, `selectedBy`,
-`selectionReason`, `initial_mode`, `escalated_mode`, `escalation_reason`,
-`requestedModeId`, `executionContractResponseMode`, and `behavior`.
 
 Read those records together. They describe different parts of the run.
 
@@ -216,7 +196,7 @@ detailed step list belongs in the trace.
 
 Receipt text should stay short:
 
-- `Answered in Balanced mode`
+- `Answered in Balanced preset`
 - `Reviewed before final answer`
 - `Review skipped`
 - `Planner fallback`
@@ -315,7 +295,7 @@ Optional profile extensions can support review and revision behavior, but they
 cannot override required no-generation classification, disposition, or
 termination-reason mapping.
 
-Mode chooses the kind of run. Profile chooses the step pattern.
+Preset chooses run posture. Workflow shape chooses the step pattern.
 `workflowEngine` enforces legality and limits. `chatOrchestrator` and
 `chatService` connect workflow to runtime calls.
 
@@ -323,14 +303,14 @@ Mode chooses the kind of run. Profile chooses the step pattern.
 
 Use this split when ownership is unclear:
 
-| Concern             | Engine core                                                                                         | Workflow profile                                                             | Adapters and callers                                                  |
-| ------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Step legality       | owns the canonical legality check before execution                                                  | declares intended flow and policy toggles                                    | supplies policy, but must not bypass legality checks                  |
-| Limits              | owns hard-stop checks and stop-reason mapping                                                       | declares default budgets within the shared limits model                      | passes config and surfaces the final result                           |
-| Workflow state      | owns step count, token totals, current step, and lineage progression                                | declares expected step shape                                                 | treats engine-produced workflow state as authoritative                |
-| Step execution      | owns bounded-review concrete step execution today (`generate`, `assess`, `revise`) and step records | defines step-specific semantics such as review parsing                       | builds requests and calls runtimes or providers                       |
-| Termination reasons | owns canonical termination reasons                                                                  | can request stop, but cannot invent new canonical reasons                    | persists and returns engine-assigned reasons unchanged                |
-| Fail-open behavior  | owns degraded fail-open workflow behavior                                                           | can define recoverable profile behavior, but not canonical fail-open meaning | must not block the user response on telemetry or persistence failures |
+| Concern             | Engine core                                                                          | Workflow profile                                                             | Adapters and callers                                                  |
+| ------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Step legality       | owns the canonical legality check before execution                                   | declares intended flow and policy toggles                                    | supplies policy, but must not bypass legality checks                  |
+| Limits              | owns hard-stop checks and stop-reason mapping                                        | declares default budgets within the shared limits model                      | passes config and surfaces the final result                           |
+| Workflow state      | owns step count, token totals, current step, and lineage progression                 | declares expected step shape                                                 | treats engine-produced workflow state as authoritative                |
+| Step execution      | owns concrete step execution today (`generate`, `assess`, `revise`) and step records | defines step-specific semantics such as review parsing                       | builds requests and calls runtimes or providers                       |
+| Termination reasons | owns canonical termination reasons                                                   | can request stop, but cannot invent new canonical reasons                    | persists and returns engine-assigned reasons unchanged                |
+| Fail-open behavior  | owns degraded fail-open workflow behavior                                            | can define recoverable profile behavior, but not canonical fail-open meaning | must not block the user response on telemetry or persistence failures |
 
 If a workflow bug looks like "who decided that?", start with this table.
 
@@ -353,7 +333,7 @@ The shared workflow vocabulary includes `plan`, `tool`, `generate`, `assess`,
 
 | Component                        | Owner   | Notes                                                                                                               |
 | -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------- |
-| `workflowEngine`                 | Core    | Owns bounded-review steps (`generate`, `assess`, `revise`) and injected context-step execution                      |
+| `workflowEngine`                 | Core    | Owns reviewed workflow steps (`generate`, `assess`, `revise`) and injected context-step execution                   |
 | `chatOrchestrator`               | Core    | Owns deterministic bootstrap (mode/profile/contract), planner policy application seam, and tool intent construction |
 | `chatService`                    | Core    | Invokes workflowEngine, handles context-step short-circuit responses (clarification, failure)                       |
 | `toolRegistryContextStepAdapter` | Adapter | Keeps workflowEngine provider-neutral while mapping tool-registry execution into context-step shape                 |
@@ -410,7 +390,7 @@ Each `StepRecord` includes an outcome with `status`, `summary`, `artifacts`,
 `signals` are machine-readable control indicators used by transition logic.
 They are not generic telemetry.
 
-For bounded-review `assess` steps, use `reviewDecision` and `reviewReason`.
+For `assess` steps, use `reviewDecision` and `reviewReason`.
 
 `recommendations` are advisory only. They never override backend legality
 checks.
