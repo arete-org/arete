@@ -183,6 +183,7 @@ export type PlanContinuation = {
           plannerTemperament?: PartialResponseTemperament;
           conversationSnapshot: string;
           contextStepRequest?: ContextStepRequest;
+          contextStepRequests?: ContextStepRequest[];
       }
 );
 

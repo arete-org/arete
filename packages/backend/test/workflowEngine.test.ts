@@ -22,7 +22,10 @@ import {
     type ExecutionLimits,
     type WorkflowPolicy,
 } from '../src/services/workflowEngine.js';
-import type { GenerationRuntime } from '@footnote/agent-runtime';
+import type {
+    GenerationRuntime,
+    RuntimeMessage,
+} from '@footnote/agent-runtime';
 
 const permissivePolicy: WorkflowPolicy = {
     enablePlanning: true,
@@ -1345,6 +1348,119 @@ test('runBoundedReviewWorkflow executes injected context step and records contex
     assert.deepEqual(toolStep.outcome.artifacts, [
         'weather_context: clear skies',
     ]);
+});
+
+test('runBoundedReviewWorkflow executes eligible context steps in parallel and merges emitted context messages', async () => {
+    const observedMessages: RuntimeMessage[][] = [];
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(input) {
+            observedMessages.push(input.messages);
+            return {
+                text: 'draft',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+    let weatherStartedAt = 0;
+    let webSearchStartedAt = 0;
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Need context' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Need context' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        contextStepRequests: [
+            {
+                integrationName: 'weather_forecast',
+                requested: true,
+                eligible: true,
+            },
+            {
+                integrationName: 'web_search',
+                requested: true,
+                eligible: true,
+            },
+        ],
+        contextStepExecutorRegistry: {
+            weather_forecast: async () => {
+                weatherStartedAt = Date.now();
+                await new Promise((resolve) => setTimeout(resolve, 40));
+                return {
+                    executionContext: {
+                        toolName: 'weather_forecast',
+                        status: 'executed',
+                    },
+                    contextMessages: ['weather_context: clear skies'],
+                };
+            },
+            web_search: async () => {
+                webSearchStartedAt = Date.now();
+                await new Promise((resolve) => setTimeout(resolve, 40));
+                return {
+                    executionContext: {
+                        toolName: 'web_search',
+                        status: 'executed',
+                    },
+                    contextMessages: ['web_context: top result'],
+                };
+            },
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.ok(Math.abs(weatherStartedAt - webSearchStartedAt) < 35);
+    assert.equal(result.contextStepResults?.length, 2);
+    assert.equal(
+        observedMessages[0]?.some(
+            (message) =>
+                message.role === 'system' &&
+                message.content === 'weather_context: clear skies'
+        ),
+        true
+    );
+    assert.equal(
+        observedMessages[0]?.some(
+            (message) =>
+                message.role === 'system' &&
+                message.content === 'web_context: top result'
+        ),
+        true
+    );
 });
 
 test('runBoundedReviewWorkflow records failed injected context step with reason and continues fail-open', async () => {

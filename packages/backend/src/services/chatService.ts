@@ -520,7 +520,9 @@ export type RunChatMessagesInput = {
     workflowModeEscalationRequest?: WorkflowModeEscalationRequest;
     toolRequest?: ToolInvocationRequest;
     contextStepRequest?: ContextStepRequest;
+    contextStepRequests?: ContextStepRequest[];
     contextStepExecutor?: ContextStepExecutor;
+    contextStepExecutorRegistry?: Record<string, ContextStepExecutor>;
     plannerStepRequest?: PlannerStepRequest;
     plannerStepExecutor?: PlannerStepExecutor;
     planContinuationBuilder?: PlanContinuationBuilder;
@@ -680,7 +682,9 @@ export const createChatService = ({
         workflowModeEscalationRequest,
         toolRequest,
         contextStepRequest,
+        contextStepRequests,
         contextStepExecutor,
+        contextStepExecutorRegistry,
         plannerStepRequest,
         plannerStepExecutor,
         planContinuationBuilder,
@@ -776,6 +780,7 @@ export const createChatService = ({
         let generationResult: GenerationResult;
         let workflowLineage: WorkflowRecord | undefined;
         let workflowContextStepResult: ContextStepResult | undefined;
+        let workflowContextStepResults: ContextStepResult[] | undefined;
         let workflowPlannerSummary: AppliedPlanState | undefined;
         let workflowPlannerStepResult: PlannerStepResult | undefined;
         let workflowConversationSnapshot: string | undefined;
@@ -817,7 +822,9 @@ export const createChatService = ({
                 plannerStepExecutor: effectivePlannerStepExecutor,
                 planContinuationBuilder,
                 contextStepRequest,
+                contextStepRequests,
                 contextStepExecutor,
+                contextStepExecutorRegistry,
             });
             workflowPlannerStepResult = workflowResult.plannerStepResult;
             workflowPlannerSummary =
@@ -842,6 +849,7 @@ export const createChatService = ({
                 workflowConversationSnapshot = undefined;
             }
             workflowContextStepResult = workflowResult.contextStepResult;
+            workflowContextStepResults = workflowResult.contextStepResults;
             switch (workflowResult.outcome) {
                 case 'generated': {
                     generationResult = workflowResult.generationResult;
@@ -1063,7 +1071,10 @@ export const createChatService = ({
             });
         }
 
-        const contextStepSources = workflowContextStepResult?.sources;
+        const contextStepSources =
+            workflowContextStepResults?.flatMap(
+                (contextStepResult) => contextStepResult.sources ?? []
+            ) ?? workflowContextStepResult?.sources;
         const assistantMetadata = buildAssistantMetadata(
             generationResult,
             effectiveNormalizedGeneration,
