@@ -112,7 +112,6 @@ export {
 export { formatExecutionTimelineSummary } from './executionFormatting.js';
 export { deriveReviewRuntimeSummary } from './reviewRuntime.js';
 export {
-    resolveWorkflowModeLabel,
     resolveReviewReceipt,
     resolvePlannerFallbackReceipt,
     summarizeGroundingEvidence,

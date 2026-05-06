@@ -203,6 +203,5 @@ export type ResponseMetadataRuntimeContext = {
         };
     };
     workflow?: WorkflowRecord;
-    workflowMode?: ResponseMetadata['workflowMode'];
     steerabilityControls?: ResponseMetadata['steerabilityControls'];
 };

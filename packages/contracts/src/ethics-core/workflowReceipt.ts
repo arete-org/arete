@@ -11,14 +11,8 @@ import type {
     GroundingEvidenceStatus,
     ResponseMetadata,
     ToolExecutionEvent,
-    WorkflowModeId,
 } from './types.js';
 import { deriveReviewRuntimeSummary } from './reviewRuntime.js';
-
-const WORKFLOW_MODE_LABELS: Record<WorkflowModeId, string> = {
-    balanced: 'Balanced mode',
-    grounded: 'Grounded mode',
-};
 
 export type GroundingEvidenceSummary = {
     status: GroundingEvidenceStatus;
@@ -27,8 +21,6 @@ export type GroundingEvidenceSummary = {
 };
 
 export const WORKFLOW_RECEIPT_LABELS = {
-    answeredBalanced: 'Answered in Balanced mode',
-    answeredGrounded: 'Answered in Grounded mode',
     reviewedBeforeFinal: 'Reviewed before final answer',
     reviewedAndRevisedBeforeFinal: 'Reviewed and revised before final answer',
     reviewSkipped: 'Review skipped',
@@ -50,31 +42,6 @@ const isSearchUnsupportedToolEvent = (
     event.toolName === 'web_search' &&
     event.status === 'skipped' &&
     event.reasonCode === SEARCH_UNSUPPORTED_REASON_CODE;
-
-/**
- * Returns the user-facing mode label for the receipt.
- *
- * We only read explicit metadata fields. We do not infer from model names or
- * workflow profile IDs. If fields are missing or unknown, we return `null`.
- */
-export const resolveWorkflowModeLabel = (
-    metadata: ResponseMetadata
-): string | null => {
-    const modeId = metadata.workflowMode?.modeId;
-    if (modeId) {
-        return WORKFLOW_MODE_LABELS[modeId];
-    }
-
-    const presetId = metadata.workflowMode?.behavior?.executionContractPresetId;
-    if (presetId === 'balanced') {
-        return WORKFLOW_MODE_LABELS.balanced;
-    }
-    if (presetId === 'quality-grounded') {
-        return WORKFLOW_MODE_LABELS.grounded;
-    }
-
-    return null;
-};
 
 /**
  * Returns the review state line for the receipt.
@@ -230,16 +197,6 @@ export const buildWorkflowReceiptItems = (
     metadata: ResponseMetadata
 ): string[] =>
     [
-        (() => {
-            const modeLabel = resolveWorkflowModeLabel(metadata);
-            if (modeLabel === WORKFLOW_MODE_LABELS.balanced) {
-                return WORKFLOW_RECEIPT_LABELS.answeredBalanced;
-            }
-            if (modeLabel === WORKFLOW_MODE_LABELS.grounded) {
-                return WORKFLOW_RECEIPT_LABELS.answeredGrounded;
-            }
-            return null;
-        })(),
         resolveReviewReceipt(metadata),
         resolvePlannerFallbackReceipt(metadata),
         (() => {

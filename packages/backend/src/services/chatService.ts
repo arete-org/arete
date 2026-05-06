@@ -793,7 +793,6 @@ export const createChatService = ({
             modeEscalationRequest: workflowModeEscalationRequest,
         });
         const workflowProfile = workflowRuntimeConfig.runtimeProfile;
-        const workflowModeDecision = workflowRuntimeConfig.modeDecision;
         const workflowExecutionEnabled =
             workflowRuntimeConfig.workflowExecutionEnabled;
         const workflowExecutionLimits =
@@ -1324,7 +1323,6 @@ export const createChatService = ({
                     tool: effectiveToolExecutionContext,
                 }),
             },
-            workflowMode: workflowModeDecision,
             ...(steerabilityControls !== undefined && { steerabilityControls }),
             retrieval: {
                 requested: hasSearchIntent,

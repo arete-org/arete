@@ -2246,17 +2246,10 @@ test('planner invocation emits distinct metadata categories for mode TRACE plann
 
     assert.equal(response.action, 'message');
     // Category separation assertions for one end-to-end orchestrator path:
-    // - mode => workflowMode (execution policy)
     // - TRACE => trace_target/trace_final (answer posture)
     // - planner => workflow.steps[] plan step (execution lineage)
     // - controls => steerabilityControls (control influence)
     // - provenance => grounding classification + assessment/record surfaces
-    assert.ok(response.metadata.workflowMode);
-    assert.equal(typeof response.metadata.workflowMode?.modeId, 'string');
-    assert.equal(
-        typeof response.metadata.workflowMode?.behavior.evidencePosture,
-        'string'
-    );
     assert.equal(typeof response.metadata.trace_target, 'object');
     assert.equal(typeof response.metadata.trace_final, 'object');
     assert.equal(response.metadata.provenance, 'Retrieved');
@@ -2298,7 +2291,6 @@ test('planner invocation emits distinct metadata categories for mode TRACE plann
     );
     // Planner influence must remain distinct from execution-policy and TRACE surfaces.
     assert.equal(plannerStep?.stepKind, 'plan');
-    assert.notEqual(response.metadata.workflowMode?.modeId, undefined);
     assert.notEqual(response.metadata.trace_final, undefined);
 });
 

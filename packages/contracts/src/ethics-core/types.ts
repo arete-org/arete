@@ -893,15 +893,14 @@ export type ResponseMetadata = {
     execution?: ExecutionEvent[]; // Structural execution record (evaluator/tool/generation events).
     workflow?: WorkflowRecord; // Optional workflow record of bounded multi-step execution; includes planner lineage via plan steps.
     reviewRuntime?: ReviewRuntimeSummary; // Normalized review-runtime summary for UI labels (path semantics only).
-    workflowMode?: WorkflowModeDecision; // Execution-policy routing decision and behavior mapping.
     steerabilityControls?: SteerabilityControls; // Control-influence records explaining which controls shaped execution/output.
     evaluator?: EvaluatorOutcome; // Deterministic evaluator decision captured before breaker enforcement.
     imageDescriptions?: string[]; // Optional captions for any images used.
     evidenceScore?: TraceAxisScore; // Optional TRACE chip; may be derived when Retrieved and explicit chip values are absent.
     freshnessScore?: TraceAxisScore; // Optional TRACE chip; may be derived when Retrieved and explicit chip values are absent.
     // TRACE posture is answer-shape metadata only.
-    // Keep this separate from workflowMode (execution policy) and provenance
-    // classification/record fields.
+    // Keep this separate from workflow execution/provenance classification
+    // record fields.
     // TODO(trace-lifecycle-summary): Current TRACE contract is summary-state.
     // If TRACE later evolves across multiple runtime steps, model canonical
     // lifecycle/history first and derive summary fields from it.

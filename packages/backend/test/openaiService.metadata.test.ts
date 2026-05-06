@@ -973,34 +973,17 @@ test('buildResponseMetadata sets reviewRuntime to revised when revise step execu
     });
 });
 
-test('buildResponseMetadata sets reviewRuntime to skipped when review pass was expected but no assess step executed', () => {
+test('buildResponseMetadata sets reviewRuntime to skipped when assess step is explicitly skipped', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
         baseRuntimeContext({
-            workflowMode: {
-                modeId: 'grounded',
-                selectedBy: 'requested_mode',
-                selectionReason: 'Requested by user.',
-                initial_mode: 'grounded',
-                behavior: {
-                    executionContractPresetId: 'quality-grounded',
-                    workflowProfileClass: 'reviewed',
-                    workflowProfileId: 'reviewed',
-                    workflowExecution: 'always',
-                    reviewPass: 'included',
-                    reviseStep: 'allowed',
-                    evidencePosture: 'strict',
-                    maxWorkflowSteps: 8,
-                    maxDeliberationCalls: 3,
-                },
-            },
             workflow: {
                 workflowId: 'wf_3',
                 workflowName: 'message_reviewed',
                 status: 'degraded',
                 terminationReason: 'budget_exhausted_steps',
-                stepCount: 1,
-                maxSteps: 1,
+                stepCount: 2,
+                maxSteps: 2,
                 maxDurationMs: 5000,
                 steps: [
                     {
@@ -1013,6 +996,18 @@ test('buildResponseMetadata sets reviewRuntime to skipped when review pass was e
                         outcome: {
                             status: 'executed',
                             summary: 'Generated initial draft response.',
+                        },
+                    },
+                    {
+                        stepId: 'step_assess_1',
+                        attempt: 1,
+                        stepKind: 'assess',
+                        startedAt: '2026-04-22T00:00:00.011Z',
+                        finishedAt: '2026-04-22T00:00:00.012Z',
+                        durationMs: 1,
+                        outcome: {
+                            status: 'skipped',
+                            summary: 'Assessment step skipped.',
                         },
                     },
                 ],
