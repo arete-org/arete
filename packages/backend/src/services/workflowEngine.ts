@@ -172,8 +172,14 @@ export type RunBoundedReviewWorkflowInput = {
     plannerStepExecutor?: PlannerStepExecutor;
     // Caller-owned policy application. Engine only consumes continuation output.
     planContinuationBuilder?: PlanContinuationBuilder;
+    // Backward-compatible single integration input used by current callers.
     contextStepRequest?: ContextStepRequest;
+    // Preferred multi-integration input. Engine executes eligible steps in parallel.
+    contextStepRequests?: ContextStepRequest[];
+    // Backward-compatible default executor for single-integration callers.
     contextStepExecutor?: ContextStepExecutor;
+    // Preferred executor routing by integration name.
+    contextStepExecutorRegistry?: Record<string, ContextStepExecutor>;
 };
 
 export type RunBoundedReviewWorkflowResult =
@@ -184,6 +190,7 @@ export type RunBoundedReviewWorkflowResult =
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
+          contextStepResults?: ContextStepResult[];
       }
     | {
           outcome: 'terminal_action';
@@ -192,6 +199,7 @@ export type RunBoundedReviewWorkflowResult =
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
+          contextStepResults?: ContextStepResult[];
       }
     | {
           outcome: 'no_generation';
@@ -199,6 +207,7 @@ export type RunBoundedReviewWorkflowResult =
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
+          contextStepResults?: ContextStepResult[];
       };
 
 export type ContextStepRequest = {
@@ -226,6 +235,15 @@ export type ContextStepExecutorInput = {
 export type ContextStepExecutor = (
     input: ContextStepExecutorInput
 ) => Promise<ContextStepResult>;
+
+type ContextStepExecutionOutcome = {
+    request: ContextStepRequest;
+    result?: ContextStepResult;
+    error?: unknown;
+    blockedByLimit?: boolean;
+    startedAtMs: number;
+    finishedAtMs: number;
+};
 
 const LEGAL_TRANSITIONS: Record<
     WorkflowStepKind,
@@ -718,7 +736,9 @@ export const runBoundedReviewWorkflow = async ({
     plannerStepExecutor,
     planContinuationBuilder,
     contextStepRequest,
+    contextStepRequests,
     contextStepExecutor,
+    contextStepExecutorRegistry,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
     // NOTE: Concrete tool execution is still orchestrator/registry-owned.
     // This engine path currently executes only bounded review generation steps.
@@ -770,10 +790,12 @@ export const runBoundedReviewWorkflow = async ({
     let shouldStop = false;
     let exhaustedLimitKey: WorkflowLimitKey | undefined;
     let executedContextStepResult: ContextStepResult | undefined;
+    let executedContextStepResults: ContextStepResult[] = [];
     let messagesWithContext = messagesWithHints;
     let effectiveGenerationRequest = generationRequest;
     let effectiveMessagesWithHints = messagesWithHints;
     let effectiveContextStepRequest = contextStepRequest;
+    let effectiveContextStepRequests = contextStepRequests;
     let workflowTerminalAction: PlanTerminalAction | undefined;
     let planContinuation: PlanContinuation | undefined;
     const effectiveReviewDecisionPrompt =
@@ -1017,6 +1039,9 @@ export const runBoundedReviewWorkflow = async ({
                 effectiveContextStepRequest =
                     planContinuation.contextStepRequest ??
                     effectiveContextStepRequest;
+                effectiveContextStepRequests =
+                    planContinuation.contextStepRequests ??
+                    effectiveContextStepRequests;
             }
         } catch (error) {
             logger.warn(
@@ -1101,12 +1126,31 @@ export const runBoundedReviewWorkflow = async ({
         ];
     };
 
-    if (
-        !shouldStop &&
-        effectiveContextStepRequest?.requested === true &&
-        effectiveContextStepRequest.eligible &&
-        contextStepExecutor !== undefined
-    ) {
+    /**
+     * Resolve executor authority per context integration.
+     * Registry mapping is authoritative. Fallback executor preserves existing
+     * single-step call sites while migration to registry is in progress.
+     */
+    const selectContextStepExecutor = (
+        request: ContextStepRequest
+    ): ContextStepExecutor | undefined => {
+        const registryExecutor =
+            contextStepExecutorRegistry?.[request.integrationName];
+        if (registryExecutor !== undefined) {
+            return registryExecutor;
+        }
+        return contextStepExecutor;
+    };
+    const requestedContextSteps = (
+        effectiveContextStepRequests ??
+        (effectiveContextStepRequest !== undefined
+            ? [effectiveContextStepRequest]
+            : [])
+    ).filter((request) => request.requested === true && request.eligible);
+    const executableContextSteps = requestedContextSteps.filter(
+        (request) => selectContextStepExecutor(request) !== undefined
+    );
+    if (!shouldStop && executableContextSteps.length > 0) {
         if (
             !isTransitionAllowed(
                 workflowState.currentStepKind,
@@ -1117,37 +1161,143 @@ export const runBoundedReviewWorkflow = async ({
             terminationReason = 'transition_blocked_by_policy';
             shouldStop = true;
         } else if (!stopIfOverLimits('tool')) {
-            const contextStepStartedAt = Date.now();
-            try {
-                const contextStepResult = await contextStepExecutor({
-                    request: effectiveContextStepRequest,
-                    workflowId,
-                    workflowName: workflowConfig.workflowName,
-                    attempt: 1,
-                });
-                const contextStepFinishedAt = Date.now();
+            // Parallel execution keeps integration latency bounded while each
+            // outcome remains independently fail-open and lineage-recorded.
+            const remainingToolCalls =
+                executionLimits.maxToolCalls === UNBOUNDED_LIMIT
+                    ? Number.POSITIVE_INFINITY
+                    : Math.max(
+                          0,
+                          executionLimits.maxToolCalls -
+                              workflowState.toolCallCount
+                      );
+            let reservedToolCallCount = 0;
+            const contextStepOutcomes = await Promise.all(
+                executableContextSteps.map(
+                    async (request): Promise<ContextStepExecutionOutcome> => {
+                        if (reservedToolCallCount >= remainingToolCalls) {
+                            const blockedAtMs = Date.now();
+                            return {
+                                request,
+                                blockedByLimit: true,
+                                startedAtMs: blockedAtMs,
+                                finishedAtMs: blockedAtMs,
+                            };
+                        }
+                        reservedToolCallCount += 1;
+                        const executor = selectContextStepExecutor(request);
+                        if (executor === undefined) {
+                            return {
+                                request,
+                                startedAtMs: Date.now(),
+                                finishedAtMs: Date.now(),
+                            };
+                        }
+                        const startedAtMs = Date.now();
+                        try {
+                            const result = await executor({
+                                request,
+                                workflowId,
+                                workflowName: workflowConfig.workflowName,
+                                attempt: 1,
+                            });
+                            return {
+                                request,
+                                result,
+                                startedAtMs,
+                                finishedAtMs: Date.now(),
+                            };
+                        } catch (error) {
+                            return {
+                                request,
+                                error,
+                                startedAtMs,
+                                finishedAtMs: Date.now(),
+                            };
+                        }
+                    }
+                )
+            );
+            for (const contextStepOutcome of contextStepOutcomes) {
+                if (contextStepOutcome.blockedByLimit === true) {
+                    exhaustedLimitKey = 'maxToolCalls';
+                    terminationReason =
+                        mapExhaustedLimitToTerminationReason('maxToolCalls');
+                    workflowStatus = 'degraded';
+                    shouldStop = true;
+                    continue;
+                }
+                if (contextStepOutcome.error !== undefined) {
+                    logger.error(
+                        'Context step execution failed; workflow continued fail-open without context.',
+                        {
+                            stepKind: 'tool',
+                            reasonCode: 'tool_execution_error',
+                            startedAtMs: contextStepOutcome.startedAtMs,
+                            finishedAtMs: contextStepOutcome.finishedAtMs,
+                            parentStepId: plannerRootStepId,
+                            attempt: 1,
+                            workflowName: workflowConfig.workflowName,
+                            workflowId,
+                            integrationName:
+                                contextStepOutcome.request.integrationName,
+                            error:
+                                contextStepOutcome.error instanceof Error
+                                    ? contextStepOutcome.error.message
+                                    : String(contextStepOutcome.error),
+                        }
+                    );
+                    captureStep({
+                        stepKind: 'tool',
+                        status: 'failed',
+                        summary:
+                            'Context step execution failed; workflow continued fail-open without context.',
+                        reasonCode: 'tool_execution_error',
+                        startedAtMs: contextStepOutcome.startedAtMs,
+                        finishedAtMs: contextStepOutcome.finishedAtMs,
+                        parentStepId: plannerRootStepId,
+                        attempt: 1,
+                    });
+                    workflowState = applyStepExecutionToState(
+                        workflowState,
+                        'tool',
+                        0,
+                        1,
+                        0
+                    );
+                    continue;
+                }
+                if (contextStepOutcome.result === undefined) {
+                    continue;
+                }
                 const normalizedExecutionContext: ToolExecutionContext = {
-                    ...contextStepResult.executionContext,
-                    toolName: contextStepResult.executionContext.toolName,
-                    ...(contextStepResult.executionContext.clarification ===
-                        undefined &&
-                        contextStepResult.clarification !== undefined && {
-                            clarification: contextStepResult.clarification,
+                    ...contextStepOutcome.result.executionContext,
+                    toolName:
+                        contextStepOutcome.result.executionContext.toolName,
+                    ...(contextStepOutcome.result.executionContext
+                        .clarification === undefined &&
+                        contextStepOutcome.result.clarification !==
+                            undefined && {
+                            clarification:
+                                contextStepOutcome.result.clarification,
                         }),
                 };
-                executedContextStepResult = {
+                const normalizedResult: ContextStepResult = {
                     executionContext: normalizedExecutionContext,
-                    ...(contextStepResult.contextMessages !== undefined && {
-                        contextMessages: contextStepResult.contextMessages,
+                    ...(contextStepOutcome.result.contextMessages !==
+                        undefined && {
+                        contextMessages:
+                            contextStepOutcome.result.contextMessages,
                     }),
                     ...(normalizedExecutionContext.clarification !==
                         undefined && {
                         clarification: normalizedExecutionContext.clarification,
                     }),
-                    ...(contextStepResult.sources !== undefined && {
-                        sources: contextStepResult.sources,
+                    ...(contextStepOutcome.result.sources !== undefined && {
+                        sources: contextStepOutcome.result.sources,
                     }),
                 };
+                executedContextStepResults.push(normalizedResult);
                 const status =
                     normalizedExecutionContext.status === 'failed'
                         ? 'failed'
@@ -1165,12 +1315,12 @@ export const runBoundedReviewWorkflow = async ({
                     ...(normalizedExecutionContext.reasonCode !== undefined && {
                         reasonCode: normalizedExecutionContext.reasonCode,
                     }),
-                    startedAtMs: contextStepStartedAt,
-                    finishedAtMs: contextStepFinishedAt,
+                    startedAtMs: contextStepOutcome.startedAtMs,
+                    finishedAtMs: contextStepOutcome.finishedAtMs,
                     parentStepId: plannerRootStepId,
                     attempt: 1,
-                    ...(contextStepResult.contextMessages !== undefined && {
-                        artifacts: contextStepResult.contextMessages,
+                    ...(normalizedResult.contextMessages !== undefined && {
+                        artifacts: normalizedResult.contextMessages,
                     }),
                     ...(normalizedExecutionContext.clarification !==
                         undefined && {
@@ -1196,44 +1346,8 @@ export const runBoundedReviewWorkflow = async ({
                     workflowStatus = 'completed';
                     shouldStop = true;
                 }
-            } catch (error) {
-                const contextStepFinishedAt = Date.now();
-                logger.error(
-                    'Context step execution failed; workflow continued fail-open without context.',
-                    {
-                        stepKind: 'tool',
-                        reasonCode: 'tool_execution_error',
-                        startedAtMs: contextStepStartedAt,
-                        finishedAtMs: contextStepFinishedAt,
-                        parentStepId: plannerRootStepId,
-                        attempt: 1,
-                        workflowName: workflowConfig.workflowName,
-                        workflowId,
-                        error:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                    }
-                );
-                captureStep({
-                    stepKind: 'tool',
-                    status: 'failed',
-                    summary:
-                        'Context step execution failed; workflow continued fail-open without context.',
-                    reasonCode: 'tool_execution_error',
-                    startedAtMs: contextStepStartedAt,
-                    finishedAtMs: contextStepFinishedAt,
-                    parentStepId: plannerRootStepId,
-                    attempt: 1,
-                });
-                workflowState = applyStepExecutionToState(
-                    workflowState,
-                    'tool',
-                    0,
-                    1,
-                    0
-                );
             }
+            executedContextStepResult = executedContextStepResults.at(0);
         }
     }
 
@@ -1251,7 +1365,11 @@ export const runBoundedReviewWorkflow = async ({
             const initialDraftStartedAt = generationStartedAtMs;
             messagesWithContext = injectContextMessagesIntoPrompt(
                 effectiveMessagesWithHints,
-                executedContextStepResult?.contextMessages
+                // Preserve deterministic context ordering by request list order.
+                executedContextStepResults.flatMap(
+                    (contextStepResult) =>
+                        contextStepResult.contextMessages ?? []
+                )
             );
             try {
                 draftResult = await generationRuntime.generate({
@@ -1592,6 +1710,9 @@ export const runBoundedReviewWorkflow = async ({
             ...(executedContextStepResult !== undefined && {
                 contextStepResult: executedContextStepResult,
             }),
+            ...(executedContextStepResults.length > 0 && {
+                contextStepResults: executedContextStepResults,
+            }),
         };
     }
 
@@ -1608,6 +1729,9 @@ export const runBoundedReviewWorkflow = async ({
             ...(executedContextStepResult !== undefined && {
                 contextStepResult: executedContextStepResult,
             }),
+            ...(executedContextStepResults.length > 0 && {
+                contextStepResults: executedContextStepResults,
+            }),
         };
     }
 
@@ -1623,6 +1747,9 @@ export const runBoundedReviewWorkflow = async ({
         }),
         ...(executedContextStepResult !== undefined && {
             contextStepResult: executedContextStepResult,
+        }),
+        ...(executedContextStepResults.length > 0 && {
+            contextStepResults: executedContextStepResults,
         }),
     };
 };
