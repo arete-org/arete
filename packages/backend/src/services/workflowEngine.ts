@@ -9,6 +9,7 @@ import type { WorkflowStepKind } from '@footnote/contracts/ethics-core';
 import type { WorkflowTerminationReason } from '@footnote/contracts/ethics-core';
 import type {
     BoundedReviewAssessSignals,
+    Citation,
     ExecutionStatus,
     ToolClarification,
     ToolExecutionContext,
@@ -212,6 +213,7 @@ export type ContextStepResult = {
     executionContext: ToolExecutionContext;
     contextMessages?: string[];
     clarification?: ToolClarification;
+    sources?: Citation[];
 };
 
 export type ContextStepExecutorInput = {
