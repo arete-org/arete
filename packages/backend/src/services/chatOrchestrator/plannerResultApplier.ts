@@ -13,7 +13,7 @@ import type { ChatGenerationPlan } from '../chatGenerationTypes.js';
 import { coercePlanForSurface } from '../chatSurfacePolicy.js';
 import { applySingleToolPolicy } from '../tools/toolPolicy.js';
 import { resolveToolSelection } from '../tools/toolRegistry.js';
-import type { WeatherForecastTool } from '../openMeteoForecastTool.js';
+import type { WeatherForecastTool } from '../contextIntegrations/weather/index.js';
 import { resolveExecutionProfile } from './profileResolution.js';
 import type {
     PlannerApplicationInput,

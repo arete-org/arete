@@ -7,7 +7,7 @@
  * @footnote-ethics: medium - Forecast errors can impact user decisions, so the adapter preserves provenance and explicit uncertainty.
  */
 import type { ToolClarification } from '@footnote/contracts/ethics-core';
-import type { ChatGenerationWeatherRequest } from './chatGenerationTypes.js';
+import type { ChatGenerationWeatherRequest } from '../../chatGenerationTypes.js';
 
 const OPEN_METEO_FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const OPEN_METEO_GEOCODING_URL =
@@ -19,7 +19,7 @@ const DEFAULT_HORIZON_PERIODS = 5;
 const MIN_HORIZON_PERIODS = 1;
 const MAX_HORIZON_PERIODS = 12;
 
-import { wrapToolResultPayload } from './contextIntegrations/toolResultFormatter.js';
+import { wrapToolResultPayload } from '../toolResultFormatter.js';
 
 /**
  * Formats a WeatherForecastToolResult into a string payload for orchestration.

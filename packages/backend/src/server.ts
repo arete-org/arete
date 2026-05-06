@@ -60,7 +60,7 @@ import { createInternalVoiceTtsHandler } from './handlers/internalVoiceTts.js';
 import { createInternalVoiceRealtimeHandler } from './handlers/internalVoiceRealtime.js';
 import { buildRealtimeInstructions } from './services/prompts/realtimePromptComposer.js';
 import { createChatProfilesHandler } from './handlers/chatProfiles.js';
-import { createOpenMeteoForecastTool } from './services/openMeteoForecastTool.js';
+import { createOpenMeteoForecastTool } from './services/contextIntegrations/weather/index.js';
 import { resolveExecutionContractTrustGraphRuntimeOptions } from './services/executionContractTrustGraph/index.js';
 import { createModelProfileResolver } from './services/modelProfileResolver.js';
 

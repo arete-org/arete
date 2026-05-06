@@ -13,7 +13,7 @@ import type {
 import type {
     WeatherForecastTool,
     WeatherForecastToolResult,
-} from '../openMeteoForecastTool.js';
+} from '../contextIntegrations/weather/index.js';
 import { wrapToolResultPayload } from '../contextIntegrations/toolResultFormatter.js';
 import type { ChatGenerationWeatherRequest } from '../chatGenerationTypes.js';
 

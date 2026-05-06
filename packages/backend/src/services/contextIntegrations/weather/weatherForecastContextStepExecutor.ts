@@ -14,12 +14,12 @@ import type {
 import type {
     ContextStepExecutor,
     ContextStepResult,
-} from '../workflowEngine.js';
+} from '../../workflowEngine.js';
 import type {
     WeatherForecastTool,
     WeatherForecastToolResult,
-} from '../openMeteoForecastTool.js';
-import { formatWeatherToolResultMessage } from '../openMeteoForecastTool.js';
+} from './openMeteoForecastTool.js';
+import { formatWeatherToolResultMessage } from './openMeteoForecastTool.js';
 
 /**
  * Maps Open-Meteo tool error codes to generic ToolInvocationReasonCode.
