@@ -181,8 +181,3 @@ cost and merge quality. Remove it if it creates more cleanup than value.
   https://docs.openhands.dev/usage/cloud/openhands-cloud
 - OpenHands API key settings:
   https://docs.openhands.dev/openhands/usage/settings/api-keys-settings
-
----
-
-_Prepared for later implementation planning and community discussion within
-Footnote._
