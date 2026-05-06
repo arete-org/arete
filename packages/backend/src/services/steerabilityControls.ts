@@ -6,6 +6,7 @@
  * @footnote-ethics: high - Misreported controls can reduce transparency and weaken operator governance.
  */
 import type {
+    ToolAllowanceState,
     SteerabilityControlRecord,
     SteerabilityControlSource,
     SteerabilityControls,
@@ -133,9 +134,10 @@ const buildToolAllowanceControl = (
     // If no tool was requested, the control record exists for inspectability
     // but has no causal execution impact for this run.
     if (!toolRequest.requested) {
+        const state: ToolAllowanceState = 'none_requested';
         return {
             controlId: 'tool_allowance',
-            value: `none_requested (${toolRequest.toolName})`,
+            value: `${state} (${toolRequest.toolName})`,
             source: 'planner_output',
             rationale:
                 'Planner did not request tool execution for this response path.',
@@ -145,9 +147,10 @@ const buildToolAllowanceControl = (
     }
 
     if (toolRequest.eligible) {
+        const state: ToolAllowanceState = 'allowed';
         return {
             controlId: 'tool_allowance',
-            value: `allowed:${toolRequest.toolName}`,
+            value: `${state}:${toolRequest.toolName}`,
             source: 'tool_policy',
             rationale:
                 'Requested tool passed capability/policy checks and remained eligible for execution.',
@@ -156,9 +159,10 @@ const buildToolAllowanceControl = (
         };
     }
 
+    const state: ToolAllowanceState = 'blocked';
     return {
         controlId: 'tool_allowance',
-        value: `blocked:${toolRequest.toolName}:${toolRequest.reasonCode ?? 'policy_blocked'}`,
+        value: `${state}:${toolRequest.toolName}:${toolRequest.reasonCode ?? 'policy_blocked'}`,
         source: 'capability_policy',
         rationale:
             'Requested tool was blocked by capability or policy checks and did not execute.',

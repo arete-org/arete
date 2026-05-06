@@ -9,6 +9,13 @@
 import { z } from 'zod';
 import {
     BOUNDED_REVIEW_ASSESS_DECISIONS,
+    WORKFLOW_MODE_EXECUTION_PRESET_IDS,
+    WORKFLOW_PROFILE_CLASSES,
+    WORKFLOW_PROFILE_IDS,
+    WORKFLOW_EXECUTION_POLICIES,
+    WORKFLOW_REVIEW_PASS_MODES,
+    WORKFLOW_REVISE_STEP_MODES,
+    WORKFLOW_EVIDENCE_POSTURES,
     WORKFLOW_LIMIT_KEYS,
     WORKFLOW_LIMIT_STATES,
     REVIEW_RUNTIME_LABELS,
@@ -698,17 +705,13 @@ const WorkflowModeSelectionSourceSchema = z.enum([
 
 const WorkflowModeBehaviorSchema = z
     .object({
-        executionContractPresetId: z.enum([
-            'fast-direct',
-            'balanced',
-            'quality-grounded',
-        ]),
-        workflowProfileClass: z.enum(['direct', 'reviewed']),
-        workflowProfileId: z.enum(['reviewed', 'generate-only']),
-        workflowExecution: z.enum(['disabled', 'policy_gated', 'always']),
-        reviewPass: z.enum(['included', 'excluded']),
-        reviseStep: z.enum(['allowed', 'disallowed']),
-        evidencePosture: z.enum(['minimal', 'balanced', 'strict']),
+        executionContractPresetId: z.enum(WORKFLOW_MODE_EXECUTION_PRESET_IDS),
+        workflowProfileClass: z.enum(WORKFLOW_PROFILE_CLASSES),
+        workflowProfileId: z.enum(WORKFLOW_PROFILE_IDS),
+        workflowExecution: z.enum(WORKFLOW_EXECUTION_POLICIES),
+        reviewPass: z.enum(WORKFLOW_REVIEW_PASS_MODES),
+        reviseStep: z.enum(WORKFLOW_REVISE_STEP_MODES),
+        evidencePosture: z.enum(WORKFLOW_EVIDENCE_POSTURES),
         maxWorkflowSteps: z.number().int().positive(),
         maxPlanCycles: z.number().int().nonnegative().optional(),
         maxReviewCycles: z.number().int().nonnegative().optional(),

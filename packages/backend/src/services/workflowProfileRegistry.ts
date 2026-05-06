@@ -18,6 +18,7 @@ import type {
     ExecutionResponseMode,
 } from './executionContract.js';
 import type {
+    ReviewIntensity,
     WorkflowModeDecision,
     WorkflowModeId,
 } from '@footnote/contracts/ethics-core';
@@ -152,8 +153,6 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
         maxDeliberationCalls: 4,
     },
 };
-
-export type ReviewIntensity = 'none' | 'light' | 'moderate' | 'high';
 
 /**
  * Canonical review-intensity derivation from workflow-mode behavior.

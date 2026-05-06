@@ -510,13 +510,50 @@ export type WorkflowModeSelectionSource =
 
 export type WorkflowModeEvidencePosture = 'minimal' | 'balanced' | 'strict';
 
+export const WORKFLOW_MODE_EXECUTION_PRESET_IDS = [
+    'fast-direct',
+    'balanced',
+    'quality-grounded',
+] as const;
+
+export type WorkflowModeExecutionPresetId =
+    (typeof WORKFLOW_MODE_EXECUTION_PRESET_IDS)[number];
+
+export const WORKFLOW_PROFILE_CLASSES = ['direct', 'reviewed'] as const;
+export type WorkflowProfileClass = (typeof WORKFLOW_PROFILE_CLASSES)[number];
+
+export const WORKFLOW_PROFILE_IDS = ['reviewed', 'generate-only'] as const;
+export type WorkflowProfileId = (typeof WORKFLOW_PROFILE_IDS)[number];
+
+export const WORKFLOW_EXECUTION_POLICIES = [
+    'disabled',
+    'policy_gated',
+    'always',
+] as const;
+export type WorkflowExecutionPolicy =
+    (typeof WORKFLOW_EXECUTION_POLICIES)[number];
+
+export const WORKFLOW_REVIEW_PASS_MODES = ['included', 'excluded'] as const;
+export type WorkflowReviewPassMode =
+    (typeof WORKFLOW_REVIEW_PASS_MODES)[number];
+
+export const WORKFLOW_REVISE_STEP_MODES = ['allowed', 'disallowed'] as const;
+export type WorkflowReviseStepMode =
+    (typeof WORKFLOW_REVISE_STEP_MODES)[number];
+
+export const WORKFLOW_EVIDENCE_POSTURES = [
+    'minimal',
+    'balanced',
+    'strict',
+] as const;
+
 export type WorkflowModeBehavior = {
-    executionContractPresetId: 'fast-direct' | 'balanced' | 'quality-grounded';
-    workflowProfileClass: 'direct' | 'reviewed';
-    workflowProfileId: 'reviewed' | 'generate-only';
-    workflowExecution: 'disabled' | 'policy_gated' | 'always';
-    reviewPass: 'included' | 'excluded';
-    reviseStep: 'allowed' | 'disallowed';
+    executionContractPresetId: WorkflowModeExecutionPresetId;
+    workflowProfileClass: WorkflowProfileClass;
+    workflowProfileId: WorkflowProfileId;
+    workflowExecution: WorkflowExecutionPolicy;
+    reviewPass: WorkflowReviewPassMode;
+    reviseStep: WorkflowReviseStepMode;
     evidencePosture: WorkflowModeEvidencePosture;
     maxWorkflowSteps: number;
     maxPlanCycles?: number;
@@ -558,6 +595,15 @@ export type ReviewRuntimeSummary = {
     label: ReviewRuntimeLabel;
 };
 
+export const REVIEW_INTENSITY_LEVELS = [
+    'none',
+    'light',
+    'moderate',
+    'high',
+] as const;
+
+export type ReviewIntensity = (typeof REVIEW_INTENSITY_LEVELS)[number];
+
 /**
  * Canonical steerability control ids tracked in response metadata.
  * These remain backend-owned/operator-facing until user controls are exposed.
@@ -596,6 +642,36 @@ export type SteerabilityControlRecord = {
     mattered: boolean;
     impactedTargets: SteerabilityImpactTarget[];
 };
+
+export const PROVIDER_PREFERENCE_OUTCOME_STATES = [
+    'requested_honored',
+    'requested_overridden',
+    'advisory_honored',
+    'advisory_overridden',
+    'fallback_resolved',
+] as const;
+
+export type ProviderPreferenceOutcomeState =
+    (typeof PROVIDER_PREFERENCE_OUTCOME_STATES)[number];
+
+export const TOOL_ALLOWANCE_STATES = [
+    'none_requested',
+    'allowed',
+    'blocked',
+] as const;
+
+export type ToolAllowanceState = (typeof TOOL_ALLOWANCE_STATES)[number];
+
+export const GROUNDING_EVIDENCE_STATUSES = [
+    'sources_available',
+    'sources_missing_after_retrieval',
+    'search_unavailable',
+    'retrieval_not_used',
+    'not_recorded',
+] as const;
+
+export type GroundingEvidenceStatus =
+    (typeof GROUNDING_EVIDENCE_STATUSES)[number];
 
 export type SteerabilityControls = {
     version: 'v1';
