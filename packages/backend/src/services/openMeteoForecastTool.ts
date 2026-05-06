@@ -31,9 +31,6 @@ const MAX_HORIZON_PERIODS = 12;
  * clarification) is included unchanged.
  *
  * === OMISSION NOTES ===
- * - isDaytime: Omitted from periods because Open-Meteo daily endpoint does not
- *   provide sunrise/sunset data; daily summaries don't have meaningful day/night
- *   distinction. Included in type as optional for future hourly implementation.
  * - detailedForecast: Omitted from JSON output; the field is generated for LLM
  *   context but adds noise to the structured payload - the LLM can derive this
  *   from temperature, shortForecast, and precipitationProbability.
@@ -72,9 +69,6 @@ export const formatWeatherToolResultMessage = (
                           name: period.name,
                           startsAt: period.startsAt,
                           endsAt: period.endsAt,
-                          ...(period.isDaytime !== undefined && {
-                              isDaytime: period.isDaytime,
-                          }),
                           temperature: period.temperature,
                           wind: period.wind,
                           shortForecast: period.shortForecast,
@@ -168,8 +162,6 @@ export type WeatherForecastPeriod = {
     name: string;
     startsAt: string;
     endsAt: string;
-    /** Omitted: Open-Meteo daily endpoint does not include sunrise/sunset, so isDaytime cannot be derived. */
-    isDaytime?: boolean;
     temperature: {
         value: number;
         unit: string;

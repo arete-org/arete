@@ -33,7 +33,6 @@ const formatWeatherToolResultMessage = (
                           name: period.name,
                           startsAt: period.startsAt,
                           endsAt: period.endsAt,
-                          isDaytime: period.isDaytime,
                           temperature: period.temperature,
                           wind: period.wind,
                           shortForecast: period.shortForecast,
