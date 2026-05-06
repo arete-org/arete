@@ -63,7 +63,7 @@ const QUALITY_GROUNDED_DEFAULT_LIMITS: Readonly<
     maxDurationMs: 15000,
 };
 
-const BOUNDED_REVIEW_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
+const REVIEWED_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
     profileId: 'reviewed',
     profileVersion: 'v1',
     displayName: 'Reviewed',
@@ -90,7 +90,7 @@ const BOUNDED_REVIEW_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
 const BUILTIN_RUNTIME_WORKFLOW_PROFILES: Readonly<
     Record<BuiltinWorkflowProfileId, RuntimeWorkflowProfile>
 > = {
-    reviewed: BOUNDED_REVIEW_WORKFLOW_PROFILE,
+    reviewed: REVIEWED_WORKFLOW_PROFILE,
 };
 
 export const DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID: BuiltinWorkflowProfileId =
