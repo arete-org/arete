@@ -172,9 +172,13 @@ export type RunBoundedReviewWorkflowInput = {
     plannerStepExecutor?: PlannerStepExecutor;
     // Caller-owned policy application. Engine only consumes continuation output.
     planContinuationBuilder?: PlanContinuationBuilder;
+    // Backward-compatible single integration input used by current callers.
     contextStepRequest?: ContextStepRequest;
+    // Preferred multi-integration input. Engine executes eligible steps in parallel.
     contextStepRequests?: ContextStepRequest[];
+    // Backward-compatible default executor for single-integration callers.
     contextStepExecutor?: ContextStepExecutor;
+    // Preferred executor routing by integration name.
     contextStepExecutorRegistry?: Record<string, ContextStepExecutor>;
 };
 
@@ -1121,6 +1125,11 @@ export const runBoundedReviewWorkflow = async ({
         ];
     };
 
+    /**
+     * Resolve executor authority per context integration.
+     * Registry mapping is authoritative. Fallback executor preserves existing
+     * single-step call sites while migration to registry is in progress.
+     */
     const selectContextStepExecutor = (
         request: ContextStepRequest
     ): ContextStepExecutor | undefined => {
@@ -1151,6 +1160,8 @@ export const runBoundedReviewWorkflow = async ({
             terminationReason = 'transition_blocked_by_policy';
             shouldStop = true;
         } else if (!stopIfOverLimits('tool')) {
+            // Parallel execution keeps integration latency bounded while each
+            // outcome remains independently fail-open and lineage-recorded.
             const contextStepOutcomes = await Promise.all(
                 executableContextSteps.map(
                     async (request): Promise<ContextStepExecutionOutcome> => {
@@ -1326,6 +1337,7 @@ export const runBoundedReviewWorkflow = async ({
             const initialDraftStartedAt = generationStartedAtMs;
             messagesWithContext = injectContextMessagesIntoPrompt(
                 effectiveMessagesWithHints,
+                // Preserve deterministic context ordering by request list order.
                 executedContextStepResults.flatMap(
                     (contextStepResult) =>
                         contextStepResult.contextMessages ?? []

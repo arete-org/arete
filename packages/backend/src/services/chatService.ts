@@ -82,6 +82,13 @@ import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureRespo
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
 
+/**
+ * Builds the fail-open short-circuit response surface for context-step outcomes.
+ *
+ * For compatibility, short-circuit branching uses one effective context-step
+ * execution context (clarification/failure handling). Multi-step citation merge
+ * still happens in assistant metadata after generation.
+ */
 const buildContextStepShortCircuit = ({
     workflowContextStepResult,
     executionContext,
@@ -1071,6 +1078,8 @@ export const createChatService = ({
             });
         }
 
+        // Backend authority merges all context-integration citations so callers
+        // consume one canonical metadata citation surface.
         const contextStepSources =
             workflowContextStepResults?.flatMap(
                 (contextStepResult) => contextStepResult.sources ?? []
