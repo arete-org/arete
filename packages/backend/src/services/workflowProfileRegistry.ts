@@ -199,10 +199,14 @@ const normalizeWorkflowModeId = (
 const inferWorkflowModeIdFromExecutionContract = (
     responseMode: ExecutionResponseMode | undefined
 ): BuiltinWorkflowModeId | undefined => {
-    // TODO(workflow-mode-response-mode-extension): If ExecutionResponseMode adds
-    // `balanced`, map it here so inference stays aligned with canonical mode ids.
+    // ExecutionContract currently exposes `fast_direct|quality_grounded`.
+    // Workflow mode no longer includes `fast`, so map `fast_direct` to
+    // `balanced` as the nearest reviewed execution posture.
     if (responseMode === 'quality_grounded') {
         return 'grounded';
+    }
+    if (responseMode === 'fast_direct') {
+        return 'balanced';
     }
     return undefined;
 };

@@ -181,6 +181,22 @@ test('resolveWorkflowModeDecision maps requested mode ids and emits inspectable 
 });
 
 test('resolveWorkflowModeDecision fails open by inferring from execution contract and then defaulting', () => {
+    const inferredBalanced = resolveWorkflowModeDecision({
+        modeId: 'unknown-mode',
+        executionContractResponseMode: 'fast_direct',
+    });
+    assert.equal(inferredBalanced.isKnownRequestedModeId, false);
+    assert.equal(inferredBalanced.modeDecision.modeId, 'balanced');
+    assert.equal(inferredBalanced.modeDecision.initial_mode, 'balanced');
+    assert.equal(
+        inferredBalanced.modeDecision.selectedBy,
+        'inferred_from_execution_contract'
+    );
+    assert.equal(
+        inferredBalanced.modeDecision.behavior.executionContractPresetId,
+        'balanced'
+    );
+
     const inferred = resolveWorkflowModeDecision({
         modeId: 'unknown-mode',
         executionContractResponseMode: 'quality_grounded',
