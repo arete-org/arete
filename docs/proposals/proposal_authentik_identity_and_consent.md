@@ -150,7 +150,3 @@ The point is to make identity useful without letting it take over the meaning of
 - authentik user settings: https://docs.goauthentik.io/add-secure-apps/flows-stages/flow/executors/user-settings
 - authentik providers overview: https://docs.goauthentik.io/docs/providers/
 - authentik 2025.10 release notes: https://docs.goauthentik.io/docs/releases/2025.10
-
----
-
-_Prepared for later implementation planning and community discussion within Footnote._
