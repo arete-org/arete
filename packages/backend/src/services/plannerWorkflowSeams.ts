@@ -114,6 +114,7 @@ export type PlannerApplicationResult = {
     toolRequestContext: ToolInvocationRequest;
     toolExecutionContext?: ToolExecutionContext;
     contextStepRequest?: ContextStepRequest;
+    contextStepRequests?: ContextStepRequest[];
     plannerApplyOutcome: PlannerExecutionApplyOutcome;
     plannerMattered: boolean;
     plannerMatteredControlIds: SteerabilityControlId[];

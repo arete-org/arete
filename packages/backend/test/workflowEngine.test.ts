@@ -1445,22 +1445,20 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
     assert.equal(result.outcome, 'generated');
     assert.ok(Math.abs(weatherStartedAt - webSearchStartedAt) < 35);
     assert.equal(result.contextStepResults?.length, 2);
-    assert.equal(
-        observedMessages[0]?.some(
-            (message) =>
-                message.role === 'system' &&
-                message.content === 'weather_context: clear skies'
-        ),
-        true
+    const firstMessageBatch = observedMessages[0] ?? [];
+    const weatherContextMessageIndex = firstMessageBatch.findIndex(
+        (message) =>
+            message.role === 'system' &&
+            message.content === 'weather_context: clear skies'
     );
-    assert.equal(
-        observedMessages[0]?.some(
-            (message) =>
-                message.role === 'system' &&
-                message.content === 'web_context: top result'
-        ),
-        true
+    const webContextMessageIndex = firstMessageBatch.findIndex(
+        (message) =>
+            message.role === 'system' &&
+            message.content === 'web_context: top result'
     );
+    assert.ok(weatherContextMessageIndex >= 0);
+    assert.ok(webContextMessageIndex >= 0);
+    assert.ok(weatherContextMessageIndex < webContextMessageIndex);
 });
 
 test('runBoundedReviewWorkflow records failed injected context step with reason and continues fail-open', async () => {

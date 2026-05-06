@@ -240,6 +240,7 @@ type ContextStepExecutionOutcome = {
     request: ContextStepRequest;
     result?: ContextStepResult;
     error?: unknown;
+    blockedByLimit?: boolean;
     startedAtMs: number;
     finishedAtMs: number;
 };
@@ -1162,9 +1163,28 @@ export const runBoundedReviewWorkflow = async ({
         } else if (!stopIfOverLimits('tool')) {
             // Parallel execution keeps integration latency bounded while each
             // outcome remains independently fail-open and lineage-recorded.
+            const remainingToolCalls =
+                executionLimits.maxToolCalls === UNBOUNDED_LIMIT
+                    ? Number.POSITIVE_INFINITY
+                    : Math.max(
+                          0,
+                          executionLimits.maxToolCalls -
+                              workflowState.toolCallCount
+                      );
+            let reservedToolCallCount = 0;
             const contextStepOutcomes = await Promise.all(
                 executableContextSteps.map(
                     async (request): Promise<ContextStepExecutionOutcome> => {
+                        if (reservedToolCallCount >= remainingToolCalls) {
+                            const blockedAtMs = Date.now();
+                            return {
+                                request,
+                                blockedByLimit: true,
+                                startedAtMs: blockedAtMs,
+                                finishedAtMs: blockedAtMs,
+                            };
+                        }
+                        reservedToolCallCount += 1;
                         const executor = selectContextStepExecutor(request);
                         if (executor === undefined) {
                             return {
@@ -1199,6 +1219,14 @@ export const runBoundedReviewWorkflow = async ({
                 )
             );
             for (const contextStepOutcome of contextStepOutcomes) {
+                if (contextStepOutcome.blockedByLimit === true) {
+                    exhaustedLimitKey = 'max_tool_calls';
+                    terminationReason =
+                        mapExhaustedLimitToTerminationReason(exhaustedLimitKey);
+                    workflowStatus = 'degraded';
+                    shouldStop = true;
+                    continue;
+                }
                 if (contextStepOutcome.error !== undefined) {
                     logger.error(
                         'Context step execution failed; workflow continued fail-open without context.',

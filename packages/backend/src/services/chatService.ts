@@ -88,22 +88,18 @@ const SURFACED_NO_GENERATION_MESSAGE =
  * The short-circuit branch can return early when a context step asks for user
  * clarification or reports a known tool failure pattern.
  *
- * Compatibility rule: this branch reads one effective context-step execution
- * context (the existing single-result shape) for clarification/failure routing.
- * This keeps older callers stable while multi-context execution is available.
+ * Compatibility rule: this branch prefers the full context-step result list
+ * when available, and falls back to the legacy single-result field for older
+ * callers.
  *
  * Citation rule: when generation continues, citations from all executed context
  * integrations are merged later into assistant metadata. This helper does not
  * own that merge.
  *
- * TODO: This helper currently checks only one context-step result when deciding
- * whether to short-circuit for clarification or known tool failure. Update it
- * to evaluate the full list of context-step results so short-circuit decisions
- * reflect every executed integration, then remove this single-result
- * compatibility behavior.
  */
 const buildContextStepShortCircuit = ({
     workflowContextStepResult,
+    workflowContextStepResults,
     executionContext,
     toolRequest,
     model,
@@ -113,6 +109,7 @@ const buildContextStepShortCircuit = ({
     buildResponseMetadata,
 }: {
     workflowContextStepResult: ContextStepResult | undefined;
+    workflowContextStepResults?: ContextStepResult[];
     executionContext: ResponseMetadataRuntimeContext['executionContext'];
     toolRequest: ToolInvocationRequest | undefined;
     model: string | undefined;
@@ -129,12 +126,14 @@ const buildContextStepShortCircuit = ({
           telemetry: FinalToolExecutionTelemetry;
       }
     | undefined => {
-    if (workflowContextStepResult === undefined) {
+    const effectiveContextStepResults =
+        workflowContextStepResults ??
+        (workflowContextStepResult !== undefined
+            ? [workflowContextStepResult]
+            : []);
+    if (effectiveContextStepResults.length === 0) {
         return undefined;
     }
-
-    const { executionContext: contextExecutionContext } =
-        workflowContextStepResult;
 
     const buildGenerationMetadataContext = () => ({
         modelVersion: model ?? defaultModel,
@@ -167,60 +166,63 @@ const buildContextStepShortCircuit = ({
 
     const generationMetadataContext = buildGenerationMetadataContext();
 
-    if (contextExecutionContext.clarification !== undefined) {
-        const clarificationResponse = buildToolClarificationResponse({
-            toolContext: contextExecutionContext,
-            metadataContext: generationMetadataContext as Parameters<
-                typeof buildToolClarificationResponse
-            >[0]['metadataContext'],
-            buildResponseMetadata,
-        });
-        return {
-            response: clarificationResponse,
-            telemetry: {
-                toolName: contextExecutionContext.toolName,
-                status: contextExecutionContext.status,
-                ...(contextExecutionContext.reasonCode !== undefined && {
-                    reasonCode: contextExecutionContext.reasonCode,
-                }),
-                ...(toolRequest !== undefined && {
-                    eligible: toolRequest.eligible,
-                }),
-                ...(toolRequest?.reasonCode !== undefined && {
-                    requestReasonCode: toolRequest.reasonCode,
-                }),
-            },
-        };
-    }
+    for (const contextStepResult of effectiveContextStepResults) {
+        const contextExecutionContext = contextStepResult.executionContext;
+        if (contextExecutionContext.clarification !== undefined) {
+            const clarificationResponse = buildToolClarificationResponse({
+                toolContext: contextExecutionContext,
+                metadataContext: generationMetadataContext as Parameters<
+                    typeof buildToolClarificationResponse
+                >[0]['metadataContext'],
+                buildResponseMetadata,
+            });
+            return {
+                response: clarificationResponse,
+                telemetry: {
+                    toolName: contextExecutionContext.toolName,
+                    status: contextExecutionContext.status,
+                    ...(contextExecutionContext.reasonCode !== undefined && {
+                        reasonCode: contextExecutionContext.reasonCode,
+                    }),
+                    ...(toolRequest !== undefined && {
+                        eligible: toolRequest.eligible,
+                    }),
+                    ...(toolRequest?.reasonCode !== undefined && {
+                        requestReasonCode: toolRequest.reasonCode,
+                    }),
+                },
+            };
+        }
 
-    if (
-        contextExecutionContext.toolName === 'weather_forecast' &&
-        contextExecutionContext.status === 'failed'
-    ) {
-        const failureResponse = buildWeatherToolFailureResponse({
-            toolContext: contextExecutionContext,
-            metadataContext: generationMetadataContext as Parameters<
-                typeof buildWeatherToolFailureResponse
-            >[0]['metadataContext'],
-            latestUserInput: latestUserInput ?? conversationSnapshot,
-            buildResponseMetadata,
-        });
-        return {
-            response: failureResponse,
-            telemetry: {
-                toolName: contextExecutionContext.toolName,
-                status: contextExecutionContext.status,
-                ...(contextExecutionContext.reasonCode !== undefined && {
-                    reasonCode: contextExecutionContext.reasonCode,
-                }),
-                ...(toolRequest !== undefined && {
-                    eligible: toolRequest.eligible,
-                }),
-                ...(toolRequest?.reasonCode !== undefined && {
-                    requestReasonCode: toolRequest.reasonCode,
-                }),
-            },
-        };
+        if (
+            contextExecutionContext.toolName === 'weather_forecast' &&
+            contextExecutionContext.status === 'failed'
+        ) {
+            const failureResponse = buildWeatherToolFailureResponse({
+                toolContext: contextExecutionContext,
+                metadataContext: generationMetadataContext as Parameters<
+                    typeof buildWeatherToolFailureResponse
+                >[0]['metadataContext'],
+                latestUserInput: latestUserInput ?? conversationSnapshot,
+                buildResponseMetadata,
+            });
+            return {
+                response: failureResponse,
+                telemetry: {
+                    toolName: contextExecutionContext.toolName,
+                    status: contextExecutionContext.status,
+                    ...(contextExecutionContext.reasonCode !== undefined && {
+                        reasonCode: contextExecutionContext.reasonCode,
+                    }),
+                    ...(toolRequest !== undefined && {
+                        eligible: toolRequest.eligible,
+                    }),
+                    ...(toolRequest?.reasonCode !== undefined && {
+                        requestReasonCode: toolRequest.reasonCode,
+                    }),
+                },
+            };
+        }
     }
 
     return undefined;
@@ -876,6 +878,7 @@ export const createChatService = ({
                     workflowLineage = workflowResult.workflowLineage;
                     const generatedShortCircuit = buildContextStepShortCircuit({
                         workflowContextStepResult,
+                        workflowContextStepResults,
                         executionContext,
                         toolRequest,
                         model,
@@ -911,6 +914,7 @@ export const createChatService = ({
                     workflowLineage = workflowResult.workflowLineage;
                     const noGenShortCircuit = buildContextStepShortCircuit({
                         workflowContextStepResult,
+                        workflowContextStepResults,
                         executionContext,
                         toolRequest,
                         model,

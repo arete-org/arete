@@ -594,8 +594,17 @@ export const createChatOrchestrator = ({
                 },
                 plannerTemperament: executionPlan.generation.temperament,
                 conversationSnapshot: postPlanAssembly.conversationSnapshot,
-                ...(plannerApplication.contextStepRequest !== undefined && {
-                    contextStepRequest: plannerApplication.contextStepRequest,
+                ...((plannerApplication.contextStepRequests !== undefined ||
+                    plannerApplication.contextStepRequest !== undefined) && {
+                    ...(plannerApplication.contextStepRequest !== undefined && {
+                        contextStepRequest:
+                            plannerApplication.contextStepRequest,
+                    }),
+                    contextStepRequests:
+                        plannerApplication.contextStepRequests ??
+                        (plannerApplication.contextStepRequest !== undefined
+                            ? [plannerApplication.contextStepRequest]
+                            : []),
                 }),
                 plannerSummary: buildPlannerSummary({
                     plannerStepResult: input.plannerStepResult,
