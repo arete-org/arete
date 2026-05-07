@@ -31,9 +31,8 @@ This file tracks the remaining rollout work. The canonical architecture is in
 
 ## Pending Work
 
-- **Tool/context-step expansion**: Only `weather_forecast` uses the workflow
-  context-step path. The infrastructure exists for additional tools, but none
-  are implemented yet.
+- **Tool/context-step expansion**: `weather_forecast` and `file_scan` now use
+  the workflow context-step path. Additional integrations are still pending.
 
 - **web_search**: Not migrated to context-step execution. It still uses the
   current search/runtime path. The proposal in
