@@ -411,6 +411,12 @@ export const createChatOrchestrator = ({
                     internalImageDescriptionTaskService,
                 logger: chatOrchestratorLogger,
             });
+        // Keep this registry additive so parallel Context Integration branches
+        // can merge by appending entries without restructuring call sites.
+        const contextStepExecutorRegistry = {
+            weather_forecast: weatherContextStepExecutor,
+            file_scan: fileScanningContextStepExecutor,
+        };
         const buildPlannerSummary = (input: {
             plannerStepResult: PlannerStepResult;
             plannerApplication: ReturnType<typeof plannerResultApplier>;
@@ -649,10 +655,7 @@ export const createChatOrchestrator = ({
             plannerStepRequest,
             plannerStepExecutor,
             planContinuationBuilder,
-            contextStepExecutorRegistry: {
-                weather_forecast: weatherContextStepExecutor,
-                file_scan: fileScanningContextStepExecutor,
-            },
+            contextStepExecutorRegistry,
             latestUserInput: normalizedRequest.latestUserInput,
             ExecutionContract: resolvedExecutionContract,
             ...(executionContractScopeTuple !== undefined && {

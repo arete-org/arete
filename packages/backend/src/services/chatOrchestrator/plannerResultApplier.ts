@@ -131,10 +131,11 @@ export const createPlannerResultApplier = (
         });
 
         const contextStepRequest =
-            toolSelection.toolRequest.toolName === 'weather_forecast' &&
+            (toolSelection.toolRequest.toolName === 'weather_forecast' ||
+                toolSelection.toolRequest.toolName === 'web_search') &&
             toolSelection.toolRequest.requested
                 ? {
-                      integrationName: 'weather_forecast',
+                      integrationName: toolSelection.toolRequest.toolName,
                       requested: toolSelection.toolRequest.requested,
                       eligible: toolSelection.toolRequest.eligible,
                       ...(toolSelection.toolRequest.reasonCode !==
