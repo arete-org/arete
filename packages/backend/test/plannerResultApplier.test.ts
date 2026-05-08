@@ -165,10 +165,19 @@ test('PlannerResultApplier enforces single-tool policy and derives weather conte
 
     assert.equal(output.toolRequestContext.toolName, 'weather_forecast');
     assert.equal(output.toolRequestContext.requested, true);
-    assert.equal(
-        output.contextStepRequest?.integrationName,
-        'weather_forecast'
-    );
+    assert.deepEqual(output.contextStepRequests, [
+        {
+            integrationName: 'weather_forecast',
+            requested: true,
+            eligible: true,
+            input: {
+                location: {
+                    type: 'place_query',
+                    query: 'Paris',
+                },
+            },
+        },
+    ]);
     assert.deepEqual(output.generationForExecution.search, {
         query: 'Paris weather',
         contextSize: 'low',
@@ -197,4 +206,68 @@ test('PlannerResultApplier resolves profile and keeps planner suggestions non-au
     assert.equal(typeof output.selectedResponseProfile.id, 'string');
     assert.equal(output.plan.profileId, output.selectedResponseProfile.id);
     assert.equal(output.plannerApplyOutcome, 'applied');
+});
+
+test('PlannerResultApplier derives web-search context-step request when web search is selected', () => {
+    const applier = createApplier();
+    const output = applier({
+        normalizedRequest: createChatRequest({
+            latestUserInput: 'What changed in TypeScript 5.7?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'What changed in TypeScript 5.7?',
+                },
+            ],
+        }),
+        plannerStepResult: createPlannerStepResult({
+            plan: {
+                ...createPlannerStepResult().plan,
+                generation: {
+                    ...createPlannerStepResult().plan.generation,
+                    toolIntent: {
+                        toolName: 'web_search',
+                        requested: true,
+                        input: {
+                            query: 'TypeScript 5.7 release notes',
+                            contextSize: 'medium',
+                            intent: 'current_facts',
+                        },
+                    },
+                    search: {
+                        query: 'TypeScript 5.7 release notes',
+                        contextSize: 'medium',
+                        intent: 'current_facts',
+                    },
+                },
+            },
+            diagnostics: {
+                rawToolIntentPresent: true,
+                normalizedToolIntentPresent: true,
+                toolIntentRejected: false,
+                toolIntentRejectionReasons: [],
+                rawToolIntentName: 'web_search',
+                normalizedToolIntentName: 'web_search',
+            },
+        }),
+        clarificationContinuation: { kind: 'none' },
+        resolvedExecutionPolicy: resolveExecutionContract({
+            presetId: 'quality-grounded',
+        }).policyContract,
+    });
+
+    assert.equal(output.toolRequestContext.toolName, 'web_search');
+    assert.equal(output.toolRequestContext.requested, true);
+    assert.deepEqual(output.contextStepRequests, [
+        {
+            integrationName: 'web_search',
+            requested: true,
+            eligible: true,
+            input: {
+                query: 'TypeScript 5.7 release notes',
+                contextSize: 'medium',
+                intent: 'current_facts',
+            },
+        },
+    ]);
 });

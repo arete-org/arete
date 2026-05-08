@@ -43,7 +43,8 @@ export const buildRuntimeConfig = (
     );
     const voltagent = buildVoltAgentSection(env, warn);
     const web = buildWebSection(env, warn);
-    const { reflect, trace, chatWorkflow } = buildServiceSections(env, warn);
+    const { reflect, trace, chatWorkflow, webSearchProviders } =
+        buildServiceSections(env, warn);
     const executionContractTrustGraph = buildExecutionContractTrustGraphSection(
         env,
         warn
@@ -73,6 +74,7 @@ export const buildRuntimeConfig = (
         reflect,
         trace,
         chatWorkflow,
+        webSearchProviders,
         executionContractTrustGraph,
         turnstile,
         rateLimits,

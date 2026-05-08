@@ -82,40 +82,44 @@ test('weather success flows through workflow context-step: tool step recorded in
             enableAssessment: true,
             enableRevision: true,
         },
-        contextStepRequest: {
-            integrationName: 'weather_forecast',
-            requested: true,
-            eligible: true,
-            input: {
-                location: {
-                    type: 'lat_lon',
-                    latitude: 39.7684,
-                    longitude: -86.1581,
+        contextStepRequests: [
+            {
+                integrationName: 'weather_forecast',
+                requested: true,
+                eligible: true,
+                input: {
+                    location: {
+                        type: 'lat_lon',
+                        latitude: 39.7684,
+                        longitude: -86.1581,
+                    },
                 },
             },
-        },
-        contextStepExecutor: async ({ request }) => {
-            const execution = await weatherForecastTool.fetchForecast(
-                request.input as {
-                    location: {
-                        type: 'lat_lon';
-                        latitude: number;
-                        longitude: number;
-                    };
-                }
-            );
-            return {
-                executionContext: {
-                    toolName: 'weather_forecast',
-                    status: 'executed',
-                    durationMs: 10,
-                },
-                contextMessages: [
-                    execution.status === 'ok' && execution.location?.name
-                        ? `Weather in ${execution.location.name}: clear skies`
-                        : 'Weather context: clear skies',
-                ],
-            };
+        ],
+        contextStepExecutorRegistry: {
+            weather_forecast: async ({ request }) => {
+                const execution = await weatherForecastTool.fetchForecast(
+                    request.input as {
+                        location: {
+                            type: 'lat_lon';
+                            latitude: number;
+                            longitude: number;
+                        };
+                    }
+                );
+                return {
+                    executionContext: {
+                        toolName: 'weather_forecast',
+                        status: 'executed',
+                        durationMs: 10,
+                    },
+                    contextMessages: [
+                        execution.status === 'ok' && execution.location?.name
+                            ? `Weather in ${execution.location.name}: clear skies`
+                            : 'Weather context: clear skies',
+                    ],
+                };
+            },
         },
         captureUsage: (generationResult) => ({
             model: generationResult.model ?? 'gpt-5-mini',
@@ -190,32 +194,36 @@ test('weather failure preserves fail-open: generation runs, tool step recorded a
             enableAssessment: true,
             enableRevision: true,
         },
-        contextStepRequest: {
-            integrationName: 'weather_forecast',
-            requested: true,
-            eligible: true,
-            input: { location: 'Indianapolis' },
-        },
-        contextStepExecutor: async () => {
-            try {
-                await weatherForecastTool.fetchForecast({
-                    location: 'Indianapolis',
-                } as never);
-                return {
-                    executionContext: {
-                        toolName: 'weather_forecast',
-                        status: 'executed',
-                    },
-                };
-            } catch {
-                return {
-                    executionContext: {
-                        toolName: 'weather_forecast',
-                        status: 'failed',
-                        reasonCode: 'tool_execution_error',
-                    },
-                };
-            }
+        contextStepRequests: [
+            {
+                integrationName: 'weather_forecast',
+                requested: true,
+                eligible: true,
+                input: { location: 'Indianapolis' },
+            },
+        ],
+        contextStepExecutorRegistry: {
+            weather_forecast: async () => {
+                try {
+                    await weatherForecastTool.fetchForecast({
+                        location: 'Indianapolis',
+                    } as never);
+                    return {
+                        executionContext: {
+                            toolName: 'weather_forecast',
+                            status: 'executed',
+                        },
+                    };
+                } catch {
+                    return {
+                        executionContext: {
+                            toolName: 'weather_forecast',
+                            status: 'failed',
+                            reasonCode: 'tool_execution_error',
+                        },
+                    };
+                }
+            },
         },
         captureUsage: (generationResult) => ({
             model: generationResult.model ?? 'gpt-5-mini',
@@ -293,29 +301,36 @@ test('weather clarification short-circuits: no generation, clarification respons
             enableAssessment: true,
             enableRevision: true,
         },
-        contextStepRequest: {
-            integrationName: 'weather_forecast',
-            requested: true,
-            eligible: true,
-            input: { location: 'New York' },
+        contextStepRequests: [
+            {
+                integrationName: 'weather_forecast',
+                requested: true,
+                eligible: true,
+                input: { location: 'New York' },
+            },
+        ],
+        contextStepExecutorRegistry: {
+            weather_forecast: async () => ({
+                executionContext: {
+                    toolName: 'weather_forecast',
+                    status: 'executed',
+                },
+                clarification: {
+                    reasonCode: 'ambiguous_location',
+                    question: 'Which New York did you mean?',
+                    options: [
+                        {
+                            id: 'nyc',
+                            label: 'New York City, New York, United States',
+                        },
+                        {
+                            id: 'albany',
+                            label: 'Albany, New York, United States',
+                        },
+                    ],
+                },
+            }),
         },
-        contextStepExecutor: async () => ({
-            executionContext: {
-                toolName: 'weather_forecast',
-                status: 'executed',
-            },
-            clarification: {
-                reasonCode: 'ambiguous_location',
-                question: 'Which New York did you mean?',
-                options: [
-                    {
-                        id: 'nyc',
-                        label: 'New York City, New York, United States',
-                    },
-                    { id: 'albany', label: 'Albany, New York, United States' },
-                ],
-            },
-        }),
         captureUsage: (generationResult) => ({
             model: generationResult.model ?? 'gpt-5-mini',
             promptTokens: generationResult.usage?.promptTokens ?? 0,
@@ -354,7 +369,7 @@ test('weather clarification short-circuits: no generation, clarification respons
         'Tool step should have clarification reason'
     );
     assert.equal(
-        result.contextStepResult?.clarification?.reasonCode,
+        result.contextStepResults?.[0]?.clarification?.reasonCode,
         'ambiguous_location',
         'Context result should have clarification'
     );

@@ -39,6 +39,7 @@ import { buildSteerabilityControls } from './steerabilityControls.js';
 import type { WeatherForecastTool } from './contextIntegrations/weather/index.js';
 import { resolveWeatherClarificationContinuation } from './tools/weatherClarificationContinuation.js';
 import { createWeatherForecastContextStepExecutor } from './contextIntegrations/weather/index.js';
+import { createWebSearchContextStepExecutor } from './contextIntegrations/webSearch/index.js';
 import { createPlannerResultApplier } from './chatOrchestrator/plannerResultApplier.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -401,6 +402,17 @@ export const createChatOrchestrator = ({
                     chatOrchestratorLogger.warn(message, meta);
                 },
             });
+        const webSearchContextStepExecutor = createWebSearchContextStepExecutor(
+            {
+                providerPolicy: runtimeConfig.webSearchProviders,
+            }
+        );
+        // Keep Context Integration registry assembly additive so parallel
+        // branches can append new integration executors with minimal conflicts.
+        const contextStepExecutorRegistry = {
+            weather_forecast: weatherContextStepExecutor,
+            web_search: webSearchContextStepExecutor,
+        } as const;
         const buildPlannerSummary = (input: {
             plannerStepResult: PlannerStepResult;
             plannerApplication: ReturnType<typeof plannerResultApplier>;
@@ -594,17 +606,8 @@ export const createChatOrchestrator = ({
                 },
                 plannerTemperament: executionPlan.generation.temperament,
                 conversationSnapshot: postPlanAssembly.conversationSnapshot,
-                ...((plannerApplication.contextStepRequests !== undefined ||
-                    plannerApplication.contextStepRequest !== undefined) && {
-                    ...(plannerApplication.contextStepRequest !== undefined && {
-                        contextStepRequest:
-                            plannerApplication.contextStepRequest,
-                    }),
-                    contextStepRequests:
-                        plannerApplication.contextStepRequests ??
-                        (plannerApplication.contextStepRequest !== undefined
-                            ? [plannerApplication.contextStepRequest]
-                            : []),
+                ...(plannerApplication.contextStepRequests !== undefined && {
+                    contextStepRequests: plannerApplication.contextStepRequests,
                 }),
                 plannerSummary: buildPlannerSummary({
                     plannerStepResult: input.plannerStepResult,
@@ -639,7 +642,7 @@ export const createChatOrchestrator = ({
             plannerStepRequest,
             plannerStepExecutor,
             planContinuationBuilder,
-            contextStepExecutor: weatherContextStepExecutor,
+            contextStepExecutorRegistry,
             latestUserInput: normalizedRequest.latestUserInput,
             ExecutionContract: resolvedExecutionContract,
             ...(executionContractScopeTuple !== undefined && {

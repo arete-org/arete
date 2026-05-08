@@ -113,7 +113,6 @@ export type PlannerApplicationResult = {
     capabilityReasonCode?: string;
     toolRequestContext: ToolInvocationRequest;
     toolExecutionContext?: ToolExecutionContext;
-    contextStepRequest?: ContextStepRequest;
     contextStepRequests?: ContextStepRequest[];
     plannerApplyOutcome: PlannerExecutionApplyOutcome;
     plannerMattered: boolean;
@@ -183,8 +182,6 @@ export type PlanContinuation = {
           generationRequest: GenerationRequest;
           plannerTemperament?: PartialResponseTemperament;
           conversationSnapshot: string;
-          // Backward-compatible single integration field for existing callers.
-          contextStepRequest?: ContextStepRequest;
           // Preferred multi-integration field consumed by parallel context-step execution.
           contextStepRequests?: ContextStepRequest[];
       }

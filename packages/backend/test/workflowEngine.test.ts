@@ -1312,20 +1312,24 @@ test('runBoundedReviewWorkflow executes injected context step and records contex
             enableAssessment: true,
             enableRevision: true,
         },
-        contextStepRequest: {
-            integrationName: 'weather_forecast',
-            requested: true,
-            eligible: true,
-            input: { location: 'Indianapolis' },
-        },
-        contextStepExecutor: async () => ({
-            executionContext: {
-                toolName: 'weather_forecast',
-                status: 'executed',
-                durationMs: 4,
+        contextStepRequests: [
+            {
+                integrationName: 'weather_forecast',
+                requested: true,
+                eligible: true,
+                input: { location: 'Indianapolis' },
             },
-            contextMessages: ['weather_context: clear skies'],
-        }),
+        ],
+        contextStepExecutorRegistry: {
+            weather_forecast: async () => ({
+                executionContext: {
+                    toolName: 'weather_forecast',
+                    status: 'executed',
+                    durationMs: 4,
+                },
+                contextMessages: ['weather_context: clear skies'],
+            }),
+        },
         captureUsage: (generationResult) => ({
             model: generationResult.model ?? 'gpt-5-mini',
             promptTokens: generationResult.usage?.promptTokens ?? 0,
@@ -1500,20 +1504,24 @@ test('runBoundedReviewWorkflow records failed injected context step with reason 
             enableAssessment: true,
             enableRevision: true,
         },
-        contextStepRequest: {
-            integrationName: 'weather_forecast',
-            requested: true,
-            eligible: true,
-            input: { location: 'Indianapolis' },
-        },
-        contextStepExecutor: async () => ({
-            executionContext: {
-                toolName: 'weather_forecast',
-                status: 'failed',
-                reasonCode: 'tool_timeout',
-                durationMs: 10,
+        contextStepRequests: [
+            {
+                integrationName: 'weather_forecast',
+                requested: true,
+                eligible: true,
+                input: { location: 'Indianapolis' },
             },
-        }),
+        ],
+        contextStepExecutorRegistry: {
+            weather_forecast: async () => ({
+                executionContext: {
+                    toolName: 'weather_forecast',
+                    status: 'failed',
+                    reasonCode: 'tool_timeout',
+                    durationMs: 10,
+                },
+            }),
+        },
         captureUsage: (generationResult) => ({
             model: generationResult.model ?? 'gpt-5-mini',
             promptTokens: generationResult.usage?.promptTokens ?? 0,
@@ -1577,26 +1585,30 @@ test('runBoundedReviewWorkflow stops before generation when injected context ste
             enableAssessment: true,
             enableRevision: true,
         },
-        contextStepRequest: {
-            integrationName: 'weather_forecast',
-            requested: true,
-            eligible: true,
-            input: { location: 'Springfield' },
+        contextStepRequests: [
+            {
+                integrationName: 'weather_forecast',
+                requested: true,
+                eligible: true,
+                input: { location: 'Springfield' },
+            },
+        ],
+        contextStepExecutorRegistry: {
+            weather_forecast: async () => ({
+                executionContext: {
+                    toolName: 'weather_forecast',
+                    status: 'executed',
+                },
+                clarification: {
+                    reasonCode: 'ambiguous_location',
+                    question: 'Which Springfield did you mean?',
+                    options: [
+                        { id: '1', label: 'Springfield, Illinois' },
+                        { id: '2', label: 'Springfield, Missouri' },
+                    ],
+                },
+            }),
         },
-        contextStepExecutor: async () => ({
-            executionContext: {
-                toolName: 'weather_forecast',
-                status: 'executed',
-            },
-            clarification: {
-                reasonCode: 'ambiguous_location',
-                question: 'Which Springfield did you mean?',
-                options: [
-                    { id: '1', label: 'Springfield, Illinois' },
-                    { id: '2', label: 'Springfield, Missouri' },
-                ],
-            },
-        }),
         captureUsage: () => ({
             model: 'gpt-5-mini',
             promptTokens: 0,

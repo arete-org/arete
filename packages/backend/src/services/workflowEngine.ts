@@ -172,12 +172,8 @@ export type RunBoundedReviewWorkflowInput = {
     plannerStepExecutor?: PlannerStepExecutor;
     // Caller-owned policy application. Engine only consumes continuation output.
     planContinuationBuilder?: PlanContinuationBuilder;
-    // Backward-compatible single integration input used by current callers.
-    contextStepRequest?: ContextStepRequest;
     // Preferred multi-integration input. Engine executes eligible steps in parallel.
     contextStepRequests?: ContextStepRequest[];
-    // Backward-compatible default executor for single-integration callers.
-    contextStepExecutor?: ContextStepExecutor;
     // Preferred executor routing by integration name.
     contextStepExecutorRegistry?: Record<string, ContextStepExecutor>;
 };
@@ -189,7 +185,6 @@ export type RunBoundedReviewWorkflowResult =
           workflowLineage: WorkflowRecord;
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
-          contextStepResult?: ContextStepResult;
           contextStepResults?: ContextStepResult[];
       }
     | {
@@ -198,7 +193,6 @@ export type RunBoundedReviewWorkflowResult =
           workflowLineage: WorkflowRecord;
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
-          contextStepResult?: ContextStepResult;
           contextStepResults?: ContextStepResult[];
       }
     | {
@@ -206,7 +200,6 @@ export type RunBoundedReviewWorkflowResult =
           workflowLineage: WorkflowRecord;
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
-          contextStepResult?: ContextStepResult;
           contextStepResults?: ContextStepResult[];
       };
 
@@ -735,9 +728,7 @@ export const runBoundedReviewWorkflow = async ({
     plannerStepRequest,
     plannerStepExecutor,
     planContinuationBuilder,
-    contextStepRequest,
     contextStepRequests,
-    contextStepExecutor,
     contextStepExecutorRegistry,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
     // NOTE: Concrete tool execution is still orchestrator/registry-owned.
@@ -789,12 +780,10 @@ export const runBoundedReviewWorkflow = async ({
     let latestReviewReason: string | undefined;
     let shouldStop = false;
     let exhaustedLimitKey: WorkflowLimitKey | undefined;
-    let executedContextStepResult: ContextStepResult | undefined;
     let executedContextStepResults: ContextStepResult[] = [];
     let messagesWithContext = messagesWithHints;
     let effectiveGenerationRequest = generationRequest;
     let effectiveMessagesWithHints = messagesWithHints;
-    let effectiveContextStepRequest = contextStepRequest;
     let effectiveContextStepRequests = contextStepRequests;
     let workflowTerminalAction: PlanTerminalAction | undefined;
     let planContinuation: PlanContinuation | undefined;
@@ -1036,9 +1025,6 @@ export const runBoundedReviewWorkflow = async ({
             } else {
                 effectiveGenerationRequest = planContinuation.generationRequest;
                 effectiveMessagesWithHints = planContinuation.messagesWithHints;
-                effectiveContextStepRequest =
-                    planContinuation.contextStepRequest ??
-                    effectiveContextStepRequest;
                 effectiveContextStepRequests =
                     planContinuation.contextStepRequests ??
                     effectiveContextStepRequests;
@@ -1128,25 +1114,16 @@ export const runBoundedReviewWorkflow = async ({
 
     /**
      * Resolve executor authority per context integration.
-     * Registry mapping is authoritative. Fallback executor preserves existing
-     * single-step call sites while migration to registry is in progress.
+     * Registry mapping is authoritative.
      */
     const selectContextStepExecutor = (
         request: ContextStepRequest
     ): ContextStepExecutor | undefined => {
-        const registryExecutor =
-            contextStepExecutorRegistry?.[request.integrationName];
-        if (registryExecutor !== undefined) {
-            return registryExecutor;
-        }
-        return contextStepExecutor;
+        return contextStepExecutorRegistry?.[request.integrationName];
     };
-    const requestedContextSteps = (
-        effectiveContextStepRequests ??
-        (effectiveContextStepRequest !== undefined
-            ? [effectiveContextStepRequest]
-            : [])
-    ).filter((request) => request.requested === true && request.eligible);
+    const requestedContextSteps = (effectiveContextStepRequests ?? []).filter(
+        (request) => request.requested === true && request.eligible
+    );
     const executableContextSteps = requestedContextSteps.filter(
         (request) => selectContextStepExecutor(request) !== undefined
     );
@@ -1347,7 +1324,6 @@ export const runBoundedReviewWorkflow = async ({
                     shouldStop = true;
                 }
             }
-            executedContextStepResult = executedContextStepResults.at(0);
         }
     }
 
@@ -1707,9 +1683,6 @@ export const runBoundedReviewWorkflow = async ({
             ...(planContinuation !== undefined && {
                 planContinuation,
             }),
-            ...(executedContextStepResult !== undefined && {
-                contextStepResult: executedContextStepResult,
-            }),
             ...(executedContextStepResults.length > 0 && {
                 contextStepResults: executedContextStepResults,
             }),
@@ -1726,9 +1699,6 @@ export const runBoundedReviewWorkflow = async ({
             ...(planContinuation !== undefined && {
                 planContinuation,
             }),
-            ...(executedContextStepResult !== undefined && {
-                contextStepResult: executedContextStepResult,
-            }),
             ...(executedContextStepResults.length > 0 && {
                 contextStepResults: executedContextStepResults,
             }),
@@ -1744,9 +1714,6 @@ export const runBoundedReviewWorkflow = async ({
         }),
         ...(planContinuation !== undefined && {
             planContinuation,
-        }),
-        ...(executedContextStepResult !== undefined && {
-            contextStepResult: executedContextStepResult,
         }),
         ...(executedContextStepResults.length > 0 && {
             contextStepResults: executedContextStepResults,

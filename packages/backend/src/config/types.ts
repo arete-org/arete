@@ -33,6 +33,9 @@ export type RateLimitConfig = {
     windowMs: number;
 };
 
+export type WebSearchProviderId = 'openai' | 'brave' | 'searxng';
+export type WebSearchProviderMode = 'auto' | 'strict' | 'preferred_order';
+
 /**
  * Canonical backend runtime config assembled from env parsing helpers.
  */
@@ -98,6 +101,11 @@ export type RuntimeConfig = {
         reviewLoopEnabled: boolean;
         maxIterations: number;
         maxDurationMs: number;
+    };
+    webSearchProviders: {
+        mode: WebSearchProviderMode;
+        enabledProviders: WebSearchProviderId[];
+        providerOrder: WebSearchProviderId[];
     };
     executionContractTrustGraph: {
         enabled: boolean;

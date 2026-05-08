@@ -10,7 +10,6 @@
 import type { RuntimeMessage } from '@footnote/agent-runtime';
 import { runtimeConfig } from '../../config.js';
 import { logger } from '../../utils/logger.js';
-import { buildWebSearchInstruction } from '../chatGenerationHints.js';
 import {
     extractCitationsFromOutputItems,
     extractMarkdownLinkCitations,
@@ -184,17 +183,6 @@ class SimpleOpenAIService implements OpenAIService {
             ...validMessages.map((message) =>
                 buildInputMessage(message.role, message.content)
             ),
-            ...(hasSearchRequest && options.search
-                ? [
-                      buildInputMessage(
-                          'system',
-                          buildWebSearchInstruction({
-                              ...options.search,
-                              repoHints: options.search.repoHints ?? [],
-                          })
-                      ),
-                  ]
-                : []),
         ];
 
         const requestBody = JSON.stringify({

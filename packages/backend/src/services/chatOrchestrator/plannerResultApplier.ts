@@ -52,6 +52,23 @@ export const createPlannerResultApplier = (
 ): ((
     plannerInput: PlannerApplicationInput & PlannerResultApplierBootstrap
 ) => PlannerApplicationResult) => {
+    const mergeContextStepRequests = (
+        requests: NonNullable<PlannerApplicationResult['contextStepRequests']>
+    ): NonNullable<PlannerApplicationResult['contextStepRequests']> => {
+        const seen = new Set<string>();
+        const merged: NonNullable<
+            PlannerApplicationResult['contextStepRequests']
+        > = [];
+        for (const request of requests) {
+            if (seen.has(request.integrationName)) {
+                continue;
+            }
+            seen.add(request.integrationName);
+            merged.push(request);
+        }
+        return merged;
+    };
+
     return (plannerInput) => {
         const plannerPlan = plannerInput.plannerStepResult.plan;
         const fallbackReasons: string[] = [];
@@ -130,11 +147,12 @@ export const createPlannerResultApplier = (
             inheritedToolExecution: profileResolution.toolExecutionContext,
         });
 
-        const contextStepRequest =
-            toolSelection.toolRequest.toolName === 'weather_forecast' &&
+        const primaryContextStepRequest =
+            (toolSelection.toolRequest.toolName === 'weather_forecast' ||
+                toolSelection.toolRequest.toolName === 'web_search') &&
             toolSelection.toolRequest.requested
                 ? {
-                      integrationName: 'weather_forecast',
+                      integrationName: toolSelection.toolRequest.toolName,
                       requested: toolSelection.toolRequest.requested,
                       eligible: toolSelection.toolRequest.eligible,
                       ...(toolSelection.toolRequest.reasonCode !==
@@ -148,6 +166,10 @@ export const createPlannerResultApplier = (
                           >,
                       }),
                   }
+                : undefined;
+        const contextStepRequests =
+            primaryContextStepRequest !== undefined
+                ? mergeContextStepRequests([primaryContextStepRequest])
                 : undefined;
         const plannerApplyOutcome =
             plannerInput.plannerStepResult.execution.status !== 'executed'
@@ -186,7 +208,9 @@ export const createPlannerResultApplier = (
             }),
             toolRequestContext: toolSelection.toolRequest,
             toolExecutionContext: toolSelection.toolExecution,
-            contextStepRequest,
+            ...(contextStepRequests !== undefined && {
+                contextStepRequests,
+            }),
             plannerApplyOutcome,
             plannerMattered,
             plannerMatteredControlIds,

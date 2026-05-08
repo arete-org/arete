@@ -39,7 +39,7 @@ Before integrations can run in parallel with assess-driven cycling:
 | ---------------------- | ----------------------- | ---------------------------- |
 | `weather_forecast`     | context-step            | Implemented                  |
 | `trustgraph`           | evidence ingestion seam | Not migrated to context-step |
-| `web_search`           | tool-registry path      | Not migrated to context-step |
+| `web_search`           | context-step            | Implemented                  |
 | `image_scan`           | Discord bot layer       | Not migrated to context-step |
 | `file_scan`            | not implemented         | Not implemented              |
 | `reverse_image_search` | not implemented         | Not implemented              |
@@ -65,8 +65,8 @@ Before integrations can run in parallel with assess-driven cycling:
 **Issue #336** - Web search context-step migration
 
 - Implement as workflow context-step integration
-- Provider-neutral architecture (SearXNG, Brave)
-- Remove profile mutation and searchFallbackPolicy reroute logic
+- Provider/runtime protocol semantics stay at provider boundary only
+- Provider-policy scaffolding is in place (`mode`, `enabledProviders`, `providerOrder`) with OpenAI-only runtime availability until follow-up provider work lands
 
 **Issue #333** - Image scanning context-step migration
 
@@ -89,6 +89,14 @@ Before integrations can run in parallel with assess-driven cycling:
 ## Related Work
 
 **Issue #338** - Remove fast mode and keep reviewed execution as the default path. `balanced` and `grounded` now run the same reviewed workflow shape, with differences coming from behavior preset and limits.
+
+**Follow-up: Web search provider policy and multi-provider execution**
+
+- Add provider adapters for `brave` and `searxng` with OpenAI retained as a provider option
+- Apply provider policy modes (`auto`, `strict`, `preferred_order`) to execution candidate selection and fallback hops
+- Normalize citation/source output across providers for one metadata shape
+- Keep fail-open behavior when provider candidates are unavailable or fail
+- Add telemetry for provider chosen, fallback path, and terminal execution outcome
 
 ## Notes
 

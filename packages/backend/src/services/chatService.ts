@@ -88,17 +88,12 @@ const SURFACED_NO_GENERATION_MESSAGE =
  * The short-circuit branch can return early when a context step asks for user
  * clarification or reports a known tool failure pattern.
  *
- * Compatibility rule: this branch prefers the full context-step result list
- * when available, and falls back to the legacy single-result field for older
- * callers.
- *
  * Citation rule: when generation continues, citations from all executed context
  * integrations are merged later into assistant metadata. This helper does not
  * own that merge.
  *
  */
 const buildContextStepShortCircuit = ({
-    workflowContextStepResult,
     workflowContextStepResults,
     executionContext,
     toolRequest,
@@ -108,7 +103,6 @@ const buildContextStepShortCircuit = ({
     latestUserInput,
     buildResponseMetadata,
 }: {
-    workflowContextStepResult: ContextStepResult | undefined;
     workflowContextStepResults?: ContextStepResult[];
     executionContext: ResponseMetadataRuntimeContext['executionContext'];
     toolRequest: ToolInvocationRequest | undefined;
@@ -126,11 +120,7 @@ const buildContextStepShortCircuit = ({
           telemetry: FinalToolExecutionTelemetry;
       }
     | undefined => {
-    const effectiveContextStepResults =
-        workflowContextStepResults ??
-        (workflowContextStepResult !== undefined
-            ? [workflowContextStepResult]
-            : []);
+    const effectiveContextStepResults = workflowContextStepResults ?? [];
     if (effectiveContextStepResults.length === 0) {
         return undefined;
     }
@@ -541,9 +531,7 @@ export type RunChatMessagesInput = {
     workflowModeId?: string;
     workflowModeEscalationRequest?: WorkflowModeEscalationRequest;
     toolRequest?: ToolInvocationRequest;
-    contextStepRequest?: ContextStepRequest;
     contextStepRequests?: ContextStepRequest[];
-    contextStepExecutor?: ContextStepExecutor;
     contextStepExecutorRegistry?: Record<string, ContextStepExecutor>;
     plannerStepRequest?: PlannerStepRequest;
     plannerStepExecutor?: PlannerStepExecutor;
@@ -703,9 +691,7 @@ export const createChatService = ({
         workflowModeId,
         workflowModeEscalationRequest,
         toolRequest,
-        contextStepRequest,
         contextStepRequests,
-        contextStepExecutor,
         contextStepExecutorRegistry,
         plannerStepRequest,
         plannerStepExecutor,
@@ -800,7 +786,6 @@ export const createChatService = ({
 
         let generationResult: GenerationResult;
         let workflowLineage: WorkflowRecord | undefined;
-        let workflowContextStepResult: ContextStepResult | undefined;
         let workflowContextStepResults: ContextStepResult[] | undefined;
         let workflowPlannerSummary: AppliedPlanState | undefined;
         let workflowPlannerStepResult: PlannerStepResult | undefined;
@@ -842,9 +827,7 @@ export const createChatService = ({
                 plannerStepRequest: effectivePlannerStepRequest,
                 plannerStepExecutor: effectivePlannerStepExecutor,
                 planContinuationBuilder,
-                contextStepRequest,
                 contextStepRequests,
-                contextStepExecutor,
                 contextStepExecutorRegistry,
             });
             workflowPlannerStepResult = workflowResult.plannerStepResult;
@@ -869,14 +852,12 @@ export const createChatService = ({
             } else {
                 workflowConversationSnapshot = undefined;
             }
-            workflowContextStepResult = workflowResult.contextStepResult;
             workflowContextStepResults = workflowResult.contextStepResults;
             switch (workflowResult.outcome) {
                 case 'generated': {
                     generationResult = workflowResult.generationResult;
                     workflowLineage = workflowResult.workflowLineage;
                     const generatedShortCircuit = buildContextStepShortCircuit({
-                        workflowContextStepResult,
                         workflowContextStepResults,
                         executionContext,
                         toolRequest,
@@ -912,7 +893,6 @@ export const createChatService = ({
                 case 'no_generation': {
                     workflowLineage = workflowResult.workflowLineage;
                     const noGenShortCircuit = buildContextStepShortCircuit({
-                        workflowContextStepResult,
                         workflowContextStepResults,
                         executionContext,
                         toolRequest,
@@ -1096,10 +1076,9 @@ export const createChatService = ({
 
         // Backend authority merges all context-integration citations so callers
         // consume one canonical metadata citation surface.
-        const contextStepSources =
-            workflowContextStepResults?.flatMap(
-                (contextStepResult) => contextStepResult.sources ?? []
-            ) ?? workflowContextStepResult?.sources;
+        const contextStepSources = workflowContextStepResults?.flatMap(
+            (contextStepResult) => contextStepResult.sources ?? []
+        );
         const assistantMetadata = buildAssistantMetadata(
             generationResult,
             effectiveNormalizedGeneration,
@@ -1140,11 +1119,8 @@ export const createChatService = ({
             ) === true;
         // Any mode escalation lineage is resolved by workflowProfileRegistry.
         // Runtime metadata here only carries the resolved decision payload.
-        const hasSearchIntent =
-            effectiveNormalizedGeneration?.search !== undefined;
         const upstreamToolExecution =
             executionContext?.tool ??
-            workflowContextStepResult?.executionContext ??
             workflowPlannerSummary?.toolExecutionContext;
         const effectiveToolExecutionContext:
             | NonNullable<
@@ -1153,46 +1129,7 @@ export const createChatService = ({
             | undefined =
             // Respect explicit upstream tool outcomes first (for example,
             // orchestrator-level fail-open policy decisions).
-            upstreamToolExecution
-                ? hasSearchIntent &&
-                  upstreamToolExecution.toolName === 'web_search'
-                    ? {
-                          ...upstreamToolExecution,
-                          status: retrievalUsed ? 'executed' : 'skipped',
-                          ...(retrievalUsed
-                              ? upstreamToolExecution.reasonCode !== undefined
-                                  ? {
-                                        // Keep policy reason codes when
-                                        // runtime confirms tool execution.
-                                        reasonCode:
-                                            upstreamToolExecution.reasonCode,
-                                    }
-                                  : {}
-                              : {
-                                    reasonCode:
-                                        upstreamToolExecution.reasonCode ??
-                                        'tool_not_used',
-                                }),
-                      }
-                    : upstreamToolExecution
-                : generationResult.toolExecution
-                  ? generationResult.toolExecution
-                  : hasSearchIntent
-                    ? ({
-                          // TODO(backend): Replace retrieval-signal inference
-                          // with explicit runtime tool execution signals once
-                          // they are always present for search requests.
-                          // When search was requested, infer tool execution from
-                          // retrieval usage signals reported by the runtime.
-                          toolName: 'web_search',
-                          status: retrievalUsed ? 'executed' : 'skipped',
-                          ...(retrievalUsed
-                              ? {}
-                              : {
-                                    reasonCode: 'tool_not_used',
-                                }),
-                      } satisfies ToolExecutionContext)
-                    : undefined;
+            upstreamToolExecution ?? generationResult.toolExecution;
 
         const usageModel = assistantMetadata.model || defaultModel;
         type GenerationExecutionContext = NonNullable<
@@ -1325,7 +1262,7 @@ export const createChatService = ({
             },
             ...(steerabilityControls !== undefined && { steerabilityControls }),
             retrieval: {
-                requested: hasSearchIntent,
+                requested: effectiveNormalizedGeneration?.search !== undefined,
                 used: retrievalUsed,
                 intent: effectiveNormalizedGeneration?.search?.intent,
                 contextSize: effectiveNormalizedGeneration?.search?.contextSize,

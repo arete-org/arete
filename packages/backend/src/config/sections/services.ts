@@ -10,6 +10,7 @@ import { envDefaultValues } from '@footnote/config-spec';
 import type { WorkflowModeId } from '@footnote/contracts/ethics-core';
 import {
     parseBooleanEnv,
+    parseCsvEnv,
     parseNonNegativeIntEnv,
     parseOptionalTrimmedString,
     parsePositiveIntEnv,
@@ -21,6 +22,44 @@ const CHAT_WORKFLOW_MODE_IDS: ReadonlySet<WorkflowModeId> = new Set([
     'balanced',
     'grounded',
 ]);
+const WEB_SEARCH_PROVIDER_MODES: ReadonlySet<
+    RuntimeConfig['webSearchProviders']['mode']
+> = new Set(['auto', 'strict', 'preferred_order']);
+const WEB_SEARCH_PROVIDER_IDS: ReadonlySet<
+    RuntimeConfig['webSearchProviders']['enabledProviders'][number]
+> = new Set(['openai', 'brave', 'searxng']);
+
+const parseWebSearchProviders = (
+    value: string[] | undefined,
+    fallback: RuntimeConfig['webSearchProviders']['enabledProviders'],
+    key: string,
+    warn: WarningSink
+): RuntimeConfig['webSearchProviders']['enabledProviders'] => {
+    const candidates = value ?? fallback;
+    const normalized = candidates
+        .map((entry) => entry.trim().toLowerCase())
+        .filter((entry) => entry.length > 0);
+    const validProviders = normalized.filter((entry) =>
+        WEB_SEARCH_PROVIDER_IDS.has(
+            entry as RuntimeConfig['webSearchProviders']['enabledProviders'][number]
+        )
+    ) as RuntimeConfig['webSearchProviders']['enabledProviders'];
+    const invalidProviders = normalized.filter(
+        (entry) =>
+            !WEB_SEARCH_PROVIDER_IDS.has(
+                entry as RuntimeConfig['webSearchProviders']['enabledProviders'][number]
+            )
+    );
+    if (invalidProviders.length > 0) {
+        warn(
+            `Ignoring invalid web search providers for ${key}: ${invalidProviders.join(', ')}.`
+        );
+    }
+    if (validProviders.length === 0) {
+        return [...fallback];
+    }
+    return [...new Set(validProviders)];
+};
 
 /**
  * Resolves auth tokens and body-size limits for trusted backend-only service
@@ -29,7 +68,10 @@ const CHAT_WORKFLOW_MODE_IDS: ReadonlySet<WorkflowModeId> = new Set([
 export const buildServiceSections = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink
-): Pick<RuntimeConfig, 'reflect' | 'trace' | 'chatWorkflow'> => ({
+): Pick<
+    RuntimeConfig,
+    'reflect' | 'trace' | 'chatWorkflow' | 'webSearchProviders'
+> => ({
     reflect: {
         serviceToken: parseOptionalTrimmedString(env.REFLECT_SERVICE_TOKEN),
         maxBodyBytes: parsePositiveIntEnv(
@@ -72,6 +114,27 @@ export const buildServiceSections = (
             env.CHAT_REVIEW_LOOP_MAX_DURATION_MS,
             15000,
             'CHAT_REVIEW_LOOP_MAX_DURATION_MS',
+            warn
+        ),
+    },
+    webSearchProviders: {
+        mode: parseStringUnionEnv<RuntimeConfig['webSearchProviders']['mode']>(
+            env.WEB_SEARCH_PROVIDER_MODE,
+            'auto',
+            'WEB_SEARCH_PROVIDER_MODE',
+            WEB_SEARCH_PROVIDER_MODES,
+            warn
+        ),
+        enabledProviders: parseWebSearchProviders(
+            parseCsvEnv(env.WEB_SEARCH_ENABLED_PROVIDERS, ['openai']),
+            ['openai'],
+            'WEB_SEARCH_ENABLED_PROVIDERS',
+            warn
+        ),
+        providerOrder: parseWebSearchProviders(
+            parseCsvEnv(env.WEB_SEARCH_PROVIDER_ORDER, ['openai']),
+            ['openai'],
+            'WEB_SEARCH_PROVIDER_ORDER',
             warn
         ),
     },
