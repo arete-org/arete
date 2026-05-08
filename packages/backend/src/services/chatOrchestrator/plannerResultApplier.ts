@@ -14,6 +14,7 @@ import { coercePlanForSurface } from '../chatSurfacePolicy.js';
 import { applySingleToolPolicy } from '../tools/toolPolicy.js';
 import { resolveToolSelection } from '../tools/toolRegistry.js';
 import type { WeatherForecastTool } from '../contextIntegrations/weather/index.js';
+import { FILE_SCAN_INTEGRATION_NAME } from '../contextIntegrations/fileScanning/index.js';
 import { resolveExecutionProfile } from './profileResolution.js';
 import type {
     PlannerApplicationInput,
@@ -154,7 +155,7 @@ export const createPlannerResultApplier = (
             plannerInput.normalizedRequest.attachments !== undefined &&
             plannerInput.normalizedRequest.attachments.length > 0
                 ? {
-                      integrationName: 'file_scan',
+                      integrationName: FILE_SCAN_INTEGRATION_NAME,
                       requested: true,
                       eligible: true,
                       input: {

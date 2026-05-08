@@ -6,3 +6,5 @@
  * @footnote-ethics: low - Re-exports only.
  */
 export { createFileScanningContextStepExecutor } from './fileScanningContextStepExecutor.js';
+
+export const FILE_SCAN_INTEGRATION_NAME = 'file_scan' as const;

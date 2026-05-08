@@ -44,4 +44,5 @@ This file tracks the remaining rollout work. The canonical architecture is in
 - [Workflow Architecture](../architecture/workflow.md)
 - [Context Integrations](../architecture/context-integrations/README.md)
 - [Weather Forecast Integration](../architecture/context-integrations/weather-forecast.md)
+- [File Scanning Integration](../architecture/context-integrations/file-scanning.md)
 - [Web Search Context Integration Proposal](../proposals/web-search-context-integration.md)
