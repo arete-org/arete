@@ -1375,6 +1375,8 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
     };
     let weatherStartedAt = 0;
     let webSearchStartedAt = 0;
+    let weatherFinishedAt = 0;
+    let webSearchFinishedAt = 0;
 
     const result = await runBoundedReviewWorkflow({
         generationRuntime,
@@ -1413,6 +1415,7 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
             weather_forecast: async () => {
                 weatherStartedAt = Date.now();
                 await new Promise((resolve) => setTimeout(resolve, 40));
+                weatherFinishedAt = Date.now();
                 return {
                     executionContext: {
                         toolName: 'weather_forecast',
@@ -1424,6 +1427,7 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
             web_search: async () => {
                 webSearchStartedAt = Date.now();
                 await new Promise((resolve) => setTimeout(resolve, 40));
+                webSearchFinishedAt = Date.now();
                 return {
                     executionContext: {
                         toolName: 'web_search',
@@ -1447,7 +1451,10 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
     });
 
     assert.equal(result.outcome, 'generated');
-    assert.ok(Math.abs(weatherStartedAt - webSearchStartedAt) < 35);
+    const parallelElapsedMs =
+        Math.max(weatherFinishedAt, webSearchFinishedAt) -
+        Math.min(weatherStartedAt, webSearchStartedAt);
+    assert.ok(parallelElapsedMs < 70);
     assert.equal(result.contextStepResults?.length, 2);
     const firstMessageBatch = observedMessages[0] ?? [];
     const weatherContextMessageIndex = firstMessageBatch.findIndex(

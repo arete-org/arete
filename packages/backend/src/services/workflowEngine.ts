@@ -1124,6 +1124,20 @@ export const runBoundedReviewWorkflow = async ({
     const requestedContextSteps = (effectiveContextStepRequests ?? []).filter(
         (request) => request.requested === true && request.eligible
     );
+    const unregisteredContextSteps = requestedContextSteps.filter(
+        (request) => selectContextStepExecutor(request) === undefined
+    );
+    for (const request of unregisteredContextSteps) {
+        logger.warn(
+            'Context step requested without registered executor; skipping integration.',
+            {
+                workflowId,
+                workflowName: workflowConfig.workflowName,
+                integrationName: request.integrationName,
+                reasonCode: request.reasonCode ?? 'tool_unavailable',
+            }
+        );
+    }
     const executableContextSteps = requestedContextSteps.filter(
         (request) => selectContextStepExecutor(request) !== undefined
     );

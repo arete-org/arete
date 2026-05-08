@@ -52,23 +52,6 @@ export const createPlannerResultApplier = (
 ): ((
     plannerInput: PlannerApplicationInput & PlannerResultApplierBootstrap
 ) => PlannerApplicationResult) => {
-    const mergeContextStepRequests = (
-        requests: NonNullable<PlannerApplicationResult['contextStepRequests']>
-    ): NonNullable<PlannerApplicationResult['contextStepRequests']> => {
-        const seen = new Set<string>();
-        const merged: NonNullable<
-            PlannerApplicationResult['contextStepRequests']
-        > = [];
-        for (const request of requests) {
-            if (seen.has(request.integrationName)) {
-                continue;
-            }
-            seen.add(request.integrationName);
-            merged.push(request);
-        }
-        return merged;
-    };
-
     return (plannerInput) => {
         const plannerPlan = plannerInput.plannerStepResult.plan;
         const fallbackReasons: string[] = [];
@@ -169,7 +152,7 @@ export const createPlannerResultApplier = (
                 : undefined;
         const contextStepRequests =
             primaryContextStepRequest !== undefined
-                ? mergeContextStepRequests([primaryContextStepRequest])
+                ? [primaryContextStepRequest]
                 : undefined;
         const plannerApplyOutcome =
             plannerInput.plannerStepResult.execution.status !== 'executed'

@@ -180,6 +180,19 @@ export const createChatOrchestrator = ({
         defaultModel: plannerProfile.providerModel,
         recordUsage,
     });
+    const weatherContextStepExecutor = createWeatherForecastContextStepExecutor(
+        {
+            weatherForecastTool,
+            onWarn: chatOrchestratorLogger.warn.bind(chatOrchestratorLogger),
+        }
+    );
+    const webSearchContextStepExecutor = createWebSearchContextStepExecutor({
+        providerPolicy: runtimeConfig.webSearchProviders,
+    });
+    const contextStepExecutorRegistry = {
+        weather_forecast: weatherContextStepExecutor,
+        web_search: webSearchContextStepExecutor,
+    } as const;
 
     /**
      * Runs one chat request end-to-end.
@@ -395,22 +408,6 @@ export const createChatOrchestrator = ({
         // Web keeps default prompt persona layers.
         const personaPrompt =
             backendOwnedProfileOverlay ?? promptLayers.personaPrompt;
-        const weatherContextStepExecutor =
-            createWeatherForecastContextStepExecutor({
-                weatherForecastTool,
-                onWarn: (message, meta) => {
-                    chatOrchestratorLogger.warn(message, meta);
-                },
-            });
-        const webSearchContextStepExecutor = createWebSearchContextStepExecutor(
-            {
-                providerPolicy: runtimeConfig.webSearchProviders,
-            }
-        );
-        const contextStepExecutorRegistry = {
-            weather_forecast: weatherContextStepExecutor,
-            web_search: webSearchContextStepExecutor,
-        } as const;
         const buildPlannerSummary = (input: {
             plannerStepResult: PlannerStepResult;
             plannerApplication: ReturnType<typeof plannerResultApplier>;

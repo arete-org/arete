@@ -58,6 +58,30 @@ const toGenerationSearchRequest = (
 };
 
 export const createWebSearchContextStepExecutor =
+    /**
+     * Creates the web-search Context Step executor used by workflow orchestration.
+     *
+     * The executor validates request shape, resolves provider-selection policy,
+     * and emits a provider-neutral search instruction as a system context message.
+     *
+     * @param input.providerPolicy - Optional provider policy from runtime config
+     * (`RuntimeConfig['webSearchProviders']`). When omitted, defaults to an
+     * `auto` policy with OpenAI enabled and ordered first.
+     * @returns ContextStepExecutor
+     *
+     * Fail-open behavior:
+     * - Returns `skipped/tool_not_requested` when the request is not requested.
+     * - Returns `skipped/tool_unavailable` when the request is ineligible.
+     * - Returns `failed/unspecified_tool_outcome` when input is malformed.
+     * - Returns `skipped/tool_unavailable` when no providers are selectable.
+     *
+     * Authority/provenance:
+     * - Execution policy authority is backend-owned via provider policy.
+     * - Provider protocol execution remains outside this executor boundary.
+     *
+     * Side effects/logging:
+     * - No network calls and no logging side effects.
+     */
     (input?: {
         providerPolicy?: RuntimeConfig['webSearchProviders'];
     }): ContextStepExecutor =>
@@ -76,8 +100,7 @@ export const createWebSearchContextStepExecutor =
                 executionContext: {
                     toolName: request.integrationName,
                     status: 'skipped',
-                    reasonCode:
-                        request.reasonCode ?? 'unspecified_tool_outcome',
+                    reasonCode: request.reasonCode ?? 'tool_unavailable',
                 },
             };
         }

@@ -33,7 +33,19 @@ export type RateLimitConfig = {
     windowMs: number;
 };
 
+/**
+ * Supported web-search providers for Context Integration execution.
+ * - `openai`
+ * - `brave`
+ * - `searxng`
+ */
 export type WebSearchProviderId = 'openai' | 'brave' | 'searxng';
+/**
+ * Web-search provider policy mode.
+ * - `auto`: choose the best available provider and allow fallback behavior
+ * - `strict`: require ordered policy match with no fallback branch
+ * - `preferred_order`: prefer explicit provider order, then use enabled-order fallback
+ */
 export type WebSearchProviderMode = 'auto' | 'strict' | 'preferred_order';
 
 /**

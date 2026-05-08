@@ -10,12 +10,31 @@ import type {
     WebSearchProviderMode,
 } from '../../../config/types.js';
 
+/**
+ * Policy inputs for provider selection planning in web search Context Integration.
+ *
+ * - `mode`: selection posture (`auto`, `strict`, `preferred_order`)
+ * - `enabledProviders`: providers allowed by backend policy/config
+ * - `providerOrder`: explicit preference order for ordered selection
+ *
+ * Invariants:
+ * - Providers should be listed using `WebSearchProviderId`.
+ * - Empty lists are allowed and resolve fail-open to empty candidates.
+ */
 export type WebSearchProviderPolicy = {
     mode: WebSearchProviderMode;
     enabledProviders: WebSearchProviderId[];
     providerOrder: WebSearchProviderId[];
 };
 
+/**
+ * Planned provider candidates for one execution attempt.
+ *
+ * - `candidates`: ordered provider ids to try
+ * - `mode`: mode used to derive this plan
+ *
+ * Empty candidates indicate no eligible+available provider could be selected.
+ */
 export type WebSearchProviderSelectionPlan = {
     candidates: WebSearchProviderId[];
     mode: WebSearchProviderMode;
@@ -25,6 +44,25 @@ const uniqueProviders = (
     providers: readonly WebSearchProviderId[]
 ): WebSearchProviderId[] => [...new Set(providers)];
 
+/**
+ * Resolves provider candidates for web search execution.
+ *
+ * Algorithm:
+ * 1) Ordered branch: pick providers in `providerOrder` that are both enabled
+ *    and available.
+ * 2) If ordered branch returns candidates, use them for all modes.
+ * 3) `strict` mode: if ordered branch is empty, return empty candidates.
+ * 4) Non-strict fallback (`auto`/`preferred_order`): use enabled providers
+ *    that are available, preserving enabledProviders order.
+ *
+ * Fail-open semantics:
+ * - Never throws.
+ * - Returns empty candidates when policy/availability cannot yield a runnable
+ *   provider; caller decides skip/failure behavior.
+ *
+ * Authority:
+ * - Backend policy/config is authoritative for enabled/order constraints.
+ */
 export const resolveWebSearchProviderSelectionPlan = (input: {
     policy: WebSearchProviderPolicy;
     availableProviders: readonly WebSearchProviderId[];
@@ -40,6 +78,12 @@ export const resolveWebSearchProviderSelectionPlan = (input: {
     if (orderedCandidates.length > 0) {
         return {
             candidates: orderedCandidates,
+            mode: input.policy.mode,
+        };
+    }
+    if (input.policy.mode === 'strict') {
+        return {
+            candidates: [],
             mode: input.policy.mode,
         };
     }

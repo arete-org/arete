@@ -36,3 +36,31 @@ test('web search provider selection returns empty candidates when no enabled pro
     assert.equal(plan.mode, 'strict');
     assert.deepEqual(plan.candidates, []);
 });
+
+test('web search provider selection uses enabled-order fallback when ordered branch has no overlap', () => {
+    const plan = resolveWebSearchProviderSelectionPlan({
+        policy: {
+            mode: 'preferred_order',
+            enabledProviders: ['searxng', 'openai', 'brave'],
+            providerOrder: [],
+        },
+        availableProviders: ['openai', 'searxng'],
+    });
+
+    assert.equal(plan.mode, 'preferred_order');
+    assert.deepEqual(plan.candidates, ['searxng', 'openai']);
+});
+
+test('web search provider selection preserves auto mode and ordered candidate behavior', () => {
+    const plan = resolveWebSearchProviderSelectionPlan({
+        policy: {
+            mode: 'auto',
+            enabledProviders: ['openai', 'searxng', 'brave'],
+            providerOrder: ['brave', 'openai', 'searxng'],
+        },
+        availableProviders: ['openai', 'searxng'],
+    });
+
+    assert.equal(plan.mode, 'auto');
+    assert.deepEqual(plan.candidates, ['openai', 'searxng']);
+});
