@@ -407,8 +407,6 @@ export const createChatOrchestrator = ({
                 providerPolicy: runtimeConfig.webSearchProviders,
             }
         );
-        // Keep Context Integration registry assembly additive so parallel
-        // branches can append new integration executors with minimal conflicts.
         const contextStepExecutorRegistry = {
             weather_forecast: weatherContextStepExecutor,
             web_search: webSearchContextStepExecutor,
