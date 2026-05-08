@@ -9,11 +9,10 @@ import type { WorkflowStepKind } from '@footnote/contracts/ethics-core';
 import type { WorkflowTerminationReason } from '@footnote/contracts/ethics-core';
 import type {
     BoundedReviewAssessSignals,
-    Citation,
+    ContextStepRequest as ContractContextStepRequest,
+    ContextStepResult as ContractContextStepResult,
     ExecutionStatus,
-    ToolClarification,
     ToolExecutionContext,
-    ToolInvocationReasonCode,
     PlannerExecutionApplyOutcome,
     PlannerExecutionContractType,
     PlannerExecutionPurpose,
@@ -172,11 +171,8 @@ export type RunBoundedReviewWorkflowInput = {
     plannerStepExecutor?: PlannerStepExecutor;
     // Caller-owned policy application. Engine only consumes continuation output.
     planContinuationBuilder?: PlanContinuationBuilder;
-    // Backward-compatible single integration input used by current callers.
-    contextStepRequest?: ContextStepRequest;
-    // Preferred multi-integration input. Engine executes eligible steps in parallel.
+    // Multi-integration input. Engine executes eligible steps in parallel.
     contextStepRequests?: ContextStepRequest[];
-    // Backward-compatible default executor for single-integration callers.
     contextStepExecutor?: ContextStepExecutor;
     // Preferred executor routing by integration name.
     contextStepExecutorRegistry?: Record<string, ContextStepExecutor>;
@@ -210,20 +206,9 @@ export type RunBoundedReviewWorkflowResult =
           contextStepResults?: ContextStepResult[];
       };
 
-export type ContextStepRequest = {
-    integrationName: string;
-    requested: boolean;
-    eligible: boolean;
-    reasonCode?: ToolInvocationReasonCode;
-    input?: Record<string, unknown>;
-};
+export type ContextStepRequest = ContractContextStepRequest;
 
-export type ContextStepResult = {
-    executionContext: ToolExecutionContext;
-    contextMessages?: string[];
-    clarification?: ToolClarification;
-    sources?: Citation[];
-};
+export type ContextStepResult = ContractContextStepResult;
 
 export type ContextStepExecutorInput = {
     request: ContextStepRequest;
@@ -735,7 +720,6 @@ export const runBoundedReviewWorkflow = async ({
     plannerStepRequest,
     plannerStepExecutor,
     planContinuationBuilder,
-    contextStepRequest,
     contextStepRequests,
     contextStepExecutor,
     contextStepExecutorRegistry,
@@ -794,7 +778,6 @@ export const runBoundedReviewWorkflow = async ({
     let messagesWithContext = messagesWithHints;
     let effectiveGenerationRequest = generationRequest;
     let effectiveMessagesWithHints = messagesWithHints;
-    let effectiveContextStepRequest = contextStepRequest;
     let effectiveContextStepRequests = contextStepRequests;
     let workflowTerminalAction: PlanTerminalAction | undefined;
     let planContinuation: PlanContinuation | undefined;
@@ -1036,9 +1019,6 @@ export const runBoundedReviewWorkflow = async ({
             } else {
                 effectiveGenerationRequest = planContinuation.generationRequest;
                 effectiveMessagesWithHints = planContinuation.messagesWithHints;
-                effectiveContextStepRequest =
-                    planContinuation.contextStepRequest ??
-                    effectiveContextStepRequest;
                 effectiveContextStepRequests =
                     planContinuation.contextStepRequests ??
                     effectiveContextStepRequests;
@@ -1128,8 +1108,8 @@ export const runBoundedReviewWorkflow = async ({
 
     /**
      * Resolve executor authority per context integration.
-     * Registry mapping is authoritative. Fallback executor preserves existing
-     * single-step call sites while migration to registry is in progress.
+     * Registry mapping is authoritative. Fallback executor is used only when
+     * no integration-specific executor is registered.
      */
     const selectContextStepExecutor = (
         request: ContextStepRequest
@@ -1141,12 +1121,9 @@ export const runBoundedReviewWorkflow = async ({
         }
         return contextStepExecutor;
     };
-    const requestedContextSteps = (
-        effectiveContextStepRequests ??
-        (effectiveContextStepRequest !== undefined
-            ? [effectiveContextStepRequest]
-            : [])
-    ).filter((request) => request.requested === true && request.eligible);
+    const requestedContextSteps = (effectiveContextStepRequests ?? []).filter(
+        (request) => request.requested === true && request.eligible
+    );
     const executableContextSteps = requestedContextSteps.filter(
         (request) => selectContextStepExecutor(request) !== undefined
     );
@@ -1295,6 +1272,11 @@ export const runBoundedReviewWorkflow = async ({
                     }),
                     ...(contextStepOutcome.result.sources !== undefined && {
                         sources: contextStepOutcome.result.sources,
+                    }),
+                    ...(contextStepOutcome.result.integrationContext !==
+                        undefined && {
+                        integrationContext:
+                            contextStepOutcome.result.integrationContext,
                     }),
                 };
                 executedContextStepResults.push(normalizedResult);

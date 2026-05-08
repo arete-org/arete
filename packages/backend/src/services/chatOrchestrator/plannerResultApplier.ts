@@ -131,7 +131,7 @@ export const createPlannerResultApplier = (
             inheritedToolExecution: profileResolution.toolExecutionContext,
         });
 
-        const contextStepRequest =
+        const toolContextStepRequest =
             (toolSelection.toolRequest.toolName === 'weather_forecast' ||
                 toolSelection.toolRequest.toolName === 'web_search') &&
             toolSelection.toolRequest.requested
@@ -167,7 +167,9 @@ export const createPlannerResultApplier = (
                   }
                 : undefined;
         const contextStepRequests = [
-            ...(contextStepRequest !== undefined ? [contextStepRequest] : []),
+            ...(toolContextStepRequest !== undefined
+                ? [toolContextStepRequest]
+                : []),
             ...(fileScanContextStepRequest !== undefined
                 ? [fileScanContextStepRequest]
                 : []),
@@ -209,7 +211,6 @@ export const createPlannerResultApplier = (
             }),
             toolRequestContext: toolSelection.toolRequest,
             toolExecutionContext: toolSelection.toolExecution,
-            contextStepRequest,
             ...(contextStepRequests.length > 0 && { contextStepRequests }),
             plannerApplyOutcome,
             plannerMattered,

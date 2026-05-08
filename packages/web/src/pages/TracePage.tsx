@@ -737,11 +737,6 @@ const TracePage = (): JSX.Element => {
             explanation: workflowSummary.explanation,
         },
     ];
-    const hasWorkflowPlanStep =
-        traceData.workflow?.steps.some((step) => step.stepKind === 'plan') ??
-        false;
-    const showDataCaveats = !hasWorkflowPlanStep || !traceData.trustGraph;
-
     return (
         <section className="site-section">
             <header className="site-header" aria-live="polite">
@@ -1000,32 +995,6 @@ const TracePage = (): JSX.Element => {
                     </pre>
                 </details>
             </article>
-
-            {showDataCaveats && (
-                <article className="card" aria-label="Data caveats">
-                    <h2>Data Caveats</h2>
-                    <dl>
-                        {!hasWorkflowPlanStep && (
-                            <div>
-                                <dt>Planner lineage</dt>
-                                <dd>
-                                    Planner steps appear only when real `plan`
-                                    steps exist in workflow metadata.
-                                </dd>
-                            </div>
-                        )}
-                        {!traceData.trustGraph && (
-                            <div>
-                                <dt>TrustGraph signals</dt>
-                                <dd>
-                                    TrustGraph evidence appears only when this
-                                    trace includes TrustGraph metadata.
-                                </dd>
-                            </div>
-                        )}
-                    </dl>
-                </article>
-            )}
         </section>
     );
 };

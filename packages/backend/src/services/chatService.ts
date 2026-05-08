@@ -14,6 +14,8 @@ import type {
 } from '@footnote/agent-runtime';
 import type {
     Citation,
+    ContextStepRequest,
+    ContextStepResult,
     PartialResponseTemperament,
     ResponseMetadata,
     SafetyTier,
@@ -49,11 +51,10 @@ import {
 import {
     runBoundedReviewWorkflow,
     type ContextStepExecutor,
-    type ContextStepRequest,
-    type ContextStepResult,
     type RunBoundedReviewWorkflowResult,
     type WorkflowPolicy,
 } from './workflowEngine.js';
+import { createTrustGraphContextStepExecutor } from './contextIntegrations/trustgraph/index.js';
 import {
     planTerminalActionToResponse,
     type PlanContinuationOutcome,
@@ -65,7 +66,6 @@ import type {
     PlannerStepRequest,
     PlannerStepResult,
 } from './plannerWorkflowSeams.js';
-import { runEvidenceIngestion } from './executionContractTrustGraph/trustGraphEvidenceIngestion.js';
 import type {
     ScopeTuple,
     TrustGraphEvidenceAdapter,
@@ -88,9 +88,8 @@ const SURFACED_NO_GENERATION_MESSAGE =
  * The short-circuit branch can return early when a context step asks for user
  * clarification or reports a known tool failure pattern.
  *
- * Compatibility rule: this branch prefers the full context-step result list
- * when available, and falls back to the legacy single-result field for older
- * callers.
+ * This branch consumes the full context-step result list when available and
+ * falls back to single-result shape when only that field is present.
  *
  * Citation rule: when generation continues, citations from all executed context
  * integrations are merged later into assistant metadata. This helper does not
@@ -487,6 +486,94 @@ const logTrustGraphRuntimeOutcome = (
     logger.info(logPayload);
 };
 
+const TRUSTGRAPH_CONTEXT_STEP_NAME = 'trustgraph';
+
+/**
+ * Merges caller-owned Context Step requests with backend-owned TrustGraph
+ * request injection.
+ *
+ * We preserve first-write precedence by integration name to avoid duplicate
+ * execution in the same workflow cycle.
+ */
+const mergeContextStepRequests = (input: {
+    contextStepRequests?: ContextStepRequest[];
+    trustGraphContextStepRequest?: ContextStepRequest;
+}): ContextStepRequest[] => {
+    const merged = [...(input.contextStepRequests ?? [])];
+    if (input.trustGraphContextStepRequest !== undefined) {
+        // Backend-authored TrustGraph scope must remain authoritative.
+        // Remove any upstream trustgraph request before appending ours.
+        for (let i = merged.length - 1; i >= 0; i -= 1) {
+            if (merged[i]?.integrationName === TRUSTGRAPH_CONTEXT_STEP_NAME) {
+                merged.splice(i, 1);
+            }
+        }
+        merged.push(input.trustGraphContextStepRequest);
+    }
+    const seen = new Set<string>();
+    const deduped: ContextStepRequest[] = [];
+    for (const request of merged) {
+        if (seen.has(request.integrationName)) {
+            continue;
+        }
+        seen.add(request.integrationName);
+        deduped.push(request);
+    }
+    return deduped;
+};
+
+/**
+ * Builds the backend-owned TrustGraph Context Step request from normalized
+ * execution-contract context.
+ */
+const buildTrustGraphContextStepRequest = (
+    executionContractTrustGraphContext:
+        | ExecutionContractTrustGraphContext
+        | undefined
+): ContextStepRequest | undefined => {
+    if (executionContractTrustGraphContext === undefined) {
+        return undefined;
+    }
+    return {
+        integrationName: TRUSTGRAPH_CONTEXT_STEP_NAME,
+        requested: true,
+        eligible: true,
+        input: {
+            queryIntent: executionContractTrustGraphContext.queryIntent,
+            scopeTuple: executionContractTrustGraphContext.scopeTuple,
+        },
+    };
+};
+
+/**
+ * Reads TrustGraph ingestion output captured by Context Step execution.
+ *
+ * `integrationContext` is intentionally generic at workflow boundaries.
+ * This helper is the single cast point that projects TrustGraph payloads into
+ * typed runtime metadata handling.
+ */
+const pickTrustGraphResultFromContextSteps = (
+    contextStepResults: ContextStepResult[] | undefined
+): TrustGraphEvidenceIngestionResult | undefined => {
+    const trustGraphStep = contextStepResults?.find(
+        (result) =>
+            result.executionContext.toolName === TRUSTGRAPH_CONTEXT_STEP_NAME
+    );
+    const integrationContext = trustGraphStep?.integrationContext;
+    if (
+        integrationContext === undefined ||
+        integrationContext.kind !== TRUSTGRAPH_CONTEXT_STEP_NAME
+    ) {
+        return undefined;
+    }
+    const payload = integrationContext.payload as Record<string, unknown>;
+    const trustGraphResult = payload.trustGraphResult;
+    if (trustGraphResult === undefined || trustGraphResult === null) {
+        return undefined;
+    }
+    return trustGraphResult as TrustGraphEvidenceIngestionResult;
+};
+
 /**
  * Dependencies for the shared chat workflow.
  * The HTTP handler injects these so the core logic stays transport-agnostic.
@@ -541,7 +628,6 @@ export type RunChatMessagesInput = {
     workflowModeId?: string;
     workflowModeEscalationRequest?: WorkflowModeEscalationRequest;
     toolRequest?: ToolInvocationRequest;
-    contextStepRequest?: ContextStepRequest;
     contextStepRequests?: ContextStepRequest[];
     contextStepExecutor?: ContextStepExecutor;
     contextStepExecutorRegistry?: Record<string, ContextStepExecutor>;
@@ -703,7 +789,6 @@ export const createChatService = ({
         workflowModeId,
         workflowModeEscalationRequest,
         toolRequest,
-        contextStepRequest,
         contextStepRequests,
         contextStepExecutor,
         contextStepExecutorRegistry,
@@ -810,6 +895,14 @@ export const createChatService = ({
         const effectivePlannerStepExecutor = plannerStepExecutor;
         if (workflowExecutionEnabled) {
             const workflowPolicy: WorkflowPolicy = workflowProfile.policy;
+            const trustGraphContextStepRequest =
+                buildTrustGraphContextStepRequest(
+                    executionContractTrustGraphContext
+                );
+            const effectiveContextStepRequests = mergeContextStepRequests({
+                contextStepRequests,
+                trustGraphContextStepRequest,
+            });
             const workflowResult = await runReviewWorkflow({
                 generationRuntime,
                 generationRequest: effectiveGenerationRequest,
@@ -842,10 +935,20 @@ export const createChatService = ({
                 plannerStepRequest: effectivePlannerStepRequest,
                 plannerStepExecutor: effectivePlannerStepExecutor,
                 planContinuationBuilder,
-                contextStepRequest,
-                contextStepRequests,
+                contextStepRequests:
+                    effectiveContextStepRequests.length > 0
+                        ? effectiveContextStepRequests
+                        : undefined,
                 contextStepExecutor,
-                contextStepExecutorRegistry,
+                contextStepExecutorRegistry: {
+                    ...(contextStepExecutorRegistry ?? {}),
+                    [TRUSTGRAPH_CONTEXT_STEP_NAME]:
+                        createTrustGraphContextStepExecutor({
+                            runtimeOptions: executionContractTrustGraph,
+                            onWarn: (message, meta) =>
+                                logger.warn(message, meta),
+                        }),
+                },
             });
             workflowPlannerStepResult = workflowResult.plannerStepResult;
             workflowPlannerSummary =
@@ -1048,36 +1151,17 @@ export const createChatService = ({
             );
         }
 
-        let trustGraphResult: TrustGraphEvidenceIngestionResult | undefined;
-        if (
-            executionContractTrustGraph !== undefined &&
-            executionContractTrustGraphContext !== undefined
-        ) {
-            try {
-                trustGraphResult = await runEvidenceIngestion({
-                    queryIntent: executionContractTrustGraphContext.queryIntent,
-                    scopeTuple: executionContractTrustGraphContext.scopeTuple,
-                    budget: executionContractTrustGraph.budget,
-                    ownershipValidationPolicy:
-                        executionContractTrustGraph.ownershipValidationPolicy,
-                    scopeOwnershipValidator:
-                        executionContractTrustGraph.scopeOwnershipValidator,
-                    scopeValidationPolicy:
-                        executionContractTrustGraph.scopeValidationPolicy,
-                    adapter: executionContractTrustGraph.adapter,
-                });
-            } catch (error) {
-                logger.warn(
-                    'Execution Contract TrustGraph ingestion failed open in chat runtime.',
-                    {
-                        error:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                    }
-                );
-            }
+        let trustGraphResult: TrustGraphEvidenceIngestionResult | undefined =
+            pickTrustGraphResultFromContextSteps(workflowContextStepResults);
+        if (trustGraphResult === undefined) {
+            trustGraphResult = pickTrustGraphResultFromContextSteps(
+                workflowContextStepResult !== undefined
+                    ? [workflowContextStepResult]
+                    : undefined
+            );
         }
+        // Full TrustGraph cutover: advisory evidence ingestion now flows
+        // exclusively through Context Step execution.
         if (trustGraphResult !== undefined) {
             logTrustGraphRuntimeOutcome(trustGraphResult, ExecutionContract);
         }

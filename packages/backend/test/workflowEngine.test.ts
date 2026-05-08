@@ -1312,12 +1312,14 @@ test('runBoundedReviewWorkflow executes injected context step and records contex
             enableAssessment: true,
             enableRevision: true,
         },
-        contextStepRequest: {
-            integrationName: 'weather_forecast',
-            requested: true,
-            eligible: true,
-            input: { location: 'Indianapolis' },
-        },
+        contextStepRequests: [
+            {
+                integrationName: 'weather_forecast',
+                requested: true,
+                eligible: true,
+                input: { location: 'Indianapolis' },
+            },
+        ],
         contextStepExecutor: async () => ({
             executionContext: {
                 toolName: 'weather_forecast',
@@ -1500,12 +1502,14 @@ test('runBoundedReviewWorkflow records failed injected context step with reason 
             enableAssessment: true,
             enableRevision: true,
         },
-        contextStepRequest: {
-            integrationName: 'weather_forecast',
-            requested: true,
-            eligible: true,
-            input: { location: 'Indianapolis' },
-        },
+        contextStepRequests: [
+            {
+                integrationName: 'weather_forecast',
+                requested: true,
+                eligible: true,
+                input: { location: 'Indianapolis' },
+            },
+        ],
         contextStepExecutor: async () => ({
             executionContext: {
                 toolName: 'weather_forecast',
@@ -1577,12 +1581,14 @@ test('runBoundedReviewWorkflow stops before generation when injected context ste
             enableAssessment: true,
             enableRevision: true,
         },
-        contextStepRequest: {
-            integrationName: 'weather_forecast',
-            requested: true,
-            eligible: true,
-            input: { location: 'Springfield' },
-        },
+        contextStepRequests: [
+            {
+                integrationName: 'weather_forecast',
+                requested: true,
+                eligible: true,
+                input: { location: 'Springfield' },
+            },
+        ],
         contextStepExecutor: async () => ({
             executionContext: {
                 toolName: 'weather_forecast',
