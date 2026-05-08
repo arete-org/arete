@@ -14,6 +14,7 @@ import { coercePlanForSurface } from '../chatSurfacePolicy.js';
 import { applySingleToolPolicy } from '../tools/toolPolicy.js';
 import { resolveToolSelection } from '../tools/toolRegistry.js';
 import type { WeatherForecastTool } from '../contextIntegrations/weather/index.js';
+import { FILE_SCAN_INTEGRATION_NAME } from '../contextIntegrations/fileScanning/index.js';
 import { resolveExecutionProfile } from './profileResolution.js';
 import type {
     PlannerApplicationInput,
@@ -131,10 +132,11 @@ export const createPlannerResultApplier = (
         });
 
         const contextStepRequest =
-            toolSelection.toolRequest.toolName === 'weather_forecast' &&
+            (toolSelection.toolRequest.toolName === 'weather_forecast' ||
+                toolSelection.toolRequest.toolName === 'web_search') &&
             toolSelection.toolRequest.requested
                 ? {
-                      integrationName: 'weather_forecast',
+                      integrationName: toolSelection.toolRequest.toolName,
                       requested: toolSelection.toolRequest.requested,
                       eligible: toolSelection.toolRequest.eligible,
                       ...(toolSelection.toolRequest.reasonCode !==
@@ -149,6 +151,27 @@ export const createPlannerResultApplier = (
                       }),
                   }
                 : undefined;
+        const fileScanContextStepRequest =
+            plannerInput.normalizedRequest.attachments !== undefined &&
+            plannerInput.normalizedRequest.attachments.length > 0
+                ? {
+                      integrationName: FILE_SCAN_INTEGRATION_NAME,
+                      requested: true,
+                      eligible: true,
+                      input: {
+                          attachments: plannerInput.normalizedRequest
+                              .attachments as Record<string, unknown>[],
+                          latestUserInput:
+                              plannerInput.normalizedRequest.latestUserInput,
+                      },
+                  }
+                : undefined;
+        const contextStepRequests = [
+            ...(contextStepRequest !== undefined ? [contextStepRequest] : []),
+            ...(fileScanContextStepRequest !== undefined
+                ? [fileScanContextStepRequest]
+                : []),
+        ];
         const plannerApplyOutcome =
             plannerInput.plannerStepResult.execution.status !== 'executed'
                 ? 'not_applied'
@@ -187,6 +210,7 @@ export const createPlannerResultApplier = (
             toolRequestContext: toolSelection.toolRequest,
             toolExecutionContext: toolSelection.toolExecution,
             contextStepRequest,
+            ...(contextStepRequests.length > 0 && { contextStepRequests }),
             plannerApplyOutcome,
             plannerMattered,
             plannerMatteredControlIds,

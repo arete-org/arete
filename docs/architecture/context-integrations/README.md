@@ -106,8 +106,8 @@ under one path.
 
 ### Workflow context-step execution
 
-`weather_forecast` uses the workflow context-step execution path for
-bounded-review modes (`balanced` and `grounded`). In this pattern:
+`weather_forecast` and `file_scan` use the workflow context-step execution path
+for bounded-review modes (`balanced` and `grounded`). In this pattern:
 
 - Executes through `workflowEngine` with an injected `ContextStepExecutor`
 - Executes before the `generate` step in bounded-review workflows
@@ -137,3 +137,4 @@ instead of workflow context-step execution.
 
 - [TrustGraph](./trustgraph.md)
 - [Weather Forecast](./weather-forecast.md)
+- [File Scanning](./file-scanning.md)

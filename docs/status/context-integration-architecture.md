@@ -38,10 +38,9 @@ Before integrations can run in parallel with assess-driven cycling:
 | Integration            | Pattern                 | Status                       |
 | ---------------------- | ----------------------- | ---------------------------- |
 | `weather_forecast`     | context-step            | Implemented                  |
+| `web_search`           | context-step            | Implemented                  |
+| `file_scan`            | context-step            | Implemented                  |
 | `trustgraph`           | evidence ingestion seam | Not migrated to context-step |
-| `web_search`           | tool-registry path      | Not migrated to context-step |
-| `image_scan`           | Discord bot layer       | Not migrated to context-step |
-| `file_scan`            | not implemented         | Not implemented              |
 | `reverse_image_search` | not implemented         | Not implemented              |
 
 ## Implementation Sequence
@@ -74,8 +73,10 @@ Before integrations can run in parallel with assess-driven cycling:
 
 **Issue #334** - File attachment scanning
 
-- Implement as new context integration
-- Support PDF, documents in addition to images
+- Implemented as new context integration (`file_scan`)
+- Runs through workflow context-step execution with fail-open semantics
+- Scans image attachments via backend image-description task service
+- Surfaces non-image files as attachment context metadata
 
 **Issue #335** - Reverse image search
 

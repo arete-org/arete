@@ -113,10 +113,8 @@ const createChatBuildMessage = () =>
         channelId: 'channel-1',
         guildId: 'guild-1',
         attachments: {
-            filter: () => ({
-                size: 0,
-                map: () => [],
-            }),
+            size: 0,
+            map: () => [],
         },
         mentions: {
             users: {
@@ -858,8 +856,8 @@ test('processMessage replies with a red code-block error when backend chat reque
         author: { id: 'user-1', username: 'Jordan' },
         channel: { id: 'channel-1' },
         attachments: {
-            some: () => false,
-            filter: () => ({ size: 0 }),
+            size: 0,
+            map: () => [],
         },
         embeds: [],
         channelId: 'channel-1',
@@ -932,216 +930,67 @@ test('buildChatRequestFromMessage includes botPersonaId and leaves overlay compo
     }
 });
 
-test('buildChatRequestFromMessage uses backend image-description tasks for attachment grounding', async () => {
+test('buildChatRequestFromMessage forwards attachments for backend context integration', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
-    const originalRunImageDescriptionTaskViaApi =
-        botApi.runImageDescriptionTaskViaApi;
-    const capturedRequests: Array<{
-        task: string;
-        imageUrl: string;
-        context?: string;
-        channelContext?: { channelId?: string; guildId?: string };
-    }> = [];
 
     processorAccess.buildRawConversationHistory = async () => [
-        { role: 'user', content: 'Jordan uploaded a screenshot.' },
+        { role: 'user', content: 'Jordan uploaded files.' },
     ];
-
-    (
-        botApi as {
-            runImageDescriptionTaskViaApi: typeof botApi.runImageDescriptionTaskViaApi;
-        }
-    ).runImageDescriptionTaskViaApi = (async (request) => {
-        capturedRequests.push(request);
-        return {
-            task: 'image_description',
-            result: {
-                description: '{"summary":"Screenshot of a policy update"}',
-                model: 'gpt-4o-mini',
-                usage: {
-                    inputTokens: 10,
-                    outputTokens: 5,
-                    totalTokens: 15,
-                },
-                costs: {
-                    input: 0.0000015,
-                    output: 0.000003,
-                    total: 0.0000045,
+    const built = await processorAccess.buildChatRequestFromMessage(
+        {
+            id: 'message-attach-1',
+            content: 'Summarize these attachments.',
+            author: { id: 'user-1', username: 'Jordan' },
+            channelId: 'channel-1',
+            guildId: 'guild-1',
+            attachments: {
+                size: 2,
+                map: (callback: (attachment: unknown) => unknown) => [
+                    callback({
+                        id: 'attachment-image',
+                        url: 'https://example.com/screenshot.png',
+                        contentType: 'image/png',
+                    }),
+                    callback({
+                        id: 'attachment-file',
+                        url: 'https://example.com/spec.pdf',
+                        contentType: 'application/pdf',
+                    }),
+                ],
+            },
+            mentions: {
+                users: {
+                    has: () => false,
                 },
             },
-        };
-    }) as typeof botApi.runImageDescriptionTaskViaApi;
-
-    try {
-        const built = await processorAccess.buildChatRequestFromMessage(
-            {
-                id: 'message-attach-1',
-                content: 'What changed in this image?',
-                author: { id: 'user-1', username: 'Jordan' },
-                channelId: 'channel-1',
-                guildId: 'guild-1',
-                attachments: {
-                    filter: () => ({
-                        size: 1,
-                        map: (callback: (attachment: unknown) => unknown) => [
-                            callback({
-                                id: 'attachment-1',
-                                url: 'https://example.com/screenshot.png',
-                                contentType: 'image/png',
-                            }),
-                        ],
-                    }),
-                },
-                mentions: {
-                    users: {
-                        has: () => false,
-                    },
-                },
-                client: {
-                    user: {
-                        id: 'bot-1',
-                    },
-                },
-                channel: {},
-                embeds: [],
-            } as never,
-            ''
-        );
-
-        if (!built) {
-            throw new Error('Expected chat request to be built');
-        }
-
-        assert.equal(capturedRequests.length, 1);
-        assert.equal(capturedRequests[0]?.task, 'image_description');
-        assert.equal(
-            capturedRequests[0]?.imageUrl,
-            'https://example.com/screenshot.png'
-        );
-        assert.equal(
-            capturedRequests[0]?.context,
-            'What changed in this image?'
-        );
-        assert.equal(
-            capturedRequests[0]?.channelContext?.channelId,
-            'channel-1'
-        );
-        const joinedConversation = built.request.conversation
-            .map((entry) => entry.content)
-            .join('\n');
-        assert.match(joinedConversation, /BEGIN Image Descriptions/);
-        assert.match(joinedConversation, /Screenshot of a policy update/);
-    } finally {
-        (
-            botApi as {
-                runImageDescriptionTaskViaApi: typeof botApi.runImageDescriptionTaskViaApi;
-            }
-        ).runImageDescriptionTaskViaApi = originalRunImageDescriptionTaskViaApi;
-    }
-});
-
-test('buildChatRequestFromMessage omits empty image-description context for image-only messages', async () => {
-    const processor = createProcessor();
-    const processorAccess = processor as unknown as ProcessorPrivateAccess;
-    const originalRunImageDescriptionTaskViaApi =
-        botApi.runImageDescriptionTaskViaApi;
-    const capturedRequests: Array<{
-        task: string;
-        imageUrl: string;
-        context?: string;
-        channelContext?: { channelId?: string; guildId?: string };
-    }> = [];
-
-    processorAccess.buildRawConversationHistory = async () => [
-        { role: 'user', content: 'Jordan uploaded an image.' },
-    ];
-
-    (
-        botApi as {
-            runImageDescriptionTaskViaApi: typeof botApi.runImageDescriptionTaskViaApi;
-        }
-    ).runImageDescriptionTaskViaApi = (async (request) => {
-        capturedRequests.push(request);
-        return {
-            task: 'image_description',
-            result: {
-                description: '{"summary":"Standalone screenshot description"}',
-                model: 'gpt-4o-mini',
-                usage: {
-                    inputTokens: 10,
-                    outputTokens: 5,
-                    totalTokens: 15,
-                },
-                costs: {
-                    input: 0.0000015,
-                    output: 0.000003,
-                    total: 0.0000045,
+            client: {
+                user: {
+                    id: 'bot-1',
                 },
             },
-        };
-    }) as typeof botApi.runImageDescriptionTaskViaApi;
+            channel: {},
+            embeds: [],
+        } as never,
+        ''
+    );
 
-    try {
-        const built = await processorAccess.buildChatRequestFromMessage(
-            {
-                id: 'message-attach-2',
-                content: '   ',
-                author: { id: 'user-1', username: 'Jordan' },
-                channelId: 'channel-1',
-                guildId: 'guild-1',
-                attachments: {
-                    filter: () => ({
-                        size: 1,
-                        map: (callback: (attachment: unknown) => unknown) => [
-                            callback({
-                                id: 'attachment-1',
-                                url: 'https://example.com/screenshot.png',
-                                contentType: 'image/png',
-                            }),
-                        ],
-                    }),
-                },
-                mentions: {
-                    users: {
-                        has: () => false,
-                    },
-                },
-                client: {
-                    user: {
-                        id: 'bot-1',
-                    },
-                },
-                channel: {},
-                embeds: [],
-            } as never,
-            ''
-        );
-
-        if (!built) {
-            throw new Error('Expected chat request to be built');
-        }
-
-        assert.equal(capturedRequests.length, 1);
-        assert.equal(
-            Object.prototype.hasOwnProperty.call(
-                capturedRequests[0] ?? {},
-                'context'
-            ),
-            false
-        );
-        const joinedConversation = built.request.conversation
-            .map((entry) => entry.content)
-            .join('\n');
-        assert.match(joinedConversation, /BEGIN Image Descriptions/);
-        assert.match(joinedConversation, /Standalone screenshot description/);
-    } finally {
-        (
-            botApi as {
-                runImageDescriptionTaskViaApi: typeof botApi.runImageDescriptionTaskViaApi;
-            }
-        ).runImageDescriptionTaskViaApi = originalRunImageDescriptionTaskViaApi;
+    if (!built) {
+        throw new Error('Expected chat request to be built');
     }
+
+    assert.deepEqual(built.request.attachments, [
+        {
+            kind: 'image',
+            url: 'https://example.com/screenshot.png',
+            contentType: 'image/png',
+        },
+        {
+            kind: 'file',
+            url: 'https://example.com/spec.pdf',
+            contentType: 'application/pdf',
+        },
+    ]);
 });
 
 test('buildChatRequestFromMessage sends raw conversation without bot-side identity guard', async () => {

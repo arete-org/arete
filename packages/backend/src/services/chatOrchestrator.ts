@@ -37,8 +37,10 @@ import { resolveExecutionContract } from './executionContractResolver.js';
 import { resolveWorkflowModeDecision } from './workflowProfileRegistry.js';
 import { buildSteerabilityControls } from './steerabilityControls.js';
 import type { WeatherForecastTool } from './contextIntegrations/weather/index.js';
+import type { InternalImageDescriptionTaskService } from './internalText.js';
 import { resolveWeatherClarificationContinuation } from './tools/weatherClarificationContinuation.js';
 import { createWeatherForecastContextStepExecutor } from './contextIntegrations/weather/index.js';
+import { createFileScanningContextStepExecutor } from './contextIntegrations/fileScanning/index.js';
 import { createPlannerResultApplier } from './chatOrchestrator/plannerResultApplier.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -67,6 +69,7 @@ import type {
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
     weatherForecastTool?: WeatherForecastTool;
+    internalImageDescriptionTaskService?: InternalImageDescriptionTaskService;
     alertRouter?: IncidentAlertRouter;
 };
 
@@ -89,6 +92,7 @@ export const createChatOrchestrator = ({
     recordUsage,
     executionContractTrustGraph,
     weatherForecastTool,
+    internalImageDescriptionTaskService,
     alertRouter,
 }: CreateChatOrchestratorOptions) => {
     const chatOrchestratorLogger =
@@ -401,6 +405,16 @@ export const createChatOrchestrator = ({
                     chatOrchestratorLogger.warn(message, meta);
                 },
             });
+        const fileScanningContextStepExecutor =
+            createFileScanningContextStepExecutor({
+                imageDescriptionTaskService:
+                    internalImageDescriptionTaskService,
+                logger: chatOrchestratorLogger,
+            });
+        const contextStepExecutorRegistry = {
+            weather_forecast: weatherContextStepExecutor,
+            file_scan: fileScanningContextStepExecutor,
+        };
         const buildPlannerSummary = (input: {
             plannerStepResult: PlannerStepResult;
             plannerApplication: ReturnType<typeof plannerResultApplier>;
@@ -639,7 +653,7 @@ export const createChatOrchestrator = ({
             plannerStepRequest,
             plannerStepExecutor,
             planContinuationBuilder,
-            contextStepExecutor: weatherContextStepExecutor,
+            contextStepExecutorRegistry,
             latestUserInput: normalizedRequest.latestUserInput,
             ExecutionContract: resolvedExecutionContract,
             ...(executionContractScopeTuple !== undefined && {
