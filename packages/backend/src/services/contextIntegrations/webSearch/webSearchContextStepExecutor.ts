@@ -98,7 +98,7 @@ export const createWebSearchContextStepExecutor =
                 enabledProviders: ['openai'],
                 providerOrder: ['openai'],
             },
-            // Row-4 scaffolding: only OpenAI-backed search is executable today.
+            // Current scaffolding: only OpenAI-backed search is executable today.
             // Brave/SearXNG will be added as dedicated providers in follow-up work.
             availableProviders: ['openai'],
         });
