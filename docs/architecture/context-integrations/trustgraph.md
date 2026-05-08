@@ -91,8 +91,10 @@ In the current implementation:
 - `server.ts` resolves runtime options
 - the chat handler passes those options into orchestration
 - the orchestrator decides whether retrieval is even attempted
-- `chatService` calls evidence ingestion only when runtime options and a valid
-  TrustGraph context both exist
+- `chatService` injects a `trustgraph` context step when runtime options and a
+  valid TrustGraph context both exist
+- `workflowEngine` executes that context step before generation
+- `chatService` reuses context-step TrustGraph results for metadata/provenance
 
 The kill switch lives at the runtime wiring boundary. If it is on, no external
 retrieval is attempted and local behavior continues normally.
@@ -126,6 +128,9 @@ If TrustGraph influences a run, that influence should be visible afterward.
 | provenance join | what outside evidence was consumed, dropped, denied, or ignored   |
 | reason codes    | why retrieval succeeded, failed, timed out, or was denied         |
 | structured logs | machine-readable runtime detail for operators and debugging       |
+
+TrustGraph citation links are emitted only for URL-like source refs, and are
+normalized to HTTPS in the response citation surface.
 
 The current provenance join records fields such as:
 
