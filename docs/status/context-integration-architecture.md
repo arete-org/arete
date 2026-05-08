@@ -35,13 +35,13 @@ Before integrations can run in parallel with assess-driven cycling:
 
 ## Integration Status
 
-| Integration            | Pattern                 | Status                       |
-| ---------------------- | ----------------------- | ---------------------------- |
-| `weather_forecast`     | context-step            | Implemented                  |
-| `web_search`           | context-step            | Implemented                  |
-| `file_scan`            | context-step            | Implemented                  |
-| `trustgraph`           | evidence ingestion seam | Not migrated to context-step |
-| `reverse_image_search` | not implemented         | Not implemented              |
+| Integration            | Pattern                        | Status          |
+| ---------------------- | ------------------------------ | --------------- |
+| `weather_forecast`     | context-step                   | Implemented     |
+| `web_search`           | context-step                   | Implemented     |
+| `file_scan`            | context-step                   | Implemented     |
+| `trustgraph`           | context-step + governance pass | Implemented     |
+| `reverse_image_search` | not implemented                | Not implemented |
 
 ## Implementation Sequence
 
@@ -58,8 +58,9 @@ Before integrations can run in parallel with assess-driven cycling:
 
 **Issue #337** - TrustGraph context-step migration
 
-- Refactor to run pre-generation through workflow context-step
-- Keep predicate view mapping as separate post-generation governance pass
+- Refactor to run through workflow context-step ✅
+- Keep predicate view mapping as separate governance pass ✅
+- Full cutover: remove legacy post-generation fallback path ✅
 
 **Issue #336** - Web search context-step migration
 
@@ -69,7 +70,7 @@ Before integrations can run in parallel with assess-driven cycling:
 
 **Issue #333** - Image scanning context-step migration
 
-- Move from Discord bot layer to workflow context-step
+- Scope folded into `file_scan` integration and completed via Issue #334 ✅
 
 **Issue #334** - File attachment scanning
 
@@ -86,6 +87,11 @@ Before integrations can run in parallel with assess-driven cycling:
 
 - Remove `toolRegistryContextStepAdapter` once weather migrates to direct implementation (Issue #340 pattern)
 - Consider removing post-generation evidence ingestion paths that are no longer needed
+- Standardize Context Step short-circuit response policy via integration policy
+  registry instead of integration-specific conditionals in shared chat flow
+- Standardize integration status mapping (`executed`/`skipped`/`failed` +
+  reason-code conventions) across Context Integrations for consistent telemetry
+  and trace interpretation
 
 ## Related Work
 

@@ -106,8 +106,9 @@ under one path.
 
 ### Workflow context-step execution
 
-`weather_forecast` and `file_scan` use the workflow context-step execution path
-for bounded-review modes (`balanced` and `grounded`). In this pattern:
+`weather_forecast`, `file_scan`, `web_search`, and `trustgraph` use the
+workflow context-step execution path for bounded-review modes (`balanced` and
+`grounded`). In this pattern:
 
 - Executes through `workflowEngine` with an injected `ContextStepExecutor`
 - Executes before the `generate` step in bounded-review workflows
@@ -118,20 +119,21 @@ for bounded-review modes (`balanced` and `grounded`). In this pattern:
 The adapter `toolRegistryContextStepAdapter.ts` implements this pattern while
 keeping the workflow engine provider-neutral.
 
-### Evidence ingestion seam
+### TrustGraph governance pass
 
-`TrustGraph` uses a separate evidence-ingestion seam. It is not implemented as
-a workflow context-step executor. In this pattern:
+`TrustGraph` executes as a workflow context step, while keeping
+its predicate-view and provenance mapping as a separate governance pass. In this
+pattern:
 
-- Flows through `chatService` evidence ingestion, not workflowEngine
-- Handles scope validation and ownership separately from workflow execution
-- Records provenance separately from workflow step records
+- Executes through `workflowEngine` as `trustgraph` context integration
+- Preserves scope validation and ownership validation inside TrustGraph ingestion
+- Surfaces bounded TrustGraph metadata/provenance after generation
 - Is documented in [trustgraph.md](./trustgraph.md)
 
 ### Tool-registry path
 
-`web_search` and other tools still use the traditional tool-registry path
-instead of workflow context-step execution.
+Provider/runtime protocol boundaries still use tool-oriented protocol semantics
+where required. Footnote orchestration remains Context Step-owned.
 
 ## Current docs
 

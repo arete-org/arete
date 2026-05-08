@@ -166,7 +166,7 @@ test('PlannerResultApplier enforces single-tool policy and derives weather conte
     assert.equal(output.toolRequestContext.toolName, 'weather_forecast');
     assert.equal(output.toolRequestContext.requested, true);
     assert.equal(
-        output.contextStepRequest?.integrationName,
+        output.contextStepRequests?.[0]?.integrationName,
         'weather_forecast'
     );
     assert.deepEqual(output.generationForExecution.search, {

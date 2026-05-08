@@ -7,14 +7,16 @@
  * @footnote-ethics: high - Clear seam ownership preserves planner-advisory boundaries and policy authority.
  */
 import type {
+    ContextStepRequest,
     ExecutionReasonCode,
     ExecutionStatus,
+    PartialResponseTemperament,
     PlannerExecutionApplyOutcome,
     PlannerExecutionContractType,
     PlannerExecutionPurpose,
+    SteerabilityControlId,
     ToolExecutionContext,
     ToolInvocationRequest,
-    SteerabilityControlId,
 } from '@footnote/contracts/ethics-core';
 import type { ModelProfile } from '@footnote/contracts';
 import type {
@@ -25,7 +27,6 @@ import type {
     GenerationRequest,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
-import type { PartialResponseTemperament } from '@footnote/contracts/ethics-core';
 import type {
     ChatPlan,
     ChatPlannerCapabilityProfileOption,
@@ -35,7 +36,6 @@ import type { ChatPlannerInvocationContext } from './chatPlannerInvocation.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import type { ChatSurfacePolicyCoercion } from './chatSurfacePolicy.js';
 import type { CapabilityProfileId } from './modelCapabilityPolicy.js';
-import type { ContextStepRequest } from './workflowEngine.js';
 
 /** Workflow engine sends this to PlannerStepExecutor for the plan step. */
 export type PlannerStepRequest = {
@@ -113,7 +113,6 @@ export type PlannerApplicationResult = {
     capabilityReasonCode?: string;
     toolRequestContext: ToolInvocationRequest;
     toolExecutionContext?: ToolExecutionContext;
-    contextStepRequest?: ContextStepRequest;
     contextStepRequests?: ContextStepRequest[];
     plannerApplyOutcome: PlannerExecutionApplyOutcome;
     plannerMattered: boolean;
@@ -183,9 +182,7 @@ export type PlanContinuation = {
           generationRequest: GenerationRequest;
           plannerTemperament?: PartialResponseTemperament;
           conversationSnapshot: string;
-          // Backward-compatible single integration field for existing callers.
-          contextStepRequest?: ContextStepRequest;
-          // Preferred multi-integration field consumed by parallel context-step execution.
+          // Multi-integration field consumed by parallel context-step execution.
           contextStepRequests?: ContextStepRequest[];
       }
 );

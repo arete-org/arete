@@ -156,7 +156,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Also define: workflow behavior presets (balanced/grounded), shared reviewed workflow shape (generate -> assess -> revise), workflow plan step (workflow-owned planner timing/lineage), applied plan state (`AppliedPlanState`), plan continuation (`PlanContinuation`), context step (injected pre-generation context), planner advisory boundary (planner suggests, backend policy decides), planner result applier (policy-application seam), terminal_action (workflow terminal outcome for ignore/react/image).",
+                    "content": "Also define: workflow behavior presets (balanced/grounded), shared reviewed workflow shape (generate -> assess -> revise), workflow plan step (workflow-owned planner timing/lineage), applied plan state (`AppliedPlanState`), plan continuation (`PlanContinuation`), context step (integration context injection before generation), planner advisory boundary (planner suggests, backend policy decides), planner result applier (policy-application seam), terminal_action (workflow terminal outcome for ignore/react/image).",
                     "author": "Maintainer"
                 }
             ]
@@ -269,7 +269,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "weather_forecast is the first concrete context-step integration, executing before the generate step in reviewed workflows."
+                    "content": "Context-step integrations include weather_forecast, web_search, file_scan, and trustgraph."
                 }
             ]
         },
@@ -280,12 +280,14 @@
             "entrypoints": [
                 "docs/architecture/context-integrations/README.md",
                 "docs/architecture/context-integrations/weather-forecast.md",
+                "docs/architecture/context-integrations/trustgraph.md",
                 "docs/proposals/web-search-context-integration.md",
-                "packages/backend/src/services/contextIntegrations/toolRegistryContextStepAdapter.ts",
-                "packages/backend/src/services/openMeteoForecastTool.ts",
-                "packages/backend/src/services/tools/weatherForecastToolAdapter.ts",
-                "packages/backend/test/toolRegistryContextStepAdapter.test.ts",
-                "packages/backend/test/openMeteoForecastTool.test.ts"
+                "packages/backend/src/services/contextIntegrations/weather",
+                "packages/backend/src/services/contextIntegrations/webSearch",
+                "packages/backend/src/services/contextIntegrations/fileScanning",
+                "packages/backend/src/services/contextIntegrations/trustgraph",
+                "packages/backend/test/webSearchContextStepExecutor.test.ts",
+                "packages/backend/test/toolExecutionParity.test.ts"
             ],
             "page_notes": [
                 {
@@ -293,15 +295,15 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "weather_forecast is implemented as a workflow context-step integration. It executes before the generate step and can inject context into the generation prompt.",
+                    "content": "weather_forecast is implemented as a workflow context-step integration and can inject context into the generation prompt.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "web_search is proposal/future work, not implemented as context-step execution yet. See the proposal for intended provider-neutral direction.",
+                    "content": "web_search is implemented as a workflow context-step integration. Keep provider protocol/tool semantics at runtime boundaries only.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "TrustGraph uses a separate evidence-ingestion seam, not the workflow context-step path. See context-integrations/trustgraph.md.",
+                    "content": "TrustGraph executes as a workflow context-step integration while keeping predicate/provenance mapping as a separate governance pass.",
                     "author": "Maintainer"
                 },
                 {
@@ -509,7 +511,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "weather_forecast uses the workflow context-step path to inject context before generation in reviewed workflow runs."
+                    "content": "Chat flow uses contextStepRequests for workflow context-step execution (weather_forecast, web_search, file_scan, trustgraph where applicable)."
                 }
             ]
         },

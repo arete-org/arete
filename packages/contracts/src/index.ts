@@ -25,6 +25,10 @@ export type {
     ToolInvocationIntent,
     ToolInvocationRequest,
     ToolExecutionContext,
+    ContextIntegrationName,
+    ContextStepRequest,
+    ContextStepIntegrationContext,
+    ContextStepResult,
     CorrelationEnvelope,
     EvaluatorAuthorityLevel,
     EvaluatorDecisionMode,
@@ -55,6 +59,7 @@ export {
 export {
     SAFETY_RULE_METADATA,
     type SafetyRuleMetadata,
+    CONTEXT_INTEGRATION_NAMES,
 } from './ethics-core/index.js';
 
 // Web API contracts (request/response envelopes)

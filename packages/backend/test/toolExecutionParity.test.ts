@@ -82,18 +82,20 @@ test('weather success flows through workflow context-step: tool step recorded in
             enableAssessment: true,
             enableRevision: true,
         },
-        contextStepRequest: {
-            integrationName: 'weather_forecast',
-            requested: true,
-            eligible: true,
-            input: {
-                location: {
-                    type: 'lat_lon',
-                    latitude: 39.7684,
-                    longitude: -86.1581,
+        contextStepRequests: [
+            {
+                integrationName: 'weather_forecast',
+                requested: true,
+                eligible: true,
+                input: {
+                    location: {
+                        type: 'lat_lon',
+                        latitude: 39.7684,
+                        longitude: -86.1581,
+                    },
                 },
             },
-        },
+        ],
         contextStepExecutor: async ({ request }) => {
             const execution = await weatherForecastTool.fetchForecast(
                 request.input as {
@@ -190,12 +192,14 @@ test('weather failure preserves fail-open: generation runs, tool step recorded a
             enableAssessment: true,
             enableRevision: true,
         },
-        contextStepRequest: {
-            integrationName: 'weather_forecast',
-            requested: true,
-            eligible: true,
-            input: { location: 'Indianapolis' },
-        },
+        contextStepRequests: [
+            {
+                integrationName: 'weather_forecast',
+                requested: true,
+                eligible: true,
+                input: { location: 'Indianapolis' },
+            },
+        ],
         contextStepExecutor: async () => {
             try {
                 await weatherForecastTool.fetchForecast({
@@ -293,12 +297,14 @@ test('weather clarification short-circuits: no generation, clarification respons
             enableAssessment: true,
             enableRevision: true,
         },
-        contextStepRequest: {
-            integrationName: 'weather_forecast',
-            requested: true,
-            eligible: true,
-            input: { location: 'New York' },
-        },
+        contextStepRequests: [
+            {
+                integrationName: 'weather_forecast',
+                requested: true,
+                eligible: true,
+                input: { location: 'New York' },
+            },
+        ],
         contextStepExecutor: async () => ({
             executionContext: {
                 toolName: 'weather_forecast',
