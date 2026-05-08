@@ -745,6 +745,52 @@ export type ToolExecutionContext = {
 };
 
 /**
+ * Context Step request envelope.
+ *
+ * Each integration receives provider-neutral input plus explicit
+ * requested/eligible state.
+ */
+export type ContextStepRequest = {
+    integrationName: ContextIntegrationName;
+    requested: boolean;
+    eligible: boolean;
+    reasonCode?: ToolInvocationReasonCode;
+    input?: Record<string, unknown>;
+};
+
+export const CONTEXT_INTEGRATION_NAMES = [
+    'weather_forecast',
+    'web_search',
+    'file_scan',
+    'trustgraph',
+    'reverse_image_search',
+] as const;
+
+export type ContextIntegrationName =
+    | (typeof CONTEXT_INTEGRATION_NAMES)[number]
+    | (string & {});
+
+export type ContextStepIntegrationContext = {
+    kind: ContextIntegrationName;
+    version: 'v1';
+    payload: unknown;
+};
+
+/**
+ * Context Step result envelope.
+ *
+ * `integrationContext` stays serializable and integration-scoped. Callers
+ * should narrow by `kind` before consuming payload fields.
+ */
+export type ContextStepResult = {
+    executionContext: ToolExecutionContext;
+    contextMessages?: string[];
+    clarification?: ToolClarification;
+    sources?: Citation[];
+    integrationContext?: ContextStepIntegrationContext;
+};
+
+/**
  * One backend-owned execution timeline entry for this response.
  *
  * This v1 shape is intentionally compact and is expected to grow once

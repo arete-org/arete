@@ -34,6 +34,10 @@ export type {
     ToolInvocationIntent,
     ToolInvocationRequest,
     ToolExecutionContext,
+    ContextIntegrationName,
+    ContextStepRequest,
+    ContextStepIntegrationContext,
+    ContextStepResult,
     ToolClarification,
     ToolClarificationOption,
     CorrelationEnvelope,
@@ -108,6 +112,7 @@ export {
     PROVIDER_PREFERENCE_OUTCOME_STATES,
     TOOL_ALLOWANCE_STATES,
     GROUNDING_EVIDENCE_STATUSES,
+    CONTEXT_INTEGRATION_NAMES,
 } from './types.js';
 export { formatExecutionTimelineSummary } from './executionFormatting.js';
 export { deriveReviewRuntimeSummary } from './reviewRuntime.js';
