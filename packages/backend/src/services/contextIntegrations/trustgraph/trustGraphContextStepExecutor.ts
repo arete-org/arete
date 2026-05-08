@@ -198,11 +198,12 @@ export const createTrustGraphContextStepExecutor = ({
             return {
                 executionContext: {
                     toolName: request.integrationName,
-                    // Adapter `error` is treated as failed execution.
+                    // Adapter `error` and `timeout` are treated as failed execution.
                     // Other governance outcomes (for example scope_denied) stay
                     // executed so provenance can report bounded outcomes.
                     status:
-                        trustGraphResult.adapterStatus === 'error'
+                        trustGraphResult.adapterStatus === 'error' ||
+                        trustGraphResult.adapterStatus === 'timeout'
                             ? 'failed'
                             : 'executed',
                     reasonCode:

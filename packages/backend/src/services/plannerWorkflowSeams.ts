@@ -7,14 +7,16 @@
  * @footnote-ethics: high - Clear seam ownership preserves planner-advisory boundaries and policy authority.
  */
 import type {
+    ContextStepRequest,
     ExecutionReasonCode,
     ExecutionStatus,
+    PartialResponseTemperament,
     PlannerExecutionApplyOutcome,
     PlannerExecutionContractType,
     PlannerExecutionPurpose,
+    SteerabilityControlId,
     ToolExecutionContext,
     ToolInvocationRequest,
-    SteerabilityControlId,
 } from '@footnote/contracts/ethics-core';
 import type { ModelProfile } from '@footnote/contracts';
 import type {
@@ -25,8 +27,6 @@ import type {
     GenerationRequest,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
-import type { ContextStepRequest } from '@footnote/contracts/ethics-core';
-import type { PartialResponseTemperament } from '@footnote/contracts/ethics-core';
 import type {
     ChatPlan,
     ChatPlannerCapabilityProfileOption,

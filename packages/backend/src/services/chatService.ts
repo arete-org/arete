@@ -83,6 +83,21 @@ const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
 
 /**
+ * Returns context-step results in canonical order for downstream consumers.
+ *
+ * Preferred source is the multi-result field from parallel execution; when only
+ * legacy single-result shape exists, normalize it to a one-item array.
+ */
+const getEffectiveContextStepResults = (
+    workflowContextStepResults?: ContextStepResult[],
+    workflowContextStepResult?: ContextStepResult
+): ContextStepResult[] =>
+    workflowContextStepResults ??
+    (workflowContextStepResult !== undefined
+        ? [workflowContextStepResult]
+        : []);
+
+/**
  * Builds the fail-open short-circuit response surface for context-step outcomes.
  *
  * The short-circuit branch can return early when a context step asks for user
@@ -125,11 +140,10 @@ const buildContextStepShortCircuit = ({
           telemetry: FinalToolExecutionTelemetry;
       }
     | undefined => {
-    const effectiveContextStepResults =
-        workflowContextStepResults ??
-        (workflowContextStepResult !== undefined
-            ? [workflowContextStepResult]
-            : []);
+    const effectiveContextStepResults = getEffectiveContextStepResults(
+        workflowContextStepResults,
+        workflowContextStepResult
+    );
     if (effectiveContextStepResults.length === 0) {
         return undefined;
     }
@@ -492,8 +506,12 @@ const TRUSTGRAPH_CONTEXT_STEP_NAME = 'trustgraph';
  * Merges caller-owned Context Step requests with backend-owned TrustGraph
  * request injection.
  *
- * We preserve first-write precedence by integration name to avoid duplicate
- * execution in the same workflow cycle.
+ * TrustGraph is backend-owned: when buildTrustGraphContextStepRequest produces
+ * a request, we remove any upstream `trustgraph` entries before appending the
+ * backend request so backend authority wins for that integration slot.
+ *
+ * For all other integrations, deduplication is first-write-wins by
+ * integrationName to avoid duplicate execution in the same workflow cycle.
  */
 const mergeContextStepRequests = (input: {
     contextStepRequests?: ContextStepRequest[];
@@ -1151,15 +1169,13 @@ export const createChatService = ({
             );
         }
 
-        let trustGraphResult: TrustGraphEvidenceIngestionResult | undefined =
-            pickTrustGraphResultFromContextSteps(workflowContextStepResults);
-        if (trustGraphResult === undefined) {
-            trustGraphResult = pickTrustGraphResultFromContextSteps(
-                workflowContextStepResult !== undefined
-                    ? [workflowContextStepResult]
-                    : undefined
-            );
-        }
+        const effectiveContextStepResults = getEffectiveContextStepResults(
+            workflowContextStepResults,
+            workflowContextStepResult
+        );
+        const trustGraphResult = pickTrustGraphResultFromContextSteps(
+            effectiveContextStepResults
+        );
         // Full TrustGraph cutover: advisory evidence ingestion now flows
         // exclusively through Context Step execution.
         if (trustGraphResult !== undefined) {
