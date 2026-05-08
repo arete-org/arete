@@ -411,8 +411,6 @@ export const createChatOrchestrator = ({
                     internalImageDescriptionTaskService,
                 logger: chatOrchestratorLogger,
             });
-        // Keep this registry additive so parallel Context Integration branches
-        // can merge by appending entries without restructuring call sites.
         const contextStepExecutorRegistry = {
             weather_forecast: weatherContextStepExecutor,
             file_scan: fileScanningContextStepExecutor,
