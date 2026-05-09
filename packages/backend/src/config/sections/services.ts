@@ -74,5 +74,42 @@ export const buildServiceSections = (
             'CHAT_REVIEW_LOOP_MAX_DURATION_MS',
             warn
         ),
+        contextIntegrations: {
+            reverseImageSearch: {
+                enabled: parseBooleanEnv(
+                    env.CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_ENABLED,
+                    true,
+                    'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_ENABLED',
+                    warn
+                ),
+                autoRunWithImageAttachments: parseBooleanEnv(
+                    env.CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_AUTORUN,
+                    true,
+                    'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_AUTORUN',
+                    warn
+                ),
+                minConfidence: Math.max(
+                    0,
+                    Math.min(
+                        1,
+                        parseNonNegativeIntEnv(
+                            env.CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_MIN_CONFIDENCE_PERCENT,
+                            35,
+                            'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_MIN_CONFIDENCE_PERCENT',
+                            warn
+                        ) / 100
+                    )
+                ),
+                maxMatchesPerImage: Math.max(
+                    1,
+                    parsePositiveIntEnv(
+                        env.CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_MAX_MATCHES_PER_IMAGE,
+                        2,
+                        'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_MAX_MATCHES_PER_IMAGE',
+                        warn
+                    )
+                ),
+            },
+        },
     },
 });

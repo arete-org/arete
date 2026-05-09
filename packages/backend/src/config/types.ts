@@ -98,6 +98,14 @@ export type RuntimeConfig = {
         reviewLoopEnabled: boolean;
         maxIterations: number;
         maxDurationMs: number;
+        contextIntegrations: {
+            reverseImageSearch: {
+                enabled: boolean;
+                autoRunWithImageAttachments: boolean;
+                minConfidence: number;
+                maxMatchesPerImage: number;
+            };
+        };
     };
     executionContractTrustGraph: {
         enabled: boolean;

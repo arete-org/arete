@@ -1528,3 +1528,23 @@ test('toolIntent with web_search survives contract sanitization', () => {
     assert.equal(result.outOfContractFields.length, 0);
     assert.equal(result.authorityFieldAttempts.length, 0);
 });
+
+test('toolIntent with reverse_image_search survives contract sanitization', () => {
+    const toolIntent = {
+        toolName: 'reverse_image_search' as const,
+        requested: true,
+    };
+
+    const result = assessPlannerOutputContract({
+        action: 'message',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            toolIntent,
+        },
+    });
+
+    assert.equal(result.shape, 'message');
+    assert.equal(result.outOfContractFields.length, 0);
+    assert.equal(result.authorityFieldAttempts.length, 0);
+});

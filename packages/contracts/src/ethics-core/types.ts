@@ -5,6 +5,7 @@
  * @footnote-risk: low - Incorrect shapes can break UI assumptions or validation.
  * @footnote-ethics: medium - Types document data meaning but do not execute logic.
  */
+import type { ContextIntegrationName } from './contextIntegrations.js';
 
 // This file is the single source of truth for cross-package metadata shapes.
 // It is intentionally "types only": no functions and no runtime behavior.
@@ -274,6 +275,7 @@ export type EvaluatorOutcome = {
 export type ToolInvocationName =
     | 'web_search'
     | 'weather_forecast'
+    | 'reverse_image_search'
     | (string & {});
 
 export type WeatherToolInputLocation =
@@ -757,18 +759,6 @@ export type ContextStepRequest = {
     reasonCode?: ToolInvocationReasonCode;
     input?: Record<string, unknown>;
 };
-
-export const CONTEXT_INTEGRATION_NAMES = [
-    'weather_forecast',
-    'web_search',
-    'file_scan',
-    'trustgraph',
-    'reverse_image_search',
-] as const;
-
-export type ContextIntegrationName =
-    | (typeof CONTEXT_INTEGRATION_NAMES)[number]
-    | (string & {});
 
 export type ContextStepIntegrationContext = {
     kind: ContextIntegrationName;

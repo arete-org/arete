@@ -358,7 +358,11 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
                     properties: {
                         toolName: {
                             type: 'string',
-                            enum: ['weather_forecast', 'web_search'],
+                            enum: [
+                                'weather_forecast',
+                                'web_search',
+                                'reverse_image_search',
+                            ],
                         },
                         requested: { type: 'boolean' },
                         input: { type: 'object' },
