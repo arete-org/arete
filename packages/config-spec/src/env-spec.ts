@@ -1737,6 +1737,48 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Reverse-image provider mode (`none` or `serpapi`). `none` keeps the integration fail-open unavailable.',
+        defaultValue: literal('none'),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_SERPAPI_API_KEY',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description:
+            'SerpAPI key used when reverse-image provider mode is set to `serpapi`.',
+        defaultValue: literal(''),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER_TIMEOUT_MS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Timeout budget for reverse-image provider HTTP requests in milliseconds.',
+        defaultValue: literal(12000),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'WEB_API_RATE_LIMIT_IP',
         owner: 'backend',
         stage: 'runtime',

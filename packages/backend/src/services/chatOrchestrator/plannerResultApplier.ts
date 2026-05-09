@@ -214,6 +214,8 @@ export const createPlannerResultApplier = (
                 reverseImageSearchConfig.autoRunWithImageAttachments)
                 ? reverseImageSearchAttachmentContextStep
                 : undefined;
+        // File scan is backend-owned attachment grounding and should run for
+        // any attachment payload (image or non-image) when attachments exist.
         const fileScanContextStepRequest = hasAttachments
             ? buildAttachmentContextStep({
                   integrationName: FILE_SCAN_INTEGRATION_NAME,

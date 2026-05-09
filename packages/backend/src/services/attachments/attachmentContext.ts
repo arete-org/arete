@@ -19,9 +19,10 @@ const isValidChatAttachment = (value: unknown): value is ChatAttachment => {
         return false;
     }
     const candidate = value as Record<string, unknown>;
+    // Contract boundary: accept the shared web/discord attachment shape only.
+    // Do not require surface-specific fields (for example Discord ids/filenames).
     return (
-        typeof candidate.id === 'string' &&
-        typeof candidate.filename === 'string' &&
+        (candidate.kind === 'image' || candidate.kind === 'file') &&
         typeof candidate.url === 'string'
     );
 };

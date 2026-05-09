@@ -21,6 +21,11 @@ const CHAT_WORKFLOW_MODE_IDS: ReadonlySet<WorkflowModeId> = new Set([
     'balanced',
     'grounded',
 ]);
+const REVERSE_IMAGE_SEARCH_PROVIDER_MODES = new Set([
+    'none',
+    'serpapi',
+] as const);
+type ReverseImageSearchProviderMode = 'none' | 'serpapi';
 
 /**
  * Resolves auth tokens and body-size limits for trusted backend-only service
@@ -108,6 +113,22 @@ export const buildServiceSections = (
                         'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_MAX_MATCHES_PER_IMAGE',
                         warn
                     )
+                ),
+                provider: parseStringUnionEnv<ReverseImageSearchProviderMode>(
+                    env.CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER,
+                    'none',
+                    'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER',
+                    REVERSE_IMAGE_SEARCH_PROVIDER_MODES,
+                    warn
+                ),
+                serpApiKey: parseOptionalTrimmedString(
+                    env.CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_SERPAPI_API_KEY
+                ),
+                providerTimeoutMs: parsePositiveIntEnv(
+                    env.CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER_TIMEOUT_MS,
+                    12000,
+                    'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER_TIMEOUT_MS',
+                    warn
                 ),
             },
         },

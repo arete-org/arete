@@ -114,6 +114,12 @@ export type RuntimeConfig = {
                 minConfidence: number;
                 /** Positive integer cap for matches surfaced per image attachment. */
                 maxMatchesPerImage: number;
+                /** Provider mode for reverse-image lookup execution. */
+                provider: 'none' | 'serpapi';
+                /** Optional SerpAPI key when provider mode is serpapi. */
+                serpApiKey: string | null;
+                /** Timeout budget for reverse-image provider requests. */
+                providerTimeoutMs: number;
             };
         };
     };

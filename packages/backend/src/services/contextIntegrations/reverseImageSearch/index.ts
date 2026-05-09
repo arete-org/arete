@@ -6,6 +6,7 @@
  * @footnote-ethics: low - Re-exports only.
  */
 export { createReverseImageSearchContextStepExecutor } from './reverseImageSearchContextStepExecutor.js';
+export { createSerpApiReverseImageSearchProvider } from './serpApiReverseImageSearchProvider.js';
 export type {
     ReverseImageSearchMatch,
     ReverseImageSearchProvider,

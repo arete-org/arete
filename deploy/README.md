@@ -69,6 +69,7 @@ Validate expected deployment env before deploy:
 - backend: `DEFAULT_MODEL`, `DEFAULT_REASONING_EFFORT`, `DEFAULT_VERBOSITY` (reflect defaults)
 - backend: `OLLAMA_BASE_URL`, `OLLAMA_API_KEY`, `OLLAMA_LOCAL_INFERENCE_ENABLED` (Ollama cloud/local behavior)
 - backend: `TRACE_API_RATE_LIMIT`, `TRACE_API_RATE_LIMIT_WINDOW_MS`, `TRACE_API_MAX_BODY_BYTES` (trace ingestion limits)
+- backend: `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_SERPAPI_API_KEY`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER_TIMEOUT_MS` (reverse-image provider runtime)
 - backend: `LITESTREAM_REPLICA_URL` (SQLite replication target)
 - bot: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (optional image uploads)
 - bot: `BOT_PROFILE_ID`, `BOT_PROFILE_DISPLAY_NAME`, `BOT_PROFILE_PROMPT_OVERLAY_PATH` (optional persona overlays)
