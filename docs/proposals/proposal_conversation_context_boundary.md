@@ -60,7 +60,7 @@ Recommended pattern:
 
 1. Canonical turns in `ConversationContextService` keep normalized role, metadata, and authority fields.
 2. A rendering adapter maps canonical turns to runtime-facing messages (`system`, `user`, `assistant`).
-3. Participant identity stays structured (`speakerId`, `speakerLabel`) and is only injected into visible text when needed.
+3. Participant identity stays structured (`speakerId`, `speakerLabel`) and follows an explicit projection policy.
 
 This keeps model input aligned with common LLM training formats while preserving Footnote-specific semantics outside provider-native payload shapes.
 
@@ -70,13 +70,63 @@ This keeps model input aligned with common LLM training formats while preserving
 
 Timestamp data should remain available as metadata by default and should not be dropped.
 
-Use temporal rendering rules:
+Use deterministic temporal rendering rules:
 
-- include one session-level time header when helpful (date + timezone)
+- include one session-level time header (date + timezone)
 - avoid per-turn transcript wrappers
-- include per-turn time only when context has meaningful gaps (for example, long pauses) or the query is time-sensitive
+- include per-turn time only when a configured time-gap threshold is met
 
 This preserves useful temporal context without teaching the model transcript wrapper styles.
+
+---
+
+## Messages And Envelope Split
+
+Model input should be split into two explicit channels:
+
+1. `messages`: runtime-facing role/content list used for generation.
+2. `contextEnvelope`: backend-owned structured metadata for context semantics.
+
+`messages` should remain role-aligned and minimal.
+`contextEnvelope` should carry speaker identity, timestamps, provenance-facing metadata, and reduction/cache metadata.
+
+Only explicit rendering rules may project `contextEnvelope` fields into model-visible message text.
+
+---
+
+## Speaker Label Policy
+
+`speakerLabel` handling should be explicit and deterministic:
+
+- Always store `speakerId` and `speakerLabel` in `contextEnvelope`.
+- Do not prepend labels in every message by default.
+- Project labels into model-visible text only when disambiguation is required (for example, multiple human participants in view).
+- Keep assistant identity stable and normalized across turns.
+
+This avoids accidental style bleed while preserving multi-party clarity.
+
+---
+
+## Segmentation And Reduction
+
+Conversation history should be represented as deterministic segments.
+
+Suggested segment model:
+
+- `segmentId` (stable hash from ordered turn ids + reduction config version)
+- `turnIds`
+- `startedAt` / `endedAt`
+- `reductionLevel` (`full`, `compact`, `summary`)
+- `summaryRef` (optional pointer to persisted summary content)
+
+Deterministic reduction policy:
+
+- Keep newest `N` turns unreduced.
+- Reduce older turns by segment age and token budget pressure.
+- Reuse existing summaries when `segmentId` is unchanged.
+- Only regenerate summaries when segment content or reduction config changes.
+
+This minimizes churn and creates a clean path for future cache-aware prompt assembly.
 
 ---
 
@@ -110,6 +160,7 @@ Guardrails:
 - avoid double-including both raw normalized conversation and rendered context output in the same model payload
 - preserve fail-open behavior by falling back to normalized role/content turns if context rendering fails
 - keep persona/system layering in prompt layers, not in context service
+- enforce one canonical source-of-truth path for generation history per request
 
 ---
 
@@ -132,6 +183,29 @@ This is guidance to validate, not a permanent rule.
 The shape below is illustrative and should be aligned with existing backend contract types before implementation.
 
 ```ts
+type ConversationSegmentReductionLevel = 'full' | 'compact' | 'summary';
+
+type ConversationContextEnvelope = {
+    sessionTimeZone?: string;
+    sessionDate?: string;
+    temporalPolicy: {
+        gapMinutesForTurnTime: number;
+    };
+    participants: Array<{
+        speakerId: string;
+        speakerLabel: string;
+        roleHint: 'user' | 'assistant' | 'system';
+    }>;
+    segments: Array<{
+        segmentId: string;
+        turnIds: string[];
+        startedAt?: string;
+        endedAt?: string;
+        reductionLevel: ConversationSegmentReductionLevel;
+        summaryRef?: string;
+    }>;
+};
+
 type ConversationContextServiceInput = {
     requestId: string;
     surface: 'discord' | 'web' | 'api';
@@ -139,6 +213,17 @@ type ConversationContextServiceInput = {
     turns: SurfaceConversationTurn[];
     personaHints?: ConversationPersonaHints;
     workflowHints?: ConversationContextWorkflowHints;
+};
+
+type ConversationContextServiceOutput = {
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+    contextEnvelope: ConversationContextEnvelope;
+    diagnostics?: {
+        stableTokenEstimate: number;
+        volatileTokenEstimate: number;
+        segmentCount: number;
+        summaryReuseCount: number;
+    };
 };
 ```
 
@@ -171,6 +256,8 @@ This avoids hard-coding legacy “normalized transcript request” assumptions i
 - Model-facing prompt material does not include transcript wrappers like `[n] At ... said:`.
 - Author/timestamp metadata remains available without transcript-style prose wrappers.
 - Runtime-facing conversation messages stay role-aligned (`system|user|assistant`) and serializable.
+- Conversation assembly uses explicit `messages` + `contextEnvelope` channels with deterministic projection rules.
+- Speaker labels are projected only by policy, not by default per-turn prefixing.
 - Prompt assembly still occurs through existing prompt-layer path.
 - No new implicit runtime/provider memory feature is enabled.
 - `chatOrchestrator` remains backend authority for orchestration and policy seams.
@@ -183,10 +270,10 @@ This avoids hard-coding legacy “normalized transcript request” assumptions i
 
 Track a small set of signals first:
 
-- stable-token vs volatile-token estimates
-- context block churn rate across turns
-- provider cache metadata when available
-- prompt assembly error/fallback counts
+- prompt assembly fallback rate
+- context-to-message projection rate
+- summary reuse rate
+- token delta before/after reduction
 
 These are enough to validate the boundary without overcommitting to low-level cache internals.
 
