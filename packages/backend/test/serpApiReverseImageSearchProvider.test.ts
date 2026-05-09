@@ -38,7 +38,7 @@ test('SerpAPI provider maps visual matches into citations', async () => {
     assert.equal(result.matches[0]?.title, 'Example Match');
     assert.equal(result.matches[0]?.url, 'https://example.com/match');
     assert.equal(result.matches[0]?.confidence, 0.82);
-    assert.equal(result.confidence, 0.82);
+    assert.equal(result.confidence, undefined);
 });
 
 test('SerpAPI provider returns empty matches with no visual hits', async () => {

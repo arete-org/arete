@@ -110,8 +110,6 @@ export type RuntimeConfig = {
                  * image attachments unless planner explicitly disables it.
                  */
                 autoRunWithImageAttachments: boolean;
-                /** Minimum accepted reverse-match confidence as a 0.0-1.0 float. */
-                minConfidence: number;
                 /** Positive integer cap for matches surfaced per image attachment. */
                 maxMatchesPerImage: number;
                 /** Provider mode for reverse-image lookup execution. */

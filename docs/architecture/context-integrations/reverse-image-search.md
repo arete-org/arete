@@ -33,7 +33,6 @@ Runtime config controls whether a provider is available:
 
 - `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_ENABLED`
 - `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_AUTORUN`
-- `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_MIN_CONFIDENCE_PERCENT`
 - `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_MAX_MATCHES_PER_IMAGE`
 - `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER` (`none` or `serpapi`)
 - `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_SERPAPI_API_KEY` (required for `serpapi`)
@@ -52,14 +51,16 @@ When provider mode is `none`, the integration stays fail-open unavailable.
 - Not requested or not eligible:
     - skipped with `tool_not_requested` (or incoming reason code)
 
-## Confidence handling
+## Match handling
 
-Provider confidence is advisory only.
+Provider match output is advisory only.
 
-- If confidence is below configured threshold:
-    - context reports low confidence and avoids asserting direct matches
 - If matches are empty:
-    - context reports no confident public matches
+    - context reports no matches for the image
+- If matches exist:
+    - context surfaces bounded match citations (capped by config)
+- If provider includes per-match confidence:
+    - confidence is preserved as advisory metadata, not as a control gate
 - If lookup fails:
     - context logs warning and continues without blocking generation
 

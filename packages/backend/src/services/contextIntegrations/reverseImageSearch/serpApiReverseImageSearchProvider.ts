@@ -150,24 +150,12 @@ export const createSerpApiReverseImageSearchProvider = ({
                     : undefined;
             const graphTitle = asString(knowledgeGraph?.title);
             const sourceName = asString(knowledgeGraph?.source?.name);
-            const providerConfidenceSignals = matches
-                .map((match) => match.confidence)
-                .filter(
-                    (confidence): confidence is number =>
-                        typeof confidence === 'number' &&
-                        Number.isFinite(confidence)
-                );
-            const providerConfidence =
-                providerConfidenceSignals.length > 0
-                    ? Math.max(...providerConfidenceSignals)
-                    : undefined;
-
             const summary =
                 matches.length > 0
                     ? `Reverse image search found ${matches.length} related public match${matches.length === 1 ? '' : 'es'}.`
                     : graphTitle
                       ? `Reverse image search found no direct visual matches, but detected likely subject: ${graphTitle}${sourceName ? ` (${sourceName})` : ''}.`
-                      : 'Reverse image search found no confident public matches.';
+                      : 'Reverse image search returned no matches for this image.';
 
             if (matches.length === 0 && graphTitle === undefined) {
                 logger.warn(
@@ -179,9 +167,6 @@ export const createSerpApiReverseImageSearchProvider = ({
             return {
                 providerId: 'serpapi_google_lens',
                 summary,
-                ...(providerConfidence !== undefined && {
-                    confidence: providerConfidence,
-                }),
                 matches,
             };
         },

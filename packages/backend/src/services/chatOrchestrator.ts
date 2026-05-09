@@ -443,9 +443,6 @@ export const createChatOrchestrator = ({
             reverse_image_search: createReverseImageSearchContextStepExecutor({
                 provider: reverseImageSearchProvider,
                 logger: chatOrchestratorLogger,
-                minConfidence:
-                    runtimeConfig.chatWorkflow.contextIntegrations
-                        .reverseImageSearch.minConfidence,
                 maxMatchesPerImage:
                     runtimeConfig.chatWorkflow.contextIntegrations
                         .reverseImageSearch.maxMatchesPerImage,

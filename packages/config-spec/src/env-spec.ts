@@ -1709,20 +1709,6 @@ export const envEntries = [
     }),
 
     defineEnv({
-        key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_MIN_CONFIDENCE_PERCENT',
-        owner: 'backend',
-        stage: 'runtime',
-        section: 'chat-workflow',
-        required: false,
-        secret: false,
-        kind: 'integer',
-        description:
-            'Minimum confidence percentage (0-100) before reverse-image matches are surfaced as direct advisory context.',
-        defaultValue: literal(35),
-        usedBy: ['packages/backend/src/config.ts'],
-    }),
-
-    defineEnv({
         key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_MAX_MATCHES_PER_IMAGE',
         owner: 'backend',
         stage: 'runtime',
