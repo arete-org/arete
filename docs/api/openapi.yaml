@@ -20,9 +20,6 @@ openapi: 3.1.0
 # - POST /api/trace-cards/from-trace: Generate/store trace-card from stored trace metadata by responseId (TraceToken required)
 # - GET /api/traces/{responseId}: Trace fetch (public)
 # - GET /api/traces/{responseId}/assets/trace-card.svg: Trace-card SVG fetch (public)
-# - GET /api/blog-posts: Blog index (public)
-# - GET /api/blog-posts/{postId}: Blog post (public)
-# - POST /api/webhook/github: GitHub discussion webhook (signature when configured)
 # - GET /config.json: Runtime config (public)
 # - Operation/code index: docs/api/operation-map.md
 
@@ -69,10 +66,6 @@ tags:
       description: Voice and audio.
     - name: Traces
       description: Trace storage and retrieval.
-    - name: Blog
-      description: Public blog content.
-    - name: Webhooks
-      description: Webhook ingestion.
     - name: System
       description: Runtime config and service metadata.
 
@@ -814,90 +807,6 @@ paths:
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
 
-    # Blog index (public).
-    /api/blog-posts:
-        get:
-            operationId: listBlogPosts
-            x-codeRefs:
-                - packages/backend/src/handlers/blog.ts#handleBlogIndexRequest
-                - packages/api-client/src/web.ts#getBlogIndex
-                - packages/contracts/src/web/types.ts#ListBlogPostsResponse
-            summary: List blog posts
-            description: |
-                Return the public blog index (trailing slash accepted).
-                Public endpoint; no auth or rate limits.
-            tags:
-                - Blog
-            responses:
-                '200':
-                    $ref: '#/components/responses/BlogIndexOk'
-                '405':
-                    $ref: '#/components/responses/MethodNotAllowed'
-                '500':
-                    $ref: '#/components/responses/InternalServerError'
-
-    /api/blog-posts/{postId}:
-        get:
-            operationId: getBlogPost
-            x-codeRefs:
-                - packages/backend/src/handlers/blog.ts#handleBlogPostRequest
-                - packages/api-client/src/web.ts#getBlogPost
-                - packages/contracts/src/web/types.ts#GetBlogPostResponse
-            summary: Fetch a blog post
-            description: |
-                Return a single blog post by numeric id.
-                Public endpoint; no auth or rate limits.
-            tags:
-                - Blog
-            parameters:
-                - $ref: '#/components/parameters/BlogPostId'
-            responses:
-                '200':
-                    $ref: '#/components/responses/BlogPostOk'
-                '400':
-                    $ref: '#/components/responses/BadRequest'
-                '404':
-                    $ref: '#/components/responses/NotFound'
-                '405':
-                    $ref: '#/components/responses/MethodNotAllowed'
-                '500':
-                    $ref: '#/components/responses/InternalServerError'
-
-    # GitHub webhook (signature when configured).
-    /api/webhook/github:
-        post:
-            operationId: postGitHubWebhook
-            x-codeRefs:
-                - packages/backend/src/handlers/webhook.ts#createWebhookHandler
-            summary: Ingest GitHub discussion webhook
-            description: |
-                Accept GitHub discussion events to sync blog posts.
-                Signature required when configured; otherwise ignored.
-            tags:
-                - Webhooks
-            security:
-                # Signature is enforced only when GITHUB_WEBHOOK_SECRET is configured; otherwise requests are ignored with 200.
-                - GitHubWebhookSignature: []
-            requestBody:
-                required: true
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/GitHubDiscussionWebhook'
-            responses:
-                '200':
-                    $ref: '#/components/responses/WebhookOk'
-                '401':
-                    $ref: '#/components/responses/Unauthorized'
-                '400':
-                    $ref: '#/components/responses/BadRequest'
-                '405':
-                    $ref: '#/components/responses/MethodNotAllowed'
-                '413':
-                    $ref: '#/components/responses/PayloadTooLarge'
-                '500':
-                    $ref: '#/components/responses/InternalServerError'
-
     # Runtime config (public).
     /config.json:
         get:
@@ -937,12 +846,6 @@ components:
             in: header
             name: x-service-token
             description: Shared secret for trusted internal service callers.
-        # GitHub webhook signature verification.
-        GitHubWebhookSignature:
-            type: apiKey
-            in: header
-            name: X-Hub-Signature-256
-            description: GitHub webhook signature (sha256=...).
 
     # Data models for request/response payloads.
     schemas:
@@ -2956,81 +2859,6 @@ components:
                 - metadata
             additionalProperties: false
 
-        # Blog content.
-        # Blog content payloads.
-        BlogPostAuthor:
-            type: object
-            properties:
-                login:
-                    type: string
-                avatarUrl:
-                    type: string
-                    format: uri
-                profileUrl:
-                    type: string
-                    format: uri
-            required:
-                - login
-                - avatarUrl
-                - profileUrl
-            additionalProperties: false
-
-        BlogPostIndexEntry:
-            type: object
-            properties:
-                number:
-                    type: integer
-                title:
-                    type: string
-                author:
-                    $ref: '#/components/schemas/BlogPostAuthor'
-                createdAt:
-                    type: string
-                    format: date-time
-                updatedAt:
-                    type: string
-                    format: date-time
-            required:
-                - number
-                - title
-                - author
-                - createdAt
-                - updatedAt
-            additionalProperties: false
-
-        BlogPost:
-            type: object
-            properties:
-                number:
-                    type: integer
-                title:
-                    type: string
-                author:
-                    $ref: '#/components/schemas/BlogPostAuthor'
-                createdAt:
-                    type: string
-                    format: date-time
-                updatedAt:
-                    type: string
-                    format: date-time
-                body:
-                    type: string
-                discussionUrl:
-                    type: string
-                    format: uri
-                commentCount:
-                    type: integer
-            required:
-                - number
-                - title
-                - author
-                - createdAt
-                - updatedAt
-                - body
-                - discussionUrl
-                - commentCount
-            additionalProperties: false
-
         # Runtime config.
         # Public runtime config payload.
         RuntimeConfig:
@@ -3043,102 +2871,6 @@ components:
                 - turnstileSiteKey
             additionalProperties: false
 
-        # Webhooks.
-        # Webhook response envelopes.
-        WebhookSuccessResponse:
-            type: object
-            properties:
-                success:
-                    type: boolean
-                    const: true
-                postNumber:
-                    type: integer
-            required:
-                - success
-                - postNumber
-            additionalProperties: false
-
-        WebhookIgnoredResponse:
-            type: object
-            properties:
-                message:
-                    type: string
-            required:
-                - message
-            additionalProperties: false
-
-        # GitHub discussion webhook payload (subset).
-        GitHubDiscussionWebhook:
-            type: object
-            description: |
-                TODO: confirm full GitHub discussion webhook payload; this is the required subset.
-            properties:
-                action:
-                    type: string
-                repository:
-                    type: object
-                    properties:
-                        full_name:
-                            type: string
-                    required:
-                        - full_name
-                    additionalProperties: true
-                discussion:
-                    type: object
-                    properties:
-                        number:
-                            type: integer
-                        title:
-                            type: string
-                        body:
-                            type: string
-                        user:
-                            type: object
-                            properties:
-                                login:
-                                    type: string
-                                avatar_url:
-                                    type: string
-                                    format: uri
-                                html_url:
-                                    type: string
-                                    format: uri
-                            required:
-                                - login
-                                - avatar_url
-                                - html_url
-                            additionalProperties: true
-                        created_at:
-                            type: string
-                            format: date-time
-                        updated_at:
-                            type: string
-                            format: date-time
-                        html_url:
-                            type: string
-                            format: uri
-                        comments:
-                            type: integer
-                        category:
-                            type: object
-                            properties:
-                                name:
-                                    type: string
-                            additionalProperties: true
-                    required:
-                        - number
-                        - title
-                        - body
-                        - user
-                        - created_at
-                        - updated_at
-                        - html_url
-                    additionalProperties: true
-            required:
-                - action
-                - repository
-                - discussion
-            additionalProperties: true
 
     parameters:
         # Shared request parameters.
@@ -3175,15 +2907,6 @@ components:
             schema:
                 type: string
                 minLength: 1
-
-        BlogPostId:
-            name: postId
-            in: path
-            required: true
-            description: Numeric blog post id.
-            schema:
-                type: string
-                pattern: '^\d+$'
 
     # No shared request bodies yet.
     requestBodies: {}
@@ -3346,28 +3069,6 @@ components:
                 image/svg+xml:
                     schema:
                         type: string
-        BlogIndexOk:
-            description: Blog index entries.
-            content:
-                application/json:
-                    schema:
-                        type: array
-                        items:
-                            $ref: '#/components/schemas/BlogPostIndexEntry'
-        BlogPostOk:
-            description: Blog post.
-            content:
-                application/json:
-                    schema:
-                        $ref: '#/components/schemas/BlogPost'
-        WebhookOk:
-            description: Webhook processed or ignored.
-            content:
-                application/json:
-                    schema:
-                        oneOf:
-                            - $ref: '#/components/schemas/WebhookSuccessResponse'
-                            - $ref: '#/components/schemas/WebhookIgnoredResponse'
         RuntimeConfigOk:
             description: Runtime config.
             content:

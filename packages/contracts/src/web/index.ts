@@ -145,22 +145,6 @@ export type {
     PostIncidentStatusResponse,
 } from './types.js';
 
-/**
- * @api.operationId: listBlogPosts
- * @api.path: GET /api/blog-posts
- */
-export type {
-    BlogAuthor,
-    BlogPostMetadata,
-    ListBlogPostsResponse,
-} from './types.js';
-
-/**
- * @api.operationId: getBlogPost
- * @api.path: GET /api/blog-posts/{postId}
- */
-export type { BlogPost, GetBlogPostResponse } from './types.js';
-
 // Runtime validation schemas for chat/traces contracts.
 export {
     ApiErrorResponseSchema,

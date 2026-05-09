@@ -188,7 +188,7 @@ $webAppName = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'fly.web.toml')
 Write-Host "Configuring backend secrets..."
 Ensure-FlySecrets -AppName $backendAppName `
   -RequiredSecrets @('OPENAI_API_KEY', 'TRACE_API_TOKEN') `
-  -OptionalSecrets @('TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY', 'GITHUB_WEBHOOK_SECRET') `
+  -OptionalSecrets @('TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY') `
   -EnvPath $envPath
 Invoke-EnvValidation -Target 'fly-backend' -AppName $backendAppName
 

@@ -1,6 +1,6 @@
 /**
  * @description: Verifies public routes are handled by Express routers with current behavior parity.
- * Protects config, chat profile listing, and blog route matching from transport dispatch-order regressions.
+ * Protects config and chat profile route matching from transport dispatch-order regressions.
  * @footnote-scope: test
  * @footnote-module: PublicRoutesTests
  * @footnote-risk: medium - Missing tests can let route grouping drift and silently change endpoint behavior.
@@ -60,7 +60,6 @@ test('public routes are Express-owned and bypass central /api dispatch while pre
                 ? pathname.slice(0, -1)
                 : pathname,
         trustProxy: false,
-        blogReadRateLimitConfig: { limit: 100, windowMs: 60_000 },
         handleIncidentListRequest: async () => undefined,
         handleIncidentReportRequest: async () => undefined,
         handleIncidentStatusRequest: async () => undefined,
@@ -112,18 +111,6 @@ test('public routes are Express-owned and bypass central /api dispatch while pre
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.end(JSON.stringify({ profiles: [] }));
         },
-        handleBlogIndexRequest: async (_req, res) => {
-            handledPaths.push('/api/blog-posts');
-            res.statusCode = 200;
-            res.setHeader('Content-Type', 'application/json; charset=utf-8');
-            res.end(JSON.stringify([]));
-        },
-        handleBlogPostRequest: async (_req, res, postId) => {
-            handledPaths.push(`/api/blog-posts/${postId}`);
-            res.statusCode = 200;
-            res.setHeader('Content-Type', 'application/json; charset=utf-8');
-            res.end(JSON.stringify({ id: postId }));
-        },
         handleStaticTransportRequest: async ({ res }) => {
             res.statusCode = 404;
             res.end('static');
@@ -147,24 +134,9 @@ test('public routes are Express-owned and bypass central /api dispatch while pre
     );
     assert.equal(chatProfilesResponse.status, 200);
 
-    const blogIndexResponse = await fetch(`${server.baseUrl}/api/blog-posts/`);
-    assert.equal(blogIndexResponse.status, 200);
-
-    const blogPostResponse = await fetch(
-        `${server.baseUrl}/api/blog-posts/100/extra`
-    );
-    assert.equal(blogPostResponse.status, 404);
-
     const healthResponse = await fetch(`${server.baseUrl}/api/health`);
     assert.equal(healthResponse.status, 404);
 
-    assert.deepEqual(handledPaths, [
-        '/config.json',
-        '/api/chat/profiles',
-        '/api/blog-posts',
-    ]);
-    assert.deepEqual(dispatchCalls, [
-        '/api/blog-posts/100/extra',
-        '/api/health',
-    ]);
+    assert.deepEqual(handledPaths, ['/config.json', '/api/chat/profiles']);
+    assert.deepEqual(dispatchCalls, ['/api/health']);
 });

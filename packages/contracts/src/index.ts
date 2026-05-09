@@ -104,11 +104,6 @@ export type {
     GetTraceResponse,
     GetTraceStaleResponse,
     GetRuntimeConfigResponse,
-    BlogAuthor,
-    BlogPostMetadata,
-    BlogPost,
-    ListBlogPostsResponse,
-    GetBlogPostResponse,
 } from './web/index.js';
 
 // Internal voice contracts (tts + realtime)

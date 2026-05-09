@@ -35,7 +35,6 @@
         "validate-env": "pnpm exec tsx scripts/validate-env.ts",
         "validate-openapi-links": "pnpm exec tsx scripts/validate-openapi-links.ts",
         "refactor:lookup": "node scripts/refactor-lookup.cjs",
-        "blog-sync": "node scripts/blog-sync.cjs",
         "review": "node scripts/review.cjs",
         "repomix:workflow-trace": "pnpm exec repomix --config tools/repomix/workflow-trace.config.json .",
         "repomix:docs-proposal": "pnpm exec repomix --config tools/repomix/docs-proposal.config.json .",

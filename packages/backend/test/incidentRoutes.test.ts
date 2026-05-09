@@ -54,12 +54,6 @@ const createUnhandledRouteHandler = async (
     res.end('not-implemented');
 };
 
-const createUnhandledBlogPostHandler = async (
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-    _postId: string
-): Promise<void> => createUnhandledRouteHandler(req, res);
-
 test('incident routes are handled in Express with explicit precedence and no special transport dispatch handoff', async (t) => {
     const dispatchCalls: string[] = [];
     const incidentCalls: string[] = [];
@@ -74,7 +68,6 @@ test('incident routes are handled in Express with explicit precedence and no spe
                 ? pathname.slice(0, -1)
                 : pathname,
         trustProxy: false,
-        blogReadRateLimitConfig: { limit: 100, windowMs: 60_000 },
         handleIncidentListRequest: async (_req, res) => {
             incidentCalls.push('/api/incidents');
             res.statusCode = 200;
@@ -139,8 +132,6 @@ test('incident routes are handled in Express with explicit precedence and no spe
         },
         handleRuntimeConfigRequest: createUnhandledRouteHandler,
         handleChatProfilesRequest: createUnhandledRouteHandler,
-        handleBlogIndexRequest: createUnhandledRouteHandler,
-        handleBlogPostRequest: createUnhandledBlogPostHandler,
         handleStaticTransportRequest: async ({ res }) => {
             res.statusCode = 404;
             res.end('static');

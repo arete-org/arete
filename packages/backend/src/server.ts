@@ -1,5 +1,5 @@
 /**
- * @description: Serves the web app and API endpoints for chat, traces, and GitHub webhooks.
+ * @description: Serves the web app and API endpoints for chat and traces.
  * @footnote-scope: core
  * @footnote-module: WebServer
  * @footnote-risk: high - Server failures can break user access or data integrity.
@@ -25,7 +25,6 @@ import { runtimeConfig } from './config.js';
 import { buildResponseMetadata } from './services/openaiService.js';
 import { SimpleRateLimiter } from './services/rateLimiter.js';
 import { createTraceStore, storeTrace } from './services/traceStore.js';
-import { createBlogStore } from './storage/blogStore.js';
 import { getDefaultIncidentStore } from './storage/incidents/incidentStore.js';
 import { createAssetResolver } from './http/assets.js';
 import { createExpressApp } from './http/expressApp.js';
@@ -35,15 +34,12 @@ import {
 } from './http/routeDispatch.js';
 import { handleStaticTransportRequest } from './http/staticTransport.js';
 import { handleUpgradeBoundary } from './http/upgradeBoundary.js';
-import { verifyGitHubSignature } from './utils/github.js';
 import { logRequest } from './utils/requestLogger.js';
 import { logger } from './utils/logger.js';
 import { createVoltAgentLogger } from './utils/voltagentLogger.js';
 import { createChatHandler } from './handlers/chat.js';
 import { createTraceHandlers } from './handlers/trace.js';
-import { createBlogHandlers } from './handlers/blog.js';
 import { createIncidentHandlers } from './handlers/incidents.js';
-import { createWebhookHandler } from './handlers/webhook.js';
 import { createRuntimeConfigHandler } from './handlers/config.js';
 import { createIncidentService } from './services/incidents.js';
 import { createIncidentAlertRouter } from './services/incidentAlerts.js';
@@ -78,15 +74,12 @@ const openAiRealtimeLogger =
 // --- Path configuration ---
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(currentDirectory, '../../web/dist');
-const DATA_DIR = runtimeConfig.server.dataDir;
-const BLOG_POSTS_DIR = path.join(DATA_DIR, 'blog-posts');
 const VOLTAGENT_LOG_DIR = path.join(
     runtimeConfig.logging.directory,
     'voltagent'
 );
 
 // --- Storage and asset helpers ---
-const blogStore = createBlogStore(BLOG_POSTS_DIR);
 const { resolveAsset, mimeMap } = createAssetResolver(DIST_DIR);
 
 // --- Service state ---
@@ -401,10 +394,6 @@ const {
     maxTraceBodyBytes: runtimeConfig.trace.maxBodyBytes,
     trustProxy: runtimeConfig.server.trustProxy,
 });
-const { handleBlogIndexRequest, handleBlogPostRequest } = createBlogHandlers({
-    blogStore,
-    logRequest,
-});
 const incidentAlertRouter = createIncidentAlertRouter({
     config: runtimeConfig.alerts,
 });
@@ -497,11 +486,6 @@ if (incidentStore) {
 }
 const handleRuntimeConfigRequest = createRuntimeConfigHandler({ logRequest });
 const handleChatProfilesRequest = createChatProfilesHandler({ logRequest });
-const handleWebhookRequest = createWebhookHandler({
-    writeBlogPost: blogStore.writeBlogPost,
-    verifyGitHubSignature,
-    logRequest,
-});
 const { handleInternalTextRequest } = createInternalTextHandler({
     internalNewsTaskService,
     internalImageDescriptionTaskService,
@@ -577,7 +561,6 @@ const handleChatRequest = createChatHandler({
 });
 const { dispatchHttpRoute, dispatchUpgradeRoute } = createRouteDispatcher({
     handlers: {
-        handleWebhookRequest,
         handleTraceRequest,
     },
     onTraceRouteMatched: (pathname) => {
@@ -588,7 +571,6 @@ const app = createExpressApp({
     dispatchHttpRoute,
     normalizePathname,
     trustProxy: runtimeConfig.server.trustProxy,
-    blogReadRateLimitConfig: runtimeConfig.rateLimits.web.ip,
     handleIncidentListRequest,
     handleIncidentReportRequest,
     handleIncidentStatusRequest,
@@ -605,8 +587,6 @@ const app = createExpressApp({
     handleTraceCardAssetRequest,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
-    handleBlogIndexRequest,
-    handleBlogPostRequest,
     handleStaticTransportRequest,
     resolveAsset,
     mimeMap,

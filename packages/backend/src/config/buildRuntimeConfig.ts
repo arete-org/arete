@@ -21,7 +21,6 @@ import { buildStorageSection } from './sections/storage.js';
 import { buildTurnstileSection } from './sections/turnstile.js';
 import { buildVoltAgentSection } from './sections/voltagent.js';
 import { buildWebSection } from './sections/web.js';
-import { buildWebhookSection } from './sections/webhook.js';
 import type { RuntimeConfig, WarningSink } from './types.js';
 
 /**
@@ -50,7 +49,6 @@ export const buildRuntimeConfig = (
     );
     const turnstile = buildTurnstileSection(env, warn);
     const rateLimits = buildRateLimitsSection(env, warn);
-    const webhook = buildWebhookSection(env, warn);
     const storage = buildStorageSection(env, warn);
     const logging = buildLoggingSection(env, warn);
     const litestream = buildLitestreamSection(env);
@@ -76,7 +74,6 @@ export const buildRuntimeConfig = (
         executionContractTrustGraph,
         turnstile,
         rateLimits,
-        webhook,
         storage,
         logging,
         litestream,

@@ -2,15 +2,13 @@
  * @description: Read-oriented web endpoint methods used by browser and server-rendered web helpers.
  * @footnote-scope: utility
  * @footnote-module: SharedWebReadApi
- * @footnote-risk: medium - Request handling mistakes can break config, blog, and trace reading in the web surface.
+ * @footnote-risk: medium - Request handling mistakes can break config and trace reading in the web surface.
  * @footnote-ethics: medium - Consistent error handling helps keep fallback behavior transparent.
  */
 import type {
-    GetBlogPostResponse,
     GetRuntimeConfigResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
-    ListBlogPostsResponse,
 } from '@footnote/contracts/web';
 import type { ApiJsonResult, ApiRequester } from './client.js';
 import { loadGetTraceApiResponseValidator } from './lazyWebValidators.js';
@@ -19,11 +17,6 @@ export type WebReadApi = {
     getRuntimeConfig: (
         signal?: AbortSignal
     ) => Promise<GetRuntimeConfigResponse>;
-    getBlogIndex: (signal?: AbortSignal) => Promise<ListBlogPostsResponse>;
-    getBlogPost: (
-        discussionNumber: number,
-        signal?: AbortSignal
-    ) => Promise<GetBlogPostResponse>;
     getTrace: (
         responseId: string,
         signal?: AbortSignal
@@ -44,41 +37,6 @@ export const createWebReadApi = (requestJson: ApiRequester): WebReadApi => {
                 method: 'GET',
                 signal,
                 cache: 'no-store',
-            }
-        );
-        return response.data;
-    };
-
-    /**
-     * @api.operationId: listBlogPosts
-     * @api.path: GET /api/blog-posts
-     */
-    const getBlogIndex = async (
-        signal?: AbortSignal
-    ): Promise<ListBlogPostsResponse> => {
-        const response = await requestJson<ListBlogPostsResponse>(
-            '/api/blog-posts',
-            {
-                method: 'GET',
-                signal,
-            }
-        );
-        return response.data;
-    };
-
-    /**
-     * @api.operationId: getBlogPost
-     * @api.path: GET /api/blog-posts/{postId}
-     */
-    const getBlogPost = async (
-        discussionNumber: number,
-        signal?: AbortSignal
-    ): Promise<GetBlogPostResponse> => {
-        const response = await requestJson<GetBlogPostResponse>(
-            `/api/blog-posts/${discussionNumber}`,
-            {
-                method: 'GET',
-                signal,
             }
         );
         return response.data;
@@ -110,8 +68,6 @@ export const createWebReadApi = (requestJson: ApiRequester): WebReadApi => {
 
     return {
         getRuntimeConfig,
-        getBlogIndex,
-        getBlogPost,
         getTrace,
     };
 };

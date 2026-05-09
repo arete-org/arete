@@ -1,6 +1,6 @@
 /**
  * @description: Locks down baseline backend transport contracts at the real server boundary.
- * Covers CORS, route negotiation, static/SPA/CSP behavior, webhook signature handling, NDJSON streaming, and upgrade dispatch.
+ * Covers CORS, route negotiation, static/SPA/CSP behavior, NDJSON streaming, and upgrade dispatch.
  * @footnote-scope: test
  * @footnote-module: ServerContractTests
  * @footnote-risk: high - Missing server-level contracts can let route and transport behavior drift during refactors.
@@ -9,7 +9,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
-import { createHmac } from 'node:crypto';
 
 import { startBackendServerContractHarness } from './serverContractHarness.js';
 
@@ -281,47 +280,6 @@ test('backend server contract baseline routes and transport behavior stay stable
                 (spaResponse.headers.get('content-security-policy') ?? '')
                     .length > 0
             );
-        }
-    );
-
-    await t.test(
-        'webhook raw-body signature path rejects invalid signatures and accepts valid signatures',
-        async () => {
-            const payloadText =
-                '{"action":"created","discussion":{"number":42,"title":"A","body":"B","category":{"name":"General"}},"repository":{"full_name":"acme/server-contract"}}';
-            const validSignature = `sha256=${createHmac('sha256', 'server-contract-secret').update(payloadText).digest('hex')}`;
-
-            const invalidResponse = await fetch(
-                `${harness.baseUrl}/api/webhook/github`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Hub-Signature-256': 'sha256=deadbeef',
-                    },
-                    body: payloadText,
-                }
-            );
-            assert.equal(invalidResponse.status, 401);
-            assert.deepEqual(await invalidResponse.json(), {
-                error: 'Invalid signature',
-            });
-
-            const validResponse = await fetch(
-                `${harness.baseUrl}/api/webhook/github`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Hub-Signature-256': validSignature,
-                    },
-                    body: payloadText,
-                }
-            );
-            assert.equal(validResponse.status, 200);
-            assert.deepEqual(await validResponse.json(), {
-                message: 'Ignored: not Blog category',
-            });
         }
     );
 

@@ -7,7 +7,7 @@ This folder defines the minimal three-service split for local/self-hosted Docker
 
 Services:
 
-- backend: Node server (`server.js`) for `/api/*`, Turnstile verification, rate limiting, tracing, and GitHub webhooks.
+- backend: Node server (`server.js`) for `/api/*`, Turnstile verification, rate limiting, and tracing.
 - web: builds the Vite app and serves it with Caddy, proxying `/api/*` to backend.
 - discord-bot: Discord bot runtime only.
 
@@ -63,7 +63,6 @@ Validate expected deployment env before deploy:
 ### Optional Environment Variables
 
 - backend: `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY` (both required to enable CAPTCHA)
-- backend: `GITHUB_WEBHOOK_SECRET` (enables blog sync)
 - backend/bot: `LOG_LEVEL` (defaults to `debug`)
 - backend: `ALLOWED_ORIGINS`, `FRAME_ANCESTORS` (override CORS/CSP allowlists)
 - backend: `DEFAULT_MODEL`, `DEFAULT_REASONING_EFFORT`, `DEFAULT_VERBOSITY` (reflect defaults)
@@ -97,7 +96,7 @@ Validate expected deployment env before deploy:
   GitHub Actions deploys use `.github/workflows/fly-deploy.yml` and only need the `FLY_API_TOKEN` secret; app names come from `deploy/fly.*.toml`.
   Secrets per app:
     - backend: `OPENAI_API_KEY`, `TRACE_API_TOKEN`
-    - backend (optional): `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY`, `GITHUB_WEBHOOK_SECRET`, `LOG_LEVEL`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_SERPAPI_API_KEY`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER_TIMEOUT_MS` (required as optional backend secrets when `reverse_image_search` runtime provider mode is enabled)
+    - backend (optional): `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY`, `LOG_LEVEL`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_SERPAPI_API_KEY`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER_TIMEOUT_MS` (required as optional backend secrets when `reverse_image_search` runtime provider mode is enabled)
     - bot: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`
     - bot (optional): `LOG_LEVEL`, `WEB_BASE_URL`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `BOT_PROFILE_ID`, `BOT_PROFILE_DISPLAY_NAME`, `BOT_PROFILE_PROMPT_OVERLAY_PATH`
 
@@ -128,7 +127,6 @@ Template overlay paths:
 - Only the web service is exposed on host port 8080 (`http://localhost:8080`) to avoid admin privileges.
 - The backend listens internally on port 3000 and stores data in `/data` (Docker volume: `footnote-data`).
 - Backend startup logs include Litestream replication visibility and latest known snapshot timestamp (or `none yet`).
-- Blog post JSONs are stored in backend-owned storage under `/data/blog-posts` and served via backend endpoints.
 - The web app fetches runtime config from `/config.json` (proxied to the backend) to read `TURNSTILE_SITE_KEY`.
 
 ## Litestream Restore Runbook
