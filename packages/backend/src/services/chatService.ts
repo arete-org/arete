@@ -214,12 +214,12 @@ const buildContextStepShortCircuit = ({
         },
     ];
 
-    for (const contextStepResult of effectiveContextStepResults) {
-        const contextExecutionContext = contextStepResult.executionContext;
-        const matchedPolicy = contextStepShortCircuitPolicies.find((policy) =>
-            policy.matches(contextStepResult)
+    for (const matchedPolicy of contextStepShortCircuitPolicies) {
+        const contextStepResult = effectiveContextStepResults.find((result) =>
+            matchedPolicy.matches(result)
         );
-        if (matchedPolicy !== undefined) {
+        if (contextStepResult !== undefined) {
+            const contextExecutionContext = contextStepResult.executionContext;
             return {
                 response: matchedPolicy.buildResponse(contextStepResult),
                 telemetry: {

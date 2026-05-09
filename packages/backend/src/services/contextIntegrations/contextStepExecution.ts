@@ -17,6 +17,10 @@ type NonBlockingExecutionLogger = {
     warn: (message: string, meta?: Record<string, unknown>) => void;
 };
 
+/**
+ * Builds a skipped context-step result with canonical skipped execution status.
+ * Used when a step is not requested/eligible or intentionally bypassed.
+ */
 export const buildSkippedContextStepResult = (input: {
     toolName: string;
     reasonCode: ToolInvocationReasonCode;
@@ -28,6 +32,10 @@ export const buildSkippedContextStepResult = (input: {
     },
 });
 
+/**
+ * Builds an executed context-step result with optional advisory payload fields.
+ * Use for successful or non-blocking-complete executions that still continue flow.
+ */
 export const buildExecutedContextStepResult = (input: {
     toolName: string;
     clarification?: ContextStepResult['clarification'];
@@ -60,6 +68,10 @@ export const buildExecutedContextStepResult = (input: {
     }),
 });
 
+/**
+ * Builds a failed context-step result while preserving serializable context output.
+ * Fail-open behavior is decided by callers; this helper only shapes failure status.
+ */
 export const buildFailedContextStepResult = (input: {
     toolName: string;
     reasonCode: ToolInvocationReasonCode;
@@ -87,6 +99,11 @@ export const buildFailedContextStepResult = (input: {
     }),
 });
 
+/**
+ * Executes integration work in a non-blocking wrapper.
+ * On success returns `{ status: 'executed', value }`.
+ * On error logs once and returns fail-open `{ status: 'degraded', error }`.
+ */
 export const runNonBlockingIntegrationTask = async <T>(input: {
     integrationName: string;
     logger: NonBlockingExecutionLogger;

@@ -168,9 +168,10 @@ export const createReverseImageSearchContextStepExecutor = ({
                     continue;
                 }
 
+                const trimmedSummary = result.summary?.trim();
                 const summaryText =
-                    result.summary?.trim().length !== 0
-                        ? result.summary?.trim()
+                    trimmedSummary !== undefined && trimmedSummary.length > 0
+                        ? trimmedSummary
                         : 'Reverse image search found related references.';
                 contextMessages.push(`[${label}] ${summaryText}`);
 

@@ -14,18 +14,42 @@ export type ChatAttachment = NonNullable<
     PostChatRequest['attachments']
 >[number];
 
+const isValidChatAttachment = (value: unknown): value is ChatAttachment => {
+    if (typeof value !== 'object' || value === null) {
+        return false;
+    }
+    const candidate = value as Record<string, unknown>;
+    return (
+        typeof candidate.id === 'string' &&
+        typeof candidate.filename === 'string' &&
+        typeof candidate.url === 'string'
+    );
+};
+
+/**
+ * Boundary sanitizer for external attachment payloads.
+ * Fail-open behavior: returns `[]` when input is not an array or entries are invalid.
+ */
 export const getAttachmentsFromUnknownInput = (
     attachmentsInput: unknown
 ): ChatAttachment[] =>
     Array.isArray(attachmentsInput)
-        ? (attachmentsInput as ChatAttachment[])
+        ? attachmentsInput.filter(isValidChatAttachment)
         : [];
 
+/**
+ * Classifies whether an attachment is image-like for context integrations.
+ * Uses `kind === 'image'` first, then falls back to `contentType` prefix checks.
+ */
 export const isImageAttachment = (attachment: ChatAttachment): boolean => {
     const contentType = attachment.contentType?.toLowerCase() ?? '';
     return attachment.kind === 'image' || contentType.startsWith('image/');
 };
 
+/**
+ * Builds a citation from an attachment for provenance-oriented context output.
+ * Authority decision: trusts `attachment.url` as the source URL.
+ */
 export const buildAttachmentCitation = (input: {
     attachment: ChatAttachment;
     title: string;
