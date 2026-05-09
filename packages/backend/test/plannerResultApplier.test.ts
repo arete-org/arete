@@ -198,3 +198,89 @@ test('PlannerResultApplier resolves profile and keeps planner suggestions non-au
     assert.equal(output.plan.profileId, output.selectedResponseProfile.id);
     assert.equal(output.plannerApplyOutcome, 'applied');
 });
+
+test('PlannerResultApplier auto-adds reverse image context-step request when attachments are present', () => {
+    const applier = createApplier();
+    const output = applier({
+        normalizedRequest: createChatRequest({
+            attachments: [
+                {
+                    kind: 'image',
+                    url: 'https://example.com/cat.png',
+                    contentType: 'image/png',
+                },
+            ],
+        }),
+        plannerStepResult: createPlannerStepResult({
+            plan: {
+                ...createPlannerStepResult().plan,
+                generation: {
+                    reasoningEffort: 'low',
+                    verbosity: 'low',
+                },
+            },
+            diagnostics: {
+                rawToolIntentPresent: false,
+                normalizedToolIntentPresent: false,
+                toolIntentRejected: false,
+                toolIntentRejectionReasons: [],
+            },
+        }),
+        clarificationContinuation: { kind: 'none' },
+        resolvedExecutionPolicy: resolveExecutionContract({
+            presetId: 'quality-grounded',
+        }).policyContract,
+    });
+
+    const integrationNames =
+        output.contextStepRequests?.map((request) => request.integrationName) ??
+        [];
+    assert.ok(integrationNames.includes('file_scan'));
+    assert.ok(integrationNames.includes('reverse_image_search'));
+});
+
+test('PlannerResultApplier honors explicit reverse image disable from planner intent', () => {
+    const applier = createApplier();
+    const output = applier({
+        normalizedRequest: createChatRequest({
+            attachments: [
+                {
+                    kind: 'image',
+                    url: 'https://example.com/cat.png',
+                    contentType: 'image/png',
+                },
+            ],
+        }),
+        plannerStepResult: createPlannerStepResult({
+            plan: {
+                ...createPlannerStepResult().plan,
+                generation: {
+                    reasoningEffort: 'low',
+                    verbosity: 'low',
+                    toolIntent: {
+                        toolName: 'reverse_image_search',
+                        requested: false,
+                    },
+                },
+            },
+            diagnostics: {
+                rawToolIntentPresent: true,
+                rawToolIntentName: 'reverse_image_search',
+                normalizedToolIntentPresent: true,
+                normalizedToolIntentName: 'reverse_image_search',
+                toolIntentRejected: false,
+                toolIntentRejectionReasons: [],
+            },
+        }),
+        clarificationContinuation: { kind: 'none' },
+        resolvedExecutionPolicy: resolveExecutionContract({
+            presetId: 'quality-grounded',
+        }).policyContract,
+    });
+
+    const integrationNames =
+        output.contextStepRequests?.map((request) => request.integrationName) ??
+        [];
+    assert.ok(integrationNames.includes('file_scan'));
+    assert.equal(integrationNames.includes('reverse_image_search'), false);
+});

@@ -101,23 +101,20 @@ dropped, or ignored.
 
 ## Integration patterns
 
-Context integrations use different patterns today. They are not fully unified
-under one path.
+Context integrations execute through the workflow context-step path for
+reviewed workflow modes.
 
 ### Workflow context-step execution
 
-`weather_forecast`, `file_scan`, `web_search`, and `trustgraph` use the
-workflow context-step execution path for bounded-review modes (`balanced` and
-`grounded`). In this pattern:
+`weather_forecast`, `file_scan`, `web_search`, `trustgraph`, and
+`reverse_image_search` use the workflow context-step execution path for
+bounded-review modes (`balanced` and `grounded`). In this pattern:
 
 - Executes through `workflowEngine` with an injected `ContextStepExecutor`
 - Executes before the `generate` step in bounded-review workflows
 - Handles clarification, failure, and success through the workflow termination
   flow
 - Preserves fail-open semantics
-
-The adapter `toolRegistryContextStepAdapter.ts` implements this pattern while
-keeping the workflow engine provider-neutral.
 
 ### TrustGraph governance pass
 

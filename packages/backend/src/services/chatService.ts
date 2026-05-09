@@ -179,48 +179,49 @@ const buildContextStepShortCircuit = ({
 
     const generationMetadataContext = buildGenerationMetadataContext();
 
-    for (const contextStepResult of effectiveContextStepResults) {
-        const contextExecutionContext = contextStepResult.executionContext;
-        if (contextExecutionContext.clarification !== undefined) {
-            const clarificationResponse = buildToolClarificationResponse({
-                toolContext: contextExecutionContext,
-                metadataContext: generationMetadataContext as Parameters<
-                    typeof buildToolClarificationResponse
-                >[0]['metadataContext'],
-                buildResponseMetadata,
-            });
-            return {
-                response: clarificationResponse,
-                telemetry: {
-                    toolName: contextExecutionContext.toolName,
-                    status: contextExecutionContext.status,
-                    ...(contextExecutionContext.reasonCode !== undefined && {
-                        reasonCode: contextExecutionContext.reasonCode,
-                    }),
-                    ...(toolRequest !== undefined && {
-                        eligible: toolRequest.eligible,
-                    }),
-                    ...(toolRequest?.reasonCode !== undefined && {
-                        requestReasonCode: toolRequest.reasonCode,
-                    }),
-                },
-            };
-        }
+    const contextStepShortCircuitPolicies: Array<{
+        policyId: 'clarification_required' | 'weather_failure_message';
+        matches: (result: ContextStepResult) => boolean;
+        buildResponse: (result: ContextStepResult) => PostChatResponse;
+    }> = [
+        {
+            policyId: 'clarification_required',
+            matches: (result) =>
+                result.executionContext.clarification !== undefined,
+            buildResponse: (result) =>
+                buildToolClarificationResponse({
+                    toolContext: result.executionContext,
+                    metadataContext: generationMetadataContext as Parameters<
+                        typeof buildToolClarificationResponse
+                    >[0]['metadataContext'],
+                    buildResponseMetadata,
+                }),
+        },
+        {
+            policyId: 'weather_failure_message',
+            matches: (result) =>
+                result.executionContext.toolName === 'weather_forecast' &&
+                result.executionContext.status === 'failed',
+            buildResponse: (result) =>
+                buildWeatherToolFailureResponse({
+                    toolContext: result.executionContext,
+                    metadataContext: generationMetadataContext as Parameters<
+                        typeof buildWeatherToolFailureResponse
+                    >[0]['metadataContext'],
+                    latestUserInput: latestUserInput ?? conversationSnapshot,
+                    buildResponseMetadata,
+                }),
+        },
+    ];
 
-        if (
-            contextExecutionContext.toolName === 'weather_forecast' &&
-            contextExecutionContext.status === 'failed'
-        ) {
-            const failureResponse = buildWeatherToolFailureResponse({
-                toolContext: contextExecutionContext,
-                metadataContext: generationMetadataContext as Parameters<
-                    typeof buildWeatherToolFailureResponse
-                >[0]['metadataContext'],
-                latestUserInput: latestUserInput ?? conversationSnapshot,
-                buildResponseMetadata,
-            });
+    for (const matchedPolicy of contextStepShortCircuitPolicies) {
+        const contextStepResult = effectiveContextStepResults.find((result) =>
+            matchedPolicy.matches(result)
+        );
+        if (contextStepResult !== undefined) {
+            const contextExecutionContext = contextStepResult.executionContext;
             return {
-                response: failureResponse,
+                response: matchedPolicy.buildResponse(contextStepResult),
                 telemetry: {
                     toolName: contextExecutionContext.toolName,
                     status: contextExecutionContext.status,

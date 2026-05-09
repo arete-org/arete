@@ -336,14 +336,14 @@ The shared workflow vocabulary includes `plan`, `tool`, `generate`, `assess`,
 | `workflowEngine`                 | Core    | Owns reviewed workflow steps (`generate`, `assess`, `revise`) and injected context-step execution                   |
 | `chatOrchestrator`               | Core    | Owns deterministic bootstrap (mode/profile/contract), planner policy application seam, and tool intent construction |
 | `chatService`                    | Core    | Invokes workflowEngine, handles context-step short-circuit responses (clarification, failure)                       |
-| `toolRegistryContextStepAdapter` | Adapter | Keeps workflowEngine provider-neutral while mapping tool-registry execution into context-step shape                 |
 
 ### Context-step executor pattern
 
-The workflow engine can execute context integrations such as
-`weather_forecast` before generation through an injected executor. This keeps
-the engine provider-neutral while allowing tools to inject context into the
-generation prompt.
+The workflow engine executes context integrations (for example
+`weather_forecast`, `web_search`, `file_scan`, `trustgraph`,
+`reverse_image_search`) before generation through injected executors. This
+keeps the engine provider-neutral while allowing integrations to inject bounded
+context into the generation prompt.
 
 The pattern works like this:
 
@@ -356,9 +356,6 @@ The pattern works like this:
       returns a user-facing clarification response
     - On failure: workflow continues fail-open without context (no-fabrication
       guardrail preserved)
-
-The adapter `toolRegistryContextStepAdapter.ts` implements this pattern for
-`weather_forecast`. Additional tools would follow the same structure.
 
 ### Planner execution
 
@@ -379,8 +376,7 @@ deterministic bootstrap and backend policy layers.
 In the current split:
 
 - planner timing and plan lineage are workflow-owned
-- weather_forecast execution uses the workflow context-step path
-- web_search unchanged (not migrated to context-step)
+- context integrations execute through the workflow context-step path
 
 ## Step records
 

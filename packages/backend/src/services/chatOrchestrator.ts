@@ -41,6 +41,7 @@ import type { InternalImageDescriptionTaskService } from './internalText.js';
 import { resolveWeatherClarificationContinuation } from './tools/weatherClarificationContinuation.js';
 import { createWeatherForecastContextStepExecutor } from './contextIntegrations/weather/index.js';
 import { createFileScanningContextStepExecutor } from './contextIntegrations/fileScanning/index.js';
+import { createReverseImageSearchContextStepExecutor } from './contextIntegrations/reverseImageSearch/index.js';
 import { createPlannerResultApplier } from './chatOrchestrator/plannerResultApplier.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -414,6 +415,15 @@ export const createChatOrchestrator = ({
         const contextStepExecutorRegistry = {
             weather_forecast: weatherContextStepExecutor,
             file_scan: fileScanningContextStepExecutor,
+            reverse_image_search: createReverseImageSearchContextStepExecutor({
+                logger: chatOrchestratorLogger,
+                minConfidence:
+                    runtimeConfig.chatWorkflow.contextIntegrations
+                        .reverseImageSearch.minConfidence,
+                maxMatchesPerImage:
+                    runtimeConfig.chatWorkflow.contextIntegrations
+                        .reverseImageSearch.maxMatchesPerImage,
+            }),
         };
         const buildPlannerSummary = (input: {
             plannerStepResult: PlannerStepResult;

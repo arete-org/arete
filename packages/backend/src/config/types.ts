@@ -98,6 +98,24 @@ export type RuntimeConfig = {
         reviewLoopEnabled: boolean;
         maxIterations: number;
         maxDurationMs: number;
+        contextIntegrations: {
+            /**
+             * Reverse-image context integration controls for chat workflow execution.
+             */
+            reverseImageSearch: {
+                /** Enables or disables reverse-image context integration entirely. */
+                enabled: boolean;
+                /**
+                 * When true, auto-runs reverse-image context step for requests with
+                 * image attachments unless planner explicitly disables it.
+                 */
+                autoRunWithImageAttachments: boolean;
+                /** Minimum accepted reverse-match confidence as a 0.0-1.0 float. */
+                minConfidence: number;
+                /** Positive integer cap for matches surfaced per image attachment. */
+                maxMatchesPerImage: number;
+            };
+        };
     };
     executionContractTrustGraph: {
         enabled: boolean;

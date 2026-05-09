@@ -1681,6 +1681,62 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_ENABLED',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'Enables reverse-image context integration execution in chat workflow orchestration.',
+        defaultValue: literal(true),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_AUTORUN',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'Automatically requests reverse-image context integration when image attachments are present.',
+        defaultValue: literal(true),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_MIN_CONFIDENCE_PERCENT',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Minimum confidence percentage (0-100) before reverse-image matches are surfaced as direct advisory context.',
+        defaultValue: literal(35),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_MAX_MATCHES_PER_IMAGE',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Maximum number of reverse-image source matches surfaced per image attachment.',
+        defaultValue: literal(2),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'WEB_API_RATE_LIMIT_IP',
         owner: 'backend',
         stage: 'runtime',

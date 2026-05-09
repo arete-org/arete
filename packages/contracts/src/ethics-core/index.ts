@@ -34,7 +34,6 @@ export type {
     ToolInvocationIntent,
     ToolInvocationRequest,
     ToolExecutionContext,
-    ContextIntegrationName,
     ContextStepRequest,
     ContextStepIntegrationContext,
     ContextStepResult,
@@ -112,8 +111,9 @@ export {
     PROVIDER_PREFERENCE_OUTCOME_STATES,
     TOOL_ALLOWANCE_STATES,
     GROUNDING_EVIDENCE_STATUSES,
-    CONTEXT_INTEGRATION_NAMES,
 } from './types.js';
+export { CONTEXT_INTEGRATION_NAMES } from './contextIntegrations.js';
+export type { ContextIntegrationName } from './contextIntegrations.js';
 export { formatExecutionTimelineSummary } from './executionFormatting.js';
 export { deriveReviewRuntimeSummary } from './reviewRuntime.js';
 export {

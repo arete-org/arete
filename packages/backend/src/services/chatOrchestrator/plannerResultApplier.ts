@@ -15,6 +15,9 @@ import { applySingleToolPolicy } from '../tools/toolPolicy.js';
 import { resolveToolSelection } from '../tools/toolRegistry.js';
 import type { WeatherForecastTool } from '../contextIntegrations/weather/index.js';
 import { FILE_SCAN_INTEGRATION_NAME } from '../contextIntegrations/fileScanning/index.js';
+import { REVERSE_IMAGE_SEARCH_INTEGRATION_NAME } from '../contextIntegrations/reverseImageSearch/index.js';
+import { isImageAttachment } from '../attachments/attachmentContext.js';
+import { runtimeConfig } from '../../config.js';
 import { resolveExecutionProfile } from './profileResolution.js';
 import type {
     PlannerApplicationInput,
@@ -46,6 +49,35 @@ export type PlannerResultApplierBootstrap = {
     resolvedExecutionPolicy: Parameters<
         typeof resolveExecutionProfile
     >[0]['resolvedExecutionPolicy'];
+};
+
+const buildAttachmentContextStep = (input: {
+    integrationName: string;
+    attachments: PostChatRequest['attachments'];
+    latestUserInput: string;
+}):
+    | {
+          integrationName: string;
+          requested: true;
+          eligible: true;
+          input: {
+              attachments: Record<string, unknown>[];
+              latestUserInput: string;
+          };
+      }
+    | undefined => {
+    if (input.attachments === undefined || input.attachments.length === 0) {
+        return undefined;
+    }
+    return {
+        integrationName: input.integrationName,
+        requested: true,
+        eligible: true,
+        input: {
+            attachments: input.attachments as Record<string, unknown>[],
+            latestUserInput: input.latestUserInput,
+        },
+    };
 };
 
 export const createPlannerResultApplier = (
@@ -151,27 +183,54 @@ export const createPlannerResultApplier = (
                       }),
                   }
                 : undefined;
-        const fileScanContextStepRequest =
+        const reverseImageSearchRequestedByPlanner =
+            toolSelection.toolRequest.toolName ===
+                REVERSE_IMAGE_SEARCH_INTEGRATION_NAME &&
+            toolSelection.toolRequest.requested;
+        const reverseImageSearchExplicitlyDisabledByPlanner =
+            toolSelection.toolRequest.toolName ===
+                REVERSE_IMAGE_SEARCH_INTEGRATION_NAME &&
+            !toolSelection.toolRequest.requested;
+        const hasAttachments =
             plannerInput.normalizedRequest.attachments !== undefined &&
-            plannerInput.normalizedRequest.attachments.length > 0
-                ? {
-                      integrationName: FILE_SCAN_INTEGRATION_NAME,
-                      requested: true,
-                      eligible: true,
-                      input: {
-                          attachments: plannerInput.normalizedRequest
-                              .attachments as Record<string, unknown>[],
-                          latestUserInput:
-                              plannerInput.normalizedRequest.latestUserInput,
-                      },
-                  }
+            plannerInput.normalizedRequest.attachments.length > 0;
+        const hasImageAttachments =
+            plannerInput.normalizedRequest.attachments?.some((attachment) =>
+                isImageAttachment(attachment)
+            ) ?? false;
+        const reverseImageSearchConfig =
+            runtimeConfig.chatWorkflow.contextIntegrations.reverseImageSearch;
+        const reverseImageSearchAttachmentContextStep =
+            buildAttachmentContextStep({
+                integrationName: REVERSE_IMAGE_SEARCH_INTEGRATION_NAME,
+                attachments: plannerInput.normalizedRequest.attachments,
+                latestUserInput: plannerInput.normalizedRequest.latestUserInput,
+            });
+        const reverseImageSearchContextStepRequest =
+            reverseImageSearchConfig.enabled &&
+            hasImageAttachments &&
+            !reverseImageSearchExplicitlyDisabledByPlanner &&
+            (reverseImageSearchRequestedByPlanner ||
+                reverseImageSearchConfig.autoRunWithImageAttachments)
+                ? reverseImageSearchAttachmentContextStep
                 : undefined;
+        const fileScanContextStepRequest = hasAttachments
+            ? buildAttachmentContextStep({
+                  integrationName: FILE_SCAN_INTEGRATION_NAME,
+                  attachments: plannerInput.normalizedRequest.attachments,
+                  latestUserInput:
+                      plannerInput.normalizedRequest.latestUserInput,
+              })
+            : undefined;
         const contextStepRequests = [
             ...(toolContextStepRequest !== undefined
                 ? [toolContextStepRequest]
                 : []),
             ...(fileScanContextStepRequest !== undefined
                 ? [fileScanContextStepRequest]
+                : []),
+            ...(reverseImageSearchContextStepRequest !== undefined
+                ? [reverseImageSearchContextStepRequest]
                 : []),
         ];
         const plannerApplyOutcome =

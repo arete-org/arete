@@ -538,6 +538,13 @@ const normalizeToolIntent = (
         };
     }
 
+    if (toolName === 'reverse_image_search') {
+        return {
+            toolName: 'reverse_image_search',
+            requested,
+        };
+    }
+
     return undefined;
 };
 

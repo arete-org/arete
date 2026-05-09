@@ -269,7 +269,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "Context-step integrations include weather_forecast, web_search, file_scan, and trustgraph."
+                    "content": "Context-step integrations include weather_forecast, web_search, file_scan, trustgraph, and reverse_image_search."
                 }
             ]
         },
@@ -283,10 +283,13 @@
                 "docs/architecture/context-integrations/trustgraph.md",
                 "docs/proposals/web-search-context-integration.md",
                 "packages/backend/src/services/contextIntegrations/weather",
-                "packages/backend/src/services/contextIntegrations/webSearch",
+                "packages/backend/src/services/tools/toolRegistry.ts",
                 "packages/backend/src/services/contextIntegrations/fileScanning",
                 "packages/backend/src/services/contextIntegrations/trustgraph",
+                "packages/backend/src/services/contextIntegrations/reverseImageSearch",
+                "packages/backend/src/services/contextIntegrations/contextStepExecution.ts",
                 "packages/backend/test/webSearchContextStepExecutor.test.ts",
+                "packages/backend/test/reverseImageSearchContextStepExecutor.test.ts",
                 "packages/backend/test/toolExecutionParity.test.ts"
             ],
             "page_notes": [
@@ -304,6 +307,10 @@
                 },
                 {
                     "content": "TrustGraph executes as a workflow context-step integration while keeping predicate/provenance mapping as a separate governance pass.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "reverse_image_search executes as an advisory workflow context-step integration for image attachments with non-blocking degradation behavior.",
                     "author": "Maintainer"
                 },
                 {
@@ -478,7 +485,7 @@
                 "packages/backend/src/services/chatService/planGenerationInput.ts",
                 "packages/backend/src/services/chatService/planContinuation.ts",
                 "packages/backend/src/services/plannerWorkflowSeams.ts",
-                "packages/backend/src/services/contextIntegrations/toolRegistryContextStepAdapter.ts",
+                "packages/backend/src/services/contextIntegrations/contextStepExecution.ts",
                 "packages/agent-runtime/src",
                 "packages/backend/src/services/responseMetadataHeuristics.ts",
                 "packages/contracts/src/web/types.ts",
@@ -511,7 +518,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "Chat flow uses contextStepRequests for workflow context-step execution (weather_forecast, web_search, file_scan, trustgraph where applicable)."
+                    "content": "Chat flow uses contextStepRequests for workflow context-step execution (weather_forecast, web_search, file_scan, trustgraph, reverse_image_search where applicable)."
                 }
             ]
         },
