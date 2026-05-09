@@ -11,6 +11,11 @@ import type {
     ToolInvocationReasonCode,
     ToolClarification,
 } from '@footnote/contracts/ethics-core';
+import {
+    buildExecutedContextStepResult,
+    buildFailedContextStepResult,
+    buildSkippedContextStepResult,
+} from '../contextStepExecution.js';
 import type {
     ContextStepExecutor,
     ContextStepResult,
@@ -158,58 +163,42 @@ export const createWeatherForecastContextStepExecutor = ({
 
     return async ({ request }): Promise<ContextStepResult> => {
         if (!weatherForecastTool) {
-            return {
-                executionContext: {
-                    toolName: request.integrationName,
-                    status: 'skipped',
-                    reasonCode: request.reasonCode ?? 'tool_unavailable',
-                },
-            };
+            return buildSkippedContextStepResult({
+                toolName: request.integrationName,
+                reasonCode: request.reasonCode ?? 'tool_unavailable',
+            });
         }
 
         if (!request.requested) {
-            return {
-                executionContext: {
-                    toolName: request.integrationName,
-                    status: 'skipped',
-                    reasonCode: request.reasonCode ?? 'tool_not_requested',
-                },
-            };
+            return buildSkippedContextStepResult({
+                toolName: request.integrationName,
+                reasonCode: request.reasonCode ?? 'tool_not_requested',
+            });
         }
 
         if (!request.eligible) {
-            return {
-                executionContext: {
-                    toolName: request.integrationName,
-                    status: 'skipped',
-                    reasonCode:
-                        request.reasonCode ?? 'unspecified_tool_outcome',
-                },
-            };
+            return buildSkippedContextStepResult({
+                toolName: request.integrationName,
+                reasonCode: request.reasonCode ?? 'unspecified_tool_outcome',
+            });
         }
 
         const weatherInput = parseWeatherInput(request.input);
         if (!weatherInput) {
-            return {
-                executionContext: {
-                    toolName: request.integrationName,
-                    status: 'failed',
-                    reasonCode: 'unspecified_tool_outcome',
-                },
-            };
+            return buildFailedContextStepResult({
+                toolName: request.integrationName,
+                reasonCode: 'unspecified_tool_outcome',
+            });
         }
 
         const normalizedLocation = normalizeWeatherLocation(
             weatherInput.location
         );
         if (!normalizedLocation) {
-            return {
-                executionContext: {
-                    toolName: request.integrationName,
-                    status: 'failed',
-                    reasonCode: 'unspecified_tool_outcome',
-                },
-            };
+            return buildFailedContextStepResult({
+                toolName: request.integrationName,
+                reasonCode: 'unspecified_tool_outcome',
+            });
         }
 
         const weatherToolStartedAt = Date.now();
@@ -232,14 +221,11 @@ export const createWeatherForecastContextStepExecutor = ({
                         error instanceof Error ? error.message : String(error),
                 }
             );
-            return {
-                executionContext: {
-                    toolName: request.integrationName,
-                    status: 'failed',
-                    reasonCode: 'tool_execution_error',
-                    durationMs: weatherToolDurationMs,
-                },
-            };
+            return buildFailedContextStepResult({
+                toolName: request.integrationName,
+                reasonCode: 'tool_execution_error',
+                durationMs: weatherToolDurationMs,
+            });
         }
 
         const weatherToolDurationMs = Math.max(
@@ -287,13 +273,27 @@ export const createWeatherForecastContextStepExecutor = ({
                 ? executionContext.clarification
                 : undefined;
 
-        return {
-            executionContext,
+        if (executionContext.status === 'failed') {
+            return buildFailedContextStepResult({
+                toolName: executionContext.toolName,
+                reasonCode:
+                    executionContext.reasonCode ?? 'tool_execution_error',
+                durationMs: executionContext.durationMs,
+                contextMessages: [
+                    formatWeatherToolResultMessage(weatherToolResult),
+                ],
+                ...(sources !== undefined && { sources }),
+            });
+        }
+
+        return buildExecutedContextStepResult({
+            toolName: executionContext.toolName,
+            durationMs: executionContext.durationMs,
+            clarification,
             contextMessages: [
                 formatWeatherToolResultMessage(weatherToolResult),
             ],
-            ...(clarification !== undefined && { clarification }),
             ...(sources !== undefined && { sources }),
-        };
+        });
     };
 };

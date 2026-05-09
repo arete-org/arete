@@ -19,6 +19,11 @@ import type {
     ContextStepExecutor,
     ContextStepResult,
 } from '../../workflowEngine.js';
+import {
+    buildExecutedContextStepResult,
+    buildFailedContextStepResult,
+    buildSkippedContextStepResult,
+} from '../contextStepExecution.js';
 
 type TrustGraphContextStepInput = {
     queryIntent: unknown;
@@ -161,13 +166,10 @@ export const createTrustGraphContextStepExecutor = ({
      */
     return async ({ request }): Promise<ContextStepResult> => {
         if (runtimeOptions === undefined) {
-            return {
-                executionContext: {
-                    toolName: request.integrationName,
-                    status: 'skipped',
-                    reasonCode: 'tool_unavailable',
-                },
-            };
+            return buildSkippedContextStepResult({
+                toolName: request.integrationName,
+                reasonCode: 'tool_unavailable',
+            });
         }
         const parsed = parseTrustGraphContextStepInput(request.input);
         if (
@@ -176,13 +178,10 @@ export const createTrustGraphContextStepExecutor = ({
             parsed.queryIntent.trim().length === 0 ||
             !isScopeTuple(parsed.scopeTuple)
         ) {
-            return {
-                executionContext: {
-                    toolName: request.integrationName,
-                    status: 'skipped',
-                    reasonCode: 'tool_not_requested',
-                },
-            };
+            return buildSkippedContextStepResult({
+                toolName: request.integrationName,
+                reasonCode: 'tool_not_requested',
+            });
         }
         try {
             const trustGraphResult = await runEvidenceIngestion({
@@ -195,24 +194,32 @@ export const createTrustGraphContextStepExecutor = ({
                 scopeValidationPolicy: runtimeOptions.scopeValidationPolicy,
                 adapter: runtimeOptions.adapter,
             });
-            return {
-                executionContext: {
+            if (trustGraphResult.adapterStatus === 'timeout') {
+                return buildFailedContextStepResult({
                     toolName: request.integrationName,
-                    // Adapter `error` and `timeout` are treated as failed execution.
-                    // Other governance outcomes (for example scope_denied) stay
-                    // executed so provenance can report bounded outcomes.
-                    status:
-                        trustGraphResult.adapterStatus === 'error' ||
-                        trustGraphResult.adapterStatus === 'timeout'
-                            ? 'failed'
-                            : 'executed',
-                    reasonCode:
-                        trustGraphResult.adapterStatus === 'timeout'
-                            ? 'tool_timeout'
-                            : trustGraphResult.adapterStatus === 'error'
-                              ? 'tool_execution_error'
-                              : undefined,
-                },
+                    reasonCode: 'tool_timeout',
+                    sources: buildCitations(trustGraphResult),
+                    integrationContext: {
+                        kind: 'trustgraph',
+                        version: 'v1',
+                        payload: { trustGraphResult },
+                    },
+                });
+            }
+            if (trustGraphResult.adapterStatus === 'error') {
+                return buildFailedContextStepResult({
+                    toolName: request.integrationName,
+                    reasonCode: 'tool_execution_error',
+                    sources: buildCitations(trustGraphResult),
+                    integrationContext: {
+                        kind: 'trustgraph',
+                        version: 'v1',
+                        payload: { trustGraphResult },
+                    },
+                });
+            }
+            return buildExecutedContextStepResult({
+                toolName: request.integrationName,
                 sources: buildCitations(trustGraphResult),
                 integrationContext: {
                     kind: 'trustgraph',
@@ -221,7 +228,7 @@ export const createTrustGraphContextStepExecutor = ({
                         trustGraphResult,
                     },
                 },
-            };
+            });
         } catch (error) {
             warn(
                 'TrustGraph context step failed open; continuing without advisory context.',
@@ -230,13 +237,10 @@ export const createTrustGraphContextStepExecutor = ({
                         error instanceof Error ? error.message : String(error),
                 }
             );
-            return {
-                executionContext: {
-                    toolName: request.integrationName,
-                    status: 'failed',
-                    reasonCode: 'tool_execution_error',
-                },
-            };
+            return buildFailedContextStepResult({
+                toolName: request.integrationName,
+                reasonCode: 'tool_execution_error',
+            });
         }
     };
 };
