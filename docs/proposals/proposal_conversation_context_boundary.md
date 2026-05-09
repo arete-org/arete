@@ -1,6 +1,6 @@
 # Feature Proposal: Conversation Context Boundary
 
-**Last Updated:** 2026-05-01
+**Last Updated:** 2026-05-09
 
 ---
 
@@ -52,6 +52,34 @@ This gives prompt assembly enough information to place blocks deliberately and e
 
 ---
 
+## Role-Aligned Rendering Strategy
+
+The canonical context representation should stay backend-owned and structured. Rendering to provider/runtime message formats should happen at the edge.
+
+Recommended pattern:
+
+1. Canonical turns in `ConversationContextService` keep normalized role, metadata, and authority fields.
+2. A rendering adapter maps canonical turns to runtime-facing messages (`system`, `user`, `assistant`).
+3. Participant identity stays structured (`speakerId`, `speakerLabel`) and is only injected into visible text when needed.
+
+This keeps model input aligned with common LLM training formats while preserving Footnote-specific semantics outside provider-native payload shapes.
+
+---
+
+## Temporal Metadata Policy
+
+Timestamp data should remain available as metadata by default and should not be dropped.
+
+Use temporal rendering rules:
+
+- include one session-level time header when helpful (date + timezone)
+- avoid per-turn transcript wrappers
+- include per-turn time only when context has meaningful gaps (for example, long pauses) or the query is time-sensitive
+
+This preserves useful temporal context without teaching the model transcript wrapper styles.
+
+---
+
 ## Authority And Visibility Rules
 
 The first version should keep five kinds of context separate:
@@ -76,6 +104,12 @@ This should plug into the existing prompt path rather than replace it. The main 
 - `packages/backend/src/services/chatOrchestrator.ts`
 
 `ConversationContextService` returns blocks. `conversationPromptLayers` still renders prompt text/messages and preserves policy-sensitive instruction order.
+
+Guardrails:
+
+- avoid double-including both raw normalized conversation and rendered context output in the same model payload
+- preserve fail-open behavior by falling back to normalized role/content turns if context rendering fails
+- keep persona/system layering in prompt layers, not in context service
 
 ---
 
@@ -136,6 +170,7 @@ This avoids hard-coding legacy “normalized transcript request” assumptions i
 
 - Model-facing prompt material does not include transcript wrappers like `[n] At ... said:`.
 - Author/timestamp metadata remains available without transcript-style prose wrappers.
+- Runtime-facing conversation messages stay role-aligned (`system|user|assistant`) and serializable.
 - Prompt assembly still occurs through existing prompt-layer path.
 - No new implicit runtime/provider memory feature is enabled.
 - `chatOrchestrator` remains backend authority for orchestration and policy seams.
