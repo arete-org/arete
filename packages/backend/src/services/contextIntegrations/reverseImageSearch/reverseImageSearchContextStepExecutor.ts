@@ -52,31 +52,15 @@ export type ReverseImageSearchProvider = {
 type CreateReverseImageSearchContextStepExecutorOptions = {
     provider?: ReverseImageSearchProvider | null;
     logger: ReverseImageSearchExecutorLogger;
-    minConfidence?: number;
     maxMatchesPerImage?: number;
 };
 
 const REVERSE_IMAGE_SEARCH_NAME = 'reverse_image_search';
-const DEFAULT_MIN_CONFIDENCE = 0.35;
 const DEFAULT_MATCH_LIMIT = 2;
-
-const normalizeConfidence = (confidence: number | undefined): number | null => {
-    if (confidence === undefined || !Number.isFinite(confidence)) {
-        return null;
-    }
-    if (confidence < 0) {
-        return 0;
-    }
-    if (confidence > 1) {
-        return 1;
-    }
-    return confidence;
-};
 
 export const createReverseImageSearchContextStepExecutor = ({
     provider,
     logger,
-    minConfidence = DEFAULT_MIN_CONFIDENCE,
     maxMatchesPerImage = DEFAULT_MATCH_LIMIT,
 }: CreateReverseImageSearchContextStepExecutorOptions): ContextStepExecutor => {
     const execute: ContextStepExecutor = async (
@@ -130,33 +114,13 @@ export const createReverseImageSearchContextStepExecutor = ({
             });
             if (taskResult.status === 'executed') {
                 const result = taskResult.value;
-                const normalizedConfidence = normalizeConfidence(
-                    result.confidence
-                );
-                if (
-                    normalizedConfidence !== null &&
-                    normalizedConfidence < minConfidence
-                ) {
-                    contextMessages.push(
-                        `[${label}] reverse image search confidence was low (${normalizedConfidence.toFixed(2)}); continuing without asserting a match.`
-                    );
-                    sources.push(
-                        buildAttachmentCitation({
-                            attachment,
-                            title: `${label} (low-confidence reverse lookup)`,
-                            snippet: `Provider ${result.providerId} returned low confidence; advisory signal only.`,
-                        })
-                    );
-                    continue;
-                }
-
                 const topMatches = result.matches.slice(
                     0,
                     Math.max(1, maxMatchesPerImage)
                 );
                 if (topMatches.length === 0) {
                     contextMessages.push(
-                        `[${label}] reverse image search found no confident public matches.`
+                        `[${label}] reverse image search returned no matches for this image.`
                     );
                     sources.push(
                         buildAttachmentCitation({
@@ -179,8 +143,16 @@ export const createReverseImageSearchContextStepExecutor = ({
                     sources.push({
                         title: match.title,
                         url: match.url,
-                        ...(match.snippet !== undefined && {
-                            snippet: match.snippet,
+                        ...((match.snippet !== undefined ||
+                            match.confidence !== undefined) && {
+                            snippet: [
+                                match.snippet,
+                                match.confidence !== undefined
+                                    ? `Provider confidence: ${match.confidence.toFixed(2)}`
+                                    : undefined,
+                            ]
+                                .filter((part): part is string => Boolean(part))
+                                .join(' | '),
                         }),
                     });
                 }

@@ -1709,20 +1709,6 @@ export const envEntries = [
     }),
 
     defineEnv({
-        key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_MIN_CONFIDENCE_PERCENT',
-        owner: 'backend',
-        stage: 'runtime',
-        section: 'chat-workflow',
-        required: false,
-        secret: false,
-        kind: 'integer',
-        description:
-            'Minimum confidence percentage (0-100) before reverse-image matches are surfaced as direct advisory context.',
-        defaultValue: literal(35),
-        usedBy: ['packages/backend/src/config.ts'],
-    }),
-
-    defineEnv({
         key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_MAX_MATCHES_PER_IMAGE',
         owner: 'backend',
         stage: 'runtime',
@@ -1733,6 +1719,49 @@ export const envEntries = [
         description:
             'Maximum number of reverse-image source matches surfaced per image attachment.',
         defaultValue: literal(2),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'enum',
+        allowedValues: ['none', 'serpapi'] as const,
+        description:
+            'Reverse-image provider mode (`none` or `serpapi`). `none` keeps the integration fail-open unavailable.',
+        defaultValue: literal('none'),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_SERPAPI_API_KEY',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description:
+            'SerpAPI key used when reverse-image provider mode is set to `serpapi`.',
+        defaultValue: literal(''),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER_TIMEOUT_MS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Timeout budget for reverse-image provider HTTP requests in milliseconds.',
+        defaultValue: literal(12000),
         usedBy: ['packages/backend/src/config.ts'],
     }),
 

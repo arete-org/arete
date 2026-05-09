@@ -42,6 +42,7 @@ import { resolveWeatherClarificationContinuation } from './tools/weatherClarific
 import { createWeatherForecastContextStepExecutor } from './contextIntegrations/weather/index.js';
 import { createFileScanningContextStepExecutor } from './contextIntegrations/fileScanning/index.js';
 import { createReverseImageSearchContextStepExecutor } from './contextIntegrations/reverseImageSearch/index.js';
+import { createSerpApiReverseImageSearchProvider } from './contextIntegrations/reverseImageSearch/index.js';
 import { createPlannerResultApplier } from './chatOrchestrator/plannerResultApplier.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -412,14 +413,36 @@ export const createChatOrchestrator = ({
                     internalImageDescriptionTaskService,
                 logger: chatOrchestratorLogger,
             });
+        const reverseImageSearchProviderMode =
+            runtimeConfig.chatWorkflow.contextIntegrations.reverseImageSearch
+                .provider;
+        const reverseImageSearchSerpApiKey =
+            runtimeConfig.chatWorkflow.contextIntegrations.reverseImageSearch.serpApiKey?.trim();
+        const reverseImageSearchProvider =
+            reverseImageSearchProviderMode === 'serpapi' &&
+            reverseImageSearchSerpApiKey
+                ? createSerpApiReverseImageSearchProvider({
+                      apiKey: reverseImageSearchSerpApiKey,
+                      requestTimeoutMs:
+                          runtimeConfig.chatWorkflow.contextIntegrations
+                              .reverseImageSearch.providerTimeoutMs,
+                      logger: chatOrchestratorLogger,
+                  })
+                : null;
+        if (
+            reverseImageSearchProviderMode === 'serpapi' &&
+            !reverseImageSearchSerpApiKey
+        ) {
+            chatOrchestratorLogger.warn(
+                'reverse_image_search provider is set to serpapi, but CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_SERPAPI_API_KEY is missing; integration will fail open as unavailable.'
+            );
+        }
         const contextStepExecutorRegistry = {
             weather_forecast: weatherContextStepExecutor,
             file_scan: fileScanningContextStepExecutor,
             reverse_image_search: createReverseImageSearchContextStepExecutor({
+                provider: reverseImageSearchProvider,
                 logger: chatOrchestratorLogger,
-                minConfidence:
-                    runtimeConfig.chatWorkflow.contextIntegrations
-                        .reverseImageSearch.minConfidence,
                 maxMatchesPerImage:
                     runtimeConfig.chatWorkflow.contextIntegrations
                         .reverseImageSearch.maxMatchesPerImage,
