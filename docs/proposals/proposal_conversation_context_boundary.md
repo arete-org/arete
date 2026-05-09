@@ -37,6 +37,21 @@ It will not assemble final model prompts or own supplemental context such as per
 
 ---
 
+## Core Invariants
+
+The first implementation should be judged against a small set of architectural invariants:
+
+- One canonical conversation-history source is used per request.
+- `messages` is the runtime-facing generation channel.
+- `contextEnvelope` is the backend-owned semantics channel.
+- Projection from `contextEnvelope` into model-visible text is deterministic and policy-driven.
+- Prompt layers remain the authority for persona/system instruction ordering.
+- Fail-open behavior is preserved when context shaping is partial or unavailable.
+
+These invariants matter more than any specific first-pass formatting choice.
+
+---
+
 ## Context Block Model
 
 Each "context block" should carry:
@@ -238,6 +253,20 @@ This avoids hard-coding legacy “normalized transcript request” assumptions i
 - No automatic provider/runtime memory enablement.
 - No broad prompt system rewrite.
 - No change to backend authority for cost, provenance, review, or incident semantics.
+
+---
+
+## Long-Term Goals And Gating
+
+This boundary should be shaped with later cost and stability goals in mind, but those goals should stay gated behind the core invariants above.
+
+The design should leave room for:
+
+- stable segment identities for low-churn history handling
+- summary reuse for older context windows
+- cache-aware prompt assembly and cost reduction
+
+Those goals should influence the structure now, but they should not force early rollout of memory-like behavior, persistent summarization systems, or broader prompt refactors in the first implementation.
 
 ---
 
