@@ -176,7 +176,7 @@ web_app_name=$(get_app_name "$SCRIPT_DIR/fly.web.toml")
 
 echo "Configuring backend secrets..."
 ensure_secrets "$backend_app_name" OPENAI_API_KEY TRACE_API_TOKEN
-ensure_optional_secrets "$backend_app_name" TURNSTILE_SECRET_KEY TURNSTILE_SITE_KEY GITHUB_WEBHOOK_SECRET
+ensure_optional_secrets "$backend_app_name" TURNSTILE_SECRET_KEY TURNSTILE_SITE_KEY
 run_env_validation fly-backend "$backend_app_name"
 
 echo "Configuring bot secrets..."

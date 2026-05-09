@@ -102,12 +102,6 @@ For route-specific payload types, derive names from `operationId`:
 - `getTrace` -> `GetTraceResponse`, `GetTraceStaleResponse`
 - `getRuntimeConfig` -> `GetRuntimeConfigResponse`
 
-Shared sub-models (reused across multiple operations) can stay domain-shaped:
-
-- `BlogAuthor`
-- `BlogPostMetadata`
-- `BlogPost`
-
 ## Scope
 
 This convention is intentionally lightweight.

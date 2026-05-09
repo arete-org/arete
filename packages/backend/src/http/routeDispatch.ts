@@ -1,6 +1,6 @@
 /**
  * @description: Centralizes ordered special transport-boundary dispatch paths.
- * Keeps explicit handling for raw-body webhook and dual-use trace Accept-negotiated behavior.
+ * Keeps explicit handling for dual-use trace Accept-negotiated behavior.
  * @footnote-scope: core
  * @footnote-module: RouteDispatch
  * @footnote-risk: high - Route order mistakes can silently change endpoint behavior.
@@ -15,10 +15,6 @@ const normalizePathname = (pathname: string): string =>
         ? pathname.slice(0, -1)
         : pathname;
 
-type RequestHandler = (
-    req: http.IncomingMessage,
-    res: http.ServerResponse
-) => Promise<void>;
 type ParsedUrlHandler = (
     req: http.IncomingMessage,
     res: http.ServerResponse,
@@ -34,7 +30,6 @@ type UpgradeHandler = (
 type DispatchOutcome = 'handled' | 'fallthrough';
 
 type RouteDispatchHandlers = {
-    handleWebhookRequest: RequestHandler;
     handleTraceRequest: ParsedUrlHandler;
 };
 
@@ -60,13 +55,6 @@ const createRouteDispatcher = ({
         parsedUrl: URL;
         normalizedPathname: string;
     }): Promise<DispatchOutcome> => {
-        // --- Special routes (keep at top; raw-body/signature-sensitive) ---
-        // Keep webhook dispatch ahead of any future generic body middleware. Signature checks require exact raw bytes.
-        if (normalizedPathname === '/api/webhook/github') {
-            await handlers.handleWebhookRequest(req, res);
-            return 'handled';
-        }
-
         // --- Special dual-use trace route ---
         // This path also doubles as a browser route for the trace page.
         // Keep JSON-vs-HTML behavior exactly as-is.

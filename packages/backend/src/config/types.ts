@@ -155,11 +155,6 @@ export type RuntimeConfig = {
         chatService: RateLimitConfig;
         traceApi: RateLimitConfig;
     };
-    webhook: {
-        secret: string | null;
-        repository: string;
-        maxBodyBytes: number;
-    };
     storage: {
         provenanceSqlitePath: string | null;
         incidentPseudonymizationSecret: string | null;

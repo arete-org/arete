@@ -2,7 +2,7 @@
  * @description: Web-focused API client entrypoint that avoids importing Discord/internal API modules.
  * @footnote-scope: interface
  * @footnote-module: WebApiClientEntrypoint
- * @footnote-risk: medium - Incorrect exports can break browser API wiring for chat, config, blog, and trace reads.
+ * @footnote-risk: medium - Incorrect exports can break browser API wiring for chat, config, and trace reads.
  * @footnote-ethics: medium - Keeps response validation intact while reducing unnecessary startup code for web users.
  */
 

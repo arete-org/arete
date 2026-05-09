@@ -48,10 +48,6 @@ type CreateExpressAppDeps = {
     dispatchHttpRoute: DispatchHttpRoute;
     normalizePathname: (pathname: string) => string;
     trustProxy: boolean;
-    blogReadRateLimitConfig: {
-        limit: number;
-        windowMs: number;
-    };
     handleIncidentListRequest: (
         req: http.IncomingMessage,
         res: http.ServerResponse,
@@ -122,15 +118,6 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => Promise<void>;
-    handleBlogIndexRequest: (
-        req: http.IncomingMessage,
-        res: http.ServerResponse
-    ) => Promise<void>;
-    handleBlogPostRequest: (
-        req: http.IncomingMessage,
-        res: http.ServerResponse,
-        postId: string
-    ) => Promise<void>;
     handleStaticTransportRequest: HandleStaticTransportRequest;
     resolveAsset: ResolveAsset;
     mimeMap: ReadonlyMap<string, string>;
@@ -142,7 +129,6 @@ const createExpressApp = ({
     dispatchHttpRoute,
     normalizePathname,
     trustProxy,
-    blogReadRateLimitConfig,
     handleIncidentListRequest,
     handleIncidentReportRequest,
     handleIncidentStatusRequest,
@@ -159,8 +145,6 @@ const createExpressApp = ({
     handleTraceCardAssetRequest,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
-    handleBlogIndexRequest,
-    handleBlogPostRequest,
     handleStaticTransportRequest,
     resolveAsset,
     mimeMap,
@@ -174,12 +158,8 @@ const createExpressApp = ({
     // /api/chat split ownership is intentional: publicRoutes owns /api/chat/* subroutes (for example /api/chat/profiles), while chatRoutes owns only bare /api/chat.
     registerPublicRoutes({
         app,
-        normalizePathname,
-        blogReadRateLimitConfig,
         handleRuntimeConfigRequest,
         handleChatProfilesRequest,
-        handleBlogIndexRequest,
-        handleBlogPostRequest,
         logRequest,
     });
     registerIncidentRoutes({

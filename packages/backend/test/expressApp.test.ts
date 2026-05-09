@@ -22,12 +22,6 @@ const createUnhandledRouteHandler = async (
     res.end('not-implemented');
 };
 
-const createUnhandledBlogPostHandler = async (
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-    _postId: string
-): Promise<void> => createUnhandledRouteHandler(req, res);
-
 const createTestServer = (
     app: ReturnType<typeof createExpressApp>
 ): Promise<{
@@ -73,7 +67,6 @@ test('express shell returns handled API dispatch without entering static fallbac
         },
         normalizePathname: (pathname) => pathname,
         trustProxy: false,
-        blogReadRateLimitConfig: { limit: 100, windowMs: 60_000 },
         handleIncidentListRequest: async () => undefined,
         handleIncidentReportRequest: async () => undefined,
         handleIncidentStatusRequest: async () => undefined,
@@ -91,8 +84,6 @@ test('express shell returns handled API dispatch without entering static fallbac
             createUnhandledRouteHandler(req, res),
         handleRuntimeConfigRequest: createUnhandledRouteHandler,
         handleChatProfilesRequest: createUnhandledRouteHandler,
-        handleBlogIndexRequest: createUnhandledRouteHandler,
-        handleBlogPostRequest: createUnhandledBlogPostHandler,
         handleStaticTransportRequest: async ({ res }) => {
             staticCalls += 1;
             res.statusCode = 200;
@@ -121,7 +112,6 @@ test('express shell falls through API dispatch and serves static transport', asy
         dispatchHttpRoute: async () => 'fallthrough',
         normalizePathname: (pathname) => pathname,
         trustProxy: false,
-        blogReadRateLimitConfig: { limit: 100, windowMs: 60_000 },
         handleIncidentListRequest: async () => undefined,
         handleIncidentReportRequest: async () => undefined,
         handleIncidentStatusRequest: async () => undefined,
@@ -139,8 +129,6 @@ test('express shell falls through API dispatch and serves static transport', asy
             createUnhandledRouteHandler(req, res),
         handleRuntimeConfigRequest: createUnhandledRouteHandler,
         handleChatProfilesRequest: createUnhandledRouteHandler,
-        handleBlogIndexRequest: createUnhandledRouteHandler,
-        handleBlogPostRequest: createUnhandledBlogPostHandler,
         handleStaticTransportRequest: async ({ res }) => {
             staticCalls += 1;
             res.statusCode = 200;

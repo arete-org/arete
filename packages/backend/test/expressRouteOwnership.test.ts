@@ -54,12 +54,6 @@ const createUnhandledRouteHandler = async (
     res.end('not-implemented');
 };
 
-const createUnhandledBlogPostHandler = async (
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-    _postId: string
-): Promise<void> => createUnhandledRouteHandler(req, res);
-
 const normalizePathname = (pathname: string): string =>
     pathname.length > 1 && pathname.endsWith('/')
         ? pathname.slice(0, -1)
@@ -77,7 +71,6 @@ const baseAppDeps = (
     },
     normalizePathname,
     trustProxy: false,
-    blogReadRateLimitConfig: { limit: 100, windowMs: 60_000 },
     handleIncidentListRequest: async (_req, res) => {
         res.statusCode = 200;
         res.end('incident-list');
@@ -113,8 +106,6 @@ const baseAppDeps = (
         createUnhandledRouteHandler(req, res),
     handleRuntimeConfigRequest: createUnhandledRouteHandler,
     handleChatProfilesRequest: createUnhandledRouteHandler,
-    handleBlogIndexRequest: createUnhandledRouteHandler,
-    handleBlogPostRequest: createUnhandledBlogPostHandler,
     handleStaticTransportRequest: async ({ res }) => {
         res.statusCode = 404;
         res.end('static');

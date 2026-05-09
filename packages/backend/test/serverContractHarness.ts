@@ -239,8 +239,6 @@ export const startBackendServerContractHarness = async ({
                 REFLECT_SERVICE_TOKEN: 'service-token',
                 ALLOWED_ORIGINS: 'https://allowed.example',
                 FRAME_ANCESTORS: 'https://allowed-frame.example',
-                GITHUB_WEBHOOK_SECRET: 'server-contract-secret',
-                GITHUB_WEBHOOK_REPOSITORY: 'acme/server-contract',
                 OPENAI_API_KEY: '',
                 OLLAMA_BASE_URL: '',
                 ...envOverrides,
