@@ -14,7 +14,7 @@ import type {
     ResponseTemperament,
 } from '@footnote/contracts';
 import type { ExecutionResponseMode } from './executionContract.js';
-import type { ToolInvocationIntent } from '@footnote/contracts/ethics-core';
+import type { ToolInvocationIntent } from '@footnote/contracts/policy';
 export type { ChatRepoSearchHint } from '@footnote/contracts';
 
 /**

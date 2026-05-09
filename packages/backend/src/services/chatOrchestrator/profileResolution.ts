@@ -9,7 +9,7 @@
 import type {
     ToolExecutionContext,
     ToolInvocationRequest,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type { ModelProfile } from '@footnote/contracts';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import type { ChatPlan } from '../chatPlanner.js';

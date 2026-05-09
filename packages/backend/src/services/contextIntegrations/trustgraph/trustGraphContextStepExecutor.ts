@@ -5,7 +5,7 @@
  * @footnote-risk: medium - Incorrect parsing or mapping can degrade advisory evidence visibility.
  * @footnote-ethics: high - TrustGraph evidence signals can influence response framing and reviewer oversight.
  */
-import type { Citation } from '@footnote/contracts/ethics-core';
+import type { Citation } from '@footnote/contracts/policy';
 import { runEvidenceIngestion } from '../../executionContractTrustGraph/trustGraphEvidenceIngestion.js';
 import type {
     ScopeTuple,

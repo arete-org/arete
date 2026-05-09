@@ -12,7 +12,7 @@ import {
     getAttachmentsFromUnknownInput,
     isImageAttachment,
 } from '../../attachments/attachmentContext.js';
-import type { Citation } from '@footnote/contracts/ethics-core';
+import type { Citation } from '@footnote/contracts/policy';
 import {
     buildExecutedContextStepResult,
     buildSkippedContextStepResult,

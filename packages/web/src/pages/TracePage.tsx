@@ -15,7 +15,7 @@ import { Link, useParams } from 'react-router-dom';
 import {
     formatExecutionTimelineSummary,
     summarizeGroundingEvidence,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type {
     GetTraceResponse,
     GetTraceStaleResponse,
@@ -23,7 +23,7 @@ import type {
 import type {
     ImageGenerationMetadata,
     WorkflowStepKind,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import { api, isApiClientError } from '../utils/api';
 import { createScopedLogger } from '../utils/logger';
 import {

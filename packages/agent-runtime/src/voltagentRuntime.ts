@@ -21,7 +21,7 @@ import type {
     GenerationUsage,
     RuntimeMessage,
 } from './index.js';
-import type { ToolExecutionContext } from '@footnote/contracts/ethics-core';
+import type { ToolExecutionContext } from '@footnote/contracts/policy';
 
 type VoltAgentOpenAiProviderOptions = {
     reasoningEffort?: 'low' | 'medium' | 'high';

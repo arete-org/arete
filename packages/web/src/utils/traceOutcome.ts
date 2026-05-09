@@ -11,7 +11,7 @@ import type {
     ResponseMetadata,
     WorkflowRecord,
     WorkflowTerminationReason,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 
 type RunOutcomeCategory =
     | 'completed'

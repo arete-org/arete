@@ -11,8 +11,8 @@ import { Message } from 'discord.js';
 import type {
     BreakerDecisionContext,
     ResponseMetadata,
-} from '@footnote/contracts/ethics-core';
-import { resolveBreakerDecisionContext } from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
+import { resolveBreakerDecisionContext } from '@footnote/contracts/policy';
 import type {
     PostChatRequest,
     ChatImageRequest,
@@ -273,7 +273,7 @@ const mapSafetyDecisionToResponseBehavior = (
  * Normalizes optional reason fields for structured logging.
  *
  * Allow outcomes intentionally omit reason metadata; restricted outcomes carry
- * deterministic reasonCode + rationale from ethics-core.
+ * deterministic reasonCode + rationale from policy.
  */
 const getSafetyReasonDetails = (
     decision: BreakerDecisionContext['safetyDecision']

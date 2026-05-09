@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import {
     resolveBreakerDecisionContext,
     type ResponseMetadata,
-} from '../src/ethics-core';
+} from '../src/policy';
 
 const createMetadata = (
     overrides: Partial<ResponseMetadata> = {}

@@ -6,7 +6,7 @@
  * @footnote-ethics: low - Uses synthetic metadata and no user-identifying values.
  */
 
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type { ResponseMetadata } from '@footnote/contracts/policy';
 
 export const createMetadata = (): ResponseMetadata => ({
     responseId: 'chat_test_response',

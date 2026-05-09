@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type { ResponseMetadata } from '@footnote/contracts/policy';
 import type { TraceStore } from '../src/storage/traces/traceStore.js';
 import { storeTrace } from '../src/services/traceStore.js';
 

@@ -13,8 +13,8 @@
             "@footnote/api-client": ["../../api-client/src/index.ts"],
             "@footnote/api-client/*": ["../../api-client/src/*"],
             "@footnote/contracts": ["../../contracts/src/index.ts"],
-            "@footnote/contracts/ethics-core": [
-                "../../contracts/src/ethics-core/index.ts"
+            "@footnote/contracts/policy": [
+                "../../contracts/src/policy/index.ts"
             ],
             "@footnote/contracts/web": ["../../contracts/src/web/index.ts"],
             "@footnote/contracts/web/schemas": [

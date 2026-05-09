@@ -12,7 +12,7 @@
     },
     "include": [
         "docs/architecture/workflow.md",
-        "packages/contracts/src/ethics-core/**/*",
+        "packages/contracts/src/policy/**/*",
         "packages/backend/src/services/workflowEngine.ts",
         "packages/backend/src/services/workflowProfileContract.ts",
         "packages/backend/src/services/workflowProfileRegistry.ts",

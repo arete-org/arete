@@ -11,7 +11,7 @@ import {
     SlashCommandBuilder,
     type SlashCommandStringOption,
 } from 'discord.js';
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type { ResponseMetadata } from '@footnote/contracts/policy';
 import type { ChatProfileOption } from '@footnote/contracts/web';
 import { botApi } from '../api/botApi.js';
 import type { DiscordChatApiResponse } from '../api/index.js';

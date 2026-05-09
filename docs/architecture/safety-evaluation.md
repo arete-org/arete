@@ -23,7 +23,7 @@ job.
 
 ## Authority
 
-`ethics-core` is the final authority for safety rule decisions.
+`policy` is the final authority for safety rule decisions.
 
 Planner output may help with context or safer wording, but planner is not the
 safety authority. It may not bypass a deterministic refusal rule, downgrade a
@@ -37,13 +37,13 @@ Discord consume backend output. They do not re-implement policy logic.
 The current evaluator lives in:
 
 ```text
-packages/backend/src/ethics-core/evaluators.ts
+packages/backend/src/policy/evaluators.ts
 ```
 
 Shared contracts live in:
 
 ```text
-packages/contracts/src/ethics-core/
+packages/contracts/src/policy/
 ```
 
 Backend orchestration builds the evaluator input in:
@@ -124,7 +124,7 @@ Today the implemented rules are narrower. The current rule metadata covers:
 The canonical rule metadata lives in:
 
 ```text
-packages/contracts/src/ethics-core/safetyRuleMetadata.ts
+packages/contracts/src/policy/safetyRuleMetadata.ts
 ```
 
 That map is the source of truth for rule id, action, reason code, and safety
@@ -261,10 +261,10 @@ This layer should stay covered by:
 
 If you need the real implementation boundary, start here:
 
-- [types.ts](../../packages/contracts/src/ethics-core/types.ts)
-- [schemas.ts](../../packages/contracts/src/ethics-core/schemas.ts)
-- [safetyRuleMetadata.ts](../../packages/contracts/src/ethics-core/safetyRuleMetadata.ts)
-- [evaluators.ts](../../packages/backend/src/ethics-core/evaluators.ts)
+- [types.ts](../../packages/contracts/src/policy/types.ts)
+- [schemas.ts](../../packages/contracts/src/policy/schemas.ts)
+- [safetyRuleMetadata.ts](../../packages/contracts/src/policy/safetyRuleMetadata.ts)
+- [evaluators.ts](../../packages/backend/src/policy/evaluators.ts)
 - [chatOrchestrator.ts](../../packages/backend/src/services/chatOrchestrator.ts)
 
 If those files disagree with older notes, the code is authoritative.

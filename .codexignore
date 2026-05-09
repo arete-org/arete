@@ -13,7 +13,7 @@ keys/
 
 # Docs and licenses are read-only
 docs/licenses/
-packages/ethics-core/licenses/
+packages/policy/licenses/
 
 # TypeScript build artifacts
 *.tsbuildinfo

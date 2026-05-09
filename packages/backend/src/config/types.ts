@@ -16,7 +16,7 @@ import type {
     SupportedVerbosity,
 } from '@footnote/contracts/providers';
 import type { ModelProfile } from '@footnote/contracts';
-import type { WorkflowModeId } from '@footnote/contracts/ethics-core';
+import type { WorkflowModeId } from '@footnote/contracts/policy';
 import type { BotProfileConfig } from './profile.js';
 
 /**

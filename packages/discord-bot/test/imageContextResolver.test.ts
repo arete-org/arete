@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type { ResponseMetadata } from '@footnote/contracts/policy';
 import { botApi } from '../src/api/botApi.js';
 import {
     recoverContextDetailsFromMessage,

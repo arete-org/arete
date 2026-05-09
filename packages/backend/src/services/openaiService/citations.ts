@@ -7,7 +7,7 @@
  * @footnote-ethics: high - Provenance transparency depends on preserving user-visible source links.
  */
 
-import type { Citation } from '@footnote/contracts/ethics-core';
+import type { Citation } from '@footnote/contracts/policy';
 import type { ResponsesApiOutputItem } from './types.js';
 
 // Owns: citation extraction and fallback parsing from provider output text.

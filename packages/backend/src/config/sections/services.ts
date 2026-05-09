@@ -7,7 +7,7 @@
  */
 
 import { envDefaultValues } from '@footnote/config-spec';
-import type { WorkflowModeId } from '@footnote/contracts/ethics-core';
+import type { WorkflowModeId } from '@footnote/contracts/policy';
 import {
     parseBooleanEnv,
     parseNonNegativeIntEnv,

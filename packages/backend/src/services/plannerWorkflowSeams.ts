@@ -17,7 +17,7 @@ import type {
     SteerabilityControlId,
     ToolExecutionContext,
     ToolInvocationRequest,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type { ModelProfile } from '@footnote/contracts';
 import type {
     ChatImageRequest,

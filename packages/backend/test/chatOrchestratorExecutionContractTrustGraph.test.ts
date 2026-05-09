@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { GenerationRuntime } from '@footnote/agent-runtime';
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type { ResponseMetadata } from '@footnote/contracts/policy';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';

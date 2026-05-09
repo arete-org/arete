@@ -9,7 +9,7 @@ import type { Message } from 'discord.js';
 import type {
     ImageGenerationMetadata,
     ResponseMetadata,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type {
     GetTraceResponse,
     GetTraceStaleResponse,

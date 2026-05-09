@@ -8,7 +8,7 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { GenerationRuntime } from '@footnote/agent-runtime';
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type { ResponseMetadata } from '@footnote/contracts/policy';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import type {
     AssistantResponseMetadata,

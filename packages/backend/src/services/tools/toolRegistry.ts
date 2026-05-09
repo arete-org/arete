@@ -10,7 +10,7 @@ import type {
     ToolExecutionContext,
     ToolInvocationIntent,
     ToolInvocationRequest,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type { ChatGenerationPlan } from '../chatGenerationTypes.js';
 import type { WeatherForecastTool } from '../contextIntegrations/weather/index.js';
 import { executeWeatherForecastTool } from './weatherForecastToolAdapter.js';

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import type {
     ResponseMetadata,
     ToolExecutionContext,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type { ResponseMetadataRuntimeContext } from '../src/services/openaiService.js';
 import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import { buildToolClarificationResponse } from '../src/services/tools/toolClarificationResponse.js';

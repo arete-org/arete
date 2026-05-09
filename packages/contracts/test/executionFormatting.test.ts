@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import {
     formatExecutionTimelineSummary,
     type ExecutionEvent,
-} from '../src/ethics-core';
+} from '../src/policy';
 
 test('formatExecutionTimelineSummary includes reasonCode for skipped and failed events', () => {
     const summary = formatExecutionTimelineSummary(

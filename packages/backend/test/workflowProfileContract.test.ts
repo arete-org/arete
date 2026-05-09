@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { WorkflowTerminationReason } from '@footnote/contracts/ethics-core';
+import type { WorkflowTerminationReason } from '@footnote/contracts/policy';
 import { resolveNoGenerationHandlingFromTermination } from '../src/services/workflowProfileContract.js';
 
 test('resolveNoGenerationHandlingFromTermination maps every no-generation termination reason deterministically', () => {

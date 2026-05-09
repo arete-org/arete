@@ -12,17 +12,17 @@ import type {
     ResponseMetadata,
     SafetyTier,
     Citation,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import {
     formatExecutionTimelineSummary,
     buildWorkflowReceiptItems,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 
 interface ProvenanceFooterProps {
     metadata?: ResponseMetadata | null;
 }
 
-// Safety tier colors matching the ethics-core constants
+// Safety tier colors matching the policy constants
 const SAFETY_TIER_COLORS: Record<SafetyTier, string> = {
     Low: '#7FDCA4', // Sage green
     Medium: '#F8E37C', // Warm gold
@@ -36,7 +36,7 @@ const ProvenanceFooter = ({
         return null;
     }
 
-    // Extract safety tier color based on safetyTier (matching ethics-core)
+    // Extract safety tier color based on safetyTier (matching policy)
     const safetyTierColor =
         SAFETY_TIER_COLORS[metadata.safetyTier] || SAFETY_TIER_COLORS.Low;
     const safetyStyle = { '--safety-color': safetyTierColor } as CSSProperties;

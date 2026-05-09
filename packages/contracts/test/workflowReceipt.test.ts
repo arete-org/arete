@@ -14,7 +14,7 @@ import {
     buildWorkflowReceiptSummary,
     summarizeGroundingEvidence,
     type ResponseMetadata,
-} from '../src/ethics-core';
+} from '../src/policy';
 
 const createBaseMetadata = (): ResponseMetadata => ({
     responseId: 'resp_1',

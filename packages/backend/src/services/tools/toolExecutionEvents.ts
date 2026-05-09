@@ -9,7 +9,7 @@
 import type {
     ToolExecutionContext,
     ToolExecutionEvent,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 
 export const buildToolExecutionEvent = (
     toolContext: ToolExecutionContext

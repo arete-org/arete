@@ -9,7 +9,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import type {
     PartialResponseTemperament,
     ResponseMetadata,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type { PostTraceCardRequest } from '@footnote/contracts/web';
 import { normalizeTraceAxisScoreWithStringParsing } from '../traceAxisScore.js';
 

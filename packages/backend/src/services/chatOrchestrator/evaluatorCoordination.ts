@@ -14,13 +14,13 @@ import type {
     EvaluatorOutcome,
     SafetyEvaluationInput,
     SafetyTier,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import {
     buildSafetyDecision,
     computeProvenance,
     evaluateSafetyDeterministic,
-} from '../../ethics-core/evaluators.js';
+} from '../../policy/evaluators.js';
 import { buildCorrelationIds } from './requestNormalization.js';
 
 export type EvaluatorExecutionContext = {

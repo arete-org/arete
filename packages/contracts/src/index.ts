@@ -45,22 +45,22 @@ export type {
     ResponseTemperament,
     TrustGraphMetadata,
     ResponseMetadata,
-} from './ethics-core/index.js';
+} from './policy/index.js';
 export {
     formatExecutionTimelineSummary,
     deriveReviewRuntimeSummary,
-} from './ethics-core/index.js';
+} from './policy/index.js';
 export {
     SafetyRuleIdSchema,
     SafetyActionSchema,
     SafetyReasonCodeSchema,
     SafetyDecisionSchema,
-} from './ethics-core/index.js';
+} from './policy/index.js';
 export {
     SAFETY_RULE_METADATA,
     type SafetyRuleMetadata,
     CONTEXT_INTEGRATION_NAMES,
-} from './ethics-core/index.js';
+} from './policy/index.js';
 
 // Web API contracts (request/response envelopes)
 export type {

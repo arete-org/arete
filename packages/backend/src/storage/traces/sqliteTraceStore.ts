@@ -5,10 +5,7 @@
  * @footnote-risk: medium - Storage errors can drop trace records or corrupt metadata.
  * @footnote-ethics: medium - Trace accuracy underpins transparency and auditability.
  */
-import type {
-    Citation,
-    ResponseMetadata,
-} from '@footnote/contracts/ethics-core';
+import type { Citation, ResponseMetadata } from '@footnote/contracts/policy';
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';

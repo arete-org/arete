@@ -5,8 +5,8 @@
  * @footnote-risk: medium - Incorrect transition or limit logic can cause invalid workflow routes or runaway execution.
  * @footnote-ethics: high - Workflow control determines whether model-deliberative paths remain bounded and auditable.
  */
-import type { WorkflowStepKind } from '@footnote/contracts/ethics-core';
-import type { WorkflowTerminationReason } from '@footnote/contracts/ethics-core';
+import type { WorkflowStepKind } from '@footnote/contracts/policy';
+import type { WorkflowTerminationReason } from '@footnote/contracts/policy';
 import type {
     BoundedReviewAssessSignals,
     ContextStepRequest as ContractContextStepRequest,
@@ -22,7 +22,7 @@ import type {
     WorkflowLimitKey,
     WorkflowLimitStop,
     WorkflowRecord,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type {
     WorkflowProfileExecutionLimitsContract,
     WorkflowProfilePolicyContract,

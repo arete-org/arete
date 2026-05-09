@@ -7,7 +7,7 @@
  * @footnote-risk: medium - Attachment misclassification can degrade context quality across multiple integrations.
  * @footnote-ethics: medium - Shared attachment interpretation can influence user-visible grounding and attribution.
  */
-import type { Citation } from '@footnote/contracts/ethics-core';
+import type { Citation } from '@footnote/contracts/policy';
 import type { PostChatRequest } from '@footnote/contracts/web';
 
 export type ChatAttachment = NonNullable<

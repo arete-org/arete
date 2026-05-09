@@ -19,7 +19,7 @@ import {
     type ImageGenerationRuntime,
     type RealtimeVoiceRuntime,
 } from '@footnote/agent-runtime';
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type { ResponseMetadata } from '@footnote/contracts/policy';
 
 import { runtimeConfig } from './config.js';
 import { buildResponseMetadata } from './services/openaiService.js';

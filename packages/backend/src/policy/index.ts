@@ -1,5 +1,5 @@
 /**
- * @description: Public exports for ethics-core types and evaluators.
+ * @description: Public exports for policy types and evaluators.
  * @footnote-scope: interface
  * @footnote-module: EthicsCoreIndex
  * @footnote-risk: low - Export changes can break downstream imports.
@@ -14,7 +14,7 @@ export type {
     SafetyEvaluationResult,
     Citation,
     ResponseMetadata,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 
 // Export functions
 export {

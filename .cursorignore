@@ -11,7 +11,7 @@ traces/
 
 # Docs and licenses are read-only
 docs/licenses/
-packages/ethics-core/licenses/
+packages/policy/licenses/
 
 # Lock files
 pnpm-lock.yaml

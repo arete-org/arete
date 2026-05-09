@@ -13,7 +13,7 @@ import type {
 import type {
     SafetyTier,
     ToolInvocationRequest,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type { PlannerPayloadChatPlan } from '../chatOrchestrator/plannerPayload.js';
 import { buildPlannerPayload } from '../chatOrchestrator/plannerPayload.js';
 import type { ChatGenerationToolIntent } from '../chatGenerationTypes.js';

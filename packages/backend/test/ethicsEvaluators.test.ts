@@ -13,7 +13,7 @@ import {
     computeProvenance,
     computeProvenanceSignals,
     evaluateSafetyDeterministic,
-} from '../src/ethics-core/evaluators.js';
+} from '../src/policy/evaluators.js';
 
 const evaluateRisk = (content: string, context: string[]) => {
     const result = evaluateSafetyDeterministic({
