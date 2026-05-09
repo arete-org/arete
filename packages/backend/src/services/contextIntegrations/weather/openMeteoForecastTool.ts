@@ -6,7 +6,7 @@
  * @footnote-risk: medium - Parsing or transport regressions can degrade weather retrieval quality, but blast radius is isolated to one optional tool path.
  * @footnote-ethics: medium - Forecast errors can impact user decisions, so the adapter preserves provenance and explicit uncertainty.
  */
-import type { ToolClarification } from '@footnote/contracts/ethics-core';
+import type { ToolClarification } from '@footnote/contracts/policy';
 import type { ChatGenerationWeatherRequest } from '../../chatGenerationTypes.js';
 
 const OPEN_METEO_FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';

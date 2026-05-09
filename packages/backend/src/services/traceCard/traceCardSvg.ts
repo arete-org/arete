@@ -9,7 +9,7 @@ import type {
     PartialResponseTemperament,
     ResponseTemperament,
     TraceAxisScore,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type { TraceCardChipData } from '@footnote/contracts/web';
 
 type TraceAxisKey = keyof ResponseTemperament;

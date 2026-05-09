@@ -22,8 +22,8 @@ import {
     type SteerabilityControls,
     type TraceAxisScore,
     type TrustGraphMetadata,
-} from '../ethics-core/index.js';
-import { SafetyDecisionSchema } from '../ethics-core/schemas.js';
+} from '../policy/index.js';
+import { SafetyDecisionSchema } from '../policy/schemas.js';
 import type { ApiResponseValidationResult } from './client-core.js';
 import type {
     GetTraceResponse,

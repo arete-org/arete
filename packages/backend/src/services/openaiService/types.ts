@@ -27,7 +27,7 @@ import type {
     SteerabilityControlId,
     ToolExecutionContext,
     WorkflowRecord,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 
 // Owns: shared contracts between provider-facing request code and metadata assembly.
 // Does not own: provider call behavior, citation parsing, or metadata policy logic.

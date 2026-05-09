@@ -6,8 +6,8 @@
  * @footnote-ethics: high - Authority-boundary mistakes can misrepresent which controls are policy authority versus presentation or preference.
  */
 
-import type { ProviderPreferenceOutcomeState } from '@footnote/contracts/ethics-core';
-export type { ProviderPreferenceOutcomeState } from '@footnote/contracts/ethics-core';
+import type { ProviderPreferenceOutcomeState } from '@footnote/contracts/policy';
+export type { ProviderPreferenceOutcomeState } from '@footnote/contracts/policy';
 
 type ProfilePreferenceSource = 'request_override' | 'planner_output';
 

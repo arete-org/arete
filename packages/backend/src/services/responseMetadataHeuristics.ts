@@ -14,7 +14,7 @@ import type {
     Provenance,
     ProvenanceAssessment,
     TraceAxisScore,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 
 /**
  * Normalizes assistant-supplied tradeoff counts into schema-safe integers.

@@ -10,7 +10,7 @@ import type { PostChatResponse } from '@footnote/contracts/web';
 import type {
     ResponseMetadata,
     ToolExecutionContext,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type {
     AssistantResponseMetadata,
     ResponseMetadataRuntimeContext,

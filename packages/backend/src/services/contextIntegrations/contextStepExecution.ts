@@ -11,7 +11,7 @@ import type {
     ContextStepResult,
     ContextStepExecutorInput,
 } from '../workflowEngine.js';
-import type { ToolInvocationReasonCode } from '@footnote/contracts/ethics-core';
+import type { ToolInvocationReasonCode } from '@footnote/contracts/policy';
 
 type NonBlockingExecutionLogger = {
     warn: (message: string, meta?: Record<string, unknown>) => void;

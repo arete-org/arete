@@ -163,14 +163,14 @@ const symbolReferences: SymbolReferenceEntry[] = [
     {
         name: 'trace_target',
         kind: 'concept',
-        filePath: 'packages/contracts/src/ethics-core/types.ts',
+        filePath: 'packages/contracts/src/policy/types.ts',
         explanation:
             'TRACE target posture recorded from planner/runtime temperament at response time.',
     },
     {
         name: 'trace_final',
         kind: 'concept',
-        filePath: 'packages/contracts/src/ethics-core/types.ts',
+        filePath: 'packages/contracts/src/policy/types.ts',
         explanation:
             'TRACE final posture delivered in metadata for rendering and trace review.',
     },
@@ -181,7 +181,7 @@ const whereToReadNextEntries: WhereToReadNextEntry[] = [
     { filePath: 'packages/backend/src/services/workflowEngine.ts' },
     { filePath: 'packages/backend/src/services/chatOrchestrator.ts' },
     { filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts' },
-    { filePath: 'packages/contracts/src/ethics-core/types.ts' },
+    { filePath: 'packages/contracts/src/policy/types.ts' },
     { filePath: 'packages/web/src/pages/TracePage.tsx' },
 ];
 

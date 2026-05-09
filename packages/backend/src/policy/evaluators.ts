@@ -13,8 +13,8 @@ import type {
     SafetyDecision,
     SafetyEvaluationInput,
     SafetyEvaluationResult,
-} from '@footnote/contracts/ethics-core';
-import { SAFETY_RULE_METADATA } from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
+import { SAFETY_RULE_METADATA } from '@footnote/contracts/policy';
 import { logger } from '../utils/logger.js';
 
 const RETRIEVAL_PATTERNS: readonly RegExp[] = [

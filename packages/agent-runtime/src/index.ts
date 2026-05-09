@@ -15,7 +15,7 @@ import type {
     SupportedOpenAITextModel,
     SupportedProvider,
 } from '@footnote/contracts';
-import type { ToolExecutionContext } from '@footnote/contracts/ethics-core';
+import type { ToolExecutionContext } from '@footnote/contracts/policy';
 import type {
     InternalTtsCosts,
     InternalTtsOptions,

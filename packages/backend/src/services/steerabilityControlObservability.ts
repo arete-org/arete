@@ -14,7 +14,7 @@ import type {
     SteerabilityControls,
     ToolInvocationRequest,
     WorkflowModeDecision,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type { PostChatRequest } from '@footnote/contracts/web';
 
 type ControlObservabilityLogger = {

@@ -9,7 +9,7 @@ import type {
     PostChatRequest,
     PostChatResponse,
 } from '@footnote/contracts/web';
-import type { SafetyTier } from '@footnote/contracts/ethics-core';
+import type { SafetyTier } from '@footnote/contracts/policy';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
     createChatService,

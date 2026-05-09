@@ -11,7 +11,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type { ResponseMetadata } from '@footnote/contracts/policy';
 import { SqliteTraceStore } from '../src/storage/traces/sqliteTraceStore.js';
 
 test('TraceStore round trips metadata with citation URLs', async () => {

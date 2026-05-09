@@ -12,7 +12,7 @@ import type {
     SteerabilityControls,
     ToolInvocationRequest,
     WorkflowModeDecision,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import { deriveReviewIntensityFromWorkflowBehavior } from './workflowProfileRegistry.js';
 import {
     resolveInternalSteerabilityControlConflicts,

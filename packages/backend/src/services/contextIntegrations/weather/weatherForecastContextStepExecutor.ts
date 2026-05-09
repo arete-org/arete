@@ -10,7 +10,7 @@ import type {
     ExecutionStatus,
     ToolInvocationReasonCode,
     ToolClarification,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import {
     buildExecutedContextStepResult,
     buildFailedContextStepResult,

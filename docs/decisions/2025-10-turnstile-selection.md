@@ -81,7 +81,7 @@ Turnstile verifies _browser integrity_ rather than _personal identity_, aligning
 
 - **Discussion thread:** _TBD_ (link to GitHub issue or Discord discussion)
 - **Author(s):** Jordan
-- **Approved by:** ethics-core maintainers
+- **Approved by:** policy maintainers
 - **Implementation PR:** _TBD_
 
 ---

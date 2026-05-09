@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import type {
     ImageGenerationMetadata,
     ResponseMetadata,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type {
     PostInternalImageGenerateRequest,
     PostInternalImageGenerateResponse,
@@ -62,7 +62,9 @@ export const buildInternalImageTraceMetadata = (input: {
     const maxInputChars =
         input.request.promptPolicy?.maxInputChars ??
         DEFAULT_IMAGE_PROMPT_MAX_INPUT_CHARS;
-    const policyTruncated = Boolean(input.request.promptPolicy?.policyTruncated);
+    const policyTruncated = Boolean(
+        input.request.promptPolicy?.policyTruncated
+    );
 
     const imageGeneration: ImageGenerationMetadata = {
         version: 'v1',

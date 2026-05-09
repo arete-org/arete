@@ -10,7 +10,7 @@ This contract standardizes tool behavior across three boundaries:
 
 Contract source of truth:
 
-- `packages/contracts/src/ethics-core/types.ts`
+- `packages/contracts/src/policy/types.ts`
 
 Backend remains authoritative for provenance, trace, and cost semantics.
 

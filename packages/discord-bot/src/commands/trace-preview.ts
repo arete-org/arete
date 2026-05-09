@@ -14,7 +14,7 @@ import {
 import type {
     ResponseTemperament,
     TraceAxisScore,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import { botApi } from '../api/botApi.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';

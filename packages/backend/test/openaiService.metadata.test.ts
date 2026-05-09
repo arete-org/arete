@@ -7,7 +7,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { ToolInvocationReasonCode } from '@footnote/contracts/ethics-core';
+import type { ToolInvocationReasonCode } from '@footnote/contracts/policy';
 
 import {
     type AssistantResponseMetadata,

@@ -11,7 +11,7 @@ import type {
     ResponseMetadata,
     ToolExecutionContext,
     ToolExecutionEvent,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type {
     AssistantResponseMetadata,
     ResponseMetadataRuntimeContext,

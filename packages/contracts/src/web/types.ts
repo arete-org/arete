@@ -10,7 +10,7 @@ import type {
     PartialResponseTemperament,
     ResponseMetadata,
     TraceAxisScore,
-} from '../ethics-core/index.js';
+} from '../policy/index.js';
 import type {
     InternalImageRenderModelId,
     InternalImageTextModelId,

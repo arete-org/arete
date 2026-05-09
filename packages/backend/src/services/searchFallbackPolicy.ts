@@ -10,7 +10,7 @@ import type {
     ModelLatencyClass,
     ModelProfile,
 } from '@footnote/contracts';
-import type { ToolInvocationReasonCode } from '@footnote/contracts/ethics-core';
+import type { ToolInvocationReasonCode } from '@footnote/contracts/policy';
 import type { ExecutionContractRoutingIntent } from './executionContract.js';
 import type { PlannerSelectionSource } from './plannerFallbackTelemetryRollup.js';
 

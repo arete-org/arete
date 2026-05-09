@@ -18,8 +18,8 @@ import type {
     SafetyTier,
     ToolInvocationReasonCode,
     TraceAxisScore,
-} from '@footnote/contracts/ethics-core';
-import { deriveReviewRuntimeSummary } from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
+import { deriveReviewRuntimeSummary } from '@footnote/contracts/policy';
 import { runtimeConfig } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 import {

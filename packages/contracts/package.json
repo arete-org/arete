@@ -10,9 +10,9 @@
             "types": "./dist/index.d.ts",
             "default": "./dist/index.js"
         },
-        "./ethics-core": {
-            "types": "./dist/ethics-core/index.d.ts",
-            "default": "./dist/ethics-core/index.js"
+        "./policy": {
+            "types": "./dist/policy/index.d.ts",
+            "default": "./dist/policy/index.js"
         },
         "./web": {
             "types": "./dist/web/index.d.ts",

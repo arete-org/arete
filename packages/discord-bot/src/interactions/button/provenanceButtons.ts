@@ -12,7 +12,7 @@ import {
     type ResponseMetadata,
     buildWorkflowReceiptSummary,
     summarizeGroundingEvidence,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 import { botApi } from '../../api/botApi.js';
 import { logger } from '../../utils/logger.js';

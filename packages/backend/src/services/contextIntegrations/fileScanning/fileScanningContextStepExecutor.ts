@@ -7,8 +7,8 @@
  * @footnote-risk: medium - Incorrect attachment handling can reduce grounding quality for attachment-driven prompts.
  * @footnote-ethics: medium - Attachment summaries can influence assistant claims, so this path stays fail-open and explicit about uncertainty.
  */
+import type { Citation } from '@footnote/contracts/policy';
 import type { InternalImageDescriptionTaskService } from '../../internalText.js';
-import type { Citation } from '@footnote/contracts/ethics-core';
 import {
     buildAttachmentCitation,
     getAttachmentsFromUnknownInput,

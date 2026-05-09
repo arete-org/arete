@@ -27,7 +27,7 @@ import type {
     SafetyTier,
     ResponseTemperament,
     TraceAxisScore,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import { renderPrompt } from './prompts/promptRegistry.js';
 import {
     estimateBackendTextCost,

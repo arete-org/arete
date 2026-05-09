@@ -142,7 +142,7 @@
             "purpose": "Define the main Footnote terms in one place so the rest of the wiki stays easy to read.",
             "parent": "Foundations",
             "entrypoints": [
-                "packages/contracts/src/ethics-core",
+                "packages/contracts/src/policy",
                 "packages/contracts/src/web/types.ts",
                 "docs/api/openapi.yaml"
             ],
@@ -166,7 +166,7 @@
             "purpose": "Explain why Footnote is different: answers are designed to be inspectable, traceable, and understandable to users.",
             "parent": "Foundations",
             "entrypoints": [
-                "packages/contracts/src/ethics-core",
+                "packages/contracts/src/policy",
                 "packages/backend/src/handlers/chat.ts",
                 "packages/backend/src/handlers/trace.ts",
                 "packages/web/src/pages/TracePage.tsx",
@@ -591,7 +591,7 @@
             "purpose": "Document the shared metadata and API shapes in the contracts package, and show the difference between compile-time types and runtime schemas.",
             "parent": "Packages",
             "entrypoints": [
-                "packages/contracts/src/ethics-core",
+                "packages/contracts/src/policy",
                 "packages/contracts/src/web/types.ts",
                 "packages/contracts/src/web/schemas.ts",
                 "docs/api/openapi.yaml"

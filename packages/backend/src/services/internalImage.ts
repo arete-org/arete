@@ -15,7 +15,7 @@ import type {
     PostInternalImageGenerateRequest,
     PostInternalImageGenerateResponse,
 } from '@footnote/contracts/web';
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type { ResponseMetadata } from '@footnote/contracts/policy';
 import {
     internalImageRenderModels,
     internalImageTextModels,

@@ -5,7 +5,7 @@
  * @footnote-risk: low - Incorrect normalization can mis-render TRACE chips and temperament values.
  * @footnote-ethics: medium - TRACE scoring affects transparency signals shown to users.
  */
-import type { TraceAxisScore } from '@footnote/contracts/ethics-core';
+import type { TraceAxisScore } from '@footnote/contracts/policy';
 
 export const isTraceAxisScore = (value: unknown): value is TraceAxisScore =>
     typeof value === 'number' &&

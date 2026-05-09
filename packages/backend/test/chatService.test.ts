@@ -13,7 +13,7 @@ import type {
     GenerationRuntime,
 } from '@footnote/agent-runtime';
 import { createVoltAgentRuntime } from '@footnote/agent-runtime';
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type { ResponseMetadata } from '@footnote/contracts/policy';
 import { ResponseMetadataSchema } from '@footnote/contracts/web';
 import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import {
@@ -159,7 +159,7 @@ test('createChatService preserves the caller-requested model when the runtime om
 
 test('runChatMessages passes planner temperament into response metadata runtime context', async () => {
     let capturedPlannerTemperament:
-        | import('@footnote/contracts/ethics-core').PartialResponseTemperament
+        | import('@footnote/contracts/policy').PartialResponseTemperament
         | undefined;
 
     const chatService = createChatService({
@@ -1466,7 +1466,7 @@ test('runChatMessages executes fast workflow mode as minimal workflow with one g
 test('runChatMessages handles surfaced no-generation reasons without runtime fallback generation', async () => {
     const surfacedReasons: Array<
         Extract<
-            import('@footnote/contracts/ethics-core').WorkflowTerminationReason,
+            import('@footnote/contracts/policy').WorkflowTerminationReason,
             'transition_blocked_by_policy' | 'executor_error_fail_open'
         >
     > = ['transition_blocked_by_policy', 'executor_error_fail_open'];
@@ -1555,7 +1555,7 @@ test('runChatMessages handles surfaced no-generation reasons without runtime fal
 test('runChatMessages handles internal no-generation reasons with fallback generation marker and preserved lineage', async () => {
     const internalReasons: Array<
         Extract<
-            import('@footnote/contracts/ethics-core').WorkflowTerminationReason,
+            import('@footnote/contracts/policy').WorkflowTerminationReason,
             | 'budget_exhausted_steps'
             | 'budget_exhausted_tokens'
             | 'budget_exhausted_time'

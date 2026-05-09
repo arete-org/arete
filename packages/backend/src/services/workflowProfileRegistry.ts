@@ -21,7 +21,7 @@ import type {
     ReviewIntensity,
     WorkflowModeDecision,
     WorkflowModeId,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type {
     RuntimeWorkflowProfile,
     WorkflowProfileContract,

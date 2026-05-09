@@ -10,7 +10,7 @@ import type {
     PostChatRequest,
     PostChatResponse,
 } from '@footnote/contracts/web';
-import type { ToolExecutionContext } from '@footnote/contracts/ethics-core';
+import type { ToolExecutionContext } from '@footnote/contracts/policy';
 import type { ApiRequester } from './client.js';
 import {
     loadGetChatProfilesResponseValidator,

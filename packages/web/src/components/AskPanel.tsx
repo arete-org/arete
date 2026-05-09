@@ -9,7 +9,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import ProvenanceFooter from './ProvenanceFooter';
-import type { ResponseMetadata } from '@footnote/contracts/ethics-core';
+import type { ResponseMetadata } from '@footnote/contracts/policy';
 import examplePrompts from '../data/examplePrompts.json';
 import { loadRuntimeConfig } from '../config';
 import { api, isApiClientError } from '../utils/api';

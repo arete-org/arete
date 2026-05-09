@@ -10,10 +10,7 @@ import type {
     GuildMember,
     Message,
 } from 'discord.js';
-import type {
-    Citation,
-    ResponseMetadata,
-} from '@footnote/contracts/ethics-core';
+import type { Citation, ResponseMetadata } from '@footnote/contracts/policy';
 import { botApi } from '../../api/botApi.js';
 import { logger } from '../logger.js';
 import { parseProvenanceActionCustomId } from './provenanceCgi.js';

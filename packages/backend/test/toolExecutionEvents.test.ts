@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { ToolExecutionContext } from '@footnote/contracts/ethics-core';
+import type { ToolExecutionContext } from '@footnote/contracts/policy';
 import { buildToolExecutionEvent } from '../src/services/tools/toolExecutionEvents.js';
 
 test('buildToolExecutionEvent maps executed tool context to tool event', () => {

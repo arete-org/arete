@@ -23,7 +23,7 @@ import type {
     ToolExecutionContext,
     ToolInvocationRequest,
     WorkflowRecord,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type {
     ModelProfileCapabilities,
     SupportedProvider,

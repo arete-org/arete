@@ -12,7 +12,7 @@ import type {
     ExecutionEvent,
     ResponseMetadata,
     WorkflowRecord,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import { buildRunOutcomeSummary } from './traceOutcome.js';
 
 const createWorkflow = (

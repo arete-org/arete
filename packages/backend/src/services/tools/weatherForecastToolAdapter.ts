@@ -9,7 +9,7 @@
 import type {
     ToolExecutionContext,
     ToolInvocationReasonCode,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 import type {
     WeatherForecastTool,
     WeatherForecastToolResult,

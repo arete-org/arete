@@ -14,7 +14,7 @@
 import type {
     WorkflowTerminationReason,
     WorkflowStepKind,
-} from '@footnote/contracts/ethics-core';
+} from '@footnote/contracts/policy';
 
 /**
  * Stable workflow profile identifier.
