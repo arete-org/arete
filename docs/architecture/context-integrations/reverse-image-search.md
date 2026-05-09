@@ -12,7 +12,7 @@ It is bounded and fail-open.
 `reverse_image_search` currently handles:
 
 - image attachments (reverse lookup against configured provider)
-- confidence-gated advisory summaries and bounded source citations
+- advisory summaries and bounded source citations with confidence preserved as metadata (not a decision gate)
 
 It does not grant terminal authority or policy authority.
 

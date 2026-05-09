@@ -54,6 +54,15 @@ const toVisualMatches = (value: unknown): SerpApiVisualMatch[] =>
           )
         : [];
 
+const sanitizeUrlForLogs = (value: string): string => {
+    try {
+        const parsed = new URL(value);
+        return `${parsed.origin}${parsed.pathname}`;
+    } catch {
+        return '[invalid_url]';
+    }
+};
+
 const parseConfidence = (value: unknown): number | undefined => {
     if (typeof value === 'number' && Number.isFinite(value)) {
         if (value >= 0 && value <= 1) {
@@ -115,7 +124,7 @@ export const createSerpApiReverseImageSearchProvider = ({
             if (!response.ok) {
                 const body = await response.text().catch(() => '');
                 throw new Error(
-                    `SerpAPI reverse image search failed with HTTP ${response.status}: ${body.slice(0, 200)}`
+                    `SerpAPI reverse image search failed with HTTP ${response.status} (response body omitted; length=${body.length}).`
                 );
             }
 
@@ -160,7 +169,10 @@ export const createSerpApiReverseImageSearchProvider = ({
             if (matches.length === 0 && graphTitle === undefined) {
                 logger.warn(
                     'reverse_image_search: SerpAPI returned no visual matches.',
-                    { imageUrl, hasContext: Boolean(context) }
+                    {
+                        imageUrl: sanitizeUrlForLogs(imageUrl),
+                        hasContext: Boolean(context),
+                    }
                 );
             }
 

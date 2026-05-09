@@ -413,14 +413,16 @@ export const createChatOrchestrator = ({
                     internalImageDescriptionTaskService,
                 logger: chatOrchestratorLogger,
             });
+        const reverseImageSearchProviderMode =
+            runtimeConfig.chatWorkflow.contextIntegrations.reverseImageSearch
+                .provider;
+        const reverseImageSearchSerpApiKey =
+            runtimeConfig.chatWorkflow.contextIntegrations.reverseImageSearch.serpApiKey?.trim();
         const reverseImageSearchProvider =
-            runtimeConfig.chatWorkflow.contextIntegrations.reverseImageSearch
-                .provider === 'serpapi' &&
-            runtimeConfig.chatWorkflow.contextIntegrations.reverseImageSearch
-                .serpApiKey
+            reverseImageSearchProviderMode === 'serpapi' &&
+            reverseImageSearchSerpApiKey
                 ? createSerpApiReverseImageSearchProvider({
-                      apiKey: runtimeConfig.chatWorkflow.contextIntegrations
-                          .reverseImageSearch.serpApiKey,
+                      apiKey: reverseImageSearchSerpApiKey,
                       requestTimeoutMs:
                           runtimeConfig.chatWorkflow.contextIntegrations
                               .reverseImageSearch.providerTimeoutMs,
@@ -428,10 +430,8 @@ export const createChatOrchestrator = ({
                   })
                 : null;
         if (
-            runtimeConfig.chatWorkflow.contextIntegrations.reverseImageSearch
-                .provider === 'serpapi' &&
-            !runtimeConfig.chatWorkflow.contextIntegrations.reverseImageSearch
-                .serpApiKey
+            reverseImageSearchProviderMode === 'serpapi' &&
+            !reverseImageSearchSerpApiKey
         ) {
             chatOrchestratorLogger.warn(
                 'reverse_image_search provider is set to serpapi, but CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_SERPAPI_API_KEY is missing; integration will fail open as unavailable.'

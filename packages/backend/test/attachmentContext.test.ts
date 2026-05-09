@@ -32,10 +32,29 @@ test('getAttachmentsFromUnknownInput accepts contract-shaped chat attachments', 
     assert.equal(attachments[1]?.kind, 'file');
 });
 
+test('getAttachmentsFromUnknownInput accepts minimal contract shape without id or filename', () => {
+    const attachments = getAttachmentsFromUnknownInput([
+        {
+            kind: 'image',
+            url: 'https://cdn.example.com/a.png',
+        },
+        {
+            kind: 'file',
+            url: 'https://cdn.example.com/spec.pdf',
+        },
+    ]);
+
+    assert.equal(attachments.length, 2);
+    assert.equal(attachments[0]?.kind, 'image');
+    assert.equal(attachments[0]?.url, 'https://cdn.example.com/a.png');
+    assert.equal(attachments[1]?.kind, 'file');
+});
+
 test('getAttachmentsFromUnknownInput drops malformed entries', () => {
     const attachments = getAttachmentsFromUnknownInput([
         { kind: 'image', contentType: 'image/png' },
         { kind: 'file', url: 1234 },
+        { kind: 'file', url: '' },
         { kind: 'other', url: 'https://example.com/other.bin' },
     ]);
 

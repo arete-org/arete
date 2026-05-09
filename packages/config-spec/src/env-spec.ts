@@ -1729,7 +1729,8 @@ export const envEntries = [
         section: 'chat-workflow',
         required: false,
         secret: false,
-        kind: 'string',
+        kind: 'enum',
+        allowedValues: ['none', 'serpapi'] as const,
         description:
             'Reverse-image provider mode (`none` or `serpapi`). `none` keeps the integration fail-open unavailable.',
         defaultValue: literal('none'),
