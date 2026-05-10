@@ -42,7 +42,8 @@ export const buildRuntimeConfig = (
     );
     const voltagent = buildVoltAgentSection(env, warn);
     const web = buildWebSection(env, warn);
-    const { reflect, trace, chatWorkflow } = buildServiceSections(env, warn);
+    const { reflect, trace, langfuseMetadataMirror, chatWorkflow } =
+        buildServiceSections(env, warn);
     const executionContractTrustGraph = buildExecutionContractTrustGraphSection(
         env,
         warn
@@ -70,6 +71,7 @@ export const buildRuntimeConfig = (
         csp: web.csp,
         reflect,
         trace,
+        langfuseMetadataMirror,
         chatWorkflow,
         executionContractTrustGraph,
         turnstile,

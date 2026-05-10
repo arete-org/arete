@@ -34,6 +34,8 @@ detail once you have the main runtime shape in mind.
 
 - [Incident Handling](./incident-handling.md)
 - [Safety Evaluation](./safety-evaluation.md)
+- [Langfuse Metadata Mirror](./langfuse-metadata-mirror.md): optional,
+  metadata-only mirror for maintainer observability with fail-open behavior.
 
 ## Subsystem Notes
 

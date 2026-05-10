@@ -10,7 +10,10 @@ import assert from 'node:assert/strict';
 
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import type { TraceStore } from '../src/storage/traces/traceStore.js';
-import { storeTrace } from '../src/services/traceStore.js';
+import {
+    configureTraceMetadataMirror,
+    storeTrace,
+} from '../src/services/traceStore.js';
 
 const createMetadata = (
     overrides: Partial<ResponseMetadata> = {}
@@ -116,4 +119,28 @@ test('storeTrace stays fail-open when trace upsert throws', async () => {
         )
     );
     assert.equal(upsertCalled, true);
+});
+
+test('storeTrace stays fail-open when optional Langfuse metadata mirror throws', async () => {
+    let upsertCalled = false;
+    let mirrorCalled = false;
+
+    const traceStore = {
+        upsert: async () => {
+            upsertCalled = true;
+        },
+    } as unknown as TraceStore;
+
+    configureTraceMetadataMirror(async () => {
+        mirrorCalled = true;
+        throw new Error('langfuse unavailable');
+    });
+
+    try {
+        await assert.doesNotReject(storeTrace(traceStore, createMetadata()));
+        assert.equal(upsertCalled, true);
+        assert.equal(mirrorCalled, true);
+    } finally {
+        configureTraceMetadataMirror(null);
+    }
 });

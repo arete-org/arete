@@ -93,6 +93,13 @@ export type RuntimeConfig = {
         apiToken: string | null;
         maxBodyBytes: number;
     };
+    langfuseMetadataMirror: {
+        enabled: boolean;
+        baseUrl: string | null;
+        publicKey: string | null;
+        secretKey: string | null;
+        timeoutMs: number;
+    };
     chatWorkflow: {
         modeId: WorkflowModeId;
         reviewLoopEnabled: boolean;

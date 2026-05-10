@@ -112,6 +112,7 @@
                 "docs/api/openapi.yaml",
                 "docs/architecture/prompt-resolution.md",
                 "docs/architecture/workflow.md",
+                "docs/architecture/langfuse-metadata-mirror.md",
                 "docs/architecture/context-integrations/README.md"
             ],
             "page_notes": [
@@ -214,6 +215,7 @@
                 "packages/discord-bot/src/utils/logger.ts",
                 "packages/backend/src/utils/logger.ts",
                 "packages/discord-bot/src/state/ChannelContextManager.ts",
+                "docs/architecture/langfuse-metadata-mirror.md",
                 "AGENTS.md",
                 "cursor.rules"
             ],

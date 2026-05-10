@@ -79,7 +79,10 @@ const parseWebSearchProviderPriority = (
 export const buildServiceSections = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink
-): Pick<RuntimeConfig, 'reflect' | 'trace' | 'chatWorkflow'> => ({
+): Pick<
+    RuntimeConfig,
+    'reflect' | 'trace' | 'langfuseMetadataMirror' | 'chatWorkflow'
+> => ({
     reflect: {
         serviceToken: parseOptionalTrimmedString(env.REFLECT_SERVICE_TOKEN),
         maxBodyBytes: parsePositiveIntEnv(
@@ -95,6 +98,29 @@ export const buildServiceSections = (
             env.TRACE_API_MAX_BODY_BYTES,
             envDefaultValues.TRACE_API_MAX_BODY_BYTES,
             'TRACE_API_MAX_BODY_BYTES',
+            warn
+        ),
+    },
+    langfuseMetadataMirror: {
+        enabled: parseBooleanEnv(
+            env.LANGFUSE_METADATA_MIRROR_ENABLED,
+            envDefaultValues.LANGFUSE_METADATA_MIRROR_ENABLED,
+            'LANGFUSE_METADATA_MIRROR_ENABLED',
+            warn
+        ),
+        baseUrl: parseOptionalTrimmedString(
+            env.LANGFUSE_METADATA_MIRROR_BASE_URL
+        ),
+        publicKey: parseOptionalTrimmedString(
+            env.LANGFUSE_METADATA_MIRROR_PUBLIC_KEY
+        ),
+        secretKey: parseOptionalTrimmedString(
+            env.LANGFUSE_METADATA_MIRROR_SECRET_KEY
+        ),
+        timeoutMs: parsePositiveIntEnv(
+            env.LANGFUSE_METADATA_MIRROR_TIMEOUT_MS,
+            envDefaultValues.LANGFUSE_METADATA_MIRROR_TIMEOUT_MS,
+            'LANGFUSE_METADATA_MIRROR_TIMEOUT_MS',
             warn
         ),
     },
