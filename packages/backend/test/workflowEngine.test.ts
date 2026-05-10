@@ -1789,3 +1789,102 @@ test('runBoundedReviewWorkflow returns terminal planner action outcome without g
     assert.equal(result.terminalAction.responseAction, 'react');
     assert.equal(result.workflowLineage.terminationReason, 'goal_satisfied');
 });
+
+test('runBoundedReviewWorkflow uses web_search hints for one OpenAI native follow-up when enabled', async () => {
+    let observedSearch: unknown;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(input) {
+            observedSearch = input.search;
+            return {
+                text: 'draft',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Retrieved',
+                citations: [{ title: 'source', url: 'https://example.com' }],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            provider: 'openai',
+            messages: [{ role: 'user', content: 'Need context' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Need context' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_review_loop',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 4,
+                maxToolCalls: 4,
+                maxDeliberationCalls: 2,
+                maxTokensTotal: 1000,
+                maxDurationMs: 15000,
+            },
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: false,
+            enableRevision: false,
+        },
+        openAiNativeSearchFromHintsEnabled: true,
+        contextStepRequests: [
+            {
+                integrationName: 'web_search',
+                requested: true,
+                eligible: true,
+            },
+        ],
+        contextStepExecutorRegistry: {
+            web_search: async () => ({
+                executionContext: {
+                    toolName: 'web_search',
+                    status: 'executed',
+                },
+                integrationContext: {
+                    kind: 'web_search',
+                    version: 'v1',
+                    payload: {
+                        searchHints: [
+                            {
+                                query: 'latest policy change',
+                                intent: 'current_facts',
+                                priority: 'high',
+                            },
+                        ],
+                    },
+                },
+            }),
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.deepEqual(observedSearch, {
+        query: 'latest policy change',
+        intent: 'current_facts',
+        contextSize: 'low',
+    });
+});

@@ -430,14 +430,28 @@ export const createWebSearchContextStepExecutor = ({
                 attempts,
                 query: input.query,
             });
-            return buildFailedContextStepResult({
-                toolName: request.integrationName,
-                reasonCode: attempts.some(
-                    (attempt) => attempt.status === 'failed'
-                )
-                    ? 'tool_execution_error'
-                    : 'tool_not_used',
-                durationMs,
+            if (attempts.some((attempt) => attempt.status === 'failed')) {
+                return buildFailedContextStepResult({
+                    toolName: request.integrationName,
+                    reasonCode: 'tool_execution_error',
+                    durationMs,
+                    integrationContext: {
+                        kind: 'web_search',
+                        version: 'v1',
+                        payload: {
+                            attempts,
+                            searchHints,
+                        } satisfies WebSearchContextStepIntegrationPayload,
+                    },
+                });
+            }
+            return {
+                executionContext: {
+                    toolName: request.integrationName,
+                    status: 'skipped',
+                    reasonCode: 'tool_not_used',
+                    durationMs,
+                },
                 integrationContext: {
                     kind: 'web_search',
                     version: 'v1',
@@ -446,7 +460,7 @@ export const createWebSearchContextStepExecutor = ({
                         searchHints,
                     } satisfies WebSearchContextStepIntegrationPayload,
                 },
-            });
+            };
         }
 
         return buildExecutedContextStepResult({

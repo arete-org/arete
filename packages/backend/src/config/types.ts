@@ -117,7 +117,7 @@ export type RuntimeConfig = {
                 maxResults: number;
                 /**
                  * Optional OpenAI-native follow-up search execution from
-                 * context-step `searchHints`. Disabled by default.
+                 * context-step `searchHints`. Enabled by default.
                  */
                 openAiNativeSearchFromHintsEnabled: boolean;
             };

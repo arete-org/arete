@@ -176,6 +176,8 @@ export type RunBoundedReviewWorkflowInput = {
     contextStepExecutor?: ContextStepExecutor;
     // Preferred executor routing by integration name.
     contextStepExecutorRegistry?: Record<string, ContextStepExecutor>;
+    // Optional OpenAI-native follow-up search from context-step search hints.
+    openAiNativeSearchFromHintsEnabled?: boolean;
 };
 
 export type RunBoundedReviewWorkflowResult =
@@ -209,6 +211,12 @@ export type RunBoundedReviewWorkflowResult =
 export type ContextStepRequest = ContractContextStepRequest;
 
 export type ContextStepResult = ContractContextStepResult;
+
+type FollowUpSearchHint = {
+    query: string;
+    intent: 'repo_explainer' | 'current_facts';
+    priority: 'low' | 'medium' | 'high';
+};
 
 export type ContextStepExecutorInput = {
     request: ContextStepRequest;
@@ -723,6 +731,7 @@ export const runBoundedReviewWorkflow = async ({
     contextStepRequests,
     contextStepExecutor,
     contextStepExecutorRegistry,
+    openAiNativeSearchFromHintsEnabled = false,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
     // NOTE: Concrete tool execution is still orchestrator/registry-owned.
     // This engine path currently executes only Reviewed generation steps.
@@ -1122,6 +1131,69 @@ export const runBoundedReviewWorkflow = async ({
         return contextStepExecutor;
     };
 
+    const selectFollowUpSearchHint = (
+        results: ContextStepResult[]
+    ): FollowUpSearchHint | undefined => {
+        if (!openAiNativeSearchFromHintsEnabled) {
+            return undefined;
+        }
+        if (effectiveGenerationRequest.provider !== 'openai') {
+            return undefined;
+        }
+        const webSearchStep = results.find(
+            (result) => result.integrationContext?.kind === 'web_search'
+        );
+        const payload = webSearchStep?.integrationContext?.payload;
+        if (
+            payload === undefined ||
+            payload === null ||
+            typeof payload !== 'object' ||
+            Array.isArray(payload)
+        ) {
+            return undefined;
+        }
+        const rawHints = (payload as { searchHints?: unknown }).searchHints;
+        if (!Array.isArray(rawHints)) {
+            return undefined;
+        }
+        const hints = rawHints
+            .map((hint) => {
+                if (
+                    hint === null ||
+                    typeof hint !== 'object' ||
+                    Array.isArray(hint)
+                ) {
+                    return undefined;
+                }
+                const hintRecord = hint as Record<string, unknown>;
+                const query =
+                    typeof hintRecord.query === 'string'
+                        ? hintRecord.query.trim()
+                        : '';
+                if (query.length === 0) {
+                    return undefined;
+                }
+                const intent =
+                    hintRecord.intent === 'repo_explainer'
+                        ? 'repo_explainer'
+                        : 'current_facts';
+                const priority =
+                    hintRecord.priority === 'high' ||
+                    hintRecord.priority === 'medium' ||
+                    hintRecord.priority === 'low'
+                        ? hintRecord.priority
+                        : 'medium';
+                return { query, intent, priority } satisfies FollowUpSearchHint;
+            })
+            .filter((hint): hint is FollowUpSearchHint => hint !== undefined)
+            .sort((left, right) => {
+                const weight = (priority: FollowUpSearchHint['priority']) =>
+                    priority === 'high' ? 3 : priority === 'medium' ? 2 : 1;
+                return weight(right.priority) - weight(left.priority);
+            });
+        return hints[0];
+    };
+
     const requestedContextSteps = (effectiveContextStepRequests ?? []).filter(
         (request) => request.requested === true && request.eligible
     );
@@ -1354,10 +1426,21 @@ export const runBoundedReviewWorkflow = async ({
                         contextStepResult.contextMessages ?? []
                 )
             );
+            const selectedFollowUpSearchHint = selectFollowUpSearchHint(
+                executedContextStepResults
+            );
             try {
                 draftResult = await generationRuntime.generate({
                     ...effectiveGenerationRequest,
                     messages: messagesWithContext,
+                    ...(selectedFollowUpSearchHint !== undefined &&
+                        effectiveGenerationRequest.search === undefined && {
+                            search: {
+                                query: selectedFollowUpSearchHint.query,
+                                intent: selectedFollowUpSearchHint.intent,
+                                contextSize: 'low',
+                            },
+                        }),
                 });
                 const initialDraftFinishedAt = Date.now();
                 const initialDraftUsage = captureUsage(

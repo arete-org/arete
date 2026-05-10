@@ -158,7 +158,7 @@ export const buildServiceSections = (
                 ),
                 openAiNativeSearchFromHintsEnabled: parseBooleanEnv(
                     env.CHAT_CONTEXT_WEB_SEARCH_OPENAI_NATIVE_FROM_HINTS_ENABLED,
-                    false,
+                    true,
                     'CHAT_CONTEXT_WEB_SEARCH_OPENAI_NATIVE_FROM_HINTS_ENABLED',
                     warn
                 ),

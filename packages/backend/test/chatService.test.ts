@@ -536,6 +536,56 @@ test('runChatMessages preserves non-search tool execution context when search is
     });
 });
 
+test('runChatMessages preserves explicit failed web_search tool context when citations exist', async () => {
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
+
+    const chatService = createChatService({
+        generationRuntime: createRuntime({
+            provenance: 'Retrieved',
+            citations: [
+                {
+                    title: 'Source',
+                    url: 'https://example.com/source',
+                },
+            ],
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedExecutionContext = runtimeContext.executionContext;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Search this.' }],
+        conversationSnapshot: 'Search this.',
+        generation: {
+            search: {
+                query: 'latest updates',
+                contextSize: 'low',
+                intent: 'current_facts',
+            },
+        },
+        executionContext: {
+            tool: {
+                toolName: 'web_search',
+                status: 'failed',
+                reasonCode: 'tool_execution_error',
+            },
+        },
+    });
+
+    assert.deepEqual(capturedExecutionContext?.tool, {
+        toolName: 'web_search',
+        status: 'failed',
+        reasonCode: 'tool_execution_error',
+    });
+});
+
 test('runChatMessages forwards total orchestration duration when provided', async () => {
     let capturedTotalDurationMs: number | undefined;
 

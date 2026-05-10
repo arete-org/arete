@@ -968,6 +968,9 @@ export const createChatService = ({
                                 logger.warn(message, meta),
                         }),
                 },
+                openAiNativeSearchFromHintsEnabled:
+                    runtimeConfig.chatWorkflow.contextIntegrations.webSearch
+                        .openAiNativeSearchFromHintsEnabled,
             });
             workflowPlannerStepResult = workflowResult.plannerStepResult;
             workflowPlannerSummary =
@@ -1254,22 +1257,9 @@ export const createChatService = ({
               >['tool']
             | undefined =
             // Respect explicit upstream tool outcomes first (for example,
-            // orchestrator-level fail-open policy decisions).
+            // context-step execution or orchestrator fail-open policy).
             upstreamToolExecution
-                ? hasSearchIntent &&
-                  upstreamToolExecution.toolName === 'web_search'
-                    ? {
-                          ...upstreamToolExecution,
-                          status: retrievalUsed ? 'executed' : 'skipped',
-                          ...(retrievalUsed
-                              ? { reasonCode: undefined }
-                              : {
-                                    reasonCode:
-                                        upstreamToolExecution.reasonCode ??
-                                        'tool_not_used',
-                                }),
-                      }
-                    : upstreamToolExecution
+                ? upstreamToolExecution
                 : generationResult.toolExecution
                   ? generationResult.toolExecution
                   : hasSearchIntent
