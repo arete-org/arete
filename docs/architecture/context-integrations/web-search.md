@@ -61,19 +61,57 @@ Current SerpAPI mapping for web search:
 
 ## Configuration
 
-Web-search runtime controls:
+### Setup quick start
 
-- `CHAT_CONTEXT_WEB_SEARCH_ENABLED`
-- `CHAT_CONTEXT_WEB_SEARCH_PROVIDER_PRIORITY`
-- `CHAT_CONTEXT_WEB_SEARCH_SEARXNG_BASE_URL`
-- `CHAT_CONTEXT_WEB_SEARCH_BRAVE_API_KEY`
-- `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_API_KEY`
-- `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_ENGINE`
-- `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_GL`
-- `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_HL`
-- `CHAT_CONTEXT_WEB_SEARCH_PROVIDER_TIMEOUT_MS`
-- `CHAT_CONTEXT_WEB_SEARCH_MAX_RESULTS`
-- `CHAT_CONTEXT_WEB_SEARCH_OPENAI_NATIVE_FROM_HINTS_ENABLED`
+1. Turn on integration:
+
+- `CHAT_CONTEXT_WEB_SEARCH_ENABLED=true`
+
+2. Pick provider order (left to right fallback):
+
+- `CHAT_CONTEXT_WEB_SEARCH_PROVIDER_PRIORITY=searxng,brave,serpapi`
+
+3. Configure at least one provider:
+
+- SearXNG: set `CHAT_CONTEXT_WEB_SEARCH_SEARXNG_BASE_URL`
+- Brave: set `CHAT_CONTEXT_WEB_SEARCH_BRAVE_API_KEY`
+- SerpAPI: set `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_API_KEY`
+
+4. Set safety/perf bounds:
+
+- `CHAT_CONTEXT_WEB_SEARCH_PROVIDER_TIMEOUT_MS=12000`
+- `CHAT_CONTEXT_WEB_SEARCH_MAX_RESULTS=6`
+
+If a provider is in priority but missing credentials/config, it is skipped as
+`tool_unavailable` and the next provider is tried.
+
+### Environment variables
+
+| Variable                                                   | What it controls                                                                 | Typical value / notes                                                  |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `CHAT_CONTEXT_WEB_SEARCH_ENABLED`                          | Master on/off switch for `web_search` context-step execution.                    | `true` (default). Set `false` to disable integration globally.         |
+| `CHAT_CONTEXT_WEB_SEARCH_PROVIDER_PRIORITY`                | Ordered fallback list of providers.                                              | `searxng,brave,serpapi` (default).                                     |
+| `CHAT_CONTEXT_WEB_SEARCH_SEARXNG_BASE_URL`                | Base URL for SearXNG API calls.                                                  | Example: `https://searxng.example`                                     |
+| `CHAT_CONTEXT_WEB_SEARCH_BRAVE_API_KEY`                   | Brave Search API key.                                                            | Required only if `brave` is in priority and expected to run.           |
+| `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_API_KEY`                 | SerpAPI key for web search provider.                                             | Required only if `serpapi` is in priority and expected to run.         |
+| `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_ENGINE`                  | Optional SerpAPI engine override.                                                | Defaults to `google` if unset.                                         |
+| `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_GL`                      | Optional SerpAPI country hint (`gl`).                                            | Example: `us`                                                          |
+| `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_HL`                      | Optional SerpAPI language hint (`hl`).                                           | Example: `en`                                                          |
+| `CHAT_CONTEXT_WEB_SEARCH_PROVIDER_TIMEOUT_MS`             | Timeout budget per provider attempt.                                             | `12000` (default). Lower for stricter latency, higher for resilience.  |
+| `CHAT_CONTEXT_WEB_SEARCH_MAX_RESULTS`                     | Max normalized results kept from a successful provider response.                 | `6` (default). Keep small to avoid prompt bloat.                       |
+| `CHAT_CONTEXT_WEB_SEARCH_OPENAI_NATIVE_FROM_HINTS_ENABLED` | Allows optional OpenAI-native follow-up search from generated `searchHints`.     | `true` (default). Set `false` for stricter external-provider-only use. |
+
+### Recommended setups
+
+- SearXNG-first self-hosted posture:
+  - `CHAT_CONTEXT_WEB_SEARCH_PROVIDER_PRIORITY=searxng,brave,serpapi`
+  - Set SearXNG base URL, keep Brave/SerpAPI as commercial fallback.
+- API-only posture (no SearXNG):
+  - `CHAT_CONTEXT_WEB_SEARCH_PROVIDER_PRIORITY=brave,serpapi`
+  - Set Brave and/or SerpAPI keys.
+- SerpAPI-focused posture:
+  - `CHAT_CONTEXT_WEB_SEARCH_PROVIDER_PRIORITY=serpapi`
+  - Set SerpAPI key and optional `ENGINE/GL/HL`.
 
 Missing provider credentials should degrade to `tool_unavailable` for that
 provider attempt, not block the request.
