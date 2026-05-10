@@ -125,18 +125,17 @@ const AboutPage = (): JSX.Element => (
                             Sources are the obvious one. Open them and see what
                             a claim is anchored to. Safety notes are there for
                             the moments when &ldquo;sounds fine&rdquo; is not
-                            good enough. TRACE is the quick snapshot: what ran,
-                            what mattered, what shaped the answer. The trace
-                            link opens the longer record.
+                            good enough. TRACE is a quick posture snapshot of
+                            the response. The trace link opens the longer
+                            record.
                         </p>
                         <p>
-                            Open the trace page and you can look at the fuller
-                            trail: what model ran, which steps happened, what
-                            tools were used, and what supporting material showed
-                            up along the way. None of this guarantees the answer
-                            is correct. That is the point. It gives you
-                            something concrete to inspect instead of a smooth
-                            answer with no way to audit it.
+                            The trace page is the paper trail: which model ran,
+                            what steps happened, what tools were used, and what
+                            supporting material showed up along the way. It is
+                            not proof. It is accountability, something you can
+                            open and verify, instead of a polished answer with
+                            nothing behind it.
                         </p>
                         <div
                             className="card"
@@ -157,10 +156,9 @@ const AboutPage = (): JSX.Element => (
                     >
                         <h2 id="project-state-title">Project state</h2>
                         <p>
-                            Footnote is open source, and it is early. The core
-                            idea is here. The hard part now is making it
-                            sturdier, clearer, and genuinely usable, not just
-                            impressive in a demo.
+                            Footnote is open source and in early development.
+                            The core idea is here, but the hard part now is making 
+                            it sturdy, clear, and genuinely usable.
                         </p>
                         <p>
                             You can run it from the repository and self-host it
