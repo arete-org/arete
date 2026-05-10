@@ -77,6 +77,14 @@ const AboutPage = (): JSX.Element => (
                             answer you got back.
                         </p>
                         <p>
+                            That uncertainty is not just a technical flaw. It
+                            changes the relationship between the person and the
+                            answer. A system that sounds sure of itself can make
+                            it easy to slide from usefulness into unearned
+                            trust, especially when there is very little for the
+                            reader to inspect.
+                        </p>
+                        <p>
                             Footnote starts from the idea that this uncertainty
                             matters. The goal is not to make AI feel magical. It
                             is to make it easier to look at a response and ask:
@@ -100,6 +108,14 @@ const AboutPage = (): JSX.Element => (
                             to the trace for that response.
                         </p>
                         <p>
+                            Each of those pieces is there for a reason. Sources
+                            help you follow specific claims back to something
+                            outside the assistant. A safety tier is a signal
+                            about the posture of the response, not a stamp of
+                            truth. The trace is where you go when the surface
+                            answer is not enough.
+                        </p>
+                        <p>
                             Those details are there to slow the experience down
                             in a useful way. Instead of treating the response as
                             a finished product, the page gives you a few handles
@@ -121,6 +137,13 @@ const AboutPage = (): JSX.Element => (
                             than the surface answer. It can show what model ran,
                             which workflow steps happened, and which outside
                             sources were used when they were part of the run.
+                        </p>
+                        <p>
+                            That matters because it replaces some of the usual
+                            black-box feeling with a visible record. Instead of
+                            being asked to trust the answer because it arrived
+                            fluently, you have something to examine when you
+                            need to understand how it came together.
                         </p>
                         <p>
                             That record does not prove the answer is correct.
@@ -167,6 +190,13 @@ const AboutPage = (): JSX.Element => (
                             underlying systems.
                         </p>
                         <p>
+                            The direction is broader than one interface. The aim
+                            is to make AI behavior more inspectable, leave more
+                            room for user choice, and rely less on opaque
+                            defaults that ask people to accept too much on
+                            faith.
+                        </p>
+                        <p>
                             You can run it from the repository and self-host it
                             with your own provider and infrastructure choices.
                             If you use hosted providers, their privacy and
@@ -186,6 +216,12 @@ const AboutPage = (): JSX.Element => (
                             backend work. Clearer docs, better trace UX,
                             stronger review flows, and sharper product writing
                             all matter here.
+                        </p>
+                        <p>
+                            The project also benefits from people who care about
+                            accountability, legibility, and how trust is earned
+                            in real interfaces, not just from people who want to
+                            tune models or ship features quickly.
                         </p>
                         <p>
                             If the project feels aligned with the questions you
