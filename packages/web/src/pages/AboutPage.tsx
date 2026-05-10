@@ -36,17 +36,30 @@ const AboutPage = (): JSX.Element => (
         <main className="page-content" id="main-content">
             <header className="page-hero" aria-labelledby="about-title">
                 <h1 id="about-title">AI that carries receipts.</h1>
+
                 <p className="page-hero__summary">
                     Footnote is an attempt to build something better.
                 </p>
+
                 <p>
-                    Most AI answers show up fast, confident, and polished, and
-                    you are still left guessing what is real. That is not a
-                    fluke. The industry gets rewarded for speed, lock-in, and
-                    persuasion, not for being checkable. Footnote gives you
-                    receipts: sources you can open, notes about uncertainty and
-                    safety when they matter, and a trace you can follow when you
-                    want the full story.
+                    Most AI answers show up fast, confident, and polished, but
+                    you&apos;re left guessing what&apos;s real. That&apos;s the
+                    predictable result of the incentives: the industry is
+                    rewarded for speed and persuasion, not for making answers
+                    easy to verify.
+                </p>
+
+                <p>
+                    Footnote isn&apos;t trying to be the flashiest AI. We care
+                    about giving you receipts: clear links to sources, notes
+                    about uncertainty and safety when they matter, and a paper
+                    trail you can follow when you want the full story.
+                </p>
+
+                <p>
+                    We believe AI that serves real people starts with being{' '}
+                    <strong>accessible</strong>, <strong>open</strong>, and{' '}
+                    <strong>honest</strong>.
                 </p>
             </header>
 
@@ -63,19 +76,21 @@ const AboutPage = (): JSX.Element => (
                         aria-labelledby="the-mission-title"
                     >
                         <h2 id="the-mission-title">The mission</h2>
+
                         <p>
-                            This is also about control. Keeping your data
-                            private when you need to. Choosing how it runs. And
-                            being able to change things later without the whole
-                            thing falling apart.
+                            This is also about control. It&apos;s about keeping
+                            your data private when you need to, choosing how the
+                            system runs, and being able to change things later
+                            without the whole setup falling apart.
                         </p>
+
                         <p>
                             A lot of tools make it easy to start and hard to
-                            leave. We are trying to avoid that. You should not
-                            get stuck with one company just because it was the
-                            default. If you want to use a different kind of AI
-                            later, you should not have to rebuild everything.
-                            And if you want to{' '}
+                            leave. We&apos;re trying to avoid that. You
+                            shouldn&apos;t get stuck with one company just
+                            because it was the default. If you want to use a
+                            different kind of AI later, you shouldn&apos;t have
+                            to rebuild everything. And if you want to{' '}
                             <a
                                 href="https://github.com/footnote-ai/footnote#quickstart"
                                 target="_blank"
@@ -86,14 +101,15 @@ const AboutPage = (): JSX.Element => (
                             , that should be doable without a weekend of
                             frustration.
                         </p>
+
                         <p>
-                            And trust is not about how smooth the writing is. A
-                            clean, well-written answer can still be wrong, or
-                            leave out something important. Footnote tries to
+                            Trust also isn&apos;t about how smooth the writing
+                            is. A clean, well-written answer can still be wrong
+                            or leave out something important. Footnote tries to
                             give you a way to check it: where claims came from,
                             what the system relied on, and when extra caution is
-                            worth it. If it is doing its job, you can dig in
-                            when you care and skim when you do not.
+                            worth it. If it&apos;s doing its job, you can dig in
+                            when you care and skim when you don&apos;t.
                         </p>
                     </section>
 
@@ -157,16 +173,16 @@ const AboutPage = (): JSX.Element => (
                         <h2 id="project-state-title">Project state</h2>
                         <p>
                             Footnote is open source and in early development.
-                            The core idea is here, but the hard part now is making 
-                            it sturdy, clear, and genuinely usable.
+                            The core idea is here, but the hard part now is
+                            making it sturdy, clear, and genuinely usable.
                         </p>
                         <p>
                             You can run it from the repository and self-host it
                             on your own infrastructure, with the model and
-                            provider choices you prefer. If you use hosted
+                            provider choices you prefer (e.g., OpenAI,
+                            Anthropic, Google, or others). If you use hosted
                             providers, their privacy and retention policies
-                            still apply. Footnote cannot hand-wave that away, so
-                            this page should not pretend otherwise.
+                            still apply.
                         </p>
                     </section>
 
@@ -177,11 +193,10 @@ const AboutPage = (): JSX.Element => (
                     >
                         <h2 id="contribute-title">Contribute</h2>
                         <p>
-                            If this lines up with the questions you already have
+                            If this lines up with the concerns you already have
                             about AI, jump in. There is real work across the
                             stack: backend, frontend, UX, docs, diagrams, and
-                            the unglamorous job of making complicated things
-                            understandable.
+                            the job of making complicated things understandable.
                         </p>
                         <p>
                             Start with the{' '}
