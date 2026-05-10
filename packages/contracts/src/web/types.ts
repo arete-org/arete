@@ -10,6 +10,7 @@ import type {
     PartialResponseTemperament,
     ResponseMetadata,
     TraceAxisScore,
+    WorkflowModeId,
 } from '../policy/index.js';
 import type {
     InternalImageRenderModelId,
@@ -322,6 +323,7 @@ export type PostChatRequest = {
     surface: ChatSurface;
     botPersonaId?: string;
     profileId?: string;
+    modeId?: WorkflowModeId;
     generation?: {
         reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
         verbosity?: 'low' | 'medium' | 'high';

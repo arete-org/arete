@@ -9,7 +9,10 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import ProvenanceFooter from './ProvenanceFooter';
-import type { ResponseMetadata } from '@footnote/contracts/policy';
+import type {
+    ResponseMetadata,
+    WorkflowModeId,
+} from '@footnote/contracts/policy';
 import examplePrompts from '../data/examplePrompts.json';
 import { loadRuntimeConfig } from '../config';
 import { api, isApiClientError } from '../utils/api';
@@ -32,12 +35,17 @@ declare global {
 // Provide a stable fallback response in case the backend is unavailable so the space stays welcoming.
 const FALLBACK_REFLECTION =
     'I was unable to generate a response - please try again later.';
+const ALLOWED_WORKFLOW_MODE_IDS: ReadonlySet<WorkflowModeId> = new Set([
+    'balanced',
+    'grounded',
+]);
 
 /**
  * Main website ask panel that manages prompt input, Turnstile, and chat
  * response rendering.
  */
 const AskPanel = (): JSX.Element => {
+    const [modeId, setModeId] = useState<WorkflowModeId>('grounded');
     const [question, setQuestion] = useState('');
     const [status, setStatus] = useState('');
     const [answer, setAnswer] = useState('');
@@ -388,6 +396,7 @@ const AskPanel = (): JSX.Element => {
             const payload = await api.chatQuestion(
                 {
                     surface: 'web',
+                    modeId,
                     trigger: { kind: 'submit' },
                     latestUserInput: trimmedQuestion,
                     conversation: [
@@ -572,6 +581,44 @@ const AskPanel = (): JSX.Element => {
                         </div>
                     </div>
                     <form className="interaction-form" onSubmit={onSubmit}>
+                        <div className="interaction-mode-row">
+                            <label
+                                htmlFor="chat-mode-select"
+                                className="interaction-mode-label"
+                                title="Choose the answer posture: grounded is stricter with evidence, balanced is more flexible."
+                            >
+                                Mode
+                            </label>
+                            <select
+                                id="chat-mode-select"
+                                className="interaction-mode-select"
+                                value={modeId}
+                                onChange={(event) => {
+                                    const val = event.target.value;
+                                    if (
+                                        ALLOWED_WORKFLOW_MODE_IDS.has(
+                                            val as WorkflowModeId
+                                        )
+                                    ) {
+                                        setModeId(val as WorkflowModeId);
+                                    }
+                                }}
+                                aria-label="Select chat mode"
+                            >
+                                <option
+                                    value="grounded"
+                                    title="Grounded: stricter evidence posture and more cautious output."
+                                >
+                                    Grounded
+                                </option>
+                                <option
+                                    value="balanced"
+                                    title="Balanced: standard reviewed posture with a lighter evidence strictness."
+                                >
+                                    Balanced
+                                </option>
+                            </select>
+                        </div>
                         <div className="interaction-input-group">
                             <label htmlFor="question-input" className="sr-only">
                                 Ask a question
