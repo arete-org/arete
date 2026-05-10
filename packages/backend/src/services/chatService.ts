@@ -115,6 +115,7 @@ const buildContextStepShortCircuit = ({
     workflowContextStepResult,
     workflowContextStepResults,
     executionContext,
+    plannerTemperament,
     toolRequest,
     model,
     defaultModel,
@@ -125,6 +126,7 @@ const buildContextStepShortCircuit = ({
     workflowContextStepResult: ContextStepResult | undefined;
     workflowContextStepResults?: ContextStepResult[];
     executionContext: ResponseMetadataRuntimeContext['executionContext'];
+    plannerTemperament?: PartialResponseTemperament;
     toolRequest: ToolInvocationRequest | undefined;
     model: string | undefined;
     defaultModel: string;
@@ -151,6 +153,7 @@ const buildContextStepShortCircuit = ({
     const buildGenerationMetadataContext = () => ({
         modelVersion: model ?? defaultModel,
         conversationSnapshot,
+        plannerTemperament,
         executionContext: {
             ...executionContext,
             generation: {
@@ -1004,6 +1007,7 @@ export const createChatService = ({
                         workflowContextStepResult,
                         workflowContextStepResults,
                         executionContext,
+                        plannerTemperament: effectivePlannerTemperament,
                         toolRequest,
                         model,
                         defaultModel,
@@ -1040,6 +1044,7 @@ export const createChatService = ({
                         workflowContextStepResult,
                         workflowContextStepResults,
                         executionContext,
+                        plannerTemperament: effectivePlannerTemperament,
                         toolRequest,
                         model,
                         defaultModel,

@@ -194,6 +194,75 @@ test('runChatMessages passes planner temperament into response metadata runtime 
     });
 });
 
+test('runChatMessages preserves planner temperament for context-step short-circuit message metadata', async () => {
+    let capturedPlannerTemperament:
+        | import('@footnote/contracts/policy').PartialResponseTemperament
+        | undefined;
+
+    const chatService = createChatService({
+        generationRuntime: createRuntime(),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedPlannerTemperament = runtimeContext.plannerTemperament;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        runReviewWorkflow: async (_input) =>
+            ({
+                outcome: 'no_generation',
+                workflowLineage: {
+                    workflowId: 'wf_short_circuit_clarification',
+                    workflowName: 'message_reviewed',
+                    status: 'degraded',
+                    terminationReason: 'transition_blocked_by_policy',
+                    stepCount: 0,
+                    maxSteps: 3,
+                    maxDurationMs: 15000,
+                    steps: [],
+                },
+                contextStepResults: [
+                    {
+                        executionContext: {
+                            toolName: 'weather_forecast',
+                            status: 'executed',
+                            clarification: {
+                                reasonCode: 'ambiguous_location',
+                                question: 'Which Springfield?',
+                                options: [
+                                    {
+                                        id: 'springfield_il',
+                                        label: 'Springfield, IL',
+                                    },
+                                    {
+                                        id: 'springfield_mo',
+                                        label: 'Springfield, MO',
+                                    },
+                                ],
+                            },
+                        },
+                    },
+                ],
+            }) as RunBoundedReviewWorkflowResult,
+    });
+
+    await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Weather in Springfield' }],
+        conversationSnapshot: 'Weather in Springfield',
+        plannerTemperament: {
+            tightness: 5,
+            attribution: 4,
+            caution: 4,
+        },
+    });
+
+    assert.deepEqual(capturedPlannerTemperament, {
+        tightness: 5,
+        attribution: 4,
+        caution: 4,
+    });
+});
+
 test('runChatMessages passes structured retrieval facts into response metadata runtime context', async () => {
     let capturedRetrieval: ResponseMetadataRetrievalContext | undefined;
 
