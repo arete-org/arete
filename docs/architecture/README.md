@@ -27,12 +27,8 @@ detail once you have the main runtime shape in mind.
   runtime boundaries, scope rules, and activation posture.
 - [Weather Forecast](./context-integrations/weather-forecast.md): backend-owned
   weather tool seam, clarification behavior, and fail-open integration rules.
-
-## Active Workflow Note
-
-- [Workflow Rollout Status](../status/workflow-engine-rollout-status.md):
-  active note for the small amount of workflow work that is still open after
-  the main workflow architecture described in [Workflow](./workflow.md).
+- [Web Search](./context-integrations/web-search.md): provider-neutral search
+  context-step seam, fallback behavior, and configuration.
 
 ## Incident And Safety
 

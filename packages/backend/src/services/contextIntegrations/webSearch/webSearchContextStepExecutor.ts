@@ -1,5 +1,5 @@
 /**
- * @description: Web-search context-step executor with provider-neutral fallback across SearXNG and Brave.
+ * @description: Web-search context-step executor with provider-neutral fallback across SearXNG, Brave, and SerpAPI.
  * @footnote-scope: core
  * @footnote-module: WebSearchContextStepExecutor
  * @footnote-risk: medium - Search-provider failures can affect grounding quality if not mapped consistently.
@@ -19,7 +19,7 @@ import type {
     ContextStepResult,
 } from '../../workflowEngine.js';
 
-export type WebSearchProviderName = 'searxng' | 'brave';
+export type WebSearchProviderName = 'searxng' | 'brave' | 'serpapi';
 
 type WebSearchInput = {
     query: string;
@@ -247,6 +247,74 @@ const runBrave = async ({
     }
 };
 
+const runSerpApi = async ({
+    apiKey,
+    query,
+    engine,
+    gl,
+    hl,
+    timeoutMs,
+    maxResults,
+}: {
+    apiKey: string;
+    query: string;
+    engine: string | null;
+    gl: string | null;
+    hl: string | null;
+    timeoutMs: number;
+    maxResults: number;
+}): Promise<WebSearchProviderResult> => {
+    const endpoint = new URL('https://serpapi.com/search.json');
+    endpoint.searchParams.set('q', query);
+    endpoint.searchParams.set('api_key', apiKey);
+    endpoint.searchParams.set('engine', engine ?? 'google');
+    if (gl) {
+        endpoint.searchParams.set('gl', gl);
+    }
+    if (hl) {
+        endpoint.searchParams.set('hl', hl);
+    }
+    try {
+        const response = await withTimeout(
+            endpoint.toString(),
+            { method: 'GET' },
+            timeoutMs
+        );
+        if (!response.ok) {
+            return { ok: false, reasonCode: 'tool_http_error' };
+        }
+        const json = (await response.json()) as {
+            organic_results?: Array<Record<string, unknown>>;
+        };
+        const records: WebSearchRecord[] = [];
+        for (const entry of json.organic_results ?? []) {
+            const url = normalizeUrl(entry.link);
+            if (!url) {
+                continue;
+            }
+            records.push({
+                title: typeof entry.title === 'string' ? entry.title : 'Source',
+                url,
+                snippet:
+                    typeof entry.snippet === 'string'
+                        ? entry.snippet
+                        : undefined,
+                provider: 'serpapi',
+            });
+            if (records.length >= maxResults) {
+                break;
+            }
+        }
+        return { ok: true, records };
+    } catch (error) {
+        const reasonCode =
+            error instanceof Error && error.name === 'AbortError'
+                ? 'tool_timeout'
+                : 'tool_network_error';
+        return { ok: false, reasonCode };
+    }
+};
+
 const formatContextMessages = (
     query: string,
     records: WebSearchRecord[]
@@ -307,6 +375,10 @@ export const createWebSearchContextStepExecutor = ({
     providerPriority,
     searxngBaseUrl,
     braveApiKey,
+    serpApiKey,
+    serpApiEngine,
+    serpApiGl,
+    serpApiHl,
     providerTimeoutMs,
     maxResults,
     onWarn,
@@ -315,6 +387,10 @@ export const createWebSearchContextStepExecutor = ({
     providerPriority: WebSearchProviderName[];
     searxngBaseUrl: string | null;
     braveApiKey: string | null;
+    serpApiKey: string | null;
+    serpApiEngine: string | null;
+    serpApiGl: string | null;
+    serpApiHl: string | null;
     providerTimeoutMs: number;
     maxResults: number;
     onWarn?: (message: string, meta?: Record<string, unknown>) => void;
@@ -395,7 +471,50 @@ export const createWebSearchContextStepExecutor = ({
                 }
                 continue;
             }
-            if (!braveApiKey) {
+            if (provider === 'brave') {
+                if (!braveApiKey) {
+                    attempts.push({
+                        provider,
+                        status: 'skipped',
+                        reasonCode: 'tool_unavailable',
+                        durationMs: 0,
+                        resultCount: 0,
+                    });
+                    continue;
+                }
+                const result = await runBrave({
+                    apiKey: braveApiKey,
+                    query: input.query,
+                    timeoutMs: providerTimeoutMs,
+                    maxResults,
+                });
+                const durationMs = Math.max(0, Date.now() - providerStartedAt);
+                if (!result.ok) {
+                    attempts.push({
+                        provider,
+                        status: 'failed',
+                        reasonCode: result.reasonCode,
+                        durationMs,
+                        resultCount: 0,
+                    });
+                    continue;
+                }
+                attempts.push({
+                    provider,
+                    status:
+                        result.records.length > 0
+                            ? 'executed_with_results'
+                            : 'executed_empty',
+                    durationMs,
+                    resultCount: result.records.length,
+                });
+                if (result.records.length > 0) {
+                    discovered = result.records;
+                    break;
+                }
+                continue;
+            }
+            if (!serpApiKey) {
                 attempts.push({
                     provider,
                     status: 'skipped',
@@ -405,9 +524,12 @@ export const createWebSearchContextStepExecutor = ({
                 });
                 continue;
             }
-            const result = await runBrave({
-                apiKey: braveApiKey,
+            const result = await runSerpApi({
+                apiKey: serpApiKey,
                 query: input.query,
+                engine: serpApiEngine,
+                gl: serpApiGl,
+                hl: serpApiHl,
                 timeoutMs: providerTimeoutMs,
                 maxResults,
             });

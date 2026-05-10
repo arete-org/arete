@@ -1681,6 +1681,157 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'CHAT_CONTEXT_WEB_SEARCH_ENABLED',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'Enables web-search context integration execution in chat workflow orchestration.',
+        defaultValue: literal(true),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_WEB_SEARCH_PROVIDER_PRIORITY',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'csv',
+        description:
+            'Ordered provider fallback list for web-search context integration (`searxng`, `brave`, `serpapi`).',
+        defaultValue: literal(['searxng', 'brave', 'serpapi']),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_WEB_SEARCH_SEARXNG_BASE_URL',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description: 'Base URL for SearXNG web-search provider.',
+        defaultValue: literal(''),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_WEB_SEARCH_BRAVE_API_KEY',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description: 'Brave API key for web-search provider.',
+        defaultValue: literal(''),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_WEB_SEARCH_SERPAPI_API_KEY',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description: 'SerpAPI key for web-search provider.',
+        defaultValue: literal(''),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_WEB_SEARCH_SERPAPI_ENGINE',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Optional SerpAPI engine override for web search (for example `google`).',
+        defaultValue: literal(''),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_WEB_SEARCH_SERPAPI_GL',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Optional SerpAPI country hint (`gl`) for web-search requests.',
+        defaultValue: literal(''),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_WEB_SEARCH_SERPAPI_HL',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Optional SerpAPI language hint (`hl`) for web-search requests.',
+        defaultValue: literal(''),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_WEB_SEARCH_PROVIDER_TIMEOUT_MS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Timeout budget for each web-search provider HTTP request in milliseconds.',
+        defaultValue: literal(12000),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_WEB_SEARCH_MAX_RESULTS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Maximum number of normalized web-search results retained per provider attempt.',
+        defaultValue: literal(6),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'CHAT_CONTEXT_WEB_SEARCH_OPENAI_NATIVE_FROM_HINTS_ENABLED',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'Enables optional OpenAI-native follow-up search from web-search context-step hints.',
+        defaultValue: literal(true),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_ENABLED',
         owner: 'backend',
         stage: 'runtime',

@@ -331,11 +331,11 @@ The shared workflow vocabulary includes `plan`, `tool`, `generate`, `assess`,
 
 ### Current ownership
 
-| Component                        | Owner   | Notes                                                                                                               |
-| -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------- |
-| `workflowEngine`                 | Core    | Owns reviewed workflow steps (`generate`, `assess`, `revise`) and injected context-step execution                   |
-| `chatOrchestrator`               | Core    | Owns deterministic bootstrap (mode/profile/contract), planner policy application seam, and tool intent construction |
-| `chatService`                    | Core    | Invokes workflowEngine, handles context-step short-circuit responses (clarification, failure)                       |
+| Component          | Owner | Notes                                                                                                               |
+| ------------------ | ----- | ------------------------------------------------------------------------------------------------------------------- |
+| `workflowEngine`   | Core  | Owns reviewed workflow steps (`generate`, `assess`, `revise`) and injected context-step execution                   |
+| `chatOrchestrator` | Core  | Owns deterministic bootstrap (mode/profile/contract), planner policy application seam, and tool intent construction |
+| `chatService`      | Core  | Invokes workflowEngine, handles context-step short-circuit responses (clarification, failure)                       |
 
 ### Context-step executor pattern
 
@@ -531,5 +531,5 @@ run look cleaner.
 ## Related docs
 
 - [Context Integrations](./context-integrations/README.md)
+- [Web Search](./context-integrations/web-search.md)
 - [Answer Posture And Control Influence](./answer-posture-and-control-influence.md)
-- [Workflow Rollout Status](../status/workflow-engine-rollout-status.md)

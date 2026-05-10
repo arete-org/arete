@@ -438,27 +438,29 @@ export const createChatOrchestrator = ({
                 'reverse_image_search provider is set to serpapi, but CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_SERPAPI_API_KEY is missing; integration will fail open as unavailable.'
             );
         }
+        const webSearchConfig =
+            runtimeConfig.chatWorkflow.contextIntegrations.webSearch;
+        if (
+            webSearchConfig.providerPriority.includes('serpapi') &&
+            !webSearchConfig.serpApiKey
+        ) {
+            chatOrchestratorLogger.warn(
+                'web_search provider priority includes serpapi, but CHAT_CONTEXT_WEB_SEARCH_SERPAPI_API_KEY is missing; serpapi will fail open as unavailable.'
+            );
+        }
         const contextStepExecutorRegistry = {
             weather_forecast: weatherContextStepExecutor,
             web_search: createWebSearchContextStepExecutor({
-                enabled:
-                    runtimeConfig.chatWorkflow.contextIntegrations.webSearch
-                        .enabled,
-                providerPriority:
-                    runtimeConfig.chatWorkflow.contextIntegrations.webSearch
-                        .providerPriority,
-                searxngBaseUrl:
-                    runtimeConfig.chatWorkflow.contextIntegrations.webSearch
-                        .searxngBaseUrl,
-                braveApiKey:
-                    runtimeConfig.chatWorkflow.contextIntegrations.webSearch
-                        .braveApiKey,
-                providerTimeoutMs:
-                    runtimeConfig.chatWorkflow.contextIntegrations.webSearch
-                        .providerTimeoutMs,
-                maxResults:
-                    runtimeConfig.chatWorkflow.contextIntegrations.webSearch
-                        .maxResults,
+                enabled: webSearchConfig.enabled,
+                providerPriority: webSearchConfig.providerPriority,
+                searxngBaseUrl: webSearchConfig.searxngBaseUrl,
+                braveApiKey: webSearchConfig.braveApiKey,
+                serpApiKey: webSearchConfig.serpApiKey,
+                serpApiEngine: webSearchConfig.serpApiEngine,
+                serpApiGl: webSearchConfig.serpApiGl,
+                serpApiHl: webSearchConfig.serpApiHl,
+                providerTimeoutMs: webSearchConfig.providerTimeoutMs,
+                maxResults: webSearchConfig.maxResults,
                 onWarn: (message, meta) => {
                     chatOrchestratorLogger.warn(message, meta);
                 },
