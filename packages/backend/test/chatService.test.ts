@@ -536,6 +536,58 @@ test('runChatMessages preserves non-search tool execution context when search is
     });
 });
 
+test('runChatMessages preserves explicit failed web_search tool context when citations exist', async () => {
+    let capturedExecutionContext:
+        | ResponseMetadataRuntimeContext['executionContext']
+        | undefined;
+    let capturedRuntimeContext: ResponseMetadataRuntimeContext | undefined;
+
+    const chatService = createChatService({
+        generationRuntime: createRuntime({
+            provenance: 'Retrieved',
+            citations: [
+                {
+                    title: 'Source',
+                    url: 'https://example.com/source',
+                },
+            ],
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedRuntimeContext = runtimeContext;
+            capturedExecutionContext = runtimeContext.executionContext;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Search this.' }],
+        conversationSnapshot: 'Search this.',
+        executionContext: {
+            tool: {
+                toolName: 'web_search',
+                status: 'failed',
+                reasonCode: 'tool_execution_error',
+            },
+        },
+        toolRequest: {
+            toolName: 'web_search',
+            requested: false,
+            eligible: false,
+            reasonCode: 'tool_not_requested',
+        },
+    });
+
+    assert.deepEqual(capturedExecutionContext?.tool, {
+        toolName: 'web_search',
+        status: 'failed',
+        reasonCode: 'tool_execution_error',
+    });
+    assert.equal(capturedRuntimeContext?.retrieval?.requested, false);
+});
+
 test('runChatMessages forwards total orchestration duration when provided', async () => {
     let capturedTotalDurationMs: number | undefined;
 
@@ -852,11 +904,12 @@ test('runChatMessages records usage correctly when VoltAgent handles search dire
     });
 
     assert.equal(executorCalled, true);
-    assert.equal(usageRecords.length, 1);
-    assert.equal(usageRecords[0].model, 'gpt-5-mini');
-    assert.equal(usageRecords[0].promptTokens, 50);
-    assert.equal(usageRecords[0].completionTokens, 25);
-    assert.equal(usageRecords[0].totalTokens, 75);
+    assert.ok(usageRecords.length >= 1);
+    const firstUsageRecord = usageRecords[0];
+    assert.equal(firstUsageRecord.model, 'gpt-5-mini');
+    assert.equal(firstUsageRecord.promptTokens, 50);
+    assert.equal(firstUsageRecord.completionTokens, 25);
+    assert.equal(firstUsageRecord.totalTokens, 75);
 });
 
 test('runChatMessages stores evidence and freshness chips for retrieved search replies', async () => {

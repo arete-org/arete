@@ -100,6 +100,28 @@ export type RuntimeConfig = {
         maxDurationMs: number;
         contextIntegrations: {
             /**
+             * Web-search context integration controls for chat workflow execution.
+             */
+            webSearch: {
+                /** Master enable/disable for web-search context integration. */
+                enabled: boolean;
+                /** Ordered provider priority used for deterministic fallback. */
+                providerPriority: Array<'searxng' | 'brave'>;
+                /** Optional SearXNG base URL (required when searxng is enabled). */
+                searxngBaseUrl: string | null;
+                /** Optional Brave API key (required when brave is enabled). */
+                braveApiKey: string | null;
+                /** Timeout budget for each web-search provider attempt. */
+                providerTimeoutMs: number;
+                /** Max normalized results retained from provider responses. */
+                maxResults: number;
+                /**
+                 * Optional OpenAI-native follow-up search execution from
+                 * context-step `searchHints`. Enabled by default.
+                 */
+                openAiNativeSearchFromHintsEnabled: boolean;
+            };
+            /**
              * Reverse-image context integration controls for chat workflow execution.
              */
             reverseImageSearch: {
