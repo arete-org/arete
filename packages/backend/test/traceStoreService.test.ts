@@ -136,9 +136,11 @@ test('storeTrace stays fail-open when optional Langfuse metadata mirror throws',
         throw new Error('langfuse unavailable');
     });
 
-    await assert.doesNotReject(storeTrace(traceStore, createMetadata()));
-    assert.equal(upsertCalled, true);
-    assert.equal(mirrorCalled, true);
-
-    configureTraceMetadataMirror(null);
+    try {
+        await assert.doesNotReject(storeTrace(traceStore, createMetadata()));
+        assert.equal(upsertCalled, true);
+        assert.equal(mirrorCalled, true);
+    } finally {
+        configureTraceMetadataMirror(null);
+    }
 });

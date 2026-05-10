@@ -99,6 +99,7 @@ test('langfuse metadata mirror exporter posts metadata-only payload to ingestion
             capturedBody.includes('raw output should not be exported'),
             false
         );
+        assert.equal(capturedBody.includes('provenance'), false);
     } finally {
         globalThis.fetch = originalFetch;
     }

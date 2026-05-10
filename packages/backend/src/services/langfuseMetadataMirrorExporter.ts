@@ -86,7 +86,6 @@ const toSafeMirrorMetadata = (
     return {
         responseId: metadata.responseId,
         modelVersion: metadata.modelVersion,
-        provenance: metadata.provenance,
         safetyTier: metadata.safetyTier,
         tradeoffCount: metadata.tradeoffCount,
         staleAfter: metadata.staleAfter,
@@ -113,6 +112,27 @@ export type LangfuseMetadataMirror = (
     metadata: ResponseMetadata
 ) => Promise<void>;
 
+/**
+ * Builds the process-local Langfuse metadata mirror callback.
+ *
+ * Enablement gates:
+ * - `config.enabled` must be true
+ * - `config.baseUrl`, `config.publicKey`, and `config.secretKey` must be set
+ *
+ * Fail-open behavior:
+ * - when gates are not met, returns a no-op mirror that resolves immediately
+ * - callers should proceed normally without mirrored export in that case
+ *
+ * Excluded metadata classes:
+ * - raw prompt/user/assistant content
+ * - Footnote-owned provenance semantics
+ * - secrets/tokens and other non-metadata payload classes
+ *
+ * Return contract:
+ * - returns a function that resolves when export is skipped/succeeds
+ * - the returned function throws on request/HTTP errors; callers are expected
+ *   to catch and treat mirror failures as non-blocking.
+ */
 export const createLangfuseMetadataMirrorExporter = (
     config: RuntimeConfig['langfuseMetadataMirror']
 ): LangfuseMetadataMirror => {

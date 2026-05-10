@@ -104,7 +104,7 @@ export const buildServiceSections = (
     langfuseMetadataMirror: {
         enabled: parseBooleanEnv(
             env.LANGFUSE_METADATA_MIRROR_ENABLED,
-            false,
+            envDefaultValues.LANGFUSE_METADATA_MIRROR_ENABLED,
             'LANGFUSE_METADATA_MIRROR_ENABLED',
             warn
         ),
@@ -119,7 +119,7 @@ export const buildServiceSections = (
         ),
         timeoutMs: parsePositiveIntEnv(
             env.LANGFUSE_METADATA_MIRROR_TIMEOUT_MS,
-            1500,
+            envDefaultValues.LANGFUSE_METADATA_MIRROR_TIMEOUT_MS,
             'LANGFUSE_METADATA_MIRROR_TIMEOUT_MS',
             warn
         ),
