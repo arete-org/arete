@@ -1,6 +1,6 @@
 # Feature Proposal: Conversation Context Boundary
 
-**Last Updated:** 2026-05-09
+**Last Updated:** 2026-05-10
 
 ---
 
@@ -24,16 +24,16 @@ A dedicated context boundary addresses this without touching orchestration or pr
 
 ## Boundary And Responsibilities
 
-The service has a narrow job: turn surface-specific input into typed context blocks.
+The service has a narrow job: turn surface-specific input into a canonical context package.
 
 `ConversationContextService`:
 
 - Accepts surface-native turns and session metadata.
-- Attaches authority and stability metadata.
-- Exposes blocks to prompt assembly.
+- Attaches authority and stability metadata in structured envelope fields.
+- Returns runtime-facing `messages` plus a backend-owned `contextEnvelope`.
 - Fails open when context shaping is partial or unavailable.
 
-It will not assemble final model prompts or own supplemental context such as persona instructions. Persona-related blocks may carry hints or metadata, but persona instruction text stays with the prompt layer.
+The envelope may contain structured context blocks, but prompt layers remain responsible for final prompt placement and instruction ordering. The service will not assemble final model prompts or own supplemental context such as persona instructions.
 
 ---
 
@@ -63,7 +63,7 @@ Each "context block" should carry:
 - `content` as structured parts, not transcript wrappers
 - optional `redaction` or `consent` metadata
 
-This gives prompt assembly enough information to place blocks deliberately and explain those choices later.
+This gives envelope- and prompt-assembly code enough information to place context deliberately and explain those choices later.
 
 ---
 
@@ -122,9 +122,9 @@ This avoids accidental style bleed while preserving multi-party clarity.
 
 ---
 
-## Segmentation And Reduction
+## Future-Compatible Segmentation Metadata
 
-Conversation history should be represented as deterministic segments.
+Conversation history shape should leave room for deterministic segments, without requiring reduction behavior in the first implementation.
 
 Suggested segment model:
 
@@ -134,14 +134,14 @@ Suggested segment model:
 - `reductionLevel` (`full`, `compact`, `summary`)
 - `summaryRef` (optional pointer to persisted summary content)
 
-Deterministic reduction policy:
+Future reduction behavior may use policies such as:
 
 - Keep newest `N` turns unreduced.
 - Reduce older turns by segment age and token budget pressure.
 - Reuse existing summaries when `segmentId` is unchanged.
 - Only regenerate summaries when segment content or reduction config changes.
 
-This minimizes churn and creates a clean path for future cache-aware prompt assembly.
+This section is intentionally forward-looking. Initial implementation should not silently inherit summary-generation or cache orchestration behavior.
 
 ---
 
@@ -168,7 +168,7 @@ This should plug into the existing prompt path rather than replace it. The main 
 - `packages/backend/src/services/prompts/conversationPromptLayers.ts`
 - `packages/backend/src/services/chatOrchestrator.ts`
 
-`ConversationContextService` returns blocks. `conversationPromptLayers` still renders prompt text/messages and preserves policy-sensitive instruction order.
+`ConversationContextService` returns a canonical context package (`messages` + `contextEnvelope`). `conversationPromptLayers` still renders prompt text/messages and preserves policy-sensitive instruction order.
 
 Guardrails:
 
@@ -301,8 +301,8 @@ Track a small set of signals first:
 
 - prompt assembly fallback rate
 - context-to-message projection rate
-- summary reuse rate
-- token delta before/after reduction
+- block churn rate across turns
+- stable-token vs volatile-token estimate
 
 These are enough to validate the boundary without overcommitting to low-level cache internals.
 
