@@ -43,26 +43,3 @@ test('langfuse metadata mirror parses explicit values', () => {
     assert.equal(config.langfuseMetadataMirror.secretKey, 'sk-test');
     assert.equal(config.langfuseMetadataMirror.timeoutMs, 2100);
 });
-
-test('langfuse metadata mirror accepts legacy shadow env aliases', () => {
-    const warnings: string[] = [];
-    const config = buildRuntimeConfig(
-        {
-            LANGFUSE_SHADOW_ENABLED: 'true',
-            LANGFUSE_SHADOW_BASE_URL: 'https://cloud.langfuse.com',
-            LANGFUSE_SHADOW_PUBLIC_KEY: 'pk-test',
-            LANGFUSE_SHADOW_SECRET_KEY: 'sk-test',
-            LANGFUSE_SHADOW_TIMEOUT_MS: '2200',
-        },
-        (message) => warnings.push(message)
-    );
-
-    assert.equal(config.langfuseMetadataMirror.enabled, true);
-    assert.equal(
-        config.langfuseMetadataMirror.baseUrl,
-        'https://cloud.langfuse.com'
-    );
-    assert.equal(config.langfuseMetadataMirror.publicKey, 'pk-test');
-    assert.equal(config.langfuseMetadataMirror.secretKey, 'sk-test');
-    assert.equal(config.langfuseMetadataMirror.timeoutMs, 2200);
-});

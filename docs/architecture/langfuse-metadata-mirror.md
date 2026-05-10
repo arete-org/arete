@@ -36,21 +36,13 @@ The write order is intentional: local trace persistence comes first.
 
 ## Configuration
 
-Primary env keys:
+Env keys:
 
 - `LANGFUSE_METADATA_MIRROR_ENABLED`
 - `LANGFUSE_METADATA_MIRROR_BASE_URL`
 - `LANGFUSE_METADATA_MIRROR_PUBLIC_KEY`
 - `LANGFUSE_METADATA_MIRROR_SECRET_KEY`
 - `LANGFUSE_METADATA_MIRROR_TIMEOUT_MS`
-
-Legacy aliases are still accepted for compatibility:
-
-- `LANGFUSE_SHADOW_ENABLED`
-- `LANGFUSE_SHADOW_BASE_URL`
-- `LANGFUSE_SHADOW_PUBLIC_KEY`
-- `LANGFUSE_SHADOW_SECRET_KEY`
-- `LANGFUSE_SHADOW_TIMEOUT_MS`
 
 ## Failure Modes
 
