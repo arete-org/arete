@@ -106,11 +106,19 @@ export type RuntimeConfig = {
                 /** Master enable/disable for web-search context integration. */
                 enabled: boolean;
                 /** Ordered provider priority used for deterministic fallback. */
-                providerPriority: Array<'searxng' | 'brave'>;
+                providerPriority: Array<'searxng' | 'brave' | 'serpapi'>;
                 /** Optional SearXNG base URL (required when searxng is enabled). */
                 searxngBaseUrl: string | null;
                 /** Optional Brave API key (required when brave is enabled). */
                 braveApiKey: string | null;
+                /** Optional SerpAPI key (required when serpapi is enabled). */
+                serpApiKey: string | null;
+                /** Optional SerpAPI engine override (defaults to google). */
+                serpApiEngine: string | null;
+                /** Optional SerpAPI country code (gl). */
+                serpApiGl: string | null;
+                /** Optional SerpAPI language code (hl). */
+                serpApiHl: string | null;
                 /** Timeout budget for each web-search provider attempt. */
                 providerTimeoutMs: number;
                 /** Max normalized results retained from provider responses. */

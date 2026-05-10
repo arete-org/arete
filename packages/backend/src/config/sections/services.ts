@@ -26,17 +26,18 @@ const REVERSE_IMAGE_SEARCH_PROVIDER_MODES = new Set([
     'serpapi',
 ] as const);
 type ReverseImageSearchProviderMode = 'none' | 'serpapi';
-type WebSearchProviderMode = 'searxng' | 'brave';
+type WebSearchProviderMode = 'searxng' | 'brave' | 'serpapi';
 const WEB_SEARCH_PROVIDER_MODES: ReadonlySet<WebSearchProviderMode> = new Set([
     'searxng',
     'brave',
+    'serpapi',
 ]);
 
 const parseWebSearchProviderPriority = (
     raw: string | undefined,
     warn: WarningSink
 ): WebSearchProviderMode[] => {
-    const fallback: WebSearchProviderMode[] = ['searxng', 'brave'];
+    const fallback: WebSearchProviderMode[] = ['searxng', 'brave', 'serpapi'];
     if (typeof raw !== 'string' || raw.trim().length === 0) {
         return fallback;
     }
@@ -140,6 +141,18 @@ export const buildServiceSections = (
                 ),
                 braveApiKey: parseOptionalTrimmedString(
                     env.CHAT_CONTEXT_WEB_SEARCH_BRAVE_API_KEY
+                ),
+                serpApiKey: parseOptionalTrimmedString(
+                    env.CHAT_CONTEXT_WEB_SEARCH_SERPAPI_API_KEY
+                ),
+                serpApiEngine: parseOptionalTrimmedString(
+                    env.CHAT_CONTEXT_WEB_SEARCH_SERPAPI_ENGINE
+                ),
+                serpApiGl: parseOptionalTrimmedString(
+                    env.CHAT_CONTEXT_WEB_SEARCH_SERPAPI_GL
+                ),
+                serpApiHl: parseOptionalTrimmedString(
+                    env.CHAT_CONTEXT_WEB_SEARCH_SERPAPI_HL
                 ),
                 providerTimeoutMs: parsePositiveIntEnv(
                     env.CHAT_CONTEXT_WEB_SEARCH_PROVIDER_TIMEOUT_MS,

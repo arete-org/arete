@@ -1,14 +1,11 @@
 /**
- * @description: Web-search context-step executor with provider-neutral fallback across SearXNG and Brave.
+ * @description: Web-search context-step executor orchestrating provider fallback and normalized output.
  * @footnote-scope: core
  * @footnote-module: WebSearchContextStepExecutor
- * @footnote-risk: medium - Search-provider failures can affect grounding quality if not mapped consistently.
- * @footnote-ethics: medium - Search output labeling must avoid overstating source confidence.
+ * @footnote-risk: medium - Provider-fallback orchestration affects grounding coverage and failure handling.
+ * @footnote-ethics: medium - Search metadata and status mapping affect user-visible transparency.
  */
-import type {
-    Citation,
-    ToolInvocationReasonCode,
-} from '@footnote/contracts/policy';
+import type { ToolInvocationReasonCode } from '@footnote/contracts/policy';
 import {
     buildExecutedContextStepResult,
     buildFailedContextStepResult,
@@ -18,295 +15,89 @@ import type {
     ContextStepExecutor,
     ContextStepResult,
 } from '../../workflowEngine.js';
+import {
+    normalizeCitation,
+    parseWebSearchInput,
+} from './webSearchNormalization.js';
+import {
+    formatContextMessages,
+    buildSearchHints,
+} from './webSearchPromptFormatting.js';
+import { buildWebSearchProviderRegistry } from './webSearchProviders.js';
+import type {
+    WebSearchContextStepIntegrationPayload,
+    WebSearchHint,
+    WebSearchProviderAttempt,
+    WebSearchProviderName,
+    WebSearchRecord,
+} from './webSearchTypes.js';
 
-export type WebSearchProviderName = 'searxng' | 'brave';
+type WebSearchProviderAttemptStatus = WebSearchProviderAttempt['status'];
 
-type WebSearchInput = {
-    query: string;
-    intent?: 'repo_explainer' | 'current_facts';
-    contextSize?: 'low' | 'medium' | 'high';
-    repoHints?: string[];
-    topicHints?: string[];
-};
-
-type WebSearchRecord = {
-    title: string;
-    url: string;
-    snippet?: string;
-    provider: WebSearchProviderName;
-};
-
-export type WebSearchHint = {
-    query: string;
-    intent: 'repo_explainer' | 'current_facts';
-    priority: 'low' | 'medium' | 'high';
-    reason?: string;
-};
-
-export type WebSearchProviderAttempt = {
-    provider: WebSearchProviderName;
-    status: 'executed_with_results' | 'executed_empty' | 'skipped' | 'failed';
-    reasonCode?: ToolInvocationReasonCode;
-    durationMs: number;
-    resultCount: number;
-};
-
-export type WebSearchContextStepIntegrationPayload = {
-    attempts: WebSearchProviderAttempt[];
-    searchHints: WebSearchHint[];
-};
-
-type WebSearchProviderResult =
-    | { ok: true; records: WebSearchRecord[] }
-    | { ok: false; reasonCode: ToolInvocationReasonCode };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const parseWebSearchInput = (input: unknown): WebSearchInput | undefined => {
-    if (!isRecord(input) || typeof input.query !== 'string') {
-        return undefined;
-    }
-    const query = input.query.trim();
-    if (query.length === 0) {
-        return undefined;
-    }
-    return {
-        query,
-        intent:
-            input.intent === 'repo_explainer' ||
-            input.intent === 'current_facts'
-                ? input.intent
-                : 'current_facts',
-        contextSize:
-            input.contextSize === 'low' ||
-            input.contextSize === 'medium' ||
-            input.contextSize === 'high'
-                ? input.contextSize
-                : 'medium',
-        repoHints: Array.isArray(input.repoHints)
-            ? input.repoHints.filter((v): v is string => typeof v === 'string')
-            : undefined,
-        topicHints: Array.isArray(input.topicHints)
-            ? input.topicHints.filter((v): v is string => typeof v === 'string')
-            : undefined,
-    };
-};
-
-const normalizeUrl = (value: unknown): string | undefined => {
-    if (typeof value !== 'string') {
-        return undefined;
-    }
-    try {
-        const parsed = new URL(value);
-        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-            return undefined;
-        }
-        return parsed.toString();
-    } catch {
-        return undefined;
-    }
-};
-
-const normalizeCitation = (record: WebSearchRecord): Citation => ({
-    title: record.title.trim().length > 0 ? record.title.trim() : 'Source',
-    url: record.url,
-    ...(record.snippet && record.snippet.trim().length > 0
-        ? { snippet: record.snippet.trim() }
-        : {}),
+const createAttemptRecorder = (attempts: WebSearchProviderAttempt[]) => ({
+    push: (input: {
+        provider: WebSearchProviderName;
+        status: WebSearchProviderAttemptStatus;
+        durationMs: number;
+        resultCount: number;
+        reasonCode?: ToolInvocationReasonCode;
+    }): void => {
+        attempts.push({
+            provider: input.provider,
+            status: input.status,
+            ...(input.reasonCode !== undefined && {
+                reasonCode: input.reasonCode,
+            }),
+            durationMs: input.durationMs,
+            resultCount: input.resultCount,
+        });
+    },
+    skipped: (provider: WebSearchProviderName): void => {
+        attempts.push({
+            provider,
+            status: 'skipped',
+            reasonCode: 'tool_unavailable',
+            durationMs: 0,
+            resultCount: 0,
+        });
+    },
+    failed: (
+        provider: WebSearchProviderName,
+        reasonCode: ToolInvocationReasonCode,
+        durationMs: number
+    ): void => {
+        attempts.push({
+            provider,
+            status: 'failed',
+            reasonCode,
+            durationMs,
+            resultCount: 0,
+        });
+    },
+    completed: (
+        provider: WebSearchProviderName,
+        records: WebSearchRecord[],
+        durationMs: number
+    ): void => {
+        attempts.push({
+            provider,
+            status:
+                records.length > 0 ? 'executed_with_results' : 'executed_empty',
+            durationMs,
+            resultCount: records.length,
+        });
+    },
 });
-
-const withTimeout = async (
-    url: string,
-    init: Parameters<typeof fetch>[1],
-    timeoutMs: number
-): Promise<Response> => {
-    const controller = new AbortController();
-    const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-        return await fetch(url, { ...init, signal: controller.signal });
-    } finally {
-        clearTimeout(timeoutHandle);
-    }
-};
-
-const runSearxng = async ({
-    baseUrl: rawBaseUrl,
-    query,
-    timeoutMs,
-    maxResults,
-}: {
-    baseUrl: string;
-    query: string;
-    timeoutMs: number;
-    maxResults: number;
-}): Promise<WebSearchProviderResult> => {
-    const baseUrl = rawBaseUrl.endsWith('/') ? rawBaseUrl : `${rawBaseUrl}/`;
-    const endpoint = new URL('search', baseUrl);
-    endpoint.searchParams.set('q', query);
-    endpoint.searchParams.set('format', 'json');
-    try {
-        const response = await withTimeout(
-            endpoint.toString(),
-            { method: 'GET' },
-            timeoutMs
-        );
-        if (!response.ok) {
-            return { ok: false, reasonCode: 'tool_http_error' };
-        }
-        const json = (await response.json()) as { results?: unknown[] };
-        const records: WebSearchRecord[] = [];
-        for (const entry of json.results ?? []) {
-            if (!isRecord(entry)) {
-                continue;
-            }
-            const url = normalizeUrl(entry.url);
-            if (!url) {
-                continue;
-            }
-            records.push({
-                title: typeof entry.title === 'string' ? entry.title : 'Source',
-                url,
-                snippet:
-                    typeof entry.content === 'string'
-                        ? entry.content
-                        : undefined,
-                provider: 'searxng',
-            });
-            if (records.length >= maxResults) {
-                break;
-            }
-        }
-        return { ok: true, records };
-    } catch (error) {
-        const reasonCode =
-            error instanceof Error && error.name === 'AbortError'
-                ? 'tool_timeout'
-                : 'tool_network_error';
-        return { ok: false, reasonCode };
-    }
-};
-
-const runBrave = async ({
-    apiKey,
-    query,
-    timeoutMs,
-    maxResults,
-}: {
-    apiKey: string;
-    query: string;
-    timeoutMs: number;
-    maxResults: number;
-}): Promise<WebSearchProviderResult> => {
-    const endpoint = new URL('https://api.search.brave.com/res/v1/web/search');
-    endpoint.searchParams.set('q', query);
-    try {
-        const response = await withTimeout(
-            endpoint.toString(),
-            {
-                method: 'GET',
-                headers: {
-                    Accept: 'application/json',
-                    'X-Subscription-Token': apiKey,
-                },
-            },
-            timeoutMs
-        );
-        if (!response.ok) {
-            return { ok: false, reasonCode: 'tool_http_error' };
-        }
-        const json = (await response.json()) as {
-            web?: { results?: Array<Record<string, unknown>> };
-        };
-        const records: WebSearchRecord[] = [];
-        for (const entry of json.web?.results ?? []) {
-            const url = normalizeUrl(entry.url);
-            if (!url) {
-                continue;
-            }
-            records.push({
-                title: typeof entry.title === 'string' ? entry.title : 'Source',
-                url,
-                snippet:
-                    typeof entry.description === 'string'
-                        ? entry.description
-                        : undefined,
-                provider: 'brave',
-            });
-            if (records.length >= maxResults) {
-                break;
-            }
-        }
-        return { ok: true, records };
-    } catch (error) {
-        const reasonCode =
-            error instanceof Error && error.name === 'AbortError'
-                ? 'tool_timeout'
-                : 'tool_network_error';
-        return { ok: false, reasonCode };
-    }
-};
-
-const formatContextMessages = (
-    query: string,
-    records: WebSearchRecord[]
-): string[] => {
-    if (records.length === 0) {
-        return [];
-    }
-    const sanitizeUntrustedText = (value: string): string =>
-        Array.from(value)
-            .map((char) => {
-                const code = char.charCodeAt(0);
-                return code < 32 || code === 127 ? ' ' : char;
-            })
-            .join('')
-            .replace(/\s+/g, ' ')
-            .trim();
-    const lines = records.map((record, index) => {
-        const title = sanitizeUntrustedText(record.title);
-        const snippet =
-            typeof record.snippet === 'string'
-                ? sanitizeUntrustedText(record.snippet)
-                : undefined;
-        return snippet && snippet.length > 0
-            ? `${index + 1}. UNTRUSTED SEARCH RESULT: ${title} (${record.url}) - ${snippet}`
-            : `${index + 1}. UNTRUSTED SEARCH RESULT: ${title} (${record.url})`;
-    });
-    return [`Web search results for "${query}":`, ...lines];
-};
-
-const buildSearchHints = (input: WebSearchInput): WebSearchHint[] => {
-    const hints: WebSearchHint[] = [];
-    const topicHints = input.topicHints ?? [];
-    for (const topic of topicHints) {
-        const trimmed = topic.trim();
-        if (trimmed.length === 0) {
-            continue;
-        }
-        hints.push({
-            query: `${input.query} ${trimmed}`.trim(),
-            intent: input.intent ?? 'current_facts',
-            priority: 'medium',
-            reason: 'topic_hint_refinement',
-        });
-    }
-    if (input.intent === 'repo_explainer') {
-        hints.push({
-            query: `${input.query} ${[...(input.repoHints ?? [])].join(' ')}`.trim(),
-            intent: 'repo_explainer',
-            priority: 'high',
-            reason: 'repo_explainer_deepening',
-        });
-    }
-    return hints.slice(0, 3);
-};
 
 export const createWebSearchContextStepExecutor = ({
     enabled,
     providerPriority,
     searxngBaseUrl,
     braveApiKey,
+    serpApiKey,
+    serpApiEngine,
+    serpApiGl,
+    serpApiHl,
     providerTimeoutMs,
     maxResults,
     onWarn,
@@ -315,11 +106,23 @@ export const createWebSearchContextStepExecutor = ({
     providerPriority: WebSearchProviderName[];
     searxngBaseUrl: string | null;
     braveApiKey: string | null;
+    serpApiKey: string | null;
+    serpApiEngine: string | null;
+    serpApiGl: string | null;
+    serpApiHl: string | null;
     providerTimeoutMs: number;
     maxResults: number;
     onWarn?: (message: string, meta?: Record<string, unknown>) => void;
 }): ContextStepExecutor => {
     const warn = onWarn ?? (() => undefined);
+    const providerRegistry = buildWebSearchProviderRegistry({
+        searxngBaseUrl,
+        braveApiKey,
+        serpApiKey,
+        serpApiEngine,
+        serpApiGl,
+        serpApiHl,
+    });
     return async ({ request }): Promise<ContextStepResult> => {
         if (!enabled) {
             return buildSkippedContextStepResult({
@@ -348,55 +151,14 @@ export const createWebSearchContextStepExecutor = ({
         }
 
         const attempts: WebSearchProviderAttempt[] = [];
+        const attemptRecorder = createAttemptRecorder(attempts);
         const startedAt = Date.now();
         let discovered: WebSearchRecord[] = [];
         for (const provider of providerPriority) {
             const providerStartedAt = Date.now();
-            if (provider === 'searxng') {
-                if (!searxngBaseUrl) {
-                    attempts.push({
-                        provider,
-                        status: 'skipped',
-                        reasonCode: 'tool_unavailable',
-                        durationMs: 0,
-                        resultCount: 0,
-                    });
-                    continue;
-                }
-                const result = await runSearxng({
-                    baseUrl: searxngBaseUrl,
-                    query: input.query,
-                    timeoutMs: providerTimeoutMs,
-                    maxResults,
-                });
-                const durationMs = Math.max(0, Date.now() - providerStartedAt);
-                if (!result.ok) {
-                    attempts.push({
-                        provider,
-                        status: 'failed',
-                        reasonCode: result.reasonCode,
-                        durationMs,
-                        resultCount: 0,
-                    });
-                    continue;
-                }
-                attempts.push({
-                    provider,
-                    status:
-                        result.records.length > 0
-                            ? 'executed_with_results'
-                            : 'executed_empty',
-                    durationMs,
-                    resultCount: result.records.length,
-                });
-                if (result.records.length > 0) {
-                    discovered = result.records;
-                    break;
-                }
-                continue;
-            }
-            if (!braveApiKey) {
-                attempts.push({
+            const registryEntry = providerRegistry[provider];
+            if (!registryEntry) {
+                attemptRecorder.push({
                     provider,
                     status: 'skipped',
                     reasonCode: 'tool_unavailable',
@@ -405,32 +167,21 @@ export const createWebSearchContextStepExecutor = ({
                 });
                 continue;
             }
-            const result = await runBrave({
-                apiKey: braveApiKey,
+            if (!registryEntry.isConfigured()) {
+                attemptRecorder.skipped(provider);
+                continue;
+            }
+            const result = await registryEntry.run({
                 query: input.query,
                 timeoutMs: providerTimeoutMs,
                 maxResults,
             });
             const durationMs = Math.max(0, Date.now() - providerStartedAt);
             if (!result.ok) {
-                attempts.push({
-                    provider,
-                    status: 'failed',
-                    reasonCode: result.reasonCode,
-                    durationMs,
-                    resultCount: 0,
-                });
+                attemptRecorder.failed(provider, result.reasonCode, durationMs);
                 continue;
             }
-            attempts.push({
-                provider,
-                status:
-                    result.records.length > 0
-                        ? 'executed_with_results'
-                        : 'executed_empty',
-                durationMs,
-                resultCount: result.records.length,
-            });
+            attemptRecorder.completed(provider, result.records, durationMs);
             if (result.records.length > 0) {
                 discovered = result.records;
                 break;
@@ -438,7 +189,7 @@ export const createWebSearchContextStepExecutor = ({
         }
 
         const durationMs = Math.max(0, Date.now() - startedAt);
-        const searchHints = buildSearchHints(input);
+        const searchHints: WebSearchHint[] = buildSearchHints(input);
         if (discovered.length === 0) {
             warn('web_search context integration completed without results', {
                 attempts,
@@ -511,3 +262,10 @@ export const createWebSearchContextStepExecutor = ({
         });
     };
 };
+
+export type {
+    WebSearchContextStepIntegrationPayload,
+    WebSearchHint,
+    WebSearchProviderAttempt,
+    WebSearchProviderName,
+} from './webSearchTypes.js';
