@@ -540,6 +540,7 @@ test('runChatMessages preserves explicit failed web_search tool context when cit
     let capturedExecutionContext:
         | ResponseMetadataRuntimeContext['executionContext']
         | undefined;
+    let capturedRuntimeContext: ResponseMetadataRuntimeContext | undefined;
 
     const chatService = createChatService({
         generationRuntime: createRuntime({
@@ -553,6 +554,7 @@ test('runChatMessages preserves explicit failed web_search tool context when cit
         }),
         storeTrace: async () => undefined,
         buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedRuntimeContext = runtimeContext;
             capturedExecutionContext = runtimeContext.executionContext;
             return createMetadata();
         },
@@ -563,21 +565,18 @@ test('runChatMessages preserves explicit failed web_search tool context when cit
     await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'Search this.' }],
         conversationSnapshot: 'Search this.',
-        generation: {
-            reasoningEffort: 'low',
-            verbosity: 'low',
-            search: {
-                query: 'latest updates',
-                contextSize: 'low',
-                intent: 'current_facts',
-            },
-        },
         executionContext: {
             tool: {
                 toolName: 'web_search',
                 status: 'failed',
                 reasonCode: 'tool_execution_error',
             },
+        },
+        toolRequest: {
+            toolName: 'web_search',
+            requested: false,
+            eligible: false,
+            reasonCode: 'tool_not_requested',
         },
     });
 
@@ -586,6 +585,7 @@ test('runChatMessages preserves explicit failed web_search tool context when cit
         status: 'failed',
         reasonCode: 'tool_execution_error',
     });
+    assert.equal(capturedRuntimeContext?.retrieval?.requested, false);
 });
 
 test('runChatMessages forwards total orchestration duration when provided', async () => {

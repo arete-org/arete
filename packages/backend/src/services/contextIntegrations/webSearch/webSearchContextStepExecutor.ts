@@ -131,7 +131,7 @@ const withTimeout = async (
 };
 
 const runSearxng = async ({
-    baseUrl,
+    baseUrl: rawBaseUrl,
     query,
     timeoutMs,
     maxResults,
@@ -141,7 +141,8 @@ const runSearxng = async ({
     timeoutMs: number;
     maxResults: number;
 }): Promise<WebSearchProviderResult> => {
-    const endpoint = new URL('/search', baseUrl);
+    const baseUrl = rawBaseUrl.endsWith('/') ? rawBaseUrl : `${rawBaseUrl}/`;
+    const endpoint = new URL('search', baseUrl);
     endpoint.searchParams.set('q', query);
     endpoint.searchParams.set('format', 'json');
     try {
@@ -253,11 +254,24 @@ const formatContextMessages = (
     if (records.length === 0) {
         return [];
     }
+    const sanitizeUntrustedText = (value: string): string =>
+        Array.from(value)
+            .map((char) => {
+                const code = char.charCodeAt(0);
+                return code < 32 || code === 127 ? ' ' : char;
+            })
+            .join('')
+            .replace(/\s+/g, ' ')
+            .trim();
     const lines = records.map((record, index) => {
-        const snippet = record.snippet?.trim();
+        const title = sanitizeUntrustedText(record.title);
+        const snippet =
+            typeof record.snippet === 'string'
+                ? sanitizeUntrustedText(record.snippet)
+                : undefined;
         return snippet && snippet.length > 0
-            ? `${index + 1}. ${record.title} (${record.url}) - ${snippet}`
-            : `${index + 1}. ${record.title} (${record.url})`;
+            ? `${index + 1}. UNTRUSTED SEARCH RESULT: ${title} (${record.url}) - ${snippet}`
+            : `${index + 1}. UNTRUSTED SEARCH RESULT: ${title} (${record.url})`;
     });
     return [`Web search results for "${query}":`, ...lines];
 };
@@ -430,6 +444,24 @@ export const createWebSearchContextStepExecutor = ({
                 attempts,
                 query: input.query,
             });
+            if (attempts.every((attempt) => attempt.status === 'skipped')) {
+                return {
+                    executionContext: {
+                        toolName: request.integrationName,
+                        status: 'skipped',
+                        reasonCode: 'tool_unavailable',
+                        durationMs,
+                    },
+                    integrationContext: {
+                        kind: 'web_search',
+                        version: 'v1',
+                        payload: {
+                            attempts,
+                            searchHints,
+                        } satisfies WebSearchContextStepIntegrationPayload,
+                    },
+                };
+            }
             if (attempts.some((attempt) => attempt.status === 'failed')) {
                 return buildFailedContextStepResult({
                     toolName: request.integrationName,

@@ -1246,7 +1246,8 @@ export const createChatService = ({
         // Runtime metadata here only carries the resolved decision payload.
         const hasSearchIntent =
             effectiveNormalizedGeneration?.search !== undefined ||
-            toolRequest?.toolName === 'web_search';
+            (toolRequest?.toolName === 'web_search' &&
+                toolRequest?.requested === true);
         const upstreamToolExecution =
             executionContext?.tool ??
             workflowContextStepResult?.executionContext ??

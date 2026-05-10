@@ -28,8 +28,10 @@ const createBaseInput = () => ({
 
 test('web search executor returns executed with normalized citations from searxng', async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () =>
-        ({
+    let observedUrl = '';
+    globalThis.fetch = async (url) => {
+        observedUrl = String(url);
+        return {
             ok: true,
             json: async () => ({
                 results: [
@@ -40,12 +42,13 @@ test('web search executor returns executed with normalized citations from searxn
                     },
                 ],
             }),
-        }) as Response;
+        } as Response;
+    };
     try {
         const executor = createWebSearchContextStepExecutor({
             enabled: true,
             providerPriority: ['searxng', 'brave'],
-            searxngBaseUrl: 'https://searxng.example',
+            searxngBaseUrl: 'https://searxng.example/custom/base',
             braveApiKey: null,
             providerTimeoutMs: 1000,
             maxResults: 4,
@@ -56,6 +59,7 @@ test('web search executor returns executed with normalized citations from searxn
         assert.ok(
             result.contextMessages?.some((line) => line.includes('OpenAI'))
         );
+        assert.ok(observedUrl.includes('/custom/base/search'));
     } finally {
         globalThis.fetch = originalFetch;
     }
@@ -134,4 +138,18 @@ test('web search executor returns skipped/tool_not_used when providers return em
     } finally {
         globalThis.fetch = originalFetch;
     }
+});
+
+test('web search executor returns skipped/tool_unavailable when all providers are skipped', async () => {
+    const executor = createWebSearchContextStepExecutor({
+        enabled: true,
+        providerPriority: ['searxng', 'brave'],
+        searxngBaseUrl: null,
+        braveApiKey: null,
+        providerTimeoutMs: 1000,
+        maxResults: 4,
+    });
+    const result = await executor(createBaseInput());
+    assert.equal(result.executionContext.status, 'skipped');
+    assert.equal(result.executionContext.reasonCode, 'tool_unavailable');
 });
