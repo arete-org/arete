@@ -14,6 +14,7 @@ import {
     buildFailedContextStepResult,
     buildSkippedContextStepResult,
 } from '../contextStepExecution.js';
+import { buildSerpApiSearchUrl } from '../shared/serpApi.js';
 import type {
     ContextStepExecutor,
     ContextStepResult,
@@ -59,6 +60,21 @@ export type WebSearchContextStepIntegrationPayload = {
 type WebSearchProviderResult =
     | { ok: true; records: WebSearchRecord[] }
     | { ok: false; reasonCode: ToolInvocationReasonCode };
+
+type WebSearchProviderAttemptStatus = WebSearchProviderAttempt['status'];
+
+type WebSearchProviderExecutorInput = {
+    query: string;
+    timeoutMs: number;
+    maxResults: number;
+};
+
+type WebSearchProviderRegistryEntry = {
+    isConfigured: () => boolean;
+    run: (
+        input: WebSearchProviderExecutorInput
+    ) => Promise<WebSearchProviderResult>;
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -264,19 +280,16 @@ const runSerpApi = async ({
     timeoutMs: number;
     maxResults: number;
 }): Promise<WebSearchProviderResult> => {
-    const endpoint = new URL('https://serpapi.com/search.json');
-    endpoint.searchParams.set('q', query);
-    endpoint.searchParams.set('api_key', apiKey);
-    endpoint.searchParams.set('engine', engine ?? 'google');
-    if (gl) {
-        endpoint.searchParams.set('gl', gl);
-    }
-    if (hl) {
-        endpoint.searchParams.set('hl', hl);
-    }
+    const endpoint = buildSerpApiSearchUrl({
+        q: query,
+        api_key: apiKey,
+        engine: engine ?? 'google',
+        gl,
+        hl,
+    });
     try {
         const response = await withTimeout(
-            endpoint.toString(),
+            endpoint,
             { method: 'GET' },
             timeoutMs
         );
@@ -370,6 +383,61 @@ const buildSearchHints = (input: WebSearchInput): WebSearchHint[] => {
     return hints.slice(0, 3);
 };
 
+const createAttemptRecorder = (attempts: WebSearchProviderAttempt[]) => ({
+    push: (input: {
+        provider: WebSearchProviderName;
+        status: WebSearchProviderAttemptStatus;
+        durationMs: number;
+        resultCount: number;
+        reasonCode?: ToolInvocationReasonCode;
+    }): void => {
+        attempts.push({
+            provider: input.provider,
+            status: input.status,
+            ...(input.reasonCode !== undefined && {
+                reasonCode: input.reasonCode,
+            }),
+            durationMs: input.durationMs,
+            resultCount: input.resultCount,
+        });
+    },
+    skipped: (provider: WebSearchProviderName): void => {
+        attempts.push({
+            provider,
+            status: 'skipped',
+            reasonCode: 'tool_unavailable',
+            durationMs: 0,
+            resultCount: 0,
+        });
+    },
+    failed: (
+        provider: WebSearchProviderName,
+        reasonCode: ToolInvocationReasonCode,
+        durationMs: number
+    ): void => {
+        attempts.push({
+            provider,
+            status: 'failed',
+            reasonCode,
+            durationMs,
+            resultCount: 0,
+        });
+    },
+    completed: (
+        provider: WebSearchProviderName,
+        records: WebSearchRecord[],
+        durationMs: number
+    ): void => {
+        attempts.push({
+            provider,
+            status:
+                records.length > 0 ? 'executed_with_results' : 'executed_empty',
+            durationMs,
+            resultCount: records.length,
+        });
+    },
+});
+
 export const createWebSearchContextStepExecutor = ({
     enabled,
     providerPriority,
@@ -424,98 +492,52 @@ export const createWebSearchContextStepExecutor = ({
         }
 
         const attempts: WebSearchProviderAttempt[] = [];
+        const attemptRecorder = createAttemptRecorder(attempts);
         const startedAt = Date.now();
         let discovered: WebSearchRecord[] = [];
+        const providerRegistry: Record<
+            WebSearchProviderName,
+            WebSearchProviderRegistryEntry
+        > = {
+            searxng: {
+                isConfigured: () => Boolean(searxngBaseUrl),
+                run: async ({ query, timeoutMs, maxResults }) =>
+                    runSearxng({
+                        baseUrl: searxngBaseUrl as string,
+                        query,
+                        timeoutMs,
+                        maxResults,
+                    }),
+            },
+            brave: {
+                isConfigured: () => Boolean(braveApiKey),
+                run: async ({ query, timeoutMs, maxResults }) =>
+                    runBrave({
+                        apiKey: braveApiKey as string,
+                        query,
+                        timeoutMs,
+                        maxResults,
+                    }),
+            },
+            serpapi: {
+                isConfigured: () => Boolean(serpApiKey),
+                run: async ({ query, timeoutMs, maxResults }) =>
+                    runSerpApi({
+                        apiKey: serpApiKey as string,
+                        query,
+                        engine: serpApiEngine,
+                        gl: serpApiGl,
+                        hl: serpApiHl,
+                        timeoutMs,
+                        maxResults,
+                    }),
+            },
+        };
         for (const provider of providerPriority) {
             const providerStartedAt = Date.now();
-            if (provider === 'searxng') {
-                if (!searxngBaseUrl) {
-                    attempts.push({
-                        provider,
-                        status: 'skipped',
-                        reasonCode: 'tool_unavailable',
-                        durationMs: 0,
-                        resultCount: 0,
-                    });
-                    continue;
-                }
-                const result = await runSearxng({
-                    baseUrl: searxngBaseUrl,
-                    query: input.query,
-                    timeoutMs: providerTimeoutMs,
-                    maxResults,
-                });
-                const durationMs = Math.max(0, Date.now() - providerStartedAt);
-                if (!result.ok) {
-                    attempts.push({
-                        provider,
-                        status: 'failed',
-                        reasonCode: result.reasonCode,
-                        durationMs,
-                        resultCount: 0,
-                    });
-                    continue;
-                }
-                attempts.push({
-                    provider,
-                    status:
-                        result.records.length > 0
-                            ? 'executed_with_results'
-                            : 'executed_empty',
-                    durationMs,
-                    resultCount: result.records.length,
-                });
-                if (result.records.length > 0) {
-                    discovered = result.records;
-                    break;
-                }
-                continue;
-            }
-            if (provider === 'brave') {
-                if (!braveApiKey) {
-                    attempts.push({
-                        provider,
-                        status: 'skipped',
-                        reasonCode: 'tool_unavailable',
-                        durationMs: 0,
-                        resultCount: 0,
-                    });
-                    continue;
-                }
-                const result = await runBrave({
-                    apiKey: braveApiKey,
-                    query: input.query,
-                    timeoutMs: providerTimeoutMs,
-                    maxResults,
-                });
-                const durationMs = Math.max(0, Date.now() - providerStartedAt);
-                if (!result.ok) {
-                    attempts.push({
-                        provider,
-                        status: 'failed',
-                        reasonCode: result.reasonCode,
-                        durationMs,
-                        resultCount: 0,
-                    });
-                    continue;
-                }
-                attempts.push({
-                    provider,
-                    status:
-                        result.records.length > 0
-                            ? 'executed_with_results'
-                            : 'executed_empty',
-                    durationMs,
-                    resultCount: result.records.length,
-                });
-                if (result.records.length > 0) {
-                    discovered = result.records;
-                    break;
-                }
-                continue;
-            }
-            if (!serpApiKey) {
-                attempts.push({
+            const registryEntry = providerRegistry[provider];
+            if (!registryEntry) {
+                attemptRecorder.push({
                     provider,
                     status: 'skipped',
                     reasonCode: 'tool_unavailable',
@@ -524,35 +546,21 @@ export const createWebSearchContextStepExecutor = ({
                 });
                 continue;
             }
-            const result = await runSerpApi({
-                apiKey: serpApiKey,
+            if (!registryEntry.isConfigured()) {
+                attemptRecorder.skipped(provider);
+                continue;
+            }
+            const result = await registryEntry.run({
                 query: input.query,
-                engine: serpApiEngine,
-                gl: serpApiGl,
-                hl: serpApiHl,
                 timeoutMs: providerTimeoutMs,
                 maxResults,
             });
             const durationMs = Math.max(0, Date.now() - providerStartedAt);
             if (!result.ok) {
-                attempts.push({
-                    provider,
-                    status: 'failed',
-                    reasonCode: result.reasonCode,
-                    durationMs,
-                    resultCount: 0,
-                });
+                attemptRecorder.failed(provider, result.reasonCode, durationMs);
                 continue;
             }
-            attempts.push({
-                provider,
-                status:
-                    result.records.length > 0
-                        ? 'executed_with_results'
-                        : 'executed_empty',
-                durationMs,
-                resultCount: result.records.length,
-            });
+            attemptRecorder.completed(provider, result.records, durationMs);
             if (result.records.length > 0) {
                 discovered = result.records;
                 break;

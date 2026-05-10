@@ -10,6 +10,7 @@ import type {
     ReverseImageSearchProvider,
     ReverseImageSearchProviderResponse,
 } from './reverseImageSearchContextStepExecutor.js';
+import { buildSerpApiSearchUrl } from '../shared/serpApi.js';
 
 type ReverseImageSearchLogger = {
     warn: (message: string, meta?: Record<string, unknown>) => void;
@@ -111,13 +112,14 @@ export const createSerpApiReverseImageSearchProvider = ({
             imageUrl,
             context,
         }): Promise<ReverseImageSearchProviderResponse> => {
-            const endpoint = new URL('https://serpapi.com/search.json');
-            endpoint.searchParams.set('engine', 'google_lens');
-            endpoint.searchParams.set('url', imageUrl);
-            endpoint.searchParams.set('api_key', apiKey);
+            const endpoint = buildSerpApiSearchUrl({
+                engine: 'google_lens',
+                url: imageUrl,
+                api_key: apiKey,
+            });
 
             const signal = AbortSignal.timeout(requestTimeoutMs);
-            const response = await fetchImpl(endpoint.toString(), {
+            const response = await fetchImpl(endpoint, {
                 method: 'GET',
                 signal,
             });
