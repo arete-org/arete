@@ -137,4 +137,5 @@ where required. Footnote orchestration remains Context Step-owned.
 - [TrustGraph](./trustgraph.md)
 - [Weather Forecast](./weather-forecast.md)
 - [File Scanning](./file-scanning.md)
+- [Web Search Proposal](../../proposals/web-search-context-integration.md)
 - [Reverse Image Search](./reverse-image-search.md)

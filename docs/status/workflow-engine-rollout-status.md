@@ -34,10 +34,10 @@ This file tracks the remaining rollout work. The canonical architecture is in
 - **Tool/context-step expansion**: `weather_forecast` and `file_scan` now use
   the workflow context-step path. Additional integrations are still pending.
 
-- **web_search**: Not migrated to context-step execution. It still uses the
-  current search/runtime path. The proposal in
-  [docs/proposals/web-search-context-integration.md](../proposals/web-search-context-integration.md)
-  describes the intended provider-neutral direction.
+- **web_search provider expansion**: `web_search` is now on the workflow
+  context-step path with deterministic provider fallback.
+  Next refinement is expanding provider coverage with a SerpAPI adapter and
+  aligned config-spec env coverage.
 
 ## Related Docs
 

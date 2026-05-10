@@ -1,6 +1,6 @@
 # Feature Proposal: Web Search Context Integration
 
-**Last Updated:** 2026-04-30
+**Last Updated:** 2026-05-10
 
 ---
 
@@ -290,6 +290,33 @@ The rollout should stay small:
    available.
 7. Add later page-fetch/context-read integration as separate follow-up work.
 8. Add later model-native reconciliation rules.
+
+### Current Status Update (2026-05-10)
+
+`web_search` now executes through the workflow context-step path in backend
+runtime, with deterministic provider fallback and fail-open behavior.
+
+Current implemented providers:
+
+- `searxng`
+- `brave`
+
+Agreed near-term refinement for the same integration seam:
+
+- Add `serpapi` as an additional provider adapter behind `web_search`.
+- Keep normalization to current citation/source schema (title/url/snippet).
+- Extend provider priority defaults to `searxng,brave,serpapi`.
+- Add explicit SerpAPI env controls for key plus optional engine/locale params.
+- Keep provider failures visible in attempt telemetry and preserve fail-open.
+
+Implementation guardrails to keep explicit during this refinement:
+
+- Keep env parsing and `config-spec` definitions in sync for all
+  `CHAT_CONTEXT_WEB_SEARCH_*` variables.
+- Keep missing-credential behavior non-blocking (`tool_unavailable` path),
+  with operator-visible warnings where appropriate.
+- Keep transport/rate-limit outcomes observable through existing reason/status
+  code surfaces.
 
 ---
 
