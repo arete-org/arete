@@ -43,6 +43,7 @@ import { createWeatherForecastContextStepExecutor } from './contextIntegrations/
 import { createFileScanningContextStepExecutor } from './contextIntegrations/fileScanning/index.js';
 import { createReverseImageSearchContextStepExecutor } from './contextIntegrations/reverseImageSearch/index.js';
 import { createSerpApiReverseImageSearchProvider } from './contextIntegrations/reverseImageSearch/index.js';
+import { createWebSearchContextStepExecutor } from './contextIntegrations/webSearch/index.js';
 import { createPlannerResultApplier } from './chatOrchestrator/plannerResultApplier.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -439,6 +440,29 @@ export const createChatOrchestrator = ({
         }
         const contextStepExecutorRegistry = {
             weather_forecast: weatherContextStepExecutor,
+            web_search: createWebSearchContextStepExecutor({
+                enabled:
+                    runtimeConfig.chatWorkflow.contextIntegrations.webSearch
+                        .enabled,
+                providerPriority:
+                    runtimeConfig.chatWorkflow.contextIntegrations.webSearch
+                        .providerPriority,
+                searxngBaseUrl:
+                    runtimeConfig.chatWorkflow.contextIntegrations.webSearch
+                        .searxngBaseUrl,
+                braveApiKey:
+                    runtimeConfig.chatWorkflow.contextIntegrations.webSearch
+                        .braveApiKey,
+                providerTimeoutMs:
+                    runtimeConfig.chatWorkflow.contextIntegrations.webSearch
+                        .providerTimeoutMs,
+                maxResults:
+                    runtimeConfig.chatWorkflow.contextIntegrations.webSearch
+                        .maxResults,
+                onWarn: (message, meta) => {
+                    chatOrchestratorLogger.warn(message, meta);
+                },
+            }),
             file_scan: fileScanningContextStepExecutor,
             reverse_image_search: createReverseImageSearchContextStepExecutor({
                 provider: reverseImageSearchProvider,
@@ -637,7 +661,6 @@ export const createChatOrchestrator = ({
                         plannerApplication.selectedResponseProfile.capabilities,
                     reasoningEffort: executionPlan.generation.reasoningEffort,
                     verbosity: executionPlan.generation.verbosity,
-                    search: executionPlan.generation.search,
                 },
                 plannerTemperament: executionPlan.generation.temperament,
                 conversationSnapshot: postPlanAssembly.conversationSnapshot,

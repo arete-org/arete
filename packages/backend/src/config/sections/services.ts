@@ -26,6 +26,50 @@ const REVERSE_IMAGE_SEARCH_PROVIDER_MODES = new Set([
     'serpapi',
 ] as const);
 type ReverseImageSearchProviderMode = 'none' | 'serpapi';
+type WebSearchProviderMode = 'searxng' | 'brave';
+const WEB_SEARCH_PROVIDER_MODES: ReadonlySet<WebSearchProviderMode> = new Set([
+    'searxng',
+    'brave',
+]);
+
+const parseWebSearchProviderPriority = (
+    raw: string | undefined,
+    warn: WarningSink
+): WebSearchProviderMode[] => {
+    const fallback: WebSearchProviderMode[] = ['searxng', 'brave'];
+    if (typeof raw !== 'string' || raw.trim().length === 0) {
+        return fallback;
+    }
+
+    const normalized = raw
+        .split(',')
+        .map((entry) => entry.trim().toLowerCase())
+        .filter((entry) => entry.length > 0);
+    if (normalized.length === 0) {
+        return fallback;
+    }
+
+    const priority: WebSearchProviderMode[] = [];
+    for (const candidate of normalized) {
+        if (
+            !WEB_SEARCH_PROVIDER_MODES.has(candidate as WebSearchProviderMode)
+        ) {
+            warn(
+                `Ignoring unsupported web-search provider "${candidate}" in CHAT_CONTEXT_WEB_SEARCH_PROVIDER_PRIORITY.`
+            );
+            continue;
+        }
+        const provider = candidate as WebSearchProviderMode;
+        if (!priority.includes(provider)) {
+            priority.push(provider);
+        }
+    }
+
+    if (priority.length === 0) {
+        return fallback;
+    }
+    return priority;
+};
 
 /**
  * Resolves auth tokens and body-size limits for trusted backend-only service
@@ -80,6 +124,45 @@ export const buildServiceSections = (
             warn
         ),
         contextIntegrations: {
+            webSearch: {
+                enabled: parseBooleanEnv(
+                    env.CHAT_CONTEXT_WEB_SEARCH_ENABLED,
+                    true,
+                    'CHAT_CONTEXT_WEB_SEARCH_ENABLED',
+                    warn
+                ),
+                providerPriority: parseWebSearchProviderPriority(
+                    env.CHAT_CONTEXT_WEB_SEARCH_PROVIDER_PRIORITY,
+                    warn
+                ),
+                searxngBaseUrl: parseOptionalTrimmedString(
+                    env.CHAT_CONTEXT_WEB_SEARCH_SEARXNG_BASE_URL
+                ),
+                braveApiKey: parseOptionalTrimmedString(
+                    env.CHAT_CONTEXT_WEB_SEARCH_BRAVE_API_KEY
+                ),
+                providerTimeoutMs: parsePositiveIntEnv(
+                    env.CHAT_CONTEXT_WEB_SEARCH_PROVIDER_TIMEOUT_MS,
+                    12000,
+                    'CHAT_CONTEXT_WEB_SEARCH_PROVIDER_TIMEOUT_MS',
+                    warn
+                ),
+                maxResults: Math.max(
+                    1,
+                    parsePositiveIntEnv(
+                        env.CHAT_CONTEXT_WEB_SEARCH_MAX_RESULTS,
+                        6,
+                        'CHAT_CONTEXT_WEB_SEARCH_MAX_RESULTS',
+                        warn
+                    )
+                ),
+                openAiNativeSearchFromHintsEnabled: parseBooleanEnv(
+                    env.CHAT_CONTEXT_WEB_SEARCH_OPENAI_NATIVE_FROM_HINTS_ENABLED,
+                    false,
+                    'CHAT_CONTEXT_WEB_SEARCH_OPENAI_NATIVE_FROM_HINTS_ENABLED',
+                    warn
+                ),
+            },
             reverseImageSearch: {
                 enabled: parseBooleanEnv(
                     env.CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_ENABLED,

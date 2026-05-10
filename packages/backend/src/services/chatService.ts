@@ -1242,7 +1242,8 @@ export const createChatService = ({
         // Any mode escalation lineage is resolved by workflowProfileRegistry.
         // Runtime metadata here only carries the resolved decision payload.
         const hasSearchIntent =
-            effectiveNormalizedGeneration?.search !== undefined;
+            effectiveNormalizedGeneration?.search !== undefined ||
+            toolRequest?.toolName === 'web_search';
         const upstreamToolExecution =
             executionContext?.tool ??
             workflowContextStepResult?.executionContext ??
@@ -1261,14 +1262,7 @@ export const createChatService = ({
                           ...upstreamToolExecution,
                           status: retrievalUsed ? 'executed' : 'skipped',
                           ...(retrievalUsed
-                              ? upstreamToolExecution.reasonCode !== undefined
-                                  ? {
-                                        // Keep policy reason codes when
-                                        // runtime confirms tool execution.
-                                        reasonCode:
-                                            upstreamToolExecution.reasonCode,
-                                    }
-                                  : {}
+                              ? { reasonCode: undefined }
                               : {
                                     reasonCode:
                                         upstreamToolExecution.reasonCode ??

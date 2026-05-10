@@ -1003,6 +1003,13 @@ test('runBoundedReviewWorkflow preserves failed planner fallback status on injec
             workflowName: 'message_reviewed',
             maxIterations: 1,
             maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 4,
+                maxToolCalls: 4,
+                maxDeliberationCalls: 2,
+                maxTokensTotal: 1000,
+                maxDurationMs: 15000,
+            },
         },
         workflowPolicy: {
             enablePlanning: false,
@@ -1386,6 +1393,13 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
             workflowName: 'message_with_review_loop',
             maxIterations: 1,
             maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 4,
+                maxToolCalls: 4,
+                maxDeliberationCalls: 2,
+                maxTokensTotal: 1000,
+                maxDurationMs: 15000,
+            },
         },
         workflowPolicy: {
             enablePlanning: false,

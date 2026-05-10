@@ -1199,11 +1199,7 @@ test('planner capability selection chooses search-capable profile without rerout
         runtimeConfigMutable.modelProfiles = originalModelProfiles;
     }
 
-    assert.deepEqual(observedSearch, {
-        query: 'latest OpenAI policy update',
-        contextSize: 'low',
-        intent: 'current_facts',
-    });
+    assert.equal(observedSearch, undefined);
     const mismatchWarning = warnings.find((warning) =>
         /tool-capable fallback profile/i.test(warning.message)
     );
