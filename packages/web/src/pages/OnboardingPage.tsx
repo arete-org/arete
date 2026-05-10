@@ -12,7 +12,6 @@ import Footer from '@components/Footer';
 import StickySectionToc from '@components/StickySectionToc';
 
 type OnboardingSectionId =
-    | 'status'
     | 'first-30-minutes'
     | 'repo-shape'
     | 'request-lifecycle'
@@ -45,7 +44,6 @@ const getRepositoryFileUrl = (filePath: string): string =>
     `${REPOSITORY_BASE_URL}/${filePath}`;
 
 const sectionLinks: SectionLink[] = [
-    { id: 'status', label: 'Status' },
     { id: 'first-30-minutes', label: 'First 30 minutes' },
     { id: 'repo-shape', label: 'Repo and package shape' },
     { id: 'request-lifecycle', label: 'Request lifecycle' },
@@ -166,8 +164,7 @@ const OnboardingPage = (): JSX.Element => {
                 >
                     <h1 id="onboarding-title">Contributor onboarding</h1>
                     <p className="page-hero__summary">
-                        This page is a practical start path for contributors
-                        across backend, web, and docs work.
+                        This page is a practical start path for contributors.
                     </p>
                 </header>
 
@@ -178,18 +175,6 @@ const OnboardingPage = (): JSX.Element => {
                     />
 
                     <article className="page-content__main">
-                        <section
-                            className="page-section"
-                            id="status"
-                            aria-labelledby="status-title"
-                        >
-                            <h2 id="status-title">Status</h2>
-                            <p>
-                                Onboarding reflects current architecture. If you
-                                spot stale guidance, open an issue or PR.
-                            </p>
-                        </section>
-
                         <section
                             className="page-section"
                             id="first-30-minutes"
