@@ -1,10 +1,10 @@
 /**
- * @description: Renders the public About page for Footnote with a plain
- * explanation of what the project is, what it shows, and where to go next.
+ * @description: Renders the public About page with concrete expectations for
+ * what Footnote shows, what trace records mean, and current project status.
  * @footnote-scope: web
  * @footnote-module: AboutPage
- * @footnote-risk: low - Inaccurate copy can misstate what the product shows or overstate project guarantees.
- * @footnote-ethics: medium - This page shapes user expectations about transparency, review, and self-hosting limits.
+ * @footnote-risk: low - Copy errors can misstate product behavior and contribution readiness.
+ * @footnote-ethics: medium - This page sets trust expectations and must avoid overclaiming verification guarantees.
  */
 
 import Header from '@components/Header';
@@ -13,11 +13,10 @@ import StickySectionToc from '@components/StickySectionToc';
 import { Link } from 'react-router-dom';
 
 type AboutSectionId =
-    | 'why-footnote-exists'
+    | 'the-mission'
     | 'reading-a-response'
-    | 'what-a-trace-is'
-    | 'open-source-and-self-hosting'
-    | 'developers';
+    | 'project-state'
+    | 'contribute';
 
 type SectionLink = {
     id: AboutSectionId;
@@ -25,14 +24,10 @@ type SectionLink = {
 };
 
 const sectionLinks: SectionLink[] = [
-    { id: 'why-footnote-exists', label: 'A better way to read AI' },
-    { id: 'reading-a-response', label: 'Inside a response' },
-    { id: 'what-a-trace-is', label: 'The record' },
-    {
-        id: 'open-source-and-self-hosting',
-        label: 'Open source',
-    },
-    { id: 'developers', label: 'Get involved' },
+    { id: 'the-mission', label: 'The mission' },
+    { id: 'reading-a-response', label: 'Reading a response' },
+    { id: 'project-state', label: 'Project state' },
+    { id: 'contribute', label: 'Contribute' },
 ];
 
 const AboutPage = (): JSX.Element => (
@@ -41,13 +36,30 @@ const AboutPage = (): JSX.Element => (
         <main className="page-content" id="main-content">
             <header className="page-hero" aria-labelledby="about-title">
                 <h1 id="about-title">AI that carries receipts.</h1>
+
                 <p className="page-hero__summary">
-                    Footnote is an AI framework that tries to show its work.
+                    Footnote is an attempt to build something better.
                 </p>
+
                 <p>
-                    Ask a question and Footnote gives you a response with
-                    receipts: source links, confidence and safety notes, and a
-                    trace page for digging deeper.
+                    Most AI answers show up fast, confident, and polished, but
+                    you&apos;re left guessing what&apos;s real. That&apos;s the
+                    predictable result of the incentives: the industry is
+                    rewarded for speed and persuasion, not for making answers
+                    easy to verify.
+                </p>
+
+                <p>
+                    Footnote isn&apos;t trying to be the flashiest AI. We care
+                    about giving you receipts: clear links to sources, notes
+                    about uncertainty and safety when they matter, and a paper
+                    trail you can follow when you want the full story.
+                </p>
+
+                <p>
+                    We believe AI that serves real people starts with being{' '}
+                    <strong>accessible</strong>, <strong>open</strong>, and{' '}
+                    <strong>honest</strong>.
                 </p>
             </header>
 
@@ -60,27 +72,35 @@ const AboutPage = (): JSX.Element => (
                 <article className="page-content__main">
                     <section
                         className="page-section"
-                        id="why-footnote-exists"
-                        aria-labelledby="why-footnote-exists-title"
+                        id="the-mission"
+                        aria-labelledby="the-mission-title"
                     >
-                        <h2 id="why-footnote-exists-title">
-                            A better way to read AI
-                        </h2>
+                        <h2 id="the-mission-title">The mission</h2>
+
                         <p>
-                            AI can be impressively fluent and still leave you
-                            guessing about where an answer came from. Footnote
-                            is built to make that gap visible. It keeps answers
-                            tied to the context behind them, so people can see
-                            what an answer is standing on.
+                            Footnote is meant to make answers easier to understand
+                            and check. You shouldn&apos;t have to guess where
+                            something came from.
                         </p>
+
                         <p>
-                            Footnote does not try to pretend every answer is
-                            perfect. It helps people slow down, look at what the
-                            answer is based on, and decide for themselves
-                            whether it feels solid enough to trust. It is part
-                            of a bigger question about steerability: how to give
-                            people more control over the direction of an answer,
-                            with more visibility into how it was produced.
+                            It's also about control—keeping your data private, 
+                            choosing how the system runs, and being able to change 
+                            things later without everything falling apart.
+                        </p>
+
+                        <p>
+                            Choice matters, so we try not to make it painful. Footnote 
+                            is designed to let you switch models or providers without 
+                            reworking the whole system. And if you want to{" "}
+                            <a
+                                href="https://github.com/footnote-ai/footnote#quickstart"
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                run it yourself
+                            </a>
+                            , it should be doable without a weekend of frustration.
                         </p>
                     </section>
 
@@ -89,64 +109,93 @@ const AboutPage = (): JSX.Element => (
                         id="reading-a-response"
                         aria-labelledby="reading-a-response-title"
                     >
-                        <h2 id="reading-a-response-title">Inside a response</h2>
-                        <p>
-                            Footnote tries to give you more than the answer on
-                            its own. Alongside a response, you may see source
-                            links, notes about confidence or safety, tradeoffs
-                            or constraints when they matter, and a trace page
-                            with more detail about how it came together.
-                        </p>
-                    </section>
-
-                    <section
-                        className="page-section"
-                        id="what-a-trace-is"
-                        aria-labelledby="what-a-trace-is-title"
-                    >
-                        <h2 id="what-a-trace-is-title">The record</h2>
-                        <p>
-                            A trace keeps the trail Footnote followed while
-                            answering: sources, model and runtime details,
-                            safety notes, and workflow steps when they matter.
-                        </p>
-                        <p>
-                            It does not prove the answer is right. It gives you
-                            a record you can open, follow, and question when you
-                            want to understand how the response came together.
-                        </p>
-                    </section>
-
-                    <section
-                        className="page-section"
-                        id="open-source-and-self-hosting"
-                        aria-labelledby="open-source-and-self-hosting-title"
-                    >
-                        <h2 id="open-source-and-self-hosting-title">
-                            Open source
+                        <h2 id="reading-a-response-title">
+                            Reading a response
                         </h2>
                         <p>
-                            Footnote is open source and built to run outside the
-                            hosted demo. You can try the browser demo, run your
-                            own copy from the repo, or self-host it with your
-                            own setup.
+                            A Footnote response comes with visible clues that can
+                            help when you want to slow down and dig deeper.
                         </p>
+                        <div
+                            className="card"
+                            aria-label="Response diagram placeholder"
+                        >
+                            <p>
+                                <strong>Placeholder:</strong> labeled diagram of
+                                one response, including the answer, sources,
+                                safety label, TRACE panel, and trace link.
+                            </p>
+                        </div>
                         <p>
-                            If you use hosted model providers (e.g. Ollama
-                            cloud, OpenAI), ensure you understand their privacy
-                            and retention rules.
+                            Sources let you see what a claim is anchored to.
+                            Safety notes are there for the moments when 
+                            &ldquo;sounds fine&rdquo; is not good enough.
+                            TRACE is a snapshot of the response's posture.
+                            The trace link opens the longer, more detailed record.
+                        </p>
+                        <div
+                            className="card"
+                            aria-label="Trace diagram placeholder"
+                        >
+                            <p>
+                                <strong>Placeholder:</strong> one or more
+                                labeled snippets of the trace page, showing the
+                                main sections worth explaining.
+                            </p>
+                        </div>
+                        <p>
+                            The trace page is the paper trail: which model ran,
+                            what steps happened, what tools were used, and what
+                            supporting material showed up along the way. It's not 
+                            proof, but a record you can open and verify for yourself.
                         </p>
                     </section>
 
                     <section
                         className="page-section"
-                        id="developers"
-                        aria-labelledby="developers-title"
+                        id="project-state"
+                        aria-labelledby="project-state-title"
                     >
-                        <h2 id="developers-title">Get involved</h2>
-                        <p>Want to help us work on Footnote?</p>
+                        <h2 id="project-state-title">Project state</h2>
                         <p>
-                            <Link to="/onboarding">Start here</Link>!
+                            Footnote is open source and in early development.
+                            The core idea is here, but the hard part now is
+                            making it sturdy, clear, and genuinely usable.
+                        </p>
+                        <p>
+                            You can run it from the repository and self-host it
+                            on your own infrastructure, with the model and
+                            provider choices you prefer (e.g., OpenAI,
+                            Anthropic, Google, or others). If you use hosted
+                            providers, their privacy and retention policies
+                            still apply.
+                        </p>
+                    </section>
+
+                    <section
+                        className="page-section"
+                        id="contribute"
+                        aria-labelledby="contribute-title"
+                    >
+                        <h2 id="contribute-title">Contribute</h2>
+                        <p>
+                            If this lines up with the concerns you already have
+                            about AI, we'd love to have your help in realizing Footnote. 
+                            There is real work to do across the frontend, backend, UX, docs, 
+                            diagrams—and making it legible to normal people (including grandma).
+                        </p>
+                        <p>
+                            Start with the{' '}
+                            <Link to="/onboarding">Onboarding page</Link> and
+                            the project on{' '}
+                            <a
+                                href="https://github.com/footnote-ai/footnote"
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                GitHub
+                            </a>
+                            .
                         </p>
                     </section>
                 </article>

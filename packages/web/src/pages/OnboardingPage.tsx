@@ -1,10 +1,10 @@
 /**
- * @description: Contributor onboarding page for the web package that explains
- * current workflow architecture, key seams, and rendering responsibilities.
+ * @description: Contributor onboarding page that provides a first-run path,
+ * architecture orientation, and practical entry points by contributor type.
  * @footnote-scope: web
  * @footnote-module: OnboardingPage
- * @footnote-risk: medium - Incorrect onboarding details can mislead contributors during architecture changes.
- * @footnote-ethics: medium - Clear, accurate docs support transparency and reduce overclaiming of trust signals.
+ * @footnote-risk: medium - Incorrect onboarding guidance can cause contributor confusion and incorrect edits.
+ * @footnote-ethics: medium - Clear docs reduce misrepresentation of trust and provenance behavior.
  */
 
 import Header from '@components/Header';
@@ -12,14 +12,15 @@ import Footer from '@components/Footer';
 import StickySectionToc from '@components/StickySectionToc';
 
 type OnboardingSectionId =
+    | 'status'
+    | 'first-30-minutes'
     | 'repo-shape'
     | 'request-lifecycle'
-    | 'architectural-themes'
+    | 'architecture-rules'
     | 'workflow-boundaries'
     | 'symbols'
-    | 'web-rendering'
-    | 'gotchas'
-    | 'where-next';
+    | 'contributor-paths'
+    | 'gotchas';
 
 type SectionLink = {
     id: OnboardingSectionId;
@@ -28,15 +29,14 @@ type SectionLink = {
 
 type SymbolKind = 'type' | 'function' | 'seam' | 'module' | 'concept';
 
+type SymbolGroup = 'workflow execution' | 'planning' | 'context integrations';
+
 type SymbolReferenceEntry = {
     name: string;
     kind: SymbolKind;
+    group: SymbolGroup;
     filePath: string;
     explanation: string;
-};
-
-type WhereToReadNextEntry = {
-    filePath: string;
 };
 
 const REPOSITORY_BASE_URL = 'https://github.com/footnote-ai/footnote/blob/main';
@@ -44,145 +44,107 @@ const REPOSITORY_BASE_URL = 'https://github.com/footnote-ai/footnote/blob/main';
 const getRepositoryFileUrl = (filePath: string): string =>
     `${REPOSITORY_BASE_URL}/${filePath}`;
 
-const getRepositoryPathUrl = (filePath: string): string =>
-    `${REPOSITORY_BASE_URL}/${filePath}`;
-
 const sectionLinks: SectionLink[] = [
+    { id: 'status', label: 'Status' },
+    { id: 'first-30-minutes', label: 'First 30 minutes' },
     { id: 'repo-shape', label: 'Repo and package shape' },
     { id: 'request-lifecycle', label: 'Request lifecycle' },
-    { id: 'architectural-themes', label: 'Architectural themes' },
+    { id: 'architecture-rules', label: 'Architecture rules' },
     { id: 'workflow-boundaries', label: 'Workflow boundaries' },
     { id: 'symbols', label: 'Important symbols' },
-    { id: 'web-rendering', label: 'What web owns' },
+    { id: 'contributor-paths', label: 'Paths by contributor type' },
     { id: 'gotchas', label: 'Gotchas' },
-    { id: 'where-next', label: 'Where to read next' },
 ];
 
 const symbolReferences: SymbolReferenceEntry[] = [
     {
         name: 'workflowEngine',
         kind: 'module',
+        group: 'workflow execution',
         filePath: 'packages/backend/src/services/workflowEngine.ts',
         explanation:
-            'Runs step ordering, timing, limits, termination, and workflow lineage.',
-    },
-    {
-        name: 'chatOrchestrator',
-        kind: 'module',
-        filePath: 'packages/backend/src/services/chatOrchestrator.ts',
-        explanation:
-            'Assembles request context, planner seams, and runtime dependencies before chat execution.',
-    },
-    {
-        name: 'chatService',
-        kind: 'module',
-        filePath: 'packages/backend/src/services/chatService.ts',
-        explanation:
-            'Runs chat generation flow, workflow execution handoff, metadata assembly, and trace persistence.',
-    },
-    {
-        name: 'PlannerStepExecutor',
-        kind: 'type',
-        filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts',
-        explanation:
-            'Injected executor interface that lets workflow run the planner as a timed plan step.',
-    },
-    {
-        name: 'PlannerResultApplier',
-        kind: 'seam',
-        filePath:
-            'packages/backend/src/services/chatOrchestrator/plannerResultApplier.ts',
-        explanation:
-            'Policy seam that applies backend rules to planner output before execution continues.',
-    },
-    {
-        name: 'AppliedPlanState',
-        kind: 'type',
-        filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts',
-        explanation:
-            'Canonical post-policy plan snapshot carried into generation and metadata.',
-    },
-    {
-        name: 'PlanContinuationBuilder',
-        kind: 'seam',
-        filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts',
-        explanation:
-            'Builds the post-plan continuation result: continue message flow or end with terminal action.',
-    },
-    {
-        name: 'PlanContinuation',
-        kind: 'type',
-        filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts',
-        explanation:
-            'Union representing either continue_message or terminal_action after plan application.',
-    },
-    {
-        name: 'PlanTerminalAction',
-        kind: 'type',
-        filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts',
-        explanation:
-            'Typed terminal outcomes: ignore, react, or image request without text generation.',
-    },
-    {
-        name: 'assemblePlanGenerationInput',
-        kind: 'function',
-        filePath:
-            'packages/backend/src/services/chatService/planGenerationInput.ts',
-        explanation:
-            'Builds generation-ready conversation payload after planner policy and prompt assembly.',
-    },
-    {
-        name: 'classifyPlanContinuation',
-        kind: 'function',
-        filePath:
-            'packages/backend/src/services/chatService/planContinuation.ts',
-        explanation:
-            'Classifies an applied execution plan into continue_message or terminal_action.',
+            'Owns step ordering, timing, limits, termination, and lineage records.',
     },
     {
         name: 'ContextStepExecutor',
         kind: 'type',
+        group: 'workflow execution',
         filePath: 'packages/backend/src/services/workflowEngine.ts',
         explanation:
-            'Executor contract for pre-generation context integrations inside workflow.',
-    },
-    {
-        name: 'ContextStepRequest',
-        kind: 'type',
-        filePath: 'packages/backend/src/services/workflowEngine.ts',
-        explanation:
-            'Structured request describing whether an integration was requested and eligible.',
+            'Contract for running context integrations before generation.',
     },
     {
         name: 'ContextStepResult',
         kind: 'type',
+        group: 'workflow execution',
         filePath: 'packages/backend/src/services/workflowEngine.ts',
         explanation:
-            'Structured context-step outcome with execution context, optional messages, and clarification.',
+            'Context-step outcome shape: execution context, optional messages, and sources.',
+    },
+    {
+        name: 'chatOrchestrator',
+        kind: 'module',
+        group: 'planning',
+        filePath: 'packages/backend/src/services/chatOrchestrator.ts',
+        explanation:
+            'Builds request context, planner seams, and runtime dependencies before chat execution.',
+    },
+    {
+        name: 'PlannerStepExecutor',
+        kind: 'type',
+        group: 'planning',
+        filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts',
+        explanation:
+            'Injected plan-step executor used by workflow timing boundaries.',
+    },
+    {
+        name: 'PlanContinuationBuilder',
+        kind: 'seam',
+        group: 'planning',
+        filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts',
+        explanation:
+            'Policy seam that decides continue_message vs terminal_action after plan application.',
     },
     {
         name: 'trace_target',
         kind: 'concept',
+        group: 'planning',
         filePath: 'packages/contracts/src/policy/types.ts',
         explanation:
-            'TRACE target posture recorded from planner/runtime temperament at response time.',
+            'TRACE target posture captured from planner/runtime temperament at response time.',
     },
     {
         name: 'trace_final',
         kind: 'concept',
+        group: 'planning',
         filePath: 'packages/contracts/src/policy/types.ts',
         explanation:
-            'TRACE final posture delivered in metadata for rendering and trace review.',
+            'TRACE final posture surfaced in metadata for rendering and trace review.',
+    },
+    {
+        name: 'createWeatherForecastContextStepExecutor',
+        kind: 'function',
+        group: 'context integrations',
+        filePath:
+            'packages/backend/src/services/contextIntegrations/weather/index.ts',
+        explanation:
+            'Weather context integration path used before generation and designed to fail open.',
+    },
+    {
+        name: 'createWebSearchContextStepExecutor',
+        kind: 'function',
+        group: 'context integrations',
+        filePath:
+            'packages/backend/src/services/contextIntegrations/webSearch/index.ts',
+        explanation:
+            'Current web-search context integration seam with provider fail-open behavior.',
     },
 ];
 
-const whereToReadNextEntries: WhereToReadNextEntry[] = [
-    { filePath: 'docs/architecture/context-integrations/weather-forecast.md' },
-    { filePath: 'packages/backend/src/services/workflowEngine.ts' },
-    { filePath: 'packages/backend/src/services/chatOrchestrator.ts' },
-    { filePath: 'packages/backend/src/services/plannerWorkflowSeams.ts' },
-    { filePath: 'packages/contracts/src/policy/types.ts' },
-    { filePath: 'packages/web/src/pages/TracePage.tsx' },
+const symbolGroups: SymbolGroup[] = [
+    'workflow execution',
+    'planning',
+    'context integrations',
 ];
 
 const SymbolBadge = ({ kind }: { kind: SymbolKind }): JSX.Element => (
@@ -204,24 +166,10 @@ const OnboardingPage = (): JSX.Element => {
                 >
                     <h1 id="onboarding-title">Contributor onboarding</h1>
                     <p className="page-hero__summary">
-                        Footnote is open source and built with community
-                        involvement in mind. This page is to help onboard
-                        contributors to the project.
+                        This page is a practical start path for contributors
+                        across backend, web, and docs work.
                     </p>
                 </header>
-
-                <section
-                    className="page-notice-banner"
-                    aria-label="Contribute page status"
-                >
-                    <p className="page-notice-banner__eyebrow">
-                        Under construction
-                    </p>
-                    <p className="page-notice-banner__copy">
-                        We are actively refining this page - Content subject to
-                        change.
-                    </p>
-                </section>
 
                 <div className="page-layout">
                     <StickySectionToc
@@ -232,41 +180,85 @@ const OnboardingPage = (): JSX.Element => {
                     <article className="page-content__main">
                         <section
                             className="page-section"
+                            id="status"
+                            aria-labelledby="status-title"
+                        >
+                            <h2 id="status-title">Status</h2>
+                            <p>
+                                Onboarding reflects current architecture. If you
+                                spot stale guidance, open an issue or PR.
+                            </p>
+                        </section>
+
+                        <section
+                            className="page-section"
+                            id="first-30-minutes"
+                            aria-labelledby="first-30-minutes-title"
+                        >
+                            <h2 id="first-30-minutes-title">
+                                First 30 minutes
+                            </h2>
+                            <ol>
+                                <li>
+                                    Clone the repository and install
+                                    dependencies with <code>pnpm</code>.
+                                </li>
+                                <li>
+                                    Follow{' '}
+                                    <a
+                                        href="https://github.com/footnote-ai/footnote#quickstart"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                    >
+                                        Quickstart
+                                    </a>{' '}
+                                    to configure one model provider.
+                                </li>
+                                <li>Run backend and web locally.</li>
+                                <li>Send one chat message in the web app.</li>
+                                <li>Open the trace link from that response.</li>
+                                <li>
+                                    Confirm you can identify workflow steps,
+                                    safety tier, TRACE posture, and any source
+                                    links.
+                                </li>
+                            </ol>
+                            <p>
+                                After this loop, you have seen the full request
+                                path end-to-end.
+                            </p>
+                        </section>
+
+                        <section
+                            className="page-section"
                             id="repo-shape"
                             aria-labelledby="repo-shape-title"
                         >
                             <h2 id="repo-shape-title">
                                 Repo and package shape
                             </h2>
-                            <p>
-                                Main packages contributors usually touch
-                                together:
-                            </p>
                             <ul>
                                 <li>
-                                    <code>packages/backend</code>: runtime
-                                    authority for chat workflow, policy,
-                                    metadata, and trace storage.
+                                    <code>packages/backend</code>: execution
+                                    authority for workflow, policy, metadata,
+                                    and trace storage.
                                 </li>
                                 <li>
-                                    <code>packages/web</code>: browser surface
-                                    that renders chat output, traces, and
-                                    contributor-facing docs pages.
+                                    <code>packages/web</code>: browser rendering
+                                    of backend-owned output and docs pages.
                                 </li>
                                 <li>
                                     <code>packages/contracts</code>: shared
-                                    transport and metadata schema contracts used
-                                    across surfaces.
+                                    transport and metadata schema contracts.
                                 </li>
                                 <li>
                                     <code>packages/discord-bot</code>: Discord
-                                    transport and UI surface for the same
-                                    backend output.
+                                    transport/UI for backend-owned outputs.
                                 </li>
                                 <li>
                                     <code>packages/agent-runtime</code> and{' '}
-                                    <code>packages/prompts</code>: generation
-                                    runtime and prompt-layer dependencies.
+                                    <code>packages/prompts</code>: runtime and
+                                    prompt-layer dependencies.
                                 </li>
                             </ul>
                         </section>
@@ -281,81 +273,63 @@ const OnboardingPage = (): JSX.Element => {
                             </h2>
                             <ol>
                                 <li>
-                                    <code>/api/chat</code> enters backend
-                                    handlers and builds normalized request
-                                    context.
+                                    <code>/api/chat</code> normalizes request
+                                    input and conversation context.
                                 </li>
                                 <li>
-                                    <code>chatOrchestrator</code> resolves
-                                    execution mode and profile, then constructs
-                                    planner and context seams.
+                                    <code>chatOrchestrator</code> resolves mode
+                                    and profile context, then wires planner and
+                                    context seams.
                                 </li>
                                 <li>
-                                    <code>
-                                        chatService.runChatMessagesWithOutcome
-                                    </code>{' '}
-                                    resolves workflow runtime config and invokes{' '}
-                                    <code>workflowEngine</code>.
+                                    <code>workflowEngine</code> runs plan first,
+                                    then optional context integrations, then
+                                    generation/review flow.
                                 </li>
                                 <li>
-                                    Workflow runs <code>plan</code> first via{' '}
-                                    <code>PlannerStepExecutor</code>, then
-                                    applies policy via{' '}
-                                    <code>PlannerResultApplier</code>, then
-                                    branches through{' '}
-                                    <code>PlanContinuation</code>.
+                                    Planner output is policy-applied before
+                                    continuation. This keeps planner advisory
+                                    and backend policy authoritative.
                                 </li>
                                 <li>
-                                    If tool context is requested and eligible,
-                                    the context step runs before generation.
-                                    Weather currently uses this path.
-                                </li>
-                                <li>
-                                    Workflow continues with generation, optional
-                                    assess/revise loops, and bounded termination
-                                    based on limits and policy.
-                                </li>
-                                <li>
-                                    Metadata is assembled, including citations,
-                                    safety, TRACE, workflow lineage, and timing,
-                                    then stored in trace persistence.
+                                    Metadata is assembled and persisted with
+                                    citations, safety, TRACE, lineage, and
+                                    timing.
                                 </li>
                             </ol>
                         </section>
 
                         <section
                             className="page-section"
-                            id="architectural-themes"
-                            aria-labelledby="architectural-themes-title"
+                            id="architecture-rules"
+                            aria-labelledby="architecture-rules-title"
                         >
-                            <h2 id="architectural-themes-title">
-                                Architectural themes
+                            <h2 id="architecture-rules-title">
+                                Architecture rules
                             </h2>
                             <ul>
                                 <li>
-                                    Backend is the runtime boundary. Web and
-                                    Discord render backend-owned execution
-                                    truth.
+                                    If a decision changes runtime behavior, it
+                                    belongs in backend policy/orchestration, not
+                                    in web or Discord adapters.
                                 </li>
                                 <li>
-                                    Planner output is advisory. Policy
-                                    application is explicit and recorded after
-                                    planning.
+                                    Web and Discord render backend-owned truth.
+                                    They do not invent workflow history or mode
+                                    semantics.
                                 </li>
                                 <li>
-                                    Workflow lineage is canonical. If a step
-                                    happened, it should appear in workflow step
-                                    records.
+                                    Planner output is advisory. Keep policy
+                                    application explicit and inspectable.
                                 </li>
                                 <li>
-                                    Fail-open defaults are intentional. Runtime
-                                    should continue safely instead of blocking
-                                    on uncertain integration paths.
+                                    Public interfaces must stay serializable so
+                                    every surface can consume the same payload.
                                 </li>
                                 <li>
-                                    Public interfaces stay serializable, so
-                                    transport surfaces can render without
-                                    backend-only assumptions.
+                                    Fail-open behavior is intentional: uncertain
+                                    integrations should degrade safely, not
+                                    block execution.
                                 </li>
                             </ul>
                         </section>
@@ -366,27 +340,19 @@ const OnboardingPage = (): JSX.Element => {
                             aria-labelledby="workflow-boundaries-title"
                         >
                             <h2 id="workflow-boundaries-title">
-                                Workflow boundaries and ownership
+                                Workflow boundaries
                             </h2>
                             <p>
-                                <code>workflowEngine</code> owns timing, step
-                                ordering, limit enforcement, termination
-                                classification, and lineage records.
+                                <code>workflowEngine</code> owns execution
+                                control flow: step ordering, timing, limits, and
+                                termination lineage.
                             </p>
                             <p>
-                                It does not own planner policy semantics,
-                                provider behavior, transport rendering, or UI
-                                labeling decisions. Those stay in
-                                orchestrator/policy layers and rendering
-                                surfaces.
+                                Common boundary mistakes are routing logic in
+                                the engine that should live in
+                                policy/orchestrator, or policy decisions in UI
+                                adapters.
                             </p>
-                            <div className="onboarding-callout onboarding-callout--warn">
-                                <p>
-                                    Keep this boundary intact: engine is
-                                    execution control flow; policy and
-                                    presentation stay outside the engine.
-                                </p>
-                            </div>
                         </section>
 
                         <section
@@ -395,89 +361,99 @@ const OnboardingPage = (): JSX.Element => {
                             aria-labelledby="symbols-title"
                         >
                             <h2 id="symbols-title">Important symbols</h2>
-                            <div className="onboarding-symbol-table-wrap">
-                                <table className="onboarding-symbol-table">
-                                    <thead>
-                                        <tr>
-                                            <th scope="col">Symbol</th>
-                                            <th scope="col">Explanation</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {symbolReferences.map((entry) => (
-                                            <tr key={entry.name}>
-                                                <td className="onboarding-symbol-table__symbol-cell">
-                                                    <a
-                                                        className="onboarding-symbol-table__symbol-link"
-                                                        href={getRepositoryFileUrl(
-                                                            entry.filePath
-                                                        )}
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        aria-label={`Open ${entry.name} in repository`}
-                                                    >
-                                                        <code className="onboarding-symbol-table__inline-code">
-                                                            {entry.name}
-                                                        </code>
-                                                    </a>
-                                                    <div className="onboarding-symbol-table__kind">
-                                                        <SymbolBadge
-                                                            kind={entry.kind}
-                                                        />
-                                                    </div>
-                                                </td>
-                                                <td>{entry.explanation}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                            {symbolGroups.map((group) => (
+                                <section
+                                    key={group}
+                                    className="onboarding-symbol-group"
+                                    aria-labelledby={`symbol-group-${group.replace(/\s+/g, '-')}`}
+                                >
+                                    <h3
+                                        id={`symbol-group-${group.replace(/\s+/g, '-')}`}
+                                    >
+                                        {group}
+                                    </h3>
+                                    <div className="onboarding-symbol-table-wrap">
+                                        <table className="onboarding-symbol-table">
+                                            <thead>
+                                                <tr>
+                                                    <th scope="col">Symbol</th>
+                                                    <th scope="col">
+                                                        Explanation
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {symbolReferences
+                                                    .filter(
+                                                        (entry) =>
+                                                            entry.group ===
+                                                            group
+                                                    )
+                                                    .map((entry) => (
+                                                        <tr key={entry.name}>
+                                                            <td className="onboarding-symbol-table__symbol-cell">
+                                                                <a
+                                                                    className="onboarding-symbol-table__symbol-link"
+                                                                    href={getRepositoryFileUrl(
+                                                                        entry.filePath
+                                                                    )}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    aria-label={`Open ${entry.name} in repository`}
+                                                                >
+                                                                    <code className="onboarding-symbol-table__inline-code">
+                                                                        {
+                                                                            entry.name
+                                                                        }
+                                                                    </code>
+                                                                </a>
+                                                                <div className="onboarding-symbol-table__kind">
+                                                                    <SymbolBadge
+                                                                        kind={
+                                                                            entry.kind
+                                                                        }
+                                                                    />
+                                                                </div>
+                                                            </td>
+                                                            <td>
+                                                                {
+                                                                    entry.explanation
+                                                                }
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </section>
+                            ))}
                         </section>
 
                         <section
                             className="page-section"
-                            id="web-rendering"
-                            aria-labelledby="web-rendering-title"
+                            id="contributor-paths"
+                            aria-labelledby="contributor-paths-title"
                         >
-                            <h2 id="web-rendering-title">What web owns</h2>
+                            <h2 id="contributor-paths-title">
+                                Paths by contributor type
+                            </h2>
                             <ul>
                                 <li>
-                                    Render workflow lineage as recorded by
-                                    backend; do not infer missing step history.
+                                    Backend contributor: start with
+                                    <code>workflowEngine</code>,{' '}
+                                    <code>chatOrchestrator</code>, and related
+                                    tests in <code>packages/backend/test</code>.
                                 </li>
                                 <li>
-                                    Show workflow <code>plan</code> steps in
-                                    trace timelines when present.
+                                    Web contributor: start with
+                                    <code>TracePage</code> and provenance
+                                    rendering components in
+                                    <code>packages/web/src</code>.
                                 </li>
                                 <li>
-                                    Keep citations and source links clear and
-                                    visible.
-                                </li>
-                                <li>
-                                    Render TRACE axes as posture indicators, not
-                                    accuracy scores.
-                                </li>
-                                <li>
-                                    Do not imply <code>web_search</code> is
-                                    already migrated into context-step flow.
-                                </li>
-                                <li>
-                                    Do not claim a user selected a mode unless
-                                    request or backend metadata says so.
-                                </li>
-                                <li>
-                                    Explain mode labels in plain language:
-                                    <code>fast</code> is short-path planning
-                                    without review;
-                                    <code>balanced</code> includes a lighter
-                                    review pass;
-                                    <code>grounded</code> keeps stricter
-                                    evidence posture and review depth.
-                                </li>
-                                <li>
-                                    Keep safety tier and citations visible as
-                                    trust surfaces in page summaries and detail
-                                    views.
+                                    Docs/design contributor: start with
+                                    <code>docs/architecture/README.md</code> and
+                                    context integration architecture docs.
                                 </li>
                             </ul>
                         </section>
@@ -491,53 +467,31 @@ const OnboardingPage = (): JSX.Element => {
                             <ul>
                                 <li>
                                     Planner output is advisory. Backend policy
-                                    can adjust or reject parts of it before
-                                    execution.
+                                    can adjust or reject planner fields before
+                                    execution continues.
                                 </li>
                                 <li>
-                                    Fast mode does not bypass planning. If
-                                    behavior changes, verify profile limits
-                                    before assuming a planner bug.
+                                    Balanced and grounded modes both plan; do
+                                    not assume planning was skipped from mode
+                                    alone.
                                 </li>
                                 <li>
-                                    Weather context integration is implemented
-                                    and fail-open. Tool failure should not block
-                                    message completion.
+                                    TRACE target and TRACE final should both be
+                                    populated for message paths. Verify both
+                                    fields when changing planner or metadata
+                                    assembly code.
                                 </li>
                                 <li>
-                                    TRACE target/final are required rendering
-                                    inputs for message outcomes; verify both
-                                    when editing planner or metadata assembly
-                                    paths.
+                                    Weather context integration is fail-open.
+                                    Tool failure should degrade safely rather
+                                    than block message completion.
                                 </li>
                                 <li>
-                                    TrustGraph metadata exists, but user-facing
-                                    trust claims should stay tied to fields
-                                    actually present in the trace payload.
+                                    <code>web_search</code> remains a legacy
+                                    integration path in parts of the stack; do
+                                    not assume parity with every context-step
+                                    integration flow.
                                 </li>
-                            </ul>
-                        </section>
-
-                        <section
-                            className="page-section"
-                            id="where-next"
-                            aria-labelledby="where-next-title"
-                        >
-                            <h2 id="where-next-title">Where to read next</h2>
-                            <ul>
-                                {whereToReadNextEntries.map((entry) => (
-                                    <li key={entry.filePath}>
-                                        <a
-                                            href={getRepositoryPathUrl(
-                                                entry.filePath
-                                            )}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                        >
-                                            <code>{entry.filePath}</code>
-                                        </a>
-                                    </li>
-                                ))}
                             </ul>
                         </section>
                     </article>
