@@ -331,11 +331,11 @@ The shared workflow vocabulary includes `plan`, `tool`, `generate`, `assess`,
 
 ### Current ownership
 
-| Component          | Owner | Notes                                                                                                               |
-| ------------------ | ----- | ------------------------------------------------------------------------------------------------------------------- |
-| `workflowEngine`   | Core  | Owns reviewed workflow steps (`generate`, `assess`, `revise`) and injected context-step execution                   |
-| `chatOrchestrator` | Core  | Owns deterministic bootstrap (mode/profile/contract), planner policy application seam, and tool intent construction |
-| `chatService`      | Core  | Invokes workflowEngine, handles context-step short-circuit responses (clarification, failure)                       |
+| Component          | Responsibility                                                                                                    |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `workflowEngine`   | Owns reviewed workflow steps (`generate`, `assess`, `revise`) and injected context-step execution.           |
+| `chatOrchestrator` | Owns deterministic bootstrap (mode/profile/contract), planner policy application seam, and tool intent construction. |
+| `chatService`      | Invokes workflowEngine and handles context-step short-circuit responses (clarification, failure).              |
 
 ### Context-step executor pattern
 
