@@ -10,7 +10,16 @@ import {
     createTraceStoreFromConfig,
     type TraceStore,
 } from '../storage/traces/traceStore.js';
+import type { LangfuseShadowMirror } from './langfuseShadowExporter.js';
 import { logger } from '../utils/logger.js';
+
+let traceMetadataMirror: LangfuseShadowMirror | null = null;
+
+export const configureTraceMetadataMirror = (
+    mirror: LangfuseShadowMirror | null
+): void => {
+    traceMetadataMirror = mirror;
+};
 
 // --- Trace store initialization ---
 const createTraceStore = (): TraceStore => createTraceStoreFromConfig();
@@ -31,6 +40,16 @@ const storeTrace = async (
         // --- Write-through ---
         await traceStore.upsert(metadata);
         logger.debug(`Trace stored successfully: ${responseId}`);
+
+        if (traceMetadataMirror) {
+            try {
+                await traceMetadataMirror(metadata);
+            } catch (error) {
+                logger.warn(
+                    `Langfuse shadow mirror failed for response "${responseId}": ${error instanceof Error ? error.message : String(error)}`
+                );
+            }
+        }
 
         // --- Optional trace-card persistence ---
         // Trace-card generation stays out of this write path so trace storage

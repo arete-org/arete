@@ -14,6 +14,7 @@ import {
     PostTracesRequestSchema,
 } from '@footnote/contracts/web/schemas';
 import type { SimpleRateLimiter } from '../services/rateLimiter.js';
+import { storeTrace } from '../services/traceStore.js';
 import { renderTraceCardPng } from '../services/traceCard/traceCardRaster.js';
 import { logger } from '../utils/logger.js';
 import { type TraceStore } from '../storage/traces/traceStore.js';
@@ -546,7 +547,7 @@ const createTraceHandlers = ({
             const normalizedMetadata = parsedPayload.data as ResponseMetadata;
             const responseId = normalizedMetadata.responseId;
 
-            await writeAccess.store.upsert(normalizedMetadata);
+            await storeTrace(writeAccess.store, normalizedMetadata);
 
             sendJson(res, 200, { ok: true, responseId });
             logRequest(req, res, `trace upsert success ${responseId}`);

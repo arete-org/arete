@@ -79,7 +79,10 @@ const parseWebSearchProviderPriority = (
 export const buildServiceSections = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink
-): Pick<RuntimeConfig, 'reflect' | 'trace' | 'chatWorkflow'> => ({
+): Pick<
+    RuntimeConfig,
+    'reflect' | 'trace' | 'langfuseShadow' | 'chatWorkflow'
+> => ({
     reflect: {
         serviceToken: parseOptionalTrimmedString(env.REFLECT_SERVICE_TOKEN),
         maxBodyBytes: parsePositiveIntEnv(
@@ -95,6 +98,23 @@ export const buildServiceSections = (
             env.TRACE_API_MAX_BODY_BYTES,
             envDefaultValues.TRACE_API_MAX_BODY_BYTES,
             'TRACE_API_MAX_BODY_BYTES',
+            warn
+        ),
+    },
+    langfuseShadow: {
+        enabled: parseBooleanEnv(
+            env.LANGFUSE_SHADOW_ENABLED,
+            false,
+            'LANGFUSE_SHADOW_ENABLED',
+            warn
+        ),
+        baseUrl: parseOptionalTrimmedString(env.LANGFUSE_SHADOW_BASE_URL),
+        publicKey: parseOptionalTrimmedString(env.LANGFUSE_SHADOW_PUBLIC_KEY),
+        secretKey: parseOptionalTrimmedString(env.LANGFUSE_SHADOW_SECRET_KEY),
+        timeoutMs: parsePositiveIntEnv(
+            env.LANGFUSE_SHADOW_TIMEOUT_MS,
+            1500,
+            'LANGFUSE_SHADOW_TIMEOUT_MS',
             warn
         ),
     },

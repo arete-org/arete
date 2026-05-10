@@ -24,7 +24,12 @@ import type { ResponseMetadata } from '@footnote/contracts/policy';
 import { runtimeConfig } from './config.js';
 import { buildResponseMetadata } from './services/openaiService.js';
 import { SimpleRateLimiter } from './services/rateLimiter.js';
-import { createTraceStore, storeTrace } from './services/traceStore.js';
+import {
+    configureTraceMetadataMirror,
+    createTraceStore,
+    storeTrace,
+} from './services/traceStore.js';
+import { createLangfuseShadowExporter } from './services/langfuseShadowExporter.js';
 import { getDefaultIncidentStore } from './storage/incidents/incidentStore.js';
 import { createAssetResolver } from './http/assets.js';
 import { createExpressApp } from './http/expressApp.js';
@@ -138,6 +143,9 @@ const initializeServices = () => {
         `VOLTOPS_TRACING_CONFIGURED: ${runtimeConfig.voltagent.observabilityEnabled ? 'ENABLED' : 'DISABLED'}`
     );
     logger.info(
+        `LANGFUSE_SHADOW_OBSERVABILITY: ${runtimeConfig.langfuseShadow.enabled ? 'ENABLED' : 'DISABLED'}`
+    );
+    logger.info(
         `LITESTREAM_REPLICA_URL: ${
             runtimeConfig.litestream.replicaUrl ? 'SET' : 'NOT SET'
         }`
@@ -153,6 +161,9 @@ const initializeServices = () => {
     try {
         // Initialize trace storage even when OpenAI is disabled.
         traceStore = createTraceStore();
+        configureTraceMetadataMirror(
+            createLangfuseShadowExporter(runtimeConfig.langfuseShadow)
+        );
     } catch (error) {
         traceStore = null;
         logger.error(
