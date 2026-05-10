@@ -564,6 +564,8 @@ test('runChatMessages preserves explicit failed web_search tool context when cit
         messages: [{ role: 'user', content: 'Search this.' }],
         conversationSnapshot: 'Search this.',
         generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
             search: {
                 query: 'latest updates',
                 contextSize: 'low',
