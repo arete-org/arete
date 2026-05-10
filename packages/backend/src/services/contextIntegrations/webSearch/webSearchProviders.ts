@@ -53,14 +53,15 @@ const runSearxng = async ({
         }
         const json = (await response.json()) as { results?: unknown[] };
         const records: WebSearchRecord[] = [];
-        for (const entry of json.results ?? []) {
+        for (const rawEntry of json.results ?? []) {
             if (
-                typeof entry !== 'object' ||
-                entry === null ||
-                Array.isArray(entry)
+                typeof rawEntry !== 'object' ||
+                rawEntry === null ||
+                Array.isArray(rawEntry)
             ) {
                 continue;
             }
+            const entry = rawEntry as Record<string, unknown>;
             const url = normalizeUrl(entry.url);
             if (!url) {
                 continue;
