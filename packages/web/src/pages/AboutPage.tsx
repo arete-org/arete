@@ -64,29 +64,28 @@ const AboutPage = (): JSX.Element => (
                     >
                         <h2 id="the-mission-title">The mission</h2>
                         <p>
-                            Footnote is for people who do not want to trust
-                            vibes. If an answer cannot show what it is leaning
-                            on, you are stuck taking it on faith. We are
-                            building responses you can interrogate: where claims
-                            came from, what shaped the answer, and what happened
-                            on the way there.
+                            This is also about control. Keeping your data
+                            private when you need to. Choosing how it runs. And
+                            being able to change things later without the whole
+                            thing falling apart.
                         </p>
                         <p>
-                            This is also about control over data, defaults, and
-                            dependencies. Your provider should not be a trap.
-                            Your model choice should not mean rewriting the
-                            whole system. Self-hosting should not be a weekend
-                            project. If you want stricter privacy boundaries,
-                            different infrastructure, lower costs, or a setup
-                            that better matches your values, that should be a
-                            practical choice.
+                            A lot of tools make it easy to start and hard to
+                            leave. We are trying to avoid that. You should not
+                            get stuck with one company just because it was the
+                            default. If you want to use a different kind of AI
+                            later, you should not have to rebuild everything.
+                            And if you want to run it yourself, that should be
+                            doable without a weekend of frustration.
                         </p>
                         <p>
-                            Trust is not a tone. It is a paper trail. If
-                            Footnote is doing its job, you end up with more
-                            leverage: more places to look, more ways to
-                            question, and fewer reasons to accept a confident
-                            paragraph at face value.
+                            And trust is not about how smooth the writing is. A
+                            clean, well-written answer can still be wrong, or
+                            leave out something important. Footnote tries to
+                            give you a way to check it: where claims came from,
+                            what the system relied on, and when extra caution is
+                            worth it. If it is doing its job, you can dig in
+                            when you care and skim when you do not.
                         </p>
                     </section>
 
