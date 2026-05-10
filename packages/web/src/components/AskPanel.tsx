@@ -578,6 +578,7 @@ const AskPanel = (): JSX.Element => {
                             <label
                                 htmlFor="chat-mode-select"
                                 className="interaction-mode-label"
+                                title="Choose the answer posture: grounded is stricter with evidence, balanced is more flexible."
                             >
                                 Mode
                             </label>
@@ -594,8 +595,18 @@ const AskPanel = (): JSX.Element => {
                                 }
                                 aria-label="Select chat mode"
                             >
-                                <option value="grounded">Grounded</option>
-                                <option value="balanced">Balanced</option>
+                                <option
+                                    value="grounded"
+                                    title="Grounded: stricter evidence posture and more cautious output."
+                                >
+                                    Grounded
+                                </option>
+                                <option
+                                    value="balanced"
+                                    title="Balanced: standard reviewed posture with a lighter evidence strictness."
+                                >
+                                    Balanced
+                                </option>
                             </select>
                         </div>
                         <div className="interaction-input-group">
