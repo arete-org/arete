@@ -78,19 +78,21 @@ const AboutPage = (): JSX.Element => (
                         <h2 id="the-mission-title">The mission</h2>
 
                         <p>
-                            This is also about control. It&apos;s about keeping
-                            your data private when you need to, choosing how the
-                            system runs, and being able to change things later
-                            without the whole setup falling apart.
+                            Footnote is meant to make answers easier to understand
+                            and check. You shouldn&apos;t have to guess where
+                            something came from.
                         </p>
 
                         <p>
-                            A lot of tools make it easy to start and hard to
-                            leave. We&apos;re trying to avoid that. You
-                            shouldn&apos;t get stuck with one company just
-                            because it was the default. If you want to use a
-                            different kind of AI later, you shouldn&apos;t have
-                            to rebuild everything. And if you want to{' '}
+                            It's also about control—keeping your data private, 
+                            choosing how the system runs, and being able to change 
+                            things later without everything falling apart.
+                        </p>
+
+                        <p>
+                            Choice matters, so we try not to make it painful. Footnote 
+                            is designed to let you switch models or providers without 
+                            reworking the whole system. And if you want to{" "}
                             <a
                                 href="https://github.com/footnote-ai/footnote#quickstart"
                                 target="_blank"
@@ -98,18 +100,7 @@ const AboutPage = (): JSX.Element => (
                             >
                                 run it yourself
                             </a>
-                            , that should be doable without a weekend of
-                            frustration.
-                        </p>
-
-                        <p>
-                            Trust also isn&apos;t about how smooth the writing
-                            is. A clean, well-written answer can still be wrong
-                            or leave out something important. Footnote tries to
-                            give you a way to check it: where claims came from,
-                            what the system relied on, and when extra caution is
-                            worth it. If it&apos;s doing its job, you can dig in
-                            when you care and skim when you don&apos;t.
+                            , it should be doable without a weekend of frustration.
                         </p>
                     </section>
 
@@ -122,10 +113,8 @@ const AboutPage = (): JSX.Element => (
                             Reading a response
                         </h2>
                         <p>
-                            A Footnote response is not just the paragraph. It
-                            comes with handles: small, visible clues you can
-                            grab when you want to verify something, slow down,
-                            or dig deeper.
+                            A Footnote response comes with visible clues that can
+                            help when you want to slow down and dig deeper.
                         </p>
                         <div
                             className="card"
@@ -138,20 +127,11 @@ const AboutPage = (): JSX.Element => (
                             </p>
                         </div>
                         <p>
-                            Sources are the obvious one. Open them and see what
-                            a claim is anchored to. Safety notes are there for
-                            the moments when &ldquo;sounds fine&rdquo; is not
-                            good enough. TRACE is a quick posture snapshot of
-                            the response. The trace link opens the longer
-                            record.
-                        </p>
-                        <p>
-                            The trace page is the paper trail: which model ran,
-                            what steps happened, what tools were used, and what
-                            supporting material showed up along the way. It is
-                            not proof. It is accountability, something you can
-                            open and verify, instead of a polished answer with
-                            nothing behind it.
+                            Sources let you see what a claim is anchored to.
+                            Safety notes are there for the moments when 
+                            &ldquo;sounds fine&rdquo; is not good enough.
+                            TRACE is a snapshot of the response's posture.
+                            The trace link opens the longer, more detailed record.
                         </p>
                         <div
                             className="card"
@@ -163,6 +143,12 @@ const AboutPage = (): JSX.Element => (
                                 main sections worth explaining.
                             </p>
                         </div>
+                        <p>
+                            The trace page is the paper trail: which model ran,
+                            what steps happened, what tools were used, and what
+                            supporting material showed up along the way. It's not 
+                            proof, but a record you can open and verify for yourself.
+                        </p>
                     </section>
 
                     <section
@@ -194,9 +180,9 @@ const AboutPage = (): JSX.Element => (
                         <h2 id="contribute-title">Contribute</h2>
                         <p>
                             If this lines up with the concerns you already have
-                            about AI, jump in. There is real work across the
-                            stack: backend, frontend, UX, docs, diagrams, and
-                            the job of making complicated things understandable.
+                            about AI, we'd love to have your help in realizing Footnote. 
+                            There is real work to do across the frontend, backend, UX, docs, 
+                            diagrams—and making it legible to normal people (including grandma).
                         </p>
                         <p>
                             Start with the{' '}
