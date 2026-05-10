@@ -391,7 +391,7 @@ export const envEntries = [
         ],
     }),
     defineEnv({
-        key: 'LANGFUSE_SHADOW_ENABLED',
+        key: 'LANGFUSE_METADATA_MIRROR_ENABLED',
         owner: 'backend',
         stage: 'runtime',
         section: 'trace',
@@ -399,12 +399,12 @@ export const envEntries = [
         secret: false,
         kind: 'boolean',
         description:
-            'Enables metadata-only Langfuse shadow observability export from backend trace writes.',
+            'Enables metadata-only Langfuse observability mirroring from backend trace writes.',
         defaultValue: literal(false),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'LANGFUSE_SHADOW_BASE_URL',
+        key: 'LANGFUSE_METADATA_MIRROR_BASE_URL',
         owner: 'backend',
         stage: 'runtime',
         section: 'trace',
@@ -412,12 +412,12 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'Langfuse base URL used for shadow observability export (for example https://cloud.langfuse.com).',
+            'Langfuse base URL used for metadata mirror export (for example https://cloud.langfuse.com).',
         defaultValue: literal(''),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'LANGFUSE_SHADOW_PUBLIC_KEY',
+        key: 'LANGFUSE_METADATA_MIRROR_PUBLIC_KEY',
         owner: 'backend',
         stage: 'runtime',
         section: 'trace',
@@ -425,12 +425,12 @@ export const envEntries = [
         secret: true,
         kind: 'string',
         description:
-            'Langfuse public key used for Basic Auth on shadow observability export.',
+            'Langfuse public key used for Basic Auth on metadata mirror export.',
         defaultValue: literal(''),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'LANGFUSE_SHADOW_SECRET_KEY',
+        key: 'LANGFUSE_METADATA_MIRROR_SECRET_KEY',
         owner: 'backend',
         stage: 'runtime',
         section: 'trace',
@@ -438,12 +438,12 @@ export const envEntries = [
         secret: true,
         kind: 'string',
         description:
-            'Langfuse secret key used for Basic Auth on shadow observability export.',
+            'Langfuse secret key used for Basic Auth on metadata mirror export.',
         defaultValue: literal(''),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'LANGFUSE_SHADOW_TIMEOUT_MS',
+        key: 'LANGFUSE_METADATA_MIRROR_TIMEOUT_MS',
         owner: 'backend',
         stage: 'runtime',
         section: 'trace',
@@ -451,7 +451,7 @@ export const envEntries = [
         secret: false,
         kind: 'integer',
         description:
-            'HTTP timeout budget in milliseconds for metadata shadow export to Langfuse.',
+            'HTTP timeout budget in milliseconds for metadata mirror export to Langfuse.',
         defaultValue: literal(1500),
         usedBy: ['packages/backend/src/config.ts'],
     }),

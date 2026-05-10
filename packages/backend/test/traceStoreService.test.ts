@@ -121,7 +121,7 @@ test('storeTrace stays fail-open when trace upsert throws', async () => {
     assert.equal(upsertCalled, true);
 });
 
-test('storeTrace stays fail-open when optional Langfuse shadow mirror throws', async () => {
+test('storeTrace stays fail-open when optional Langfuse metadata mirror throws', async () => {
     let upsertCalled = false;
     let mirrorCalled = false;
 

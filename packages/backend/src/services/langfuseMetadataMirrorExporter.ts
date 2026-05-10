@@ -1,7 +1,7 @@
 /**
  * @description: Mirrors a safe, metadata-only subset of Footnote trace records to Langfuse.
  * @footnote-scope: utility
- * @footnote-module: LangfuseShadowExporter
+ * @footnote-module: LangfuseMetadataMirrorExporter
  * @footnote-risk: low - Export failures only affect optional maintainer observability and do not block response execution.
  * @footnote-ethics: medium - External observability export must avoid PII, raw prompts, and Footnote-owned sensitive semantics.
  */
@@ -109,13 +109,13 @@ const toSafeMirrorMetadata = (
 const toIngestionEndpoint = (baseUrl: string): string =>
     `${baseUrl.replace(/\/+$/, '')}/api/public/ingestion`;
 
-export type LangfuseShadowMirror = (
+export type LangfuseMetadataMirror = (
     metadata: ResponseMetadata
 ) => Promise<void>;
 
-export const createLangfuseShadowExporter = (
-    config: RuntimeConfig['langfuseShadow']
-): LangfuseShadowMirror => {
+export const createLangfuseMetadataMirrorExporter = (
+    config: RuntimeConfig['langfuseMetadataMirror']
+): LangfuseMetadataMirror => {
     if (
         !config.enabled ||
         config.baseUrl === null ||
@@ -139,13 +139,13 @@ export const createLangfuseShadowExporter = (
             const payload = {
                 batch: [
                     {
-                        id: `footnote-shadow-${metadata.responseId}-${Date.now()}`,
+                        id: `footnote-metadata-mirror-${metadata.responseId}-${Date.now()}`,
                         type: 'trace-create',
                         timestamp: nowIso,
                         body: {
                             id: metadata.responseId,
                             timestamp: nowIso,
-                            name: 'footnote-shadow',
+                            name: 'footnote-metadata-mirror',
                             metadata: toSafeMirrorMetadata(metadata),
                         },
                     },
@@ -164,7 +164,7 @@ export const createLangfuseShadowExporter = (
 
             if (!response.ok) {
                 throw new Error(
-                    `Langfuse shadow export failed with status ${response.status}`
+                    `Langfuse metadata mirror export failed with status ${response.status}`
                 );
             }
         } finally {

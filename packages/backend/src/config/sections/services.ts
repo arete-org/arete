@@ -72,6 +72,11 @@ const parseWebSearchProviderPriority = (
     return priority;
 };
 
+const readPrimaryOrLegacyEnv = (
+    primaryValue: string | undefined,
+    legacyValue: string | undefined
+): string | undefined => primaryValue ?? legacyValue;
+
 /**
  * Resolves auth tokens and body-size limits for trusted backend-only service
  * endpoints.
@@ -81,7 +86,7 @@ export const buildServiceSections = (
     warn: WarningSink
 ): Pick<
     RuntimeConfig,
-    'reflect' | 'trace' | 'langfuseShadow' | 'chatWorkflow'
+    'reflect' | 'trace' | 'langfuseMetadataMirror' | 'chatWorkflow'
 > => ({
     reflect: {
         serviceToken: parseOptionalTrimmedString(env.REFLECT_SERVICE_TOKEN),
@@ -101,20 +106,41 @@ export const buildServiceSections = (
             warn
         ),
     },
-    langfuseShadow: {
+    langfuseMetadataMirror: {
         enabled: parseBooleanEnv(
-            env.LANGFUSE_SHADOW_ENABLED,
+            readPrimaryOrLegacyEnv(
+                env.LANGFUSE_METADATA_MIRROR_ENABLED,
+                env.LANGFUSE_SHADOW_ENABLED
+            ),
             false,
-            'LANGFUSE_SHADOW_ENABLED',
+            'LANGFUSE_METADATA_MIRROR_ENABLED',
             warn
         ),
-        baseUrl: parseOptionalTrimmedString(env.LANGFUSE_SHADOW_BASE_URL),
-        publicKey: parseOptionalTrimmedString(env.LANGFUSE_SHADOW_PUBLIC_KEY),
-        secretKey: parseOptionalTrimmedString(env.LANGFUSE_SHADOW_SECRET_KEY),
+        baseUrl: parseOptionalTrimmedString(
+            readPrimaryOrLegacyEnv(
+                env.LANGFUSE_METADATA_MIRROR_BASE_URL,
+                env.LANGFUSE_SHADOW_BASE_URL
+            )
+        ),
+        publicKey: parseOptionalTrimmedString(
+            readPrimaryOrLegacyEnv(
+                env.LANGFUSE_METADATA_MIRROR_PUBLIC_KEY,
+                env.LANGFUSE_SHADOW_PUBLIC_KEY
+            )
+        ),
+        secretKey: parseOptionalTrimmedString(
+            readPrimaryOrLegacyEnv(
+                env.LANGFUSE_METADATA_MIRROR_SECRET_KEY,
+                env.LANGFUSE_SHADOW_SECRET_KEY
+            )
+        ),
         timeoutMs: parsePositiveIntEnv(
-            env.LANGFUSE_SHADOW_TIMEOUT_MS,
+            readPrimaryOrLegacyEnv(
+                env.LANGFUSE_METADATA_MIRROR_TIMEOUT_MS,
+                env.LANGFUSE_SHADOW_TIMEOUT_MS
+            ),
             1500,
-            'LANGFUSE_SHADOW_TIMEOUT_MS',
+            'LANGFUSE_METADATA_MIRROR_TIMEOUT_MS',
             warn
         ),
     },

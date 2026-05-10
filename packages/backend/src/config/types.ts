@@ -93,7 +93,7 @@ export type RuntimeConfig = {
         apiToken: string | null;
         maxBodyBytes: number;
     };
-    langfuseShadow: {
+    langfuseMetadataMirror: {
         enabled: boolean;
         baseUrl: string | null;
         publicKey: string | null;

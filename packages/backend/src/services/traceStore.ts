@@ -10,13 +10,13 @@ import {
     createTraceStoreFromConfig,
     type TraceStore,
 } from '../storage/traces/traceStore.js';
-import type { LangfuseShadowMirror } from './langfuseShadowExporter.js';
+import type { LangfuseMetadataMirror } from './langfuseMetadataMirrorExporter.js';
 import { logger } from '../utils/logger.js';
 
-let traceMetadataMirror: LangfuseShadowMirror | null = null;
+let traceMetadataMirror: LangfuseMetadataMirror | null = null;
 
 export const configureTraceMetadataMirror = (
-    mirror: LangfuseShadowMirror | null
+    mirror: LangfuseMetadataMirror | null
 ): void => {
     traceMetadataMirror = mirror;
 };
@@ -46,7 +46,7 @@ const storeTrace = async (
                 await traceMetadataMirror(metadata);
             } catch (error) {
                 logger.warn(
-                    `Langfuse shadow mirror failed for response "${responseId}": ${error instanceof Error ? error.message : String(error)}`
+                    `Langfuse metadata mirror failed for response "${responseId}": ${error instanceof Error ? error.message : String(error)}`
                 );
             }
         }
