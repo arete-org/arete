@@ -10,7 +10,6 @@
 import Header from '@components/Header';
 import Footer from '@components/Footer';
 import StickySectionToc from '@components/StickySectionToc';
-import { Link } from 'react-router-dom';
 
 type OnboardingSectionId =
     | 'status'
@@ -186,8 +185,8 @@ const OnboardingPage = (): JSX.Element => {
                         >
                             <h2 id="status-title">Status</h2>
                             <p>
-                                Onboarding reflects architecture as of May 2026.
-                                If you spot stale guidance, open an issue or PR.
+                                Onboarding reflects current architecture. If you
+                                spot stale guidance, open an issue or PR.
                             </p>
                         </section>
 
@@ -205,8 +204,15 @@ const OnboardingPage = (): JSX.Element => {
                                     dependencies with <code>pnpm</code>.
                                 </li>
                                 <li>
-                                    Follow <Link to="/setup">Setup</Link> to
-                                    configure one model provider.
+                                    Follow{' '}
+                                    <a
+                                        href="https://github.com/footnote-ai/footnote#quickstart"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                    >
+                                        Quickstart
+                                    </a>{' '}
+                                    to configure one model provider.
                                 </li>
                                 <li>Run backend and web locally.</li>
                                 <li>Send one chat message in the web app.</li>
