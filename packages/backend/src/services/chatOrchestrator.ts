@@ -361,7 +361,8 @@ export const createChatOrchestrator = ({
         // 2) derive Execution Contract preset from mode
         // 3) execute orchestration within that contract
         const workflowModeResolution = resolveWorkflowModeDecision({
-            modeId: runtimeConfig.chatWorkflow.modeId,
+            modeId:
+                normalizedRequest.modeId ?? runtimeConfig.chatWorkflow.modeId,
         });
         // Pick the run mode first, then derive the contract from it. That keeps
         // later branches from inventing their own policy rules.

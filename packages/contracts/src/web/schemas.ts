@@ -67,6 +67,7 @@ const ChatTriggerKindSchema = z.enum([
 ]);
 const ChatPersonaIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
 const ChatProfileIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
+const ChatModeIdSchema = z.enum(['balanced', 'grounded']);
 const ChatConversationMessageSchema = z
     .object({
         role: z.enum(['system', 'user', 'assistant']),
@@ -944,6 +945,7 @@ export const PostChatRequestSchema = z
         surface: ChatSurfaceSchema,
         botPersonaId: ChatPersonaIdSchema.optional(),
         profileId: ChatProfileIdSchema.optional(),
+        modeId: ChatModeIdSchema.optional(),
         generation: z
             .object({
                 reasoningEffort: z

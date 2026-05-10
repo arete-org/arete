@@ -11,7 +11,10 @@ import {
     SlashCommandBuilder,
     type SlashCommandStringOption,
 } from 'discord.js';
-import type { ResponseMetadata } from '@footnote/contracts/policy';
+import type {
+    ResponseMetadata,
+    WorkflowModeId,
+} from '@footnote/contracts/policy';
 import type { ChatProfileOption } from '@footnote/contracts/web';
 import { botApi } from '../api/botApi.js';
 import type { DiscordChatApiResponse } from '../api/index.js';
@@ -92,6 +95,16 @@ const buildChatCommandData = (
         .addStringOption((option) => addProfileOption(option, profileChoices))
         .addStringOption((option) =>
             option
+                .setName('mode')
+                .setDescription('Optional answer posture for this request')
+                .addChoices(
+                    { name: 'Grounded', value: 'grounded' },
+                    { name: 'Balanced', value: 'balanced' }
+                )
+                .setRequired(false)
+        )
+        .addStringOption((option) =>
+            option
                 .setName('reasoning_effort')
                 .setDescription('Reasoning effort hint for this request')
                 .addChoices(
@@ -152,6 +165,7 @@ const hasResponseMetadata = (value: unknown): value is ResponseMetadata =>
 
 const buildChatDetailsPrefix = (options: {
     profileId: string | null | undefined;
+    modeId: WorkflowModeId | null;
     reasoningEffort: ReasoningEffort | null;
     verbosity: Verbosity | null;
 }): string => {
@@ -160,6 +174,9 @@ const buildChatDetailsPrefix = (options: {
 
     if (trimmedProfileId) {
         details.push(`> profile_id: ${trimmedProfileId}`);
+    }
+    if (options.modeId) {
+        details.push(`> mode: ${options.modeId}`);
     }
     if (options.reasoningEffort) {
         details.push(`> reasoning_effort: ${options.reasoningEffort}`);
@@ -202,6 +219,9 @@ const chatCommand: ChatCommandWithProfiles = {
 
         const prompt = interaction.options.getString('prompt', true).trim();
         const profileId = interaction.options.getString('profile_id')?.trim();
+        const modeId = interaction.options.getString(
+            'mode'
+        ) as WorkflowModeId | null;
         const reasoningEffort = interaction.options.getString(
             'reasoning_effort'
         ) as ReasoningEffort | null;
@@ -214,6 +234,7 @@ const chatCommand: ChatCommandWithProfiles = {
                 surface: 'discord',
                 botPersonaId: runtimeConfig.profile.id,
                 ...(profileId && profileId.length > 0 ? { profileId } : {}),
+                ...(modeId ? { modeId } : {}),
                 trigger: {
                     kind: 'submit',
                     messageId: interaction.id,
@@ -248,7 +269,7 @@ const chatCommand: ChatCommandWithProfiles = {
                     ? response.metadata
                     : null;
                 const replyBody = clampReplyContent(
-                    `${buildChatDetailsPrefix({ profileId, reasoningEffort, verbosity })}${buildSearchUnavailablePrefix(metadata)}${response.message}`
+                    `${buildChatDetailsPrefix({ profileId, modeId, reasoningEffort, verbosity })}${buildSearchUnavailablePrefix(metadata)}${response.message}`
                 );
                 if (!metadata) {
                     await interaction.editReply({
@@ -297,7 +318,7 @@ const chatCommand: ChatCommandWithProfiles = {
 
             await interaction.editReply({
                 content: clampReplyContent(
-                    `${buildChatDetailsPrefix({ profileId, reasoningEffort, verbosity })}${renderNonMessageAction(response)}`
+                    `${buildChatDetailsPrefix({ profileId, modeId, reasoningEffort, verbosity })}${renderNonMessageAction(response)}`
                 ),
             });
         } catch (error) {

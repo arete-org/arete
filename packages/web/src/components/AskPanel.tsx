@@ -38,6 +38,7 @@ const FALLBACK_REFLECTION =
  * response rendering.
  */
 const AskPanel = (): JSX.Element => {
+    const [modeId, setModeId] = useState<'balanced' | 'grounded'>('grounded');
     const [question, setQuestion] = useState('');
     const [status, setStatus] = useState('');
     const [answer, setAnswer] = useState('');
@@ -388,6 +389,7 @@ const AskPanel = (): JSX.Element => {
             const payload = await api.chatQuestion(
                 {
                     surface: 'web',
+                    modeId,
                     trigger: { kind: 'submit' },
                     latestUserInput: trimmedQuestion,
                     conversation: [
@@ -572,6 +574,30 @@ const AskPanel = (): JSX.Element => {
                         </div>
                     </div>
                     <form className="interaction-form" onSubmit={onSubmit}>
+                        <div className="interaction-mode-row">
+                            <label
+                                htmlFor="chat-mode-select"
+                                className="interaction-mode-label"
+                            >
+                                Mode
+                            </label>
+                            <select
+                                id="chat-mode-select"
+                                className="interaction-mode-select"
+                                value={modeId}
+                                onChange={(event) =>
+                                    setModeId(
+                                        event.target.value as
+                                            | 'balanced'
+                                            | 'grounded'
+                                    )
+                                }
+                                aria-label="Select chat mode"
+                            >
+                                <option value="grounded">Grounded</option>
+                                <option value="balanced">Balanced</option>
+                            </select>
+                        </div>
                         <div className="interaction-input-group">
                             <label htmlFor="question-input" className="sr-only">
                                 Ask a question

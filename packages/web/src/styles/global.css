@@ -1276,6 +1276,34 @@ section:has(.site-header-sticky) {
     gap: clamp(0.75rem, 2vw, 0.9rem);
 }
 
+.interaction-mode-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.interaction-mode-label {
+    font-family: var(--mono-font);
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    color: var(--subtle-text);
+}
+
+.interaction-mode-select {
+    border: 1px solid var(--border);
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--mono-font);
+    font-size: 0.82rem;
+    padding: 0.35rem 0.55rem;
+}
+
+.interaction-mode-select:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--accent) 60%, var(--border) 40%);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent 80%);
+}
+
 .interaction-label {
     flex-basis: 100%;
     font-family: var(--mono-font);

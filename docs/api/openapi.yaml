@@ -1304,6 +1304,10 @@ components:
                     type: string
                     pattern: '^[a-z0-9][a-z0-9-]{0,31}$'
                     description: Optional response profile selector resolved by backend model routing.
+                modeId:
+                    type: string
+                    enum: [balanced, grounded]
+                    description: Optional user-facing posture selector for workflow mode routing.
                 generation:
                     type: object
                     properties:
@@ -2870,7 +2874,6 @@ components:
             required:
                 - turnstileSiteKey
             additionalProperties: false
-
 
     parameters:
         # Shared request parameters.
