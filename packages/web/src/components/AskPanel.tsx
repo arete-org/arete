@@ -9,7 +9,10 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import ProvenanceFooter from './ProvenanceFooter';
-import type { ResponseMetadata } from '@footnote/contracts/policy';
+import type {
+    ResponseMetadata,
+    WorkflowModeId,
+} from '@footnote/contracts/policy';
 import examplePrompts from '../data/examplePrompts.json';
 import { loadRuntimeConfig } from '../config';
 import { api, isApiClientError } from '../utils/api';
@@ -32,13 +35,17 @@ declare global {
 // Provide a stable fallback response in case the backend is unavailable so the space stays welcoming.
 const FALLBACK_REFLECTION =
     'I was unable to generate a response - please try again later.';
+const ALLOWED_WORKFLOW_MODE_IDS: ReadonlySet<WorkflowModeId> = new Set([
+    'balanced',
+    'grounded',
+]);
 
 /**
  * Main website ask panel that manages prompt input, Turnstile, and chat
  * response rendering.
  */
 const AskPanel = (): JSX.Element => {
-    const [modeId, setModeId] = useState<'balanced' | 'grounded'>('grounded');
+    const [modeId, setModeId] = useState<WorkflowModeId>('grounded');
     const [question, setQuestion] = useState('');
     const [status, setStatus] = useState('');
     const [answer, setAnswer] = useState('');
@@ -586,13 +593,16 @@ const AskPanel = (): JSX.Element => {
                                 id="chat-mode-select"
                                 className="interaction-mode-select"
                                 value={modeId}
-                                onChange={(event) =>
-                                    setModeId(
-                                        event.target.value as
-                                            | 'balanced'
-                                            | 'grounded'
-                                    )
-                                }
+                                onChange={(event) => {
+                                    const val = event.target.value;
+                                    if (
+                                        ALLOWED_WORKFLOW_MODE_IDS.has(
+                                            val as WorkflowModeId
+                                        )
+                                    ) {
+                                        setModeId(val as WorkflowModeId);
+                                    }
+                                }}
                                 aria-label="Select chat mode"
                             >
                                 <option
