@@ -75,8 +75,16 @@ const AboutPage = (): JSX.Element => (
                             get stuck with one company just because it was the
                             default. If you want to use a different kind of AI
                             later, you should not have to rebuild everything.
-                            And if you want to run it yourself, that should be
-                            doable without a weekend of frustration.
+                            And if you want to{' '}
+                            <a
+                                href="https://github.com/footnote-ai/footnote#quickstart"
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                run it yourself
+                            </a>
+                            , that should be doable without a weekend of
+                            frustration.
                         </p>
                         <p>
                             And trust is not about how smooth the writing is. A
