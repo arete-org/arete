@@ -2595,5 +2595,5 @@ test('runChatMessages fails loudly when contextEnvelope is omitted', async () =>
         } as unknown as Parameters<
             typeof chatService.runChatMessagesWithOutcome
         >[0]);
-    });
+    }, /contextEnvelope is required for runChatMessagesWithOutcome\./);
 });

@@ -128,7 +128,10 @@ const trimDiscordConversationWindow = (
     for (let index = conversation.length - 1; index >= 0; index -= 1) {
         const message = conversation[index];
         if (!message) {
-            continue;
+            throw new ConversationContextAssemblyError(
+                'invalid_message_shape',
+                `Conversation message at index ${index} is not an object.`
+            );
         }
         if (message.role === 'system') {
             retainedReverse.push(message);
@@ -235,6 +238,13 @@ export const buildConversationContext = (
         }
 
         if (typeof message.content !== 'string') {
+            throw new ConversationContextAssemblyError(
+                'missing_content',
+                `Conversation message at index ${index} is missing string content.`
+            );
+        }
+
+        if (message.content.trim().length === 0) {
             throw new ConversationContextAssemblyError(
                 'missing_content',
                 `Conversation message at index ${index} is missing string content.`

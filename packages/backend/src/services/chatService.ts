@@ -1027,7 +1027,9 @@ export const createChatService = ({
                         toolRequest,
                         model,
                         defaultModel,
-                        conversationSnapshot,
+                        conversationSnapshot:
+                            workflowConversationSnapshot ??
+                            conversationSnapshot,
                         latestUserInput,
                         buildResponseMetadata,
                     });
@@ -1064,7 +1066,9 @@ export const createChatService = ({
                         toolRequest,
                         model,
                         defaultModel,
-                        conversationSnapshot,
+                        conversationSnapshot:
+                            workflowConversationSnapshot ??
+                            conversationSnapshot,
                         latestUserInput,
                         buildResponseMetadata,
                     });

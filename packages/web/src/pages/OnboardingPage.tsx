@@ -121,11 +121,7 @@ const symbolReferences: SymbolReferenceEntry[] = [
     },
 ];
 
-const symbolGroups: SymbolGroup[] = [
-    'workflow execution',
-    'planning',
-    'context integrations',
-];
+const symbolGroups: SymbolGroup[] = ['workflow execution', 'planning'];
 
 const SymbolBadge = ({ kind }: { kind: SymbolKind }): JSX.Element => (
     <span

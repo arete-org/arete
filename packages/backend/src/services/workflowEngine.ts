@@ -1038,7 +1038,6 @@ export const runBoundedReviewWorkflow = async ({
             } else {
                 effectiveGenerationRequest = planContinuation.generationRequest;
                 effectiveMessagesWithHints = planContinuation.messagesWithHints;
-                effectiveContextEnvelope = planContinuation.contextEnvelope;
                 effectiveContextStepRequests =
                     planContinuation.contextStepRequests ??
                     effectiveContextStepRequests;

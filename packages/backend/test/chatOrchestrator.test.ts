@@ -2151,13 +2151,17 @@ test('discord requests are canonically trimmed/projected before planner and gene
 });
 
 test('orchestrator fails loudly when conversation context assembly cannot normalize role/content', async () => {
+    let generationCalls = 0;
     const orchestrator = createChatOrchestrator({
-        generationRuntime: createGenerationRuntime(async () => ({
-            text: 'should not execute',
-            model: 'gpt-5-mini',
-            provenance: 'Inferred',
-            citations: [],
-        })),
+        generationRuntime: createGenerationRuntime(async () => {
+            generationCalls += 1;
+            return {
+                text: 'should not execute',
+                model: 'gpt-5-mini',
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
         storeTrace: async () => undefined,
         buildResponseMetadata: () => createMetadata(),
         defaultModel: 'gpt-5-mini',
@@ -2176,6 +2180,7 @@ test('orchestrator fails loudly when conversation context assembly cannot normal
             })
         );
     });
+    assert.equal(generationCalls, 0);
 });
 
 test('planner runtime failures emit failed planner execution metadata and still generate a message', async () => {
