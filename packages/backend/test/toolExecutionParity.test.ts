@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import type { GenerationRuntime } from '@footnote/agent-runtime';
 import type { WeatherForecastTool } from '../src/services/contextIntegrations/weather/index.js';
 import { runBoundedReviewWorkflow } from '../src/services/workflowEngine.js';
+import type { ConversationContextEnvelope } from '../src/services/conversationContextService.js';
 
 const createTestRuntime = (
     implementation: (
@@ -20,6 +21,32 @@ const createTestRuntime = (
     kind: 'test-runtime',
     generate: implementation,
 });
+
+const TEST_CONTEXT_ENVELOPE: ConversationContextEnvelope = {
+    participants: [],
+    turns: [],
+    diagnostics: {
+        surface: 'web',
+        totalInputMessages: 0,
+        projectedMessageCount: 0,
+        trimmedMessageCount: 0,
+        sanitizedTimestampCount: 0,
+        projectedSpeakerLabelCount: 0,
+    },
+};
+
+const runBoundedReviewWorkflowForTest = (
+    input: Omit<
+        Parameters<typeof runBoundedReviewWorkflow>[0],
+        'contextEnvelope'
+    > & {
+        contextEnvelope?: ConversationContextEnvelope;
+    }
+): ReturnType<typeof runBoundedReviewWorkflow> =>
+    runBoundedReviewWorkflow({
+        ...input,
+        contextEnvelope: input.contextEnvelope ?? TEST_CONTEXT_ENVELOPE,
+    });
 
 test('weather success flows through workflow context-step: tool step recorded in lineage', async () => {
     const weatherForecastTool: WeatherForecastTool = {
@@ -61,7 +88,7 @@ test('weather success flows through workflow context-step: tool step recorded in
         citations: [],
     }));
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -171,7 +198,7 @@ test('weather failure preserves fail-open: generation runs, tool step recorded a
         citations: [],
     }));
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -272,7 +299,7 @@ test('weather clarification short-circuits: no generation, clarification respons
         };
     });
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',

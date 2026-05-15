@@ -36,6 +36,7 @@ import type { ChatPlannerInvocationContext } from './chatPlannerInvocation.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import type { ChatSurfacePolicyCoercion } from './chatSurfacePolicy.js';
 import type { CapabilityProfileId } from './modelCapabilityPolicy.js';
+import type { ConversationContextEnvelope } from './conversationContextService.js';
 
 /** Workflow engine sends this to PlannerStepExecutor for the plan step. */
 export type PlannerStepRequest = {
@@ -132,6 +133,7 @@ export type PlanContinuationBuilderInput = {
     attempt: number;
     baseMessagesWithHints: RuntimeMessage[];
     baseGenerationRequest: GenerationRequest;
+    contextEnvelope: ConversationContextEnvelope;
 };
 
 export type PostPlannerDiagnosticsSummary = Pick<
@@ -182,6 +184,7 @@ export type PlanContinuation = {
           generationRequest: GenerationRequest;
           plannerTemperament?: PartialResponseTemperament;
           conversationSnapshot: string;
+          contextEnvelope: ConversationContextEnvelope;
           // Multi-integration field consumed by parallel context-step execution.
           contextStepRequests?: ContextStepRequest[];
       }

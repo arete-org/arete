@@ -45,6 +45,8 @@ import { createReverseImageSearchContextStepExecutor } from './contextIntegratio
 import { createSerpApiReverseImageSearchProvider } from './contextIntegrations/reverseImageSearch/index.js';
 import { createWebSearchContextStepExecutor } from './contextIntegrations/webSearch/index.js';
 import { createPlannerResultApplier } from './chatOrchestrator/plannerResultApplier.js';
+import type { ConversationContextEnvelope } from './conversationContextService.js';
+import { toSnapshotContextEnvelope } from './conversationContextService.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import type { IncidentAlertRouter } from './incidentAlerts.js';
@@ -211,10 +213,30 @@ export const createChatOrchestrator = ({
         // Total wall-clock budget for this request from planner entry to
         // final response payload. This is exposed as telemetry only.
         const orchestrationStartedAt = Date.now();
-        const { normalizedConversation, normalizedRequest } = normalizeRequest(
-            request,
-            chatOrchestratorLogger
-        );
+        let normalizedConversation: PostChatRequest['conversation'];
+        let normalizedRequest: PostChatRequest;
+        let contextEnvelope: ConversationContextEnvelope;
+        try {
+            const normalized = normalizeRequest(
+                request,
+                chatOrchestratorLogger
+            );
+            normalizedConversation = normalized.normalizedConversation;
+            normalizedRequest = normalized.normalizedRequest;
+            contextEnvelope = normalized.contextEnvelope;
+        } catch (error) {
+            chatOrchestratorLogger.error('chat.context.assembly_failed', {
+                event: 'chat.context.assembly_failed',
+                surface: request.surface,
+                reasonCode:
+                    error && typeof error === 'object' && 'reasonCode' in error
+                        ? (error as { reasonCode?: string }).reasonCode
+                        : 'context_assembly_error',
+                reason: error instanceof Error ? error.message : String(error),
+                correlation: buildCorrelationIds(request, null),
+            });
+            throw error;
+        }
         const clarificationContinuation =
             resolveWeatherClarificationContinuation(normalizedRequest);
         let evaluatorExecutionContext: EvaluatorExecutionContext | undefined;
@@ -629,6 +651,7 @@ export const createChatOrchestrator = ({
                 systemPrompt: promptLayers.systemPrompt,
                 personaPrompt,
                 normalizedConversation,
+                contextEnvelope,
                 executionPlanForPrompt: executionPlan,
                 ...(plannerApplication.surfacePolicy !== undefined && {
                     surfacePolicy: plannerApplication.surfacePolicy,
@@ -667,6 +690,7 @@ export const createChatOrchestrator = ({
                 },
                 plannerTemperament: executionPlan.generation.temperament,
                 conversationSnapshot: postPlanAssembly.conversationSnapshot,
+                contextEnvelope,
                 ...(plannerApplication.contextStepRequests !== undefined && {
                     contextStepRequests: plannerApplication.contextStepRequests,
                 }),
@@ -688,12 +712,14 @@ export const createChatOrchestrator = ({
                 policyId: resolvedExecutionContract.policyId,
                 policyVersion: resolvedExecutionContract.policyVersion,
             },
+            contextEnvelope: toSnapshotContextEnvelope(contextEnvelope),
         });
         const executionContractScopeTuple =
             buildExecutionContractScopeTuple(normalizedRequest);
         const response = await chatService.runChatMessagesWithOutcome({
             messages: baseConversationMessages,
             conversationSnapshot: baseConversationSnapshot,
+            contextEnvelope,
             orchestrationStartedAtMs: orchestrationStartedAt,
             safetyTier: evaluatorSafetyTierHint,
             model: defaultResponseProfile.providerModel,

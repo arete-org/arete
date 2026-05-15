@@ -42,6 +42,7 @@ import type {
     PlannerStepRequest,
     PlannerStepResult,
 } from './plannerWorkflowSeams.js';
+import type { ConversationContextEnvelope } from './conversationContextService.js';
 
 /**
  * Canonical Execution Contract workflow-policy surface.
@@ -154,6 +155,7 @@ export type RunBoundedReviewWorkflowInput = {
     generationRuntime: GenerationRuntime;
     generationRequest: GenerationRequest;
     messagesWithHints: RuntimeMessage[];
+    contextEnvelope: ConversationContextEnvelope;
     generationStartedAtMs: number;
     workflowConfig: ReviewWorkflowRuntimeConfig;
     workflowPolicy: WorkflowPolicy;
@@ -716,6 +718,7 @@ export const runBoundedReviewWorkflow = async ({
     generationRuntime,
     generationRequest,
     messagesWithHints,
+    contextEnvelope,
     generationStartedAtMs,
     workflowConfig,
     workflowPolicy,
@@ -733,6 +736,11 @@ export const runBoundedReviewWorkflow = async ({
     contextStepExecutorRegistry,
     openAiNativeSearchFromHintsEnabled = false,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
+    if (!contextEnvelope) {
+        throw new Error(
+            'contextEnvelope is required for runBoundedReviewWorkflow.'
+        );
+    }
     // NOTE: Concrete tool execution is still orchestrator/registry-owned.
     // This engine path currently executes only Reviewed generation steps.
     const UNBOUNDED_LIMIT = UNBOUNDED_LIMIT_SENTINEL;
@@ -787,6 +795,7 @@ export const runBoundedReviewWorkflow = async ({
     let messagesWithContext = messagesWithHints;
     let effectiveGenerationRequest = generationRequest;
     let effectiveMessagesWithHints = messagesWithHints;
+    let effectiveContextEnvelope: ConversationContextEnvelope = contextEnvelope;
     let effectiveContextStepRequests = contextStepRequests;
     let workflowTerminalAction: PlanTerminalAction | undefined;
     let planContinuation: PlanContinuation | undefined;
@@ -1022,12 +1031,14 @@ export const runBoundedReviewWorkflow = async ({
                 attempt: 1,
                 baseMessagesWithHints: messagesWithHints,
                 baseGenerationRequest: generationRequest,
+                contextEnvelope: effectiveContextEnvelope,
             });
             if (planContinuation.continuation === 'terminal_action') {
                 workflowTerminalAction = planContinuation.terminalAction;
             } else {
                 effectiveGenerationRequest = planContinuation.generationRequest;
                 effectiveMessagesWithHints = planContinuation.messagesWithHints;
+                effectiveContextEnvelope = planContinuation.contextEnvelope;
                 effectiveContextStepRequests =
                     planContinuation.contextStepRequests ??
                     effectiveContextStepRequests;

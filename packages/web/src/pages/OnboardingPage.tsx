@@ -119,24 +119,6 @@ const symbolReferences: SymbolReferenceEntry[] = [
         explanation:
             'TRACE final posture surfaced in metadata for rendering and trace review.',
     },
-    {
-        name: 'createWeatherForecastContextStepExecutor',
-        kind: 'function',
-        group: 'context integrations',
-        filePath:
-            'packages/backend/src/services/contextIntegrations/weather/index.ts',
-        explanation:
-            'Weather context integration path used before generation and designed to fail open.',
-    },
-    {
-        name: 'createWebSearchContextStepExecutor',
-        kind: 'function',
-        group: 'context integrations',
-        filePath:
-            'packages/backend/src/services/contextIntegrations/webSearch/index.ts',
-        explanation:
-            'Current web-search context integration seam with provider fail-open behavior.',
-    },
 ];
 
 const symbolGroups: SymbolGroup[] = [
@@ -456,26 +438,15 @@ const OnboardingPage = (): JSX.Element => {
                                     execution continues.
                                 </li>
                                 <li>
-                                    Balanced and grounded modes both plan; do
-                                    not assume planning was skipped from mode
-                                    alone.
-                                </li>
-                                <li>
                                     TRACE target and TRACE final should both be
-                                    populated for message paths. Verify both
-                                    fields when changing planner or metadata
-                                    assembly code.
+                                    populated for message paths. The former is
+                                    set by the planner, and the latter is what
+                                    was landed on prior to submission.
                                 </li>
                                 <li>
-                                    Weather context integration is fail-open.
-                                    Tool failure should degrade safely rather
-                                    than block message completion.
-                                </li>
-                                <li>
-                                    <code>web_search</code> remains a legacy
-                                    integration path in parts of the stack; do
-                                    not assume parity with every context-step
-                                    integration flow.
+                                    Context integrations are fail-open,
+                                    degrading safely rather than blocking
+                                    message completion.
                                 </li>
                             </ul>
                         </section>

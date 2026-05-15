@@ -17,6 +17,10 @@ import type {
 import type { PlannerPayloadChatPlan } from '../chatOrchestrator/plannerPayload.js';
 import { buildPlannerPayload } from '../chatOrchestrator/plannerPayload.js';
 import type { ChatGenerationToolIntent } from '../chatGenerationTypes.js';
+import {
+    toSnapshotContextEnvelope,
+    type ConversationContextEnvelope,
+} from '../conversationContextService.js';
 
 export type PlanGenerationInputParams = {
     systemPrompt: string;
@@ -24,6 +28,7 @@ export type PlanGenerationInputParams = {
     normalizedConversation: Array<
         Pick<ChatConversationMessage, 'role' | 'content'>
     >;
+    contextEnvelope: ConversationContextEnvelope;
     executionPlanForPrompt: PlannerPayloadChatPlan;
     surfacePolicy?: { coercedFrom: 'message' | 'react' | 'ignore' | 'image' };
     normalizedRequest: PostChatRequest;
@@ -93,6 +98,7 @@ export const assemblePlanGenerationInput = (
             policyId: input.executionContract.policyId,
             policyVersion: input.executionContract.policyVersion,
         },
+        contextEnvelope: toSnapshotContextEnvelope(input.contextEnvelope),
     });
 
     return {
