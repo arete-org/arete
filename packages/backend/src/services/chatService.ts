@@ -78,6 +78,7 @@ import { logger } from '../utils/logger.js';
 import { runtimeConfig } from '../config.js';
 import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
 import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureResponse.js';
+import type { ConversationContextEnvelope } from './conversationContextService.js';
 
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
@@ -639,6 +640,7 @@ export type RunChatInput = {
 export type RunChatMessagesInput = {
     messages: RuntimeMessage[];
     conversationSnapshot: string;
+    contextEnvelope: ConversationContextEnvelope;
     orchestrationStartedAtMs?: number;
     plannerTemperament?: PartialResponseTemperament;
     safetyTier?: SafetyTier;
@@ -692,6 +694,13 @@ type RunChatMessagesLegacyResult = {
     metadata: ResponseMetadata;
     generationDurationMs: number;
     finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
+};
+
+type RunChatMessagesCompatibilityInput = Omit<
+    RunChatMessagesInput,
+    'contextEnvelope'
+> & {
+    contextEnvelope?: ConversationContextEnvelope;
 };
 
 /**
@@ -800,6 +809,7 @@ export const createChatService = ({
     const runChatMessagesWithOutcome = async ({
         messages,
         conversationSnapshot,
+        contextEnvelope,
         orchestrationStartedAtMs,
         plannerTemperament,
         safetyTier,
@@ -822,6 +832,11 @@ export const createChatService = ({
         ExecutionContract,
         steerabilityControls,
     }: RunChatMessagesInput): Promise<RunChatMessagesResult> => {
+        if (!contextEnvelope) {
+            throw new Error(
+                'contextEnvelope is required for runChatMessagesWithOutcome.'
+            );
+        }
         const toShortCircuitMessageResult = (
             response: PostChatResponse,
             finalToolExecutionTelemetry: FinalToolExecutionTelemetry
@@ -957,6 +972,7 @@ export const createChatService = ({
                 plannerStepRequest: effectivePlannerStepRequest,
                 plannerStepExecutor: effectivePlannerStepExecutor,
                 planContinuationBuilder,
+                contextEnvelope,
                 contextStepRequests:
                     effectiveContextStepRequests.length > 0
                         ? effectiveContextStepRequests
@@ -1011,7 +1027,9 @@ export const createChatService = ({
                         toolRequest,
                         model,
                         defaultModel,
-                        conversationSnapshot,
+                        conversationSnapshot:
+                            workflowConversationSnapshot ??
+                            conversationSnapshot,
                         latestUserInput,
                         buildResponseMetadata,
                     });
@@ -1048,7 +1066,9 @@ export const createChatService = ({
                         toolRequest,
                         model,
                         defaultModel,
-                        conversationSnapshot,
+                        conversationSnapshot:
+                            workflowConversationSnapshot ??
+                            conversationSnapshot,
                         latestUserInput,
                         buildResponseMetadata,
                     });
@@ -1504,9 +1524,27 @@ export const createChatService = ({
     };
 
     const runChatMessages = async (
-        input: RunChatMessagesInput
+        input: RunChatMessagesCompatibilityInput
     ): Promise<RunChatMessagesLegacyResult> => {
-        const result = await runChatMessagesWithOutcome(input);
+        // Compatibility seam for older internal/test callers that still invoke
+        // runChatMessages directly without orchestrator-owned context assembly.
+        const compatibilityEnvelope: ConversationContextEnvelope =
+            input.contextEnvelope ?? {
+                participants: [],
+                turns: [],
+                diagnostics: {
+                    surface: 'web',
+                    totalInputMessages: 0,
+                    projectedMessageCount: 0,
+                    trimmedMessageCount: 0,
+                    sanitizedTimestampCount: 0,
+                    projectedSpeakerLabelCount: 0,
+                },
+            };
+        const result = await runChatMessagesWithOutcome({
+            ...input,
+            contextEnvelope: compatibilityEnvelope,
+        });
         if (
             result.kind !== 'message' ||
             result.message === undefined ||
@@ -1549,6 +1587,18 @@ export const createChatService = ({
         const response = await runChatMessagesWithOutcome({
             messages,
             conversationSnapshot: question.trim(),
+            contextEnvelope: {
+                participants: [],
+                turns: [],
+                diagnostics: {
+                    surface: 'web',
+                    totalInputMessages: 1,
+                    projectedMessageCount: 1,
+                    trimmedMessageCount: 0,
+                    sanitizedTimestampCount: 0,
+                    projectedSpeakerLabelCount: 0,
+                },
+            },
         });
 
         if (response.kind !== 'message') {

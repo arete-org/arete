@@ -30,6 +30,7 @@ import {
 } from '../src/services/executionContractTrustGraph/index.js';
 import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
 import type { RunBoundedReviewWorkflowResult } from '../src/services/workflowEngine.js';
+import type { ConversationContextEnvelope } from '../src/services/conversationContextService.js';
 
 const createRuntime = (
     overrides: Partial<GenerationResult> = {}
@@ -52,6 +53,18 @@ const createRuntime = (
 });
 
 const TEST_TIMESTAMP = new Date('2026-04-04T00:00:00.000Z').toISOString();
+const TEST_CONTEXT_ENVELOPE: ConversationContextEnvelope = {
+    participants: [],
+    turns: [],
+    diagnostics: {
+        surface: 'web',
+        totalInputMessages: 0,
+        projectedMessageCount: 0,
+        trimmedMessageCount: 0,
+        sanitizedTimestampCount: 0,
+        projectedSpeakerLabelCount: 0,
+    },
+};
 
 test('createChatService records backend token usage and estimated cost', async () => {
     const usageRecords: BackendLLMCostRecord[] = [];
@@ -1444,6 +1457,7 @@ test('runChatMessages forwards planner seams into workflow runtime for reviewed 
             messagesWithHints: input.baseMessagesWithHints,
             generationRequest: input.baseGenerationRequest,
             conversationSnapshot: 'planner continuation snapshot',
+            contextEnvelope: input.contextEnvelope,
             plannerSummary: {
                 executionPlan: input.plannerStepResult.plan,
                 generationForExecution: input.plannerStepResult.plan.generation,
@@ -2459,6 +2473,7 @@ test('runChatMessages surfaces workflow terminal react outcome as terminal actio
     const result = await chatService.runChatMessagesWithOutcome({
         messages: [{ role: 'user', content: 'React only' }],
         conversationSnapshot: 'React only',
+        contextEnvelope: TEST_CONTEXT_ENVELOPE,
     });
 
     assert.equal(result.kind, 'terminal_action');
@@ -2503,6 +2518,7 @@ test('runChatMessages surfaces workflow terminal ignore outcome as terminal acti
     const result = await chatService.runChatMessagesWithOutcome({
         messages: [{ role: 'user', content: 'Ignore this' }],
         conversationSnapshot: 'Ignore this',
+        contextEnvelope: TEST_CONTEXT_ENVELOPE,
     });
 
     assert.equal(result.kind, 'terminal_action');
@@ -2550,6 +2566,7 @@ test('runChatMessages surfaces workflow terminal image outcome as terminal actio
     const result = await chatService.runChatMessagesWithOutcome({
         messages: [{ role: 'user', content: 'Generate image' }],
         conversationSnapshot: 'Generate image',
+        contextEnvelope: TEST_CONTEXT_ENVELOPE,
     });
 
     assert.equal(result.kind, 'terminal_action');
@@ -2561,4 +2578,22 @@ test('runChatMessages surfaces workflow terminal image outcome as terminal actio
         throw new Error('Expected image action');
     }
     assert.equal(result.response.imageRequest.prompt, 'Draw a skyline');
+});
+
+test('runChatMessages fails loudly when contextEnvelope is omitted', async () => {
+    const chatService = createChatService({
+        generationRuntime: createRuntime(),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+    });
+
+    await assert.rejects(async () => {
+        await chatService.runChatMessagesWithOutcome({
+            messages: [{ role: 'user', content: 'Missing envelope' }],
+            conversationSnapshot: 'Missing envelope',
+        } as unknown as Parameters<
+            typeof chatService.runChatMessagesWithOutcome
+        >[0]);
+    }, /contextEnvelope is required for runChatMessagesWithOutcome\./);
 });

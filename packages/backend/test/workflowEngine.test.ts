@@ -26,6 +26,7 @@ import type {
     GenerationRuntime,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
+import type { ConversationContextEnvelope } from '../src/services/conversationContextService.js';
 
 const permissivePolicy: WorkflowPolicy = {
     enablePlanning: true,
@@ -50,6 +51,32 @@ const createLimits = (): ExecutionLimits => ({
     maxTokensTotal: 100,
     maxDurationMs: 1000,
 });
+
+const TEST_CONTEXT_ENVELOPE: ConversationContextEnvelope = {
+    participants: [],
+    turns: [],
+    diagnostics: {
+        surface: 'web',
+        totalInputMessages: 0,
+        projectedMessageCount: 0,
+        trimmedMessageCount: 0,
+        sanitizedTimestampCount: 0,
+        projectedSpeakerLabelCount: 0,
+    },
+};
+
+const runBoundedReviewWorkflowForTest = (
+    input: Omit<
+        Parameters<typeof runBoundedReviewWorkflow>[0],
+        'contextEnvelope'
+    > & {
+        contextEnvelope?: ConversationContextEnvelope;
+    }
+): ReturnType<typeof runBoundedReviewWorkflow> =>
+    runBoundedReviewWorkflow({
+        ...input,
+        contextEnvelope: input.contextEnvelope ?? TEST_CONTEXT_ENVELOPE,
+    });
 
 test('workflowEngine remains policy/runtime neutral and avoids orchestrator policy imports', () => {
     const testDir = dirname(fileURLToPath(import.meta.url));
@@ -338,7 +365,7 @@ test('runBoundedReviewWorkflow enforces legality before initial generate executi
         },
     };
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -410,7 +437,7 @@ test('runBoundedReviewWorkflow normalizes invalid config bounds and keeps lineag
         },
     };
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -480,7 +507,7 @@ test('runBoundedReviewWorkflow marks configured-inactive limits when their workf
         },
     };
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -555,7 +582,7 @@ test('runBoundedReviewWorkflow records explicit limit stop attribution for exhau
         },
     };
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -629,7 +656,7 @@ test('runBoundedReviewWorkflow classifies initial generate runtime failure as no
         },
     };
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -722,7 +749,7 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
         },
     };
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -795,7 +822,7 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
         },
     };
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -875,6 +902,7 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
             plannerStepResult,
             baseGenerationRequest,
             baseMessagesWithHints,
+            contextEnvelope,
         }) => ({
             continuation: 'continue_message',
             messagesWithHints: [
@@ -889,6 +917,7 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
                 model: 'gpt-5-mini',
             },
             conversationSnapshot: 'planner continuation snapshot',
+            contextEnvelope,
             plannerSummary: {
                 executionPlan: plannerStepResult.plan,
                 generationForExecution: plannerStepResult.plan.generation,
@@ -991,7 +1020,7 @@ test('runBoundedReviewWorkflow preserves failed planner fallback status on injec
         },
     });
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -1236,7 +1265,7 @@ test('runBoundedReviewWorkflow does not emit concrete tool steps in current engi
         },
     };
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -1295,7 +1324,7 @@ test('runBoundedReviewWorkflow executes injected context step and records contex
         },
     };
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -1381,7 +1410,7 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
     let weatherStartedAt = 0;
     let webSearchStartedAt = 0;
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -1495,7 +1524,7 @@ test('runBoundedReviewWorkflow records failed injected context step with reason 
         },
     };
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -1574,7 +1603,7 @@ test('runBoundedReviewWorkflow stops before generation when injected context ste
         },
     };
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -1658,7 +1687,7 @@ test('runBoundedReviewWorkflow returns terminal planner action outcome without g
         },
     };
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -1810,7 +1839,7 @@ test('runBoundedReviewWorkflow uses web_search hints for one OpenAI native follo
         },
     };
 
-    const result = await runBoundedReviewWorkflow({
+    const result = await runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',

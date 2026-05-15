@@ -8,10 +8,14 @@
  */
 import type { CorrelationEnvelope } from '@footnote/contracts';
 import type { PostChatRequest } from '@footnote/contracts/web';
-import { normalizeDiscordConversation } from '../chatConversationNormalization.js';
+import {
+    buildConversationContext,
+    type ConversationContextEnvelope,
+} from '../conversationContextService.js';
 import type { ScopeTuple } from '../executionContractTrustGraph/trustGraphEvidenceTypes.js';
 
 type ConversationNormalizationLogger = {
+    warn: (message: string, meta?: Record<string, unknown>) => void;
     debug: (message: string, meta?: Record<string, unknown>) => void;
 };
 
@@ -30,16 +34,10 @@ export const normalizeRequest = (
 ): {
     normalizedConversation: PostChatRequest['conversation'];
     normalizedRequest: PostChatRequest;
+    contextEnvelope: ConversationContextEnvelope;
 } => {
-    const normalizedConversation =
-        request.surface === 'discord'
-            ? normalizeDiscordConversation(request, logger)
-            : request.conversation.map(
-                  (message: PostChatRequest['conversation'][number]) => ({
-                      role: message.role,
-                      content: message.content,
-                  })
-              );
+    const context = buildConversationContext(request, logger);
+    const normalizedConversation = context.messages;
 
     return {
         normalizedConversation,
@@ -47,6 +45,7 @@ export const normalizeRequest = (
             ...request,
             conversation: normalizedConversation,
         },
+        contextEnvelope: context.contextEnvelope,
     };
 };
 

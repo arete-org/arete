@@ -17,6 +17,7 @@ import type {
 import type { CreateChatServiceOptions } from '../services/chatService.js';
 import { runtimeConfig } from '../config.js';
 import { createChatOrchestrator } from '../services/chatOrchestrator.js';
+import { ConversationContextAssemblyError } from '../services/conversationContextService.js';
 import type { IncidentAlertRouter } from '../services/incidentAlerts.js';
 import type { WeatherForecastTool } from '../services/contextIntegrations/weather/index.js';
 import type { InternalImageDescriptionTaskService } from '../services/internalText.js';
@@ -329,6 +330,18 @@ const createChatHandler = ({
                 generationError instanceof Error
                     ? generationError.message
                     : String(generationError);
+            if (generationError instanceof ConversationContextAssemblyError) {
+                sendJson(res, 400, {
+                    error: 'Invalid conversation context',
+                    details: generationError.reasonCode,
+                });
+                logRequest(
+                    req,
+                    res,
+                    `chat context-assembly-error ${generationError.reasonCode}`
+                );
+                return;
+            }
 
             sendJson(res, 502, {
                 error: 'AI generation failed',
