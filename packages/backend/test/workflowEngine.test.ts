@@ -734,7 +734,7 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
 
             if (generationCalls === 2) {
                 return {
-                    text: '{"reviewDecision":"finalize","reviewReason":"Draft is complete and clear."}',
+                    text: '{"reviewDecision":"finalize","reviewReason":"Draft is complete and clear.","traceAlignment":"aligned"}',
                     model: 'gpt-5-mini',
                     usage: {
                         promptTokens: 8,
@@ -796,7 +796,177 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
         assessStep.outcome.signals?.reviewReason,
         'Draft is complete and clear.'
     );
+    assert.equal(assessStep.outcome.signals?.traceAlignment, 'aligned');
     assert.equal(generationCalls, 2);
+});
+
+test('runBoundedReviewWorkflow records TRACE misalignment assess signals with final temperament axes', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'draft response',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 10,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+
+            return {
+                text: '{"reviewDecision":"revise","reviewReason":"TRACE is too broad.","revisionInstruction":"Tighten scope and add source boundaries.","traceAlignment":"misaligned","traceAlignmentReason":"Delivered posture was broader than target.","finalTemperament":{"tightness":5,"attribution":4}}',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 5,
+                    completionTokens: 5,
+                    totalTokens: 10,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Answer this.' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Answer this.' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: () => ({
+            model: 'gpt-5-mini',
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    const assessReviseStep = result.workflowLineage.steps.find(
+        (step) =>
+            step.stepKind === 'assess' &&
+            step.outcome.signals?.reviewDecision === 'revise'
+    );
+    assert.ok(assessReviseStep);
+    assert.equal(
+        assessReviseStep.outcome.signals?.traceAlignment,
+        'misaligned'
+    );
+    assert.equal(
+        assessReviseStep.outcome.signals?.traceAlignmentReason,
+        'Delivered posture was broader than target.'
+    );
+    assert.equal(
+        assessReviseStep.outcome.signals?.finalTemperamentTightness,
+        5
+    );
+    assert.equal(
+        assessReviseStep.outcome.signals?.finalTemperamentAttribution,
+        4
+    );
+});
+
+test('runBoundedReviewWorkflow fails open when assess misalignment omits finalTemperament', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'draft response',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 10,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+
+            return {
+                text: '{"reviewDecision":"revise","reviewReason":"TRACE mismatch.","revisionInstruction":"Revise.","traceAlignment":"misaligned","traceAlignmentReason":"No posture match."}',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 5,
+                    completionTokens: 5,
+                    totalTokens: 10,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Answer this.' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Answer this.' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: () => ({
+            model: 'gpt-5-mini',
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.workflowLineage.status, 'degraded');
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'executor_error_fail_open'
+    );
 });
 
 test('runBoundedReviewWorkflow executes engine-bounded refinement path without revise step kind', async () => {
@@ -1626,6 +1796,13 @@ test('buildPlannerStepRecord creates schema-safe plan step with bounded planner 
             },
             mattered: true,
             matteredControlIds: ['provider_preference'],
+            traceRevisionRequested: true,
+            traceRevisionReasonCode: 'planner_temperament_material_change',
+            traceTargetTightness: 5,
+            traceTargetRationale: 4,
+            traceTargetAttribution: 3,
+            traceTargetCaution: 4,
+            traceTargetExtent: 2,
         },
     });
 
@@ -1647,6 +1824,16 @@ test('buildPlannerStepRecord creates schema-safe plan step with bounded planner 
     assert.equal(step.outcome.signals?.provider, 'openai');
     assert.equal(step.outcome.signals?.mattered, true);
     assert.equal(step.outcome.signals?.matteredControlCount, 1);
+    assert.equal(step.outcome.signals?.traceRevisionRequested, true);
+    assert.equal(
+        step.outcome.signals?.traceRevisionReasonCode,
+        'planner_temperament_material_change'
+    );
+    assert.equal(step.outcome.signals?.traceTargetTightness, 5);
+    assert.equal(step.outcome.signals?.traceTargetRationale, 4);
+    assert.equal(step.outcome.signals?.traceTargetAttribution, 3);
+    assert.equal(step.outcome.signals?.traceTargetCaution, 4);
+    assert.equal(step.outcome.signals?.traceTargetExtent, 2);
     assert.equal(step.model, 'gpt-5-nano');
     assert.equal(step.usage?.totalTokens, 18);
     assert.equal(step.cost?.totalCostUsd, 0.000003);

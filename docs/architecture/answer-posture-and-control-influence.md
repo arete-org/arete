@@ -57,6 +57,11 @@ It records:
 - the delivered posture: `trace_final`
 - the reason for any gap: `trace_final_reason_code`
 
+Current reason codes:
+
+- `runtime_posture_adjustment`: runtime finalized posture without a more specific assess reason
+- `assess_trace_misalignment`: assess reported misalignment and emitted final posture axes
+
 The important boundary is simple:
 
 - mode explains routing
@@ -65,7 +70,13 @@ The important boundary is simple:
 Do not merge those ideas together in UI copy or trace explanations.
 
 The current runtime stops at target, final, and reason code. It does not yet
-implement a full TRACE lifecycle or history model.
+implement a full TRACE lifecycle or history model. TRACE revision context is
+captured in workflow lineage signals (for example assess alignment outputs and
+planner trace-revision signals), not a separate top-level metadata field.
+
+TRACE target/final equality checks are now normalized through shared contracts
+helpers keyed by canonical TRACE axis order, so schema and backend runtime use
+the same comparison semantics.
 
 ## TRACE boundaries
 

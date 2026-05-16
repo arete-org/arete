@@ -2526,7 +2526,9 @@ components:
                 trace_final_reason_code:
                     type: string
                     description: Required when trace_final differs from trace_target.
-                    enum: [runtime_posture_adjustment]
+                    enum:
+                        - runtime_posture_adjustment
+                        - assess_trace_misalignment
                 trustGraph:
                     type: object
                     properties:

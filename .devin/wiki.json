@@ -263,7 +263,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "Planner now runs as an early workflow `plan` step through injected `PlannerStepExecutor`, and workflow-owned plan lineage is the canonical source."
+                    "content": "Planner runs as an early workflow `plan` step through injected `PlannerStepExecutor`, and workflow-owned plan lineage is the canonical source."
                 },
                 {
                     "author": "Maintainer",
@@ -272,6 +272,10 @@
                 {
                     "author": "Maintainer",
                     "content": "Context-step integrations include weather_forecast, web_search, file_scan, trustgraph, and reverse_image_search."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "TRACE alignment flows through assess lineage signals and runtime finalization, with target/final comparison semantics normalized via shared contracts helpers and canonical axis keys."
                 }
             ]
         },

@@ -22,6 +22,7 @@ import type {
     WorkflowLimitKey,
     WorkflowLimitStop,
     WorkflowRecord,
+    PartialResponseTemperament,
 } from '@footnote/contracts/policy';
 import type {
     WorkflowProfileExecutionLimitsContract,
@@ -51,6 +52,12 @@ import {
     composeAssessPrompt,
     composeRefinementPrompt,
 } from './prompts/reviewPromptComposer.js';
+import {
+    hasDifferentTemperament,
+    isTraceAxisScore,
+    toAssessFinalTemperamentSignals,
+    toPlannerTraceTargetSignals,
+} from './traceAlignmentSignals.js';
 
 /**
  * Canonical Execution Contract workflow-policy surface.
@@ -84,6 +91,15 @@ export type ReviewDecision = {
     reviewDecision: 'finalize' | 'revise';
     reviewReason: string;
     revisionInstruction?: string;
+    traceAlignment?: 'aligned' | 'misaligned';
+    traceAlignmentReason?: string;
+    finalTemperament?: {
+        tightness?: 1 | 2 | 3 | 4 | 5;
+        rationale?: 1 | 2 | 3 | 4 | 5;
+        attribution?: 1 | 2 | 3 | 4 | 5;
+        caution?: 1 | 2 | 3 | 4 | 5;
+        extent?: 1 | 2 | 3 | 4 | 5;
+    };
     moduleHints?: string[];
     concerns?: {
         length?: 'too_long' | 'ok';
@@ -98,6 +114,15 @@ Schema:
   "reviewDecision": "finalize" | "revise",
   "reviewReason": "one short sentence",
   "revisionInstruction": "required when reviewDecision is revise",
+  "traceAlignment": "aligned" | "misaligned",
+  "traceAlignmentReason": "required when traceAlignment is misaligned",
+  "finalTemperament": {
+    "tightness": 1 | 2 | 3 | 4 | 5,
+    "rationale": 1 | 2 | 3 | 4 | 5,
+    "attribution": 1 | 2 | 3 | 4 | 5,
+    "caution": 1 | 2 | 3 | 4 | 5,
+    "extent": 1 | 2 | 3 | 4 | 5
+  },
   "moduleHints": ["optional review module ids"],
   "concerns": {
     "length": "too_long" | "ok",
@@ -126,6 +151,9 @@ export const parseReviewDecisionText = (
             reviewDecision?: unknown;
             reviewReason?: unknown;
             revisionInstruction?: unknown;
+            traceAlignment?: unknown;
+            traceAlignmentReason?: unknown;
+            finalTemperament?: unknown;
             moduleHints?: unknown;
             concerns?: unknown;
         };
@@ -149,6 +177,77 @@ export const parseReviewDecisionText = (
             parsed.reviewDecision === 'revise' &&
             (!rawRevisionInstruction || rawRevisionInstruction.length === 0)
         ) {
+            return null;
+        }
+        if (
+            parsed.traceAlignment !== undefined &&
+            parsed.traceAlignment !== 'aligned' &&
+            parsed.traceAlignment !== 'misaligned'
+        ) {
+            return null;
+        }
+        const traceAlignment =
+            parsed.traceAlignment === 'aligned' ||
+            parsed.traceAlignment === 'misaligned'
+                ? parsed.traceAlignment
+                : undefined;
+        const traceAlignmentReason =
+            typeof parsed.traceAlignmentReason === 'string'
+                ? parsed.traceAlignmentReason.trim()
+                : undefined;
+        const rawFinalTemperament =
+            parsed.finalTemperament &&
+            typeof parsed.finalTemperament === 'object'
+                ? (parsed.finalTemperament as Record<string, unknown>)
+                : undefined;
+        if (rawFinalTemperament !== undefined) {
+            const axisKeys = [
+                'tightness',
+                'rationale',
+                'attribution',
+                'caution',
+                'extent',
+            ] as const;
+            for (const axisKey of axisKeys) {
+                if (
+                    axisKey in rawFinalTemperament &&
+                    !isTraceAxisScore(rawFinalTemperament[axisKey])
+                ) {
+                    return null;
+                }
+            }
+        }
+        const finalTemperament =
+            rawFinalTemperament !== undefined
+                ? ({
+                      ...(isTraceAxisScore(rawFinalTemperament.tightness) && {
+                          tightness: rawFinalTemperament.tightness,
+                      }),
+                      ...(isTraceAxisScore(rawFinalTemperament.rationale) && {
+                          rationale: rawFinalTemperament.rationale,
+                      }),
+                      ...(isTraceAxisScore(rawFinalTemperament.attribution) && {
+                          attribution: rawFinalTemperament.attribution,
+                      }),
+                      ...(isTraceAxisScore(rawFinalTemperament.caution) && {
+                          caution: rawFinalTemperament.caution,
+                      }),
+                      ...(isTraceAxisScore(rawFinalTemperament.extent) && {
+                          extent: rawFinalTemperament.extent,
+                      }),
+                  } as NonNullable<ReviewDecision['finalTemperament']>)
+                : undefined;
+        const hasAnyFinalTemperamentAxis =
+            finalTemperament !== undefined &&
+            Object.keys(finalTemperament).length > 0;
+        if (
+            traceAlignment === 'misaligned' &&
+            (traceAlignmentReason === undefined ||
+                traceAlignmentReason.length === 0)
+        ) {
+            return null;
+        }
+        if (traceAlignment === 'misaligned' && !hasAnyFinalTemperamentAxis) {
             return null;
         }
         const moduleHints = Array.isArray(parsed.moduleHints)
@@ -182,6 +281,13 @@ export const parseReviewDecisionText = (
             reviewReason: parsed.reviewReason.trim(),
             ...(rawRevisionInstruction !== undefined && {
                 revisionInstruction: rawRevisionInstruction,
+            }),
+            ...(traceAlignment !== undefined && { traceAlignment }),
+            ...(traceAlignmentReason !== undefined && {
+                traceAlignmentReason,
+            }),
+            ...(hasAnyFinalTemperamentAxis && {
+                finalTemperament,
             }),
             ...(moduleHints !== undefined && { moduleHints }),
             ...(Object.keys(normalizedConcerns).length > 0 && {
@@ -617,6 +723,13 @@ type PlannerStepRecordSummary = {
     cost?: StepRecord['cost'];
     mattered?: boolean;
     matteredControlIds?: string[];
+    traceRevisionRequested?: boolean;
+    traceRevisionReasonCode?: string;
+    traceTargetTightness?: 1 | 2 | 3 | 4 | 5;
+    traceTargetRationale?: 1 | 2 | 3 | 4 | 5;
+    traceTargetAttribution?: 1 | 2 | 3 | 4 | 5;
+    traceTargetCaution?: 1 | 2 | 3 | 4 | 5;
+    traceTargetExtent?: 1 | 2 | 3 | 4 | 5;
 };
 
 export type BuildPlannerStepRecordInput = {
@@ -711,6 +824,27 @@ export const buildPlannerStepRecord = ({
         ...(summary.mattered !== undefined && { mattered: summary.mattered }),
         ...(Array.isArray(summary.matteredControlIds) && {
             matteredControlCount: summary.matteredControlIds.length,
+        }),
+        ...(summary.traceRevisionRequested !== undefined && {
+            traceRevisionRequested: summary.traceRevisionRequested,
+        }),
+        ...(summary.traceRevisionReasonCode !== undefined && {
+            traceRevisionReasonCode: summary.traceRevisionReasonCode,
+        }),
+        ...(summary.traceTargetTightness !== undefined && {
+            traceTargetTightness: summary.traceTargetTightness,
+        }),
+        ...(summary.traceTargetRationale !== undefined && {
+            traceTargetRationale: summary.traceTargetRationale,
+        }),
+        ...(summary.traceTargetAttribution !== undefined && {
+            traceTargetAttribution: summary.traceTargetAttribution,
+        }),
+        ...(summary.traceTargetCaution !== undefined && {
+            traceTargetCaution: summary.traceTargetCaution,
+        }),
+        ...(summary.traceTargetExtent !== undefined && {
+            traceTargetExtent: summary.traceTargetExtent,
         }),
     };
 
@@ -867,6 +1001,7 @@ export const runBoundedReviewWorkflow = async ({
     let effectiveContextEnvelope: ConversationContextEnvelope = contextEnvelope;
     let effectiveContextStepRequests = contextStepRequests;
     let workflowTerminalAction: PlanTerminalAction | undefined;
+    let latestPlannerTemperament: PartialResponseTemperament | undefined;
     let planContinuation: PlanContinuation | undefined;
     const effectiveReviewDecisionPrompt = reviewDecisionPrompt?.trim();
     const effectiveRevisionPromptPrefix =
@@ -1073,8 +1208,13 @@ export const runBoundedReviewWorkflow = async ({
                     modality: plannerExecutionResult.plan.modality,
                     requestedCapabilityProfile:
                         plannerExecutionResult.plan.requestedCapabilityProfile,
+                    ...toPlannerTraceTargetSignals(
+                        plannerExecutionResult.plan.generation.temperament
+                    ),
                 },
             });
+            latestPlannerTemperament =
+                plannerExecutionResult.plan.generation.temperament;
             workflowSteps.push(plannerStep);
             stepCounter = 1;
             plannerRootStepId = plannerStep.stepId;
@@ -1707,6 +1847,13 @@ export const runBoundedReviewWorkflow = async ({
                     refinementRequested: true,
                     revisionInstruction: decision.revisionInstruction,
                 }),
+                ...(decision.traceAlignment !== undefined && {
+                    traceAlignment: decision.traceAlignment,
+                }),
+                ...(decision.traceAlignmentReason !== undefined && {
+                    traceAlignmentReason: decision.traceAlignmentReason,
+                }),
+                ...toAssessFinalTemperamentSignals(decision.finalTemperament),
                 ...(decision.concerns?.length !== undefined && {
                     lengthConcern: decision.concerns.length,
                 }),
@@ -1836,8 +1983,24 @@ export const runBoundedReviewWorkflow = async ({
                             requestedCapabilityProfile:
                                 plannerReentryResult.plan
                                     .requestedCapabilityProfile,
+                            traceRevisionRequested: hasDifferentTemperament(
+                                latestPlannerTemperament,
+                                plannerReentryResult.plan.generation.temperament
+                            ),
+                            ...(hasDifferentTemperament(
+                                latestPlannerTemperament,
+                                plannerReentryResult.plan.generation.temperament
+                            ) && {
+                                traceRevisionReasonCode:
+                                    'planner_temperament_material_change',
+                            }),
+                            ...toPlannerTraceTargetSignals(
+                                plannerReentryResult.plan.generation.temperament
+                            ),
                         },
                     });
+                    latestPlannerTemperament =
+                        plannerReentryResult.plan.generation.temperament;
                     workflowSteps.push(plannerReentryStep);
                     stepCounter += 1;
                     workflowState = applyStepExecutionToState(
