@@ -399,6 +399,24 @@ Each `StepRecord` includes an outcome with `status`, `summary`, `artifacts`,
 They are not generic telemetry.
 
 For `assess` steps, use `reviewDecision` and `reviewReason`.
+When `reviewDecision` is `revise`, `signals` may also include
+`revisionInstruction`. `reviewReason` explains why a revision is needed, while
+`revisionInstruction` gives the concrete guidance for the follow-up refinement
+generate step. Do not emit `revisionInstruction` for `finalize`.
+
+Example assess signals:
+
+```json
+{ "reviewDecision": "finalize", "reviewReason": "Draft is complete." }
+```
+
+```json
+{
+    "reviewDecision": "revise",
+    "reviewReason": "Tone is too stiff.",
+    "revisionInstruction": "Use simpler, more natural wording."
+}
+```
 
 `recommendations` are advisory only. They never override backend legality
 checks.
