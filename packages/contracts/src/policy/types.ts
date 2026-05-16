@@ -447,6 +447,7 @@ export type BoundedReviewAssessDecision =
 export type BoundedReviewAssessSignals = {
     reviewDecision: BoundedReviewAssessDecision;
     reviewReason: string;
+    revisionInstruction?: string;
     refinementRequested?: boolean;
     moduleHintCount?: number;
     moduleHintIdsCsv?: string;
@@ -463,7 +464,8 @@ export type StepOutcome = {
      * Machine-readable per-step outputs.
      *
      * For `stepKind === "assess"` in the reviewed profile, emit
-     * `reviewDecision` + `reviewReason` as the canonical decision seam.
+     * `reviewDecision` + `reviewReason` as the canonical decision seam and
+     * emit non-empty `revisionInstruction` when `reviewDecision === "revise"`.
      */
     signals?: Record<string, string | number | boolean | null>;
     recommendations?: string[];

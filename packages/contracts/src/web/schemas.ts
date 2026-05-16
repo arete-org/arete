@@ -414,6 +414,10 @@ const StepRecordSchema = z
             assessSignals !== undefined
                 ? assessSignals.reviewReason
                 : undefined;
+        const revisionInstruction =
+            assessSignals !== undefined
+                ? assessSignals.revisionInstruction
+                : undefined;
 
         if (
             typeof reviewDecision !== 'string' ||
@@ -438,6 +442,19 @@ const StepRecordSchema = z
                 path: ['outcome', 'signals', 'reviewReason'],
                 message:
                     'executed assess steps must include non-empty reviewReason.',
+            });
+        }
+
+        if (
+            reviewDecision === 'revise' &&
+            (typeof revisionInstruction !== 'string' ||
+                revisionInstruction.trim().length === 0)
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['outcome', 'signals', 'revisionInstruction'],
+                message:
+                    'executed assess steps must include non-empty revisionInstruction when reviewDecision is "revise".',
             });
         }
     })

@@ -350,6 +350,7 @@ test('runChatMessagesWithOutcome derives reviewRuntime.revised from refinement-a
                     signals: {
                         reviewDecision: 'revise',
                         reviewReason: 'Need one refinement pass.',
+                        revisionInstruction: 'Tighten wording for clarity.',
                         refinementRequested: true,
                     },
                 },
@@ -406,6 +407,7 @@ test('runChatMessagesWithOutcome derives reviewRuntime.revised from refinement-a
                     signals: {
                         reviewDecision: 'revise',
                         reviewReason: 'Need one refinement pass.',
+                        revisionInstruction: 'Tighten wording for clarity.',
                         refinementRequested: true,
                     },
                 },

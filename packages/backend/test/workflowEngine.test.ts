@@ -909,6 +909,10 @@ test('runBoundedReviewWorkflow executes engine-bounded refinement path without r
     );
     assert.ok(assessReviseStep);
     assert.equal(assessReviseStep.outcome.signals?.refinementRequested, true);
+    assert.equal(
+        assessReviseStep.outcome.signals?.revisionInstruction,
+        'Trim and soften the phrasing.'
+    );
     assert.equal(assessReviseStep.outcome.signals?.moduleHintCount, 1);
     assert.equal(
         assessReviseStep.outcome.signals?.moduleHintIdsCsv,
@@ -925,6 +929,10 @@ test('runBoundedReviewWorkflow executes engine-bounded refinement path without r
     assert.equal(
         refinementGenerateStep.outcome.signals?.refinementSourceStepId,
         assessReviseStep.stepId
+    );
+    assert.equal(
+        refinementGenerateStep.outcome.signals?.appliedRevisionInstruction,
+        'Trim and soften the phrasing.'
     );
     assert.equal(refinementGenerateStep.outcome.signals?.appliedModuleCount, 2);
     assert.equal(

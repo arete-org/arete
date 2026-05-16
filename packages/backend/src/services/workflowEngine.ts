@@ -1675,12 +1675,37 @@ export const runBoundedReviewWorkflow = async ({
                 shouldStop = true;
                 break;
             }
+            if (
+                decision.reviewDecision === 'revise' &&
+                (typeof decision.revisionInstruction !== 'string' ||
+                    decision.revisionInstruction.trim().length === 0)
+            ) {
+                captureStep({
+                    stepKind: 'assess',
+                    status: 'failed',
+                    summary:
+                        'Assessment step returned invalid decision output; fail-open returned latest successful draft.',
+                    reasonCode: 'generation_runtime_error',
+                    startedAtMs: reviewStartedAt,
+                    finishedAtMs: reviewFinishedAt,
+                    model: reviewUsage.model,
+                    usage: reviewResult.usage,
+                    estimatedCost: reviewUsage.estimatedCost,
+                    parentStepId: draftParentStepId,
+                    attempt: iteration,
+                });
+                terminationReason = 'executor_error_fail_open';
+                workflowStatus = 'degraded';
+                shouldStop = true;
+                break;
+            }
 
             const assessSignals: BoundedReviewAssessSignals = {
                 reviewDecision: decision.reviewDecision,
                 reviewReason: decision.reviewReason,
                 ...(decision.reviewDecision === 'revise' && {
                     refinementRequested: true,
+                    revisionInstruction: decision.revisionInstruction,
                 }),
                 ...(decision.concerns?.length !== undefined && {
                     lengthConcern: decision.concerns.length,
@@ -1893,6 +1918,10 @@ export const runBoundedReviewWorkflow = async ({
                     signals: {
                         refinementApplied: true,
                         refinementSourceStepId: reviewStepId,
+                        ...(latestRevisionInstruction !== undefined && {
+                            appliedRevisionInstruction:
+                                latestRevisionInstruction,
+                        }),
                         appliedModuleCount: selectedReviewModuleIds.length,
                         ...(selectedReviewModuleIds.length > 0 && {
                             appliedModuleIdsCsv:

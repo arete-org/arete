@@ -948,6 +948,8 @@ test('buildResponseMetadata sets reviewRuntime to revised when refinement-applie
                                 reviewDecision: 'revise',
                                 reviewReason:
                                     'One revision improves specificity.',
+                                revisionInstruction:
+                                    'Tighten wording and improve specificity.',
                             },
                         },
                     },
@@ -1016,6 +1018,8 @@ test('buildResponseMetadata does not mark revised when assess requested refineme
                                 reviewDecision: 'revise',
                                 reviewReason:
                                     'One revision improves specificity.',
+                                revisionInstruction:
+                                    'Tighten wording and improve specificity.',
                                 refinementRequested: true,
                             },
                         },

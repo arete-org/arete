@@ -92,6 +92,8 @@ Footnote control.
 
 - Review is optional and policy-gated.
 - Review decisions are bounded: finalize or revise.
+- Revise decisions include explicit `revisionInstruction` guidance for the
+  follow-up refinement `generate` step.
 - Revision cannot loosen grounding or provenance rules.
 - TRACE remains Footnote-specific response temperament metadata, not a generic
   self-improvement score.

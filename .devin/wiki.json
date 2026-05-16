@@ -157,7 +157,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Also define: workflow behavior presets (balanced/grounded), shared reviewed workflow shape (generate -> assess -> revise), workflow plan step (workflow-owned planner timing/lineage), applied plan state (`AppliedPlanState`), plan continuation (`PlanContinuation`), context step (integration context injection before generation), planner advisory boundary (planner suggests, backend policy decides), planner result applier (policy-application seam), terminal_action (workflow terminal outcome for ignore/react/image).",
+                    "content": "Also define: workflow behavior presets (balanced/grounded), shared reviewed workflow shape (generate -> assess -> planner re-entry -> generate), assess decision signals (`reviewDecision`, `reviewReason`, and revise-only `revisionInstruction`), workflow plan step (workflow-owned planner timing/lineage), applied plan state (`AppliedPlanState`), plan continuation (`PlanContinuation`), context step (integration context injection before generation), planner advisory boundary (planner suggests, backend policy decides), planner result applier (policy-application seam), terminal_action (workflow terminal outcome for ignore/react/image).",
                     "author": "Maintainer"
                 }
             ]
@@ -236,7 +236,7 @@
             "parent": "Foundations",
             "entrypoints": [
                 "docs/architecture/workflow.md",
-                "docs/status/workflow-engine-rollout-status.md",
+                "docs/architecture/footnote-and-common-agentic-patterns.md",
                 "packages/backend/src/services/workflowEngine.ts",
                 "packages/backend/src/services/plannerWorkflowSeams.ts",
                 "packages/backend/src/services/chatService/planContinuation.ts",
@@ -255,7 +255,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "balanced and grounded presets use the shared reviewed workflow shape (generate -> assess -> revise)."
+                    "content": "balanced and grounded presets use the shared reviewed workflow shape (generate -> assess -> planner re-entry -> generate)."
                 },
                 {
                     "author": "Maintainer",
@@ -508,7 +508,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "Chat requests now route through workflowEngine. balanced and grounded both use the shared reviewed workflow shape."
+                    "content": "Chat requests now route through workflowEngine. balanced and grounded both use the shared reviewed workflow shape (generate -> assess -> planner re-entry -> generate)."
                 },
                 {
                     "author": "Maintainer",
