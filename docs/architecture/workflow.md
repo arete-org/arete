@@ -143,9 +143,10 @@ The `assess` step returns `reviewDecision` and `reviewReason`.
 
 `reviewDecision` is either `finalize` or `revise`.
 
-When `reviewDecision` is `revise`, `assess` also returns a non-empty
-`revisionInstruction` that is recorded in lineage signals and passed into the
-follow-up refinement `generate` step.
+When `reviewDecision` is `revise`, `assess` may also emit revise-only
+`revisionInstruction`. `reviewReason` states why a revision is needed, and
+`revisionInstruction` gives concrete guidance for the follow-up refinement
+`generate` step. Do not emit `revisionInstruction` for `finalize`.
 
 If the decision is `revise`, the engine may run planner re-entry and then a
 follow-up `generate` step for refinement.

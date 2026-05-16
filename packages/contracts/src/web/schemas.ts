@@ -454,7 +454,7 @@ const StepRecordSchema = z
                 code: z.ZodIssueCode.custom,
                 path: ['outcome', 'signals', 'revisionInstruction'],
                 message:
-                    'executed assess steps with reviewDecision "revise" must include non-empty revisionInstruction.',
+                    'executed assess steps must include non-empty revisionInstruction when reviewDecision is "revise".',
             });
         }
     })
